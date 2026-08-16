@@ -1,18 +1,19 @@
 #include <goto-symex/printf_formatter.h>
 #include <sstream>
-#include <util/c_types.h>
-#include <util/config.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
 #include <irep2/irep2_utils.h>
-#include <util/format_constant.h>
-#include <util/type_byte_size.h>
+#include <util/arith/format_constant.h>
+#include <util/expr/type_byte_size.h>
 
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
 {
-  if (src->type == dest)
-    return src;
-
-  expr2tc tmp = typecast2tc(dest, src);
+  // Callers test the result with is_constant_int2t, so fold on both paths --
+  // an operand already of the target type may be constant only after folding.
+  expr2tc tmp = src;
+  if (src->type != dest)
+    tmp = typecast2tc(dest, src);
   simplify(tmp);
   return tmp;
 }

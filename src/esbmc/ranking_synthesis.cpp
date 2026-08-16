@@ -6,11 +6,11 @@
 #include <solvers/smt/smt_conv.h>
 #include <irep2/irep2_expr.h>
 #include <langapi/language_util.h>
-#include <util/c_types.h>
-#include <util/arith_tools.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/std_expr.h>
 
 #include <algorithm>
 #include <functional>

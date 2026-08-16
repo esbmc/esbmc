@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_function_definition(
@@ -63,7 +63,7 @@ bool solidity_convertert::get_function_definition(
   {
     typet tmp_rtn_type("constructor");
     type.return_type() = tmp_rtn_type;
-    type.set("#member_name", prefix + c_name);
+    type.member_name(prefix + c_name);
     type.set("#inlined", true);
   }
   else if (ast_node.contains("returnParameters"))
@@ -76,7 +76,7 @@ bool solidity_convertert::get_function_definition(
   {
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
-    type.set("#member_name", prefix + c_name);
+    type.member_name(prefix + c_name);
   }
 
   // special handling for tuple:

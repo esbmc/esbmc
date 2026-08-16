@@ -40,6 +40,14 @@ from typing import Iterable, Iterator, List
 _UBSAN_RE = re.compile(
     r"(?P<loc>[^:\s]+:\d+(?::\d+)?): runtime error: (?P<msg>.+)$")
 
+# Heap addresses vary run to run and even between occurrences of the same
+# defect. UBSan embeds them mid-message ("member access within address 0x55..
+# with insufficient space for ..."), and those messages carry no colon for the
+# split below to cut at, so the address survived into the dedup key: one
+# recurring finding became tens of thousands of "unique" ones, and the report
+# outgrew the 1 MB job-summary limit. Fold them to a placeholder.
+_ADDR_RE = re.compile(r"0x[0-9a-fA-F]+")
+
 # ASan/LSan reports begin with a header line containing the tool and a
 # kind identifier. The kind is the first token after the colon; ASan
 # sometimes appends parenthesised qualifiers (e.g.
@@ -65,9 +73,14 @@ _FRAME_RE = re.compile(
     r"(?:\s+(?P<loc>\S+:\d+(?::\d+)?))?")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class Finding:
-    """Single sanitizer finding (already comparable; used as dedup key)."""
+    """Single sanitizer finding; used as a dedup key and sorted for display.
+
+    ``order`` is what makes the count tie-break in render_markdown work: frozen
+    alone gives __eq__/__hash__ but no ordering, so two findings with the same
+    count made sorted() fall through to comparing Finding objects and raise.
+    """
     tool: str
     kind: str
     location: str
@@ -148,7 +161,8 @@ def parse_log(path: Path) -> List[Finding]:
         for line in line_iter:
             ubsan = _UBSAN_RE.search(line)
             if ubsan:
-                kind = ubsan.group("msg").split(":", 1)[0].strip()
+                kind = _ADDR_RE.sub("0xADDR",
+                                    ubsan.group("msg").split(":", 1)[0].strip())
                 out.append(Finding("UBSan", kind, ubsan.group("loc")))
                 continue
             tsan = _TSAN_RE.search(line)

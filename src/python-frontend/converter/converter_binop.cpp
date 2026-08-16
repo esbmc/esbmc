@@ -10,21 +10,23 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
 
 #include <functional>
 #include <map>
-#include <util/std_expr.h>
+#include <set>
+#include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
 #include <cfenv>
@@ -868,6 +870,35 @@ exprt python_converter::handle_membership_operator(
     "' operation");
 }
 
+// Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+// % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+// guarded exception raise -- the same mechanism list indexing uses for
+// IndexError -- so that `try: x / 0 except ZeroDivisionError: ...` is treated
+// as SAFE while a bare division by zero propagates and fails. The built-in
+// C-level div-by-zero assertion cannot express this: it fires regardless of
+// the surrounding try/except, so caught divisions were wrongly reported.
+//
+// The guard is a statement planted into the enclosing block, so it is emitted
+// only where the division is really code-generated in its execution context:
+// not for a lambda body converted at its definition, not during the discarded
+// type-probe pass over an assignment RHS, and not inside a clause, which is a
+// specification rather than code.
+bool python_converter::needs_zero_division_guard(
+  const std::string &op,
+  const exprt &rhs) const
+{
+  if (op != "Div" && op != "FloorDiv" && op != "Mod")
+    return false;
+
+  if (
+    !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
+    !rhs.type().is_floatbv())
+    return false;
+
+  return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+         !in_contract_clause_;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   // Extract left and right operands from AST
@@ -881,9 +912,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     right = element["value"];
 
-  // Convert operands to expressions
+  // Convert operands to expressions. current_lhs is cleared first so a
+  // constructor call in operand position (`r = V(2) + V(3)`) allocates its own
+  // self temp instead of constructing into the outer assignment target, which
+  // every operand would otherwise alias (#6257).
+  exprt *saved_lhs = current_lhs;
+  current_lhs = nullptr;
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
+  current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
@@ -895,6 +932,23 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
+
+  // A tagged-scalar operand needs runtime dispatch instead of any of the
+  // static-type-driven paths below, none of which know how to handle a
+  // PyObject-shaped operand.
+  if (
+    type_handler_.is_tagged_scalar_type(lhs.type()) ||
+    type_handler_.is_tagged_scalar_type(rhs.type()))
+  {
+    if (op == "Eq" || op == "NotEq")
+      return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+    if (op == "Add" || op == "Sub" || op == "Div")
+      return dynamic_type_handler_.handle_arithmetic(
+        op, lhs, rhs, get_location_from_decl(element));
+    throw std::runtime_error(
+      "operator '" + op +
+      "' on a dynamically-typed variable is not yet supported");
+  }
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
@@ -918,7 +972,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // type-check it as a pointer/struct rather than as empty code.
     lhs = to_value_expr(lhs, ns);
     rhs = to_value_expr(rhs, ns);
-    return handle_none_comparison(op, lhs, rhs);
+
+    return handle_none_operand(op, lhs, rhs);
   }
 
   // Handle exceptions
@@ -1517,18 +1572,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "values");
   }
 
-  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
-  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
-  // guarded exception raise — the same mechanism list indexing uses for
-  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
-  // as SAFE while a bare division by zero propagates and fails. The built-in
-  // C-level div-by-zero assertion cannot express this: it fires regardless of
-  // the surrounding try/except, so caught divisions were wrongly reported.
-  if (
-    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
-    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
-     rhs.type().is_floatbv()) &&
-    !converting_lambda_body_ && !in_rhs_type_probe_)
+  if (needs_zero_division_guard(op, rhs))
   {
     // The divisor is referenced by both the zero-check guard and the division
     // itself. If it carries a side effect (a call, or a nondet) it would be
@@ -2254,6 +2298,24 @@ exprt python_converter::handle_list_operations(
     return list.build_concat_list_call(lhs, rhs, element);
   }
 
+  // list + <definitely-non-list> is a Python TypeError ("can only concatenate
+  // list ... to list") — only list + list concatenates. The concat case above
+  // already consumed list and any-typed (void*) right operands, so raise a
+  // catchable TypeError (uncaught -> VERIFICATION FAILED) for a definite
+  // scalar/string right operand. Unknown/other types are left untouched to
+  // avoid misfiring on imprecise frontend typing (#6265).
+  if (lhs.type() == list_type && op == "Add")
+  {
+    const typet &rt = rhs.type();
+    if (
+      rt.is_signedbv() || rt.is_unsignedbv() || rt.is_floatbv() ||
+      type_utils::is_string_type(rt))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "can only concatenate list (not \"" +
+          type_handler_.get_python_type_name(rt) + "\") to list");
+  }
+
   // List repetition
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
@@ -2451,8 +2513,13 @@ exprt python_converter::build_binary_expression(
   // type, the narrower float widens to the wider. Bitwise operands were
   // already coerced to int above, so no float reaches a bitwise op.
   {
-    const bool lhs_float = lhs.type().is_floatbv();
-    const bool rhs_float = rhs.type().is_floatbv();
+    // Under --fixedbv a Python float is a fixedbv, not a floatbv; testing only
+    // is_floatbv() left the int/float mix unreconciled there (#6567).
+    auto is_float = [](const typet &t) {
+      return t.is_floatbv() || t.is_fixedbv();
+    };
+    const bool lhs_float = is_float(lhs.type());
+    const bool rhs_float = is_float(rhs.type());
     if (lhs_float && is_bv_or_bool(rhs.type()))
       rhs = typecast_exprt(rhs, lhs.type());
     else if (rhs_float && is_bv_or_bool(lhs.type()))

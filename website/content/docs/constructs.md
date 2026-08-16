@@ -15,6 +15,38 @@ you're planning to verify your code with only ESBMC.
 
 SV-COMP Document: https://sv-comp.sosy-lab.org/2025/rules.php {{< /callout >}}
 
+## The `esbmc.h` Header
+
+ESBMC installs an `esbmc.h` header alongside the binary. Including it gives the
+intrinsics unprefixed names, which is the supported surface for hand-written
+harnesses and stubs:
+
+| Macro                       | Expands to                  |
+| --------------------------- | --------------------------- |
+| `ESBMC_assume(cond)`        | `__ESBMC_assume`            |
+| `ESBMC_assert(cond, msg)`   | `__ESBMC_assert`            |
+| `ESBMC_alloca(size)`        | `__ESBMC_alloca`            |
+| `ESBMC_same_object(p, q)`   | `__ESBMC_same_object`       |
+| `ESBMC_unreachable()`       | `__ESBMC_unreachable`       |
+| `ESBMC_unroll(n)`           | `__ESBMC_unroll`            |
+| `ESBMC_atomic_begin()` / `ESBMC_atomic_end()` | `__ESBMC_atomic_begin` / `__ESBMC_atomic_end` |
+| `ESBMC_yield()`             | `__ESBMC_yield`             |
+
+Every ESBMC run defines `__ESBMC_execution`, and the header refuses to compile
+without it — so a harness that includes `esbmc.h` is a hard error under any
+ordinary compiler instead of silently building with the intrinsics undefined.
+
+```c
+#include <esbmc.h>
+
+int main() {
+    unsigned int x = nondet_uint();
+    ESBMC_assume(x < 5);
+    ESBMC_assert(x < 10, "X needs to be less than 10.");
+    return 0;
+}
+```
+
 ## Non-Deterministic Functions
 
 `nondet_X()` where `X` is a primitive C data type. This will mark the variable
@@ -231,6 +263,36 @@ Run with a supported solver:
 ```sh
 esbmc file.c --z3
 ```
+
+### Calls, branches and loops inside a quantifier body
+
+A quantifier body may call a function. ESBMC inlines the callee *under* the
+binder, so the bound variable stays free:
+
+```c
+_Bool eq(int a, int b) { return a == b; }
+
+int main() {
+  int var;
+  __ESBMC_assert(__ESBMC_forall(&var, eq(var, 6)), "not valid for every var");
+}
+```
+
+Beyond a single `return`, a callee built from local declarations, assignments,
+`if`/`else`, and loops with a **statically constant** trip count is summarized
+into one side-effect-free expression — so a counting or accumulating helper can
+appear under `__ESBMC_forall`/`__ESBMC_exists` directly.
+
+Summarization is bounded by the size of the resulting expression rather than by
+the iteration count, because a branch merge inside an unrolled loop can double
+the summary on every iteration. The cap is
+`--max-quantifier-summary-nodes NR` (default 20000); raise it if a legitimate
+body is rejected for size.
+
+Shapes that cannot be summarized soundly — data-dependent trip counts, pointer
+writes, `break`, `switch`, recursion — are **rejected with a diagnostic naming
+the cause**, not silently hoisted out of the binder (which would freeze the
+bound variable and make the quantifier vacuous).
 
 ### Limitations
 

@@ -3,7 +3,7 @@
 #include <fstream>
 #include <limits>
 #include <solvers/solver_config.h>
-#include <util/cmdline.h>
+#include <util/config/cmdline.h>
 
 const struct group_opt_templ all_cmd_options[] = {
   {"Main Usage",
@@ -207,10 +207,22 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
+     {"clang-c-irep2-adjust",
+      NULL,
+      "Run the IREP2-native C adjuster alongside the legacy adjust pass "
+      "(Phase 6 migration; experimental, default off)"},
+     {"clang-c-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
+      "(Phase 6 hop-off; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
       "(V.4 migration; experimental, default off)"},
+     {"python-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native Python adjuster instead of the legacy clang_cpp "
+      "adjust pass (V.4 migration hop-off; experimental, default off)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND
@@ -304,6 +316,25 @@ const struct group_opt_templ all_cmd_options[] = {
      {"i386-win32", NULL, "Set Windows/I386 architecture"},
 #endif
    }},
+  {"Floating-point",
+   {
+     {"round-to-nearest",
+      NULL,
+      "Round floating-point results towards the nearest even value (default)"},
+     {"round-to-even", NULL, "Alias for --round-to-nearest"},
+     {"round-to-plus-inf",
+      NULL,
+      "Round floating-point results towards plus infinity"},
+     {"round-to-minus-inf",
+      NULL,
+      "Round floating-point results towards minus infinity"},
+     {"round-to-zero", NULL, "Round floating-point results towards zero"},
+     {"fp-taylor-terms",
+      boost::program_options::value<int>()->value_name("n"),
+      "Terms the exp/log/pow operational models expand their Taylor series to, "
+      "between 2 and 12 (default 8). More terms are more accurate and more "
+      "expensive to solve"},
+   }},
   {"Witness",
    {{"witness-output",
      boost::program_options::value<std::string>()->value_name("path"),
@@ -344,7 +375,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-witnesses",
      boost::program_options::value<int>()->default_value(16)->value_name("n"),
      "Cap the number of witnesses reported per property "
-     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."},
+    {"full-traces",
+     NULL,
+     "Print every trace state in the multi-witness report instead of the "
+     "states closest to the failure. Only meaningful with --all-witnesses."},
+    {"ascii-report",
+     NULL,
+     "Draw the multi-witness report with ASCII instead of box-drawing "
+     "characters. Detected automatically from the locale; this forces it."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),
@@ -423,6 +462,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable the removal of NO-OP instructions in GOTO programs"},
     {"partial-loops", NULL, "Permit paths with partial loops"},
+    {"closed-world-fnptr",
+     NULL,
+     "Treat a function-pointer call with no compatible target as unreachable "
+     "rather than assuming an external definition may supply one"},
     {"no-slice", NULL, "Do not remove unused equations"},
     {"multi-fail-fast",
      boost::program_options::value<int>()->value_name("n"),
@@ -515,11 +558,29 @@ const struct group_opt_templ all_cmd_options[] = {
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
+    {"incremental-context-bound",
+     NULL,
+     "Re-explore with the context bound raised by one each round, stopping at "
+     "the first violation or once a round has covered every interleaving"},
+    {"max-context-bound",
+     boost::program_options::value<int>()->default_value(20)->value_name("nr"),
+     "Highest context bound tried by --incremental-context-bound"},
+    {"falsify-context-bound",
+     boost::program_options::value<int>()->default_value(0)->value_name("nr"),
+     "Before the chosen strategy runs, look for a violation with the context "
+     "bound raised from 1 to nr; such a violation is genuine, no proof is "
+     "claimed, and the strategy still runs when none is found (0 = off)"},
     {"state-hashing", NULL, "Enable state-hashing, prunes duplicate states"},
     {"no-goto-merge",
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"sleep-sets",
+     NULL,
+     "Prune schedules with sleep sets; only fires where the search is "
+     "exhaustive, so pair it with --no-por and no context bound. Ignored under "
+     "--schedule, --direct-interleavings, --interactive-ileaves and "
+     "--data-races-check-only (experimental, off by default)"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "Skip context switches on globals that are never written anywhere "
@@ -638,8 +699,20 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"multi-property-interleavings",
+     boost::program_options::value<int>()->value_name("n"),
+     "In multi-property mode, keep exploring thread interleavings after a "
+     "violation until n consecutive ones reach a verdict on no new property "
+     "(default 100, must be positive)"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
+    {"no-library-assertions",
+     NULL,
+     "Ignore assertions stated by ESBMC's operational models (e.g. \"Sem is "
+     "not initialized\"), keeping the ones in the program under verification. "
+     "Warning: hides genuine API misuse the models report. Leaves the checks "
+     "ESBMC generates inside model code (see --no-standard-checks), renumbers "
+     "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
@@ -670,6 +743,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"restrict-check",
      NULL,
      "Check C restrict-qualified pointer parameters do not alias"},
+    {"restrict-assume",
+     NULL,
+     "Assume the entry function's C restrict-qualified pointer parameters do "
+     "not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},
@@ -701,17 +778,36 @@ const struct group_opt_templ all_cmd_options[] = {
     {"dead-store-check",
      NULL,
      "Emit advisory notes for dead stores / assignments never read (CWE-563)"},
+    {"excessive-alloc-check",
+     // Optional bound: bare flag uses the implicit 1 MiB (1048576-byte)
+     // default; --excessive-alloc-check=K sets the byte bound to K. `int`
+     // (not a wider type) because cmdlinet only stringifies int / string /
+     // vector<int> values; the 2 GiB ceiling is far past any meaningful
+     // "excessive" threshold.
+     boost::program_options::value<int>()->implicit_value(1048576)->value_name(
+       "bytes"),
+     "Enable check for allocations (malloc/calloc/realloc/new[]) whose size "
+     "can exceed K bytes; attach the bound with '=' as "
+     "--excessive-alloc-check=K "
+     "(a space-separated value is treated as an input file), default 1 MiB "
+     "(CWE-789)"},
     {"volatile-check", NULL, "Enable check for volatile variable"},
     {"stack-limit",
      boost::program_options::value<int>()->default_value(-1)->value_name(
        "bits"),
      "Check if stack limit is respected"},
+    {"total-stack-limit",
+     boost::program_options::value<int>()->default_value(-1)->value_name(
+       "bits"),
+     "Bound the combined size of all live stack frames, excluding ESBMC's "
+     "own operational models. Accounted per symbolic path at declaration "
+     "points; over-approximates for spawned threads"},
     {"error-label",
      boost::program_options::value<std::string>()->value_name("label"),
      "Check if label is unreachable"},
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
-    {"malloc-zero-is-null", NULL, "Force malloc(0) to return NULL"},
+    {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "
@@ -724,6 +820,19 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable unreach-call style checking: activates __ESBMC_unreachable() and "
      "treats reach_error()/__VERIFIER_error() as error sentinels"},
+    {"dead-code-check",
+     NULL,
+     "Detect provably-unreachable conditional branch directions (if/loop "
+     "guards) and report them as advisory CWE-561 findings (note level in "
+     "SARIF). Default off; does not flip the verdict to FAILED. Scope is "
+     "branch "
+     "directions only: statements after an unconditional return/abort and "
+     "unreferenced functions are not analysed. Findings are bounded by the "
+     "unwinding depth (use --unwind for programs with loops). The SUCCESSFUL "
+     "verdict of a dead-code run is not a safety verdict: the coverage "
+     "instrumentation neutralises pre-existing assertions, including the "
+     "default bounds and division-by-zero checks, so run this alongside a "
+     "normal verification run rather than instead of one"},
     {"conv-assert-to-assume",
      NULL,
      "Convert assertions for bounds and pointer checks into assumptions"},
@@ -872,7 +981,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "Configure time limit, integer followed by {s,m,h}"},
     {"enable-core-dump", NULL, "Do not disable core dump output"},
     {"no-simplify", NULL, "Do not simplify any expression"},
-    {"no-propagation", NULL, "Disable constant propagation"},
+    {"no-propagation",
+     NULL,
+     "Disable constant propagation (unsupported with concurrency: the pthread "
+     "model requires constant thread ids)"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
@@ -918,13 +1030,17 @@ const struct group_opt_templ all_cmd_options[] = {
      "bypass and the --no-irep2-bodies escape hatch have been removed."},
     {"irep2-native-body",
      NULL,
-     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
-     "Route function bodies to an IREP2-native goto_convert that consumes "
-     "code_*2t directly and inherits the statement location onto value "
-     "operands at consumption, skipping the whole-body legacy round-trip. "
-     "Grown one statement kind at a time; any body containing an unsupported "
-     "construct falls back to the round-trip path, so flag-on is byte-"
-     "identical to flag-off until the native path is complete."}}},
+     "Deprecated no-op (accepted for backward compatibility). Function bodies "
+     "are routed to the IREP2-native goto_convert by default since the W1-loc "
+     "keystone concluded; --no-irep2-native-body opts out."},
+    {"no-irep2-native-body",
+     NULL,
+     "Convert function bodies through the whole-body legacy round-trip "
+     "instead of the IREP2-native goto_convert (esbmc/esbmc#4715). The native "
+     "path consumes code_*2t directly and inherits the statement location "
+     "onto value operands at consumption; a body containing an unsupported "
+     "construct falls back to the round-trip either way, so this is a "
+     "diagnostic escape hatch, not a semantic switch."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

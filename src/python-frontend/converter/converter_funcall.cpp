@@ -12,17 +12,95 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+
+#include <optional>
 
 using namespace json_utils;
+
+namespace
+{
+std::optional<std::size_t>
+get_nonnegative_literal_size(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", std::string()) != "Constant" ||
+    !node.contains("value"))
+    return std::nullopt;
+
+  const auto &value = node["value"];
+  if (value.is_number_unsigned())
+    return value.get<std::size_t>();
+
+  if (value.is_number_integer())
+  {
+    const auto signed_value = value.get<long long>();
+    if (signed_value >= 0)
+      return static_cast<std::size_t>(signed_value);
+  }
+
+  return std::nullopt;
+}
+
+std::optional<std::size_t> get_keyword_literal_size(
+  const nlohmann::json &call,
+  const std::string &keyword_name)
+{
+  if (!call.contains("keywords"))
+    return std::nullopt;
+
+  for (const auto &kw : call["keywords"])
+  {
+    if (
+      kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+      !kw["arg"].is_null() && kw["arg"] == keyword_name)
+      return get_nonnegative_literal_size(kw["value"]);
+  }
+
+  return std::nullopt;
+}
+
+bool is_numpy_random_attr(const nlohmann::json &func, const std::string &name)
+{
+  if (
+    !func.is_object() || func.value("_type", std::string()) != "Attribute" ||
+    func.value("attr", std::string()) != name || !func.contains("value") ||
+    !func["value"].is_object() ||
+    func["value"].value("_type", std::string()) != "Attribute" ||
+    func["value"].value("attr", std::string()) != "random" ||
+    !func["value"].contains("value") || !func["value"]["value"].is_object())
+    return false;
+
+  const auto &base = func["value"]["value"];
+  return base.value("_type", std::string()) == "Name" &&
+         base.value("id", std::string()) == "np";
+}
+
+nlohmann::json
+make_list_from_repeated_call(const nlohmann::json &call, std::size_t size)
+{
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (call.contains(key))
+      list_node[key] = call[key];
+
+  for (std::size_t i = 0; i < size; ++i)
+    list_node["elts"].push_back(call);
+
+  return list_node;
+}
+} // namespace
 
 // Resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
@@ -280,6 +358,67 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         attr[f] = element["func"][f];
     call_node["func"] = attr;
     return get_function_call(call_node);
+  }
+
+  // a.<method>(...) on a tracked numpy array (sum/mean/min/max/std/var/
+  // flatten/transpose/reshape/ravel/copy) only resolves through the numpy
+  // operational model when it has the np.<method>(a, ...) shape a
+  // module-form call would have produced. The assignment-statement RHS
+  // already rewrites this shape before it reaches here; this call covers
+  // every other expression context (assert, nested expressions, call
+  // arguments, ...), which otherwise fall through to an unrelated builtin
+  // or class-method lookup for the same method name.
+  if (
+    std::optional<nlohmann::json> rewritten =
+      rewrite_numpy_method_call_node(element))
+    return rewritten->value("_type", "") == "Call"
+             ? get_function_call(*rewritten)
+             : get_expr(*rewritten);
+
+  if (
+    is_numpy_random_attr(element["func"], "random") &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (
+    is_numpy_random_attr(element["func"], "rand") && element.contains("args") &&
+    element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (is_numpy_random_attr(element["func"], "randint"))
+  {
+    if (auto size = get_keyword_literal_size(element, "size"))
+    {
+      nlohmann::json scalar_call = element;
+      nlohmann::json keywords = nlohmann::json::array();
+      if (scalar_call.contains("keywords"))
+      {
+        for (const auto &kw : scalar_call["keywords"])
+        {
+          if (
+            kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+            !kw["arg"].is_null() && kw["arg"] == "size")
+            continue;
+          keywords.push_back(kw);
+        }
+      }
+      scalar_call["keywords"] = std::move(keywords);
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
   }
 
   // Handle direct range(...) calls by converting to list
@@ -633,13 +772,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       call.location() = get_location_from_decl(element);
 
       // The function pointer itself, not dereferenced.
-      // For Any-typed (void*) parameters, cast to a generic function pointer
-      // so that the adjuster can dereference it to a code type (it calls
-      // to_code_type on the dereferenced subtype, which would fail on void).
+      // Any pointer whose pointee is not code needs the cast to a generic
+      // function pointer: the adjuster dereferences the callee and calls
+      // to_code_type on the result, which asserts on anything else. Any-typed
+      // (void*) parameters get here, and so does a callable returned by an
+      // unannotated function, which the frontend types None, i.e. bool*
+      // (#6640).
       // V.3: build the function-pointer reference (and the generic-pointer
       // cast the adjuster relies on) in IREP2; both are over a clean symbol.
       exprt func_ptr_expr = python_expr::build_symbol(*var_symbol);
-      if (var_symbol->get_type() == any_type())
+      if (!var_symbol->get_type().subtype().is_code())
         func_ptr_expr = python_expr::build_typecast(
           func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;

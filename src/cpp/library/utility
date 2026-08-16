@@ -280,7 +280,111 @@ using make_integer_sequence =
 
 template <size_t _Np>
 using make_index_sequence = make_integer_sequence<size_t, _Np>;
+
+// [intseq.general]: index_sequence_for<T...> is make_index_sequence<sizeof...(T)>.
+template <class... T>
+using index_sequence_for = make_index_sequence<sizeof...(T)>;
 #endif
+
+#if __cplusplus >= 202302L
+// Reaching this is undefined behaviour, which is what __ESBMC_unreachable()
+// already models: it claims the path is dead, reported under
+// --enable-unreachability-intrinsic.
+[[noreturn]] inline void unreachable()
+{
+  __ESBMC_unreachable();
+}
+#endif
+
+#if __cplusplus >= 201103L
+// [pair.astuple]: pair participates in the tuple protocol, so std::get,
+// tuple_size and tuple_element must work on it from <utility> alone -- <tuple>
+// includes this header, not the other way round, and <type_traits> includes it
+// too, so integral_constant is deliberately not used here (issue #5868).
+template <typename Tuple>
+struct tuple_size;
+
+template <std::size_t I, typename Tuple>
+struct tuple_element;
+
+template <typename T1, typename T2>
+struct tuple_size<pair<T1, T2>>
+{
+  static const std::size_t value = 2;
+};
+
+template <typename T1, typename T2>
+struct tuple_element<0, pair<T1, T2>>
+{
+  typedef T1 type;
+};
+
+template <typename T1, typename T2>
+struct tuple_element<1, pair<T1, T2>>
+{
+  typedef T2 type;
+};
+
+// Index dispatch, so get() selects the member by specialisation rather than
+// by casting between the two member types.
+template <std::size_t I>
+struct __pair_get;
+
+template <>
+struct __pair_get<0>
+{
+  template <typename T1, typename T2>
+  static OM_CONSTEXPR T1 &get(pair<T1, T2> &p)
+  {
+    return p.first;
+  }
+  template <typename T1, typename T2>
+  static OM_CONSTEXPR const T1 &get(const pair<T1, T2> &p)
+  {
+    return p.first;
+  }
+};
+
+template <>
+struct __pair_get<1>
+{
+  template <typename T1, typename T2>
+  static OM_CONSTEXPR T2 &get(pair<T1, T2> &p)
+  {
+    return p.second;
+  }
+  template <typename T1, typename T2>
+  static OM_CONSTEXPR const T2 &get(const pair<T1, T2> &p)
+  {
+    return p.second;
+  }
+};
+
+template <std::size_t I, typename T1, typename T2>
+OM_CONSTEXPR typename tuple_element<I, pair<T1, T2>>::type &get(pair<T1, T2> &p)
+{
+  return __pair_get<I>::get(p);
+}
+
+template <std::size_t I, typename T1, typename T2>
+OM_CONSTEXPR const typename tuple_element<I, pair<T1, T2>>::type &
+get(const pair<T1, T2> &p)
+{
+  return __pair_get<I>::get(p);
+}
+
+// The rvalue overload is not optional here: a structured binding calls get on
+// an rvalue, and without it the const lvalue overload wins and the binding
+// fails on the dropped const.
+template <std::size_t I, typename T1, typename T2>
+OM_CONSTEXPR typename tuple_element<I, pair<T1, T2>>::type &&
+get(pair<T1, T2> &&p)
+{
+  return static_cast<typename tuple_element<I, pair<T1, T2>>::type &&>(
+    __pair_get<I>::get(p));
+}
+
+#endif // __cplusplus >= 201103L
 
 } // namespace std
 

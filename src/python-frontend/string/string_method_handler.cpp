@@ -12,15 +12,15 @@
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
-#include <util/std_expr.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
-#include <util/type.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+#include <util/irep/type.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <algorithm>
@@ -37,7 +37,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <util/message.h>
+#include <util/message/message.h>
 
 using namespace python_expr;
 
@@ -1145,9 +1145,14 @@ std::optional<exprt> dispatch_decode_join_method(
 
   if (method_name == "join")
   {
-    ensure_allowed_keywords(method_name, keyword_values, {});
+    // str.join takes exactly one iterable, so any other arity is not a string
+    // method at all. Decline instead of throwing, or an object with its own
+    // join() -- queue.Queue.join(), threading's Thread.join() -- never reaches
+    // instance dispatch, because every attribute call is offered to the string
+    // handler first (#6639).
     if (args.size() != 1)
-      throw std::runtime_error("join() takes exactly one argument");
+      return std::nullopt;
+    ensure_allowed_keywords(method_name, keyword_values, {});
     return self.handle_str_join(call_json);
   }
 

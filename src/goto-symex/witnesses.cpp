@@ -6,7 +6,7 @@
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
 #include <solvers/smt/smt_conv.h>
-#include <util/picosha2.h>
+#include <util/base/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
@@ -929,7 +929,7 @@ std::string get_formated_assignment(
 
 bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step)
 {
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
   std::string lhsexpr;
   languages.from_expr(
     migrate_expr_back(step.lhs), lhsexpr, presentationt::WITNESS);
@@ -944,7 +944,7 @@ bool is_valid_witness_expr(
   const namespacet &ns,
   const irep_container<expr2t> &exp)
 {
-  languagest languages(ns, language_idt::C);
+  languagest languages(ns, configured_language());
   std::string value;
   languages.from_expr(migrate_expr_back(exp), value, presentationt::WITNESS);
   return (value.find("__ESBMC") & value.find("stdin") & value.find("stdout") &
@@ -1124,8 +1124,8 @@ bool find_nondet_in_expr(const expr2tc &expr)
   return false;
 }
 
-#include <util/prefix.h>
-#include <util/c_types.h>
+#include <util/base/prefix.h>
+#include <util/lang/c_types.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
 #include <goto-symex/slice.h>

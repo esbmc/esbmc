@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
@@ -87,7 +87,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 
     // construct comp
     comp.type() = mem_type;
-    comp.type().set("#member_name", t.tag());
+    comp.type().member_name(t.tag());
     comp.identifier(mem_id);
     comp.name(mem_name);
     comp.pretty_name(mem_name);
@@ -446,7 +446,7 @@ bool solidity_convertert::construct_tuple_assigments(
   {
     std::string cname = comp.get_name().as_string();
     rhs_by_name[cname] = comp;
-    // Skip padding components (anon_pad$N)
+    // Skip padding components (anon_pad#N)
     if (cname.find("anon_pad") == std::string::npos)
       rhs_by_pos.push_back(comp);
   }

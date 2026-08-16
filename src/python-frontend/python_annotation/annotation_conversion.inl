@@ -1408,6 +1408,11 @@ std::string python_annotation<Json>::get_function_return_type(
     {
       const auto &import_node =
         json_utils::find_imported_function(ast_, func_name);
+      // Relative imports (`from . import helper`) carry a null module name;
+      // fall through to the wildcard/builtin probes instead of feeding null
+      // to get_module (which would raise an uncatchable nlohmann type_error).
+      if (!import_node.contains("module") || import_node["module"].is_null())
+        throw std::runtime_error("import has no resolvable module name");
       auto module = module_manager_->get_module(import_node["module"]);
 
       if (!module)
@@ -2565,7 +2570,30 @@ InferResult python_annotation<Json>::infer_type(
     if (!stmt.contains("annotation") || stmt["annotation"].is_null())
       return InferResult::UNKNOWN;
 
-    if (stmt["annotation"].contains("value"))
+    // A forward-reference (string) annotation `node: 'Foo'` is a Constant whose
+    // value is the type-name string; a dotted annotation `node: mod.Robot` /
+    // `node: a.b.Robot` is an Attribute whose last component (attr) is the type
+    // name. Reading annotation["value"]["id"] blindly does operator[] on a JSON
+    // string / a null and aborts with nlohmann type_error (#6284), so dispatch
+    // on the node shape instead. The Attribute branch must precede the
+    // value.id branch: for a single-dot annotation the Attribute's value is a
+    // Name holding the module prefix (`mod`), so value.id would otherwise pick
+    // the prefix rather than the type name (`Robot`).
+    if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Constant" &&
+      stmt["annotation"].contains("value") &&
+      stmt["annotation"]["value"].is_string())
+      inferred_type = stmt["annotation"]["value"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("_type") &&
+      stmt["annotation"]["_type"] == "Attribute" &&
+      stmt["annotation"].contains("attr"))
+      inferred_type = stmt["annotation"]["attr"].template get<std::string>();
+    else if (
+      stmt["annotation"].contains("value") &&
+      stmt["annotation"]["value"].is_object() &&
+      stmt["annotation"]["value"].contains("id"))
       inferred_type =
         stmt["annotation"]["value"]["id"].template get<std::string>();
     else if (stmt["annotation"].contains("id"))
@@ -3394,7 +3422,8 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
   {
     if (
       !node.contains("_type") || node["_type"] != "ImportFrom" ||
-      !node.contains("names") || !node.contains("module"))
+      !node.contains("names") || !node.contains("module") ||
+      node["module"].is_null())
       continue;
     bool is_star = false;
     for (const auto &name : node["names"])

@@ -139,7 +139,9 @@ ignored_dirs=(
   "range19-fail"
   "ternary_symbolic"
   "threading_thread_increment_race_fail"
+  "threading_thread_increment_race_no_flag_fail"
   "threading_thread_race_fail"
+  "threading_thread_subclass_func_scope_race_fail"
   "threading_thread_subclass_race_fail"
   "threading_thread_subclass_run_assert_fail"
   "try-fail"
@@ -164,6 +166,13 @@ ignored_dirs=(
   "dataclass_factory_kwarg_ignored"
   "harness_time_monotonic"
   "harness_time_monotonic_fail"
+  # Top-level relative imports (`from . import X`) cannot run as a bare
+  # `python3 main.py` script -- CPython raises "attempted relative import with
+  # no known parent package" regardless of file layout. These exercise ESBMC's
+  # relative-import handling and are validated via the ESBMC regression harness.
+  "github_6281"
+  "github_6281_used"
+  "github_6281_fail"
 )
 
 # Prefixes for ESBMC-specific regression directories that are not suitable for

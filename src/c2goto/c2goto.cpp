@@ -4,10 +4,10 @@
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <util/cmdline.h>
-#include <util/config.h>
+#include <util/config/cmdline.h>
+#include <util/config/config.h>
 #include <irep2/irep2.h>
-#include <util/parseoptions.h>
+#include <util/config/parseoptions.h>
 #include <stdlib.h>
 
 const struct group_opt_templ c2goto_options[] = {
@@ -74,6 +74,7 @@ public:
     if (config.set(cmdline))
       return 1;
     config.options.cmdline(cmdline);
+    config.options.set_option("building-c-library", true);
     set_verbosity_msg(VerbosityLevel::Result);
 
     if (!cmdline.isset("output"))

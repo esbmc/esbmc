@@ -1,0 +1,8 @@
+CORE
+main.c
+--branch-coverage --schedule
+^Coverage goals: 2 ✓ 2 reached$
+^Branches : 2
+^Reached : 2
+^Branch Coverage: 100%$
+^COVERAGE ANALYSIS COMPLETE$

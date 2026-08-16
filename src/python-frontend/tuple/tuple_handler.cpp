@@ -4,12 +4,12 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
-#include <util/c_types.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/python_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/lang/python_types.h>
 
 using namespace python_expr;
 
@@ -358,8 +358,17 @@ exprt tuple_handler::handle_tuple_subscript(
     // out-of-range assertion for indices outside [-N, N).
     const auto &components = tuple_type.components();
     if (components.empty())
-      throw std::runtime_error(
-        "Tuple subscript on empty tuple is not supported");
+    {
+      // Every index is out of range, so the selected value is dead and only
+      // the assertion carries meaning. Iterating an empty tuple lowers to a
+      // subscript under a `0 < 0` guard, which leaves it unreachable.
+      code_assertt bounds_assert{false_exprt()};
+      if (element.contains("lineno"))
+        bounds_assert.location() = converter_.get_location_from_decl(element);
+      bounds_assert.location().comment("Tuple index out of range");
+      converter_.add_instruction(bounds_assert);
+      return gen_zero(int_type());
+    }
 
     const typet &first_type = components.front().type();
     for (const auto &comp : components)

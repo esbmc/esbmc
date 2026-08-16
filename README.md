@@ -79,6 +79,14 @@ sudo apt install esbmc
 
 This method is recommended for general users and supports Ubuntu 22.04 (Jammy) and 24.04 (Noble).
 
+### Homebrew (macOS and Linux)
+
+```
+brew install esbmc
+```
+
+This installs `esbmc` together with its bundled SMT solvers (Z3, Bitwuzla).
+
 ### GitHub Release
 
 You can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
@@ -209,6 +217,30 @@ VERIFICATION FAILED
 
 ESBMC-Python will parse the Python code, generate an Abstract Syntax Tree (AST), perform type inference, and translate it into the GOTO intermediate representation for symbolic execution and verification.
 For detailed information about Python support, please take a look at the [Python Frontend Documentation](src/python-frontend/README.md).
+
+### Verification intrinsics
+
+Harnesses and stubs written by hand can include [`esbmc.h`](include/esbmc.h), installed alongside the binary, for the supported spelling of ESBMC's intrinsics — `ESBMC_assume`, `ESBMC_assert`, `ESBMC_alloca`, `ESBMC_same_object`, `ESBMC_unreachable`, `ESBMC_unroll`, `ESBMC_atomic_begin` / `ESBMC_atomic_end` and `ESBMC_yield`:
+
+```c
+#include <esbmc.h>
+
+int nondet_int(void);
+
+int main(void)
+{
+  int x = nondet_int();
+  ESBMC_assume(x > 10);
+  ESBMC_assert(x > 5, "the assumption carries");
+  return 0;
+}
+```
+
+```
+$ esbmc main.c -I /usr/local/include
+```
+
+The header requires `__ESBMC_execution`, which ESBMC defines on every run, so including it under any other compiler is a hard error rather than a pile of undefined intrinsics.
 
 ## Tutorials
 

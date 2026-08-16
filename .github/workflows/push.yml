@@ -1,16 +1,29 @@
-name: Master Push
+name: Master Coverage
 on:
-  push:
-    branches: [master]
+  # Nightly, not per-push: the run takes hours, and every push to master shared
+  # one `cancel-in-progress` concurrency group, so a later push killed it. 97 of
+  # the last 100 runs were cancelled and master went 8 days with no report.
+  schedule:
+    - cron: '0 2 * * *'
+  # Lets the sharded pipeline be re-run against a known commit, so its total
+  # can be compared with a previous unsharded run rather than assumed correct.
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 jobs:
   coverage:
-    name: Build and upload coverage to Codecov
+    name: Coverage shard ${{ matrix.shard }}/4
     runs-on: ubuntu-24.04
+    # A 4-vCPU hosted runner needs ~5.5h for the whole suite, against a 6h hard
+    # job limit; runner speed varies by ~20%, so unsharded runs miss the wall.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
@@ -20,7 +33,11 @@ jobs:
       - name: Run tests
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
-        run: mkdir -p build/coverage && cd build/ && ctest -j4 --progress . || true
+        # -I <shard>,,4 walks the suite with a stride of 4, so the shards
+        # partition it exactly and interleave slow suites across all four.
+        run: |
+          mkdir -p build/coverage && cd build/ && \
+          ctest -j4 --progress --timeout 600 -I ${{ matrix.shard }},,4 . || true
       - name: Merge coverage data
         run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
       - name: Generate lcov coverage report
@@ -36,8 +53,49 @@ jobs:
                '/usr/*' \
                '*/build/*' \
                --output-file coverage.info
+      - name: Save shard coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: coverage.info
+          retention-days: 1
+
+  upload:
+    name: Upload coverage to Codecov
+    runs-on: ubuntu-24.04
+    # Every shard must succeed: a missing shard would publish a partial figure
+    # as the repo total, which reads as a coverage regression.
+    needs: coverage
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install lcov
+        run: sudo apt-get update && sudo apt-get install -y lcov
+      - name: Fetch shard coverage
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-shard-*
+          path: shards
+      # Not uploaded -- this is the combined line total #6799 left open, to be
+      # read from the log and compared against the last good unsharded run
+      # (76.4%, 138,698 of 181,616 lines).
+      - name: Report combined line total
+        continue-on-error: true
+        run: |
+          args=()
+          for f in shards/*/coverage.info; do args+=(-a "$f"); done
+          # 'empty': llvm-cov's lcov export carries no function records, which
+          # lcov treats as an error when aggregating tracefiles.
+          lcov --ignore-errors inconsistent --ignore-errors corrupt \
+               --ignore-errors empty "${args[@]}" \
+               --output-file combined.info
+      # Upload the shards themselves and let Codecov merge them: the two runs
+      # that ever reached this step both uploaded an lcov-combined tracefile and
+      # both came back `state: error` with no report, while every unsharded run
+      # before them processed. Server-side merge is Codecov's own path for
+      # matrix builds and drops the step that correlates with the failures.
       - name: Upload to Codecov
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.info  
+          disable_search: true
+          files: shards/coverage-shard-1/coverage.info,shards/coverage-shard-2/coverage.info,shards/coverage-shard-3/coverage.info,shards/coverage-shard-4/coverage.info

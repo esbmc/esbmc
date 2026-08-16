@@ -1,11 +1,11 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
-#include <util/config.h>
-#include <util/c_types.h>
-#include <util/fixedbv.h>
-#include <util/ieee_float.h>
-#include <util/location.h>
+#include <util/config/config.h>
+#include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
+#include <util/arith/ieee_float.h>
+#include <util/irep/location.h>
 #include <irep2/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -492,7 +492,15 @@ public:
       datatype_members(members),
       init_field(std::move(if_))
   {
-    assert(is_union_type(type));
+    // A symbol_id type is permitted on the same terms constant_struct2t
+    // permits it above: a transient pre-resolution state. migrate_expr builds
+    // a union literal from `constant_union2tc(migrate_type(expr.type()), ...)`
+    // (migrate.cpp:923), and a frontend whose union tag is still by-name at
+    // that point yields symbol_type2t rather than union_type2t -- which aborted
+    // here for 12 of regression/esbmc's tests under --clang-c-irep2-adjust,
+    // while the identical shape passed for structs. The asymmetry was an
+    // oversight, not a rule: NDEBUG builds already construct these nodes.
+    assert(is_union_type(type) || type->type_id == type2t::symbol_id);
     // smt_conv.cpp's counterexample reconstruction intentionally builds unions
     //  with multiple members (see TODO in get_by_ast), so we can't check if the
     // union has at most 1 member initializer, with
@@ -1389,8 +1397,21 @@ public:
    *         expr is a pointer to this subtype. This is slightly unintuitive,
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
-  address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : expr2t(pointer_type2tc(subtype), address_of_id), ptr_obj(ptrobj)
+  /// Set when the frontend synthesised this address-of rather than the program
+  /// spelling it: the `&f` sugar clang_c_adjust inserts for a function
+  /// designator. clang_c_adjust reads it back to tell `f(x)` (strip the sugar)
+  /// from `(&f)(x)` (a call through a user-written function pointer) -- the two
+  /// carry the same shape and differ only in provenance
+  /// (docs/roadmap/scope-clang-c-irep2.md §35).
+  bool implicit;
+
+  address_of2t(
+    const type2tc &subtype,
+    const expr2tc &ptrobj,
+    bool is_implicit = false)
+    : expr2t(pointer_type2tc(subtype), address_of_id),
+      ptr_obj(ptrobj),
+      implicit(is_implicit)
   {
     assert(ptrobj->expr_id != expr2t::constant_int_id);
     assert(ptrobj->expr_id != expr2t::address_of_id);
@@ -1399,8 +1420,10 @@ public:
 
   expr2tc do_simplify() const override;
 
-  static constexpr auto fields =
-    std::make_tuple(&expr2t::type, &address_of2t::ptr_obj);
+  static constexpr auto fields = std::make_tuple(
+    &expr2t::type,
+    &address_of2t::ptr_obj,
+    &address_of2t::implicit);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1557,15 +1580,28 @@ public:
        builds member2t pre-adjust (all go through migrate at goto-convert, which
        is post-adjust), so this disjunct is staged enabling infra, exercised
        once the V.1k converter/adjuster pilot lands. */
+    /* A `pointer_id` source is the same transient state index2t already
+       permits, and for the same reason: a legacy `member` over a pointer base
+       is what the C adjuster's adjust_member rewrites to
+       `member(dereference(base))`, so migrating a symbol value before that arm
+       has run hands one here. index2t's sibling comment names this pairing; the
+       relaxation had been applied there and not here. An `array_id` source is
+       the same thing for adjust_member other branch, which rewrites an array
+       base to `member(index(base, 0))`. */
     assert(
       source->type->type_id == type2t::struct_id ||
       source->type->type_id == type2t::union_id ||
       source->type->type_id == type2t::complex_id ||
-      source->type->type_id == type2t::symbol_id);
-    /* member must exist exactly once in the parent struct/union — only checkable
-       once the source type is resolved (skipped for the transient symbol case) */
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id);
+    /* member must exist exactly once in the parent struct/union — only
+       checkable once the source type is resolved (skipped for the transient
+       cases) */
     assert(
       source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id ||
+      source->type->type_id == type2t::array_id ||
       struct_union_get_component_number(source->type, memb).has_value());
 #endif
   }
@@ -1638,12 +1674,16 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &idx)
     : expr2t(type, index_id), source_value(source), index(idx)
   {
-    /* A `symbol_id` source is permitted only as a transient pre-resolution
-       state (V.1k two-phase source invariant, see member2t above); the
-       IREP2-native adjuster resolves it to an array/vector before symex. */
+    /* A `symbol_id` or `pointer_id` source is permitted only as a transient
+       pre-resolution state (V.1k two-phase source invariant, see member2t
+       above); the IREP2-native adjuster resolves a symbol source to an
+       array/vector and rewrites a pointer source `p[i]` to `*(p+i)` before
+       symex. A pointer source arises when a legacy `index` over a decayed
+       array (a Python string, char*) is migrated via get_value2(). */
     assert(
       is_array_type(source) || is_vector_type(source) ||
-      source->type->type_id == type2t::symbol_id);
+      source->type->type_id == type2t::symbol_id ||
+      source->type->type_id == type2t::pointer_id);
   }
   index2t(const index2t &ref) = default;
 

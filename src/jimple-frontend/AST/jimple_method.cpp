@@ -1,6 +1,6 @@
 #include <jimple-frontend/AST/jimple_class_member.h>
-#include <util/std_code.h>
-#include <util/expr_util.h>
+#include <util/irep/std_code.h>
+#include <util/expr/expr_util.h>
 
 exprt jimple_method::to_exprt(
   contextt &ctx,
@@ -89,7 +89,7 @@ exprt jimple_method::to_exprt(
     method_type.make_ellipsis();
 
   added_symbol.set_type(method_type);
-  added_symbol.set_value(body->to_exprt(ctx, class_name, this->name));
+  added_symbol.set_value(body->to_code2t(ctx, class_name, this->name));
 
   return dummy;
 }

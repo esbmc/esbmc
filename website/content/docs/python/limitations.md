@@ -126,10 +126,20 @@ weight: 4
 - Core built-in exception types are supported, but not all Python standard library exceptions; custom exception hierarchies with complex inheritance patterns may not be fully handled.
 - `try`/`finally` is supported (including bare `try`/`finally`), but two shapes are refused at parse time rather than lowered unsoundly: a non-empty `else` clause on the `try` (a pre-existing gap — `orelse` is silently dropped today), and a `return`/`break`/`continue` that escapes the `try`, an `except` handler, or the `finally` body (it would bypass the appended `finally`).
 
+## Methods Without an Operational Model
+
+- A method call whose receiver class cannot be resolved — most commonly a method invoked directly on a **container literal**, e.g. `{1}.isdisjoint({2})` or `[1].foobar()` — evaluates to a **nondeterministic value**, so neither the assertion nor its negation can be discharged and both report `VERIFICATION FAILED`. This is deliberate: the previous fallback returned a null (falsy) value, which *proved* the negation of any such call. Binding the receiver to a name first (`s = {1}` … `s.isdisjoint({2})`) gets the modelled semantics.
+- An attribute assigned from a method whose return type is not the enclosing class, then used as a receiver (`self.pub = self.make_publisher()` followed by `self.pub.publish(...)`), degrades to `Unsupported function 'publish' is reached` / `VERIFICATION FAILED` rather than resolving the call.
+- `self.attr = self.method()` types `attr` by the **enclosing** class and does not perform virtual dispatch, so a subclass override is ignored and a valid polymorphic program can be reported as a false `VERIFICATION FAILED` (pinned as a KNOWNBUG in `regression/python/github_6242_override`).
+
 ## Class Attributes
 
 - Type inference for class attributes requires values with clear, determinable types; complex expressions may require explicit type annotations.
 - Recovering a self-referential attribute's type from constructor arguments (the linked-list / tree pattern, e.g. `self.successor = successor` set via `Node(2, a)`) works both within a module and across the module boundary for an imported class (`from node import Node`). It relies on unifying against module-level `ClassName(...)` instantiations: if the class is never instantiated at module scope with the relevant positional argument, the attribute type cannot be recovered and an explicit annotation is required.
+
+## Callable Attributes
+
+- A callable member's signature is recovered from an explicit `Callable[...]` annotation or from the parameter an unannotated `self.fn = fn` names. A callable chosen at runtime (the assigned value varies by path) and a container of callables such as `List[Callable]` are not supported.
 
 ## Missing Return Detection
 
@@ -141,7 +151,6 @@ weight: 4
 - **`Thread(args=(instance,))` value-copies object arguments** ([#4583](https://github.com/esbmc/esbmc/issues/4583)). When a `Thread` target receives a class instance with non-trivial attributes (e.g. a `threading.Lock`), the args-capture struct copies the descriptor by value and breaks attribute dereference inside the trampoline body. Workaround: share state via module-level globals instead of instance attributes passed through `args=`.
 - **Symex does not interleave at Python module-global accesses** ([#4584](https://github.com/esbmc/esbmc/issues/4584)). `--data-races-check` correctly flags W/W races on a module global, but symex's per-statement scheduler does not insert interleaving points at function-internal reads/writes of these globals. A classic split read-modify-write race (`tmp = counter; counter = tmp + 1` from two threads) reports `VERIFICATION SUCCESSFUL` instead of finding the schedule where both threads read `counter == 0` before either writes. The C equivalent of the same program is correctly reported as `VERIFICATION FAILED`.
 - **Thread shapes refused at parse time** with explicit errors:
-  - `Thread` subclassing with `run` override
   - Lambda or runtime-variable `target=`
   - Positional argument forms (`Thread(f, (a, b))`)
   - `args=` bound to a variable instead of a tuple literal (`Thread(target=f, args=payload)`)
@@ -151,6 +160,7 @@ weight: 4
   - `Thread` as a class attribute (`class C: t = Thread(...)`)
   - `target` defined after the caller in source order
   - `from threading import *`
+- **`Thread` subclassing is supported** (see [Supported Features](/docs/python/supported-features#thread-subclassing)), with these shapes refused at parse time: multiple inheritance, a class below module scope, a missing `run`, an overridden `start`, a non-bare `super().__init__()`, a class defined after its constructing function, instance reassignment, binding by anything other than a simple assignment, construction inside a loop, and assignment to a `global`/`nonlocal` name from a function.
 - **Other `threading` primitives are not supported**: `RLock`, `Semaphore`, `Condition`, `Event`, `Barrier`, `Timer` are refused at parse time. The `queue` module now has a single-threaded model (`queue.Queue`/`LifoQueue`; see [Supported Features — Queue](./supported-features#queue-module-queue)), but its blocking `put()`/`get()` semantics are not modelled, so it does not provide thread synchronisation.
 - **The CPython Global Interpreter Lock (GIL) is not modelled** ([#4579](https://github.com/esbmc/esbmc/issues/4579)). Translated programs execute under sequentially-consistent POSIX semantics rather than GIL-serialised bytecode execution, so the analysis over-approximates the set of feasible interleavings compared to actual CPython execution. This preserves safety but may produce spurious concurrency counterexamples.
 

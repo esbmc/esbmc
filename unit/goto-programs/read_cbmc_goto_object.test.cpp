@@ -14,10 +14,10 @@
 #include <goto-programs/cbmc_adapter.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program.h>
-#include <util/config.h>
-#include <util/context.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
+#include <util/config/config.h>
+#include <util/symtab/context.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
 
 #include <fstream>
 #include <sstream>

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANSI_C_PARSE_FLOAT_H
 
 #include <string>
-#include <util/mp_arith.h>
+#include <util/arith/mp_arith.h>
 
 void parse_float(
   const std::string &src,

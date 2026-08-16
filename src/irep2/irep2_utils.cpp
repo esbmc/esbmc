@@ -1,6 +1,6 @@
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 
 void make_not(expr2tc &expr)
 {
@@ -132,6 +132,15 @@ expr2tc gen_zero(const type2tc &type, bool array_as_array_of)
       gen_zero(union_type.members.front(), array_as_array_of)};
 
     return constant_union2tc(type, union_type.member_names.front(), members);
+  }
+
+  case type2t::complex_id:
+  {
+    // C11 6.2.5p13: the (real, imag) pair, both of the element type.
+    const expr2tc zero =
+      gen_zero(to_complex_type(type).subtype, array_as_array_of);
+    std::vector<expr2tc> members = {zero, zero};
+    return constant_struct2tc(type, members);
   }
 
   default:

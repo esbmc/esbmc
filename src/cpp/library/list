@@ -4,6 +4,9 @@
 #include "definitions.h"
 #include "type_traits"
 #include "vector"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 #define LIST_MAX_SIZE 20
 
@@ -263,6 +266,15 @@ public:
     _init();
   }
 
+#if __cplusplus >= 201103L
+  list(std::initializer_list<value_type> init)
+  {
+    _init();
+    for (const value_type *it = init.begin(); it != init.end(); ++it)
+      this->push_back(*it);
+  }
+#endif
+
   list(size_type n, const value_type &value = value_type())
   {
     _init();
@@ -352,6 +364,15 @@ public:
     return it;
   }
 
+  const_iterator cbegin() const
+  {
+    return begin();
+  }
+  const_iterator cend() const
+  {
+    return end();
+  }
+
   reverse_iterator rbegin()
   {
     return reverse_iterator(this, _sentinel_prev);
@@ -360,6 +381,24 @@ public:
   reverse_iterator rend()
   {
     return reverse_iterator(this, SENTINEL);
+  }
+
+  // Const overloads, matching the const begin()/end() pattern above: the
+  // node-based iterator keeps a non-const owner to resolve the sentinel
+  // boundary; cast away const on the receiver, the iterator does not mutate.
+  const_reverse_iterator rbegin() const
+  {
+    const_reverse_iterator it;
+    it.owner = const_cast<list<T> *>(this);
+    it.idx = _sentinel_prev;
+    return it;
+  }
+  const_reverse_iterator rend() const
+  {
+    const_reverse_iterator it;
+    it.owner = const_cast<list<T> *>(this);
+    it.idx = SENTINEL;
+    return it;
   }
 
   size_type size() const
@@ -381,8 +420,16 @@ public:
   {
     return _pool[_sentinel_next].data;
   }
+  const_reference front() const
+  {
+    return _pool[_sentinel_next].data;
+  }
 
   reference back()
+  {
+    return _pool[_sentinel_prev].data;
+  }
+  const_reference back() const
   {
     return _pool[_sentinel_prev].data;
   }

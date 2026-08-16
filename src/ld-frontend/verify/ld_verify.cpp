@@ -231,8 +231,10 @@ LdVerifyResult LdVerifyRunner::run(const LdVerifyOptions &opts)
         "could not determine the temporary directory: " + ec.message();
       return r;
     }
-    // unique_path guarantees a fresh name, so the plain copy_file overload
-    // suffices (no overwrite option needed).
+    // unique_path() only invents a name, it does not reserve one. What stops a
+    // file planted at that path in the meantime from being clobbered is
+    // copy_file()'s default: without overwrite_existing it creates the target
+    // exclusively and fails with EEXIST. Do not "simplify" that away.
     temp_ld = tmp_dir / fs::unique_path("ld-verify-%%%%-%%%%.ld");
     fs::copy_file(input, temp_ld, ec);
     if (ec)

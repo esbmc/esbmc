@@ -1,4 +1,14 @@
-# Activate this on demand for now
-# Our current CMake is having some weird dependencies...
-# It makes no sense for this test to depend on solvers
-#new_unit_test(intrinsic-utils-test "intrinsic_utils.test.cpp" "symex;solvers;gotoalgorithms;pointeranalysis;util_esbmc;langapi")
+new_unit_test(intrinsic-utils-test "intrinsic_utils.test.cpp" "mode_table_obj;symex;solvers;gotoalgorithms;pointeranalysis;util_esbmc;langapi")
+new_unit_test(ssa-wellformed-test "ssa_wellformed.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(renaming-test "renaming.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(frame-lifecycle-test "frame_lifecycle.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(merge-test "merge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(unwind-test "unwind.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(symex-invariant-test "invariant.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(determinism-test "determinism.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(slice-test "slice.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(mpor-test "mpor.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(value-set-merge-test "value_set_merge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(assumption-discharge-test "assumption_discharge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(context-stack-test "context_stack.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(overapproximation-test "overapproximation.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")

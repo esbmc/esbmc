@@ -94,6 +94,12 @@ protected:
     exprt &new_expr,
     const code_typet &ftype) override;
 
+  /** Body for a lambda's static invoker: forward to the closure's
+   *  operator(). Clang synthesises this in CodeGen, so the AST has none. */
+  bool build_lambda_static_invoker(
+    const clang::CXXMethodDecl &invoker,
+    exprt &new_expr);
+
   /**
    *  Get function params for C++
    *  contains conversion routines specific to C++ class member functions
@@ -167,6 +173,17 @@ protected:
    */
   bool
   build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
+
+  /*
+   * The `this` a base destructor is called with: the address of the derived
+   * object's base subobject, not the derived object itself.
+   */
+  exprt base_dtor_this(
+    const clang::CXXRecordDecl &base,
+    const exprt &deref,
+    const irep_idt &this_id,
+    const typet &this_ptr_type,
+    uint64_t offset);
 
   /*
    * Add additional annotations for class/struct/union fields
@@ -345,6 +362,15 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string vtable_ptr_suffix = "@vtable_pointer";
+  /* Leading component of every vtable type: a pointer to the printed name of
+   * the most-derived class the vtable belongs to. Reading it through an
+   * object's vptr is how `typeid` recovers the dynamic type (#6310). */
+  static irep_idt rtti_name_component_id(const irep_idt &vtable_type_id);
+  static struct_typet::componentt
+  rtti_name_component(const irep_idt &vtable_type_id);
+  /* The single spelling of a type used as typeid identity; see #6310. */
+  static std::string rtti_type_name(const clang::QualType &qtype);
+  static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
@@ -489,7 +515,8 @@ protected:
   void add_thunk_component_to_type(
     const symbolt &thunk_func_symb,
     struct_typet &type,
-    const struct_typet::componentt &comp);
+    const struct_typet::componentt &comp,
+    const irep_idt &virtual_name);
   /*
    * Set an intuitive name to thunk function
    */
@@ -644,6 +671,15 @@ protected:
    *  expr: ESBMC IR to represent Function call
    */
   void make_temporary(exprt &expr);
+
+  /* Lower a class-typed conditional operator to a single temporary_object whose
+   * initializer branches, so both constructors target one object (guaranteed
+   * elision). Sets `elided` when it applied; leaves it false for shapes that
+   * keep the generic if_exprt lowering. Returns true on conversion error. */
+  bool get_conditional_class_prvalue(
+    const clang::ConditionalOperator &ternary,
+    exprt &new_expr,
+    bool &elided);
 
   bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };

@@ -5,13 +5,14 @@
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
-#include <util/arith_tools.h>
-#include <util/config.h>
-#include <util/context.h>
-#include <util/c_types.h>
-#include <util/message.h>
-#include <util/migrate.h>
-#include <util/python_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/config/config.h>
+#include <util/symtab/context.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
 #include <irep2/irep2_utils.h>
 
 #include <regex>
@@ -715,6 +716,18 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     }
   }
 
+  // An operational model may implement what Python calls a class as a function
+  // (collections.deque -> list[int], defaultdict/OrderedDict -> dict). The name
+  // is still a legal annotation, so resolve it to the declared return type
+  // rather than rejecting it (#6639).
+  if (!is_defined)
+  {
+    const std::string ret =
+      json_utils::imported_function_return_type(ast_type, converter_.ast());
+    if (!ret.empty() && ret != ast_type)
+      return get_typet(ret, type_size);
+  }
+
   // If still not found, it's a NameError
   if (!is_defined)
   {
@@ -1108,13 +1121,64 @@ const typet type_handler::get_list_type() const
   return lower_to_seam(pointer_type2tc(symbol_type2tc(list_type_symbol->id)));
 }
 
-typet type_handler::get_list_element_type() const
+typet type_handler::get_tagged_object_type() const
 {
   static const symbolt *type = nullptr;
   const char *type_id = "tag-struct __ESBMC_PyObj";
   type = converter_.symbol_table().find_symbol(type_id);
   assert(type);
   return symbol_typet(type->id);
+}
+
+bool type_handler::is_tagged_scalar_type(const typet &t) const
+{
+  return t == get_tagged_object_type();
+}
+
+exprt type_handler::tagged_scalar_type_id(const typet &type) const
+{
+  const std::string type_name =
+    type == bool_type() ? "int" : type_to_string(type);
+  constant_exprt type_id(size_type());
+  type_id.set_value(integer2binary(
+    std::hash<std::string>{}(type_name), config.ansi_c.address_width));
+  return type_id;
+}
+
+exprt type_handler::tagged_scalar_byte_size(const exprt &value) const
+{
+  if (value.type().is_array())
+  {
+    const array_typet &array_type = to_array_type(value.type());
+    const size_t array_length =
+      std::stoull(array_type.size().value().as_string(), nullptr, 2);
+    const size_t subtype_bits =
+      std::stoull(array_type.subtype().width().as_string(), nullptr, 10);
+    return from_integer(BigInt((array_length * subtype_bits) / 8), size_type());
+  }
+
+  const size_t width_bits =
+    std::stoull(value.type().width().as_string(), nullptr, 10);
+  return from_integer(BigInt(width_bits / 8), size_type());
+}
+
+bool type_handler::is_string_type(const typet &t) const
+{
+  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+}
+
+bool type_handler::is_numeric_scalar_type(const typet &t) const
+{
+  if (t.is_floatbv() || t.is_bool())
+    return true;
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return bv_width(t) >= 16;
+  return false;
+}
+
+typet type_handler::get_list_element_type() const
+{
+  return get_tagged_object_type();
 }
 
 typet type_handler::get_slice_type() const

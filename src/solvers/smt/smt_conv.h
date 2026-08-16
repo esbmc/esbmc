@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include <irep2/irep2.h>
-#include <util/threeval.h>
+#include <util/base/threeval.h>
 #include <solvers/smt/smt_result.h>
 
 // Forward declaration only: the full solver implementation lives in

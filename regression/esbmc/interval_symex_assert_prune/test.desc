@@ -3,5 +3,5 @@ main.c
 --interval-symex-assert --multi-property
 ^VERIFICATION SUCCESSFUL$
 ^Generated 2 VCC\(s\), 0 remaining after simplification
-PASSED \(interval\).*x must be non-negative
-PASSED \(interval\).*x must be at most 100
+PASSED: 'x must be non-negative at file .*main\.c line 6.*' \(interval\)
+PASSED: 'x must be at most 100 at file .*main\.c line 7.*' \(interval\)

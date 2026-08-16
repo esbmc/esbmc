@@ -36,7 +36,7 @@ jobs:
     name: arm64 darwin build
     with:
       operating-system: macos-latest
-      build-flags: '-b DebugOpt -c 21'
+      build-flags: '-b DebugOpt -c 21 -e ON'
       testing: true
 
   # Check project with clang-format. This job no longer auto-commits fixes:
@@ -206,6 +206,21 @@ jobs:
             exit 0
           fi
           cmakelint --config=.config/cmakelintrc "${files[@]}"
+
+
+  # Fail when a goto-symex verification harness no longer matches the source it
+  # transcribes (docs/roadmap/goto-symex-verification-plan.md §11.5).
+  symex-harness-drift:
+    name: Check goto-symex harness drift
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Run drift check
+        run: python3 scripts/verification/symex/drift_check.py
 
 
   # Check project with YAPF

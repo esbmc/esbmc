@@ -1,10 +1,10 @@
 #pragma once
 
-#include <util/c_types.h>
-#include <util/arith_tools.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
-#include <util/migrate.h>
+#include <util/lang/c_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
+#include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
 
@@ -205,6 +205,21 @@ public:
   const typet get_list_type() const;
 
   typet get_list_element_type() const;
+
+  typet get_tagged_object_type() const;
+
+  bool is_tagged_scalar_type(const typet &t) const;
+
+  exprt tagged_scalar_type_id(const typet &type) const;
+
+  exprt tagged_scalar_byte_size(const exprt &value) const;
+
+  // A Python str is a char array or char*.
+  bool is_string_type(const typet &t) const;
+
+  // A Python numeric scalar is an int (>=16-bit bitvector, excluding the
+  // 8-bit char that backs a 1-character string), float, or bool.
+  bool is_numeric_scalar_type(const typet &t) const;
 
   /*
    * Gets the generic dictionary type from the symbol table.

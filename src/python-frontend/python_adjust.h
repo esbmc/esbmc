@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
 #include <string>
 #include <vector>
@@ -22,7 +22,7 @@
 /// path is dead-but-tested, mirroring the "add the machinery, prove it inert,
 /// wire it later" pattern (esbmc/esbmc#5265). `#cpp_type`/`#member_name`
 /// carriage and dropping the legacy hop remain later phases (B.4/B.5). See
-/// `docs/irep2-migration.md`, section "V.1k (b)-adjuster".
+/// `docs/roadmap/irep2-migration.md`, section "V.1k (b)-adjuster".
 class python_adjust
 {
 public:
@@ -99,6 +99,14 @@ protected:
   /// parameter type. Returns true when rewritten.
   bool wrap_function_pointer_callee(expr2tc &fn, std::vector<expr2tc> &args);
 
+  /// Decay an array-typed call argument to `&arg[0]` when the callee's declared
+  /// parameter is a pointer — the array half of
+  /// `clang_c_adjust::adjust_function_call_arguments`, which converts each
+  /// argument to its parameter type through `c_typecastt` (whose array case
+  /// decays). Without it symex aborts binding the argument. Returns true when
+  /// any argument was rewritten.
+  bool decay_array_arguments(const expr2tc &fn, std::vector<expr2tc> &args);
+
   /// Derive a cpp-throw's exception-id chain from its operand's type,
   /// mirroring `clang_cpp_adjust::convert_exception_id`: the bare class name
   /// followed by its direct bases for a class operand (both the by-name
@@ -108,7 +116,7 @@ protected:
   /// type-id fallback so the result is never empty (remove_exceptions
   /// dereferences front()). Used by adjust_expr to complete an empty
   /// `code_cpp_throw2t::exception_list` — flip blocker #1
-  /// (docs/irep2-migration.md, "Flip-probe census").
+  /// (docs/roadmap/irep2-migration.md, "Flip-probe census").
   std::vector<irep_idt> derive_exception_ids(const type2tc &type) const;
 
   /// Recursive worker for derive_exception_ids, threading the legacy `_ptr`

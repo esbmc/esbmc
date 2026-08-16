@@ -1,15 +1,15 @@
 #include <goto-programs/goto_convert_class.h>
 #include <irep2/irep2_utils.h>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
-#include <util/rename.h>
-#include <util/std_expr.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/rename.h>
+#include <util/irep/std_expr.h>
 
 /// Recursively flatten a (possibly nested) binary && expression into a flat
 /// list of conjuncts.  Clang represents A && B && C as and(and(A,B),C).
@@ -85,6 +85,105 @@ static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
     if (mentions_symbol(*it, ids))
       return true;
   return false;
+}
+
+/// `__ESBMC_old(base[j])` with `j` bound by the enclosing quantifier takes the
+/// address of one element, which has no value outside the quantifier and so
+/// cannot be hoisted. Snapshot the array instead — `__ESBMC_old(base)[j]` —
+/// leaving an operand the bound variable does not reach, so the ordinary
+/// hoisting applies and the contract layer materialises one array snapshot in
+/// place of one per index (#4219). Only a base of array type is rewritten: a
+/// pointer with a symbolic extent has no whole object to snapshot.
+/// The `__ESBMC_old_raw` call under \p deref, which the `__ESBMC_old` macro
+/// wraps as `*(T*)__ESBMC_old_raw(&x)`, or nullptr if this is not one.
+static exprt *old_raw_call_under(exprt &deref)
+{
+  if (deref.id() != exprt::deref || deref.operands().size() != 1)
+    return nullptr;
+
+  exprt *call = &deref.op0();
+  while (call->id() == exprt::typecast && call->operands().size() == 1)
+    call = &call->op0();
+
+  if (
+    call->id() != "sideeffect" || call->statement() != "function_call" ||
+    call->operands().size() < 2 || !call->op0().is_symbol())
+    return nullptr;
+
+  // Compare the base name rather than suffix-matching the mangled id, so a
+  // user function whose name merely ends in the token keeps the meaning it
+  // was written with. Same split as is_contract_intrinsic in contracts.cpp.
+  const std::string callee = call->op0().identifier().as_string();
+  const size_t at = callee.rfind('@');
+  if (
+    (at == std::string::npos ? callee : callee.substr(at + 1)) !=
+    "__ESBMC_old_raw")
+    return nullptr;
+
+  return call->op1().operands().size() == 1 ? call : nullptr;
+}
+
+/// The array element \p addr addresses, when its index reaches \p bound_vars
+/// and its base is an array. A pointer with a symbolic extent has no whole
+/// object to snapshot, so it is left alone.
+static const exprt *
+bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
+{
+  const exprt *e = &addr;
+  while (e->id() == exprt::typecast && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() != exprt::addrof || e->operands().size() != 1)
+    return nullptr;
+
+  const exprt &target = e->op0();
+  if (target.id() != exprt::index || target.operands().size() != 2)
+    return nullptr;
+
+  if (
+    !mentions_symbol(target.op1(), bound_vars) ||
+    !target.op0().type().is_array())
+    return nullptr;
+
+  return &target;
+}
+
+static void
+lift_old_over_bound_index(exprt &expr, const std::set<irep_idt> &bound_vars)
+{
+  Forall_operands (it, expr)
+    lift_old_over_bound_index(*it, bound_vars);
+
+  exprt *call = old_raw_call_under(expr);
+  if (!call)
+    return;
+
+  const exprt *target =
+    bound_array_element(call->op1().operands()[0], bound_vars);
+  if (!target)
+    return;
+
+  // Snapshotting an array through a dereference is an rvalue array read, which
+  // the dereference layer refuses. Where the array is a struct member, take the
+  // struct — a legal rvalue — and re-apply the member to the snapshot.
+  const exprt base = target->op0();
+  const exprt index = target->op1();
+  const bool via_member = base.id() == exprt::member;
+  const exprt object = via_member ? base.op0() : base;
+
+  exprt whole_snapshot = *call;
+  whole_snapshot.op1().operands()[0] = address_of_exprt(object);
+
+  typet object_ptr("pointer");
+  object_ptr.subtype() = object.type();
+  exprt snapshot =
+    dereference_exprt(typecast_exprt(whole_snapshot, object_ptr), object_ptr);
+
+  if (via_member)
+    snapshot = member_exprt(
+      snapshot, to_member_expr(base).get_component_name(), base.type());
+
+  index_exprt element(snapshot, index);
+  expr.swap(element);
 }
 
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
@@ -1008,6 +1107,9 @@ void goto_convertt::convert_quantifier_calls(exprt &expr)
       // Bottom-up: convert any nested quantifier calls first, then summarize
       // the remaining calls so the bound variable stays free in the body.
       convert_quantifier_calls(args[1]);
+      const irep_idt bound = quantifier_bound_var_id(args[0]);
+      if (!bound.empty())
+        lift_old_over_bound_index(args[1], {bound});
       inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
       if (!has_sideeffect(args[1]))
       {
@@ -1165,6 +1267,47 @@ bool goto_convertt::has_sideeffect(const expr2tc &expr)
       found = true;
   });
   return found;
+}
+
+/// Recursively flatten a (possibly nested) &&/|| tree forming a contract
+/// clause, hoisting side effects (e.g. __ESBMC_old()) at the leaves while
+/// preserving the boolean structure.
+///
+/// The earlier path processed only the *top-level* && or || chain, calling
+/// remove_sideeffects() on each part. For a disjunctive clause whose disjuncts
+/// are themselves && chains containing __ESBMC_old(), that lowered a whole
+/// nested && at once and silently dropped its leading conjuncts (#6298).
+/// Recursing so remove_sideeffects() only ever sees a leaf keeps every conjunct
+/// and still snapshots __ESBMC_old() unconditionally at function entry.
+void goto_convertt::flatten_contract_clause(exprt &clause, goto_programt &dest)
+{
+  // Look through an implicit typecast Clang inserts around a boolean && / ||.
+  exprt *inner = &clause;
+  if (
+    inner->id() == "typecast" && inner->operands().size() == 1 &&
+    (inner->op0().is_and() || inner->op0().id() == "or"))
+    inner = &inner->op0();
+
+  if (inner->is_and())
+  {
+    exprt::operandst parts;
+    collect_and_conjuncts(*inner, parts);
+    for (auto &p : parts)
+      flatten_contract_clause(p, dest);
+    clause = rebuild_and_chain(parts, 0);
+    return;
+  }
+  if (inner->id() == "or")
+  {
+    exprt::operandst parts;
+    collect_or_disjuncts(*inner, parts);
+    for (auto &p : parts)
+      flatten_contract_clause(p, dest);
+    clause = rebuild_or_chain(parts, 0);
+    return;
+  }
+
+  remove_sideeffects(clause, dest);
 }
 
 void goto_convertt::remove_sideeffects(
@@ -1451,11 +1594,7 @@ void goto_convertt::remove_sideeffects(
       // they have zero effect on the GOTO program (no FUNCTION_CALL step, no
       // side-effect processing of the argument).  The declarations remain in
       // the unconditional intrinsics section so annotated files still compile.
-      if (
-        fsym && options.get_option("enforce-contract").empty() &&
-        options.get_option("replace-call-with-contract").empty() &&
-        !options.get_bool_option("enforce-all-contracts") &&
-        !options.get_bool_option("replace-all-contracts"))
+      if (fsym && !options.contracts_enabled())
       {
         const std::string &fname = id2string(fsym->name);
         if (
@@ -1508,7 +1647,6 @@ void goto_convertt::remove_sideeffects(
         (fsym->name == "__ESBMC_ensures" || fsym->name == "__ESBMC_requires"))
       {
         exprt::operandst &args = expr.op1().operands();
-        bool rewrote = false;
         if (args.size() == 1 && has_sideeffect(args.front()))
         {
           exprt *inner = &args.front();
@@ -1517,29 +1655,15 @@ void goto_convertt::remove_sideeffects(
             (inner->op0().is_and() || inner->op0().id() == "or"))
             inner = &inner->op0();
 
-          if (inner->is_and())
+          // Recurse through the full &&/|| tree so a side effect nested inside a
+          // disjunct's && chain is hoisted at the leaf rather than lowering the
+          // whole nested chain at once (which dropped leading conjuncts, #6298).
+          if (inner->is_and() || inner->id() == "or")
           {
-            exprt::operandst parts;
-            collect_and_conjuncts(*inner, parts);
-            for (auto &p : parts)
-              remove_sideeffects(p, dest);
-            args.front() = rebuild_and_chain(parts, 0);
-            rewrote = true;
+            flatten_contract_clause(args.front(), dest);
+            remove_function_call(expr, dest, result_is_used);
+            return;
           }
-          else if (inner->id() == "or")
-          {
-            exprt::operandst parts;
-            collect_or_disjuncts(*inner, parts);
-            for (auto &p : parts)
-              remove_sideeffects(p, dest);
-            args.front() = rebuild_or_chain(parts, 0);
-            rewrote = true;
-          }
-        }
-        if (rewrote)
-        {
-          remove_function_call(expr, dest, result_is_used);
-          return;
         }
       }
 
@@ -1604,7 +1728,7 @@ void goto_convertt::remove_sideeffects(
     else if (statement == "temporary_object")
     {
       const locationt location = expr.find_location();
-      remove_temporary_object(expr, dest, result_is_used);
+      remove_temporary_object(expr, dest);
 
       // A discarded temporary dies at the end of its full expression
       // (C++ [class.temporary]/4, github #6076), not at block exit: emit
@@ -1799,12 +1923,24 @@ void goto_convertt::remove_assignment(
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type() = expr.op0().type();
 
+    // The C frontend records the type C says the operation runs in when it
+    // differs from E1's (#6589). Promote E1 into it and convert the result
+    // back on assignment, so `E1 op= E2` and `E1 = E1 op (E2)` agree.
+    const typet &computation_type =
+      static_cast<const typet &>(expr.find("computation_type"));
+
     if (rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());
       rhs.type() = int_type();
       rhs.make_typecast(typet("bool"));
+    }
+    else if (computation_type.is_not_nil() && computation_type != rhs.type())
+    {
+      rhs.op0().make_typecast(computation_type);
+      rhs.type() = computation_type;
+      rhs.make_typecast(expr.op0().type());
     }
 
     exprt lhs(expr.op0());
@@ -2242,16 +2378,14 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   tmp.location() = expr.location();
   tmp.copy_to_operands(to_unary_expr(expr).op0());
   tmp.set("destructor", expr.find("destructor"));
+  tmp.set("dealloc_function", expr.find("dealloc_function"));
 
   convert_cpp_delete(tmp, dest);
 
   expr.make_nil();
 }
 
-void goto_convertt::remove_temporary_object(
-  exprt &expr,
-  goto_programt &dest,
-  bool result_is_used)
+void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 {
   if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";

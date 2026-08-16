@@ -4,7 +4,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <unordered_map>
 
 enum class FunctionType
@@ -49,6 +49,19 @@ public:
 
 private:
   friend class function_call_expr_test_access;
+
+  /// Fold a constant integer component of a tuple being sorted at convert
+  /// time; follows symbols, unary minus and widening typecasts.
+  bool eval_const_int(const exprt &e, BigInt &out) const;
+
+  /// Fold a constant str component of such a tuple (#6883).
+  bool eval_const_str(const exprt &e, std::string &out) const;
+
+  /*
+   * Build the receiver for a method called on a constructor temporary
+   * (`A().f()`), running A's __init__ when it has one.
+   */
+  exprt build_temporary_receiver(const nlohmann::json &ctor_call) const;
 
   /*
   * Check if the current function call is to math.comb() function
@@ -192,6 +205,18 @@ private:
    */
   exprt handle_float_is_integer_literal() const;
 
+  /**
+   * @brief Fold (3.5).hex() on a constant float literal receiver to CPython's
+   *        hexadecimal string ("0x1.c000000000000p+1").
+   */
+  exprt handle_float_hex_literal() const;
+
+  /**
+   * @brief Fold float.fromhex("0x1.8p3") on a constant string to a double,
+   *        the inverse of float.hex().
+   */
+  exprt handle_float_fromhex() const;
+
   /*
    * Extracts a string representation from a symbol's constant value.
    * Handles both character arrays (e.g., ['6', '5']) and single-character
@@ -209,6 +234,16 @@ private:
   exprt handle_isinstance() const;
 
   exprt handle_hasattr() const;
+
+  /*
+   * hasattr()'s first argument when it names an imported module. A module is
+   * not a first-class value here, so it has no symbol of its own; resolve the
+   * attribute against the symbols the module contributed instead. Returns
+   * nullopt when the argument does not name an imported module.
+   */
+  std::optional<exprt> module_hasattr(
+    const nlohmann::json &obj_arg,
+    const std::string &attr_name) const;
 
   /*
    * Handles issubclass(cls, classinfo): resolves the class hierarchy from the
@@ -518,6 +553,8 @@ private:
   bool is_int_literal_method_call() const;
   // float.is_integer() on a constant float-literal receiver.
   bool is_float_is_integer_literal_call() const;
+  // float.hex() on a constant float-literal receiver.
+  bool is_float_hex_literal_call() const;
   // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
   bool is_iter_on_builtin_call() const;
   // x.__str__() with no args on a builtin scalar (int/float/bool/str).
@@ -571,6 +608,15 @@ private:
   std::optional<exprt> try_handle_round(bool is_user_imported);
 
   /*
+   * Inlines a call to a user function whose entire body is `return <param>`
+   * when that parameter resolves to an array/array-pointer type: arrays
+   * aren't a valid by-value return type yet, so the call is replaced with
+   * the caller's own argument expression for this exact identity pattern.
+   * Returns nullopt for any other function shape or non-array parameter.
+   */
+  std::optional<exprt> try_fold_identity_array_return();
+
+  /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
    * may early-return the inline comparison for a mixed int/float min/max list.
@@ -586,6 +632,9 @@ private:
    * not resolve to a non-code variable symbol.
    */
   std::optional<exprt> try_indirect_variable_call();
+
+  /// Indirect call through a function pointer held in an instance field.
+  std::optional<exprt> try_indirect_member_call();
 
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass

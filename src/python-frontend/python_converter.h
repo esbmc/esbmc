@@ -5,18 +5,22 @@
 #include <python-frontend/function_call/cache.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/set/python_set.h>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/symtab/symbol_generator.h>
 #include <map>
+#include <optional>
 #include <set>
+#include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,6 +38,13 @@ class python_class_builder;
 class python_lambda;
 class python_exception_handler;
 class get_expr_depth_guard;
+
+// Defined in converter_stmt.cpp; shared with numpy_call_expr.cpp so both can
+// verify a Name/Attribute receiver actually resolves to the imported numpy
+// module before treating a call as a numpy constructor/method.
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name);
 
 /**
  * @class python_converter
@@ -90,6 +101,12 @@ public:
   {
     return *ast_json;
   }
+  /// \brief Symbol for __ESBMC_return_value in an ensures clause, null when
+  ///   the name is something else or the function returns nothing.
+  symbolt *contract_return_value_symbol(
+    const std::string &var_name,
+    const nlohmann::json &element);
+
   exprt get_expr(const nlohmann::json &element);
 
   /**
@@ -229,6 +246,7 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  std::string current_module_name() const;
 
   const std::string
   get_imported_module_path(const std::string &module_name) const
@@ -277,6 +295,17 @@ public:
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 
+  /// Enters a contract clause or loop invariant, staying entered when already
+  /// inside one. Returns the previous state for @ref restore_contract_clause.
+  bool enter_contract_clause(bool entering)
+  {
+    return std::exchange(in_contract_clause_, in_contract_clause_ || entering);
+  }
+  void restore_contract_clause(bool saved)
+  {
+    in_contract_clause_ = saved;
+  }
+
 private:
   friend class complex_handler;
   friend class function_call_expr;
@@ -286,6 +315,7 @@ private:
   friend class python_list;
   friend class string_handler;
   friend class tuple_handler;
+  friend class dynamic_type_handler;
   friend class python_typechecking;
   friend class python_class_builder;
   friend class python_dict_handler;
@@ -444,6 +474,11 @@ private:
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real classes.
   bool is_user_class_pointer(const typet &t);
 
+  // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
+  // scalar) to a class-pointer binding. Only those types are widened: a
+  // struct-shaped one may already back an expression built elsewhere.
+  void retype_placeholder_to_class(symbolt &sym, const typet &new_type);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
@@ -453,6 +488,13 @@ private:
     const std::string &func_identifier);
 
   exprt handle_none_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  /// Binary operation with a None operand: raises for the operators CPython
+  /// rejects, otherwise defers to handle_none_comparison (#6260).
+  exprt handle_none_operand(
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs);
@@ -647,6 +689,12 @@ private:
     module_locator &locator,
     code_blockt &code);
 
+  /// Binds an `import <mod> as <alias>` alias to the module's file, so the
+  /// alias resolves like the module name does (#6296).
+  void register_import_alias(
+    const nlohmann::json &import_node,
+    const std::string &module_file);
+
   /// Converts every module-level and function-local Import/ImportFrom
   /// statement in the current AST, appending the resulting code to
   /// `all_imports_block`. Shared by both the whole-module conversion path
@@ -816,6 +864,87 @@ private:
   typet resolve_any_subscript_array_type(
     const nlohmann::json &ast_node,
     const typet &current_type);
+
+  typet resolve_call_argument_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
+  std::string resolve_name_symbol_id(const std::string &name) const;
+
+  std::string root_name_from_subscript(const nlohmann::json &node) const;
+
+  bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
+
+  bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
+
+  std::string
+  root_name_from_numpy_view_copy_expr(const nlohmann::json &node) const;
+
+  bool contains_copied_numpy_view_name(const nlohmann::json &node);
+
+  void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
+
+  void reject_unknown_numpy_view_call(const nlohmann::json &node);
+
+  void reject_numpy_view_identity_query(const nlohmann::json &node);
+
+  void reject_copied_numpy_view_in_container(
+    const nlohmann::json &ast_node,
+    const std::set<std::string> &container_types);
+
+  bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
+
+  std::optional<nlohmann::json>
+  select_return_value_for_call(const nlohmann::json &call_node) const;
+
+  nlohmann::json substitute_call_arguments(
+    const nlohmann::json &node,
+    const nlohmann::json &call_node) const;
+
+  bool return_value_uses_call_argument(
+    const nlohmann::json &return_value,
+    const nlohmann::json &call_node) const;
+
+  void reject_unsafe_numpy_view_target(const nlohmann::json &target);
+
+  /// Raise Python's TypeError for item assignment on an immutable container,
+  /// reporting whether `container_type` is one.
+  bool reject_immutable_item_assignment(
+    const typet &container_type,
+    codet &target_block);
+
+  void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  void clear_numpy_view_copy(const exprt &lhs);
+
+  void
+  update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  std::optional<nlohmann::json>
+  rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+
+  // Classifies a Call node as a numpy method call: (is_a_method_call,
+  // method_name, method_base, is_a_supported_copy_method,
+  // is_a_supported_dispatch_rewrite_method). Split out of
+  // rewrite_numpy_method_call_node() to keep that function's own decision
+  // count low.
+  std::tuple<bool, std::string, nlohmann::json, bool, bool>
+  classify_numpy_method_call(const nlohmann::json &call_node) const;
+
+  bool
+  method_base_is_imported_module(const std::string &method_base_name) const;
+
+  bool
+  method_base_is_tracked_numpy_array(const std::string &method_base_name) const;
+
+  // Builds the np.<method_name>(method_base, ...original args...) rewrite of
+  // a recognized numpy method call.
+  nlohmann::json build_numpy_method_rewrite_node(
+    const nlohmann::json &call_node,
+    const std::string &method_name,
+    const nlohmann::json &method_base) const;
 
   // =========================================================================
   // Unpacking helper methods
@@ -1136,6 +1265,15 @@ private:
 
   static std::string op_to_dunder(const std::string &op);
   static std::string op_to_rdunder(const std::string &op);
+  /// Rewrite @p cond into a call to its class's __bool__ when there is one.
+  exprt apply_bool_dunder(exprt cond, const locationt &location);
+
+  /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
+  exprt apply_bool_dunder_for_not(
+    const std::string &op,
+    exprt operand,
+    const locationt &location);
+
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
@@ -1186,6 +1324,7 @@ private:
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;
+  dynamic_type_handler dynamic_type_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
@@ -1202,6 +1341,14 @@ private:
   // and evaluate a side-effecting divisor an extra time).
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
+  // A clause is a specification, not code: converting one must not plant a
+  // statement into the enclosing block. The guard did, so annotating a file
+  // changed its verification result with contracts switched off, and a `//` in
+  // a loop invariant raised inside the loop body. C emits nothing from a
+  // clause either.
+  bool in_contract_clause_ = false;
+
+  bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
   // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
   // raw index/slice expression rather than an already-materialized array
@@ -1209,13 +1356,14 @@ private:
   // code_assignt between those (Z3 sort mismatch) -- get_var_assign's final
   // store must copy it element by element instead.
   bool any_subscript_array_needs_copy_ = false;
-  // The exprt resolve_any_subscript_array_type already built while probing
-  // the RHS's real type. get_var_assign's RHS fetch reuses it instead of
-  // converting the same Subscript AST node a second time (which would
-  // duplicate any temporaries/instructions the probe emitted, e.g. for
-  // fancy/mask/column selection).
+  // An array-type probe may already have built this exprt while resolving the
+  // RHS's real type. get_var_assign's RHS fetch reuses it instead of converting
+  // the same RHS AST node a second time (which would duplicate any temporaries/
+  // instructions the probe emitted, e.g. for fancy/mask/column selection).
   exprt cached_any_subscript_rhs_;
   bool has_cached_any_subscript_rhs_ = false;
+  std::set<std::string> numpy_array_symbols_;
+  std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

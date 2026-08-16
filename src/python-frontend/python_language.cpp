@@ -6,9 +6,9 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/param_annotations.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/message.h>
-#include <util/filesystem.h>
-#include <util/c_expr2string.h>
+#include <util/message/message.h>
+#include <util/base/filesystem.h>
+#include <util/lang/c_expr2string.h>
 #include <c2goto/cprover_library.h>
 
 #include <cstdlib>
@@ -29,6 +29,14 @@
 //                    subheaders. Include the ones we use.
 //
 // We use Boost.Process to run the Python interpreter in a separate process.
+//
+// v1's locale.hpp uses std::codecvt_utf8, deprecated in C++17. Boost is not
+// ours to fix and the include lists it with -I rather than -isystem (the
+// nlohmann pin needs that precedence, see ExternalDependencies.cmake), so
+// -Werror would stop on a third-party header. Silence it across the include
+// only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #if defined(__APPLE__) || (BOOST_VERSION == 108700)
 #  include <boost/process/v1.hpp>
 namespace bp = boost::process::v1;
@@ -41,6 +49,7 @@ namespace bp = boost::process::v1;
 #  include <boost/process.hpp>
 namespace bp = boost::process;
 #endif
+#pragma GCC diagnostic pop
 
 namespace fs = boost::filesystem;
 
@@ -286,6 +295,20 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   {
     log_error("{}", e.what());
     exit(-2);
+  }
+
+  // V.4 hop-off: with --python-irep2-adjust-only the IREP2-native adjuster
+  // *replaces* clang_cpp_adjust on the Python path (the B.5 "sole adjuster"
+  // milestone, gated behind a default-off flag). It stays default-off: a
+  // whole-corpus legacy-vs-hop-off census (2026-07-29) found the missing
+  // assignment/operand conversion documented in docs/roadmap/scope-v1k-adjuster.md
+  // ("the assignment-conversion trap") reaches the solver as an ill-typed term
+  // and crashes it, so the flip waits on the coupled arithmetic-reconciliation
+  // effort that section sizes.
+  if (config.options.get_bool_option("python-irep2-adjust-only"))
+  {
+    python_adjust py_adjuster(context);
+    return py_adjuster.adjust();
   }
 
   clang_cpp_adjust adjuster(context);

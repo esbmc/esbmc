@@ -2,7 +2,7 @@
 #define PYTHON_FRONTEND_COMPLEX_HANDLER_H
 
 #include <nlohmann/json.hpp>
-#include <util/expr.h>
+#include <util/irep/expr.h>
 #include <string>
 #include <unordered_map>
 

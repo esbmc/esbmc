@@ -21,20 +21,22 @@ extern "C"
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <irep2/simplification_check.h>
+#include <solvers/smt/simplification_equivalence.h>
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -63,19 +65,20 @@ extern "C"
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/goto_check_uninit_vars.h>
 #include <goto-programs/goto_check_unchecked_return.h>
+#include <goto-programs/goto_check_excessive_alloc.h>
 #include <goto-programs/dead_store_analysis.h>
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -109,6 +112,24 @@ extern "C"
 //    - Perform a single run of Bounded Model Checking and rely
 //      on the simplifier to determine the sufficient verification bound
 //      (see "do_bmc")
+int esbmc_parseoptionst::run_chosen_strategy(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  if (cmdline.isset("incremental-context-bound"))
+    return do_context_bound_deepening(options, goto_functions);
+
+  if (
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant"))
+    return do_bmc_strategy(options, goto_functions);
+
+  // No strategy chosen: rely on the simplifier and the flags set through CMD.
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
+}
+
 int esbmc_parseoptionst::doit()
 {
   // Configure msg output
@@ -142,6 +163,93 @@ int esbmc_parseoptionst::doit()
     log_error("This version has no support for hardware modules.");
     return 1;
   }
+
+  // --dead-code-check is a standalone base-case advisory analysis: it reuses
+  // the branch-coverage instrumentation and forces a SUCCESSFUL verdict. The
+  // k-induction / incremental strategies and early-stopping fail-fast drive
+  // paths it neither exercises nor can report soundly (a stopped fail-fast
+  // run leaves unsolved probes that would be misreported as dead), so reject
+  // those combinations up front (issue #4495).
+  if (cmdline.isset("dead-code-check"))
+    for (const char *incompatible :
+         {"k-induction",
+          "k-induction-parallel",
+          "incremental-bmc",
+          "falsification",
+          "termination",
+          "loop-invariant",
+          "multi-fail-fast",
+          // Standalone phase-only modes: the dead-code report is only emitted
+          // on the base-case pass (bmc.cpp `bs && !fc && !is`), so a run under
+          // --forward-condition / --inductive-step would exit SUCCESSFUL
+          // without ever printing the [Dead code] findings.
+          "forward-condition",
+          "inductive-step",
+          // Claim filtering marks every unselected assertion SKIP but leaves it
+          // in goto_coveraget::all_claims, so its probe never solves and the
+          // reporter would flag live branches as dead. SMT-formula emission
+          // (P_SMTLIB) likewise leaves every probe unsolved. --no-assertions
+          // drops the probes outright: goto_coveraget::insert_assert marks them
+          // user_provided(true), which is just what symex_assert discards, so
+          // every branch would be reported dead. All produce spurious CWE-561
+          // findings, so reject them (issue #4495 / #5934).
+          "claim",
+          "smt-formula-only",
+          "smt-formula-too",
+          "no-assertions",
+          // Other coverage modes reuse the same goto_coveraget::all_claims and
+          // multi_property_check routing: assertion coverage diverts solved
+          // probes into reached_mul_claims (leaving reached_claims empty), and
+          // the branch-function / k-path passes overwrite all_claims after the
+          // dead-code instrumentation runs. Either way the reporter would mark
+          // live branches as dead, so reject them (issue #4495).
+          "assertion-coverage",
+          "assertion-coverage-claims",
+          "condition-coverage",
+          "condition-coverage-claims",
+          "condition-coverage-rm",
+          "condition-coverage-claims-rm",
+          "branch-function-coverage",
+          "branch-function-coverage-claims",
+          "k-path-coverage",
+          "k-path-coverage-claims",
+          // Safety checks injected during symex (after the coverage
+          // instrumentation) surface as genuine SAT claims that are not in
+          // all_claims. The advisory forces a SUCCESSFUL verdict, so such a
+          // real violation would be silently masked; reject these so a leak /
+          // deadlock / race is never hidden behind a dead-code run (issue
+          // #4495). Both race spellings must be listed: process_goto_program
+          // treats --data-races-check-only as a request to add race assertions
+          // too.
+          "memory-leak-check",
+          "deadlock-check",
+          "data-races-check",
+          "data-races-check-only"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--dead-code-check cannot be combined with --{}", incompatible);
+        return 1;
+      }
+
+  // --incremental-context-bound owns the outer verification loop, re-running
+  // do_bmc per context bound; the unwinding strategies each drive an outer
+  // loop of their own, so only one driver can own the run (issue #6480).
+  if (cmdline.isset("incremental-context-bound"))
+    for (const char *incompatible :
+         {"termination",
+          "incremental-bmc",
+          "falsification",
+          "k-induction",
+          "k-induction-parallel",
+          "loop-invariant"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--incremental-context-bound cannot be combined with --{}",
+          incompatible);
+        return 1;
+      }
 
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
@@ -178,6 +286,24 @@ int esbmc_parseoptionst::doit()
     if (cmdline.isset("unchecked-return-value-check"))
       goto_preprocess_algorithms.emplace_back(
         std::make_unique<goto_check_unchecked_return>(context));
+
+    // Excessive-allocation-size check (CWE-789). The bound K is the byte
+    // limit above which an allocation size is flagged; a bare flag uses the
+    // implicit 1 MiB default (see options.cpp).
+    if (cmdline.isset("excessive-alloc-check"))
+    {
+      // boost's value<int> already validated this as an int at parse time (as
+      // --unwind / --k-path-coverage do), so atoi only reads it back and never
+      // sees the non-numeric input that would make it silently yield 0.
+      int k = atoi(cmdline.getval("excessive-alloc-check"));
+      if (k <= 0)
+      {
+        log_error("--excessive-alloc-check=K requires K >= 1 (got {})", k);
+        return 1;
+      }
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<goto_check_excessive_alloc>(context, BigInt(k)));
+    }
 
     // Dead-store advisory (CWE-563). Must also run before mark_decl_as_non_det,
     // which rewrites uninitialised DECLs into `DECL; ASSIGN x = nondet` — that
@@ -281,9 +407,19 @@ int esbmc_parseoptionst::doit()
     }
   }
 
+  // Installed before the GOTO program is built so the check also covers the
+  // simplification the frontend and the GOTO passes perform. Inert unless
+  // the build enabled ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK.
+  install_simplification_equivalence_check(namespacet(context), options);
+
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
     return 6;
+
+  simplification_check_stats::report();
+  // The checker captured a namespace over `context`, a member of this object;
+  // dropping it here keeps it from outliving what it points at.
+  simplification_check::clear();
 
   // Output claims about this program
   // (Fedor: should be moved to the output method perhaps)
@@ -303,17 +439,41 @@ int esbmc_parseoptionst::doit()
   if (options.get_bool_option("skip-bmc"))
     return 0;
 
-  // Now run one of the chosen strategies
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
-    return do_bmc_strategy(options, goto_functions);
+  // A violation found under a bounded schedule space is genuine whichever
+  // strategy owns the run, so this precedes the dispatch rather than joins it.
+  const int prepass = falsify_with_bounded_schedules(options, goto_functions);
+  if (prepass >= 0)
+    return prepass;
 
-  // If no strategy is chosen, just rely on the simplifier
-  // and the flags set through CMD
-  bmct bmc(goto_functions, options, context);
-  return do_bmc(bmc);
+  const int res = run_chosen_strategy(options, goto_functions);
+
+  // Dead-code analysis is advisory: its probes are SAT for every live branch,
+  // which do_bmc maps to a non-zero (FAILED) exit code. The findings are
+  // reported separately, so remap that to 0 — but only for a completed
+  // analysis. A solver error (P_ERROR) or an SMTLIB-only emission (P_SMTLIB)
+  // is not a finished advisory run, so propagate it rather than masking a
+  // crashed/incomplete analysis as success (issue #4495).
+  //
+  // Checked before the coverage branch below: `is_coverage` also covers
+  // --dead-code-check, which borrows the instrumentation but reports
+  // advisories and a verdict rather than a [Coverage] block.
+  if (options.get_bool_option("dead-code-check"))
+  {
+    if (res == P_ERROR || res == P_SMTLIB)
+      return res;
+    return 0;
+  }
+
+  // A coverage run has no verdict, so it has no failure exit code either: its
+  // result is the [Coverage] block closed by the completeness line. Printed
+  // here, once, so it lands after the last block (k-induction prints one per
+  // phase).
+  if (is_coverage)
+  {
+    report_coverage_completeness();
+    return 0;
+  }
+  return res;
 }
 
 bool esbmc_parseoptionst::resolve_color_option() const

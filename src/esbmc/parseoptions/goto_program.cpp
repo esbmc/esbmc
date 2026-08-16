@@ -5,19 +5,19 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
-#include <util/cwe_mapping.h>
+#include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
-#include <util/filesystem.h>
+#include <util/config/config.h>
+#include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -50,15 +50,15 @@
 #include <goto-programs/mark_decl_as_non_det.h>
 #include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
-#include <util/irep.h>
+#include <util/irep/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
-#include <util/time_stopping.h>
+#include <util/symtab/symbol.h>
+#include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
@@ -479,6 +479,51 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   return failed;
 }
 
+/* A call to a bodyless function is reported ("no body for function", see
+ * symex_function.cpp), but an undefined external variable was silently havoc'd,
+ * leaving no trace that the run covered less than the user believed
+ * (esbmc/esbmc#1424). c_link clears is_extern once a definition is linked in,
+ * so what survives final() is exactly the undefined set. */
+static void warn_undefined_external_symbols(const contextt &context)
+{
+  std::vector<const symbolt *> undefined;
+  context.foreach_operand([&undefined](const symbolt &s) {
+    if (s.is_extern && !s.is_type && !s.get_type().is_code())
+      undefined.push_back(&s);
+  });
+
+  std::sort(
+    undefined.begin(), undefined.end(), [](const symbolt *a, const symbolt *b) {
+      return a->id < b->id;
+    });
+
+  for (const symbolt *s : undefined)
+    log_warning(
+      "no definition for external symbol {} declared at {}",
+      s->name,
+      s->location);
+}
+
+// Expand --no-standard-checks into the individual checks it stands for. Must
+// run before goto_convert, because VLA size checks are generated during goto
+// conversion.
+static void
+expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
+{
+  if (
+    !cmdline.isset("no-standard-checks") &&
+    !options.get_bool_option("no-standard-checks"))
+    return;
+
+  options.set_option("no-pointer-check", true);
+  options.set_option("no-div-by-zero-check", true);
+  options.set_option("no-pointer-relation-check", true);
+  options.set_option("no-unlimited-scanf-check", true);
+  options.set_option("no-vla-size-check", true);
+  options.set_option("no-align-check", true);
+  options.set_option("no-bounds-check", true);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -508,6 +553,8 @@ bool esbmc_parseoptionst::parse_goto_program(
     if (final())
       return true;
 
+    warn_undefined_external_symbols(context);
+
     // we no longer need any parse trees or language files
     clear_parse();
 
@@ -520,20 +567,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Expand --no-standard-checks into individual options before goto_convert,
-    // because VLA size checks are generated during goto conversion.
-    if (
-      cmdline.isset("no-standard-checks") ||
-      options.get_bool_option("no-standard-checks"))
-    {
-      options.set_option("no-pointer-check", true);
-      options.set_option("no-div-by-zero-check", true);
-      options.set_option("no-pointer-relation-check", true);
-      options.set_option("no-unlimited-scanf-check", true);
-      options.set_option("no-vla-size-check", true);
-      options.set_option("no-align-check", true);
-      options.set_option("no-bounds-check", true);
-    }
+    expand_no_standard_checks(cmdline, options);
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
@@ -554,6 +588,16 @@ bool esbmc_parseoptionst::parse_goto_program(
   catch (std::bad_alloc &)
   {
     log_error("Out of memory");
+    return true;
+  }
+
+  // Frontends report unconvertible input by throwing (e.g. the Python
+  // converter's unresolvable-attribute paths). Without this the exception
+  // escapes to std::terminate and the process dies on SIGABRT -- the failure
+  // mode that replacing abort() with a throw was meant to remove.
+  catch (const std::exception &e)
+  {
+    log_error("{}", e.what());
     return true;
   }
 

@@ -3,8 +3,8 @@
 #include <mathsat_conv.h>
 #include <sstream>
 #include <string>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 
 static const char *mathsat_config =
   "preprocessor.toplevel_propagation = true\n"
@@ -51,7 +51,7 @@ smt_solver_baset *create_new_mathsat_solver(
 
 mathsat_convt::mathsat_convt(const namespacet &ns, const optionst &options)
   : smt_solver_baset(ns, options),
-    array_iface(false, false),
+    array_iface(false, true),
     fp_convt(this),
     use_fp_api(false)
 {
@@ -921,7 +921,28 @@ smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt
 mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  return default_convert_array_of(init_val, domain_width, this);
+  /* The generic fallback materialises the array with one store per index, which
+   * cannot terminate for an infinite domain -- so smt_convt used to drop the
+   * initializer and havoc the array instead, letting an ARRAY_OF(0) model array
+   * read back nondet (esbmc/esbmc#1197). MathSAT builds the constant array
+   * directly, at any domain width. */
+  if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays)
+  {
+    smt_sortt bit = mk_int_bv_sort(1);
+    init_val =
+      mk_ite(init_val, mk_smt_bv(BigInt(1), bit), mk_smt_bv(BigInt(0), bit));
+  }
+
+  smt_sortt arrsort =
+    mk_array_sort(mk_int_bv_sort(domain_width), init_val->sort);
+
+  msat_term t = msat_make_array_const(
+    env,
+    to_solver_smt_sort<msat_type>(arrsort)->s,
+    to_solver_smt_ast<mathsat_smt_ast>(init_val)->a);
+  check_msat_error(t);
+
+  return new_ast(t, arrsort);
 }
 
 mathsat_smt_ast::mathsat_smt_ast(

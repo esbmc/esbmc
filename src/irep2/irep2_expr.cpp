@@ -1,15 +1,15 @@
 #include <memory>
 #include <charconv>
 #include <unordered_map>
-#include <util/fixedbv.h>
-#include <util/i2string.h>
-#include <util/ieee_float.h>
+#include <util/arith/fixedbv.h>
+#include <util/base/i2string.h>
+#include <util/arith/ieee_float.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
 #include <util/message/format.h>
-#include <util/migrate.h>
+#include <util/irep/migrate.h>
 
 // Pretty names indexed by expr2t::expr_ids. Driven by expr_kinds.inc;
 // adding a new expression kind there automatically populates this
@@ -786,7 +786,7 @@ std::string pointer_object2t::field_names[esbmct::num_type_fields] =
 std::string pointer_capability2t::field_names[esbmct::num_type_fields] =
   {"pointer_obj", "", "", "", ""};
 std::string address_of2t::field_names[esbmct::num_type_fields] =
-  {"pointer_obj", "", "", "", ""};
+  {"pointer_obj", "implicit", "", "", ""};
 std::string byte_extract2t::field_names[esbmct::num_type_fields] =
   {"source_value", "source_offset", "big_endian", "", ""};
 std::string byte_update2t::field_names[esbmct::num_type_fields] =

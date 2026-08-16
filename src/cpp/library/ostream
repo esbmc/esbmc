@@ -25,10 +25,14 @@ public:
   {
   }
 
-  streamsize width() const;
-  streamsize width(streamsize wide);
-  void fill(char c);
-  void precision(int p);
+  /* width/fill/precision are members of ios_base/ios, not of ostream
+   * ([ostream.formatted] lists no such members). Declaring them here hid the
+   * inherited overload sets: `cout.precision()` did not resolve at all, and
+   * `cout.precision(3)` / `cout.fill(c)` bound to void-returning stubs whose
+   * bodies were commented out, so the setting was silently discarded.
+   * ostream::width was declared and never defined, so it returned a
+   * nondeterministic value. Removing all four lets the inherited members
+   * through. */
   void put(char c);
   //	void write(char str[], size_t n);
   ostream &write(const char *s, streamsize n);
@@ -138,16 +142,6 @@ using basic_ostream = ostream;
 
 namespace std
 {
-void ostream::fill(char c)
-{
-  //		setfill(c);
-}
-
-void ostream::precision(int p)
-{
-  //		setprecision(p);
-}
-
 void ostream::put(char c)
 {
 }

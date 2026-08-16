@@ -647,8 +647,14 @@ class CoreVisitorsMixin:
         kwonly_args = []
         if isinstance(node.func, ast.Attribute):
             method_name = node.func.attr
-            if isinstance(node.func.value, ast.Name):
-                var_name = node.func.value.id
+            # The receiver of a chained attribute call (`os.path.abspath(x)`) is
+            # as unresolved as a bare one, and must not bind a same-named
+            # module-level function as if it were a method (#6742).
+            receiver_root = node.func.value
+            while isinstance(receiver_root, ast.Attribute):
+                receiver_root = receiver_root.value
+            if isinstance(receiver_root, ast.Name):
+                var_name = receiver_root.id
                 if (var_name not in self.known_variable_types
                         and var_name not in self.functionParams
                         and not hasattr(__builtins__, var_name)):
@@ -711,6 +717,9 @@ class CoreVisitorsMixin:
         )
 
     def _validate_positional_call_arity(self, node, function_name, expected_args):
+        # A *args parameter absorbs any number of extra positionals (PEP 3102).
+        if function_name in self.functionVarargs:
+            return
         display_name = self._display_name(function_name)
         if len(node.args) > len(expected_args):
             if display_name == "__init__":
@@ -1459,10 +1468,8 @@ class CoreVisitorsMixin:
         self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
-        if not self._apply_call_signature_defaults(node):
-            self.generic_visit(node)
-            return node
-
+        self._apply_call_signature_defaults(node)
+        self._specialize_vararg_call(node)
         self.generic_visit(node)
         return node
 
@@ -1484,6 +1491,7 @@ class CoreVisitorsMixin:
         self._assignment_call_origins.clear()
         saved_eq_only = set(self._eq_only_items_view_targets)
         self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
+        saved_vararg_defs = self._enter_vararg_scope(node)
         try:
             node = self._rewrite_humaneval_20_none_sentinel(node)
 
@@ -1500,6 +1508,7 @@ class CoreVisitorsMixin:
 
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
             self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            self._record_vararg_function(node, qualified_name)
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
                 self.generic_visit(node)
@@ -1519,3 +1528,4 @@ class CoreVisitorsMixin:
             self.variable_annotations = saved_var_anns
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
+            self._exit_vararg_scope(node, saved_vararg_defs)

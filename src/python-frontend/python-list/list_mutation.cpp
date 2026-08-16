@@ -1,6 +1,6 @@
 #include "python_list_internal.h"
 
-#include <util/c_typecast.h>
+#include <util/lang/c_typecast.h>
 
 using namespace python_expr;
 using namespace python_list_detail;
@@ -1200,10 +1200,10 @@ exprt python_list::build_shallow_copy_call(
   const typet list_type = converter_.get_type_handler().get_list_type();
 
   const symbolt *copy_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy_shallow");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy_shallow_sz");
   if (!copy_func)
     throw std::runtime_error(
-      "__ESBMC_list_copy_shallow not found in symbol table");
+      "__ESBMC_list_copy_shallow_sz not found in symbol table");
 
   // Materialize a list-returning call into a temporary so it can be passed
   // to the model by value (same pattern as handle_slice_assignment's RHS).
@@ -1248,10 +1248,39 @@ exprt python_list::build_shallow_copy_call(
       converter_.get_type_handler().type_to_string(list_type)),
     config.ansi_c.address_width));
 
+  BigInt elem_size_bytes = 0;
+  size_t float_type_id = 0;
+  if (src.is_symbol())
+  {
+    auto it = list_type_map.find(src.identifier().as_string());
+    if (it != list_type_map.end() && !it->second.empty())
+    {
+      const typet &elem_type = converter_.ns.follow(it->second.back().second);
+      if (
+        elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
+        elem_type.is_floatbv() || elem_type.is_bool())
+      {
+        elem_size_bytes =
+          type_byte_size(migrate_type(elem_type), &converter_.name_space());
+      }
+    }
+    int type_flag = 0;
+    get_list_type_flags(
+      src.identifier().as_string(),
+      converter_.get_type_handler(),
+      type_flag,
+      float_type_id);
+  }
+  constant_exprt elem_size(size_type());
+  elem_size.set_value(
+    integer2binary(elem_size_bytes, config.ansi_c.address_width));
+
   code_function_callt copy_call;
   copy_call.function() = build_symbol(*copy_func);
   copy_call.arguments().push_back(src);
   copy_call.arguments().push_back(list_type_id);
+  copy_call.arguments().push_back(elem_size);
+  copy_call.arguments().push_back(from_integer(float_type_id, size_type()));
   copy_call.lhs() = build_symbol(copied);
   copy_call.type() = list_type;
   copy_call.location() = location;

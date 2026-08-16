@@ -2,7 +2,7 @@
 #include <boost/filesystem.hpp>
 #include <fstream>
 #include <ac_config.h>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 
 #ifdef ESBMC_CLANG_HEADERS_BUNDLED
 extern "C"

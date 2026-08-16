@@ -1,0 +1,192 @@
+#ifndef STL_MUTEX
+#define STL_MUTEX
+
+#include <pthread.h>
+#include "OM_compiler_defs.h"
+
+// Model of <mutex> (github #6319) over ESBMC's pthread model, so the C++
+// wrappers reach the same lock/unlock semantics -- including the deadlock and
+// double-unlock checks -- that pthread_mutex_* already implement.
+//
+// Not modelled: timed_mutex/shared_mutex and the timed try_lock_for/_until
+// members (ESBMC has no clock to block against), std::lock/std::try_lock
+// (free-function templates, whose instantiated bodies the frontend does not
+// convert -- calls would return nondet), and once_flag/call_once.
+
+#if __cplusplus >= 201103L
+
+namespace std
+{
+struct defer_lock_t
+{
+};
+struct try_to_lock_t
+{
+};
+struct adopt_lock_t
+{
+};
+
+const defer_lock_t defer_lock = defer_lock_t();
+const try_to_lock_t try_to_lock = try_to_lock_t();
+const adopt_lock_t adopt_lock = adopt_lock_t();
+
+class mutex
+{
+  pthread_mutex_t __m;
+
+  mutex(const mutex &);
+  mutex &operator=(const mutex &);
+
+public:
+  mutex() OM_NOEXCEPT
+  {
+    pthread_mutex_init(&__m, OM_NULLPTR);
+  }
+
+  ~mutex()
+  {
+    pthread_mutex_destroy(&__m);
+  }
+
+  void lock()
+  {
+    pthread_mutex_lock(&__m);
+  }
+
+  bool try_lock() OM_NOEXCEPT
+  {
+    return pthread_mutex_trylock(&__m) == 0;
+  }
+
+  void unlock() OM_NOEXCEPT
+  {
+    pthread_mutex_unlock(&__m);
+  }
+
+  typedef pthread_mutex_t *native_handle_type;
+
+  native_handle_type native_handle()
+  {
+    return &__m;
+  }
+};
+
+// A recursive_mutex needs a per-thread ownership count the pthread model does
+// not expose, so it is deliberately absent rather than aliased to mutex --
+// aliasing would report a spurious deadlock on the re-lock that makes the type
+// worth using.
+
+template <class M>
+class lock_guard
+{
+  M &__m;
+
+  lock_guard(const lock_guard &);
+  lock_guard &operator=(const lock_guard &);
+
+public:
+  typedef M mutex_type;
+
+  explicit lock_guard(M &m) : __m(m)
+  {
+    __m.lock();
+  }
+
+  lock_guard(M &m, adopt_lock_t) : __m(m)
+  {
+  }
+
+  ~lock_guard()
+  {
+    __m.unlock();
+  }
+};
+
+template <class M>
+class unique_lock
+{
+  M *__m;
+  bool __owns;
+
+  unique_lock(const unique_lock &);
+  unique_lock &operator=(const unique_lock &);
+
+public:
+  typedef M mutex_type;
+
+  unique_lock() OM_NOEXCEPT : __m(OM_NULLPTR), __owns(false)
+  {
+  }
+
+  explicit unique_lock(M &m) : __m(&m), __owns(true)
+  {
+    __m->lock();
+  }
+
+  unique_lock(M &m, defer_lock_t) OM_NOEXCEPT : __m(&m), __owns(false)
+  {
+  }
+
+  unique_lock(M &m, try_to_lock_t) : __m(&m), __owns(false)
+  {
+    __owns = __m->try_lock();
+  }
+
+  unique_lock(M &m, adopt_lock_t) : __m(&m), __owns(true)
+  {
+  }
+
+  ~unique_lock()
+  {
+    if (__owns)
+      __m->unlock();
+  }
+
+  void lock()
+  {
+    __m->lock();
+    __owns = true;
+  }
+
+  bool try_lock()
+  {
+    __owns = __m->try_lock();
+    return __owns;
+  }
+
+  void unlock()
+  {
+    __m->unlock();
+    __owns = false;
+  }
+
+  M *release() OM_NOEXCEPT
+  {
+    M *r = __m;
+    __m = OM_NULLPTR;
+    __owns = false;
+    return r;
+  }
+
+  bool owns_lock() const OM_NOEXCEPT
+  {
+    return __owns;
+  }
+
+  operator bool() const OM_NOEXCEPT
+  {
+    return __owns;
+  }
+
+  M *mutex() const OM_NOEXCEPT
+  {
+    return __m;
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 201103L
+
+#endif // STL_MUTEX

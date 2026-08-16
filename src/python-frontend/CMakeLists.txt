@@ -68,6 +68,7 @@ add_library(pythonfrontend STATIC
             function_call/expr.cpp
             function_call/str_conv.cpp
             numpy/numpy_call_expr.cpp
+            numpy/ndarray_descriptor.cpp
             function_call/builder.cpp
             string/string_builder.cpp
             string/string_handler.cpp
@@ -78,7 +79,8 @@ add_library(pythonfrontend STATIC
             math/math_guard_utils.cpp
             math/parse_float.cpp
             tuple/tuple_handler.cpp
-            math/convert_float_literal.cpp)
+            math/convert_float_literal.cpp
+            dynamic_type/dynamic_type_handler.cpp)
 
 target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

@@ -1,0 +1,4 @@
+CORE
+main.c
+--function touch_all --enforce-contract touch_all --no-pointer-check --unwind 8 --loop-invariant-check --z3 --replace-call-with-contract touch
+^VERIFICATION FAILED$

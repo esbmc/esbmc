@@ -98,8 +98,10 @@ int parse_header(const u8 *buf, u32 buf_len,
 int parse_message(const u8 *buf, u32 buf_len, u32 *consumed)
 {
     __ESBMC_requires(consumed != ((void *)0));
+    __ESBMC_requires(__ESBMC_is_fresh(consumed, sizeof(u32)));
     __ESBMC_requires(!(buf_len > 0) || (buf != ((void *)0)));
     __ESBMC_requires(buf_len <= 128);
+    __ESBMC_requires(__ESBMC_is_fresh(buf, 128));
 
     __ESBMC_assigns(*consumed);
 

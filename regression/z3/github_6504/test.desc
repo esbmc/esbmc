@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3
+^VERIFICATION FAILED$
+dereference failure: array bounds violated: heap object

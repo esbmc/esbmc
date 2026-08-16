@@ -1,28 +1,27 @@
 #include <cassert>
+#include <goto-programs/destructor.h>
 #include <goto-symex/goto_symex.h>
 #include <string>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
-#include <util/type_byte_size.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_types.h>
+#include <util/expr/type_byte_size.h>
+#include <util/symtab/base_subobject.h>
+#include <utility>
 #include <vector>
 #include <algorithm>
 
-// Component-name prefix the C++ frontend uses for nested base subobjects; see
-// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
-static const std::string base_subobject_prefix = "@base@";
-
-// Collect the byte offsets of every (transitively) nested base subobject of
-// `t`, relative to the start of `t`.
+// Collect the byte offset and class type of every (transitively) nested base
+// subobject of `t`, relative to the start of `t`.
 static void collect_base_subobject_offsets(
   const type2tc &t,
   const namespacet &ns,
   const BigInt &base,
-  std::vector<BigInt> &out)
+  std::vector<std::pair<BigInt, type2tc>> &out)
 {
   if (is_nil_type(t))
     return;
@@ -36,13 +35,39 @@ static void collect_base_subobject_offsets(
   {
     const std::string name = st.member_names[i].as_string();
     if (
-      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) != 0)
       continue;
 
     const BigInt off = base + member_offset(ft, st.member_names[i], &ns);
-    out.push_back(off);
+    out.emplace_back(off, st.members[i]);
     collect_base_subobject_offsets(st.members[i], ns, off, out);
   }
+}
+
+// True iff the class `t` (a base-subobject type) has a virtual destructor.
+// Deleting through a base pointer is only well-defined ([expr.delete]p3) when
+// the pointer's static (base) type has a virtual destructor: only then does the
+// virtual deleting destructor adjust an interior subobject pointer back to the
+// complete object before calling operator delete. Absent one the destructor is
+// statically bound and operator delete receives the unadjusted subobject
+// pointer -- a genuine bad-free -- so that offset must not be admitted.
+static bool base_has_virtual_destructor(const type2tc &t, const namespacet &ns)
+{
+  const type2tc ft = ns.follow(t);
+  if (!is_struct_type(ft))
+    return false;
+
+  const irep_idt &tag = to_struct_type(ft).name;
+  if (tag.empty())
+    return false;
+
+  const symbolt *sym = ns.lookup("tag-" + id2string(tag));
+  if (sym == nullptr || sym->get_type().id() != "struct")
+    return false;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, to_struct_type(sym->get_type()));
+  return dtor != nullptr && dtor->get_bool("is_virtual");
 }
 
 expr2tc goto_symext::symex_malloc(
@@ -240,7 +265,9 @@ bool goto_symext::handle_realloc_zero_size(
 {
   expr2tc zero_size = gen_zero(realloc_size->type);
   expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
-  do_simplify(is_zero_size);
+  // Classify unconditionally: --no-simplify selects a formula representation,
+  // it must not decide whether realloc(p, 0) frees p and returns NULL.
+  simplify(is_zero_size);
 
   if (is_true(is_zero_size))
   {
@@ -524,6 +551,33 @@ expr2tc goto_symext::symex_mem_inf(
   return to_address_of2t(rhs_addrof).ptr_obj;
 }
 
+void goto_symext::offer_malloc_zero_null(
+  const expr2tc &size,
+  expr2tc &rhs,
+  guard2tc &alloc_guard)
+{
+  if (!options.get_bool_option("malloc-zero-is-null"))
+    return;
+
+  expr2tc nonzero = greaterthan2tc(size, gen_long(size->type, 0));
+  simplify(nonzero);
+  if (is_true(nonzero))
+    return;
+
+  // C17 7.22.3p1 leaves malloc(0) implementation-defined: NULL, or a pointer
+  // that may be freed but not used to access an object. Offer both -- forcing
+  // NULL makes the assume(p != NULL) that environment models emit after a
+  // zero-sized request unsatisfiable, pruning every execution under test
+  // (#5398).
+  expr2tc may_alloc = gen_nondet(get_bool_type());
+  replace_nondet(may_alloc);
+
+  expr2tc choice = or2tc(nonzero, may_alloc);
+  simplify(choice);
+  alloc_guard.add(choice);
+  rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
@@ -537,6 +591,8 @@ expr2tc goto_symext::symex_mem(
   type2tc type = code.alloctype;
   expr2tc size = code.size;
   bool size_is_one = false;
+  // Nil unless a symbolic size needs bounding to the address space.
+  expr2tc fits;
 
   if (is_nil_type(type))
     type = char_type2();
@@ -547,42 +603,78 @@ expr2tc goto_symext::symex_mem(
   {
     cur_state->rename(size);
 
-    // Detect malloc(-N) before do_simplify folds typecast(size_t, -N) into
-    // a large positive constant and erases the sign. The simplifier's
-    // behaviour varies between the normal and --no-slice paths, so we
-    // capture the inner operand's sign up front and also re-check the
-    // post-simplify value below.
+    // Classify the request on unconditionally simplified copies: --no-simplify
+    // must not blind the checks below, because an unsatisfiable request that
+    // reaches the address-space model is encoded as a contradiction rather
+    // than as a failed allocation, which silently proves the whole program.
     bool is_negative_size = false;
     if (is_malloc && is_typecast2t(size))
     {
+      // Detect malloc(-N) before the fold to typecast(size_t, -N) erases the
+      // sign; to_uint64() below discards it, so malloc(-1) would otherwise be
+      // mistaken for a 1-byte allocation.
       expr2tc inner = to_typecast2t(size).from;
-      do_simplify(inner);
+      simplify(inner);
       is_negative_size = is_constant_int2t(inner) &&
                          to_constant_int2t(inner).value.is_negative();
     }
 
-    do_simplify(size);
-    if (is_constant_int2t(size))
+    expr2tc folded = size;
+    simplify(folded);
+
+    if (is_malloc && is_constant_int2t(folded))
     {
-      const BigInt &val = to_constant_int2t(size).value;
-      // Check negativity before inspecting the magnitude: to_uint64()
-      // discards the sign, so malloc(-1) would otherwise be mistaken for
-      // a 1-byte allocation.
-      if (is_malloc && (is_negative_size || val.is_negative()))
+      const BigInt &val = to_constant_int2t(folded).value;
+      // smt_memspace.cpp lays each object out as [start, start + size] over
+      // ptraddr_type2, with start past the NULL object and aligned to
+      // max_alignment(), and asserts that the sum does not wrap. A larger
+      // request cannot be laid out at all, so it must fail here; real
+      // allocators return NULL for it too.
+      const BigInt max_size = BigInt::power2m1(ptraddr_type2()->get_width()) -
+                              config.ansi_c.max_alignment();
+      if (is_negative_size || val.is_negative() || val > max_size)
       {
-        // Negative size cast to size_t: return NULL even under
-        // --force-malloc-success, matching real OS behaviour.
+        // Return NULL even under --force-malloc-success, matching real OS
+        // behaviour.
         expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
         if (null_sym->type != lhs->type)
           null_sym = typecast2tc(lhs->type, null_sym);
         symex_assign(code_assign2tc(lhs, null_sym), true, guard);
         return null_sym;
       }
-      uint64_t v = val.to_uint64();
-      if (v == 1)
+    }
+
+    do_simplify(size);
+    if (is_constant_int2t(size))
+    {
+      if (to_constant_int2t(size).value == 1)
         size_is_one = true;
-      else if (v == 0 && options.get_bool_option("malloc-zero-is-null"))
-        return symbol2tc(pointer_type2tc(type), "NULL");
+    }
+    else if (
+      is_malloc && is_unsignedbv_type(size->type) &&
+      size->type->get_width() >= ptraddr_type2()->get_width())
+    {
+      // A symbolic request can exceed the address space too, and the layout
+      // constraints are asserted unconditionally, so leaving it unbounded makes
+      // the formula UNSAT — silently pruning the executions the program asked
+      // about instead of failing the allocation.
+      const BigInt lim = BigInt::power2m1(ptraddr_type2()->get_width()) -
+                         config.ansi_c.max_alignment();
+      fits = lessthanequal2tc(size, constant_int2tc(size->type, lim));
+
+      if (options.get_bool_option("force-malloc-success"))
+      {
+        // Branching to NULL here would reintroduce exactly the case split this
+        // flag exists to remove, at a cost measured in minutes on
+        // allocation-heavy inputs. State the bound as an assumption instead:
+        // the same executions are excluded as before, but visibly.
+        assume(fits);
+        fits = expr2tc();
+      }
+      else
+        // Give the object size zero on the failing branch so it is always
+        // representable, and hand back NULL for it below.
+        size = if2tc(size->type, fits, size, gen_zero(size->type));
     }
   }
 
@@ -620,6 +712,13 @@ expr2tc goto_symext::symex_mem(
 
   new_context.add(symbol);
 
+  // Without a record at the branch point phi_function skips this object, so a
+  // write inside a branch would apply on both paths (#6798).
+  expr2tc dyn_l1_sym = symbol2tc(get_empty_type(), symbol.id);
+  cur_state->top().level1.get_ident_name(dyn_l1_sym);
+  cur_state->level2.declare(
+    renaming::level2t::name_record(to_symbol2t(dyn_l1_sym)));
+
   type2tc new_type = migrate_symbol_type(symbol);
 
   type2tc rhs_type;
@@ -648,13 +747,17 @@ expr2tc goto_symext::symex_mem(
   expr2tc ptr_rhs = rhs;
   guard2tc alloc_guard = cur_state->guard;
 
-  if (options.get_bool_option("malloc-zero-is-null"))
+  if (!is_nil_expr(fits))
   {
     expr2tc null_sym = symbol2tc(rhs->type, "NULL");
-    expr2tc choice = greaterthan2tc(size, gen_long(size->type, 0));
-    alloc_guard.add(choice);
-    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+    alloc_guard.add(fits);
+    rhs = if2tc(rhs->type, fits, rhs, null_sym);
+    ptr_rhs = rhs;
   }
+
+  // alloca has no NULL outcome to explore: C17 7.22.3p1 is about malloc.
+  if (is_malloc)
+    offer_malloc_zero_null(size, rhs, alloc_guard);
 
   if (!options.get_bool_option("force-malloc-success") && is_malloc)
   {
@@ -775,21 +878,26 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc eq = equality2tc(offset, gen_ulong(0));
 
       // C++ permits `delete p` where p points at a *base subobject* of the
-      // complete object -- the deleting destructor adjusts back to the
+      // complete object *only when that base has a virtual destructor* -- the
+      // virtual deleting destructor adjusts the interior pointer back to the
       // complete object before freeing. Under the nested base-subobject model
       // such an upcast pointer legitimately carries a non-zero offset. The
       // deallocation below keys on pointer_object(), so it already clears the
       // right allocation; only this assertion needs to admit those offsets.
-      // Arbitrary interior pointers (delete (p+1), delete &arr[1]) are still
-      // rejected, and C free() is unaffected. See #1866, #3894.
+      // A base with no virtual destructor is statically bound: operator delete
+      // then receives the unadjusted subobject pointer, a genuine bad-free
+      // ([expr.delete]p3), so its offset stays rejected. Arbitrary interior
+      // pointers (delete (p+1), delete &arr[1]) are also still rejected, and C
+      // free() is unaffected. See #1866, #3894, #6263.
       if (is_code_cpp_delete2t(expr) || is_code_cpp_del_array2t(expr))
       {
-        std::vector<BigInt> base_offsets;
+        std::vector<std::pair<BigInt, type2tc>> base_offsets;
         collect_base_subobject_offsets(
           item.object->type, ns, BigInt(0), base_offsets);
-        for (const BigInt &bo : base_offsets)
-          if (bo != 0)
-            eq = or2tc(eq, equality2tc(offset, gen_ulong(bo.to_uint64())));
+        for (const auto &bo : base_offsets)
+          if (bo.first != 0 && base_has_virtual_destructor(bo.second, ns))
+            eq =
+              or2tc(eq, equality2tc(offset, gen_ulong(bo.first.to_uint64())));
       }
 
       g.guard_expr(eq);
