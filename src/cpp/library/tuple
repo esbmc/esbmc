@@ -107,6 +107,11 @@ struct tuple_size<tuple<Types...>>
 {
 };
 
+#if __cplusplus >= 201703L
+template <typename Tuple>
+inline constexpr std::size_t tuple_size_v = tuple_size<Tuple>::value;
+#endif
+
 template <std::size_t I, typename... Types>
 constexpr typename tuple_element<I, tuple<Types...>>::type &
 get(tuple<Types...> &t) noexcept
