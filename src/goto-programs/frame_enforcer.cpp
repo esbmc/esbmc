@@ -147,16 +147,44 @@ static void emit_frame_instruction(
 
 // One assertion per element costs more than linearly: 256 elements solve in
 // 0.6s, 512 in 2.4s, 1000 in 16s, and 10000 does not finish inside the
-// regression timeout. Past this extent fall back to the whole-array assertion,
-// which is still sound -- only imprecise, reporting the write the clause names.
+// regression timeout.
 static const unsigned max_elementwise_frame_extent = 256;
+
+// The array equals its snapshot with only the named indices replaced by their
+// current values. Exact, and one equality whatever the extent, so it is what
+// carries an array too large to hold element by element.
+//
+// It does not replace the element-wise form, for three reasons measured on
+// this branch: it reports the array rather than the element that broke the
+// frame, Bitwuzla rejects equality over constant arrays ("not fully supported
+// yet") so it cannot serve the loop rule's ASSUME mode, and an element that is
+// itself an array fails on every solver -- reading an array-typed rvalue is
+// the same gap that stops __ESBMC_old over an array (#7057).
+static void emit_array_store_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const std::vector<expr2tc> &assigned_indices,
+  const expr2tc &var,
+  const expr2tc &snap,
+  const irep_idt &arr_name)
+{
+  const array_type2t &atype = to_array_type(var->type);
+  expr2tc updated = snap;
+  for (const expr2tc &assigned : assigned_indices)
+    updated = with2tc(
+      var->type, updated, assigned, index2tc(atype.subtype, var, assigned));
+
+  emit_frame_instruction(
+    dest, loc, equality2tc(var, updated), mode, id2string(arr_name));
+}
 
 // Hold every element the clause did not name unchanged, rather than the array
 // as a whole -- which the named write itself falsifies (#7056). A global array
 // has a constant extent, so this needs neither a witness index nor a
 // quantifier: one assertion per element, each excused at the named indices.
-// Returns whether \p var was of that shape and so is now dealt with; a
-// non-constant or oversized extent falls back to the whole-array assertion.
+// Returns whether \p var was of that shape and so is now dealt with; what
+// neither form covers falls back to the whole-array assertion.
 static bool emit_array_elem_frame(
   goto_programt &dest,
   const locationt &loc,
@@ -179,7 +207,13 @@ static bool emit_array_elem_frame(
 
   const BigInt &n = to_constant_int2t(atype.array_size).value;
   if (n > BigInt(max_elementwise_frame_extent))
-    return false;
+  {
+    if (mode != frame_modet::ASSERT || is_array_type(atype.subtype))
+      return false;
+
+    emit_array_store_frame(dest, loc, mode, ait->second, var, snap, arr_name);
+    return true;
+  }
 
   for (BigInt k = 0; k < n; k += 1)
   {
