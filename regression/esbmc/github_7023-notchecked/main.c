@@ -1,12 +1,11 @@
-#include <assert.h>
-
 int main()
 {
-  int a, b, c;
-  int *p = 0;
+  int a, b;
 
-  assert(a + b == b + a);
-  assert(a + b == a + c);
-  *p = 1;
+  __ESBMC_assert(a + b == b + a, "addition commutes");
+  /* At most one of these can be violated by any single model, so exactly one
+     stays undecided whichever one the solver picks. */
+  __ESBMC_assert(a != 1, "a is not one");
+  __ESBMC_assert(a != 2, "a is not two");
   return 0;
 }
