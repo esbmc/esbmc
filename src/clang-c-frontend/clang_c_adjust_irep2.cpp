@@ -56,6 +56,45 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   else if (
     sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
     declare_implicit_callee(expr);
+
+  if (sole_adjuster && (is_and2t(expr) || is_or2t(expr) || is_not2t(expr)))
+    adjust_boolean_operands(expr);
+
+  if (sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
+    adjust_call_callee(expr);
+}
+
+void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
+{
+  expr2tc callee;
+  if (is_code_function_call2t(expr))
+    callee = to_code_function_call2t(expr).function;
+  else
+  {
+    const sideeffect2t &se = to_sideeffect2t(expr);
+    if (se.kind != sideeffect_allockind::function_call)
+      return;
+    callee = se.operand;
+  }
+
+  if (is_nil_expr(callee) || !is_pointer_type(callee->type))
+    return;
+
+  const expr2tc deref =
+    dereference2tc(to_pointer_type(callee->type).subtype, callee);
+
+  if (is_code_function_call2t(expr))
+    to_code_function_call2t(expr).function = deref;
+  else
+    to_sideeffect2t(expr).operand = deref;
+}
+
+void clang_c_adjust_irep2::adjust_boolean_operands(expr2tc &expr)
+{
+  expr->Foreach_operand([this](expr2tc &op) {
+    if (!is_nil_expr(op) && !is_bool_type(op->type))
+      c_implicit_typecast(op, get_bool_type(), ns);
+  });
 }
 
 void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)

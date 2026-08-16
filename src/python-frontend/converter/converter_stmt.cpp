@@ -16,6 +16,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -42,14 +43,6 @@ using namespace json_utils;
 
 namespace
 {
-// Straight-line dynamic-retyping classification (#4770, #4774). A Python str is
-// a char array or char* ; a numeric scalar is a Python int (>=16-bit bitvector,
-// excluding the 8-bit char that backs a 1-character string), float, or bool.
-bool is_py_string_type(const typet &t)
-{
-  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
-}
-
 // True when `expr` (or any of its operands) is a `cpp-throw` marker, i.e. a
 // probe build hit an error path instead of producing a usable value.
 bool contains_cpp_throw(const exprt &expr)
@@ -66,83 +59,16 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
-bool is_py_numeric_scalar_type(const typet &t)
-{
-  if (t.is_floatbv() || t.is_bool())
-    return true;
-  if (t.is_signedbv() || t.is_unsignedbv())
-    return bv_width(t) >= 16;
-  return false;
-}
-
 // True when reassigning a value of type rhs to a variable currently typed lhs
 // crosses the numeric<->string boundary, which a single GOTO symbol cannot
 // represent in place.
-bool is_incompatible_scalar_string_retype(const typet &lhs, const typet &rhs)
+bool is_incompatible_scalar_string_retype(
+  const type_handler &th,
+  const typet &lhs,
+  const typet &rhs)
 {
-  return (is_py_numeric_scalar_type(lhs) && is_py_string_type(rhs)) ||
-         (is_py_string_type(lhs) && is_py_numeric_scalar_type(rhs));
-}
-
-// Classifies a branch's direct, top-level literal assignments by literal
-// type.
-std::unordered_map<std::string, std::string>
-classify_branch_literal_assigns(const nlohmann::json &block)
-{
-  std::unordered_map<std::string, std::string> types;
-  if (!block.is_array())
-    return types;
-
-  for (const auto &stmt : block)
-  {
-    if (!stmt.is_object())
-      continue;
-
-    const std::string stmt_type = stmt.value("_type", "");
-    nlohmann::json target;
-    if (stmt_type == "Assign")
-    {
-      if (!stmt.contains("targets") || stmt["targets"].size() != 1)
-        continue;
-      target = stmt["targets"][0];
-    }
-    else if (stmt_type == "AnnAssign")
-    {
-      if (!stmt.contains("target"))
-        continue;
-      target = stmt["target"];
-    }
-    else
-      continue;
-
-    if (target.value("_type", "") != "Name" || !target.contains("id"))
-      continue;
-    const std::string &name = target["id"].get<std::string>();
-
-    // A later reassignment invalidates any literal kind recorded for `name`
-    // by an earlier statement in this same block.
-    if (!stmt.contains("value") || stmt["value"].is_null())
-    {
-      types.erase(name);
-      continue;
-    }
-    const auto &value = stmt["value"];
-    if (value.value("_type", "") != "Constant" || !value.contains("value"))
-    {
-      types.erase(name);
-      continue;
-    }
-
-    const auto &lit = value["value"];
-    if (lit.is_string())
-      types[name] = "str";
-    else if (lit.is_number_integer() || lit.is_boolean())
-      types[name] = "num";
-    else
-      types.erase(name);
-  }
-
-  return types;
+  return (th.is_numeric_scalar_type(lhs) && th.is_string_type(rhs)) ||
+         (th.is_string_type(lhs) && th.is_numeric_scalar_type(rhs));
 }
 
 // True if the AST subtree contains a function-call node. Used to gate
@@ -252,27 +178,6 @@ struct retype_alias_scope_guard
   }
 };
 
-// Removes on exit only the names this instance added, keeping nested
-// invocations independent.
-struct tagged_scalar_scope_guard
-{
-  std::unordered_set<std::string> &names;
-  std::unordered_set<std::string> added;
-  tagged_scalar_scope_guard(
-    std::unordered_set<std::string> &n,
-    const std::unordered_set<std::string> &candidates)
-    : names(n)
-  {
-    for (const auto &c : candidates)
-      if (names.insert(c).second)
-        added.insert(c);
-  }
-  ~tagged_scalar_scope_guard()
-  {
-    for (const auto &a : added)
-      names.erase(a);
-  }
-};
 } // namespace
 
 // External linkage: shared with numpy_call_expr.cpp (declared in
@@ -3134,76 +3039,6 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
   return json_utils::is_class(cls, *ast_json) ? cls : std::string();
 }
 
-void python_converter::get_tagged_scalar_assign(
-  const nlohmann::json &ast_node,
-  const std::string &name,
-  codet &target_block)
-{
-  symbol_id sid = create_symbol_id();
-  sid.set_object(name);
-  symbolt *tag_symbol = symbol_table_.find_symbol(sid.to_string());
-  assert(
-    tag_symbol &&
-    "tagged scalar symbol must already be declared before its branches are "
-    "converted");
-
-  exprt rhs = get_expr(ast_node["value"]);
-  locationt location = get_location_from_decl(ast_node);
-
-  exprt value_to_store = rhs;
-  if (rhs.type() == bool_type())
-    value_to_store = python_expr::build_typecast(
-      rhs, signedbv_typet(config.ansi_c.long_long_int_width));
-
-  symbolt &backing = create_tmp_symbol(
-    ast_node, "$scalar_tag$", value_to_store.type(), value_to_store);
-  code_declt backing_decl(python_expr::build_symbol(backing));
-  backing_decl.copy_to_operands(value_to_store);
-  backing_decl.location() = location;
-  target_block.copy_to_operands(backing_decl);
-
-  exprt elem_size = type_handler_.tagged_scalar_byte_size(value_to_store);
-
-  // `backing` goes DEAD at the end of this branch; copy its value into
-  // non-expiring storage first so `.value` stays valid past the join.
-  const symbolt *copy_func =
-    symbol_table_.find_symbol("c:@F@__python_scalar_tag_copy");
-
-  assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
-
-  exprt backing_addr = python_expr::build_typecast(
-    python_expr::build_address_of(python_expr::build_symbol(backing)),
-    pointer_typet(empty_typet()));
-  exprt copy_call = python_expr::build_call_expr(
-    *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
-
-  exprt type_id_value = type_handler_.tagged_scalar_type_id(rhs.type());
-
-  exprt tag_expr = python_expr::build_symbol(*tag_symbol);
-
-  code_assignt value_assign(
-    python_expr::build_member(tag_expr, "value", pointer_typet(empty_typet())),
-    copy_call);
-  value_assign.location() = location;
-  target_block.copy_to_operands(value_assign);
-
-  code_assignt type_id_assign(
-    python_expr::build_member(tag_expr, "type_id", size_type()), type_id_value);
-  type_id_assign.location() = location;
-  target_block.copy_to_operands(type_id_assign);
-
-  code_assignt size_assign(
-    python_expr::build_member(tag_expr, "size", size_type()), elem_size);
-  size_assign.location() = location;
-  target_block.copy_to_operands(size_assign);
-
-  code_assignt float_idx_assign(
-    python_expr::build_member(tag_expr, "float_idx", size_type()),
-    from_integer(BigInt(0), size_type()));
-  float_idx_assign.location() = location;
-  target_block.copy_to_operands(float_idx_assign);
-}
-
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -3221,27 +3056,23 @@ void python_converter::get_var_assign(
     if (tag_target.is_object() && tag_target.value("_type", "") == "Name")
     {
       const std::string name = tag_target["id"].get<std::string>();
-      bool is_tagged = tagged_scalar_names_.count(name) > 0;
-      if (!is_tagged)
+      if (dynamic_type_handler_.is_tagged(name))
       {
-        symbol_id sid = create_symbol_id();
-        sid.set_object(name);
-        const symbolt *sym = symbol_table_.find_symbol(sid.to_string());
-        is_tagged = sym && type_handler_.is_tagged_scalar_type(sym->get_type());
-      }
-
-      if (is_tagged)
-      {
-        if (
-          ast_node.contains("value") &&
-          ast_node["value"].value("_type", "") == "Constant")
+        if (ast_node.contains("value") && !ast_node["value"].is_null())
         {
-          get_tagged_scalar_assign(ast_node, name, target_block);
-          return;
+          exprt rhs = get_expr(ast_node["value"]);
+          if (
+            type_handler_.is_numeric_scalar_type(rhs.type()) ||
+            type_handler_.is_string_type(rhs.type()))
+          {
+            dynamic_type_handler_.assign(
+              rhs, get_location_from_decl(ast_node), name, target_block);
+            return;
+          }
         }
         throw std::runtime_error(
-          "assigning a non-literal value to a dynamically-typed variable is "
-          "not yet supported");
+          "assigning a value of this type to a dynamically-typed variable "
+          "is not yet supported");
       }
     }
   }
@@ -4016,7 +3847,8 @@ void python_converter::get_var_assign(
         !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
 
       if (
-        is_incompatible_scalar_string_retype(lhs.type(), rhs.type()) ||
+        is_incompatible_scalar_string_retype(
+          type_handler_, lhs.type(), rhs.type()) ||
         tuple_to_nontuple_rebind)
       {
         std::string new_id;
@@ -4651,39 +4483,6 @@ bool python_converter::contains_named_expr(const nlohmann::json &node)
   return false;
 }
 
-std::unordered_set<std::string>
-python_converter::scalar_tag_candidates(const nlohmann::json &if_node)
-{
-  std::unordered_set<std::string> candidates;
-
-  if (!if_node.contains("body"))
-    return candidates;
-
-  auto then_types = classify_branch_literal_assigns(if_node["body"]);
-  if (then_types.empty())
-    return candidates;
-
-  if (!if_node.contains("orelse") || if_node["orelse"].empty())
-    return candidates;
-  auto else_types = classify_branch_literal_assigns(if_node["orelse"]);
-
-  for (const auto &[name, then_kind] : then_types)
-  {
-    auto it = else_types.find(name);
-    if (it == else_types.end() || it->second == then_kind)
-      continue;
-
-    symbol_id sid = create_symbol_id();
-    sid.set_object(name);
-    if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
-      continue; // Pre-existing variable: leave to the current heuristic.
-
-    candidates.insert(name);
-  }
-
-  return candidates;
-}
-
 /// Truth-testing an object calls its __bool__ when the class defines one. The
 /// caller has already resolved @p value_type to the struct behind @p cond
 /// (following a pointer if need be); a non-struct or a class without the dunder
@@ -5165,41 +4964,18 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Recover type
   current_element_type = t;
 
-  // Declares the flagged variable's struct-typed symbol before either
+  // Declares the flagged variable's tagged-object symbol before either
   // branch converts, so goto-symex's struct-merge resolves the join for
   // free; get_var_assign fills in the fields per branch.
-  std::unordered_set<std::string> tag_candidates;
+  std::unordered_set<std::string> dynamic_type_names;
   if (type == "If")
-    tag_candidates = scalar_tag_candidates(ast_node);
+    dynamic_type_names =
+      dynamic_type_handler_.detect_dynamic_type_names(ast_node);
 
-  for (const auto &name : tag_candidates)
-  {
-    symbol_id tag_sid = create_symbol_id();
-    tag_sid.set_object(name);
-
-    locationt tag_location = get_location_from_decl(ast_node);
-    std::string tag_module_name = tag_location.get_file().as_string();
-    symbolt tag_symbol = create_symbol(
-      tag_module_name,
-      name,
-      tag_sid.to_string(),
-      tag_location,
-      type_handler_.get_tagged_object_type());
-    tag_symbol.lvalue = true;
-    tag_symbol.file_local = !current_func_name_.empty();
-    tag_symbol.is_extern = false;
-
-    symbolt *tag_symbol_ptr = symbol_table_.move_symbol_to_context(tag_symbol);
-
-    if (!current_func_name_.empty() && !is_global_variable(tag_sid))
-    {
-      code_declt tag_decl(python_expr::build_symbol(*tag_symbol_ptr));
-      tag_decl.location() = tag_location;
-      add_instruction(tag_decl);
-    }
-  }
-  tagged_scalar_scope_guard tag_scope_guard(
-    tagged_scalar_names_, tag_candidates);
+  dynamic_type_handler_.declare_dynamic_type_names(
+    dynamic_type_names, ast_node);
+  dynamic_type_handler::scope_guard tag_scope_guard(
+    dynamic_type_handler_, dynamic_type_names);
 
   // Extract 'then' block from AST
   exprt then;

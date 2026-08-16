@@ -2631,3 +2631,203 @@ Next: `assign_shr`, the same class one level up. `adjust_side_effect_assignment`
 picks `assign_lshr`/`assign_ashr` from the **unpromoted** LHS type, which the
 converter also has, so option 1 applies again -- with its own default-path A/B
 and its own semantic test, since the printer is blind here too.
+
+## 76. `assign_shr`, the same decision one level up
+
+`E1 >>= E2` carries the same problem as §74's `E1 >> E2` and the same fix.
+`clang_c_convert` now emits `assign_lshr`/`assign_ashr`; the kind follows E1's
+own type, per C11 6.5.16.2p3's rewrite to `E1 = E1 >> E2`, which is what
+`adjust_side_effect_assignment` already used (`ns.follow(op0.type())` -- the
+*unpromoted* LHS type, unlike the binary case).
+
+Three details differ from §74 and each was a way to get it wrong:
+
+- **The type arrives after the switch.** A compound assignment's type comes from
+  `get_type(compop.getType(), ...)` further down, so the decision cannot sit in
+  the opcode switch. It is made where `lhs` exists, using `ns.follow(lhs.type())`
+  -- mirroring the arm exactly rather than trusting the node type to be resolved.
+- **Falling out of the dispatcher is worse here.** `adjust_side_effect_assignment`
+  ends with `gen_typecast_arithmetic(ns, op0, op1)`, which converts *both*
+  operands to a common type. For a shift E2 is a bit count, not a value in that
+  type (the reason #6924 exists), so an unrouted `assign_lshr` would not merely
+  lose a cast -- it would gain a wrong one. The condition admits the typed forms
+  and returns early for them.
+- **Solidity still emits the untyped form** (`solidity_convert_expr.cpp:3180`),
+  so the arm's rewrite stays for it. This is a C-frontend change only.
+
+### 76.1 Gate
+
+Default path byte-identical (0 of 2 809). The printer shows `>>=` whatever the
+kind, so byte-identity is again blind (§74.3) and the real gate is
+`regression/esbmc/shift_kind_compound_assign`: nondeterministic inputs, and
+assertions in **both** directions -- an unsigned value with the high bit set must
+end below `0x80000000` (false under an arithmetic shift), and a negative `int`
+must stay negative (false under a logical one).
+
+Mutating both arms kills it. That alone does not show both directions are
+covered, because ESBMC reports only the first violated property -- so the signed
+case was also run standalone against the mutant binary, where it fails on its
+own. A two-directional test can otherwise be carried entirely by one half.
+
+## 77. Status
+
+Sampled `-only` errors: **14, of which 10 are the pre-existing parse failures**
+(§72.1). Real remainder: 2 `and takes boolean operands only`, 1 `sizeof` arity,
+1 `do_function_call` member callee. Both shift classes are gone.
+
+Next: `and takes boolean operands only` -- `migrate.cpp:1118` asserting because
+the boolean arms have not run. §58.1 showed those arms' type write is dead for C
+(the converter already emits bool), so the assert is firing on operands, not on
+the node: worth reducing before assuming which.
+
+## 78. The boolean arms port after all -- in this shape
+
+§58 withdrew `adjust_expr_binary_boolean` and `adjust_expr_unary_boolean`
+because the *dispatch-point round trip* was quadratic on `&&` chains. That was
+an objection to the shape, not the arm. Under `-only` the walk migrates a symbol
+once and never round-trips per node, so the same arm goes in without the cost,
+and their live half -- the operand conversion, §58.1 -- is now native.
+
+This is the first evidence that `-only` absorbs work the other two shapes
+rejected, which is a point in favour of §60.3's third route beyond its being the
+last one standing.
+
+### 78.1 The reduction took three attempts
+
+The error is `goto_convert`'s short-circuit lowering rejecting a non-boolean
+operand (`goto_sideeffects.cpp:1267`), so a bare `x && f()` looks like it should
+fail. It does not, and neither does the same condition in an `if`. What fails:
+
+```c
+int foo(int x) { return 1; }
+int main(void) { int il; for (il = 0; foo(il) && il < 2; ++il) {} return 0; }
+```
+
+A call on the **left** of `&&`, in a **`for`** condition. Fixing this from the
+error message alone would have meant patching against a case that could not be
+triggered -- and the message names the check, not the shape that reaches it.
+
+### 78.2 Gate
+
+Default path byte-identical (0 of 2 809); shadow mode unchanged at 2, both the
+§62 VLA defect. `regression/esbmc/irep2_only_boolean_operands` pins the fix by
+the `(_Bool)` cast on the call result; disabling the conversion makes ESBMC abort
+and fails it.
+
+The first `test.desc` regex was written from a guess at the lowering and did not
+match: the condition becomes
+`IF !((_Bool)return_value$_foo$1 ? il < 2 ? 1 : 0 : 0)`, a ternary. Read the
+output before writing the pattern.
+
+## 79. Status
+
+Sampled `-only` errors: **12, of which 10 are the pre-existing parse failures**
+(§72.1) -- so **2 real**: one `sizeof` arity, one `do_function_call` member
+callee. `llvm/sizeof` and `llvm/struct_method` are the two tests.
+
+Next: the `sizeof` arity error. `migrate.cpp:783` aborts on a one-operand
+`sizeof`, which `adjust_sizeof` fills for VLAs -- and §55.5 already found that
+arm blocked on exactly this, from the other direction. That makes it a migration
+ordering question like §72's `shr`, not a port: check whether the converter can
+supply the value operand before assuming the arm must.
+
+## 80. The VLA `sizeof` operand: compute in migration, not in the converter
+
+`migrate.cpp` aborts on a one-operand `sizeof`. The frontend emits that shape
+for a VLA -- clang cannot evaluate a non-constant size -- and
+`clang_c_adjust::adjust_sizeof` fills the value in. Under `-only` that pass does
+not run, so the node dies before anything can fix it.
+
+### 80.1 The converter cannot do it, measured
+
+§79 asked whether the converter could supply the operand, since `adjust_sizeof`
+does not need a constant either: it calls `c_sizeof(measured, ns)`, and
+`clang_c_convertert` has an `ns`. Tried, and it moves the default path on four
+VLA tests (`github_588`, `github_588_1`, `cwe_excessive_alloc_vla{,_pass}`).
+
+The arm calls `adjust_type(measured)` *before* `c_sizeof`, so it measures a
+resolved type; at conversion the symbols are not resolved yet and the resulting
+expression differs. Reverted.
+
+### 80.2 Migration can, and the distinction is the point
+
+`migrate_expr` computing the size is **default-path-neutral by construction**:
+the adjuster fills the operand first, so the normal pipeline never reaches a
+one-operand `sizeof`. Confirmed empirically as well -- 0 of 2 809 on the default
+path, shadow unchanged at 2.
+
+This draws a line §72 left implicit:
+
+> Migration may **compute** what is a pure function of information the node
+> already carries. It may not **decide** something that depends on an adjustment
+> having run.
+
+`c_sizeof` of the measured type is the first: derivable wherever the type is.
+The `shr` kind is the second: correct only after integer promotion. That is why
+§72 refused one and §80 permits the other, and it is a usable test for the
+remaining constructs rather than a case-by-case judgement.
+
+Fail-closed behaviour is kept: an empty operand list still aborts, and so does a
+one-operand node whose size `c_sizeof` cannot build.
+
+## 81. Status
+
+Sampled `-only` errors: **11, of which 10 are the pre-existing parse failures**
+(§72.1). **One real error left**: `do_function_call: unexpected callee
+expression (id: member)`, in `llvm/struct_method`.
+
+Next: that one. It is a C++ shape reaching the C driver (a member callee), so
+the first question is whether `llvm/struct_method` is a C test at all -- §63.1
+found two arms that are C++-only and must not be claimed verified on this
+corpus.
+
+## 82. The function-pointer callee, and the sample reaching zero
+
+`llvm/struct_method` is plain C -- a function-pointer struct member called as
+`x.update()` -- so §81's scope question is answered: this is Phase 6 work, not
+one of §63.1's C++-only arms.
+
+`goto_convert`'s `do_function_call` accepts a symbol or a dereference as callee.
+`adjust_side_effect_function_call` ends with an implicit-dereference step that
+wraps a pointer-typed callee; without it the `member` node arrives bare. The
+rewrite is driven only by the callee's type, depends on no adjustment, and the
+failure surfaces after migration -- so by §80's rule it belongs in the native
+pass, and that is where it went.
+
+The arm also unwraps an *implicit* `address_of` callee. `address_of2t` carries
+no `implicit` flag, so that half is deliberately not mirrored: it would have to
+be guessed, and guessing it wrong is silent. If it matters it will appear as a
+divergence or an error, not as a bad rewrite.
+
+### 82.1 Where the metric now stands
+
+| | before this series | now |
+|---|---:|---:|
+| `-only` divergences | 1 808 | **1 623** |
+| `-only` errors | 304 | **185** |
+| sampled *real* errors | 14 | **0** |
+
+The sample's remaining 10 are §72.1's pre-existing parse failures, which fail
+flag-off too. Every error the sample can see is now either fixed or not ours --
+which means the sample has stopped being a useful instrument and the full-corpus
+185 is the number to work from.
+
+### 82.2 Gate
+
+Default path 0 of 2 809; shadow unchanged at 2.
+`regression/esbmc/irep2_only_fnptr_callee` pins the dereferenced callee, and
+disabling the rewrite reproduces the original `unexpected callee expression`
+error and fails the test.
+
+The test pins *only* the callee, not the surrounding output: `-only` still
+mislowers other parts of that function (`OTHER A` where an assignment belongs),
+and freezing that would pin the bugs the remaining arms still have.
+
+## 83. Status
+
+`-only`: **1 623 of 2 813 diverge, 185 error**. Shadow: 2, both the §62 VLA
+defect. Default path unchanged throughout.
+
+Next: the 185 need re-classifying by message before picking a target -- the
+303-test sample is exhausted (§82.1), so the next step is the full-corpus
+equivalent of §68's error census rather than another reduction.

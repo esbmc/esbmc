@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --loop-invariant-check --bitwuzla
+^VERIFICATION SUCCESSFUL$
+^Properties: 4 verified ✓ 4 passed$
