@@ -1,0 +1,4 @@
+CORE
+main.goto
+--binary --function _RNvNtNtCsfemxtvIyyHd_4core3ptr6verify22check_align_offset_u32
+^VERIFICATION FAILED$
