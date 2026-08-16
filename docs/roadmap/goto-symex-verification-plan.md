@@ -5529,7 +5529,9 @@ was never composed, in the very `get_reference_set_rec` arm the inverse mirrors.
 Counting it would be convenient rather than accurate. The honest position is
 that the family stands at two, the coupling is real and now recorded, and the
 move is a separate change that should not enlarge a patch already spanning four
-defects.
+defects. **Done as that separate change**, §15 M9 (R31/R32 residual) — not
+because a third defect fired the trigger, but because the missing Tier-B
+evidence did.
 
 ---
 
@@ -5718,6 +5720,198 @@ because it is self-inflicted by the suite: the build globs `regression/` with
 `CONFIGURE_DEPENDS`, so artefacts a test run leaves behind make the *next*
 `ninja` re-run CMake and relink, and even `ninja -n` runs the regeneration step
 for real. Settle the build to completion before measuring anything.
+
+---
+
+### M9 (R31/R32 residual) — 2026-08-15, the inverse moves next to its forward
+
+The residual both the R31 and the R32 review raised — *the inverse lives away
+from its forward* — is closed. `collect_offset_paths` and `collect_typed_paths`
+were file-`static` in `value_set.cpp` while the walks they invert are
+`member_offset_bits` (`src/util/expr/type_byte_size.cpp`) and the index arm of
+`get_reference_set_rec`. Every convention the two directions must agree on was
+therefore held in step by a comment. Both now sit in `type_byte_size.cpp` as
+`member_paths_at_offset` and `member_paths_of_type`, beside the forward walk;
+`value_sett::offset_paths` keeps only the dispatch and the empty-path rule,
+which is value-set-specific.
+
+**The move is behaviour-preserving, and that is checked rather than asserted.**
+Each moved body diffs identically against the version at `fd6f75d923` once the
+`overlaid`/`members`/`names` triple is rewritten to the `aggregate_memberst`
+helper that replaces it — the offset walk exactly, the typed walk modulo one
+blank line. `esbmc-unix` is **621/621** and the 26 `mpor_aggregate_ptr_*` shapes
+all pass. Three tests failed at `-j8` on the 120 s cap and pass serially, the
+signature §15 M9 (post-refactor sweep) already records; `01_pthread60` at
+**103.05 s** lands on the 103.1 s recorded there, which is what separates
+"passes serially" from "unchanged by the patch".
+
+**What the move buys is the evidence, not the tidiness.** Both walks being
+file-`static` is why every piece of evidence for them in this document is an
+end-to-end MPOR race, against this plan's own stated preference for Tier B.
+`unit/util/type_byte_size.test.cpp` is that Tier-B test: 9 cases, 40 assertions,
+no `value_sett` and no solver. It pins the forward/inverse round trip over every
+member of a padded struct, nested descent, R33's member-plus-element
+composition, the union overlay, `ns.follow` on a typedef'd member, the
+offset-vs-typed discriminator that is R32, the variable-length element only the
+typed walk reaches, and the empty path the dispatcher keys on.
+
+**Nine mutants, all killed — but only four of them by the suite as first
+written.** Review mutated the moved code independently and found five survivors,
+each with a measured witness, and each a behaviour the walk is entitled to claim
+only if it is checked:
+
+| Mutant | Witness | Killed by |
+|---|---|---|
+| `ns.follow` dropped, offset walk | typedef'd member invisible | symbol-type case |
+| union members accumulate like struct members | second member unreachable at 0 | union case |
+| `offset % esize` dropped | element 1 loses its path | composition case |
+| `[]` suffix dropped, typed walk | variable-length member unreachable | variable-length case |
+| `ns.follow` dropped, **typed** walk | `.in.p` → `{}` | *added* — the original claim that one case killed both walks' `follow` was wrong; it killed the offset walk's |
+| `offset == 0 &&` dropped | byte 12, mid-pointer, yields `.v[]` | *added* — this guard is the whole difference between an inverse and a "holds a target somewhere below" query |
+| member bound `<` → `<=` | one-past-end of `v` wraps to `.v[]` | *added* — invisible until the array is moved off the end of the struct |
+| unmeasurable member `return` → `continue` | offset 8 attributed to `.q` | *added* — invisible until the variable-length member is moved off the end |
+| `esize > 0` guard dropped | **SIGABRT**, `BigInt` modulo by zero | *added* — a zero-sized element array; the guard was the only thing between the walk and an abort |
+| array-arm `array_size_excp` catch swallowed | unmeasurable *element* yields a path | *added* by the coverage gate — the arm has its own catch, and a struct-wrapped VLA never reaches it |
+
+Two of those five survived for the same reason: the shape that exposes them puts
+the array, or the unmeasurable member, somewhere **other than last**, and every
+case as first written put it last. That is the enumeration failure §15 M9
+(census re-run) argues about, reproduced in miniature inside a unit test — the
+cases were generated from the defects already known, so they inherited those
+defects' shape. A third, the array-arm catch, hid behind the same reflex in a
+different guise: a VLA was always reached *through a struct member*, where the
+member loop's catch fires first, so the arm's own catch was never entered. The
+coverage gate found that one by asking which lines the tests execute, which is a
+question neither reading nor mutation-by-hypothesis had put.
+
+The `return`-on-unmeasurable-member rule is now justified rather than asserted:
+C11 **6.7.2.1p18** puts a flexible array member last and **6.7.2.1p9** bars a
+variably modified member outright, so no later member is reachable by a constant
+offset. It matters which way the rule errs — dropping paths under-approximates a
+may-points-to set, which is the unsound direction, so the argument for it has to
+be a standard citation and not a plausibility.
+
+**One recorded claim was wrong, in the direction that matters.** The first cut
+of the round-trip case built `struct { char c1; int *p; char c2; }` unpadded and
+asserted `member_offset(s, "p") == 8`. It is **1**: `member_offset_bits` sums the
+widths of the preceding members and makes no alignment adjustment, because the
+frontend hands padding over as explicit members. The inverse agreed with the
+forward on that struct too — only the hard-coded offsets were wrong — but the
+case would have documented a layout ESBMC does not use. It now builds the struct
+the way `add_padding` does and pins `type_byte_size(s) == 24` alongside the two
+offsets, so the forward walk is pinned rather than trusted.
+
+The offer this makes to `dereferencet`, which faces the same
+descriptor-to-field-path problem, is left unexercised: nothing in scope needs it,
+and a second caller should arrive with its own test rather than be anticipated.
+
+---
+
+### M9 (byte_extract census) — 2026-08-15, the probe that found no defect because it found no code
+
+R31, R32 and R33 were each an arm of the value set failing to compose an offset,
+so the next probe went to the arm that composes least.
+`get_reference_set_rec`'s **`byte_extract2t` arm** (`value_set.cpp:1338-1353` at
+`fd6f75d923`) neither recurses into `source_value` nor composes an offset — it
+calls `insert(dest, extract.source_value, o)` directly with the extract's own
+offset, where the member arm does `get_reference_set(memb.source_value, …)` and
+then `o.offset += offset_in_bytes`, and the index arm has done the same since
+R33. On shape alone it is R33 before its fix.
+
+**It is never entered.** Counters compiled into four arms of the function and
+swept over **1,197** sources from `regression/esbmc-unix`, `regression/esbmc`
+and `regression/esbmc-cpp/cpp`:
+
+| Arm | Calls | Files |
+|---|---|---|
+| `get_reference_set_rec` entry | 152,478 | 790 of 1,197 |
+| index | 15,538 | 598 |
+| member | 470 | 37 |
+| **`byte_extract`** | **0** | **0** |
+| `assign_rec`'s `byte_extract` lhs arm (`:1721`) | **0** | **0** |
+
+Twelve hand-written shapes aimed at the arm — `char *` arithmetic into a struct,
+misaligned punned writes, union punning, an array element read as `short`, a
+`struct` overlaid on `long buf[]`, `memcpy` into a local buffer, and the C++
+`reinterpret_cast` spelling of the first — add **0** more.
+
+The entry and index counters are the control that makes the zero a measurement
+rather than dead instrumentation, and the first attempt at this sweep was
+exactly that mistake: run under `--goto-functions-only`, which exits before
+symex ever starts, it reported 0 for *every* arm across 427 files — a clean,
+confident, entirely vacuous result. The control is not a formality.
+
+**The one route that looked like it would feed the arm provably does not.** An
+assignment whose lhs is a `byte_extract` is handled at `value_set.cpp:1721` by
+`assign_rec(to_byte_extract2t(lhs).source_value, …)`, recursing on
+`source_value` directly and bypassing `get_reference_set_rec` altogether. That
+is the *same* non-composing shortcut the dead arm takes, which is the part worth
+keeping: both places that handle a byte-extract lvalue decline to compose, and
+the live one gets away with it by reaching its base through recursion instead.
+
+**Verdict: no defect, and the hypothesis is unwitnessable rather than refuted.**
+If the arm does mis-compose, nothing measured here can show it, because nothing
+reaches it. It is the strongest dead-code candidate in the function — and it
+**stays**. §14 item 8 is explicit that C-Dead cannot be discharged on `src/**`:
+the file does not parse (G9), and a corpus sweep is evidence of non-coverage,
+never a proof of unreachability. Deleting a branch on the strength of 1,197
+files of silence is precisely the "deletion drops live behaviour" regression the
+rule exists to prevent. Recorded so the next reader does not spend the same
+afternoon rediscovering it.
+
+---
+
+### M9 (dereferencet agreement) — 2026-08-15, the other half of the coupling, checked
+
+R31's material argued that the descriptor-to-field-path problem is solved twice
+in ESBMC — once by the value set, once by `dereferencet` — and that the pair
+agreeing is held by nothing but convention. The value set's half is now pinned
+by `unit/util/type_byte_size.test.cpp`. This entry checks the other half against
+the *same shapes that broke it*, at verdict level: write through a punned
+pointer, read the sub-object back by its declared path, assert they agree.
+
+**Ten shapes, all correct**, each with both an inverted-assertion twin and an
+`assert(0)` reachability twin:
+
+| Shape | Byte | Result |
+|---|---|---|
+| `struct S { long pad; int *v[2]; }`, `&s.v[1]` — R33's composition | 16 | correct |
+| the same, read direction | 16 | correct |
+| member offset alone, `&s.v[0]` | 8 | correct |
+| element offset alone, no pad, `&s.v[1]` | 8 | correct |
+| symbolic index, `&s.v[i]`, `i` nondet and assumed in range — R32's shape | — | correct |
+| symbolic offset by `char *` arithmetic, `(char *)&s + 8 + i * 8` | — | correct |
+| `struct Outer { long pad; struct Inner in[2]; }`, `&o.in[1].q[1]` | 48 | correct |
+| the same at `&o.in[0].q[1]` | 24 | correct |
+| union member through a pun | 8 | correct |
+
+Every one reads an `int *` object through an `int **`, which is the object's own
+type, so C11 **6.5p7** is satisfied and none of this is a strict-aliasing test —
+unlike the two shapes §15 M9 (census re-run) had to set aside.
+
+**So the coupling is real but not currently broken.** That is worth stating
+precisely: it is not evidence that `dereferencet` cannot drift from the value
+set, only that on the shapes that actually broke one, the other is right. The
+pair is pinned going forward by
+`regression/esbmc/deref_punned_member_index{,_fail}`.
+
+**A false finding, and the harness bug behind it.** The first run of this probe
+reported `assert(0)` proving `SUCCESSFUL` on two straight-line programs — a
+false-SUCCESSFUL of the most serious kind, and it was reproduced on master
+before being believed, which is the right instinct applied to a wrong result.
+It was neither. The variants were generated with `sed 's/== &g)/!= \&g)/'`, and
+those two inputs had been written compactly as `s.v[0]==&g`, with no spaces. The
+pattern never matched, `sed` reported nothing, and the "mutant" was a byte-copy
+of the original — so the *same passing program* was run three times and read as
+three results. The rewritten harness selects its variant with `-D` at compile
+time (`PROBE_NEG`, `PROBE_REACH`), which cannot silently fail to apply: a
+misspelt macro changes no behaviour and the twin visibly stops failing.
+
+The lesson generalises past `sed`. §15 M8's rule was that a detector which
+cannot fail teaches nothing; this adds that **a mutation which cannot be
+observed to have applied is not a mutation**. Both anti-vacuity twins here exist
+to catch the ordinary vacuity — an unreachable assertion — and neither would
+have caught this, because the fault was upstream of the tool entirely.
 
 ---
 
