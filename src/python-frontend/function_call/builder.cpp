@@ -1378,6 +1378,10 @@ exprt function_call_builder::build() const
     return numpy_call.get();
   }
 
+  const bool saved = converter_.enter_contract_clause(
+    needs_bool_intrinsic_symbol(function_id.get_function()));
   function_call_expr call_expr(function_id, call_, converter_);
-  return call_expr.get();
+  exprt result = call_expr.get();
+  converter_.restore_contract_clause(saved);
+  return result;
 }
