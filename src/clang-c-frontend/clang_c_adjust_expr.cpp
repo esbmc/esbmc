@@ -1020,6 +1020,41 @@ void clang_c_adjust::adjust_type(typet &type)
   }
 }
 
+/// A compound assignment over a complex operand has to be expanded here.
+/// goto_convert's remove_assignment rebuilds `a op b` long after adjustment, so
+/// the component-level lowering would never see it and the SMT layer would be
+/// handed a raw complex operator (#6713). An lvalue with its own side effect is
+/// left alone: expanding it would evaluate that effect twice, and a loud
+/// failure downstream beats a wrong answer.
+bool clang_c_adjust::lower_complex_compound_assignment(exprt &expr)
+{
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
+  const typet type0 = op0.type();
+
+  if (
+    (type0.id() != "complex" && op1.type().id() != "complex") ||
+    contains_sideeffect(op0))
+    return false;
+
+  static const std::map<irep_idt, irep_idt> complex_compound_ops = {
+    {"assign+", "+"}, {"assign-", "-"}, {"assign*", "*"}, {"assign_div", "/"}};
+
+  auto it = complex_compound_ops.find(expr.statement());
+  if (it == complex_compound_ops.end())
+    return false;
+
+  exprt rhs(it->second, type0);
+  rhs.location() = expr.location();
+  rhs.copy_to_operands(op0, op1);
+  if (!lower_complex_binary_arithmetic(rhs))
+    return false;
+
+  expr.statement("assign");
+  expr.op1().swap(rhs);
+  return true;
+}
+
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -1036,44 +1071,22 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     return;
   }
 
-  // A compound assignment over a complex operand has to be expanded here.
-  // goto_convert's remove_assignment rebuilds `a op b` long after adjustment,
-  // so the component-level lowering would never see it and the SMT layer
-  // would be handed a raw complex operator (#6713). An lvalue with its own
-  // side effect is left alone: expanding it would evaluate that effect twice,
-  // and a loud failure downstream beats a wrong answer.
+  if (lower_complex_compound_assignment(expr))
+    return;
+
   if (
-    (type0.id() == "complex" || op1.type().id() == "complex") &&
-    !contains_sideeffect(op0))
-  {
-    static const std::map<irep_idt, irep_idt> complex_compound_ops = {
-      {"assign+", "+"},
-      {"assign-", "-"},
-      {"assign*", "*"},
-      {"assign_div", "/"}};
-
-    auto it = complex_compound_ops.find(statement);
-    if (it != complex_compound_ops.end())
-    {
-      exprt rhs(it->second, type0);
-      rhs.location() = expr.location();
-      rhs.copy_to_operands(op0, op1);
-      if (lower_complex_binary_arithmetic(rhs))
-      {
-        expr.statement("assign");
-        expr.op1().swap(rhs);
-        return;
-      }
-    }
-  }
-
-  if (statement == "assign_shl" || statement == "assign_shr")
+    statement == "assign_shl" || statement == "assign_shr" ||
+    statement == "assign_lshr" || statement == "assign_ashr")
   {
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
     {
-      if (statement == "assign_shl")
+      // The C converter now picks the kind (§76); Solidity still emits the
+      // untyped assign_shr, so the rewrite below stays for it.
+      if (
+        statement == "assign_shl" || statement == "assign_lshr" ||
+        statement == "assign_ashr")
         return;
 
       if (type0.id() == "unsignedbv")
