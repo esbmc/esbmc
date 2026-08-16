@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--goto-functions-only --clang-c-irep2-adjust
+^\s*FUNCTION_CALL:\s+return_value\$_strlen\$1=strlen\(&entry->d_name\[0\]\)$
