@@ -137,18 +137,6 @@ public:
     std::map<irep_idt, std::vector<expr2tc>> array_elem_targets;
   };
 
-  /// \brief Hold the parts of \p var the clause did not name unchanged, rather
-  ///        than \p var as a whole: named struct fields, or named array
-  ///        elements.
-  /// \return Whether \p var was one of those shapes and so is now dealt with
-  bool emit_partial_frame(
-    goto_programt &dest,
-    const locationt &loc,
-    frame_modet mode,
-    const classified_assignst &classified,
-    const expr2tc &var,
-    const expr2tc &snap);
-
   /// \brief Classify assigns targets into direct and pointer categories.
   /// - Pointer-typed symbols (from Clang simplifying &(*ptr) to ptr) → pointer_targets
   /// - Dereference expressions → extract pointer operand → pointer_targets

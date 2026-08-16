@@ -56,7 +56,22 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
 
   for (const auto &target : explicit_assigns)
   {
-    if (is_pointer_type(target))
+    if (
+      is_index2t(target) && is_symbol2t(to_index2t(target).source_value) &&
+      is_array_type(to_index2t(target).source_value->type))
+    {
+      // global[i]: record the index so the assertion can spare that element.
+      // As a direct target it matched nothing, and the whole array was asserted
+      // unchanged, which the named write itself falsifies (#7056).
+      // Tested before the pointer case: an element of an array *of pointers*
+      // is pointer-typed, and classing it as a pointer target left the whole
+      // array asserted unchanged, so even a body writing only the named
+      // element failed.
+      const index2t &idx = to_index2t(target);
+      result.array_elem_targets[to_symbol2t(idx.source_value).thename]
+        .push_back(idx.index);
+    }
+    else if (is_pointer_type(target))
     {
       // Pointer-typed symbol: Clang simplified &(*ptr) to ptr
       result.pointer_targets.push_back(target);
@@ -96,17 +111,6 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
         result.direct_targets.push_back(target);
       }
     }
-    else if (
-      is_index2t(target) && is_symbol2t(to_index2t(target).source_value) &&
-      is_array_type(to_index2t(target).source_value->type))
-    {
-      // global[i]: record the index so the assertion can spare that element.
-      // As a direct target it matched nothing, and the whole array was asserted
-      // unchanged, which the named write itself falsifies (#7056).
-      const index2t &idx = to_index2t(target);
-      result.array_elem_targets[to_symbol2t(idx.source_value).thename]
-        .push_back(idx.index);
-    }
     else
     {
       result.direct_targets.push_back(target);
@@ -141,12 +145,18 @@ static void emit_frame_instruction(
   }
 }
 
+// One assertion per element costs more than linearly: 256 elements solve in
+// 0.6s, 512 in 2.4s, 1000 in 16s, and 10000 does not finish inside the
+// regression timeout. Past this extent fall back to the whole-array assertion,
+// which is still sound -- only imprecise, reporting the write the clause names.
+static const unsigned max_elementwise_frame_extent = 256;
+
 // Hold every element the clause did not name unchanged, rather than the array
 // as a whole -- which the named write itself falsifies (#7056). A global array
 // has a constant extent, so this needs neither a witness index nor a
 // quantifier: one assertion per element, each excused at the named indices.
 // Returns whether \p var was of that shape and so is now dealt with; a
-// non-constant extent falls back to the whole-array assertion.
+// non-constant or oversized extent falls back to the whole-array assertion.
 static bool emit_array_elem_frame(
   goto_programt &dest,
   const locationt &loc,
@@ -168,6 +178,9 @@ static bool emit_array_elem_frame(
     return false;
 
   const BigInt &n = to_constant_int2t(atype.array_size).value;
+  if (n > BigInt(max_elementwise_frame_extent))
+    return false;
+
   for (BigInt k = 0; k < n; k += 1)
   {
     expr2tc kc = constant_int2tc(atype.array_size->type, k);
@@ -228,11 +241,14 @@ static bool emit_struct_field_frame(
   return true;
 }
 
-bool frame_enforcert::emit_partial_frame(
+// Hold the parts of \p var the clause did not name unchanged, rather than \p
+// var as a whole: named struct fields, or named array elements.
+// Returns whether \p var was one of those shapes and so is now dealt with.
+static bool emit_partial_frame(
   goto_programt &dest,
   const locationt &loc,
   frame_modet mode,
-  const classified_assignst &classified,
+  const frame_enforcert::classified_assignst &classified,
   const expr2tc &var,
   const expr2tc &snap)
 {
