@@ -2,4 +2,4 @@ KNOWNBUG
 main.c
 --enforce-contract write_sub_a --function write_sub_a --no-pointer-check
 ^VERIFICATION FAILED$
-^.*sub->b not in assigns clause.*$
+^.*g->x not in assigns clause.*$

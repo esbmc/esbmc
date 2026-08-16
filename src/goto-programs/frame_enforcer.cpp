@@ -49,6 +49,14 @@ void frame_enforcert::materialize_snapshots(
   }
 }
 
+static const expr2tc &strip_typecasts(const expr2tc &e)
+{
+  const expr2tc *leaf = &e;
+  while (is_typecast2t(*leaf))
+    leaf = &to_typecast2t(*leaf).from;
+  return *leaf;
+}
+
 // The parameter a path is rooted at, and the field of *that* parameter the path
 // goes through: `o->sub->a` is rooted at `o` through `sub`. Recording that much
 // lets the per-field check hold every other field of `*o` unchanged, which is
@@ -60,11 +68,15 @@ static bool root_pointer_field(const expr2tc &e, irep_idt &ptr, irep_idt &field)
   if (!is_member2t(e))
     return false;
 
+  // A cast anywhere along the path -- `((Inner *)o->sub)->a` -- must not lose
+  // the root, or the target falls back to direct_targets and no obligation is
+  // generated at all.
   const member2t &mem = to_member2t(e);
-  if (!is_dereference2t(mem.source_value))
+  const expr2tc &src = strip_typecasts(mem.source_value);
+  if (!is_dereference2t(src))
     return false;
 
-  const expr2tc &under = to_dereference2t(mem.source_value).value;
+  const expr2tc &under = strip_typecasts(to_dereference2t(src).value);
   if (is_symbol2t(under))
   {
     ptr = to_symbol2t(under).thename;
