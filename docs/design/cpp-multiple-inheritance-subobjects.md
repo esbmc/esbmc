@@ -207,6 +207,25 @@ changes) before the next.
   returns.
 * **P5 — virtual bases.** Shared virtual-base subobject via an indirection
   (vbase pointer), building on the #938 most-derived-init work.
+  * **Symptom now pinned:** `regression/esbmc-cpp/inheritance/`
+    `github_7025_vbase_nonfirst_member` (KNOWNBUG) plus the two
+    `github_7025_vbase_first_base{,_fail}` controls. Under the flattened
+    layout a class whose virtual base is *not* at offset 0 lays its own
+    fields out differently from the enclosing class, so a write through the
+    base's `this` and a read through the derived object disagree — silently,
+    since only the non-first-base ordering triggers it (#7025).
+  * **Spike result (single-path virtual bases are not a shortcut):** nesting
+    a virtual base that is reachable on exactly one path — keeping the flat
+    layout only for genuinely shared ones — fixes #7025 and promotes
+    `virtual_base_with_base`, but two further migrations fall out and the
+    second is the blocker. (a) Clang elides the intermediate base specifiers
+    from a cast path that crosses a virtual base, so `get_cast_expr` must
+    resolve a *chain* of `@base@` hops per specifier, not one. (b) The C++
+    stream OM (`ostream`/`istream : virtual ios`, `ios : ios_base`) then
+    reaches `ios_base` fields through member expressions that never pass
+    through `get_cast_expr` at all, and those still assume the flat layout.
+    P5 has to migrate them together; a layout flip on its own does not
+    converge.
 
 ## 6. Validation strategy
 

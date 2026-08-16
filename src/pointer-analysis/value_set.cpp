@@ -265,133 +265,11 @@ static std::optional<std::pair<size_t, size_t>> match_leading_component(
   return std::make_pair(no, len);
 }
 
-/* Every field path of `type` whose sub-object is a `target` sitting `offset`
- * bytes in. Members are accumulated in bits, as member_offset_bits does, and
- * array elements in bytes, as the index arm of get_reference_set_rec does, so
- * each arm inverts the walk that contributed its part of the offset.
- * A member of no constant size ends the descent, keeping the paths already
- * found: everything after it is unreachable by a constant offset anyway. */
-static void collect_offset_paths(
-  const type2tc &type_in,
-  const BigInt &offset,
-  const type2tc &target,
-  const namespacet &ns,
-  const std::string &prefix,
-  std::vector<std::string> &dest)
-{
-  /* size_bits follows symbol types before measuring, so the inverse must too,
-   * or a typedef'd aggregate silently loses its path. */
-  const type2tc type = ns.follow(type_in);
-
-  if (offset == 0 && type == target)
-  {
-    dest.push_back(prefix);
-    return;
-  }
-
-  if (is_array_type(type))
-  {
-    const type2tc &subtype = to_array_type(type).subtype;
-    BigInt esize;
-    try
-    {
-      esize = type_byte_size(subtype, &ns);
-    }
-    catch (const array_type2t::array_size_excp &)
-    {
-      return;
-    }
-    if (esize > 0)
-      collect_offset_paths(
-        subtype, offset % esize, target, ns, prefix + "[]", dest);
-    return;
-  }
-
-  if (!is_struct_type(type) && !is_union_type(type))
-    return;
-
-  const bool overlaid = is_union_type(type);
-  const std::vector<type2tc> &members =
-    overlaid ? to_union_type(type).members : to_struct_type(type).members;
-  const std::vector<irep_idt> &names = overlaid
-                                         ? to_union_type(type).member_names
-                                         : to_struct_type(type).member_names;
-  const BigInt offset_bits = offset * 8;
-  BigInt start_bits = 0;
-
-  for (size_t i = 0; i < members.size(); i++)
-  {
-    BigInt size_bits;
-    try
-    {
-      size_bits = type_byte_size_bits(members[i], &ns);
-    }
-    catch (const array_type2t::array_size_excp &)
-    {
-      return;
-    }
-
-    if (offset_bits >= start_bits && offset_bits < start_bits + size_bits)
-      collect_offset_paths(
-        members[i],
-        (offset_bits - start_bits) / 8,
-        target,
-        ns,
-        prefix + "." + names[i].as_string(),
-        dest);
-    if (!overlaid)
-      start_bits += size_bits;
-  }
-}
-
-/* Every field path of `type` whose sub-object is a `target`, wherever it sits.
- * A descriptor carrying no constant offset selects no single path, so all of
- * them are possible (R32) -- the same over-approximation the union case makes
- * on the offset walk, and for the same reason: the descriptor cannot say which
- * sub-object is meant. No size is consulted, there being no offset to place,
- * which also keeps a target inside a variable-length element reachable where
- * the offset walk has to drop it. */
-static void collect_typed_paths(
-  const type2tc &type_in,
-  const type2tc &target,
-  const namespacet &ns,
-  const std::string &prefix,
-  std::vector<std::string> &dest)
-{
-  const type2tc type = ns.follow(type_in);
-
-  if (type == target)
-  {
-    dest.push_back(prefix);
-    return;
-  }
-
-  if (is_array_type(type))
-  {
-    collect_typed_paths(
-      to_array_type(type).subtype, target, ns, prefix + "[]", dest);
-    return;
-  }
-
-  if (!is_struct_type(type) && !is_union_type(type))
-    return;
-
-  const bool overlaid = is_union_type(type);
-  const std::vector<type2tc> &members =
-    overlaid ? to_union_type(type).members : to_struct_type(type).members;
-  const std::vector<irep_idt> &names = overlaid
-                                         ? to_union_type(type).member_names
-                                         : to_struct_type(type).member_names;
-
-  for (size_t i = 0; i < members.size(); i++)
-    collect_typed_paths(
-      members[i], target, ns, prefix + "." + names[i].as_string(), dest);
-}
-
 /* The suffixes naming a `target` held at @p offset in `type`, or held anywhere
  * in it when @p offset_known is false. A union contributes every member the
  * offset lands in, as the member2t arm of get_value_set_rec does, since an
- * offset alone cannot say which one is live. */
+ * offset alone cannot say which one is live. The walks themselves sit beside
+ * the forward ones they invert, in util/expr/type_byte_size. */
 static std::vector<std::string> offset_paths(
   const type2tc &type,
   const BigInt &offset,
@@ -399,20 +277,14 @@ static std::vector<std::string> offset_paths(
   const type2tc &target,
   const namespacet &ns)
 {
-  std::vector<std::string> paths;
-
   /* The descriptor already names the object being dereferenced, which the
    * caller's unrefined lookup covers, so there is no path to add. Both walks
    * would otherwise yield the empty path and have the caller repeat it. */
   if ((!offset_known || offset == 0) && ns.follow(type) == target)
-    return paths;
+    return {};
 
-  if (offset_known)
-    collect_offset_paths(type, offset, target, ns, "", paths);
-  else
-    collect_typed_paths(type, target, ns, "", paths);
-
-  return paths;
+  return offset_known ? member_paths_at_offset(type, offset, target, ns)
+                      : member_paths_of_type(type, target, ns);
 }
 
 void value_sett::get_constant_value_set(
