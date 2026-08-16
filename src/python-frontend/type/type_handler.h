@@ -214,6 +214,13 @@ public:
 
   exprt tagged_scalar_byte_size(const exprt &value) const;
 
+  // A Python str is a char array or char*.
+  bool is_string_type(const typet &t) const;
+
+  // A Python numeric scalar is an int (>=16-bit bitvector, excluding the
+  // 8-bit char that backs a 1-character string), float, or bool.
+  bool is_numeric_scalar_type(const typet &t) const;
+
   /*
    * Gets the generic dictionary type from the symbol table.
    * @return A pointer to the generic __python_dict__ struct type.

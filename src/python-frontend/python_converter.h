@@ -5,6 +5,7 @@
 #include <python-frontend/function_call/cache.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/type_handler.h>
@@ -314,6 +315,7 @@ private:
   friend class python_list;
   friend class string_handler;
   friend class tuple_handler;
+  friend class dynamic_type_handler;
   friend class python_typechecking;
   friend class python_class_builder;
   friend class python_dict_handler;
@@ -335,12 +337,6 @@ private:
   void load_c_intrisics(code_blockt &block);
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
-
-  // Fills in the tagged-object fields.
-  void get_tagged_scalar_assign(
-    const nlohmann::json &ast_node,
-    const std::string &name,
-    codet &target_block);
 
   void preregister_global_variables(const nlohmann::json &ast_body);
 
@@ -377,14 +373,6 @@ private:
   static bool contains_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
-
-  exprt handle_tagged_scalar_comparison(
-    const std::string &op,
-    const exprt &lhs,
-    const exprt &rhs);
-
-  exprt
-  build_tagged_scalar_eq_literal(const exprt &tagged, const exprt &literal);
 
   /// Coarse Python-level type category used to decide whether two operands
   /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
@@ -539,10 +527,6 @@ private:
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
-
-  // Decides which variables need the tagged-object representation
-  std::unordered_set<std::string>
-  scalar_tag_candidates(const nlohmann::json &if_node);
 
   bool is_coverage_mode() const;
 
@@ -1340,6 +1324,7 @@ private:
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;
+  dynamic_type_handler dynamic_type_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
@@ -1416,9 +1401,6 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
-
-  // Names of variables flagged as needing the tagged-object representation.
-  std::unordered_set<std::string> tagged_scalar_names_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to

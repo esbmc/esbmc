@@ -6,6 +6,7 @@
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/config/config.h>
 #include <util/symtab/context.h>
 #include <util/lang/c_types.h>
@@ -1159,6 +1160,20 @@ exprt type_handler::tagged_scalar_byte_size(const exprt &value) const
   const size_t width_bits =
     std::stoull(value.type().width().as_string(), nullptr, 10);
   return from_integer(BigInt(width_bits / 8), size_type());
+}
+
+bool type_handler::is_string_type(const typet &t) const
+{
+  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+}
+
+bool type_handler::is_numeric_scalar_type(const typet &t) const
+{
+  if (t.is_floatbv() || t.is_bool())
+    return true;
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return bv_width(t) >= 16;
+  return false;
 }
 
 typet type_handler::get_list_element_type() const

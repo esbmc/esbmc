@@ -4520,6 +4520,19 @@ bool clang_c_convertert::get_compound_assign_expr(
     new_expr.add("computation_type") = computation_type;
   }
 
+  // IREP2 has no signedness-agnostic shift, and the choice cannot be made after
+  // conversion without redoing the promotion (scope-clang-c-irep2.md §72, §76).
+  // Mirror adjust_side_effect_assignment: for `E1 >>= E2` the kind follows E1's
+  // own type, per C11 6.5.16.2p3's rewrite to `E1 = E1 >> E2`.
+  if (new_expr.statement() == "assign_shr")
+  {
+    const typet lhs_type = ns.follow(lhs.type());
+    if (lhs_type.id() == "unsignedbv")
+      new_expr.statement("assign_lshr");
+    else if (lhs_type.id() == "signedbv")
+      new_expr.statement("assign_ashr");
+  }
+
   new_expr.copy_to_operands(lhs, rhs);
   return false;
 }
