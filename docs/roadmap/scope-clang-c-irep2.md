@@ -2890,3 +2890,84 @@ converter, some cannot. `adjust_builtin_va_arg` lowers the node to a call to
 `__ESBMC_va_arg`, which is a rewrite rather than a decision, so the question is
 whether it can run natively after migration or whether `migrate_expr` rejects
 the node first, as it did for `shr`.
+
+## 86. `builtin_va_arg`: a lowering migration may replay
+
+`migrate_expr` rejects the node first. IREP2 has no `builtin_va_arg` kind, so
+under `-only` the node dies exactly where `shr` died (§72) -- and not where
+§82's and §84's arms failed, which was downstream of a migration that had
+succeeded.
+
+That settles placement before soundness. §82 and §84 could go in the native walk
+because migration left something to walk; here it leaves nothing, so the rewrite
+has to happen *during* migration, as §80's VLA `sizeof` does.
+
+§80's rule then says it may. The lowering reads the node's type -- which becomes
+the call's return type -- and its single operand, cast to `void *`. Both are
+already on the node and neither is the result of an earlier adjustment: a
+computation, not a decision. The cast needs no layering exception either, since
+`gen_typecast` is one line over `c_typecastt` (`clang-c-frontend/typecast.cpp:9`)
+and `util` may call that directly.
+
+### 86.1 The symbol is declared, with a different type
+
+`adjust_builtin_va_arg` does a second thing the arm does not: it moves an
+`__ESBMC_va_arg` symbol into the context, deliberately typed `void (void *)` to
+"avoid collisions of the same symbol with different types". `migrate_expr` holds
+a `namespacet`, not a `contextt`, so §70's `declare_implicit_callee` declares it
+instead -- and types it from the call site:
+
+| | `__ESBMC_va_arg` |
+|---|---|
+| default path | `void (void *)` |
+| `-only` | `signed int (void *)` -- the first call site |
+
+Inert, and measured to be so rather than argued. `do_function_call` builds the
+`va_arg` side-effect from the *assignment target's* type
+(`builtin_functions.cpp:1500`), never from the callee symbol, so a function
+reading an `int`, a `double` and a `char *` off one `va_list` lowers identically
+under both flags -- as does the cross-function case, where the second function's
+migration finds the symbol already in the table and takes
+`sym_name_to_symbol`'s use-the-table-type path.
+
+Not special-cased. §82 declined to mirror the `address_of` unwrap on a guess,
+and forcing a `void` return here would be the same guess; if it matters it will
+surface as a divergence.
+
+The call sites do each log `missing renaming delimiters`. That is §70's ordering
+-- migration walks the callee before the adjuster declares it -- and reproduces
+on any implicitly-declared callee under `-only`, so it is not this arm's.
+
+### 86.2 Result and gate
+
+Ours **8 → 2** -- the whole `builtin_va_arg` class, all 6 of it -- and `-only`
+divergences 1 623 of 2 813 → **1 612 of 2 816**. The two denominators differ
+because each arm since §82 adds its own test, so treat the drop as bounded by
+the 6 rather than read exactly from the difference.
+
+Default path 0 of 2 814 common rows against the pre-arm sweep; shadow unchanged
+at 2, both the §62 VLA defect. Disabling the arm reproduces `ERROR:
+builtin_va_arg` and fails `regression/esbmc/irep2_only_va_arg`, which pins four
+lines: the return-value temporary's type and `=va_arg(ap[0])` for an `int` and
+again for a `double`. The second pair is what regression-protects §86.1 -- it is
+the call whose type differs from the declared callee's, so a lowering that read
+the symbol instead of the node would produce `signed int` there and fail.
+
+`=va_arg(ap[0])` earns its place in the expected output. `make_va_list`
+(`builtin_functions.cpp:835`) strips typecasts, so the `void *` cast looks
+unobservable; it is observable because the array-to-pointer decay it forces
+yields `address_of(index(ap, 0))`, which `make_va_list` unwraps to `ap[0]`.
+Drop the cast and the operand prints as a bare `ap`.
+
+## 87. Status
+
+`-only`: 1 612 of 2 816 diverge; **169 error, of which 167 are pre-existing --
+2 are ours**, both `Can't generate zero for type complex`. Shadow: 2, both the
+§62 VLA defect. Default path unchanged throughout.
+
+Next: that last class. `gen_zero` (`irep2_utils.cpp:63`) has no `complex_id`
+arm and falls through to its aborting `default`, so the tempting fix is to add
+one. §88 has to establish first *which* caller asks for a complex zero under
+`-only` and not on the default path: the abort names the type, not the
+adjustment whose absence produced the request, and every arm since §72 has
+turned on that distinction.
