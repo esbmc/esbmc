@@ -3135,3 +3135,80 @@ Next, in order:
    nothing counted it because a `FUNCTION_CALL` where an `ASSERT` belongs fails
    quietly. Size it across the whole corpus first; the 12 are only the ones
    §88 happened to look at.
+
+## 92. §90.2's base-name defect, fixed -- and a metric that cannot see it
+
+The fix is one line: `declare_implicit_callee` gives the symbol
+`get_pretty_name(id)` -- the existing helper in `util/symtab/pretty.h`, which is
+the same `rfind('@')` split every other consumer of a mangled C identifier uses
+-- instead of the identifier itself.
+
+`complex_01`'s goto program is byte-identical to the default path afterwards.
+
+### 92.1 What it actually fixes is a vacuous pass
+
+Before: `assert(x == 2)` with `x == 1` and no `#include <assert.h>` reports
+**VERIFICATION SUCCESSFUL** under `-only`, because no `ASSERT` is emitted at
+all. That is the dangerous direction -- §90.1's `__builtin_expect` defect
+reported a spurious failure, which is loud; this one silently drops the property
+and reports success. Both are wrong verdicts and only one of them complains.
+
+`irep2_only_implicit_assert_fail` pins it at the verdict (FAILED, SUCCESSFUL on
+master) and `irep2_only_implicit_assert` pins the emitted `ASSERT` in the goto
+dump (`FUNCTION_CALL: c:@F@assert(x == 1)` on master). Both discriminate against
+a control binary.
+
+### 92.2 The divergence count does not move, and the reason is instructive
+
+| | control | patched |
+|---|---:|---:|
+| full-output divergence, 297-test sample | 201 | **201** |
+| of those, goto program identical (warning-only) | 1 | **17** |
+
+The arm closes 16 tests at the goto level and the headline metric registers
+nothing, because what replaces the missing `ASSERT` is a *different* divergence
+on the same tests: `migrate_expr` warns
+
+```
+WARNING: migrate_expr: symbol 'c:@F@assert' missing renaming delimiters,
+treating as level0 with base name 'c:@F@assert'
+```
+
+once per occurrence, on stderr, which the A/B captures. The symbol genuinely is
+not in the context when the enclosing body is migrated -- `get_value2()` runs
+before `declare_implicit_callee` adds it -- so this is inherent to the ordering,
+not to the fix.
+
+Two consequences worth carrying forward. First, **the divergence count is not a
+sufficient statistic for this phase any more**: an arm can be entirely correct
+and score zero. §89 already moved the instrument once, from "what aborts" to
+"what the divergence set is made of"; this moves it again, to "goto program
+versus diagnostics", and the sweep should report both columns from here on.
+Second, the warning is itself a candidate: it is emitted for every
+implicitly-declared callee under `-only` and says nothing a user can act on.
+
+### 92.3 A local-only failure class, explained
+
+`irep2_only_complex_arith` and `irep2_only_complex_arith_int` fail on master on
+this host and pass in CI. The cause is §90.1: they call `assert`, Darwin's
+`assert.h` routes it through `__builtin_expect`, and the nondet result violates
+the assertion. glibc's `assert.h` does not, so CI never saw it. §90's arm makes
+both pass locally. Anyone baselining this suite on macOS should expect that
+class to disappear with it rather than treat it as noise.
+
+## 93. Status
+
+`-only` on the 297-test sample: **201 of 297 by full output** (unchanged by this
+arm, §92.2), **184 by goto program** (200 before). §90's arm, measured
+separately from master, takes the full-output count to 131.
+
+Gates: 42 of 44 in the
+`irep2_only|complex_|gcc_popcount|gcc_bswap|github_223` slice green; the two
+failures are the §92.3 pair and fail on master identically. The whole-suite gate
+is still owed (§91).
+
+Next:
+
+1. The name-matched builtin family with `shadows_user_definition` (§90.3).
+2. The `missing renaming delimiters` warning (§92.2) -- worth closing on its own
+   terms, and it unblocks the divergence metric.
