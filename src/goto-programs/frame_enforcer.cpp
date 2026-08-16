@@ -96,6 +96,17 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
         result.direct_targets.push_back(target);
       }
     }
+    else if (
+      is_index2t(target) && is_symbol2t(to_index2t(target).source_value) &&
+      is_array_type(to_index2t(target).source_value->type))
+    {
+      // global[i]: record the index so the assertion can spare that element.
+      // As a direct target it matched nothing, and the whole array was asserted
+      // unchanged, which the named write itself falsifies (#7056).
+      const index2t &idx = to_index2t(target);
+      result.array_elem_targets[to_symbol2t(idx.source_value).thename]
+        .push_back(idx.index);
+    }
     else
     {
       result.direct_targets.push_back(target);
@@ -130,6 +141,105 @@ static void emit_frame_instruction(
   }
 }
 
+// Hold every element the clause did not name unchanged, rather than the array
+// as a whole -- which the named write itself falsifies (#7056). A global array
+// has a constant extent, so this needs neither a witness index nor a
+// quantifier: one assertion per element, each excused at the named indices.
+// Returns whether \p var was of that shape and so is now dealt with; a
+// non-constant extent falls back to the whole-array assertion.
+static bool emit_array_elem_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var,
+  const expr2tc &snap)
+{
+  if (!is_symbol2t(var) || !is_array_type(var->type))
+    return false;
+
+  const irep_idt &arr_name = to_symbol2t(var).thename;
+  auto ait = classified.array_elem_targets.find(arr_name);
+  if (ait == classified.array_elem_targets.end())
+    return false;
+
+  const array_type2t &atype = to_array_type(var->type);
+  if (!is_constant_int2t(atype.array_size))
+    return false;
+
+  const BigInt &n = to_constant_int2t(atype.array_size).value;
+  for (BigInt k = 0; k < n; k += 1)
+  {
+    expr2tc kc = constant_int2tc(atype.array_size->type, k);
+    expr2tc elem_guard = equality2tc(
+      index2tc(atype.subtype, var, kc), index2tc(atype.subtype, snap, kc));
+
+    for (const expr2tc &assigned : ait->second)
+      elem_guard = or2tc(
+        elem_guard, equality2tc(typecast2tc(assigned->type, kc), assigned));
+
+    emit_frame_instruction(
+      dest,
+      loc,
+      elem_guard,
+      mode,
+      id2string(arr_name) + "[" + integer2string(k) + "]");
+  }
+  return true;
+}
+
+// Assert only that the struct fields NOT in the assigns clause are unchanged.
+// Example: __ESBMC_assigns(global_pt.x) allows global_pt.x to change but holds
+// global_pt.y, global_pt.z, ... to their pre-state.
+static bool emit_struct_field_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var,
+  const expr2tc &snap)
+{
+  if (!is_symbol2t(var) || !is_struct_type(var))
+    return false;
+
+  const irep_idt &sym_name = to_symbol2t(var).thename;
+  auto sit = classified.struct_field_targets.find(sym_name);
+  if (sit == classified.struct_field_targets.end())
+    return false;
+
+  const struct_type2t &stype = to_struct_type(var->type);
+  for (size_t i = 0; i < stype.member_names.size(); ++i)
+  {
+    const irep_idt &field = stype.member_names[i];
+    if (sit->second.count(field))
+      continue; // This field is explicitly assigned — skip
+
+    const type2tc &ftype = stype.members[i];
+    expr2tc field_guard =
+      equality2tc(member2tc(ftype, var, field), member2tc(ftype, snap, field));
+
+    emit_frame_instruction(
+      dest,
+      loc,
+      field_guard,
+      mode,
+      id2string(sym_name) + "." + id2string(field));
+  }
+  return true;
+}
+
+bool frame_enforcert::emit_partial_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const classified_assignst &classified,
+  const expr2tc &var,
+  const expr2tc &snap)
+{
+  return emit_struct_field_frame(dest, loc, mode, classified, var, snap) ||
+         emit_array_elem_frame(dest, loc, mode, classified, var, snap);
+}
+
 void frame_enforcert::enforce_frame_rule(
   const std::vector<expr2tc> &explicit_assigns,
   goto_programt &dest,
@@ -159,38 +269,8 @@ void frame_enforcert::enforce_frame_rule(
     if (is_assigned)
       continue;
 
-    // Check for struct field targets: if this global is a struct and some of
-    // its fields are in the assigns clause, generate per-field assertions
-    // instead of a coarse whole-struct assertion.
-    // Example: __ESBMC_assigns(global_pt.x) allows global_pt.x to change but
-    // asserts that global_pt.y, global_pt.z, ... remain unchanged.
-    if (is_symbol2t(var) && is_struct_type(var))
-    {
-      const irep_idt &sym_name = to_symbol2t(var).thename;
-      auto sit = classified.struct_field_targets.find(sym_name);
-      if (sit != classified.struct_field_targets.end())
-      {
-        // Some fields of this struct are in the assigns clause.
-        // Assert only that the fields NOT in assigns are unchanged.
-        const struct_type2t &stype = to_struct_type(var->type);
-        for (size_t i = 0; i < stype.member_names.size(); ++i)
-        {
-          const irep_idt &field = stype.member_names[i];
-          if (sit->second.count(field))
-            continue; // This field is explicitly assigned — skip
-
-          const type2tc &ftype = stype.members[i];
-          expr2tc field_var = member2tc(ftype, var, field);
-          expr2tc field_snap = member2tc(ftype, snap, field);
-          expr2tc field_guard = equality2tc(field_var, field_snap);
-
-          std::string field_name_str =
-            id2string(sym_name) + "." + id2string(field);
-          emit_frame_instruction(dest, loc, field_guard, mode, field_name_str);
-        }
-        continue; // Skip the whole-struct assertion
-      }
-    }
+    if (emit_partial_frame(dest, loc, mode, classified, var, snap))
+      continue;
 
     // Build the base guard: var == snapshot (unchanged condition)
     expr2tc guard = equality2tc(var, snap);
