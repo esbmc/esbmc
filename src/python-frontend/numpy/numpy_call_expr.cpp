@@ -2044,33 +2044,74 @@ materialize_arange_int(int64_t start, int64_t stop, int64_t step)
   return node;
 }
 
+// NumPy computes an arange() with float arguments as length =
+// ceil((stop - start) / step) and element i = start + i * step, rather than
+// repeatedly accumulating current += step. Accumulation drifts under
+// floating-point rounding and can add a spurious trailing element (e.g.
+// arange(0.0, 1.0, 0.1) accumulated to 11 elements here vs NumPy's 10).
 static nlohmann::json
 materialize_arange_float(double start, double stop, double step)
 {
   nlohmann::json node;
   node["_type"] = "List";
   node["elts"] = nlohmann::json::array();
-  if (step > 0.0)
-    for (double current = start; current < stop; current += step)
-      node["elts"].push_back(build_constant_node(make_float_value(current)));
-  else
-    for (double current = start; current > stop; current += step)
-      node["elts"].push_back(build_constant_node(make_float_value(current)));
+
+  const double count_d = std::ceil((stop - start) / step);
+  if (count_d <= 0.0)
+    return node;
+
+  const auto count = static_cast<std::size_t>(count_d);
+  for (std::size_t i = 0; i < count; ++i)
+    node["elts"].push_back(build_constant_node(
+      make_float_value(start + static_cast<double>(i) * step)));
   return node;
 }
 
-static std::optional<nlohmann::json>
-materialize_arange(const nlohmann::json &args)
+// Keeps the fast literal-materialization path itself cheap and any
+// downstream verification within the regression suite's timeout: a range
+// with more elements than this still hits the pre-existing ADR-NP-004
+// scalability wall documented in the numpy roadmap (arrays are fully
+// unrolled) whether materialized here or via the operational model, so
+// declining early avoids building an oversized literal list up front (e.g.
+// np.arange(1000000) would otherwise allocate a million-element JSON list
+// unconditionally, before any downstream cost is even considered).
+static constexpr std::size_t max_materialized_arange_elements = 10000;
+
+enum class arange_decline_reason
 {
-  if (args.empty() || args.size() > 3)
-    return std::nullopt;
+  none,
+  bad_arity,
+  non_constant,
+  zero_step,
+  too_many_elements,
+};
+
+struct arange_materialize_result
+{
+  std::optional<nlohmann::json> list;
+  arange_decline_reason reason = arange_decline_reason::none;
+};
+
+static arange_materialize_result
+materialize_arange_ex(const nlohmann::json &args)
+{
+  arange_materialize_result result;
+  if (!args.is_array() || args.empty() || args.size() > 3)
+  {
+    result.reason = arange_decline_reason::bad_arity;
+    return result;
+  }
+
   std::vector<numeric_value> values;
   values.reserve(args.size());
   for (const auto &a : args)
   {
     numeric_value v;
     if (!try_extract_numeric_constant(a, v))
-      return std::nullopt;
+    {
+      result.reason = arange_decline_reason::non_constant;
+      return result;
+    }
     values.push_back(v);
   }
 
@@ -2086,7 +2127,18 @@ materialize_arange(const nlohmann::json &args)
     step_v = values[2];
 
   if (to_double(step_v) == 0.0)
-    return std::nullopt;
+  {
+    result.reason = arange_decline_reason::zero_step;
+    return result;
+  }
+
+  const double count =
+    std::ceil((to_double(stop_v) - to_double(start_v)) / to_double(step_v));
+  if (count > static_cast<double>(max_materialized_arange_elements))
+  {
+    result.reason = arange_decline_reason::too_many_elements;
+    return result;
+  }
 
   // Matches the real arange() creation path: an int dtype unless any
   // argument is float.
@@ -2094,12 +2146,18 @@ materialize_arange(const nlohmann::json &args)
     std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
       return !v.is_int;
     });
-  if (!any_float)
-    return materialize_arange_int(
-      start_v.int_value, stop_v.int_value, step_v.int_value);
+  result.list = any_float
+                  ? materialize_arange_float(
+                      to_double(start_v), to_double(stop_v), to_double(step_v))
+                  : materialize_arange_int(
+                      start_v.int_value, stop_v.int_value, step_v.int_value);
+  return result;
+}
 
-  return materialize_arange_float(
-    to_double(start_v), to_double(stop_v), to_double(step_v));
+static std::optional<nlohmann::json>
+materialize_arange(const nlohmann::json &args)
+{
+  return materialize_arange_ex(args).list;
 }
 
 // The structural/receiver checks materialize_numpy_constructor_array() needs
@@ -2173,6 +2231,24 @@ static bool is_numpy_constructor_call_by_name(const nlohmann::json &call_node)
   static const std::set<std::string> constructors = {
     "zeros", "ones", "full", "eye", "identity", "linspace", "arange"};
   return constructors.count(call_node["func"]["attr"].get<std::string>()) != 0;
+}
+
+// resolve_var()/resolve_numpy_var() copies only resolve a Name argument to
+// its declaration; a constructor call passed inline as the argument itself
+// (e.g. the arange(4) in np.sum(np.arange(4))) is left untouched and fails
+// downstream extraction. Materializes it in place when possible, after the
+// Name-resolution attempt above has already run (a no-op for an already
+// materialized/non-Call node).
+static void materialize_inline_numpy_constructor_call(
+  nlohmann::json &node,
+  const nlohmann::json &ast_json)
+{
+  if (!node.is_object() || node.value("_type", std::string()) != "Call")
+    return;
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(node, ast_json))
+    node = std::move(*materialized);
 }
 
 // full()/eye()/identity()/linspace() are declared through to_list_expr in
@@ -2944,6 +3020,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
       std::optional<nlohmann::json> row_view =
         resolve_literal_numpy_row_view(arg, converter_))
@@ -3107,76 +3184,6 @@ exprt numpy_call_expr::create_expr_from_call()
       out["elts"].push_back(
         {{"_type", "Constant"}, {"value", value.value.real() == 0.0}});
     return converter_.get_expr(out);
-  }
-
-  if (function == "arange")
-  {
-    if (call_["args"].empty() || call_["args"].size() > 3)
-      throw std::runtime_error(
-        "TypeError: numpy.arange() expects 1 to 3 arguments");
-
-    std::vector<numeric_value> args;
-    args.reserve(call_["args"].size());
-    for (auto arg : call_["args"])
-    {
-      resolve_var(arg);
-      numeric_value value;
-      if (!try_extract_numeric_constant(arg, value))
-        throw std::runtime_error(
-          "TypeError: numpy.arange() currently supports constant numeric "
-          "inputs only");
-      args.push_back(value);
-    }
-
-    double start = 0.0;
-    double stop = 0.0;
-    double step = 1.0;
-    if (args.size() == 1)
-    {
-      stop = to_double(args[0]);
-    }
-    else
-    {
-      start = to_double(args[0]);
-      stop = to_double(args[1]);
-      if (args.size() == 3)
-        step = to_double(args[2]);
-    }
-
-    if (step == 0.0)
-      throw std::runtime_error(
-        "ValueError: numpy.arange() step must not be zero");
-
-    const bool any_float =
-      std::any_of(args.begin(), args.end(), [](const numeric_value &v) {
-        return !v.is_int;
-      });
-
-    std::vector<double> float_values;
-    std::vector<int64_t> int_values;
-    if (step > 0.0)
-    {
-      for (double current = start; current < stop; current += step)
-      {
-        if (any_float)
-          float_values.push_back(current);
-        else
-          int_values.push_back(static_cast<int64_t>(std::llround(current)));
-      }
-    }
-    else
-    {
-      for (double current = start; current > stop; current += step)
-      {
-        if (any_float)
-          float_values.push_back(current);
-        else
-          int_values.push_back(static_cast<int64_t>(std::llround(current)));
-      }
-    }
-    if (any_float)
-      return converter_.get_expr(create_list(float_values));
-    return converter_.get_expr(create_list(int_values));
   }
 
   if (
@@ -5077,6 +5084,97 @@ exprt numpy_call_expr::create_expr_from_call()
   return converter_.get_expr(expr);
 }
 
+// A Name argument materialize_arange() cannot see through directly (e.g. the
+// `n` in `n = 3; np.arange(n)`) is resolved to its declaration's value here,
+// mirroring what the operational-model fallback used to do by plain
+// interpretation. Only a single-level lookup is attempted; anything that
+// does not resolve to a value (a genuinely non-constant parameter, a nondet
+// value, a further Name chain) is left untouched and correctly declines in
+// materialize_arange() afterwards.
+static nlohmann::json resolve_arange_call_args(
+  const nlohmann::json &args,
+  python_converter &converter)
+{
+  nlohmann::json resolved = args;
+  for (auto &arg : resolved)
+  {
+    if (!arg.is_object() || arg.value("_type", std::string()) != "Name")
+      continue;
+    const nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"].get<std::string>(),
+      converter.current_function_name(),
+      converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+  return resolved;
+}
+
+exprt numpy_call_expr::get_arange_expr()
+{
+  // A dtype= (or any other) keyword changes arange()'s output in ways the
+  // literal-materialization path below does not model; fall back to the
+  // operational model for that shape exactly like every arange call used
+  // to, rather than silently ignoring the keyword.
+  if (call_.contains("keywords") && !call_["keywords"].empty())
+    return function_call_expr::get();
+
+  const nlohmann::json resolved_args =
+    call_.contains("args") ? resolve_arange_call_args(call_["args"], converter_)
+                           : nlohmann::json::array();
+
+  // np.arange(...) with constant, small arguments is materialized to a
+  // literal list directly, avoiding the operational model's while-loop
+  // list-concatenation implementation (models/numpy.py's arange()), which
+  // is disproportionately expensive to symbolically execute even for a
+  // handful of elements. Although real np.arange() returns an ndarray, this
+  // frontend materializes it as a list-like runtime object for consistency
+  // with build_static_lists, disabled the same way full()/eye()/identity()/
+  // linspace() already do it -- a plain static array here would not
+  // compare equal to a `[]`-literal PyListObj.
+  const arange_materialize_result result = materialize_arange_ex(resolved_args);
+  if (result.list)
+  {
+    const bool old_build_static_lists = converter_.build_static_lists;
+    converter_.build_static_lists = false;
+    exprt expr = converter_.get_expr(*result.list);
+    converter_.build_static_lists = old_build_static_lists;
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = expr.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return expr;
+  }
+
+  switch (result.reason)
+  {
+  case arange_decline_reason::bad_arity:
+    throw std::runtime_error(
+      "TypeError: numpy.arange() expects 1 to 3 arguments");
+  case arange_decline_reason::zero_step:
+    throw std::runtime_error(
+      "ValueError: numpy.arange() step must not be zero");
+  case arange_decline_reason::too_many_elements:
+    throw std::runtime_error(
+      "TypeError: numpy.arange() range exceeds the supported element limit "
+      "of " +
+      std::to_string(max_materialized_arange_elements));
+  case arange_decline_reason::non_constant:
+  case arange_decline_reason::none:
+  default:
+    break;
+  }
+
+  // Non-constant arguments (e.g. a function parameter) cannot be
+  // materialized this way; falling back to the operational model here
+  // hangs past any practical timeout instead of producing a verdict, so
+  // this is rejected explicitly and quickly instead.
+  throw std::runtime_error(
+    "TypeError: numpy.arange() currently supports constant numeric inputs "
+    "only");
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
@@ -5124,12 +5222,11 @@ exprt numpy_call_expr::get()
       }
     };
     if (function == "arange")
-    {
-      return function_call_expr::get();
-    }
+      return get_arange_expr();
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
       std::optional<nlohmann::json> row_view =
         resolve_literal_numpy_row_view(arg, converter_))
@@ -5438,6 +5535,7 @@ exprt numpy_call_expr::get()
     auto get_arg = [&](std::size_t index) {
       nlohmann::json arg = call_["args"][index];
       resolve_var(arg);
+      materialize_inline_numpy_constructor_call(arg, converter_.ast());
       return arg;
     };
 
@@ -6573,6 +6671,7 @@ exprt numpy_call_expr::get()
     else
     {
       resolve_numpy_var(arr_arg);
+      materialize_inline_numpy_constructor_call(arr_arg, converter_.ast());
     }
 
     std::vector<std::size_t> old_shape;
