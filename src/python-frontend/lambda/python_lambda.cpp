@@ -104,6 +104,41 @@ static bool is_param_used_as_string(
   return false;
 }
 
+// True when `param_name` appears in callee position anywhere in the body.
+// Parameters are typed `double` below, so lowering such a call would build a
+// call through a non-code operand and hand the solver an ill-sorted term
+// (esbmc/esbmc#7074).
+static bool is_param_used_as_callee(
+  const nlohmann::json &node,
+  const std::string &param_name)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      if (is_param_used_as_callee(child, param_name))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (node.value("_type", "") == "Call" && node.contains("func"))
+  {
+    const auto &callee = node["func"];
+    if (
+      callee.is_object() && callee.value("_type", "") == "Name" &&
+      callee.value("id", "") == param_name)
+      return true;
+  }
+
+  for (const auto &entry : node.items())
+    if (is_param_used_as_callee(entry.value(), param_name))
+      return true;
+
+  return false;
+}
+
 typet python_lambda::infer_lambda_return_type(
   [[maybe_unused]] const nlohmann::json &body_node)
 {
@@ -212,6 +247,12 @@ void python_lambda::process_lambda_parameters(
   for (const auto &arg : args_node["args"])
   {
     std::string arg_name = arg["arg"].get<std::string>();
+
+    if (is_param_used_as_callee(body_node, arg_name))
+      throw std::runtime_error(
+        "calling the lambda parameter '" + arg_name +
+        "' is not supported: higher-order lambda parameters have no inferred "
+        "signature");
 
     // Determine parameter type from annotation or infer from usage
     typet param_type = double_type();
