@@ -4,6 +4,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/python_typechecking.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
@@ -728,9 +729,35 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       return get_typet(ret, type_size);
   }
 
-  // If still not found, it's a NameError
   if (!is_defined)
   {
+    // `ast_type` may be a call-result tag the intrinsic map invents for a
+    // builtin rather than a name from the source (`iter` -> "iterator",
+    // `map` -> "map", `filter` -> "filter"). No such type is modelled, so
+    // resolution lands here — but reporting a NameError blames a name the
+    // program never mentions. Name the builtin instead (esbmc/esbmc#7081).
+    std::vector<std::string> producers;
+    for (const auto &[builtin, result_type] :
+         python_annotation_intrinsics::builtin_functions())
+      if (result_type == ast_type && builtin != ast_type)
+        producers.push_back(builtin);
+
+    if (
+      !producers.empty() ||
+      python_annotation_intrinsics::builtin_functions().count(ast_type))
+    {
+      std::string msg = "the result of ";
+      if (producers.empty())
+        msg += "the '" + ast_type + "' builtin";
+      else
+      {
+        for (size_t i = 0; i < producers.size(); ++i)
+          msg += (i ? ", " : "") + std::string("'") + producers[i] + "()'";
+      }
+      throw std::runtime_error(
+        msg + " is not modelled (no '" + ast_type + "' type)");
+    }
+
     throw std::runtime_error(
       "NameError: name '" + ast_type + "' is not defined");
   }
