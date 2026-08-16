@@ -1,15 +1,17 @@
 /* remquo's remainder obeys the same |r| <= |y|/2 bound as remainder().
- * Constant divisor for the reason given in ieee_rem_remainder_bound. */
+ * Single precision for the same reason as ieee_rem_remainder_bound. */
 #include <assert.h>
 
-double __VERIFIER_nondet_double(void);
+float __VERIFIER_nondet_float(void);
 #include <math.h>
 int main(void)
 {
-  double x = __VERIFIER_nondet_double();
-  __ESBMC_assume(isgreaterequal(x, -1e6) && islessequal(x, 1e6));
+  float x = __VERIFIER_nondet_float();
+  float y = __VERIFIER_nondet_float();
+  __ESBMC_assume(isgreaterequal(x, -1e6f) && islessequal(x, 1e6f));
+  __ESBMC_assume(isgreaterequal(y, 1.0f) && islessequal(y, 1024.0f));
   int q;
-  double r = remquo(x, 3.0, &q);
-  assert(islessequal(fabs(r), 1.5));
+  float r = remquof(x, y, &q);
+  assert(islessequal(fabsf(r), fabsf(y) * 0.5f));
   return 0;
 }
