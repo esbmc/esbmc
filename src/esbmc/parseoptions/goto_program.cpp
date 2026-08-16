@@ -137,7 +137,8 @@ bool esbmc_parseoptionst::get_goto_program(
     /* Building the GOTO program allocates and frees the whole
      * operational-model library, and with one arena (see main.cpp) those blocks
      * are in the arena everything after this point allocates from. Handing them
-     * back here is what keeps encoding from paying for them (esbmc/esbmc#6831). */
+     * back here is what keeps encoding from paying for them (esbmc/esbmc#6831).
+     */
     malloc_trim(0);
 #endif
 
