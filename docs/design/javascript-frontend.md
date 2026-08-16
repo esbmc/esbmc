@@ -27,7 +27,7 @@ The short version of the conclusion:
   dynamic path accepts an rvalue only when that rvalue is a numeric scalar or a
   string, and raises "not yet supported" for anything else — a container, a
   class instance, a call whose result type is unknown
-  (`src/python-frontend/converter/converter_stmt.cpp:3062-3075`). JavaScript has
+  (`src/python-frontend/converter/converter_stmt.cpp:3059-3076`). JavaScript has
   no annotations. The frontend therefore needs a real inference pass and a
   first-class tagged-value path — and building that is the one large piece of
   new infrastructure, which pays back into Python immediately.
@@ -87,12 +87,12 @@ terms.
     │    to a temp dir at first use (dump_python_script(), :63)
     ▼
   <module>.json                     ast + ast2json, vendored in libs/ast2json
-    │  preprocessor/*.py (22 mixins, ~11k lines) desugars in Python
+    │  preprocessor/*.py (18 mixins, ~11k lines) desugars in Python
     │  python_annotation<json>      adds type nodes to the JSON  (:243)
     ▼
   annotated JSON AST
     │  python_converter::convert()                     python_converter.cpp
-    │    ~65 translation units: converter/, python-list/, python-dict/,
+    │    ~68 translation units: converter/, python-list/, python-dict/,
     │    string/, set/, tuple/, class/, exception/, math/, numpy/, lambda/
     ▼
   contextt  (legacy symbolt / exprt / codet)
@@ -172,7 +172,7 @@ if (dynamic_type_handler_.is_tagged(name)) {
     "is not yet supported");
 }
 ```
-— `src/python-frontend/converter/converter_stmt.cpp:3060-3076`
+— `src/python-frontend/converter/converter_stmt.cpp:3059-3076`
 
 So the boundary is *by rvalue type*, not by literal-vs-computed: a computed
 numeric or string rvalue does box, while a container, a class instance, a tuple
@@ -187,10 +187,23 @@ result — exactly the three the check rejects.
 **Classes reuse the C++ object model.** `python_class_builder::build`
 (`src/python-frontend/class/python_class_builder.cpp`) emits a `struct_typet`
 with a method table and base classes, instances are allocated through
-`__ESBMC_new_object` (`src/c2goto/library/python/list.c:14`, intercepted by
-symex's `symex_mem_inf` to produce a non-expiring typed object), and
-`clang_cpp_adjust` — the C++ frontend's adjuster — runs over the result
-(`python_language.cpp:314`).
+`__ESBMC_new_object`, and `clang_cpp_adjust` — the C++ frontend's adjuster —
+runs over the result (`python_language.cpp:314`).
+
+The allocation mechanism is worth naming precisely, because §6.1 and §9.3 rest
+on reusing it. `__ESBMC_new_object`'s C body is a placeholder returning `0`
+(`src/c2goto/library/python/list.c:14`); the real work is a dedicated handler in
+symex (`src/goto-symex/symex_main.cpp:1058-1116`) that allocates one dynamic
+object typed by the callee's *result pointer type*, marks it non-expiring so it
+survives the constructing frame, and binds the return value to its address. It
+is **not** `symex_mem_inf`. That function (`builtin_functions/memory_alloc.cpp:482`)
+is a different allocator, reached only through the `__ESBMC_create_inf_obj`
+handler (`symex_main.cpp:1118`), and it produces the *infinite array* backing a
+list's `items` — which is why §4.2.1 can reuse it for JS arrays while class
+instances go through the size-1 path instead. The `__ESBMC_new_object` handler's
+own comment describes itself as mirroring `symex_mem_inf`'s binding, and the
+comment at `src/c2goto/library/python/list.c:11` still names `symex_mem_inf`
+outright; that comment is stale and predates this document.
 
 **Exceptions reuse the C++ exception model.** `raise` becomes a `cpp-throw`
 side effect and `try`/`except` a `cpp-catch`
@@ -252,8 +265,10 @@ rest of this document is written to respect:
    `src/dynlang/`. This is checkable in CI (an include-path lint), and it is
    what stops "shared" from degrading into "mutually coupled".
 3. **The extraction is gated, not scheduled.** M3 does not start because the
-   roadmap says it is next. Its entry criteria are in §10; if they are unmet,
-   the JS frontend proceeds on duplicated code and the extraction is deferred.
+   roadmap says it is next. Its entry criteria are in §10, split across M3a (the
+   interface exists and the Python frontend has been rebuilt against it) and M3b
+   (a JavaScript consumer actually calls it); if they are unmet, the JS frontend
+   proceeds on duplicated code and the extraction is deferred.
    A design whose first large milestone is a refactor of someone else's
    experimental subsystem should be able to survive that refactor not happening.
 
@@ -313,7 +328,8 @@ claim that the frontend vendors exactly one file.
   on a Rust toolchain in ESBMC's build, a non-ESTree AST, and a second
   dependency-management story. Parse time is not ESBMC's bottleneck: the Python
   frontend spends ~0.6–1.2 s in "GOTO program creation" and milliseconds in the
-  solver on small programs (`src/python-frontend/README.md`, Examples 2 and 5).
+  solver on small programs (`src/python-frontend/README.md`, Examples 2 and 6:
+  0.637 s and 1.156 s).
   Optimising the cheapest stage is the wrong trade.
 - **Babel parser.** Strictly more capable and strictly heavier: a dependency
   tree instead of one file, and an AST that is an ESTree *superset*, so the
@@ -403,20 +419,27 @@ rather than of either engine.
 | prototype chain | *(none)* | `__proto__` link | new OM | convert-time walk / OM loop | **N** |
 | function | function | function symbol | — | `code_function_call` | **R** |
 | closure | nested function | `{fn, env}` pair | `__ESBMC_new_object` env | fn-pointer call | **N** (see §4.3) |
-| `this` | `self` | leading parameter | — | — | **R** |
+| `this` | `self` (bound at definition) | call-site–determined receiver | — | leading param + `undefined` sentinel | **N** (§4.6) |
 | exception | exception | `cpp-throw`/`cpp-catch` | `remove_exceptions` | `code_cpp_throw` | **R** |
 | `finally` | `finally` (restricted) | — | — | — | **G** |
 | dynamic typing | annotations + narrow tags | `DynObject` | shared tag OM | `isinstance2t` | **G** — the big one |
 | `for...of` | `for … in range()` | desugared | — | `code_goto` loop | **G** |
 | modules (ESM) | `import` | module manager | `module_manager` | — | **G** |
-| `typeof` | `type(x)` | tag read | — | `isinstance2t` | **R** |
+| `typeof` | `type(x)` | tag read + spec result table | — | `isinstance2t` | **R** (`null`/`function` caveat) |
 | `instanceof` | `isinstance` | value-set query | `python_builtins.cpp` | `isinstance2t` | **R** |
 | `in` | `in` (dict) | key membership | `python-dict/` | `hasattr2t` | **R** |
 
-Aggregate: of 24 constructs, 11 reuse directly, 7 generalise a Python
-component, 6 are new — and of those six, three (`undefined`, `symbol`,
-prototype chains) are small and two (closures, dynamic typing) are the load
-bearing work.
+Aggregate: of 24 constructs, 12 reuse directly, 7 generalise a Python component,
+and 5 are new. Two of the five are small (`undefined`, `symbol`); the other three
+are real work — prototype chains, closures, and `this` binding, which is **N**
+rather than **R** because JavaScript determines it at the *call* site while
+Python's `self` is fixed when the method is looked up (§4.6, and §6.2 schedules
+it at M6).
+
+The single largest item is not in the **N** column at all: dynamic typing is
+marked **G**, because it widens the existing Python tagged-value path rather than
+introducing a new one (§5.3) — but it is still the biggest piece of work in the
+plan, and §9.4 counts it accordingly.
 
 ---
 
@@ -431,13 +454,35 @@ bearing work.
 
 Two JavaScript-specific obligations:
 
-- **Bitwise operators are `ToInt32`.** `a | 0`, `a << 1`, `a & 0xff` and `~a`
-  all convert through a modular 32-bit signed integer. Lower as
-  `typecast(floatbv → signedbv(32))` under JS's truncate-toward-zero-modulo-2³²
-  rule, apply the `signedbv(32)` bit operation, and cast back. `>>>` uses
-  `unsignedbv(32)`. This is a small, self-contained conversion helper — the
-  single most common source of unsoundness in naive JS models, so it belongs in
-  milestone 4, not later.
+- **Bitwise operators are `ToInt32`, which is not a typecast.** `a | 0`,
+  `a << 1`, `a & 0xff` and `~a` all convert through `ToInt32` (ECMA-262,
+  `sec-toint32`), a *total* function on doubles:
+
+  1. NaN, `+∞`, `−∞`, `+0` and `−0` all map to `+0`.
+  2. Otherwise, truncate toward zero.
+  3. Reduce the result modulo 2³², then wrap into the signed range: a residue
+     `≥ 2³¹` becomes `residue − 2³²`.
+
+  So `4294967296 | 0` is `0`, `2147483648 | 0` is `-2147483648`, `NaN | 0` is
+  `0`, and `1e300 | 0` is `0`. `ToUint32` (`sec-touint32`) is steps 1–3 without
+  the final wrap, and is what `>>>` uses.
+
+  A bare `typecast(floatbv → signedbv(32))` implements none of this. It has no
+  modulo step, so every out-of-range operand is wrong rather than merely
+  imprecise, and SMT-LIB leaves `fp.to_sbv` *unspecified* for NaN, infinities
+  and out-of-range values, so the solver is free to pick any result — the
+  encoding would be unsound in a way no test reliably catches. The lowering is
+  therefore an explicit helper, in this order: guard NaN and the infinities to
+  `+0`; truncate toward zero; take the residue modulo 2³² **in `floatbv`**,
+  because the truncated value need not fit in any fixed-width integer
+  (`1e300` is an exact double); only then convert the in-range residue to
+  `unsignedbv(32)` and reinterpret as `signedbv(32)`. The bit operation applies
+  to that, and the result converts back to `floatbv`.
+
+  Getting the order wrong — casting first and reducing afterwards — is exactly
+  the bug this paragraph exists to prevent. It is a small, self-contained
+  helper, and it is the single most common source of unsoundness in naive JS
+  models, so it belongs in milestone 4, not later.
 - **Integer-valued fast path.** Most computational JS uses numbers that are
   integers. The annotation pass (§5) marks a variable *integral* when every
   reaching definition is an integer literal, an integer-preserving operation, or
@@ -615,11 +660,17 @@ the annotation pass marks an array *dense* when no hole can reach it, and the
 
 JS-specific behaviour that Python's list lacks:
 
-- **OOB read yields `undefined`**, it does not raise, so the bounds *property*
-  becomes a warning-level check (`--js-array-oob=undefined|error`). Note this
-  makes the default configuration deliberately permissive about a class of
-  defect ESBMC would normally report — the flag exists so a user verifying
-  array-bounds discipline can get the strict reading back.
+- **OOB read yields `undefined`**, it does not raise. This is the language's
+  semantics, and it means `goto_check`'s array-bounds property does not carry
+  over to JS index access the way §8's "for free" row suggests for C: the access
+  is in bounds of the infinite `items` array *by construction*, so `goto_check`
+  has nothing to fire on, and the thing a user might want reported — that the
+  index was outside `[0, length)` — is a JS-level property the array OM has to
+  raise itself. The MVP therefore defaults to `--js-array-oob=undefined`
+  (faithful to the language) with `--js-array-oob=error` reporting every
+  out-of-range index as a violated property. **The default is deliberately
+  permissive about a class of defect ESBMC would normally report**, which is why
+  §7 lists array bounds as opt-in rather than as a default property.
 - **`length` is an invariant, not a derived value.** Writing index `i ≥ length`
   sets `length = i+1`; writing `length = n` clears `present[k]` for all
   `k ≥ n`. Both directions are maintained by the OM.
@@ -650,7 +701,7 @@ paths, both disqualify the site from Tier 1.
 
 *Tier 2: open objects → `DynDict`.* When keys are computed (`o[k]`), added, or
 deleted, fall back to the generalised dict handler (`src/python-frontend/
-python-dict/`, ~4k lines across 8 translation units) keyed by string with
+python-dict/`, ~4.8k lines across 8 translation units) keyed by string with
 `DynObject` values. Slower, general, already written — but it has to be
 *confirmed* insertion-ordered and given a presence bit before it can carry
 JS objects (§4.2.0 #4, #5); CPython dict semantics make the first likely and
@@ -724,10 +775,32 @@ statically wherever possible.
 **Resolution ladder**, cheapest first:
 
 1. **Known shape, own property** → `member2t`. Free.
-2. **Known shape, inherited property** → walk the `__proto__` chain *at
-   conversion time* and emit `member2t` on the resolved subobject. This is
-   exactly what C++ does for base-class members, and `clang_cpp_adjust` already
-   implements the subobject arithmetic.
+2. **Known shape, inherited property, prototype chain provably frozen at this
+   site** → walk the `__proto__` chain *at conversion time* and emit `member2t`
+   on the resolved subobject. This is exactly what C++ does for base-class
+   members, and `clang_cpp_adjust` already implements the subobject arithmetic.
+
+   The third condition is a real precondition, not a formality, and it is *not*
+   the common case by default. §5.5 is right that a `[[Prototype]]` chain is
+   mutable at runtime: `Object.setPrototypeOf`, reassigning `Foo.prototype`, and
+   monkey-patching a method onto a prototype after instances already exist are
+   all ordinary JavaScript, and mixin and polyfill code is built out of them.
+   Baking a resolution into a `member2t` without proving the chain is stable
+   would silently miscompile that code — the worst failure mode a verifier has.
+
+   So the annotation pass must discharge, for every shape the receiver may
+   have: no reachable `Object.setPrototypeOf` or `Reflect.setPrototypeOf` on it,
+   no write to any `.prototype` property on its constructor, and no write to a
+   property of any object on its chain, on any path that can execute before this
+   site. Like Tier-1 shape inference in §4.2.1, this must be conservative in
+   *both* directions — an unresolvable callee, a computed property write whose
+   target set includes a possible prototype, or any escape of a prototype object
+   into an unanalysed context disqualifies the site.
+
+   A disqualified site is not a failure and is not out of scope: it falls to
+   step 5 when the shape set is finite, and to step 6 otherwise. Prototype
+   reassignment is therefore *handled* in the MVP — it is simply handled by the
+   dynamic steps of this ladder rather than by this one.
 3. **Known shape, accessor** → emit the getter/setter call.
 4. **Open object, constant key** → dict lookup with a constant key.
 5. **Open object, computed key** → dict lookup with a symbolic key; if the
@@ -773,6 +846,36 @@ The built-in error hierarchy (`Error`, `TypeError`, `RangeError`,
 `ReferenceError`, `SyntaxError`) is declared in a *JavaScript* model file, the
 way `src/python-frontend/models/exceptions.py` declares Python's — no C++
 required.
+
+### 4.6 `this`
+
+Python's `self` is an ordinary leading parameter, bound when the method is
+resolved on the class. JavaScript's `this` is supplied by the *call*, which is
+why §3 marks it **N** and not **R**:
+
+| Call form | `this` |
+|---|---|
+| `obj.m(…)` | `obj` |
+| `m(…)` — a detached reference, e.g. `const f = obj.m; f()` | `undefined` |
+| `f.call(r, …)` / `f.apply(r, …)` / `f.bind(r)` | `r` |
+| `new C(…)` | the freshly allocated instance |
+| arrow function | the enclosing function's `this`, captured lexically |
+
+Two consequences the MVP has to get right. First, the MVP's modules are ESM and
+therefore always strict, so the detached case binds `undefined` rather than the
+global object, and any property read through it is a reported `TypeError` — the
+`const f = obj.m; f()` bug is a defect this frontend should *find*, and modelling
+`this` as a fixed leading parameter would silently lose it. Second, an arrow
+function has no `this` of its own at all; it is structurally a closure capture,
+not a parameter, so it takes the §4.3 path.
+
+Lowering is at conversion time. The annotation pass records the binding form at
+each call site; an ordinary function takes `this` as a leading parameter whose
+value the *call site* supplies, an arrow function captures `this` into its
+closure environment instead of receiving a parameter, and `bind` produces a
+closure whose environment holds the bound receiver. Where the receiver is not
+statically known, `this` is a tagged value like any other and the `undefined` arm
+stays live.
 
 ---
 
@@ -880,9 +983,27 @@ frontend today refuses — is:
   reinterpretation.
 - `dyn_truthy(v)`, `dyn_typeof(v)`, `dyn_equals(v, w)` for `==` vs `===`.
 
-`typeof` is a `type_id` read; `instanceof` is `isinstance2t`, already resolved by
-symex against the points-to set; `in` is `hasattr2t`. So the *predicates* are
-free — it is boxing, dispatch and coercion that are new.
+`instanceof` is `isinstance2t`, already resolved by symex against the points-to
+set, and `in` is `hasattr2t`. `typeof` is *nearly* a `type_id` read, and the two
+places it is not are precisely the two that step 5's narrowing depends on
+(ECMA-262, `sec-typeof-operator`):
+
+- **`typeof null === "object"`.** The historical quirk is preserved by the spec
+  deliberately, so `null` does not report the distinct tag §4.1 gives it. Worse
+  for the analysis, `typeof x === "object"` therefore narrows `x` to
+  `object | array | null`, not to `object` — which is why real JavaScript always
+  pairs it with `x !== null`, and why the lattice has to narrow away the `null`
+  arm on that second test rather than on the first.
+- **`typeof f === "function"`.** Closures are `{fn, env}` structs (§4.3) and
+  class constructors are shapes, so a raw tag read yields a closure or shape
+  tag, never `"function"`. Every callable tag — closure, bound function, class
+  constructor, method — has to map onto `"function"`.
+
+`dyn_typeof` is therefore a small total function from tag to result string, not
+the identity on `type_id`; it also answers `"undefined"` for an unresolvable
+identifier rather than raising, which is the one place `typeof` differs from
+evaluating its operand. The mapping is a handful of table rows, so the
+*predicates* are still cheap — it is boxing, dispatch and coercion that are new.
 
 ### 5.4 SMT encoding implications
 
@@ -949,27 +1070,62 @@ language's special cases accumulate behind `if (lang == PYTHON)` — the outcome
 §1.5 exists to avoid. So the shared layer is defined as a set of **interfaces
 the two converters call**, and code moves only once it sits behind one.
 
-The layer is five interfaces. Each is stated as *what the consumer may assume*,
-because that is the part that has to survive a second consumer:
+The layer is **seven** interfaces — the same seven the diagram above names and
+the §9.1 diagram repeats. Each is stated as *what the consumer may assume*,
+because that is the part that has to survive a second consumer.
 
-| Interface | Operations | Language-specific policy it must **not** contain |
+The third column needs a word of explanation, because an earlier draft of this
+table got it wrong in a way worth naming. "Language-specific policy" does not
+mean *absent* — every one of these interfaces has per-language behaviour. It
+means the behaviour is supplied by the caller **as data**: a coercion table, a
+sequence policy, a resolver callback, a method-name map. That is the distinction
+M3's entry criterion 3 is actually testing. An interface that branches on the
+source language fails; an interface parameterised by a table the frontend hands
+it passes, and stays one implementation.
+
+| Interface | Operations | Per-language behaviour, supplied as data |
 |---|---|---|
-| `dyn_value` | `box(expr,tag)`, `unbox(expr,type)`, `tag_of(expr)`, `truthy(expr)`, `type_id_for(name)` | what is truthy; which tags coerce to which |
-| `dyn_container` | ordered map + indexed sequence: `get/set/delete/has`, `len`, `iterate(order)`, presence bits | iteration protocol, hole semantics, OOB behaviour |
-| `dyn_string` | code-unit sequence: `concat`, `slice`, `find`, `compare`, `length` | encoding (UTF-16 vs byte), method names |
+| `dyn_value` | `box(expr,tag)`, `unbox(expr,type)`, `tag_of(expr)`, `type_id_for(name)`, `truthy(expr)`, `binop(op,a,b)`, `equals(a,b,strict)` | the truthiness set and the coercion matrix, as a tag→tag table `truthy`/`binop`/`equals` consume (§5.3) |
+| `dyn_container` | ordered map + indexed sequence: `get/set/delete/has`, `len`, `iterate(order)`, presence bits, index-vs-string key partition | a *sequence policy*: whether writing past the end extends `length`, whether shrinking `length` deletes, whether an OOB read raises or yields a sentinel, and which methods skip a hole |
+| `dyn_string` | code-unit sequence: `concat`, `slice`, `find`, `compare`, `length` | the method-name map, and locale-sensitive operations. Code-unit **width is a parameter**, not an exclusion — widening it to 16 bits (§4.1, M9) is one change serving both consumers |
 | `dyn_object` | shape construction: `struct_typet` from an ordered key list, field read/update, allocation via `__ESBMC_new_object` | how a shape is *inferred*; what a "class" is |
-| `dyn_dispatch` | resolve a method/property name on a receiver shape to a callable | **the resolution algorithm itself** |
+| `dyn_dispatch` | call-site lowering *given* a target set: direct call, guarded candidate set, or fallback; plus devirtualisation bookkeeping | the **resolver callback** that produces the target set — `py_resolver` (MRO) and `js_resolver` (prototype chain, §4.4), each living in its own frontend |
+| `dyn_exception` | throw/catch lowering onto `cpp-throw`/`cpp-catch`, `finally` duplication onto every exit edge (§4.5) | the built-in error hierarchy, and what may be thrown |
+| `dyn_scope` | `symbol_id` naming, module resolution and merging, closure-environment materialisation | the module resolution algorithm; the name-mangling prefix (`py:`/`js:`) |
 
-The last row is the one that decides whether this works. Python resolves a
+Three of those rows are corrections to how this table read before, and they are
+worth stating rather than quietly fixing:
+
+- **`dyn_container` owns the presence bit and the `props` field, not just an
+  abstract map.** §4.2.1 puts `present[]` and `props` in the shared layout on
+  purpose: they are *storage*, and storage is exactly what belongs in a shared
+  container. What is per-language is the *policy* over that storage — whether
+  `forEach` skips a hole, whether shrinking `length` deletes above it, whether
+  an OOB read raises. Python constructs its sequences with a no-coupling,
+  OOB-raises policy; JavaScript with a coupling, OOB-yields-`undefined` one.
+  Same code, different table.
+- **`dyn_value` carries `binop` and `equals`.** §5.3 says they must be built,
+  so leaving them off the interface was an omission, not a scoping decision.
+  They are also where the coercion matrix is consumed, which is why the third
+  column names the matrix as data rather than pretending coercion lives
+  somewhere else.
+- **`dyn_dispatch` is an interface with per-language implementations behind
+  it** — which is what §9.3 means by labelling that row **interface** rather
+  than **shared**, and the label is correct rather than anomalous. The shared
+  half is real and non-empty: call-site lowering, the guarded-candidate `if2t`
+  chain, and the devirtualisation bookkeeping are one implementation. The
+  resolver half is a callback, and neither `py_resolver` nor `js_resolver`
+  lives in `src/dynlang/`.
+
+`dyn_dispatch` is the row that decides whether this works. Python resolves a
 method by C3 linearisation over `__mro__`; JavaScript walks a `[[Prototype]]`
-chain that is mutable at runtime; C++ — whose `clang_cpp_adjust` the Python
-frontend currently borrows for exactly this — uses static vtable offsets fixed
-at compile time. These are three different algorithms, and they are not
-reconcilable by parameterisation. `dyn_dispatch` therefore defines only the
-*shape* of the answer — given a receiver shape and a name, produce either a
-direct call target or a guarded set of candidates — and each frontend supplies
-its own resolver behind it. The shared part is the call-site lowering and the
-devirtualisation bookkeeping; the resolution order is not shared.
+chain that is mutable at runtime (§4.4 step 2 states exactly when it can be
+resolved statically and what has to be proved first); C++ — whose
+`clang_cpp_adjust` the Python frontend currently borrows for exactly this — uses
+static vtable offsets fixed at compile time. These are three different
+algorithms, and they are the one thing in this layer that parameterisation
+genuinely cannot reconcile — which is why the resolver is a callback rather than
+a table like the other six rows.
 
 This is also the correction to §4.2's claim that ES6 classes map onto
 `python_class_builder` "with almost no change". The *struct layout* and the
@@ -985,14 +1141,15 @@ Once an interface exists and the Python frontend has been rebuilt against it,
 the implementation moves: `src/python-frontend/{python-list,python-dict,string,
 set,tuple,class,exception}/` and `src/c2goto/library/python/*.c` relocate to
 `src/dynlang/` and `src/c2goto/library/dyn/`, with `PyObject`/`PyListObject`
-retained as `typedef` aliases so the 4,590 tests under `regression/python/` keep
+retained as `typedef` aliases so the ~4.6k tests under `regression/python/` keep
 passing unchanged. The Python frontend keeps what is genuinely Python: PEP 484
 annotation handling, the `models/*.py` library, numpy, complex numbers, MRO
 resolution, and the Python-specific converter dispatch.
 
-A component that cannot be stated as one of the five interfaces without a
-language conditional does not move. It is duplicated on the JS side and both
-copies are maintained — the cost §1.5 accepts on purpose.
+A component that cannot be stated as one of the seven interfaces without a
+language conditional does not move — where "conditional" means a branch on the
+source language, not a table the frontend supplies. It is duplicated on the JS
+side and both copies are maintained — the cost §1.5 accepts on purpose.
 
 This is the answer to the final requirement in the brief: not a new dynamic
 representation, and not a shared directory either, but a shared *interface* over
@@ -1011,7 +1168,8 @@ real.
 | Array/list storage | `python-list/` (8.3k lines), `library/python/list.c` | infinite-array model carries over |
 | Keyed containers | `python-dict/` (4.8k lines) | backs open objects and `Map` |
 | Sets | `set/python_set.cpp` | backs `Set` |
-| Object allocation | `__ESBMC_new_object` + symex `symex_mem_inf` | reference semantics, non-expiring |
+| Object allocation | `__ESBMC_new_object` + its symex handler (`symex_main.cpp:1058-1116`) | one typed, non-expiring dynamic object per site; reference semantics |
+| Infinite containers | `__ESBMC_create_inf_obj` → `symex_mem_inf` | the unbounded `items` array behind symbolic indices |
 | Exceptions | `cpp-throw`/`cpp-catch`, `remove_exceptions`, `exception_typeid` | shared type-id space |
 | Class/struct building | `class/python_class_builder.cpp` | ES6 `class` and shaped objects |
 | Adjustment | `clang_cpp_adjust` | reused as-is, as Python does |
@@ -1026,10 +1184,10 @@ real.
 | Area | Approach | Milestone |
 |---|---|---|
 | Prototype chains | `__proto__` field + resolution ladder (§4.4) | 6 |
-| `this` binding | conversion-time: method call, `call`/`apply`/`bind`, arrow lexical capture | 6 |
+| `this` binding (§4.6) | conversion-time: method call, detached call → `undefined`, `call`/`apply`/`bind`, arrow lexical capture | 6 |
 | Coercion (`==`, `+`, `ToPrimitive`) | explicit lowering table; `--js-strict-equality` warns on loose `==` | 4 |
 | `ToInt32` bitwise semantics | conversion helper (§4.1) | 4 |
-| Array holes / OOB → `undefined` | array OM modification | 5 |
+| Array holes / OOB → `undefined` | shared array OM, driven by the JS *sequence policy* (§5.5), not a language branch | 5 |
 | `Object.keys/values/entries`, spread, destructuring | desugared in the preprocessor | 5 |
 | Getters/setters | conversion-time call insertion | 6 |
 | Built-in error hierarchy | `models/errors.js` | 3 |
@@ -1084,8 +1242,11 @@ browser or server behaviour.
   flow, built-in error types, custom errors via `extends Error`.
 - **Modules** — ESM `import`/`export` across files.
 - **Verification properties** — user `assert`, ESBMC intrinsics, division by
-  zero, array bounds, arithmetic overflow on the integral path, uncaught
-  exceptions, null/undefined property access, type confusion on unbox.
+  zero, arithmetic overflow on the integral path, uncaught exceptions,
+  null/undefined property access, type confusion on unbox. **Array bounds are
+  opt-in** (`--js-array-oob=error`, §4.2.1): JavaScript defines an out-of-range
+  read as `undefined` rather than as an error, so reporting it is a
+  stricter-than-the-language check a user asks for, not a default.
 
 ### Deferred
 
@@ -1133,8 +1294,8 @@ counterexample rendering exactly as Python does
 | IR | `irep2` via `util/irep/migrate.{h,cpp}` at the same seam Python uses |
 | GOTO conversion | `goto_convert`, `goto_convert_functions` |
 | Exception lowering | `remove_exceptions`, `exception_typeid`, `exception_globals` |
-| Property checks | `goto_check` — bounds, division by zero, overflow, pointer safety, all for free |
-| Symbolic execution | `goto-symex`, incl. `isinstance2t` resolution and `symex_mem_inf` |
+| Property checks | `goto_check` — division by zero, overflow, pointer safety, and bounds on the *model's own* buffers, all for free. JS index bounds are **not** among them: an out-of-range read is in bounds of the infinite `items` array and is a JS-level property the array OM raises under `--js-array-oob=error` (§4.2.1) |
+| Symbolic execution | `goto-symex`, incl. `isinstance2t` resolution, the `__ESBMC_new_object` handler and `symex_mem_inf` (the infinite-array allocator behind `__ESBMC_create_inf_obj`) |
 | Slicing, caching | `slice.cpp`, the existing caches |
 | SMT | every backend (Z3, Bitwuzla, Boolector, CVC5, MathSAT, Yices, SMT-LIB) |
 | Strategies | BMC, incremental BMC, k-induction (modulo the function-pointer caveat), coverage, `--multi-property` |
@@ -1183,7 +1344,8 @@ no second class model, and no frontend-local property checking.
  ┌───────────────────────────▼──────────────────────────────────┐
  │ src/dynlang/                         (new, from python-*/)   │
  │   dyn_value/  dyn_container/  dyn_string/  dyn_object/       │
- │   dyn_exception/  dyn_scope/                                 │
+ │   dyn_dispatch/ (lowering only — resolver supplied by the    │
+ │                  frontend, §5.5)  dyn_exception/  dyn_scope/ │
  └───────────────────────────┬──────────────────────────────────┘
                              │
  ┌───────────────────────────▼──────────────────────────────────┐
@@ -1239,7 +1401,7 @@ no second class model, and no frontend-local property checking.
 | strings | `string/` + `library/python/string.c` | **shared** |
 | `Set` | `set/python_set.cpp` | **shared** |
 | shapes, struct layout | `class/python_class_builder.cpp` | **shared** (`dyn_object`) |
-| method/property resolution | call-site lowering only | **interface** — JS resolver is new (§4.4) |
+| method/property resolution | `dyn_dispatch` call-site lowering only | **interface** — the resolver is a per-language callback; the JS one is new (§4.4, §5.5) |
 | exceptions | `exception/` + `remove_exceptions` | **shared** |
 | modules | `module/module_manager.cpp` | **shared** |
 | naming | `symbol_id` | **shared** |
@@ -1248,18 +1410,19 @@ no second class model, and no frontend-local property checking.
 
 ### 9.4 New JavaScript-specific components
 
-Seven: the Acorn integration, scope resolution (§5.2 — Acorn supplies no scope
+Eight: the Acorn integration, scope resolution (§5.2 — Acorn supplies no scope
 tree), the type-inference pass, object-shape inference, **prototype resolution
 as its own resolver** (§5.5 — not shared, because MRO and prototype chains are
-different algorithms), closure conversion, and the coercion tables (`ToInt32`,
-`ToPrimitive`, `ToBoolean`, `==`).
+different algorithms), closure conversion, **`this` binding** (§4.6 — determined
+by the call site, so it is not Python's `self` under another name), and the
+coercion tables (`ToInt32`, `ToPrimitive`, `ToBoolean`, `==`).
 
 Plus two generalisations that are new *work* even though they land in shared
 code: presence bits and index/string key partitioning in `dyn_container`, and
 the `length` invariant in the array OM (§4.2.0). Earlier drafts of this document
-counted five and described the array change as a field rename; that was wrong,
-and the count is stated here so the estimate in §10 is not read as smaller than
-it is.
+counted five, described the array change as a field rename, and treated `this`
+as pure reuse; all three were wrong. The count is stated here so the estimate in
+§10 is not read as smaller than it is.
 
 ---
 
@@ -1296,36 +1459,59 @@ drifting one ulp and flipping verdicts).
 correctly on straight-line and looping arithmetic; division-by-zero and
 overflow properties fire.
 
-### M3 — Shared dynamic-language layer extraction
+### M3 — Shared dynamic-language layer
 
-**Entry criteria — this milestone is gated, not scheduled (§1.5).** All four
-must hold before any code moves; if they do not, M3 is deferred, the JS frontend
-proceeds on duplicated implementations, and the roadmap continues at M4:
+**Gated, not scheduled (§1.5), and split in two, because the two halves have
+different preconditions and only one of them can run early.**
 
-1. The five `src/dynlang/` interfaces (§5.5) are written down as headers, with
+#### M3a — interfaces, and Python rebuilt against them in place
+
+Entry criteria; all three must hold before a line of `src/dynlang/` is written:
+
+1. The seven `src/dynlang/` interfaces (§5.5) are written down as headers, with
    each operation's contract stated, and reviewed by a maintainer of the Python
    frontend.
 2. The Python frontend has been rebuilt against those headers *in place* —
    still under `src/python-frontend/`, no files moved — and `regression/python`
    is green. This is the step that proves the interface is adequate before it
    is load-bearing for two languages.
-3. No interface operation carries a language conditional. A component that
-   needs one is struck off the shared list and duplicated instead.
-4. `js_converter` (from M2) actually calls at least `dyn_value` and
-   `dyn_container`, so the interface has a second consumer rather than a
-   hypothetical one.
+3. No interface operation branches on the source language. Per-language
+   behaviour is supplied as data — a coercion table, a sequence policy, a
+   resolver callback (§5.5) — and a component that needs a branch instead is
+   struck off the shared list and duplicated.
 
-**Deliverables.** `src/dynlang/` and `src/c2goto/library/dyn/` created by moving
-Python components behind the agreed interfaces; `PyObject`/`PyListObject`
-retained as typedefs; per-language resolvers (`py_resolver`, `js_resolver`) left
-in their own frontends; `models/errors.js`, `models/nondet.js`.
+M3a involves no JavaScript at all. That is what makes it the part that can be
+worked in parallel with M1 and M2.
+
+#### M3b — relocation
+
+Entry criterion: **a JavaScript consumer actually calls the interfaces**, so
+they have a second consumer rather than a hypothetical one.
+
+That consumer does not exist at M2. M2's deliverables are deliberately
+monomorphic — numeric literals, arithmetic, control flow, intrinsics — and touch
+neither `dyn_value` nor `dyn_container`. The first real traffic is M4's widened
+`dyn_assign`/`dyn_binop`/`dyn_unbox` and M5's arrays and objects. **M3b is
+therefore sequenced after M5**, and until it lands the JS frontend calls the
+interfaces where M3a has defined them and duplicates where it has not.
+
+If M3a's criteria are never met, M3b never happens: the JS frontend proceeds
+entirely on duplicated implementations and the rest of the roadmap is unaffected.
+That is the point of §1.5 constraint 3 — this plan has to survive its own
+largest refactor not happening.
+
+**Deliverables.** *M3a:* interface headers; the Python frontend rebuilt against
+them in place; `models/errors.js`, `models/nondet.js`. *M3b:* `src/dynlang/` and
+`src/c2goto/library/dyn/` created by moving Python components behind the agreed
+interfaces; `PyObject`/`PyListObject` retained as typedefs; per-language
+resolvers (`py_resolver`, `js_resolver`) left in their own frontends.
 **Risks.** *This is the highest-risk milestone* — it touches code covered by
-4,590 tests, and it freezes interfaces on a frontend that is still moving.
+~4.6k tests, and it freezes interfaces on a frontend that is still moving.
 Mitigation: the entry criteria above; then pure relocation, no behaviour change,
 one component per commit, full `regression/python` after each.
-**Testing.** `regression/python` must be verdict-identical before and after;
-capture verdicts to a baseline file and diff. An include-path lint asserting
-`src/js-frontend/` never includes `src/python-frontend/` and vice versa
+**Testing.** `regression/python` must be verdict-identical before and after
+*each* half; capture verdicts to a baseline file and diff. An include-path lint
+asserting `src/js-frontend/` never includes `src/python-frontend/` and vice versa
 (§1.5 constraint 2), wired into CI.
 **Validation.** Zero Python regressions; the include lint passes; the JS
 frontend links only against `src/dynlang/`, never `src/python-frontend/`.
@@ -1429,8 +1615,11 @@ unsupported-construct counts rather than by a predetermined order.
 **Validation.** Feature-by-feature, against Node's observable behaviour.
 
 **Sequencing note.** M3 and M4 are the load-bearing milestones and also the
-riskiest. M1, M2 and M3 can be worked in parallel by separate contributors once
-M1's JSON contract is fixed; M5 and M6 both depend on M4's annotations.
+riskiest. M1, M2 and **M3a** can be worked in parallel by separate contributors
+once M1's JSON contract is fixed — M3a is a Python-side refactor and depends on
+no JavaScript code. M5 and M6 both depend on M4's annotations, and **M3b depends
+on M5**, because M5 is the first point at which a JavaScript consumer exercises
+the interfaces M3b relocates.
 
 ---
 
@@ -1446,7 +1635,7 @@ This proposal introduces none, for four reasons.
 
 2. **The expensive parts are already built and already tested.** 26k lines of
    C++ across the list, dict, string, set, tuple, class and exception handlers,
-   plus 4.2k lines of C operational models, plus 4,590 regression tests. A
+   plus 4.2k lines of C operational models, plus ~4.6k regression tests. A
    parallel JS-only representation would mean reimplementing all of it *and*
    maintaining two divergent models of the same abstractions.
 
@@ -1459,7 +1648,7 @@ This proposal introduces none, for four reasons.
 
 4. **The one real gap is a gap in the Python frontend too.** Assigning a
    non-scalar, non-string rvalue to a tagged variable throws today
-   (`converter_stmt.cpp:3060-3076`). Fixing that behind `dyn_value` fixes both
+   (`converter_stmt.cpp:3059-3076`). Fixing that behind `dyn_value` fixes both
    languages; forking it fixes one and leaves the other with a
    `runtime_error`. The same argument applies to bignum, to UTF-16, and to
    `try`/`finally` with escaping control flow — three more places where the JS
@@ -1472,8 +1661,9 @@ The proposal takes reuse and declines the merge — §5.5's interface boundary a
 criteria cannot be met, the reuse happens by duplication and the conclusion
 above is unaffected.
 
-Where JavaScript genuinely differs — prototype chains, capturing closures, the
-`ToInt32` bitwise rules, `undefined` as distinct from `null`, `==` coercion —
-the proposal adds *JavaScript-specific components on top of the shared layer*,
-not a competing substrate. That boundary is what §9.4's list of five new
-components is: the irreducible JavaScript-specific surface, and nothing more.
+Where JavaScript genuinely differs from Python — prototype chains, capturing
+closures, `this` bound at the call site, the `ToInt32` bitwise rules, `undefined`
+as distinct from `null`, `==` coercion — the proposal adds *JavaScript-specific
+components on top of the shared layer*, not a competing substrate. Those
+differences are what §9.4's eight new components exist to cover: the irreducible
+JavaScript-specific surface, and nothing more.
