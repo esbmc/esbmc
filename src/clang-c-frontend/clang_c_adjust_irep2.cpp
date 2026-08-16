@@ -1,8 +1,10 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <util/irep/migrate.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
+#include <util/config/config.h>
 #include <util/symtab/namespace.h>
 #include <utility>
 
@@ -99,6 +101,72 @@ static bool is_width_suffixed(const std::string &name, const std::string &stem)
   return suffix.empty() || suffix == "l" || suffix == "ll";
 }
 
+/// The lowerings `do_special_functions` selects by base name rather than by a
+/// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
+///
+/// `sqrt`'s legacy arm additionally skips a `py:`-prefixed callee; this pass is
+/// constructed only from `clang_c_languaget::typecheck`, so no Python symbol
+/// can reach it and the guard has nothing to test.
+bool clang_c_adjust_irep2::adjust_float_builtin(
+  expr2tc &expr,
+  const irep_idt &name,
+  const std::vector<expr2tc> &args)
+{
+  const bool is_inf = compare_unscore_builtin(name, "inf") ||
+                      compare_unscore_builtin(name, "huge_val");
+  const bool is_nan = name != "nan" && compare_unscore_builtin(name, "nan");
+
+  if (is_inf || is_nan)
+  {
+    // The fixed-point spelling is a bit pattern built off bv_width rather than
+    // an ieee_floatt, and has no constant_floatbv2t to land on. Decline instead
+    // of guessing: the call stays where this mode already had it.
+    if (config.ansi_c.use_fixed_for_float || !is_floatbv_type(expr->type))
+      return false;
+
+    const ieee_float_spect spec(to_floatbv_type(expr->type));
+    expr = constant_floatbv2tc(
+      is_inf ? ieee_floatt::plus_infinity(spec) : ieee_floatt::NaN(spec));
+    return true;
+  }
+
+  if (args.size() != 1)
+    return false;
+
+  const expr2tc &arg = args[0];
+
+  if (compare_unscore_builtin(name, "isnan"))
+    expr = isnan2tc(arg);
+  else if (compare_unscore_builtin(name, "isinf"))
+    expr = isinf2tc(arg);
+  else if (compare_unscore_builtin(name, "isnormal"))
+    expr = isnormal2tc(arg);
+  else if (compare_unscore_builtin(name, "signbit"))
+    expr = signbit2tc(arg);
+  else if (
+    compare_float_suffix(name, "finite") ||
+    compare_unscore_builtin(name, "isfinite") ||
+    compare_unscore_builtin(name, "finite"))
+    expr = isfinite2tc(arg);
+  else if (compare_float_suffix(name, "sqrt"))
+    // The legacy node carries no rounding_mode attribute, so migrate_expr
+    // synthesises this symbol for it -- the same one adjust_complex_arith
+    // names.
+    expr = ieee_sqrt2tc(
+      expr->type, arg, symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"));
+  else if (is_abs_builtin_name(name))
+  {
+    // `abs` lowers to `(x >= 0) ? x : -x`, ill-typed for anything else.
+    if (!is_number_type(arg->type))
+      return false;
+    expr = abs2tc(expr->type, arg);
+  }
+  else
+    return false;
+
+  return true;
+}
+
 void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 {
   const sideeffect2t &se = to_sideeffect2t(expr);
@@ -124,6 +192,34 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
   if (name == "__builtin_expect" && args.size() == 2)
   {
     expr = args[0];
+    return;
+  }
+
+  // A name-matched spelling the program defines itself keeps its call (#6904).
+  if (builtin_shadows_user_definition(context, s->name, s->id))
+    return;
+
+  // Before the arity check: inf/huge_val/nan take no argument at all.
+  if (adjust_float_builtin(expr, s->name, args))
+    return;
+
+  // The ordered-comparison builtins, which differ from the plain operators only
+  // in being defined when an operand is NaN.
+  if (args.size() == 2)
+  {
+    const expr2tc &l = args[0], &r = args[1];
+    if (name == "__builtin_isgreater")
+      expr = greaterthan2tc(l, r);
+    else if (name == "__builtin_isgreaterequal")
+      expr = greaterthanequal2tc(l, r);
+    else if (name == "__builtin_isless")
+      expr = lessthan2tc(l, r);
+    else if (name == "__builtin_islessequal")
+      expr = lessthanequal2tc(l, r);
+    else if (name == "__builtin_islessgreater")
+      expr = or2tc(lessthan2tc(l, r), greaterthan2tc(l, r));
+    else if (name == "__builtin_isunordered")
+      expr = or2tc(isnan2tc(l), isnan2tc(r));
     return;
   }
 

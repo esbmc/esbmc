@@ -3260,3 +3260,116 @@ Next, in order:
    §88.3 actually named.
 2. The name-matched builtin family (§90.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
+
+## 94. The name-matched builtin family, and the guard it needs
+
+§90.3 deferred these because they are the spellings a program may reuse:
+`is_name_matched_builtin`'s list, plus `sqrt` and the ordered-comparison
+builtins. Ported here.
+
+### 94.1 The matchers are shared, not copied
+
+`compare_float_suffix`, `compare_unscore_builtin`, `is_abs_builtin_name`,
+`is_name_matched_builtin` and `shadows_user_definition` moved from
+`clang_c_adjust_expr.cpp` (where four of the five were `static inline`) into
+`clang-c-frontend/builtin_names.{h,cpp}`, and the legacy member now delegates.
+
+That is not tidying. §39.2 and `scope-coupled-arith-assign-conversion.md` §20
+record two defects found in independently-written copies of
+`c_typecastt` -- a dropped `floatbv` case and an unfolded constant cast -- each
+of which produced a silent divergence for years. A second copy of "which
+spellings are `isnan`" would be the same shape of bug, and the two passes must
+agree by construction rather than by review.
+
+### 94.2 The shadow guard is the load-bearing part
+
+`abs`, `isinf`, `fabs` are names a program is free to define (#6904). The arm
+runs behind `builtin_shadows_user_definition` for exactly that reason, and
+`irep2_only_builtin_shadowed` -- a program with its own `fabs` returning 42 --
+is the only test that detects the guard's removal. It is worth noting that this
+test does *not* discriminate against the pre-arm control: with no lowering at
+all the user's body is called too, and the verdict is the same. It is a mutation
+test by nature, which §39.1's table anticipates.
+
+### 94.3 What is declined, with the reason
+
+- **`inf`/`huge_val`/`nan` under `--fixedbv`.** The legacy arm builds a bit
+  pattern off `bv_width` rather than an `ieee_floatt`, and `constant_floatbv2t`
+  takes an `ieee_floatt`. Declining leaves the call where this mode already had
+  it, as §88.2's operand rule does.
+- **`__builtin_sqrt`.** Neither pass lowers it: the legacy arm is
+  `compare_float_suffix(identifier, "sqrt")`, which matches `sqrt`/`sqrtf`/
+  `sqrtl` and *not* the `__builtin_` spelling. Reproduced on the default path
+  before writing the arm's test to it; the test uses plain `sqrt`. Whether that
+  asymmetry is intended is a question for the legacy pass, not for this port.
+- **`sqrt`'s `py:` guard.** This pass is constructed only from
+  `clang_c_languaget::typecheck`, so no Python symbol reaches it.
+
+### 94.4 Result
+
+| | before | after |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 131 | **129** |
+| tests carrying this family's residue | **7** | **1** |
+| regressions | -- | **0** |
+
+The divergence column is again the wrong instrument (§92.2): the family's
+residue is gone from six of seven tests, but most of those tests also diverge
+for reasons this arm does not touch -- `math_exp02` is now down to the
+unported boolean-condition cast alone. The one test still carrying family
+residue is `github_2757`, whose `signbit` is *implicitly declared*, so it needs
+the base-name fix of §92 as well. Two tests reach byte-identity outright:
+`15_qurt_new` (`sqrt`) and `github_1226-2` (`__builtin_isgreaterequal`).
+
+Five mutants, one rebuild each:
+
+| mutant | killed by |
+|---|---|
+| shadow guard removed | `..._shadowed` only |
+| `isnan` → `isinf` | `..._float_class` |
+| `inf` ↔ `nan` constants swapped | `..._float_class`, `..._inf_abs` |
+| `__builtin_isgreater` → `lessthan` | `..._ordered` |
+| `signbit` → `popcount` | `..._signbit` |
+
+The second of those is why the tests look the way they do. A first draft
+asserted the predicates over `1.0` alone, and `isnan` → `isinf` **survived** it:
+`!isnan(1.0)` and `!isinf(1.0)` are both true, so the test distinguished neither
+node. The values are now chosen so the predicates disagree -- an infinity
+separates `isinf` from `isnan` and `isfinite`, a zero separates `isnormal` from
+`isfinite`.
+
+### 94.5 An unrelated abort the tests surfaced
+
+Asserting all four classification predicates *and* `signbit` over the same
+function aborts in the solver, on the **default path**, under Bitwuzla:
+
+```
+Assertion failed: (a->sort->id == SMT_SORT_BOOL), function mk_not,
+file bitwuzla_conv.cpp, line 346.
+```
+
+Each assertion passes alone and in pairs; removing the `signbit(-d)` line clears
+it. `signbit2t` is `int32`-typed, so a `not` over it is the suspect, but the
+combination is what triggers it and that is not explained yet. Nothing to do
+with this arm -- recorded because it cost a test-writing iteration, and because
+`signbit` now lives in its own test file for this reason rather than by design.
+
+## 95. Status
+
+`-only` on the 297-test sample: **129 of 297**. §90 + §92 + this arm together
+take it from 201.
+
+Gates: 66 of 67 in the
+`irep2_only|complex_|gcc_popcount|gcc_bswap|math_|github_*|15_qurt` slice green;
+`github_2572_2` fails identically on master (`--z3 --ir-ieee`). Whole-suite gate
+still owed (§91).
+
+Next:
+
+1. The **CPROVER intrinsic family** (`same_object`, `POINTER_OFFSET`,
+   `POINTER_OBJECT`, ...), which is the last block of `do_special_functions`
+   with corpus traffic.
+2. The `missing renaming delimiters` warning (§92.2). Checked while picking this
+   slice: the warning comes from `sym_name_to_symbol`, shared by every frontend,
+   and firing it is inherent to migrating a body before its implicit callee is
+   declared. Not the one-liner §93 implied.
