@@ -76,6 +76,14 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   }
 }
 
+/// The four shift ids the adjuster handles together: the C-level `shl`/`shr`
+/// the parser still emits, and the signed/unsigned `ashr`/`lshr` this
+/// conversion now produces.
+static bool is_shift_id(const irep_idt &id)
+{
+  return id == "shl" || id == "shr" || id == "ashr" || id == "lshr";
+}
+
 void clang_c_adjust::adjust_expr(exprt &expr)
 {
   adjust_type(expr.type());
@@ -150,7 +158,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
       expr.type().id() != "bool")
       gen_typecast(ns, expr.op0(), expr.type());
   }
-  else if (expr.id() == "shl" || expr.id() == "shr")
+  else if (is_shift_id(expr.id()))
   {
     adjust_expr_shifts(expr);
   }
@@ -438,7 +446,7 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
 
 void clang_c_adjust::adjust_expr_shifts(exprt &expr)
 {
-  assert(expr.id() == "shr" || expr.id() == "shl");
+  assert(is_shift_id(expr.id()));
 
   adjust_operands(expr);
 
@@ -1012,6 +1020,41 @@ void clang_c_adjust::adjust_type(typet &type)
   }
 }
 
+/// A compound assignment over a complex operand has to be expanded here.
+/// goto_convert's remove_assignment rebuilds `a op b` long after adjustment, so
+/// the component-level lowering would never see it and the SMT layer would be
+/// handed a raw complex operator (#6713). An lvalue with its own side effect is
+/// left alone: expanding it would evaluate that effect twice, and a loud
+/// failure downstream beats a wrong answer.
+bool clang_c_adjust::lower_complex_compound_assignment(exprt &expr)
+{
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
+  const typet type0 = op0.type();
+
+  if (
+    (type0.id() != "complex" && op1.type().id() != "complex") ||
+    contains_sideeffect(op0))
+    return false;
+
+  static const std::map<irep_idt, irep_idt> complex_compound_ops = {
+    {"assign+", "+"}, {"assign-", "-"}, {"assign*", "*"}, {"assign_div", "/"}};
+
+  auto it = complex_compound_ops.find(expr.statement());
+  if (it == complex_compound_ops.end())
+    return false;
+
+  exprt rhs(it->second, type0);
+  rhs.location() = expr.location();
+  rhs.copy_to_operands(op0, op1);
+  if (!lower_complex_binary_arithmetic(rhs))
+    return false;
+
+  expr.statement("assign");
+  expr.op1().swap(rhs);
+  return true;
+}
+
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -1028,44 +1071,22 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     return;
   }
 
-  // A compound assignment over a complex operand has to be expanded here.
-  // goto_convert's remove_assignment rebuilds `a op b` long after adjustment,
-  // so the component-level lowering would never see it and the SMT layer
-  // would be handed a raw complex operator (#6713). An lvalue with its own
-  // side effect is left alone: expanding it would evaluate that effect twice,
-  // and a loud failure downstream beats a wrong answer.
+  if (lower_complex_compound_assignment(expr))
+    return;
+
   if (
-    (type0.id() == "complex" || op1.type().id() == "complex") &&
-    !contains_sideeffect(op0))
-  {
-    static const std::map<irep_idt, irep_idt> complex_compound_ops = {
-      {"assign+", "+"},
-      {"assign-", "-"},
-      {"assign*", "*"},
-      {"assign_div", "/"}};
-
-    auto it = complex_compound_ops.find(statement);
-    if (it != complex_compound_ops.end())
-    {
-      exprt rhs(it->second, type0);
-      rhs.location() = expr.location();
-      rhs.copy_to_operands(op0, op1);
-      if (lower_complex_binary_arithmetic(rhs))
-      {
-        expr.statement("assign");
-        expr.op1().swap(rhs);
-        return;
-      }
-    }
-  }
-
-  if (statement == "assign_shl" || statement == "assign_shr")
+    statement == "assign_shl" || statement == "assign_shr" ||
+    statement == "assign_lshr" || statement == "assign_ashr")
   {
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
     {
-      if (statement == "assign_shl")
+      // The C converter now picks the kind (§76); Solidity still emits the
+      // untyped assign_shr, so the rewrite below stays for it.
+      if (
+        statement == "assign_shl" || statement == "assign_lshr" ||
+        statement == "assign_ashr")
         return;
 
       if (type0.id() == "unsignedbv")
@@ -1228,6 +1249,37 @@ void clang_c_adjust::adjust_side_effect_function_call(
   do_special_functions(expr);
 }
 
+// The expression a chain of typecasts wraps, which is where the address the
+// caller wrote actually sits.
+static exprt *strip_typecasts(exprt &e)
+{
+  exprt *p = &e;
+  while (p->id() == "typecast" && p->operands().size() == 1)
+    p = &p->op0();
+  return p;
+}
+
+static bool is_address_of_array(exprt &arg, const namespacet &ns)
+{
+  const exprt *addr = strip_typecasts(arg);
+  return addr->is_address_of() && addr->operands().size() == 1 &&
+         is_array_like(ns.follow(addr->op0().type()));
+}
+
+// Undo the `&a` -> `&a[0]` rewrite adjust_address_of applies to every array.
+static void restore_array_lvalue(exprt &arg)
+{
+  exprt *addr = strip_typecasts(arg);
+  if (
+    !addr->is_address_of() || addr->operands().size() != 1 ||
+    !addr->op0().is_index() || addr->op0().operands().size() != 2)
+    return;
+
+  exprt array = addr->op0().op0();
+  addr->type() = pointer_typet(array.type());
+  addr->op0().swap(array);
+}
+
 void clang_c_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
@@ -1236,10 +1288,24 @@ void clang_c_adjust::adjust_function_call_arguments(
   exprt::operandst &arguments = expr.arguments();
   const code_typet::argumentst &argument_types = code_type.arguments();
 
+  // An assigns clause names an lvalue, and array-to-pointer decay is the one
+  // conversion that loses which lvalue it was: adjust_address_of rewrites `&a`
+  // to `&a[0]`, after which the clause is indistinguishable from one that
+  // named the first element, and the frame silently shrinks to it (#7010).
+  // Keep the pointer-to-array `&a` C already gave us for this callee alone.
+  const bool keeps_array_lvalues =
+    f_op.is_symbol() && f_op.identifier() == "c:@F@__ESBMC_assigns_impl";
+
   for (unsigned i = 0; i < arguments.size(); i++)
   {
     exprt &op = arguments[i];
+    const bool was_array_lvalue =
+      keeps_array_lvalues && is_address_of_array(op, ns);
+
     adjust_expr(op);
+
+    if (was_array_lvalue)
+      restore_array_lvalue(op);
 
     if (i < argument_types.size())
     {
