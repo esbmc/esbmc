@@ -109,7 +109,7 @@ def ratios(a_samples, b_samples, name):
     return out
 
 
-def summarise(a_samples, b_samples):
+def print_timings(a_samples, b_samples):
     print(f"\n{'metric':<12}{'A':>10}{'B':>10}{'B/A':>9}{'IQR':>9}{'n':>4}")
     for name, _ in PHASES:
         pair_ratios = ratios(a_samples, b_samples, name)
@@ -123,7 +123,9 @@ def summarise(a_samples, b_samples):
               f"{statistics.median(pair_ratios):>9.3f}{spread:>9.3f}{len(pair_ratios):>4}")
     print("wall > bmc > {symex, caching, slicing, encoding, solve}; goto is outside bmc")
 
-    print()
+
+def print_counts(a_samples, b_samples):
+    """Print each count side by side; return the (moved, unknown) names."""
     moved, unknown = [], []
     for name, _ in COUNTS:
         a_values = {s[name] for s in a_samples if s[name] is not None}
@@ -137,6 +139,13 @@ def summarise(a_samples, b_samples):
             moved.append(name)
         print(f"{name:<12}A={sorted(a_values)} B={sorted(b_values)}"
               f"  {'DIFFER' if differ else 'identical'}")
+    return moved, unknown
+
+
+def summarise(a_samples, b_samples):
+    print_timings(a_samples, b_samples)
+    print()
+    moved, unknown = print_counts(a_samples, b_samples)
 
     print()
     if unknown:
