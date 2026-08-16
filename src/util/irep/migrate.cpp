@@ -593,11 +593,35 @@ static void splice_expr(const exprt &expr, expr2tc &new_expr_ref)
   migrate_expr(newexpr, new_expr_ref);
 }
 
+/// Clang does not cast a binary operator's real operand to complex -- it hands
+/// over `double + _Complex double` and leaves the promotion to the consumer, so
+/// clang_c_adjust's complex lowering pairs the real with a zero imaginary part
+/// before anything migrates. Under --clang-c-irep2-adjust-only that pass does
+/// not run and the mixed node reaches the arith constructors, whose width
+/// assertion fires before clang_c_adjust_irep2 can lower it. The promotion is a
+/// pure function of the node's type and the operand, so migration may do it
+/// (§80).
+static void promote_complex_operand(const type2tc &t, expr2tc &op)
+{
+  if (is_complex_type(op->type))
+    return;
+
+  const type2tc &et = to_complex_type(t).subtype;
+  op = constant_struct2tc(t, std::vector<expr2tc>{op, gen_zero(et)});
+}
+
 static void
 convert_operand_pair(const exprt &expr, expr2tc &arg1, expr2tc &arg2)
 {
   migrate_expr(expr.op0(), arg1);
   migrate_expr(expr.op1(), arg2);
+
+  if (expr.type().id() == "complex")
+  {
+    const type2tc t = migrate_type(expr.type());
+    promote_complex_operand(t, arg1);
+    promote_complex_operand(t, arg2);
+  }
 }
 
 static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)

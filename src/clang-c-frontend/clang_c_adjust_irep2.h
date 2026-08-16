@@ -80,6 +80,14 @@ private:
   /// first (§82).
   void adjust_call_callee(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's complex
+  /// branch: decompose `a op b` over a complex operand into per-component
+  /// arithmetic and rebuild a (real, imag) pair. Unported, a complex `/`
+  /// reaches goto_check's div_by_zero_check, which asks gen_zero for a complex
+  /// zero and aborts -- the default path never gets there because it lowers to
+  /// ieee_div, which is exempt from that check (§88).
+  void adjust_complex_arith(expr2tc &expr);
+
   /// IREP2 form of clang_c_adjust::adjust_if: a ternary's condition must be
   /// boolean before goto_convert lowers it, and its arms must agree with the
   /// node's type. `if2t` is the only value-level kind carrying a location
