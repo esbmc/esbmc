@@ -445,6 +445,28 @@ static std::unordered_set<std::string> program_references(const contextt &ctx)
   return referenced;
 }
 
+/// Whether a library symbol belongs in the context handed to the rest of the
+/// run. `bundled_wholesale` frontends (Python, Solidity) filter upstream, so
+/// everything their blob carries is kept; for the rest a symbol is a library
+/// body the program declared and left empty, minus the memory primitives it
+/// never mentions.
+static bool store_library_symbol(
+  const contextt &context,
+  const symbolt &s,
+  bool bundled_wholesale,
+  const std::unordered_set<std::string> &referenced)
+{
+  if (bundled_wholesale)
+    return true;
+
+  const symbolt *symbol = context.find_symbol(s.id);
+  if (symbol == nullptr || !symbol->get_value().is_nil())
+    return false;
+
+  return !is_cbmc_memory_primitive(s) ||
+         referenced.find(id2string(s.id)) != referenced.end();
+}
+
 static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
@@ -594,30 +616,23 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
   bool uses_whitelist = language && language->id() == "python";
 
+  const bool bundled_wholesale = is_solidity || uses_whitelist;
+
   const std::unordered_set<std::string> referenced =
-    (is_solidity || uses_whitelist) ? std::unordered_set<std::string>()
-                                    : program_references(context);
+    bundled_wholesale ? std::unordered_set<std::string>()
+                      : program_references(context);
 
   new_ctx.foreach_operand([&context,
                            &store_ctx,
                            &symbol_deps,
                            &to_include,
-                           &is_solidity,
-                           &uses_whitelist,
+                           bundled_wholesale,
                            &referenced](const symbolt &s) {
-    const symbolt *symbol = context.find_symbol(s.id);
-    if (
-      (is_solidity || uses_whitelist) ||
-      (symbol != nullptr && symbol->get_value().is_nil()))
-    {
-      if (
-        !is_solidity && !uses_whitelist && is_cbmc_memory_primitive(s) &&
-        referenced.find(id2string(s.id)) == referenced.end())
-        return;
+    if (!store_library_symbol(context, s, bundled_wholesale, referenced))
+      return;
 
-      store_ctx.add(s);
-      ingest_symbol(s.id, symbol_deps, to_include);
-    }
+    store_ctx.add(s);
+    ingest_symbol(s.id, symbol_deps, to_include);
   });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
