@@ -12,22 +12,30 @@ The short version of the conclusion:
 - **The pipeline shape is reusable verbatim.** External parser → JSON AST →
   annotation pass → C++ converter → legacy `exprt`/`codet` into `contextt` →
   `clang_cpp_adjust` → `goto_convert`. Nothing about that is Python-specific.
-- **The runtime substrate is reusable after generalisation.** `PyObject`,
-  `PyListObject`, the string handler, the dict handler, the exception lowering
-  and the class-to-`struct_typet` builder all become a shared
-  *dynamic-language layer* that Python and JavaScript both consume.
+- **The runtime substrate is reusable after generalisation — behind an
+  interface, not by relocation.** `PyObject`, `PyListObject`, the string
+  handler, the dict handler, the exception lowering and the
+  class-to-`struct_typet` builder become a shared *dynamic-language layer*, but
+  only once each sits behind a stated contract (§5.5) and the extraction's entry
+  criteria are met (§10, M3). Method resolution is explicitly *not* shared:
+  Python's MRO and JavaScript's prototype chain are different algorithms, and
+  each frontend keeps its own resolver. Anything that cannot be stated without a
+  language conditional is duplicated instead of shared.
 - **The typing strategy is not reusable as-is, and this is the crux of the
   proposal.** ESBMC's Python frontend is, in practice, a static
   monomorphising translator that leans on PEP 484 annotations; its genuinely
-  dynamic path is narrow enough that assigning a non-literal to a
-  dynamically-typed variable raises "not yet supported"
-  (`src/python-frontend/converter/converter_stmt.cpp:3243`). JavaScript has no
-  annotations. The frontend therefore needs a real inference pass and a
+  dynamic path accepts an rvalue only when that rvalue is a numeric scalar or a
+  string, and raises "not yet supported" for anything else — a container, a
+  class instance, a call whose result type is unknown
+  (`src/python-frontend/converter/converter_stmt.cpp:3062-3075`). JavaScript has
+  no annotations. The frontend therefore needs a real inference pass and a
   first-class tagged-value path — and building that is the one large piece of
   new infrastructure, which pays back into Python immediately.
 
 Everything below is evidence for those three claims and a plan that follows from
-them.
+them. §1.5 states the strongest objection to the whole approach — that the
+Python frontend is too unsettled to build a second language on — and the three
+constraints the rest of the document is written to respect because of it.
 
 ---
 
@@ -147,21 +155,34 @@ materialised by symex — the SMT-level unbounded-array trick that makes symboli
 list indices tractable.
 
 **The dynamic-variable path is deliberately narrow.** A scalar variable only
-becomes `PyObject`-typed when `scalar_tag_candidates()` flags it at an `if`
-join point, and even then:
+becomes `PyObject`-typed when the tag analysis flags it, and assignment into a
+tagged variable is gated on the *type of the rvalue*:
 
 ```cpp
-if (is_tagged) {
-  if (ast_node["value"]["_type"] == "Constant") { get_tagged_scalar_assign(...); return; }
+if (dynamic_type_handler_.is_tagged(name)) {
+  if (ast_node.contains("value") && !ast_node["value"].is_null()) {
+    exprt rhs = get_expr(ast_node["value"]);
+    if (type_handler_.is_numeric_scalar_type(rhs.type()) ||
+        type_handler_.is_string_type(rhs.type())) {
+      dynamic_type_handler_.assign(rhs, …); return;
+    }
+  }
   throw std::runtime_error(
-    "assigning a non-literal value to a dynamically-typed variable is "
-    "not yet supported");
+    "assigning a value of this type to a dynamically-typed variable "
+    "is not yet supported");
 }
 ```
-— `src/python-frontend/converter/converter_stmt.cpp:3224-3245`
+— `src/python-frontend/converter/converter_stmt.cpp:3060-3076`
 
-That is the honest state of the art: tagged scalars support literal assignment
-at branch joins, and nothing else.
+So the boundary is *by rvalue type*, not by literal-vs-computed: a computed
+numeric or string rvalue does box, while a container, a class instance, a tuple
+or a call whose result type is unknown throws. `is_numeric_scalar_type`
+additionally excludes bitvectors narrower than 16 bits
+(`type/type_handler.cpp`).
+
+That is the honest state of the art, and it is the shape JavaScript cannot live
+within: in JS the *common* tagged rvalue is an object, an array or a call
+result — exactly the three the check rejects.
 
 **Classes reuse the C++ object model.** `python_class_builder::build`
 (`src/python-frontend/class/python_class_builder.cpp`) emits a `struct_typet`
@@ -204,6 +225,45 @@ Stated plainly, because the JS design has to plan around it:
 JavaScript needs (1), (2), (3) and (4) to be *good*, not special-cased. That
 determines the roadmap ordering in §10.
 
+### 1.5 The objection this design has to answer first
+
+The Python frontend is not a settled component. It is under active development,
+its dynamic path is the narrow thing §1.3 just described, and several of its
+subsystems are still changing shape. Building a second frontend on top of it,
+and then *promoting its internals to a shared interface*, risks freezing
+immature abstractions into a contract two languages depend on — and a shared
+layer that both frontends can edit is a faster route to entanglement than two
+separate frontends would be.
+
+This is the strongest argument against the proposal and it is not answered by
+asserting that reuse is cheaper. It is answered by three constraints, which the
+rest of this document is written to respect:
+
+1. **Reuse is by interface, not by relocation.** §5.5 defines an interface
+   before any code moves; nothing is shared because it happens to be sitting in
+   `src/python-frontend/`. A component qualifies for the shared layer only if it
+   has a stated contract, its Python-specific policy has been factored out of
+   it, and a second consumer actually exercises it. Components that fail that
+   test stay in the Python frontend and are *duplicated* on the JS side — a
+   deliberate accepted cost, because two clear implementations beat one
+   entangled one.
+2. **The dependency is one-way and enforced.** `src/js-frontend/` must not
+   include anything from `src/python-frontend/`, and vice versa; both include
+   `src/dynlang/`. This is checkable in CI (an include-path lint), and it is
+   what stops "shared" from degrading into "mutually coupled".
+3. **The extraction is gated, not scheduled.** M3 does not start because the
+   roadmap says it is next. Its entry criteria are in §10; if they are unmet,
+   the JS frontend proceeds on duplicated code and the extraction is deferred.
+   A design whose first large milestone is a refactor of someone else's
+   experimental subsystem should be able to survive that refactor not happening.
+
+There is a real benefit in the other direction that the objection should be
+weighed against: every gap in §1.4 is a gap JavaScript *forces*, and the four
+listed there (dynamic scalars, iteration, closures, `try`/`finally`) are the
+Python frontend's own known weaknesses. A second consumer is the usual way an
+experimental component acquires a stable interface. But that argument only
+holds under constraint (1); without it, the objection stands.
+
 ---
 
 ## 2. Parser selection
@@ -234,6 +294,15 @@ determines the roadmap ordering in §10.
 - **`acorn-walk` and `acorn-loose` are in the same repo**, giving a supported
   traversal utility for the annotation pass and an error-tolerant mode for
   diagnostics.
+
+**What Acorn does not give you.** It produces an AST and nothing else: no scope
+tree, no binding table, no type information. Scope resolution is a separate
+analysis the annotation pass owns (§5.2), and the recommendation there is to
+vendor `eslint-scope` for it. So the vendored bundle is Acorn + `acorn-walk` +
+`eslint-scope` (+ `esrecurse`/`estraverse`), all MIT or BSD-2 and all pure JS.
+"Zero dependencies" above is a property of Acorn itself and of the *native*
+toolchain — which is what §2.4's embedding argument actually rests on — not a
+claim that the frontend vendors exactly one file.
 
 ### 2.3 Why not the others
 
@@ -292,9 +361,24 @@ choose a *pure-JS* parser over a native one: pure JS can be embedded in a 400 KB
 engine, whereas SWC or Tree-sitter would each pull their own native toolchain.
 Stage 2 is scheduled as milestone 7 so it is never on the critical path.
 
-**Contract between stages.** Both stages produce byte-identical JSON, so the
-converter is unaware of which is in use, and Stage 1 remains a supported
-fallback (`--js-parser=node|embedded`).
+**Contract between stages.** The contract is the *ESTree AST*, not its
+serialisation: both stages must produce structurally identical trees — same node
+kinds, same children, same `start`/`end`/`loc` — so the converter is unaware of
+which is in use, and Stage 1 remains a supported fallback
+(`--js-parser=node|embedded`).
+
+Byte-identical JSON is deliberately *not* the requirement. `JSON.stringify` is
+free to differ between Node's serialiser and QuickJS-ng's in key order, number
+formatting (`1e21` vs `1000000000000000000000`, `-0`), and non-ASCII escaping,
+and pinning the contract to text would make an unrelated engine upgrade look
+like a parser regression. Equality is therefore defined on the parsed tree, by a
+structural comparison that ignores key order and normalises numeric literals.
+
+Where a *textual* artefact is genuinely needed — golden-file tests, and the
+cross-backend parity check in M7 — it is produced by one canonical serialiser
+that both backends feed (recursive key sort, fixed number formatting, `\u`
+escaping above ASCII), so the canonical form is a property of the test harness
+rather than of either engine.
 
 ---
 
@@ -309,9 +393,9 @@ fallback (`--js-parser=node|embedded`).
 | `string` | `str` | `char[N]` / `char *` | `string.c`, `string_handler` | `index`, `constant_string` | **R** (UTF-16 caveat) |
 | `boolean` | `bool` | `bool` | — | `constant_bool` | **R** |
 | `null` | `None` | `pointer(bool)` sentinel | — | `isnone2t` | **R** |
-| `undefined` | *(none)* | second sentinel | — | `isnone2t` variant | **N** (small) |
+| `undefined` | *(none)* | sentinel, own pointee type (§4.1) | — | `isnone2t` variant | **N** (small) |
 | `symbol` | *(none)* | opaque unique id | — | `unsignedbv` | **N** (deferred) |
-| array | `list` | `JsArrayObject` | `list.c` | infinite `array` + `index` | **G** |
+| array | `list` | `JsArrayObject` (+ presence, `length` invariant) | `list.c` | infinite `array` + `index` | **G** (§4.2.0) |
 | object (fixed shape) | class instance | `struct_typet` | `__ESBMC_new_object` | `member`, `with` | **R** |
 | object (dynamic keys) | `dict` | `DynDict` | `python-dict/` | struct + arrays | **G** |
 | class | class | `struct_typet` + methods | `python_class_builder` | `member`, indirect call | **R** |
@@ -392,18 +476,47 @@ the analogous truthiness lowering for `any()` and `if` conditions
 (`src/python-frontend/function_call/builtins.cpp`), so this is a table extension.
 
 **`null` and `undefined`.** JavaScript distinguishes them, Python has only
-`None`. Represent both as distinct singleton sentinels:
+`None`. Both are singleton sentinels, and the sentinel's *pointee* type is what
+makes them distinguishable on the monomorphic path — so it has to be a type
+nothing else in the frontend uses.
+
+The obvious spelling, `pointer(char)`, does not work: that is exactly the type
+§4.1 gives a computed string, so `typeof s === "undefined"` and "`s` is a string
+pointer" would be the same type-level question, and `string | undefined` — one
+of the most common shapes in real JS — would be unrepresentable without boxing.
+Two of the other short candidates are taken as well: `pointer(bool)` is
+`none_type()` and `pointer(empty)` (i.e. `void *`) is `any_type()`
+(`src/util/lang/python_types.cpp:4-15`).
+
+So `undefined` gets a pointee type that exists only to be that sentinel:
 
 ```cpp
-typet js_null_type()      { return pointer_typet(bool_typet()); }   // == none_type()
-typet js_undefined_type() { return pointer_typet(char_typet()); }   // distinct
+typet js_null_type() { return none_type(); }   // pointer(bool), reused as-is
+
+typet js_undefined_type()
+{
+  // Empty tag-only struct: distinct from bool (null), void (Any) and char
+  // (computed string). The pointer is a sentinel address and is never
+  // dereferenced, so the struct having no members is fine.
+  struct_typet t;
+  t.tag("__ESBMC_js_undefined");
+  return pointer_typet(t);
+}
 ```
 
 with distinct `type_id`s in the shared tag namespace, so `x === null` and
 `x === undefined` are separate predicates while `x == null` (loose) is their
-disjunction. On the monomorphic path, a variable that may be `undefined` uses
-the optional-type builder Python already has
-(`type_handler::build_optional_type`, `type_handler.cpp:1436`).
+disjunction. Sentinel values are compared by identity, never dereferenced; any
+read through one is a `TypeError` property, which is what makes
+"`undefined` is not a function" a *reported* defect rather than a crash.
+
+On the monomorphic path a variable that may be `undefined` uses the optional-type
+builder Python already has (`type_handler::build_optional_type`,
+`type/type_handler.cpp:1451`), so `string | undefined` is an optional over
+`char *` rather than a union of two pointer types. Where inference cannot keep a
+binding monomorphic, `undefined` is carried on the tagged path as its own
+`type_id` and the sentinel type never appears — the sentinel exists only so the
+*monomorphic* path can still tell the two apart.
 
 **`symbol`.** Deferred past the MVP. When needed: an opaque `unsignedbv(64)`
 identity allocated by a counter, with `Symbol()` calls yielding fresh distinct
@@ -414,23 +527,109 @@ values, and well-known symbols as reserved constants.
 The single most important modelling decision, because it decides whether
 verification is fast or hopeless.
 
+#### 4.2.0 What the ECMAScript object model actually is
+
+Stating this first, because the two tiers below are *approximations of it*, and
+a reader cannot judge an approximation without the thing being approximated.
+Python's `list` and `dict` are close enough to their JS counterparts to invite
+a one-to-one mapping, and that mapping is wrong in five specific ways.
+
+**1. There is one data structure, and it is an ordered property map.** Every
+JS object is a map from property keys to property *descriptors* (value or
+get/set, plus `writable`/`enumerable`/`configurable`), with a `[[Prototype]]`
+link. There is no separate "array type" and no separate "record type" — an
+array is an object, a class instance is an object, a function is an object.
+Python's `list`/`dict`/instance split does not exist here, so a design that
+maps JS array → `PyListObject` and JS object → `PyDict` has silently asserted a
+partition JavaScript does not have.
+
+**2. Keys are strings (or symbols); integer indices are canonicalised.**
+`a[1]`, `a["1"]` and `a[1.0]` are the same property. `a[1.5]` and `a["01"]` are
+ordinary string keys, *not* indices. An array index is specifically a string
+that round-trips through `ToString(ToUint32(k))` and is `< 2³²−1`; everything
+else is a normal key that does not participate in `length`. The model needs
+this canonicalisation at every computed access, and it is a place where a naive
+`index2t` on a numeric key is unsound for `a[1.5]`.
+
+**3. Arrays are exotic only in `length`.** The one non-ordinary behaviour is
+that `length` is a data property whose `[[DefineOwnProperty]]` is magic: writing
+an index `≥ length` raises `length`, and writing a smaller `length` *deletes*
+every index above it. Everything else about an array — `a.foo = 1` is legal and
+does not touch `length`; `delete a[0]` leaves `length` alone — falls out of (1).
+So `JsArrayObject` cannot be `PyListObject` with a renamed field: it needs the
+`length`/index coupling as an invariant, and it needs somewhere to put
+non-index properties.
+
+**4. Holes are not `undefined`, and the difference is observable.** `[1,,3]`
+has no property `"1"`; `[1,undefined,3]` has one whose value is `undefined`.
+`1 in a`, `Object.keys(a)` and `a.hasOwnProperty(1)` distinguish them, and the
+array methods split three ways: `forEach`/`filter`/`every`/`some` skip holes,
+`map` skips them but *preserves* them in the result, and `Array.from`, spread,
+`entries`/`keys`/`values`, `find`/`findIndex` treat a hole as `undefined`. A
+model with a flat `items` buffer and no presence bit collapses this distinction
+and will disagree with Node on any sparse-array test.
+
+**5. Property order is specified, and programs depend on it.** Within one
+object, own keys come out as: array-index keys in ascending numeric order,
+then remaining string keys in property-creation order, then symbols in creation
+order. `Object.keys`, `Object.values`, `Object.entries`, `JSON.stringify` and
+`for...in` all follow it (`for...in` then repeats per prototype-chain
+component, and its order becomes unspecified only if the object is mutated
+during iteration). So insertion order is *semantics*, not an implementation
+detail: an unordered map model gives wrong answers for any program that
+serialises or enumerates an object.
+
+**Consequences for the two tiers.** Tier 1 (`struct_typet`) is sound only for
+objects whose key set *and* creation order are both fixed at the allocation
+site, which is why shape inference has to be conservative about any computed or
+conditional key. Tier 2 must carry a presence bit and a creation-order index
+per entry, not just key→value; Python's dict handler is insertion-ordered
+already (CPython semantics), so this is a reuse point rather than new work, but
+it has to be *checked* rather than assumed. Arrays get an explicit
+`present[]` bitmap alongside `items[]` so holes survive, and `length` is
+maintained as an invariant rather than derived.
+
+None of this changes the tier choice below; it changes what each tier has to
+store, and it is the reason `JsArrayObject` is not simply `PyListObject`.
+
+#### 4.2.1 The two tiers
+
 **Arrays.** Generalise `PyListObject` to
 
 ```c
 typedef struct __ESBMC_JsArrayObj {
   DynType   *type;
-  DynObject *items;   /* infinite array, materialised by symex */
-  size_t     length;
+  DynObject *items;    /* infinite array, materialised by symex          */
+  _Bool     *present;  /* infinite array: hole vs. present (§4.2.0 #4)   */
+  size_t     length;   /* coupled to items by the invariant below        */
+  DynDict   *props;    /* non-index own properties, NULL until used (#3) */
 } JsArrayObject;
 ```
 
-which is `PyListObject` with the field renamed. The infinite-array trick
-(`__ESBMC_create_inf_obj`) carries over unchanged and is precisely what makes
-symbolic indices tractable. JS-specific behaviour that Python's list lacks:
-out-of-bounds read yields `undefined` rather than raising (so the bounds
-*property* becomes a warning-level check, configurable via
-`--js-array-oob=undefined|error`); assigning past the end extends `length`;
-holes are `undefined`. Each is a modification to the array OM, not a new model.
+which is `PyListObject` plus the two fields §4.2.0 forces. The infinite-array
+trick (`__ESBMC_create_inf_obj`) carries over unchanged and is precisely what
+makes symbolic indices tractable; `present` is a second infinite array, so holes
+cost one extra bit per touched index and nothing for arrays that have none —
+the annotation pass marks an array *dense* when no hole can reach it, and the
+`present` reads fold away.
+
+JS-specific behaviour that Python's list lacks:
+
+- **OOB read yields `undefined`**, it does not raise, so the bounds *property*
+  becomes a warning-level check (`--js-array-oob=undefined|error`). Note this
+  makes the default configuration deliberately permissive about a class of
+  defect ESBMC would normally report — the flag exists so a user verifying
+  array-bounds discipline can get the strict reading back.
+- **`length` is an invariant, not a derived value.** Writing index `i ≥ length`
+  sets `length = i+1`; writing `length = n` clears `present[k]` for all
+  `k ≥ n`. Both directions are maintained by the OM.
+- **Non-index properties do not touch `length`**, which is why `props` exists;
+  it stays `NULL` for the overwhelmingly common array-used-as-array case, so it
+  costs nothing until a program actually writes `a.foo`.
+
+Each is a modification to the array OM rather than a new model, but `present`
+and `props` are additions to the *layout*, so this is a generalisation of
+`PyListObject` and not a rename.
 
 **Objects — two tiers, chosen per allocation site.**
 
@@ -443,10 +642,22 @@ whole thing costs the solver what a C struct costs. Instances are allocated by
 `__ESBMC_new_object` so they get reference semantics and survive escaping their
 defining scope — the mechanism Python class instances already use.
 
+Member order in the emitted struct is the §4.2.0 #5 enumeration order, so
+`Object.keys` and `JSON.stringify` are a walk over `member_names` and need no
+side table. The inference must be conservative in *both* directions: a key that
+might be added on some path, and a key whose creation order differs between
+paths, both disqualify the site from Tier 1.
+
 *Tier 2: open objects → `DynDict`.* When keys are computed (`o[k]`), added, or
 deleted, fall back to the generalised dict handler (`src/python-frontend/
 python-dict/`, ~4k lines across 8 translation units) keyed by string with
-`DynObject` values. Slower, general, already written.
+`DynObject` values. Slower, general, already written — but it has to be
+*confirmed* insertion-ordered and given a presence bit before it can carry
+JS objects (§4.2.0 #4, #5); CPython dict semantics make the first likely and
+the second is new either way. Index-like keys additionally need the ascending
+numeric ordering of #2, which a plain insertion-ordered dict does not give: the
+key set is partitioned into index keys and string keys, and enumeration
+concatenates the two.
 
 The tier is a per-allocation-site decision, so one open object does not degrade
 the rest of the program.
@@ -479,8 +690,8 @@ how JavaScript is written.
 `src/python-frontend/preprocessor/*.py` desugars before the C++ converter ever
 runs:
 
-1. Compute free variables per function (Acorn gives complete scope structure;
-   `acorn-walk` supplies the traversal).
+1. Compute free variables per function, over the scope tree the annotation pass
+   builds (§5.2 — Acorn does not emit one; `acorn-walk` supplies the traversal).
 2. For each function with free variables, synthesise an environment struct
    holding one field per captured binding — by *reference* if the binding is
    ever reassigned after capture (JS captures variables, not values), by value
@@ -571,8 +782,9 @@ required.
 
 Python's approach is *annotation-directed static monomorphisation with a narrow
 tagged escape hatch*. JavaScript has no annotations, so the annotation-directed
-half is missing and the escape hatch is too narrow to carry the load (§1.3:
-non-literal assignment to a tagged variable throws).
+half is missing and the escape hatch is too narrow to carry the load (§1.3: a
+tagged variable accepts only a numeric-scalar or string rvalue, and JavaScript's
+common tagged rvalue is an object, an array or a call result).
 
 Two options:
 
@@ -595,10 +807,41 @@ one.
 
 A `js_annotation` pass, structurally parallel to `python_annotation<json>`
 (`src/python-frontend/python_annotation/`), running over the ESTree JSON before
-the C++ converter. Because Acorn resolves scopes, this is a standard
+the C++ converter.
+
+**Scope resolution is work this pass has to do itself.** Acorn parses syntax
+into an ESTree tree; it tracks scopes internally only to raise early errors
+(duplicate declarations, illegal `await`), and exposes none of that in the AST.
+There is no scope tree, no binding table and no reference-to-declaration edge in
+Acorn's output. Step 1 below is therefore a real analysis, not a field read —
+which also means it is a place the design can be wrong about `var` hoisting or
+TDZ and not find out until a differential test fails.
+
+Two ways to get it, and the choice matters for §2.2's zero-dependency claim:
+
+- **Build it in `annotate.js` using `acorn-walk`.** `acorn-walk` ships in the
+  Acorn monorepo, is MIT, and has no dependencies of its own, so the vendored
+  parser bundle stays dependency-free. Roughly 300 lines: a scope stack over
+  `Program`/function/block/`catch`/class nodes, hoisting `var` and function
+  declarations to the nearest function scope, `let`/`const`/`class` to the block,
+  and binding each `Identifier` in reference position to the nearest enclosing
+  declaration.
+- **Vendor `eslint-scope`**, the standard ESTree scope analyser. Better tested
+  and handles the corners (`with`, `eval`, `arguments`, module bindings) that a
+  hand-rolled pass will get wrong, but it pulls `esrecurse`/`estraverse`, so
+  "Acorn has zero dependencies" stops describing what is actually vendored.
+
+**Recommendation: `eslint-scope`.** Scope resolution is where subtle unsoundness
+enters — a missed TDZ or a mis-hoisted `var` silently changes which definition
+reaches a use, and the inference in step 3 is built on top of it. Two extra
+vendored files is a smaller cost than a wrong binding table, and the
+dependency-free property that matters for §2.4's embedding is *no native
+toolchain*, which all three packages satisfy.
+
+With the binding table in hand, the rest is a standard
 flow-insensitive-with-SSA-refinement analysis:
 
-1. Build the scope tree and bind every identifier to a declaration
+1. Bind every identifier to a declaration using the scope tree built above
    (`var` hoisting, `let`/`const` TDZ, function declarations, parameters,
    destructuring).
 2. Assign each binding a **type lattice** element:
@@ -669,17 +912,23 @@ core architectural recommendation.**
                      │      src/dynlang/  (new)         │
                      │  ─ dyn_value: tag protocol,      │
                      │    type_id allocation, box/unbox │
-                     │  ─ dyn_container: array + dict   │
-                     │    handlers (from python-list/,  │
-                     │    python-dict/)                 │
+                     │  ─ dyn_container: ordered map +  │
+                     │    indexed seq, presence bits    │
+                     │    (from python-list/, -dict/)   │
                      │  ─ dyn_string: string_handler    │
                      │  ─ dyn_object: struct/shape      │
                      │    builder (from class/)         │
+                     │  ─ dyn_dispatch: call-site       │
+                     │    lowering ONLY — resolution    │
+                     │    order supplied per language   │
                      │  ─ dyn_exception: throw/catch/   │
                      │    finally lowering              │
                      │  ─ dyn_scope: symbol_id, module  │
                      │    manager, closure conversion   │
-                     └───────────────┬──────────────────┘
+                     └──▲────────────┬─────────────▲────┘
+                        │            │             │
+              py_resolver (MRO)      │      js_resolver (proto chain)
+                                     │
                                      │
                      ┌───────────────▼──────────────────┐
                      │ src/c2goto/library/dyn/*.c       │
@@ -691,18 +940,64 @@ core architectural recommendation.**
                               ▶ goto-symex ▶ SMT
 ```
 
-The layer is created by **moving** Python code, not copying it:
-`src/python-frontend/{python-list,python-dict,string,set,tuple,class,exception}/`
-and `src/c2goto/library/python/*.c` relocate to `src/dynlang/` and
-`src/c2goto/library/dyn/`, with `PyObject`/`PyListObject` retained as `typedef`
-aliases so the 4,590 tests under `regression/python/` keep passing unchanged.
-The Python frontend keeps only what is genuinely Python: PEP 484 annotation
-handling, the `models/*.py` library, numpy, complex numbers, and the
-Python-specific converter dispatch.
+#### The interface comes first, and relocation is downstream of it
+
+"Move the Python directories into `src/dynlang/` and add typedefs" is not a
+design, it is a `git mv`. Sharing implementation between two frontends without
+first agreeing what is shared is how the layer becomes a place where each
+language's special cases accumulate behind `if (lang == PYTHON)` — the outcome
+§1.5 exists to avoid. So the shared layer is defined as a set of **interfaces
+the two converters call**, and code moves only once it sits behind one.
+
+The layer is five interfaces. Each is stated as *what the consumer may assume*,
+because that is the part that has to survive a second consumer:
+
+| Interface | Operations | Language-specific policy it must **not** contain |
+|---|---|---|
+| `dyn_value` | `box(expr,tag)`, `unbox(expr,type)`, `tag_of(expr)`, `truthy(expr)`, `type_id_for(name)` | what is truthy; which tags coerce to which |
+| `dyn_container` | ordered map + indexed sequence: `get/set/delete/has`, `len`, `iterate(order)`, presence bits | iteration protocol, hole semantics, OOB behaviour |
+| `dyn_string` | code-unit sequence: `concat`, `slice`, `find`, `compare`, `length` | encoding (UTF-16 vs byte), method names |
+| `dyn_object` | shape construction: `struct_typet` from an ordered key list, field read/update, allocation via `__ESBMC_new_object` | how a shape is *inferred*; what a "class" is |
+| `dyn_dispatch` | resolve a method/property name on a receiver shape to a callable | **the resolution algorithm itself** |
+
+The last row is the one that decides whether this works. Python resolves a
+method by C3 linearisation over `__mro__`; JavaScript walks a `[[Prototype]]`
+chain that is mutable at runtime; C++ — whose `clang_cpp_adjust` the Python
+frontend currently borrows for exactly this — uses static vtable offsets fixed
+at compile time. These are three different algorithms, and they are not
+reconcilable by parameterisation. `dyn_dispatch` therefore defines only the
+*shape* of the answer — given a receiver shape and a name, produce either a
+direct call target or a guarded set of candidates — and each frontend supplies
+its own resolver behind it. The shared part is the call-site lowering and the
+devirtualisation bookkeeping; the resolution order is not shared.
+
+This is also the correction to §4.2's claim that ES6 classes map onto
+`python_class_builder` "with almost no change". The *struct layout* and the
+allocation path do carry over. The resolution does not: `python_class_builder`
+reaches `clang_cpp_adjust` and gets C++ base-subobject arithmetic, which is
+right for Python's static-ish MRO and wrong for a prototype chain that can be
+reassigned. §4.4's ladder is the JS resolver, and it lives in
+`src/js-frontend/js_object/`, not in `src/dynlang/`.
+
+#### Then, and only then, relocation
+
+Once an interface exists and the Python frontend has been rebuilt against it,
+the implementation moves: `src/python-frontend/{python-list,python-dict,string,
+set,tuple,class,exception}/` and `src/c2goto/library/python/*.c` relocate to
+`src/dynlang/` and `src/c2goto/library/dyn/`, with `PyObject`/`PyListObject`
+retained as `typedef` aliases so the 4,590 tests under `regression/python/` keep
+passing unchanged. The Python frontend keeps what is genuinely Python: PEP 484
+annotation handling, the `models/*.py` library, numpy, complex numbers, MRO
+resolution, and the Python-specific converter dispatch.
+
+A component that cannot be stated as one of the five interfaces without a
+language conditional does not move. It is duplicated on the JS side and both
+copies are maintained — the cost §1.5 accepts on purpose.
 
 This is the answer to the final requirement in the brief: not a new dynamic
-representation, but the existing one promoted out of the Python frontend and
-given a second consumer.
+representation, and not a shared directory either, but a shared *interface* over
+the existing representation, with a second consumer to prove the interface is
+real.
 
 ---
 
@@ -865,7 +1160,9 @@ no second class model, and no frontend-local property checking.
  ┌──────────────────────────────────────────────────────────────┐
  │ src/js-frontend/                              (new, JS-only) │
  │                                                              │
- │  libs/acorn/acorn.js            vendored parser (MIT)        │
+ │  libs/acorn/                    vendored parser (MIT)        │
+ │  libs/acorn-walk/               traversal (MIT)              │
+ │  libs/eslint-scope/             scope analysis (BSD-2, §5.2) │
  │  parser/parse.js                driver → ESTree JSON         │
  │  parser/preprocess.js           desugaring: destructuring,   │
  │                                 spread, for-of, optional     │
@@ -941,7 +1238,8 @@ no second class model, and no frontend-local property checking.
 | open objects, `Map` | `python-dict/` | **shared** |
 | strings | `string/` + `library/python/string.c` | **shared** |
 | `Set` | `set/python_set.cpp` | **shared** |
-| shapes, classes | `class/python_class_builder.cpp` | **shared** |
+| shapes, struct layout | `class/python_class_builder.cpp` | **shared** (`dyn_object`) |
+| method/property resolution | call-site lowering only | **interface** — JS resolver is new (§4.4) |
 | exceptions | `exception/` + `remove_exceptions` | **shared** |
 | modules | `module/module_manager.cpp` | **shared** |
 | naming | `symbol_id` | **shared** |
@@ -950,10 +1248,18 @@ no second class model, and no frontend-local property checking.
 
 ### 9.4 New JavaScript-specific components
 
-Only five: the Acorn integration, the type-inference pass, object-shape
-inference and prototype resolution, closure conversion, and the coercion tables
-(`ToInt32`, `ToPrimitive`, `ToBoolean`, `==`). Everything else is shared or
-adapted.
+Seven: the Acorn integration, scope resolution (§5.2 — Acorn supplies no scope
+tree), the type-inference pass, object-shape inference, **prototype resolution
+as its own resolver** (§5.5 — not shared, because MRO and prototype chains are
+different algorithms), closure conversion, and the coercion tables (`ToInt32`,
+`ToPrimitive`, `ToBoolean`, `==`).
+
+Plus two generalisations that are new *work* even though they land in shared
+code: presence bits and index/string key partitioning in `dyn_container`, and
+the `length` invariant in the array OM (§4.2.0). Earlier drafts of this document
+counted five and described the array change as a field rename; that was wrong,
+and the count is stated here so the estimate in §10 is not read as smaller than
+it is.
 
 ---
 
@@ -965,14 +1271,17 @@ convention.
 
 ### M1 — Acorn integration and language registration
 
-**Deliverables.** `js_languaget` registered for `.js`/`.mjs`/`.cjs`; Acorn
-vendored under `src/js-frontend/libs/acorn/` and FLAIL-mangled; `parse.js`
-driver; `--parse-tree-only` dumps ESTree JSON; Node discovery and version check.
+**Deliverables.** `js_languaget` registered for `.js`/`.mjs`/`.cjs`; Acorn,
+`acorn-walk` and `eslint-scope` vendored under `src/js-frontend/libs/` and
+FLAIL-mangled; `parse.js` driver; `--parse-tree-only` dumps ESTree JSON; Node
+discovery and version check.
 **Risks.** Node on `PATH` (accepted; M7 removes it). FLAIL asset layout for a
 multi-file JS bundle.
 **Testing.** Round-trip a corpus of ~50 JS files through `--parse-tree-only` and
-diff against `node -e "acorn.parse(...)"`.
-**Validation.** Every file parses; JSON is byte-identical to a direct Acorn run.
+compare against `node -e "acorn.parse(...)"` under the structural comparison of
+§2.4.
+**Validation.** Every file parses; every tree matches a direct Acorn run
+structurally (byte equality is not required, and not asserted — see §2.4).
 
 ### M2 — Skeleton converter: expressions, statements, `main`
 
@@ -989,20 +1298,42 @@ overflow properties fire.
 
 ### M3 — Shared dynamic-language layer extraction
 
+**Entry criteria — this milestone is gated, not scheduled (§1.5).** All four
+must hold before any code moves; if they do not, M3 is deferred, the JS frontend
+proceeds on duplicated implementations, and the roadmap continues at M4:
+
+1. The five `src/dynlang/` interfaces (§5.5) are written down as headers, with
+   each operation's contract stated, and reviewed by a maintainer of the Python
+   frontend.
+2. The Python frontend has been rebuilt against those headers *in place* —
+   still under `src/python-frontend/`, no files moved — and `regression/python`
+   is green. This is the step that proves the interface is adequate before it
+   is load-bearing for two languages.
+3. No interface operation carries a language conditional. A component that
+   needs one is struck off the shared list and duplicated instead.
+4. `js_converter` (from M2) actually calls at least `dyn_value` and
+   `dyn_container`, so the interface has a second consumer rather than a
+   hypothetical one.
+
 **Deliverables.** `src/dynlang/` and `src/c2goto/library/dyn/` created by moving
-Python components; `PyObject`/`PyListObject` retained as typedefs; Python
-frontend rebuilt against the shared layer; `models/errors.js`, `models/nondet.js`.
+Python components behind the agreed interfaces; `PyObject`/`PyListObject`
+retained as typedefs; per-language resolvers (`py_resolver`, `js_resolver`) left
+in their own frontends; `models/errors.js`, `models/nondet.js`.
 **Risks.** *This is the highest-risk milestone* — it touches code covered by
-4,590 tests. Mitigation: pure relocation, no behaviour change, one component per
-commit, full `regression/python` after each.
-**Testing.** `regression/python` must be bit-identical before and after; capture
-verdicts to a baseline file and diff.
-**Validation.** Zero Python regressions; the JS frontend links only against
-`src/dynlang/`, never `src/python-frontend/`.
+4,590 tests, and it freezes interfaces on a frontend that is still moving.
+Mitigation: the entry criteria above; then pure relocation, no behaviour change,
+one component per commit, full `regression/python` after each.
+**Testing.** `regression/python` must be verdict-identical before and after;
+capture verdicts to a baseline file and diff. An include-path lint asserting
+`src/js-frontend/` never includes `src/python-frontend/` and vice versa
+(§1.5 constraint 2), wired into CI.
+**Validation.** Zero Python regressions; the include lint passes; the JS
+frontend links only against `src/dynlang/`, never `src/python-frontend/`.
 
 ### M4 — Type inference, coercion, and the tagged path
 
-**Deliverables.** `annotate.js` (scopes, lattice, fixpoint, narrowing);
+**Deliverables.** `annotate.js` (scope resolution via vendored `eslint-scope`,
+lattice, fixpoint, narrowing);
 `js_type_handler` consuming the annotations; integral-number fast path;
 `ToInt32`/`ToPrimitive`/`ToBoolean` tables; `===` vs `==`; **widened
 `dyn_assign`/`dyn_binop`/`dyn_unbox`** lifting the literal-only restriction.
@@ -1019,17 +1350,25 @@ currently throw "not yet supported" on the Python side.
 
 ### M5 — Arrays and objects
 
-**Deliverables.** Array literals, indexing, `length`, mutation and query methods
-over the shared array OM; OOB→`undefined`; object literals with shape inference
-→ `struct_typet`; open objects → dict; destructuring and spread desugaring;
-`Object.keys/values/entries`.
+**Deliverables.** Array literals, indexing, `length` as a maintained invariant,
+mutation and query methods over the shared array OM; **presence bits and hole
+semantics**; **index-vs-string key canonicalisation** and the enumeration order
+of §4.2.0 #5; OOB→`undefined`; object literals with shape inference →
+`struct_typet`; open objects → ordered dict; non-index properties on arrays;
+destructuring and spread desugaring; `Object.keys/values/entries`.
 **Risks.** Shape inference misjudging an object as closed when a later branch
-adds a key — must be conservative, and the desugaring must be verified against
-Node.
-**Testing.** ~120 regression tests; property-based comparison against Node for
-array method semantics.
+adds a key, or when creation order differs between paths — must be conservative
+in both, and the desugaring must be verified against Node. Hole semantics are
+per-method and inconsistent in the language itself (`forEach` skips, `map`
+preserves, spread fills), so the method table has to encode the split rather
+than pick one rule.
+**Testing.** ~120 regression tests, including a sparse-array set that
+distinguishes `[1,,3]` from `[1,undefined,3]` under `in`, `Object.keys`,
+`forEach`, `map` and spread; an enumeration-order set mixing integer-like and
+string keys; property-based comparison against Node for array method semantics.
 **Validation.** Bounds properties fire correctly; a shaped object costs the same
-as the equivalent C struct in VCC count.
+as the equivalent C struct in VCC count; zero differential mismatches against
+Node on the sparse-array and key-order sets.
 
 ### M6 — Classes, prototypes, `this`, closures
 
@@ -1058,9 +1397,11 @@ dependency optional.
 `DOWNLOAD_DEPENDENCIES` flow. Keep Stage 1 supported so a build problem is never
 a blocker.
 **Testing.** Per-model regression tests; parity tests asserting both parser
-backends produce identical JSON on the whole corpus.
+backends produce structurally identical ASTs on the whole corpus, compared after
+canonical serialisation (§2.4) rather than on raw engine output.
 **Validation.** ESBMC verifies a multi-module JS program with no `node` on
-`PATH`; both backends agree byte-for-byte.
+`PATH`; both backends agree on every tree in the corpus under the structural
+comparison.
 
 ### M8 — Benchmarks and evaluation
 
@@ -1116,13 +1457,20 @@ This proposal introduces none, for four reasons.
    `clang_cpp_adjust` are all generic mechanisms that happen to have been
    reached through Python first.
 
-4. **The one real gap is a gap in the Python frontend too.** Non-literal
-   assignment to a tagged variable throws today
-   (`converter_stmt.cpp:3243`). Fixing that in a shared layer fixes both
+4. **The one real gap is a gap in the Python frontend too.** Assigning a
+   non-scalar, non-string rvalue to a tagged variable throws today
+   (`converter_stmt.cpp:3060-3076`). Fixing that behind `dyn_value` fixes both
    languages; forking it fixes one and leaves the other with a
    `runtime_error`. The same argument applies to bignum, to UTF-16, and to
    `try`/`finally` with escaping control flow — three more places where the JS
    requirement is the forcing function for a Python fix.
+
+The honest counterweight, restated from §1.5: (2) and (3) are arguments for
+*reusing* the existing mechanisms, not for *merging the two frontends' code*.
+The proposal takes reuse and declines the merge — §5.5's interface boundary and
+§10's M3 entry criteria are what keep those two things separate, and if the
+criteria cannot be met, the reuse happens by duplication and the conclusion
+above is unaffected.
 
 Where JavaScript genuinely differs — prototype chains, capturing closures, the
 `ToInt32` bitwise rules, `undefined` as distinct from `null`, `==` coercion —
