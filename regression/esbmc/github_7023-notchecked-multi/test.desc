@@ -1,0 +1,6 @@
+CORE
+main.c
+--result-only --multi-property
+^ +FAILED .*line +9 +assertion a \+ b == a \+ c$
+^VERIFICATION FAILED$
+\A(?![\s\S]*NOT CHECKED)[\s\S]*\Z
