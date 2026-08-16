@@ -1,4 +1,0 @@
-KNOWNBUG
-main.c
---replace-call-with-contract callee --unwind 8
-^VERIFICATION SUCCESSFUL$

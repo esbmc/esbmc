@@ -17,6 +17,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -1081,6 +1082,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
           symbol = retyped;
       }
+
+      // Also resolve reads through a permanent tagged-object alias, if a
+      // branch join flagged this variable.
+      dynamic_type_handler_.resolve_read(symbol);
     }
 
     expr = symbol_expr(*symbol);
