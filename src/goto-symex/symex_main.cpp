@@ -1066,8 +1066,22 @@ void goto_symext::run_intrinsic(
   // size-1 dynamic object.
   if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
   {
-    assert(
-      is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    // The frontend must bind the result to a pointer; a non-pointer lvalue is
+    // a frontend bug, not a property of the program. Report it rather than
+    // letting to_pointer_type() below surface it as an irep2 cast error with
+    // no source location (esbmc/esbmc#7083). Checked unconditionally: an
+    // assert here is compiled out of release builds, which is exactly where
+    // the unintelligible failure was observed.
+    if (!is_pointer_type(func_call.ret->type))
+    {
+      const std::string loc = func_call.location.as_string();
+      log_error(
+        "__ESBMC_new_object bound to a non-pointer lvalue of type {}{}; the "
+        "frontend must allocate class instances through a pointer",
+        get_type_id(func_call.ret->type),
+        loc.empty() ? "" : (" at " + loc));
+      abort();
+    }
     const expr2tc &lhs = func_call.ret;
     const type2tc base = to_pointer_type(lhs->type).subtype;
     const guard2tc &guard = cur_state->guard;
