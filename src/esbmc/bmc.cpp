@@ -3262,7 +3262,7 @@ void bmct::print_property_rows(
   {
     const char *color = "";
     if (is_color)
-      color = row.verdict == property_verdictt::Failed  ? "\033[31m"
+      color = row.verdict == property_verdictt::Failed   ? "\033[31m"
               : row.verdict == property_verdictt::Passed ? "\033[32m"
                                                          : "\033[33m";
 
@@ -3288,9 +3288,8 @@ void bmct::print_property_rows(
   }
 }
 
-void bmct::print_property_summary(
-  size_t total,
-  const property_countst &counts) const
+void bmct::print_property_summary(size_t total, const property_countst &counts)
+  const
 {
   const bool is_color = options.get_bool_option("color");
   const std::string GREEN = is_color ? "\033[32m" : "";
