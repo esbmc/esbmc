@@ -651,6 +651,23 @@ set(_slow_regression_tests
     # touch its code path. Give it the 2x budget so transient CI slowness does
     # not flap it.
     "regression/python/set_variadic_methods"
+    # These verify SUCCESSFUL but are FP-dense: cmath log/pow, the complex
+    # helpers and the int<->float casts all land on the solver's floating-point
+    # theory, which this branch made the default. It buys ~940 SV-COMP score,
+    # and costs roughly a third more suite time -- enough to tip these ten past
+    # the 120s cap on the macOS arm64 runner (the job goes 1h36m -> 1h58m).
+    # Each is ~40s locally on an idle machine, so the 2x budget restores the
+    # headroom the rest of the suite has.
+    "regression/python/complex_cmath_log"
+    "regression/python/complex_cmath_log_base"
+    "regression/python/complex_cmath_log_errors"
+    "regression/python/complex_pow_budget"
+    "regression/python/complex_pow_float_exponent"
+    "regression/python/dict65_4"
+    "regression/python/dict_comprehension_list"
+    "regression/python/power16"
+    "regression/python/power20"
+    "regression/python/range_int_cast"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
