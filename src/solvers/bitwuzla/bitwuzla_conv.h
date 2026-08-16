@@ -17,6 +17,7 @@ public:
   using solver_smt_ast<BitwuzlaTerm>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
+  smt_astt with_sort(smt_solver_baset *ctx, smt_sortt s) const override;
   void dump() const override;
 };
 

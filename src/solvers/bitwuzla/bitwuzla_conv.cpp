@@ -4,6 +4,14 @@
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
+/* An fp sort and a bv sort are different Bitwuzla sorts, so the in-place
+ * rewrite the base class performs would corrupt every other holder of this
+ * ast. Hand back a fresh node over the same term instead. */
+smt_astt bitw_smt_ast::with_sort(smt_solver_baset *ctx, smt_sortt s) const
+{
+  return ctx->new_solver_ast<bitw_smt_ast>(a, s);
+}
+
 void bitwuzla_error_handler(const char *msg)
 {
   log_error("Bitwuzla error encountered\n{}", msg);
