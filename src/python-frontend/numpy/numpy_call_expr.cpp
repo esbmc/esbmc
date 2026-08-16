@@ -2251,6 +2251,283 @@ static void materialize_inline_numpy_constructor_call(
     node = std::move(*materialized);
 }
 
+// True when call_node is a call to one of the comparison/logical functions
+// the block below evaluates. Shared by the top-level dispatch and by
+// resolve_numpy_logical_arg() below, so a call chained as another numpy
+// call's argument is recognized the same way as a top-level call.
+static bool is_numpy_logical_comparison_call(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_json)
+{
+  if (
+    !call_node.is_object() ||
+    call_node.value("_type", std::string()) != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", std::string()) != "Attribute" ||
+    !call_node["func"].contains("attr") ||
+    !call_node["func"].contains("value") ||
+    !call_node["func"]["value"].is_object() ||
+    call_node["func"]["value"].value("_type", std::string()) != "Name" ||
+    !is_imported_numpy_module_alias(
+      ast_json, call_node["func"]["value"].value("id", std::string())))
+    return false;
+
+  static const std::set<std::string> functions = {
+    "greater",
+    "less",
+    "greater_equal",
+    "less_equal",
+    "equal",
+    "not_equal",
+    "logical_and",
+    "logical_or",
+    "logical_not",
+    "where"};
+  return functions.count(call_node["func"]["attr"].get<std::string>()) != 0;
+}
+
+static nlohmann::json make_bool_constant_node(bool value)
+{
+  nlohmann::json out;
+  out["_type"] = "Constant";
+  out["value"] = value;
+  return out;
+}
+
+static nlohmann::json make_list_node(const std::vector<nlohmann::json> &elts)
+{
+  nlohmann::json out;
+  out["_type"] = "List";
+  out["elts"] = elts;
+  return out;
+}
+
+static bool numpy_logical_as_bool(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (try_extract_numeric_constant(node, value))
+    return to_double(value) != 0.0;
+  if (node.is_object() && node.contains("value") && node["value"].is_boolean())
+    return node["value"].get<bool>();
+  return false;
+}
+
+static double numpy_logical_as_double(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (try_extract_numeric_constant(node, value))
+    return to_double(value);
+  return 0.0;
+}
+
+static nlohmann::json numpy_compare_scalar(
+  const std::string &op,
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs)
+{
+  const double left = numpy_logical_as_double(lhs);
+  const double right = numpy_logical_as_double(rhs);
+  bool result = false;
+  if (op == "greater")
+    result = left > right;
+  else if (op == "less")
+    result = left < right;
+  else if (op == "greater_equal")
+    result = left >= right;
+  else if (op == "less_equal")
+    result = left <= right;
+  else if (op == "equal")
+    result = left == right;
+  else
+    result = left != right;
+  return make_bool_constant_node(result);
+}
+
+// Applies element_fn pairwise across lhs/rhs, broadcasting a scalar against a
+// list on either side. Shared by comparisons and logical_and/or, both at the
+// top-level dispatch and when evaluating a chained call.
+template <typename ElementFn>
+static nlohmann::json numpy_broadcast_binary(
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs,
+  ElementFn element_fn)
+{
+  if (lhs.contains("elts") && lhs["elts"].is_array())
+  {
+    std::vector<nlohmann::json> out_elts;
+    for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
+    {
+      const auto &lhs_item = lhs["elts"][i];
+      const auto &rhs_item =
+        rhs.contains("elts") && rhs["elts"].is_array() ? rhs["elts"][i] : rhs;
+      out_elts.push_back(element_fn(lhs_item, rhs_item));
+    }
+    return make_list_node(out_elts);
+  }
+  if (rhs.contains("elts") && rhs["elts"].is_array())
+  {
+    std::vector<nlohmann::json> out_elts;
+    for (const auto &rhs_item : rhs["elts"])
+      out_elts.push_back(element_fn(lhs, rhs_item));
+    return make_list_node(out_elts);
+  }
+  return element_fn(lhs, rhs);
+}
+
+// Bounds recursion for evaluate_numpy_logical_call() below. A handful of
+// levels comfortably covers realistic chaining; beyond that, resolve_
+// numpy_logical_arg() raises an explicit diagnostic instead of leaving an
+// unresolved Call node for the caller's numeric/list extraction to silently
+// misread (the exact failure mode this fix closes).
+static constexpr int max_numpy_logical_chain_depth = 4;
+
+static std::optional<nlohmann::json> evaluate_numpy_logical_call(
+  const nlohmann::json &call_node,
+  python_converter &converter,
+  int depth);
+
+// Resolves one argument of a numpy comparison/logical call: a Name is
+// followed to its declaration; a Call to a recognized constructor is
+// materialized; a Call to another comparison/logical function is evaluated
+// recursively via evaluate_numpy_logical_call(). Anything else (a function
+// parameter, a call to an unrelated numpy function) is left unchanged, so
+// the caller's own numeric/list extraction fails on it exactly as it
+// already does for any other unresolvable operand.
+static nlohmann::json resolve_numpy_logical_arg(
+  nlohmann::json arg,
+  python_converter &converter,
+  int depth)
+{
+  if (arg.is_object() && arg.value("_type", std::string()) == "Name")
+  {
+    const nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"].get<std::string>(),
+      converter.current_function_name(),
+      converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+  if (arg.is_object() && arg.value("_type", std::string()) == "Call")
+  {
+    if (
+      std::optional<nlohmann::json> materialized =
+        materialize_numpy_constructor_array(arg, converter.ast()))
+      return *materialized;
+    if (is_numpy_logical_comparison_call(arg, converter.ast()))
+    {
+      if (
+        std::optional<nlohmann::json> evaluated =
+          evaluate_numpy_logical_call(arg, converter, depth + 1))
+        return *evaluated;
+      throw std::runtime_error(
+        "TypeError: numpy call composition exceeds the supported chaining "
+        "depth");
+    }
+  }
+  return arg;
+}
+
+// Evaluates a numpy comparison/logical Call node to its literal JSON result
+// (a "List" of booleans/values, or a scalar "Constant"), so it can resolve a
+// call chained as another numpy call's argument -- either nested directly
+// (np.logical_not(np.equal(a, b))) or via an intermediate variable
+// (x = np.equal(a, b); np.logical_not(x)). Mirrors the top-level dispatch in
+// numpy_call_expr::get() for these same functions; both share the helpers
+// above instead of each reimplementing broadcasting/comparison logic.
+static std::optional<nlohmann::json> evaluate_numpy_logical_call(
+  const nlohmann::json &call_node,
+  python_converter &converter,
+  int depth)
+{
+  if (depth > max_numpy_logical_chain_depth)
+    return std::nullopt;
+  if (!is_numpy_logical_comparison_call(call_node, converter.ast()))
+    return std::nullopt;
+
+  const std::string function = call_node["func"]["attr"].get<std::string>();
+  const auto &args = call_node["args"];
+
+  if (
+    function == "greater" || function == "less" ||
+    function == "greater_equal" || function == "less_equal" ||
+    function == "equal" || function == "not_equal")
+  {
+    if (args.size() != 2)
+      return std::nullopt;
+    const nlohmann::json lhs =
+      resolve_numpy_logical_arg(args[0], converter, depth);
+    const nlohmann::json rhs =
+      resolve_numpy_logical_arg(args[1], converter, depth);
+    return numpy_broadcast_binary(
+      lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+        return numpy_compare_scalar(function, a, b);
+      });
+  }
+
+  if (function == "logical_and" || function == "logical_or")
+  {
+    if (args.size() != 2)
+      return std::nullopt;
+    const nlohmann::json lhs =
+      resolve_numpy_logical_arg(args[0], converter, depth);
+    const nlohmann::json rhs =
+      resolve_numpy_logical_arg(args[1], converter, depth);
+    return numpy_broadcast_binary(
+      lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+        const bool l = numpy_logical_as_bool(a);
+        const bool r = numpy_logical_as_bool(b);
+        return make_bool_constant_node(
+          function == "logical_and" ? (l && r) : (l || r));
+      });
+  }
+
+  if (function == "logical_not")
+  {
+    if (args.size() != 1)
+      return std::nullopt;
+    const nlohmann::json arg =
+      resolve_numpy_logical_arg(args[0], converter, depth);
+    if (arg.contains("elts") && arg["elts"].is_array())
+    {
+      std::vector<nlohmann::json> out_elts;
+      for (const auto &item : arg["elts"])
+        out_elts.push_back(
+          make_bool_constant_node(!numpy_logical_as_bool(item)));
+      return make_list_node(out_elts);
+    }
+    return make_bool_constant_node(!numpy_logical_as_bool(arg));
+  }
+
+  if (function == "where")
+  {
+    if (args.size() != 3)
+      return std::nullopt;
+    const nlohmann::json cond =
+      resolve_numpy_logical_arg(args[0], converter, depth);
+    const nlohmann::json x =
+      resolve_numpy_logical_arg(args[1], converter, depth);
+    const nlohmann::json y =
+      resolve_numpy_logical_arg(args[2], converter, depth);
+    if (cond.contains("elts") && cond["elts"].is_array())
+    {
+      std::vector<nlohmann::json> out_elts;
+      for (std::size_t i = 0; i < cond["elts"].size(); ++i)
+      {
+        const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
+        const nlohmann::json &chosen =
+          choose_x
+            ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
+            : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
+        out_elts.push_back(chosen);
+      }
+      return make_list_node(out_elts);
+    }
+    return numpy_logical_as_bool(cond) ? x : y;
+  }
+
+  return std::nullopt;
+}
+
 // full()/eye()/identity()/linspace() are declared through to_list_expr in
 // the real creation path (see array_creation_funcs and its neighbours),
 // which forces a dynamic PyListObj representation instead of a plain
@@ -5456,6 +5733,19 @@ exprt numpy_call_expr::get()
             var = var["value"];
             return;
           }
+          if (is_numpy_logical_comparison_call(var["value"], converter_.ast()))
+          {
+            if (
+              std::optional<nlohmann::json> evaluated =
+                evaluate_numpy_logical_call(var["value"], converter_, 0))
+            {
+              var = std::move(*evaluated);
+              return;
+            }
+            throw std::runtime_error(
+              "TypeError: numpy call composition exceeds the supported "
+              "chaining depth");
+          }
           if (var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
@@ -5464,13 +5754,6 @@ exprt numpy_call_expr::get()
         else
           var = var["value"];
       }
-    };
-
-    auto make_constant = [](const auto &value) {
-      nlohmann::json out;
-      out["_type"] = "Constant";
-      out["value"] = value;
-      return out;
     };
 
     auto to_list_expr = [this](const nlohmann::json &node) {
@@ -5485,22 +5768,42 @@ exprt numpy_call_expr::get()
       return converter_.get_expr(node);
     };
 
+    auto get_arg = [&](std::size_t index) {
+      nlohmann::json arg = call_["args"][index];
+      resolve_var(arg);
+      materialize_inline_numpy_constructor_call(arg, converter_.ast());
+      if (
+        arg.value("_type", std::string()) == "Call" &&
+        is_numpy_logical_comparison_call(arg, converter_.ast()))
+      {
+        if (
+          std::optional<nlohmann::json> evaluated =
+            evaluate_numpy_logical_call(arg, converter_, 0))
+          arg = std::move(*evaluated);
+        else
+          throw std::runtime_error(
+            "TypeError: numpy call composition exceeds the supported "
+            "chaining depth");
+      }
+      return arg;
+    };
+
+    // Used by full()/eye()/identity()/linspace() below, which build
+    // numeric (not boolean) literals -- kept local since that shape
+    // materialization is unrelated to the comparison/logical evaluation
+    // above and out of this fix's scope.
+    auto make_constant = [](const auto &value) {
+      nlohmann::json out;
+      out["_type"] = "Constant";
+      out["value"] = value;
+      return out;
+    };
+
     auto make_list = [](const std::vector<nlohmann::json> &elts) {
       nlohmann::json out;
       out["_type"] = "List";
       out["elts"] = elts;
       return out;
-    };
-
-    auto as_bool = [](const nlohmann::json &node) {
-      numeric_value value;
-      if (try_extract_numeric_constant(node, value))
-        return to_double(value) != 0.0;
-      if (
-        node.is_object() && node.contains("value") &&
-        node["value"].is_boolean())
-        return node["value"].get<bool>();
-      return false;
     };
 
     auto as_double = [](const nlohmann::json &node) {
@@ -5510,35 +5813,6 @@ exprt numpy_call_expr::get()
       return 0.0;
     };
 
-    auto compare_scalar = [&](
-                            const std::string &op,
-                            const nlohmann::json &lhs,
-                            const nlohmann::json &rhs) {
-      const double left = as_double(lhs);
-      const double right = as_double(rhs);
-      bool result = false;
-      if (op == "greater")
-        result = left > right;
-      else if (op == "less")
-        result = left < right;
-      else if (op == "greater_equal")
-        result = left >= right;
-      else if (op == "less_equal")
-        result = left <= right;
-      else if (op == "equal")
-        result = left == right;
-      else
-        result = left != right;
-      return make_constant(result);
-    };
-
-    auto get_arg = [&](std::size_t index) {
-      nlohmann::json arg = call_["args"][index];
-      resolve_var(arg);
-      materialize_inline_numpy_constructor_call(arg, converter_.ast());
-      return arg;
-    };
-
     if (
       function == "greater" || function == "less" ||
       function == "greater_equal" || function == "less_equal" ||
@@ -5546,66 +5820,29 @@ exprt numpy_call_expr::get()
     {
       auto lhs = get_arg(0);
       auto rhs = get_arg(1);
-
-      if (lhs.contains("elts") && lhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
-        {
-          const auto &lhs_item = lhs["elts"][i];
-          const auto &rhs_item = rhs.contains("elts") && rhs["elts"].is_array()
-                                   ? rhs["elts"][i]
-                                   : rhs;
-          out_elts.push_back(compare_scalar(function, lhs_item, rhs_item));
-        }
-        return to_list_expr(make_list(out_elts));
-      }
-
-      if (rhs.contains("elts") && rhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (const auto &rhs_item : rhs["elts"])
-          out_elts.push_back(compare_scalar(function, lhs, rhs_item));
-        return to_list_expr(make_list(out_elts));
-      }
-
-      return to_expr(compare_scalar(function, lhs, rhs));
+      const nlohmann::json result = numpy_broadcast_binary(
+        lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+          return numpy_compare_scalar(function, a, b);
+        });
+      return result.value("_type", std::string()) == "List"
+               ? to_list_expr(result)
+               : to_expr(result);
     }
 
     if (function == "logical_and" || function == "logical_or")
     {
       auto lhs = get_arg(0);
       auto rhs = get_arg(1);
-      auto apply = [&](const nlohmann::json &a, const nlohmann::json &b) {
-        const bool left = as_bool(a);
-        const bool right = as_bool(b);
-        return make_constant(
-          function == "logical_and" ? (left && right) : (left || right));
-      };
-
-      if (lhs.contains("elts") && lhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
-        {
-          const auto &lhs_item = lhs["elts"][i];
-          const auto &rhs_item = rhs.contains("elts") && rhs["elts"].is_array()
-                                   ? rhs["elts"][i]
-                                   : rhs;
-          out_elts.push_back(apply(lhs_item, rhs_item));
-        }
-        return to_list_expr(make_list(out_elts));
-      }
-
-      if (rhs.contains("elts") && rhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (const auto &rhs_item : rhs["elts"])
-          out_elts.push_back(apply(lhs, rhs_item));
-        return to_list_expr(make_list(out_elts));
-      }
-
-      return to_expr(apply(lhs, rhs));
+      const nlohmann::json result = numpy_broadcast_binary(
+        lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+          const bool l = numpy_logical_as_bool(a);
+          const bool r = numpy_logical_as_bool(b);
+          return make_bool_constant_node(
+            function == "logical_and" ? (l && r) : (l || r));
+        });
+      return result.value("_type", std::string()) == "List"
+               ? to_list_expr(result)
+               : to_expr(result);
     }
 
     if (function == "logical_not")
@@ -5615,10 +5852,11 @@ exprt numpy_call_expr::get()
       {
         std::vector<nlohmann::json> out_elts;
         for (const auto &item : arg["elts"])
-          out_elts.push_back(make_constant(!as_bool(item)));
-        return to_list_expr(make_list(out_elts));
+          out_elts.push_back(
+            make_bool_constant_node(!numpy_logical_as_bool(item)));
+        return to_list_expr(make_list_node(out_elts));
       }
-      return to_expr(make_constant(!as_bool(arg)));
+      return to_expr(make_bool_constant_node(!numpy_logical_as_bool(arg)));
     }
 
     if (function == "where")
@@ -5631,16 +5869,17 @@ exprt numpy_call_expr::get()
         std::vector<nlohmann::json> out_elts;
         for (std::size_t i = 0; i < cond["elts"].size(); ++i)
         {
-          const bool choose_x = as_bool(cond["elts"][i]);
+          const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
           const auto &chosen =
             choose_x
               ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
               : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
           out_elts.push_back(chosen);
         }
-        return to_list_expr(make_list(out_elts));
+        return to_list_expr(make_list_node(out_elts));
       }
-      return as_bool(cond) ? converter_.get_expr(x) : converter_.get_expr(y);
+      return numpy_logical_as_bool(cond) ? converter_.get_expr(x)
+                                         : converter_.get_expr(y);
     }
 
     auto parse_shape = [&](const nlohmann::json &shape_node) {
