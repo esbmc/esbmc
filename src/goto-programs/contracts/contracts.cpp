@@ -974,20 +974,14 @@ static expr2tc unwrap_array_decay(const expr2tc &expr)
     if (is_index2t(addr.ptr_obj))
     {
       const index2t &idx = to_index2t(addr.ptr_obj);
-      // Check if index is 0
-      if (is_constant_int2t(idx.index))
-      {
-        const constant_int2t &idx_val = to_constant_int2t(idx.index);
-        if (idx_val.value == 0)
-        {
-          // Check if source is an array type
-          if (is_array_type(idx.source_value->type))
-          {
-            // Return the original array
-            return idx.source_value;
-          }
-        }
-      }
+      // Any constant index, not only 0. `&b[2]` is not the decay a compiler
+      // produces, but it names a place inside b that the callee then writes
+      // forward from, and the array is the only object we can widen to. That
+      // over-havocs b[0..1]; havocking more than the callee writes loses the
+      // caller information rather than granting it any, so it is the safe
+      // direction, and it is what a decayed `b` already does.
+      if (is_constant_int2t(idx.index) && is_array_type(idx.source_value->type))
+        return idx.source_value;
     }
   }
 
@@ -4941,15 +4935,6 @@ void code_contractst::generate_replacement_at_call(
       const bool names_place_directly = is_address_of2t(instantiated_target);
       instantiated_target = havoc_place(instantiated_target);
 
-      // Skip pointer havoc in value-set mode (consistent with loop invariant).
-      // Tested on the widened place, so a decayed array argument is still
-      // havocked: the skip is about a pointer variable, not about the array
-      // whose address one happens to hold.
-      if (
-        config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(instantiated_target))
-        continue;
-
       if (target_is_pointer_param && !names_place_directly)
       {
         instantiated_target = havoc_through_pointer(instantiated_target, ns);
@@ -4964,6 +4949,16 @@ void code_contractst::generate_replacement_at_call(
           continue;
         }
       }
+
+      // Skip pointer havoc in value-set mode (consistent with loop invariant).
+      // Tested on the place actually written, after widening and after
+      // following a pointer parameter: the skip is about assigning a pointer,
+      // not about writing through one, and a target the contract named should
+      // not vanish because it was reached through a pointer variable.
+      if (
+        config.options.get_bool_option("add-symex-value-sets") &&
+        is_pointer_type(instantiated_target))
+        continue;
 
       if (havoc_pointed_to_array(
             instantiated_target, call_location, replacement))
