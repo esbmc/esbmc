@@ -1,5 +1,4 @@
 #include <bitwuzla_conv.h>
-#include <cstring>
 #include <cstdio>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
@@ -699,19 +698,18 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 tvt bitwuzla_convt::get_bool(smt_astt a)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
+  BitwuzlaTerm value = bitwuzla_get_value(bitw, ast->a);
 
-  const char *result =
-    bitwuzla_term_to_string(bitwuzla_get_value(bitw, ast->a));
-
-  assert(result != NULL && "Bitwuzla returned null bv value string");
-
-  if (!strcmp(result, "true"))
+  if (bitwuzla_term_is_true(value))
     return tvt(true);
-  if (!strcmp(result, "false"))
+  if (bitwuzla_term_is_false(value))
     return tvt(false);
 
-  log_error("Can't get boolean value from Bitwuzla: {}", result);
-  abort();
+  // Bitwuzla returns the query term unchanged when evaluating it would need a
+  // quantifier it never registered, so there is no ground value here (#7063).
+  log_debug(
+    "solver", "Bitwuzla returned no boolean value; term is unevaluatable");
+  return tvt(tvt::TV_UNKNOWN);
 }
 
 BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
