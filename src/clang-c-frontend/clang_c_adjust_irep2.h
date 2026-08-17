@@ -99,6 +99,13 @@ private:
   /// (§49.2), so the rebuild passes the original through (§84).
   void adjust_if_expr(expr2tc &expr);
 
+  /// IREP2 form of the `__builtin_`-prefixed half of
+  /// clang_c_adjust::do_special_functions: fold a recognised builtin call to
+  /// the node it denotes. These spellings are reserved, so unlike the
+  /// name-matched family (is_name_matched_builtin) a program cannot supply its
+  /// own definition and no shadows_user_definition query is needed (§90).
+  void adjust_special_functions(expr2tc &expr);
+
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
