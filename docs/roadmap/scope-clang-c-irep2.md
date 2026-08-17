@@ -3339,3 +3339,34 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 97. The baseline was two tests too high
+
+§96's residue read left `intrinsic_unroll_misplaced_warning` and `github_746`
+untagged. Neither is a divergence: their whole diff is run-to-run noise the
+canonicaliser did not strip.
+
+| test | the entire difference |
+|---|---|
+| `intrinsic_unroll_misplaced_warning` | `operational-model library (clib): ... deserialise 0.197s ...` vs `0.198s` |
+| `github_746` | clang AST-dump node addresses in an error message (`0x8e529b0a8`) |
+
+Both differ **against themselves** — the same binary, twice, on the same input.
+§90.4 flagged the second and PR #7094 fixed three of that group at the source
+(the nested-function transform's random file name, which was a real defect); this
+is the remainder, which is diagnostic text and belongs in `irep2_canon` exactly
+as §90.4 said.
+
+`irep2_canon` now drops the clib summary line and rewrites hex addresses to
+`0xADDR`.
+
+**Every divergence count in §§90-96 is therefore two too high.** Master's
+baseline is **200 of 297**, not 202. The per-arm deltas are unaffected — both
+tests were noise on both sides of every A/B — but the absolute numbers should be
+read with this correction, and re-measured counts from here use the fixed
+canonicaliser.
+
+The lesson is the one §90.4 already stated and this scope keeps re-learning: run
+the same binary twice before believing a diff. It cost three sessions of
+mis-attribution for the nested-function group, and two units of a headline
+number here.
