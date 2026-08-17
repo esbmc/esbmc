@@ -87,7 +87,10 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
     adjust_boolean_operands(expr);
 
   if (is_code_function_call2t(expr) || is_sideeffect2t(expr))
+  {
     adjust_call_callee(expr);
+    adjust_call_arguments(expr);
+  }
 
   if (is_if2t(expr))
     adjust_if_expr(expr);
@@ -312,6 +315,51 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
     to_code_function_call2t(expr).function = deref;
   else
     to_sideeffect2t(expr).operand = deref;
+}
+
+void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
+{
+  expr2tc callee;
+  std::vector<expr2tc> *args;
+  if (is_code_function_call2t(expr))
+  {
+    code_function_call2t &call = to_code_function_call2t(expr);
+    callee = call.function;
+    args = &call.operands;
+  }
+  else
+  {
+    sideeffect2t &se = to_sideeffect2t(expr);
+    if (se.kind != sideeffect_allockind::function_call)
+      return;
+    callee = se.operand;
+    args = &se.arguments;
+  }
+
+  if (is_nil_expr(callee))
+    return;
+
+  type2tc ct = callee->type;
+  if (is_pointer_type(ct))
+    ct = to_pointer_type(ct).subtype;
+  if (!is_code_type(ct))
+    return;
+
+  const std::vector<type2tc> &params = to_code_type(ct).arguments;
+
+  for (std::size_t i = 0; i < args->size(); i++)
+  {
+    expr2tc &arg = (*args)[i];
+    if (is_nil_expr(arg))
+      continue;
+
+    if (i < params.size())
+      c_implicit_typecast(arg, params[i], ns);
+    else if (is_array_type(ns.follow(arg->type)))
+      // A variadic argument has no parameter type to convert against; only the
+      // array decay is owed.
+      c_implicit_typecast(arg, pointer_type2tc(get_empty_type()), ns);
+  }
 }
 
 void clang_c_adjust_irep2::adjust_boolean_operands(expr2tc &expr)

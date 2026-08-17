@@ -115,6 +115,11 @@ private:
   /// decays an array operand compared against a pointer (§96).
   void adjust_relational(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_function_call_arguments' conversion
+  /// half: convert each argument to its parameter type, which is what decays a
+  /// function designator to a pointer at a call (§98).
+  void adjust_call_arguments(expr2tc &expr);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 

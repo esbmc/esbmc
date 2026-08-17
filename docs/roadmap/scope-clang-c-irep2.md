@@ -3476,3 +3476,83 @@ Next, by the §96 census rather than by guess:
 2. **The conversion at assignment and binary arithmetic** (17), taking
    `adjust_float_arith` with it.
 3. The CPROVER intrinsics (~3), which are cheap but small.
+
+## 98. Conversions at call arguments -- and where the function decay actually lives
+
+§97 named function-to-pointer decay next, on the strength of §96's 12-test row.
+Porting `adjust_function_call_arguments`' conversion half clears ten tests and
+**does not clear that row**, which is the interesting part.
+
+### 98.1 The arm
+
+For each argument, convert to the parameter type; where the parameter list is
+exhausted -- a variadic argument -- only the array decay is owed, to `void *`.
+That is `gen_typecast(ns, op, argument_type)` and its `is_array_like` fallback,
+which is `c_implicit_typecast(expr2tc &, type2tc, ns)` on this side.
+
+`adjust_function_call_arguments`' other half, the `__ESBMC_assigns_impl`
+guard that keeps a pointer-to-array `&a` intact (#7010), is **not** ported and
+does not need to be yet: it exists to undo `adjust_address_of`'s `&a` → `&a[0]`
+rewrite, and that arm is unported, so there is nothing to undo. Checked rather
+than assumed -- the eight `__ESBMC_assigns` tests were run both ways, and the
+one that differs (`github_4219_..._knownbug`) produces the identical 14-line
+diff on the two preceding binaries as well. **When `adjust_address_of` is
+ported, this guard must go with it in the same commit.**
+
+### 98.2 The 12-test row was mis-attributed
+
+The census tagged those tests by their symptom -- `&f` in the default dump, bare
+`f` under `-only`. The cause is not an argument conversion. Neither copy of
+`c_typecastt` decays a bare `code`-typed operand; the sugar is applied at the
+symbol, in `clang_c_adjust::adjust_symbol`
+(`clang_c_adjust_expr.cpp:366-372`): a symbol whose type is `code` is wrapped in
+an implicit `address_of`. So the row belongs to a symbol-level arm and is
+untouched by this one, which a probe showed directly -- `apply(callee, 1)` under
+`-only` before and after.
+
+Worth stating as a method point, because §96 built its work list on these tags:
+a symptom-tagged census names *where a difference shows up*, not what produced
+it. Both readings were needed here, and the second only came from probing.
+
+### 98.3 Result
+
+| | before | after |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 122 | **112** |
+| array-to-pointer decay | 26 | **16** |
+| usual arithmetic conversions | 17 | **12** |
+| function-to-pointer decay | 20 | 11 |
+| regressions | -- | **0** |
+
+The two shapes it fixes, taken from the cleared tests rather than from the
+standard: an array passed to a **declared-but-undefined** function with a
+pointer parameter (`wchar_model`'s `wcscpy(&dst[0], ...)` -- clang inserts the
+decay itself when the callee is defined in the same file, which is why the first
+probe found nothing), and the scalar conversion on an `__ESBMC_assume` argument
+(`github_1620`'s `ASSUME (_Bool)((signed int)(x != 0))`).
+
+Both tests are goto-shape rather than verdict tests, deliberately: the callees
+that exhibit this are bodiless, so there is no verdict to move.
+
+| mutant | killed by |
+|---|---|
+| arm absent (the control binary) | both |
+| declared-parameter branch disabled | `..._call_arg_decay` |
+| variadic branch disabled | `..._call_arg_variadic` |
+
+## 99. Status
+
+`-only` on the 297-test sample: **112 of 297** (201 → 131 → 129 → 122 → 112
+across §90, §94, §96 and this arm).
+
+Gates: 694 unit tests green; 108 of 108 in the affected slice green. Whole-suite
+gate still owed (§91); it has not completed inside the 5-minute cap at any
+stride tried across three sessions.
+
+Next:
+
+1. **`adjust_symbol`'s function-designator sugar** (§98.2) -- now located
+   exactly, and it owns the 11-test decay row.
+2. The conversion at assignment and binary arithmetic (12), with
+   `adjust_float_arith`.
+3. `adjust_address_of`, which must bring #7010's assigns guard with it (§98.1).
