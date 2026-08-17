@@ -1,9 +1,9 @@
-# An unsupported intrinsic outside any clause is reported as the unsupported
-# call it is, rather than blamed on the contract clauses above it.
+# Outside a clause there is no "before" for the snapshot to name, and the
+# instruction it plants has no reader.
 def bump(x: int) -> int:
     __ESBMC_requires(x > 0)
     __ESBMC_ensures(__ESBMC_return_value > x)
-    __ESBMC_is_fresh(x, 8)
+    __ESBMC_old(x)
     return x + 1
 
 def main() -> None:
