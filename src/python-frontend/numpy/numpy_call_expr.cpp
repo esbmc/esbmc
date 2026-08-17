@@ -2302,6 +2302,10 @@ static nlohmann::json make_list_node(const std::vector<nlohmann::json> &elts)
   return out;
 }
 
+// A node that reaches here unresolved (e.g. resolve_numpy_logical_arg left a
+// recognized-but-not-evaluable chained call untouched) must raise, not
+// silently stand in as false/0.0 -- the latter is exactly the class of
+// silent-wrong-verdict bug this whole chaining fix exists to close.
 static bool numpy_logical_as_bool(const nlohmann::json &node)
 {
   numeric_value value;
@@ -2309,7 +2313,9 @@ static bool numpy_logical_as_bool(const nlohmann::json &node)
     return to_double(value) != 0.0;
   if (node.is_object() && node.contains("value") && node["value"].is_boolean())
     return node["value"].get<bool>();
-  return false;
+  throw std::runtime_error(
+    "TypeError: numpy call composition could not resolve an operand to a "
+    "constant value");
 }
 
 static double numpy_logical_as_double(const nlohmann::json &node)
@@ -2317,7 +2323,9 @@ static double numpy_logical_as_double(const nlohmann::json &node)
   numeric_value value;
   if (try_extract_numeric_constant(node, value))
     return to_double(value);
-  return 0.0;
+  throw std::runtime_error(
+    "TypeError: numpy call composition could not resolve an operand to a "
+    "constant value");
 }
 
 static nlohmann::json numpy_compare_scalar(
