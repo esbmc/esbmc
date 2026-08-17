@@ -3339,6 +3339,53 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 102. The migrate warning, and a correction to §92.2
+
+§96's census put the `migrate_expr` "missing renaming delimiters" warning at the
+top of the remaining causes, 31 tests. Taken on its own terms rather than as a
+divergence row:
+
+`sym_name_to_symbol` returns level0 immediately for a symbol it finds in the
+namespace. Reaching the warning means the symbol was *not* found, and the name
+carries no `?`/`!`; the function then treats it as level0 -- which is what it
+is. A level0 symbol carries no renaming delimiters by definition, so their
+absence is not an anomaly, and the message names no action. It fires once per
+occurrence.
+
+Measured over the sample: under `-only` every instance is an implicitly-declared
+callee (`assert` 23, `perror` 3, `strlen` 1, `signbit` 1) -- library functions
+used without their headers. On the **default path** it fires too, on
+`sizeof(int[n])`, a VLA type whose extent symbol is reached before it is in the
+context. Both are ordinary construction order, not defects.
+
+Demoted to `log_debug("migrate", ...)`. The information is unchanged at
+`--verbosity 9`.
+
+### 102.1 What was considered and dropped
+
+A first version kept `log_warning` for the level2 case -- a name carrying `#`
+but no delimiters is genuinely malformed. It was dropped because that is a
+**new branch whose reachability cannot be shown**: the names come from ESBMC's
+own renaming, which always emits delimiters, and no C input reaches it.
+`CLAUDE.md`'s dead-code rule is that an added branch must be proven reachable or
+removed, and an unprovable guard is worth less than the simpler code. If a
+malformed level2 name is ever produced, the guard can come back with the input
+that produces it.
+
+### 102.2 §92.2 overstated the masking
+
+§92.2 said the warning makes the divergence count "not a sufficient statistic"
+because an arm can be entirely correct and score zero, and put 17 tests behind
+it. That was measured on the base-name branch, where the `assert` tests had lost
+their goto difference and had only the warning left. At the current stack tip --
+which does **not** include that branch -- the warning is the sole difference in
+**2** of 105 tests, and on master in **1** of 201. The general point stands; the
+number attached to it was specific to one branch's state and should not be
+carried forward.
+
+On master this change takes the sample from 201 to 200. Its value is the output
+it stops printing, and that it lets the base-name arm's effect be seen.
 ## 92. The base-name defect in `declare_implicit_callee`
 
 The fix is one line: `declare_implicit_callee` gives the symbol
