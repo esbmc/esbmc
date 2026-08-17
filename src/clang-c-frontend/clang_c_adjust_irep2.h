@@ -122,7 +122,7 @@ private:
 
   /// IREP2 form of clang_c_adjust::adjust_function_call_arguments' conversion
   /// half: convert each argument to its parameter type, which is what decays a
-  /// function designator to a pointer at a call (§98).
+  /// function designator to a pointer at a call (§108).
   void adjust_call_arguments(expr2tc &expr);
 
   /// IREP2 form of clang_c_adjust::adjust_symbol's function-designator sugar

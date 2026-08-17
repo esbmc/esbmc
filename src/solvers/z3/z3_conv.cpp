@@ -50,8 +50,16 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
+    /* `smt` is incomplete for nonlinear real arithmetic, which the
+     * integer/real encoding (--ir) produces from a float multiplication, and
+     * the relevancy=0 below makes it give up rather than grind: it reports
+     * "incomplete (theory arithmetic)", which reaches the user as "SMT solver
+     * failed" with no verdict. Fall back to the complete NRA procedure, which
+     * declines any goal outside QF_NRA and leaves the result unknown exactly
+     * as before. */
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
-            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
+            z3::tactic(z3_ctx, "simplify") &
+            (z3::tactic(z3_ctx, "smt") | z3::tactic(z3_ctx, "qfnra-nlsat")))
              .mk_solver())
 {
   z3::params p(z3_ctx);

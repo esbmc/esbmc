@@ -53,6 +53,11 @@ tvt smt_convt::l_get(const expr2tc &expr)
   return solver_impl->l_get(expr);
 }
 
+bool smt_convt::has_model() const
+{
+  return solver_impl->has_model();
+}
+
 void smt_convt::assert_expr(const expr2tc &e)
 {
   solver_impl->assert_expr(e);
