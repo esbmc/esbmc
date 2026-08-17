@@ -80,6 +80,27 @@ private:
     const std::string &clause) const;
 
   /*
+   * Validates a contract-intrinsic call and, for the ones that denote a value,
+   * builds it. Registers the bodiless symbol the clause intrinsics need.
+   * Returns nullopt for any callee that is not one, or that denotes no value.
+   */
+  std::optional<exprt>
+  build_contract_intrinsic(const symbol_id &function_id) const;
+
+  /*
+   * __ESBMC_old(x) as the C macro spells it: the value x held before the body
+   * ran. Throws when x is not a scalar the frontend can snapshot.
+   */
+  exprt build_old_snapshot() const;
+
+  /*
+   * Whether the name is a parameter of the function being converted, or a
+   * module-level global. Only those have a value from before the body ran.
+   */
+  bool names_enclosing_parameter(const std::string &name) const;
+  bool names_module_global(const std::string &name) const;
+
+  /*
    * Return type of the function currently being converted; nil when there is
    * no enclosing function.
    */

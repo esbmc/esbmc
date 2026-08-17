@@ -252,7 +252,25 @@ void smt_tuple_node_flattener::push_tuple_ctx()
   array_conv.push_array_ctx();
 }
 
+void smt_tuple_node_flattener::note_elements_populated(
+  tuple_node_smt_ast *tuple)
+{
+  populated_elements[ctx->ctx_level].push_back(tuple);
+}
+
 void smt_tuple_node_flattener::pop_tuple_ctx()
 {
+  // ctx_level has already been decremented, and smt_solver_baset::pop_ctx has
+  // already deleted every AST allocated at the level being discarded. The
+  // tuples registered here outlive it, so their element vectors now name
+  // destroyed ASTs; drop them and let make_free rebuild on demand.
+  auto it = populated_elements.find(ctx->ctx_level + 1);
+  if (it != populated_elements.end())
+  {
+    for (tuple_node_smt_ast *tuple : it->second)
+      tuple->elements.clear();
+    populated_elements.erase(it);
+  }
+
   array_conv.pop_array_ctx();
 }
