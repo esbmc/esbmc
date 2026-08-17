@@ -73,6 +73,9 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 
   if (sole_adjuster)
     adjust_sole_arms(expr);
+
+  if (sole_adjuster && is_address_of2t(expr))
+    adjust_address_of(expr);
 }
 
 /// The arms that only run when this pass is the sole adjuster, gathered behind
@@ -93,6 +96,29 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_address_of's array decay: `&a` on an
+/// array is `&a[0]`, and the pointer's subtype follows the element.
+///
+/// The conditional distribution the legacy arm also does -- `&(c ? a : b)` into
+/// `c ? &a : &b`, which #6291 needs for the pointer analysis to resolve either
+/// arm -- is not ported: no corpus input reaches it under this flag, and an arm
+/// no test executes is the trap §90.4 records.
+void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
+{
+  const address_of2t &a = to_address_of2t(expr);
+  if (is_nil_expr(a.ptr_obj))
+    return;
+
+  const type2tc obj_type = ns.follow(a.ptr_obj->type);
+  if (!is_array_type(obj_type))
+    return;
+
+  const type2tc &elem = to_array_type(obj_type).subtype;
+  const expr2tc idx =
+    index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
+  expr = address_of2tc(elem, idx, a.implicit);
 }
 
 void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)

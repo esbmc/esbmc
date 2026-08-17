@@ -99,6 +99,9 @@ private:
   /// (§49.2), so the rebuild passes the original through (§84).
   void adjust_if_expr(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
+  void adjust_address_of(expr2tc &expr);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 

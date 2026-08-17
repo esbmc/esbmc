@@ -3339,3 +3339,70 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 94. `adjust_address_of`'s array decay, and a guard that had no witness
+
+`&a` on an array is `&a[0]`: the pointer designates the first element, not the
+array object. Ported here; the pointer's subtype follows the element.
+
+Master-based rather than stacked, like the arms before it. Baseline re-measured
+against current master first, since #7028 and the contracts series landed since
+§96: **202 of 297** diverge, not 201.
+
+### 94.1 The #7010 guard, written and then removed
+
+`adjust_function_call_arguments` undoes this very rewrite for
+`__ESBMC_assigns_impl` arguments, because an assigns clause names an lvalue and
+the decay makes `&a` indistinguishable from a clause naming the first element —
+the frame silently shrinks (#7010). §98.1 flagged that the guard must travel
+with this arm.
+
+It was written: a flag set while walking a clause's subtree, suppressing the
+decay inside it. Then measured, and **removed**, because it never fires:
+
+- With the guard disabled, all 14 `function_contract` assigns tests still agree
+  between the default path and `-only`.
+- On a purpose-built array-typed clause (`__ESBMC_assigns(a)` for `int a[4]`),
+  this arm changes **nothing**: the `-only` goto dump is byte-identical to
+  master's. The `&a` the macro expands to never reaches the arm as an
+  `address_of` over an array.
+
+An arm no input executes is the trap §90.4 records, and the same reasoning that
+removed the level2 warning branch in §102.1 applies: a guard whose reachability
+cannot be shown is worth less than the simpler code. If the shape is ever
+produced, the guard comes back with the input that produces it.
+
+### 94.2 A pre-existing divergence found while checking
+
+The purpose-built clause above **already diverges on master** under `-only`:
+
+```c
+int a[4];
+__ESBMC_contract void bump(void) { __ESBMC_assigns(a); a[3] = 7; }
+```
+
+`--enforce-contract bump` is SUCCESSFUL on the default path and FAILED under
+`-only`, on master, before this arm. So `-only` mishandles an array-typed
+assigns clause for a reason that is not the decay and is not yet identified.
+Recorded rather than chased: it is the first contracts-specific `-only`
+divergence this scope has seen, and the `function_contract` suite is not
+registered on macOS (`gotcha`: run its `test.desc` by hand, as here).
+
+### 94.3 Result
+
+| | master | with the arm |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 202 | **200** |
+| regressions | -- | **0** |
+
+Cleared: `github_159_postdecrement_fail`, `github_159_preincrement_fail`, whose
+shape is `&Q` on a global array in an initialiser — which is what the test pins.
+
+The conditional distribution the legacy arm also does — `&(c ? a : b)` into
+`c ? &a : &b`, which #6291 needs for the pointer analysis to resolve either arm
+— is **not** ported: no corpus input reaches it under this flag, and porting it
+would be the same unwitnessed instrumentation §94.1 just removed.
+
+| mutant | killed by |
+|---|---|
+| arm absent (master) | `..._address_of_array` |
