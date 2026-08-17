@@ -18,6 +18,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
+#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Option/ArgList.h>
 #if CLANG_VERSION_MAJOR < 16
 #  include <llvm/Support/Host.h>
@@ -28,7 +29,8 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/AST/build_ast.h>
-#include <clang-c-frontend/AST/esbmc_action.h>
+#include <clang-c-frontend/AST/vfs_adapter.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 
 /// Builds a clang driver initialized for running clang tools.
 static clang::driver::Driver *newDriver(
@@ -61,16 +63,8 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   const std::string &intrinsics,
   const std::vector<std::string> &compiler_args)
 {
-  // Create virtual file system to add clang's headers
-  llvm::IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> OverlayFileSystem(
-    new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem()));
-
-  llvm::IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemoryFileSystem(
-    new llvm::vfs::InMemoryFileSystem);
-  OverlayFileSystem->pushOverlay(InMemoryFileSystem);
-
   llvm::IntrusiveRefCntPtr<clang::FileManager> Files(
-    new clang::FileManager(clang::FileSystemOptions(), OverlayFileSystem));
+    new clang::FileManager(clang::FileSystemOptions(), esbmc_clang_vfs()));
 
   // Create everything needed to create a CompilerInvocation,
   // copied from ToolInvocation::run
@@ -154,24 +148,31 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     llvm::errs() << "\n";
   }
 
-  // Create our custom action
-  auto action = new esbmc_action(std::move(intrinsics));
+  /* Must precede any user -include: those can transitively reach ESBMC's own
+   * models, which would then see nondet_* / __ESBMC_* undeclared (#5868). */
+  const std::string intrinsics_path = clang_vfs_root() + "/esbmc_intrinsics.h";
+  clang::PreprocessorOptions &PPOpts = Invocation->getPreprocessorOpts();
+  /* Copy: `intrinsics` does not outlive the ASTUnit. clang frees the buffer,
+   * RetainRemappedFileBuffers being false. */
+  PPOpts.addRemappedFile(
+    intrinsics_path,
+    llvm::MemoryBuffer::getMemBufferCopy(intrinsics, intrinsics_path)
+      .release());
+  PPOpts.Includes.insert(PPOpts.Includes.begin(), intrinsics_path);
 
   // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(
-    clang::ASTUnit::LoadFromCompilerInvocationAction(
+    clang::ASTUnit::LoadFromCompilerInvocation(
       std::move(Invocation),
       std::make_shared<clang::PCHContainerOperations>(),
 #if CLANG_VERSION_MAJOR >= 21
       DiagOpts,
 #endif
       Diagnostics,
-      action));
+      /* Raw pointer: FileManager * up to clang 21, IntrusiveRefCntPtr in 22,
+       * which converts implicitly and retains. */
+      Files.get()));
   assert(unit);
-
-  // The action is only used locally, we can delete it now
-  // See: https://clang.llvm.org/doxygen/ASTUnit_8cpp_source.html#l01510
-  delete (action);
 
   return unit;
 }

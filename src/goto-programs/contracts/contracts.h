@@ -266,6 +266,22 @@ private:
     const std::vector<expr2tc> &assigns_targets = {},
     bool check_assigns_compliance = false);
 
+  /// \brief A fresh lvalue symbol of \p type registered under \p name
+  expr2tc
+  declare_local_symbol(const std::string &name, const type2tc &type) const;
+
+  /// \brief Declare and havoc the value a replaced call returns
+  /// \param function_symbol Function symbol being called
+  /// \param ret_val Place the call assigns to, nil when the result is dropped
+  /// \param call_location Location to give the emitted instructions
+  /// \param replacement Program the declaration and havoc are appended to
+  /// \return The result symbol, nil for a function returning nothing
+  expr2tc declare_call_result(
+    const symbolt &function_symbol,
+    const expr2tc &ret_val,
+    const locationt &call_location,
+    goto_programt &replacement) const;
+
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
   /// \param function_body Function body (to extract contracts from)
@@ -340,6 +356,20 @@ private:
     const expr2tc &expr,
     const expr2tc &old_symbol,
     const expr2tc &new_expr) const;
+
+  /// \brief An assigns target with the callee's formals replaced by the
+  ///        arguments of one call
+  /// \param target_expr Assigns target as written in the callee
+  /// \param function_symbol The callee
+  /// \param actual_args Arguments at this call site
+  /// \param[out] is_pointer_param Whether the target was a pointer parameter
+  ///        and nothing else, the only shape whose havoc follows the pointer
+  /// \return The target expressed in the caller's terms
+  expr2tc instantiate_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    bool &is_pointer_param) const;
 
   // ========== __ESBMC_old support ==========
 

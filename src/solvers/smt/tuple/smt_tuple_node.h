@@ -45,9 +45,23 @@ public:
   void push_tuple_ctx() override;
   void pop_tuple_ctx() override;
 
+  /** Record that @p tuple had its elements installed at the current context
+   *  level, having itself been created at a shallower one — so pop_tuple_ctx
+   *  must clear them before the ASTs they name are destroyed. Keying on the
+   *  level the vector was *installed* at rather than the one its contents were
+   *  allocated at is what makes the clear both safe and exact: installation
+   *  never precedes allocation, pops descend, and the vector a tuple held
+   *  before the install was empty. */
+  void note_elements_populated(tuple_node_smt_ast *tuple);
+
   smt_solver_baset *ctx;
   const namespacet &ns;
   array_convt array_conv;
+
+private:
+  /** Tuples needing their elements cleared, keyed by the level the elements
+   *  were populated at. */
+  std::map<unsigned int, std::vector<tuple_node_smt_ast *>> populated_elements;
 };
 
 #endif
