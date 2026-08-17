@@ -124,7 +124,7 @@ def _run_check_json(check, base_dir):
     if not os.path.isfile(path):
         return False, f"CHECK_JSON file not found: {file}"
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         return False, f"CHECK_JSON read/parse failed for {file}: {exc}"
@@ -197,7 +197,7 @@ def _run_check_file(check, base_dir):
     if not os.path.isfile(path):
         return False, f"CHECK_FILE file not found: {file}"
     try:
-        with open(path, errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read()
     except OSError as exc:
         return False, f"CHECK_FILE read failed for {file}: {exc}"
@@ -227,6 +227,10 @@ STATIC_CAPABILITIES = {
     # The 32-bit target (--32) is usable: multi-arch headers exist and the
     # frontend's type model matches them. See issue #1400.
     "arch32",
+    # The operational-model library is bundled as a goto binary. With
+    # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
+    # measuring the blob has nothing to measure.
+    "bundled_libc",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:
@@ -319,7 +323,7 @@ def _run_seed_file(seed, base_dir):
     file, content = seed
     path = os.path.join(base_dir, file)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(content + "\n" if content else "")
 
 
@@ -334,7 +338,9 @@ class TestCase:
 
     def _initialize_test_case(self):
         """Reads test description and initialize this object"""
-        with open(os.path.join(self.test_dir, "test.desc")) as fp:
+        with open(
+            os.path.join(self.test_dir, "test.desc"), encoding="utf-8"
+        ) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
             assert (
@@ -422,7 +428,10 @@ class TestCase:
         assert os.path.exists(test_dir)
         assert os.path.exists(os.path.join(test_dir, "test.desc"))
         self.name = name
-        self.test_dir = test_dir
+        # A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
+        # temporary cwd, where a test_dir relative to the invoking cwd no longer
+        # resolves. Anchor it here so every derived path survives the chdir.
+        self.test_dir = os.path.abspath(test_dir)
         self.test_args = None
         self.test_file = None
         self.test_mode = "CORE"
@@ -435,7 +444,7 @@ class TestCase:
         """Replaces original test with the current configuration"""
         test_desc_path = os.path.join(self.test_dir, "test.desc")
         assert os.path.isfile(test_desc_path)
-        with open(test_desc_path, "w") as f:
+        with open(test_desc_path, "w", encoding="utf-8") as f:
             f.write(f"{self.test_mode}\n")
             f.write(f"{self.test_file}\n")
             f.write(f"{self.test_args}\n")
@@ -495,19 +504,23 @@ class Executor:
                 # Gracefully shut down the whole process group so
                 # grandchildren don't linger and starve the CI runner.
                 if os.name == "posix":
-                    # Best-effort: on macOS killpg can raise EPERM when the
-                    # group holds a process we can no longer signal, which
-                    # otherwise turns a tolerated timeout into a hard ERROR.
+                    # ESBMC does not necessarily die on SIGTERM, so the SIGKILL
+                    # escalation has to run even when the SIGTERM itself failed.
+                    # Sharing one try with the wait meant a killpg that raised
+                    # (on macOS it raises EPERM when the group holds a process
+                    # we can no longer signal) skipped the kill entirely and
+                    # left the group running.
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+                    try:
                         proc.wait(timeout=_TERM_GRACE)
                     except subprocess.TimeoutExpired:
                         try:
                             os.killpg(proc.pid, signal.SIGKILL)
                         except OSError:
                             pass
-                    except OSError:
-                        pass
                 else:
                     proc.kill()
                 stdout, stderr = proc.communicate()
@@ -629,7 +642,7 @@ def _add_test(test_case, executor):
                 destination = os.path.join(log_dir, f"{suite}_{test_case.name}")
                 # Overwrite on every run — accumulating across ctest invocations
                 # would corrupt downstream stat-counting (e.g. summing VCCs).
-                with open(destination, "w") as f:
+                with open(destination, "w", encoding="utf-8") as f:
                     f.write("ESBMC args: " + test_case.test_args + "\n\n")
                     f.write(output_to_validate)
 

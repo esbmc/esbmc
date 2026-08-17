@@ -59,6 +59,16 @@ engines:
       - 'src/util/lang/c_qualifiers.h'
       - 'src/util/lang/c_qualifiers.cpp'
 
+      # Bundled-file store. filesystemt::read() takes a path and returns an
+      # owning file_data; there is no caller-supplied buffer to overflow, and
+      # flawfinder flags the declaration in the header as well as the call in
+      # vfs_adapter.cpp purely on the name. The one genuine buffer write,
+      # istream::read() into a std::string sized from tellg(), is bounded by
+      # that string and truncated to gcount(). Same rationale as irep above.
+      - 'src/util/base/filesystem.h'
+      - 'src/util/base/filesystem.cpp'
+      - 'src/clang-c-frontend/AST/vfs_adapter.cpp'
+
   bandit:
     enabled: true
     exclude_paths:
@@ -95,6 +105,39 @@ engines:
       # which already covers the identical findings in
       # regression/testing_tool.py.
       - 'scripts/**'
+
+  # Codacy's key for Pylint is `pylintpython3`, matching the pattern IDs it
+  # reports (PyLintPython3_W0611); a `pylint` block is silently ignored.
+  pylintpython3:
+    enabled: true
+    exclude_paths:
+      # ESBMC operational models for the Python standard library. These files
+      # are named after the modules they model -- unittest.py, math.py, os.py,
+      # collections.py and so on -- because the Python frontend resolves
+      # `import unittest` by filename (src/python-frontend/CMakeLists.txt
+      # FLAIL-mangles the directory into the binary). That shadowing makes
+      # pylint resolve the same name to the *real* stdlib module and report its
+      # contents against ours: the "Unused IsolatedAsyncioTestCase imported
+      # from async_case" finding on models/unittest.py names a symbol that
+      # appears nowhere in that file (its only import is `from typing import
+      # Any`) and does appear in CPython's unittest/__init__.py, inside the
+      # lazy __getattr__ at line 78 that a name-based checker cannot see
+      # through.
+      #
+      # The models also have to spell every method exactly as the module they
+      # stand in for -- assertNotIn, assertLessEqual, TestCase.setUp -- so
+      # invalid-name and missing-function-docstring fire on nearly every line
+      # and cannot be fixed without breaking what ESBMC resolves. Same
+      # rationale as the bandit block above, which already excludes this
+      # directory. Python code elsewhere in the tree remains in scope.
+      - 'src/python-frontend/models/**'
+
+  prospector:
+    enabled: true
+    exclude_paths:
+      # Prospector runs Pylint internally and reports the same finding under
+      # its own engine, so it needs the exclusion above to take effect too.
+      - 'src/python-frontend/models/**'
 
   cppcheck:
     enabled: true

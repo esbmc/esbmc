@@ -344,9 +344,16 @@ public:
     : out_stream(&s), delim(delimiter)
   {
   }
-  ostream_iterator(ostream_iterator<T, charT, traits> &x); /* :
-			out_stream(x.out_stream), delim(x.delim) {
-	}*/
+  /* Needs a body for the same reason ostream's own constructors do: an
+   * undefined one leaves out_stream unconstrained, and std::copy takes the
+   * iterator by value -- an insertion through the copy then dispatches on a
+   * vtable pointer no value set can pin down, surfacing as "No target
+   * candidate" and a bogus invalid-pointer violation on a safe program.
+   * [ostream.iterator.cons] declares the parameter const. */
+  ostream_iterator(const ostream_iterator<T, charT, traits> &x)
+    : out_stream(x.out_stream), delim(x.delim)
+  {
+  }
   ~ostream_iterator()
   {
   }
@@ -502,6 +509,48 @@ constexpr T *end(T (&arr)[N]) noexcept
 #endif
 
 #if __cplusplus >= 201402L
+// [iterator.range]: the reverse range accessors, alongside cbegin/cend below.
+template <class C>
+constexpr auto rbegin(C &c) -> decltype(c.rbegin())
+{
+  return c.rbegin();
+}
+
+template <class C>
+constexpr auto rbegin(const C &c) -> decltype(c.rbegin())
+{
+  return c.rbegin();
+}
+
+template <class C>
+constexpr auto rend(C &c) -> decltype(c.rend())
+{
+  return c.rend();
+}
+
+template <class C>
+constexpr auto rend(const C &c) -> decltype(c.rend())
+{
+  return c.rend();
+}
+
+/* No array overloads: std::reverse_iterator is declaration-only in this model
+ * (no constructors, no definitions), so reverse_iterator<T*>(arr + N) has
+ * nothing to construct from. The container overloads above forward to the
+ * container's own rbegin, which is implemented. */
+
+template <class C>
+constexpr auto crbegin(const C &c) -> decltype(std::rbegin(c))
+{
+  return std::rbegin(c);
+}
+
+template <class C>
+constexpr auto crend(const C &c) -> decltype(std::rend(c))
+{
+  return std::rend(c);
+}
+
 template <class C>
 constexpr auto cbegin(const C &c) noexcept(noexcept(std::begin(c)))
   -> decltype(std::begin(c))

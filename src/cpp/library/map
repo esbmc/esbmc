@@ -1,6 +1,8 @@
 #ifndef __STL_MAP
 #define __STL_MAP
 
+#include <stdlib.h>
+
 #include "utility"
 #include "vector"
 #include "functional"
@@ -22,8 +24,13 @@ public:
   typedef Compare key_compare;
   typedef unsigned int size_type;
 
-  key_type _key[MAP_SIZE];
-  mapped_type _value[MAP_SIZE];
+  // Held behind a pointer, not as by-value member arrays: an array member
+  // requires `mapped_type` to be complete at instantiation, which rules out
+  // the recursive `map<K, Node>` member that tree-shaped code (including
+  // ESBMC's own irept) declares. libstdc++ accepts it for the same reason.
+  // See #7029.
+  key_type *_key;
+  mapped_type *_value;
   int _size;
 
   typedef bool(func)(Key, Key);
@@ -491,13 +498,27 @@ public:
     }
   };
 
+  // Raw storage, no element construction: the by-value member arrays this
+  // replaces were not element-constructed either, and a construction loop
+  // here would cost every map program MAP_SIZE unwindings.
+  void __om_allocate()
+  {
+    this->_key = static_cast<key_type *>(malloc(sizeof(key_type) * MAP_SIZE));
+    this->_value =
+      static_cast<mapped_type *>(malloc(sizeof(mapped_type) * MAP_SIZE));
+    __ESBMC_assume(this->_key);
+    __ESBMC_assume(this->_value);
+  }
+
   map()
   {
+    this->__om_allocate();
     this->_size = 0;
   }
 
   map(iterator first, iterator last)
   {
+    this->__om_allocate();
     int j = 0;
     this->_size = 0;
     int limit = last.it_pos - first.it_pos;
@@ -511,11 +532,13 @@ public:
 
   map(func *x)
   {
+    this->__om_allocate();
     this->_size = 0;
   }
 
   map(map &x)
   {
+    this->__om_allocate();
     this->_size = x._size;
     size_type s = x._size;
     for (int i = 0; i < s; i++)
@@ -528,6 +551,7 @@ public:
 #if __cplusplus >= 201103L
   map(std::initializer_list<value_type> list)
   {
+    this->__om_allocate();
     this->_size = list.size();
     auto begin = list.begin();
     for (size_type i = 0; i < _size; ++i)
@@ -543,7 +567,7 @@ public:
     assert(this->_size >= 0); // Size should be non-negative
 
     // Calculate array capacity dynamically
-    static const size_t CAPACITY = sizeof(this->_key) / sizeof(this->_key[0]);
+    static const size_t CAPACITY = MAP_SIZE;
 
     // Handle empty container case
     if (this->_size == 0)
@@ -800,19 +824,20 @@ public:
     return *this;
   }
 
+  // The elements past _size are never read, so dropping the size is the whole
+  // of clear(). The loop this replaces was dead -- it ran after _size was
+  // already 0 -- and its `_value[i] = T()` made ~map recurse through the
+  // element type, which a recursive map<K, Node> cannot afford. See #7029.
   void clear()
   {
     this->_size = 0;
-    for (int i = 0; i < this->_size; i++)
-    {
-      this->_key[i] = Key();
-      this->_value[i] = T();
-    }
   }
 
   ~map()
   {
     this->clear();
+    free(this->_key);
+    free(this->_value);
   }
 
   void swap(map &x)
@@ -1136,7 +1161,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
@@ -1163,7 +1190,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
@@ -2136,7 +2165,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }
@@ -2162,7 +2193,9 @@ public:
         }
         if (key_compare()((Key &)x, this->_key[i]))
         {
-          return this->end();
+          /* First key greater than x: for both bounds that key is the
+           * answer, not the end of the map ([map.ops]). */
+          return it;
         }
         it++;
       }

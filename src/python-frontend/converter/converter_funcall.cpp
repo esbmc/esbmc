@@ -360,6 +360,21 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     return get_function_call(call_node);
   }
 
+  // a.<method>(...) on a tracked numpy array (sum/mean/min/max/std/var/
+  // flatten/transpose/reshape/ravel/copy) only resolves through the numpy
+  // operational model when it has the np.<method>(a, ...) shape a
+  // module-form call would have produced. The assignment-statement RHS
+  // already rewrites this shape before it reaches here; this call covers
+  // every other expression context (assert, nested expressions, call
+  // arguments, ...), which otherwise fall through to an unrelated builtin
+  // or class-method lookup for the same method name.
+  if (
+    std::optional<nlohmann::json> rewritten =
+      rewrite_numpy_method_call_node(element))
+    return rewritten->value("_type", "") == "Call"
+             ? get_function_call(*rewritten)
+             : get_expr(*rewritten);
+
   if (
     is_numpy_random_attr(element["func"], "random") &&
     element.contains("args") && element["args"].size() == 1)
@@ -757,13 +772,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       call.location() = get_location_from_decl(element);
 
       // The function pointer itself, not dereferenced.
-      // For Any-typed (void*) parameters, cast to a generic function pointer
-      // so that the adjuster can dereference it to a code type (it calls
-      // to_code_type on the dereferenced subtype, which would fail on void).
+      // Any pointer whose pointee is not code needs the cast to a generic
+      // function pointer: the adjuster dereferences the callee and calls
+      // to_code_type on the result, which asserts on anything else. Any-typed
+      // (void*) parameters get here, and so does a callable returned by an
+      // unannotated function, which the frontend types None, i.e. bool*
+      // (#6640).
       // V.3: build the function-pointer reference (and the generic-pointer
       // cast the adjuster relies on) in IREP2; both are over a clean symbol.
       exprt func_ptr_expr = python_expr::build_symbol(*var_symbol);
-      if (var_symbol->get_type() == any_type())
+      if (!var_symbol->get_type().subtype().is_code())
         func_ptr_expr = python_expr::build_typecast(
           func_ptr_expr, gen_pointer_type(code_typet()));
       call.function() = func_ptr_expr;

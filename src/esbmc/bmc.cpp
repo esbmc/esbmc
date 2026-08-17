@@ -1,7 +1,12 @@
 #include <csignal>
 #include <memory>
+#ifdef _WIN32
+#  include <windows.h>
+#endif
 #include <sys/types.h>
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <thread>
 #include <chrono>
 
@@ -391,16 +396,22 @@ smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
   return solver->dec_solve();
 }
 
-// True when a discharged claim is a candidate for vacuity probing. Skips
-// the loop-invariant pass's own synthetic sanity assertions: each is
-// sequenced under an ASSUME(false) terminator, so any claim appearing
-// after the first loop's inductive step would always probe vacuous. The
-// probe targets user-facing claims (contract ensures, user assertions),
-// not internal pass scaffolding.
+// True when a discharged claim is a candidate for vacuity probing. Vacuity
+// asks whether a claim held only because its path was dead, which is a
+// question about what the user meant to state -- so the probe is limited to
+// claims the user wrote. An auto-generated safety check (overflow, array
+// bounds, ...) discharged on an unreachable failure path is the intended
+// result, not a warning, and every correct program with bounded arithmetic
+// produces some (#5327). Naming the admitted claims rather than the rejected
+// ones also keeps a newly added built-in check from poisoning verdicts.
+// Excluded for a second reason: the loop-invariant pass's own synthetic
+// assertions sit under an ASSUME(false) terminator, so any claim after the
+// first loop's inductive step would always probe vacuous.
 static bool is_vacuity_probe_candidate(const std::string &claim_property)
 {
-  return claim_property != "invariant-base-case" &&
-         claim_property != "invariant-inductive-step";
+  return claim_property == "assertion" ||
+         claim_property == "contract ensures" ||
+         claim_property == "assigns compliance";
 }
 
 void bmct::show_program(const symex_target_equationt &eq)
@@ -567,6 +578,77 @@ void bmct::clear_verified_claims_in_goto(
   }
 }
 
+namespace
+{
+/// True when the multi-witness report must avoid box-drawing glyphs. A console
+/// that is not reading UTF-8 renders them as mojibake on every line of the
+/// report (esbmc/esbmc#4311). On Windows the console's code page is queried;
+/// on POSIX the locale environment is read. An unset locale is treated as
+/// UTF-8 so the common CI shape keeps the richer output.
+bool ascii_report(const optionst &options)
+{
+  if (options.get_bool_option("ascii-report"))
+    return true;
+#ifdef _WIN32
+  // A Windows console is cp1252 by default but can be switched to UTF-8
+  // (`chcp 65001`), so ask it rather than assuming: assuming would also cost
+  // the richer output on a console that renders it correctly.
+  return GetConsoleOutputCP() != CP_UTF8;
+#else
+  for (const char *var : {"LC_ALL", "LC_CTYPE", "LANG"})
+  {
+    const char *val = std::getenv(var);
+    if (!val || !*val)
+      continue;
+    std::string v(val);
+    std::transform(v.begin(), v.end(), v.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+    return v.find("utf-8") == std::string::npos &&
+           v.find("utf8") == std::string::npos;
+  }
+  return false;
+#endif
+}
+
+/// States nearest the failure are the ones that explain it; the rest is
+/// prologue repeated almost verbatim across every witness (#4311). Keep the
+/// last @p keep of them and replace what precedes with a count, so the reader
+/// still knows the trace was shortened. Operates on the rendered text because
+/// that is what "states in the report" means -- show_goto_trace decides for
+/// itself which steps become states.
+std::string keep_last_trace_states(const std::string &rendered, size_t keep)
+{
+  // Rendered states start at column 0 with "State ".
+  std::vector<size_t> starts;
+  for (size_t pos = 0; pos != std::string::npos;)
+  {
+    size_t hit = rendered.compare(pos, 6, "State ") == 0
+                   ? pos
+                   : rendered.find("\nState ", pos);
+    if (hit == std::string::npos)
+      break;
+    if (rendered.compare(hit, 6, "State ") != 0)
+      ++hit; // skip the newline the search matched on
+    starts.push_back(hit);
+    pos = hit + 6;
+  }
+
+  if (starts.size() <= keep)
+    return rendered;
+
+  const size_t omitted = starts.size() - keep;
+  const size_t cut = starts[omitted];
+  return rendered.substr(0, starts.front()) + "... " + std::to_string(omitted) +
+         " earlier states omitted (--full-traces to show them) ...\n\n" +
+         rendered.substr(cut);
+}
+
+/// Matches the K=50 the issue proposes; large enough to keep the explanatory
+/// tail of a trace, small enough that N witnesses stay readable.
+constexpr size_t kMaxReportedStates = 50;
+} // namespace
+
 void bmct::report_multi_property_trace(
   const smt_resultt &res,
   const std::vector<witness_recordt> &witnesses,
@@ -624,19 +706,81 @@ void bmct::report_multi_property_trace(
   // tracked separately (#4311).
   oss << (reachability_trace ? "\n[Reachability traces - "
                              : "\n[Counterexamples - ")
-      << witnesses.size() << " witnesses]\n\n";
+      << witnesses.size() << " witnesses";
+  // An incremental run already enumerates at every failing k, not just the
+  // first, so without the bound a reader cannot tell which unwinding produced
+  // a block -- or that two blocks are different unwindings rather than a
+  // repeat (esbmc/esbmc#4314). Plain BMC has one bound, where this is noise.
+  if (options.get_bool_option("incremental-bmc"))
+  {
+    const std::string k = options.get_option("unwind");
+    oss << " at k = " << (k.empty() ? "0" : k);
+  }
+  oss << "]\n\n";
   // Say up front that this is a truncated enumeration. The same fact reaches
   // the Summary footer below, but that sits after every witness block -- tens
   // of kilobytes on a real program -- so a reader can easily act on a partial
   // list without realising it (#4311).
   if (stop_reason == enumeration_stop_reasont::CapHit)
     oss << "  NOTE: --max-witnesses cap reached; more witnesses may exist.\n\n";
+  // The inputs are the part that actually differs between witnesses, and they
+  // are what a reader needs first. Per-witness they sit one trace apart, so on
+  // a real program comparing them means paging through tens of kilobytes of
+  // near-identical trace. Collect them up front (#4311). ASCII only, for the
+  // same cp1252 reason as the header above.
+  {
+    bool any_inputs = false;
+    for (const witness_recordt &w : witnesses)
+      if (!w.nondet_inputs.empty())
+      {
+        any_inputs = true;
+        break;
+      }
+
+    if (any_inputs)
+    {
+      oss << "  Inputs by witness:\n";
+      for (size_t i = 0; i < witnesses.size(); ++i)
+      {
+        const witness_recordt &w = witnesses[i];
+        oss << "    #" << (i + 1) << " : ";
+        if (w.nondet_inputs.empty())
+          oss << "(none)";
+        else
+          for (size_t k = 0; k < w.nondet_inputs.size(); ++k)
+          {
+            if (k)
+              oss << ", ";
+            oss << "[" << k << "] = "
+                << from_expr(
+                     ns,
+                     "",
+                     w.nondet_inputs[k].value_expr,
+                     presentationt::WITNESS);
+          }
+        oss << "\n";
+      }
+      oss << "\n";
+    }
+  }
+  // Box-drawing glyphs are mojibake'd by a console that is not reading UTF-8
+  // -- Windows' default cp1252 above all -- which at N witnesses corrupts
+  // every line of the report (esbmc/esbmc#4311).
+  const bool ascii = ascii_report(options);
+  const std::string bar = ascii ? "|" : "│";
+  const std::string head_open = ascii ? "  +- " : "  ┌─ ";
+  const std::string head_fill =
+    ascii ? " -----------------------------" : " ─────────────────────────────";
+  const std::string foot =
+    ascii ? "  +---------------------------------------------\n\n"
+          : "  └──────────────────────────────────────────────\n\n";
+
   for (size_t i = 0; i < witnesses.size(); ++i)
   {
     const witness_recordt &w = witnesses[i];
-    oss << "  ┌─ Witness " << (i + 1) << " of " << witnesses.size()
-        << " ─────────────────────────────\n";
-    oss << "  │  Inputs : ";
+    oss << head_open << "Witness " << (i + 1) << " of " << witnesses.size()
+        << head_fill << "\n";
+    oss << "  " << bar << "  Inputs : ";
     if (w.nondet_inputs.empty())
     {
       oss << "(none)\n";
@@ -656,24 +800,27 @@ void bmct::report_multi_property_trace(
       }
       oss << "\n";
     }
-    oss << "  │  Trace  :\n";
+    oss << "  " << bar << "  Trace  :\n";
     {
       std::ostringstream tr;
       show_goto_trace(tr, ns, w.trace, reachability_trace);
       // Indent the trace under the box.
       std::string s = tr.str();
+      if (!options.get_bool_option("full-traces"))
+        s = keep_last_trace_states(s, kMaxReportedStates);
       std::string indented;
       indented.reserve(s.size() + 8);
-      indented += "  │    ";
+      const std::string lead = "  " + bar + "    ";
+      indented += lead;
       for (char c : s)
       {
         indented += c;
         if (c == '\n')
-          indented += "  │    ";
+          indented += lead;
       }
       oss << indented << "\n";
     }
-    oss << "  └──────────────────────────────────────────────\n\n";
+    oss << foot;
   }
 
   oss << "Summary: " << witnesses.size()
@@ -1638,7 +1785,10 @@ smt_resultt bmct::start_bmc()
   }
 
   if (symex)
+  {
     cs_bound_pruned = symex->cs_bound_pruned;
+    symex->report_reduction_stats();
+  }
 
   return res;
 }
@@ -2553,22 +2703,26 @@ smt_resultt bmct::multi_property_check(
           claim.claim_cstr,
           is ? property_verdictt::Unknown : property_verdictt::Failed,
           is ? "inductive step could not prove this claim" : "");
-      else if (is_cov_goal)
+      else
       {
-        // No answer at all: neither reached nor unreached. Recorded so the
-        // goal still gets a line and the run closes as INCOMPLETE.
-        goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown);
-        if (solver_result == P_SMTLIB)
-          note_undecided_cov_goal("SMT formula only, no solving performed");
-        else
-        {
-          // The verdict a coverage run suppresses was the only thing
-          // reporting this, so say it here.
+        // No answer at all. A coverage run suppresses the verdict that would
+        // have reported this; a plain multi-property run reports it nowhere,
+        // and a SAT claim elsewhere buries it entirely — so name the claim
+        // either way (issue #5934).
+        if (solver_result == P_ERROR)
           log_error(
             "SMT solver failed on '{}'",
             prettify_solidity_expr(claim.claim_cstr));
-          note_undecided_cov_goal("the solver failed on at least one goal");
+        if (is_cov_goal)
+        {
+          // Neither reached nor unreached. Recorded so the goal still gets a
+          // line and the run closes as INCOMPLETE.
+          goto_functionst::property_verdicts.record(
+            claim.claim_cstr, property_verdictt::Unknown);
+          note_undecided_cov_goal(
+            solver_result == P_SMTLIB
+              ? "SMT formula only, no solving performed"
+              : "the solver failed on at least one goal");
         }
       }
     }
@@ -2584,6 +2738,23 @@ smt_resultt bmct::multi_property_check(
     }
 
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);
+
+    // A claim that reached no verdict — a backend failure (P_ERROR) or an
+    // SMTLIB-only emission (P_SMTLIB) — would otherwise leave final_result at
+    // its P_UNSATISFIABLE seed, which reads as "every claim discharged" and
+    // closes the run SUCCESSFUL over an analysis that never happened. Surface
+    // it instead; P_SATISFIABLE still wins, a witnessed violation being a
+    // verdict either way (issue #5934).
+    if (solver_result == P_ERROR || solver_result == P_SMTLIB)
+    {
+      // Set even when a SAT claim dominates below: the verdict is right in
+      // that case, but the summary is still short a claim and nothing else
+      // would say so.
+      report_incomplete = true;
+      std::lock_guard lock(result_mutex);
+      if (final_result != P_SATISFIABLE)
+        final_result = solver_result;
+    }
 
     // If an assertion instance is verified to be violated
     if (solver_result == P_SATISFIABLE)

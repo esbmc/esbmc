@@ -1,5 +1,6 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/reachability_tree.h>
+#include <goto-symex/symex_invariant.h>
 #include <langapi/language_ui.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
@@ -95,6 +96,8 @@ execution_statet::execution_statet(
   // One thread with one dependency relation.
   dependency_chain.emplace_back();
   dependency_chain.back().push_back(0);
+  thread_last_transition.push_back(0);
+  transition_ordinal = 0;
   mpor_says_no = false;
 
   cswitch_forced = false;
@@ -163,6 +166,8 @@ void execution_statet::copy_derived_from(const execution_statet &ex)
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;
   dependency_chain = ex.dependency_chain;
+  thread_last_transition = ex.thread_last_transition;
+  transition_ordinal = ex.transition_ordinal;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
 
@@ -245,7 +250,8 @@ void execution_statet::symex_step(reachability_treet &art)
 
   merge_gotos();
 
-  // If current state guard is false, it shouldn't perform further context switch.
+  // If current state guard is false, it shouldn't perform further context
+  // switch.
   if (
     !state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
     interleaving_unviable = false;
@@ -301,7 +307,8 @@ void execution_statet::symex_step(reachability_treet &art)
       // whether we are not checking for memory leaks.
       // We should end the main thread to avoid exploring further interleavings
       // TODO: once we support at_exit, we should check this code
-      // TODO: we should support verifying memory leaks in multi-threaded C programs.
+      // TODO: we should support verifying memory leaks in multi-threaded C
+      // programs.
       //
       // Returning from main is a call to exit(): the process terminates and
       // every other thread is torn down (C11 5.1.2.2.3), so a thread still
@@ -410,6 +417,28 @@ void execution_statet::assume(const expr2tc &assumption)
     analyze_read(assumption);
 }
 
+void execution_statet::symex_printf(const expr2tc &lhs, expr2tc &code)
+{
+  // A shared global passed to printf is read here and nowhere else, so without
+  // this the read is missing from thread_last_reads and every reduction that
+  // consults it treats the transition as independent of a writer (issue #6831).
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(code);
+
+  goto_symext::symex_printf(lhs, code);
+}
+
+void execution_statet::note_bounded_loop_truncation()
+{
+  goto_symext::note_bounded_loop_truncation();
+  art1->mark_search_truncated();
+}
+
+void execution_statet::reset_dynamic_counter()
+{
+  dynamic_counter = 0;
+}
+
 unsigned int &execution_statet::get_dynamic_counter()
 {
   return dynamic_counter;
@@ -470,15 +499,16 @@ bool execution_statet::check_if_ileaves_blocked()
   {
     // Only count this as truncation if a switch was actually available;
     // otherwise every terminal state would look truncated.
-    if (!art1->cs_bound_pruned)
-      for (unsigned int i = 0; i < threads_state.size(); ++i)
-        if (
-          i != active_thread && !threads_state[i].thread_ended &&
-          !threads_state[i].call_stack.empty())
-        {
-          art1->cs_bound_pruned = true;
-          break;
-        }
+    for (unsigned int i = 0; i < threads_state.size(); ++i)
+      if (
+        i != active_thread && !threads_state[i].thread_ended &&
+        !threads_state[i].call_stack.empty())
+      {
+        art1->cs_bound_pruned = true;
+        ++art1->reduction_stats.pruned_by_cs_bound;
+        art1->mark_search_truncated();
+        break;
+      }
     return true;
   }
 
@@ -813,6 +843,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
+  if (threads_state.size() > art1->reduction_stats.peak_threads)
+    art1->reduction_stats.peak_threads = threads_state.size();
   preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
@@ -835,6 +867,7 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   dependency_chain.emplace_back();
   for (unsigned int i = 0; i < dependency_chain.size(); i++)
     dependency_chain.back().push_back(0);
+  thread_last_transition.push_back(0);
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
@@ -1021,6 +1054,36 @@ void execution_statet::record_access_key(
   }
 }
 
+/* A dereference through a pointer that is not spelled as a bare symbol -- held
+ * in a struct member, array element or union -- never reaches the symbol
+ * resolution in get_expr_globals, which is gated on `is_symbol2t`. Its operand
+ * walk would then record the *aggregate*, so a thread reaching the same target
+ * directly keys on something else and MPOR calls the two transitions
+ * independent (R29, the aggregate-held counterpart of #6539). Record the target
+ * as well; the walk still runs, and recording both keys only makes MPOR more
+ * conservative. */
+void execution_statet::record_aggregate_held_target(
+  const namespacet &ns,
+  const expr2tc &expr,
+  std::set<expr2tc> &globals_list,
+  access_kindt kind)
+{
+  if (!is_dereference2t(expr))
+    return;
+
+  const expr2tc &ptr = to_dereference2t(expr).value;
+  if (is_symbol2t(ptr) || !is_pointer_type(ptr->type))
+    return;
+
+  bool to_global = false;
+  expr2tc target = resolve_pointer_target(ns, ptr, to_global);
+  if (is_nil_expr(target) || !to_global)
+    return;
+
+  cur_state->top().level1.rename(target);
+  record_access_key(target, globals_list, kind);
+}
+
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
@@ -1126,6 +1189,8 @@ void execution_statet::get_expr_globals(
     return;
   }
 
+  record_aggregate_held_target(ns, expr, globals_list, kind);
+
   /* A direct `m[i]` on a lock array: record the element. Falling through to
    * the operand walk below would reach the bare array symbol and record the
    * whole array, which re-conflates the elements the pointer path above took
@@ -1159,35 +1224,79 @@ void execution_statet::get_expr_globals(
   });
 }
 
+// Rules given on page 13 of MPOR paper, although they don't appear to
+// distinguish which thread is which correctly. Essentially, check that the
+// write(s) of the previous transition (l) don't intersect with this
+// transitions (j) reads or writes; and that the previous transitions reads
+// don't intersect with this transitions write(s).
+static bool mpor_transitions_conflict(
+  const std::set<expr2tc> &reads_j,
+  const std::set<expr2tc> &writes_j,
+  const std::set<expr2tc> &reads_l,
+  const std::set<expr2tc> &writes_l)
+{
+  // Double write intersection
+  for (const expr2tc &it : writes_j)
+    if (mpor_set_conflicts(writes_l, it))
+      return true;
+
+  // This read what that wrote intersection
+  for (const expr2tc &it : reads_j)
+    if (mpor_set_conflicts(writes_l, it))
+      return true;
+
+  // We wrote what that reads intersection
+  for (const expr2tc &it : writes_j)
+    if (mpor_set_conflicts(reads_l, it))
+      return true;
+
+  // No check for read-read intersection, it doesn't affect anything
+  return false;
+}
+
+bool execution_statet::check_mpor_dependency(
+  unsigned int j,
+  const transition_footprintt &fp) const
+{
+  assert(j < threads_state.size());
+  return mpor_transitions_conflict(
+    thread_last_reads[j], thread_last_writes[j], fp.reads, fp.writes);
+}
+
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
 {
   assert(j < threads_state.size());
   assert(l < threads_state.size());
+  return mpor_transitions_conflict(
+    thread_last_reads[j],
+    thread_last_writes[j],
+    thread_last_reads[l],
+    thread_last_writes[l]);
+}
 
-  // Rules given on page 13 of MPOR paper, although they don't appear to
-  // distinguish which thread is which correctly. Essentially, check that
-  // the write(s) of the previous transition (l) don't intersect with this
-  // transitions (j) reads or writes; and that the previous transitions reads
-  // don't intersect with this transitions write(s).
-
-  // Double write intersection
-  for (const expr2tc &it : thread_last_writes[j])
-    if (mpor_set_conflicts(thread_last_writes[l], it))
-      return true;
-
-  // This read what that wrote intersection
-  for (const expr2tc &it : thread_last_reads[j])
-    if (mpor_set_conflicts(thread_last_writes[l], it))
-      return true;
-
-  // We wrote what that reads intersection
-  for (const expr2tc &it : thread_last_writes[j])
-    if (mpor_set_conflicts(thread_last_reads[l], it))
-      return true;
-
-  // No check for read-read intersection, it doesn't affect anything
-  return false;
+/// The inductive step of A6.4: every 1 in the chain points forward in run
+/// order. Only the active thread's row and column change meaning when it takes
+/// a transition -- every other entry keeps both its endpoints -- so checking
+/// those two is checking the step.
+static void check_chain_points_forward(
+  const std::vector<std::vector<int>> &chain,
+  const std::vector<unsigned int> &last_transition,
+  unsigned int active_thread,
+  unsigned int j)
+{
+  // The column covers the res == 0 path, which keeps a 1 recorded against an
+  // older transition of the active thread; the row covers the active-row reset,
+  // without which the chain would claim a dependency leaving the newest
+  // transition in the run.
+  SYMEX_INVARIANT(
+    chain[j][active_thread] != 1 ||
+      last_transition[j] < last_transition[active_thread],
+    "MPOR dependency chain runs backwards in time");
+  SYMEX_INVARIANT(
+    chain[active_thread][j] != 1 ||
+      last_transition[active_thread] < last_transition[j],
+    "MPOR dependency chain leaves the newest transition");
 }
 
 void execution_statet::calculate_mpor_constraints()
@@ -1207,6 +1316,9 @@ void execution_statet::calculate_mpor_constraints()
   //  about progress later.
   std::vector<std::vector<int>> new_dep_chain = dependency_chain;
 
+  // The transition just taken is the newest in the run.
+  thread_last_transition[active_thread] = ++transition_ordinal;
+
   // Start new dependency chain for this thread. Default to there being no
   // relation.
   for (unsigned int i = 0; i < new_dep_chain.size(); i++)
@@ -1221,6 +1333,12 @@ void execution_statet::calculate_mpor_constraints()
   {
     if (j == active_thread)
       continue;
+
+    // The diagonal is what the un-run test below reads, and it is only a
+    // "has this thread run" flag because nothing else ever writes it.
+    SYMEX_INVARIANT(
+      (dependency_chain[j][j] == 1) == (thread_last_transition[j] != 0),
+      "MPOR chain diagonal disagrees with whether the thread has run");
 
     // MPOR's rule is DCjj(k) == 0 -- "Tj has not run" -- not DCji(k) == 0. The
     // two differ for a thread created after Tj last ran: its column is padded
@@ -1257,6 +1375,9 @@ void execution_statet::calculate_mpor_constraints()
       if (res != 0)
         new_dep_chain[j][active_thread] = res;
     }
+
+    check_chain_points_forward(
+      new_dep_chain, thread_last_transition, active_thread, j);
   }
 
   // For /all other relations/, just propagate the dependency it already has.
@@ -1346,9 +1467,28 @@ std::size_t execution_statet::generate_hash() const
   // same family irep2 uses for hash-consing) replaces the former Boost SHA-1;
   // a collision only over-prunes interleavings, the same risk class crc()
   // already carries tool-wide.
+  //
+  // The return continuation is part of the fingerprint because a pc does not
+  // identify it: one function reached from two call sites stands at one pc with
+  // one set of L0 values, and returns to different places. Depth alone does not
+  // separate those -- two calls from the same caller sit at equal depth -- so
+  // each frame's calling location is mixed in. Without it a bug reachable only
+  // past the later state is pruned away in silence.
+  //
+  // The active thread is part of it for the same reason: equal pcs and equal
+  // values still leave two states scheduling differently, because MPOR's
+  // dependency chain and decide_ileave_direction's scan both key off which
+  // thread just ran. Omitting it collided such pairs, and
+  // post_hash_collision_cleanup marks every switch from the survivor explored,
+  // so the violating schedule was never generated (#6831).
   std::size_t h = l2->generate_l2_state_hash();
+  esbmct::hash_combine(h, active_thread);
   for (const auto &it : threads_state)
+  {
     esbmct::hash_combine(h, it.source.pc->location_number);
+    for (const auto &frame : it.call_stack)
+      esbmct::hash_combine(h, frame.calling_location.pc->location_number);
+  }
 
   return h;
 }

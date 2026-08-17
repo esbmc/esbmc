@@ -7,9 +7,9 @@
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_binary_reader.h>
-#include <goto-programs/goto_functions.h>
 #include <util/symtab/context.h>
 #include <util/message/message.h>
+#include <util/base/time_stopping.h>
 #include <util/lang/c_link.h>
 #include <util/config/config.h>
 #include <util/lang/language.h>
@@ -427,13 +427,70 @@ static void ingest_symbol(
   deps.erase(name);
 }
 
+#ifdef ENABLE_SOLIDITY_FRONTEND
+/// Point `start`/`size` at the Solidity operational-model binary when
+/// `language` is Solidity, reporting whether it did. sol64 holds ONLY Solidity
+/// symbols, so callers need no whitelist for it.
+static bool select_solidity_blob(
+  const languaget *language,
+  const uint8_t *&start,
+  unsigned int &size)
+{
+  if (!language || language->id() != "solidity_ast")
+    return false;
+
+  // The build substitutes a zero-length stub wherever sol64 cannot be produced
+  // (macOS has no _BitInt wider than 128). Say so, rather than let the reader
+  // reject the empty buffer as "`' is not a goto-binary".
+  if (sol64_buf_size == 0)
+  {
+    log_error(
+      "This build has no Solidity operational-model library, so Solidity "
+      "verification is unavailable on this platform");
+    abort();
+  }
+
+  start = sol64_buf;
+  size = sol64_buf_size;
+  return true;
+}
+#endif
+
+struct library_load_report
+{
+  bool is_solidity;
+  unsigned int present;
+  unsigned int kept;
+  fine_timet deserialise;
+  fine_timet deps;
+  fine_timet select;
+  fine_timet link;
+};
+
+// Solidity loads two blobs per run, so the name is what tells the two lines
+// apart. regression/{esbmc,python}/library_fixed_cost_budget match this
+// format; keep them in step with it.
+static void report_library_load(const library_load_report &r)
+{
+  log_debug(
+    "c2goto",
+    "operational-model library ({}): {} symbols present, {} kept; "
+    "deserialise {}s, dependency scan {}s, select {}s, link {}s",
+    r.is_solidity ? "sol64" : "clib",
+    r.present,
+    r.kept,
+    time2string(r.deserialise),
+    time2string(r.deps),
+    time2string(r.select),
+    time2string(r.link));
+}
+
 void add_cprover_library(contextt &context, const languaget *language)
 {
   if (config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
 
   contextt new_ctx, store_ctx;
-  goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
   const buffer *clib;
@@ -477,24 +534,12 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (language && language->id() == "python")
     goto_reader.set_functions_to_read(python_c_models);
 
-  // Solidity uses a separate, smaller goto binary (sol64) for fast loading.
-  // No whitelist needed: sol64 contains ONLY Solidity symbols.
-  const uint8_t *lib_start;
-  unsigned int lib_size;
+  const uint8_t *lib_start = clib->start;
+  unsigned int lib_size = clib->size;
   bool is_solidity = false;
 #ifdef ENABLE_SOLIDITY_FRONTEND
-  if (language && language->id() == "solidity_ast")
-  {
-    lib_start = sol64_buf;
-    lib_size = sol64_buf_size;
-    is_solidity = true;
-  }
-  else
+  is_solidity = select_solidity_blob(language, lib_start, lib_size);
 #endif
-  {
-    lib_start = clib->start;
-    lib_size = clib->size;
-  }
 
   /* Python: actively has a function filter
    *    - not everything makes it into new_ctx
@@ -504,15 +549,22 @@ void add_cprover_library(contextt &context, const languaget *language)
    *    - ignored_ctx empty
    */
   contextt ignored_ctx;
+  fine_timet read_start = current_time();
   if (goto_reader.read_goto_binary_array(
-        lib_start, lib_size, new_ctx, ignored_ctx, goto_functions))
+        lib_start, lib_size, new_ctx, ignored_ctx))
     abort();
+  fine_timet read_stop = current_time();
 
   // Traverse symbols and get dependencies from both their nested types and values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.get_value(), symbol_deps);
     generate_symbol_deps(s.id, s.get_type(), symbol_deps);
   });
+  fine_timet deps_stop = current_time();
+
+  // The whitelist path scans again for every symbol it pulls out of
+  // ignored_ctx; bill that to the scan rather than to selection.
+  fine_timet deps_extra = 0;
 
   // Add two hacks; we might use either pthread_mutex_lock or the checked
   // variant; so if one version is used, pull in the other too.
@@ -586,13 +638,18 @@ void add_cprover_library(contextt &context, const languaget *language)
 
       if (uses_whitelist)
       {
+        fine_timet scan_start = current_time();
         generate_symbol_deps(s->id, s->get_value(), symbol_deps);
         generate_symbol_deps(s->id, s->get_type(), symbol_deps);
+        deps_extra += current_time() - scan_start;
       }
 
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
+
+  fine_timet select_stop = current_time();
+  unsigned int kept = store_ctx.size();
 
   // Bring store_ctx symbols into context
   if (c_link(context, store_ctx, "<built-in-library>"))
@@ -601,6 +658,17 @@ void add_cprover_library(contextt &context, const languaget *language)
     log_error("Failed to merge C library");
     abort();
   }
+  fine_timet link_stop = current_time();
+
+  report_library_load(
+    {is_solidity,
+     new_ctx.size() + ignored_ctx.size(),
+     kept,
+     read_stop - read_start,
+     deps_stop - read_stop + deps_extra,
+     select_stop - deps_stop - deps_extra,
+     link_stop - select_stop});
+
   // We basically need a place where we know that ESBMC produces the "main" executable that will be run.
   // This is the best place that I've found and mimics how a real compiler would work:
   // First compile all source files to objects files, then link them together and then link with the libc

@@ -16,6 +16,9 @@
 #include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
+#ifdef __GLIBC__
+#  include <malloc.h>
+#endif
 #include <limits>
 #include <util/expr/expr_util.h>
 #include <iostream>
@@ -129,6 +132,15 @@ bool esbmc_parseoptionst::get_goto_program(
     log_status(
       "GOTO program creation time: {}s",
       time2string(create_stop - create_start));
+
+#ifdef __GLIBC__
+    /* Building the GOTO program allocates and frees the whole
+     * operational-model library, and with one arena (see main.cpp) those blocks
+     * are in the arena everything after this point allocates from. Handing them
+     * back here is what keeps encoding from paying for them (esbmc/esbmc#6831).
+     */
+    malloc_trim(0);
+#endif
 
     fine_timet process_start = current_time();
     if (process_goto_program(options, goto_functions))
@@ -504,6 +516,26 @@ static void warn_undefined_external_symbols(const contextt &context)
       s->location);
 }
 
+// Expand --no-standard-checks into the individual checks it stands for. Must
+// run before goto_convert, because VLA size checks are generated during goto
+// conversion.
+static void
+expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
+{
+  if (
+    !cmdline.isset("no-standard-checks") &&
+    !options.get_bool_option("no-standard-checks"))
+    return;
+
+  options.set_option("no-pointer-check", true);
+  options.set_option("no-div-by-zero-check", true);
+  options.set_option("no-pointer-relation-check", true);
+  options.set_option("no-unlimited-scanf-check", true);
+  options.set_option("no-vla-size-check", true);
+  options.set_option("no-align-check", true);
+  options.set_option("no-bounds-check", true);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -547,20 +579,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Expand --no-standard-checks into individual options before goto_convert,
-    // because VLA size checks are generated during goto conversion.
-    if (
-      cmdline.isset("no-standard-checks") ||
-      options.get_bool_option("no-standard-checks"))
-    {
-      options.set_option("no-pointer-check", true);
-      options.set_option("no-div-by-zero-check", true);
-      options.set_option("no-pointer-relation-check", true);
-      options.set_option("no-unlimited-scanf-check", true);
-      options.set_option("no-vla-size-check", true);
-      options.set_option("no-align-check", true);
-      options.set_option("no-bounds-check", true);
-    }
+    expand_no_standard_checks(cmdline, options);
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
@@ -581,6 +600,16 @@ bool esbmc_parseoptionst::parse_goto_program(
   catch (std::bad_alloc &)
   {
     log_error("Out of memory");
+    return true;
+  }
+
+  // Frontends report unconvertible input by throwing (e.g. the Python
+  // converter's unresolvable-attribute paths). Without this the exception
+  // escapes to std::terminate and the process dies on SIGABRT -- the failure
+  // mode that replacing abort() with a throw was meant to remove.
+  catch (const std::exception &e)
+  {
+    log_error("{}", e.what());
     return true;
   }
 
@@ -777,7 +806,7 @@ void esbmc_parseoptionst::preprocessing()
     }
 #ifdef ENABLE_OLD_FRONTEND
     std::ostringstream oss;
-    if (c_preprocess(filename, oss, false))
+    if (c_preprocess(filename, oss))
       log_error("PREPROCESSING ERROR");
     log_status("{}", oss.str());
 #endif

@@ -46,7 +46,16 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_warning("expected string constant, but got:\n{}", expr);
+    // Only the assertion's description is read from here, so a message built
+    // at runtime is not an error: the caller falls back to printing the guard.
+    // Name the location rather than dumping the expression tree — the dump was
+    // pages of irep for a benign case, and it is the source line the user needs
+    // (#1557).
+    const locationt &loc = expr.find_location();
+    log_warning(
+      "assertion description at {} is not a string literal; reporting the "
+      "guard instead",
+      loc.is_nil() ? std::string("unknown location") : loc.as_string());
     return;
   }
 
@@ -209,6 +218,38 @@ void goto_convertt::emit_assert_fail_noreturn(
   a->location.user_provided(true);
 }
 
+void goto_convertt::do_assert_fail(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest,
+  const irep_idt &base_name,
+  std::size_t arity,
+  std::size_t expr_arg)
+{
+  if (arguments.size() != arity)
+  {
+    log_error(
+      "`{}' expected to have {} arguments", id2string(base_name), arity);
+    abort();
+  }
+
+  std::string description = "assertion ";
+  get_string_constant(arguments[expr_arg], description);
+
+  if (options.get_bool_option("no-assertions"))
+  {
+    emit_assert_fail_noreturn(function.location(), dest);
+    return;
+  }
+
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  t->guard = gen_false_expr();
+  t->location = function.location();
+  t->location.user_provided(true);
+  t->location.property("assertion");
+  t->location.comment(description);
+}
+
 void goto_convertt::do_printf(
   const exprt &lhs,
   const exprt &function,
@@ -307,10 +348,20 @@ void goto_convertt::do_mem(
 {
   std::string func = is_malloc ? "malloc" : "alloca";
 
-  if (lhs.is_nil())
-    return; // does nothing
-
   locationt location = function.location();
+
+  // `malloc(n);` with the result discarded still allocates, and the storage is
+  // unreachable the moment the statement ends -- exactly what
+  // --memory-leak-check exists to report. Dropping the call made that leak
+  // invisible, so allocate into a temporary instead (#822). The result type is
+  // the allocator's own; the object's type and size ride on the side effect
+  // below, so nothing downstream depends on it.
+  exprt target = lhs;
+  if (target.is_nil())
+  {
+    const typet ptr_type = pointer_typet(empty_typet());
+    target = symbol_exprt(new_tmp_symbol(ptr_type).id, ptr_type);
+  }
 
   // get alloc type and size
   typet alloc_type;
@@ -321,7 +372,7 @@ void goto_convertt::do_mem(
 
   // produce new object
 
-  exprt new_expr("sideeffect", lhs.type());
+  exprt new_expr("sideeffect", target.type());
   new_expr.statement(func);
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(alloc_size);
@@ -330,7 +381,7 @@ void goto_convertt::do_mem(
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
-  exprt new_assign = code_assignt(lhs, new_expr);
+  exprt new_assign = code_assignt(target, new_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
@@ -813,6 +864,23 @@ static void emit_va_marker_call(
   t->location = function.location();
 }
 
+bool goto_convertt::drop_inactive_contract_clause(bool is_clause) const
+{
+  return is_clause && !options.contracts_enabled();
+}
+
+// The assigns marker is an assignment, so symex reads its right-hand side. A
+// whole array read through a pointer is the one rvalue dereference refuses to
+// build (pointer-analysis/dereference.cpp), so carry an array target by
+// address; the contracts layer strips it back off. A frame target is a place,
+// and its address is the part that matters.
+static exprt assigns_marker_operand(const exprt &target)
+{
+  if (!target.type().is_array())
+    return target;
+  return address_of_exprt(target);
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -874,6 +942,7 @@ void goto_convertt::do_function_call_symbol(
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
   bool is_requires = (base_name == "__ESBMC_requires");
   bool is_ensures = (base_name == "__ESBMC_ensures");
+  bool is_clause = is_requires || is_ensures;
   bool is_assigns = (base_name == "__ESBMC_assigns");
 
   // Debug: log if we see assigns
@@ -885,7 +954,15 @@ void goto_convertt::do_function_call_symbol(
       arguments.size());
   }
 
-  if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
+  // A contract clause states nothing outside contract mode. goto_sideeffects
+  // already drops it, but only for clauses that arrive as a side-effect
+  // expression; the Python frontend emits a direct FUNCTION_CALL, which never
+  // reaches that strip, so a live `requires` would be assumed and mask real
+  // bugs in the function it annotates.
+  if (drop_inactive_contract_clause(is_clause))
+    return;
+
+  if (is_assume || is_assert || is_loop_invariant || is_clause)
   {
     if (arguments.size() != 1)
     {
@@ -895,7 +972,7 @@ void goto_convertt::do_function_call_symbol(
 
     if (
       options.get_bool_option("no-assertions") && !is_assume &&
-      !is_loop_invariant && !is_requires && !is_ensures)
+      !is_loop_invariant && !is_clause)
       return;
 
     // Rafael's invariant merging: combine consecutive
@@ -928,7 +1005,7 @@ void goto_convertt::do_function_call_symbol(
     else
     {
       // For contract functions, generate ASSUME instructions with special markers
-      if (is_requires || is_ensures)
+      if (is_clause)
       {
         t = dest.add_instruction(ASSUME);
         t->guard = guard;
@@ -1075,6 +1152,8 @@ void goto_convertt::do_function_call_symbol(
 
       log_debug(
         "builtin_functions", "  Assigns target {}: {}", i, actual_arg.pretty());
+
+      actual_arg = assigns_marker_operand(actual_arg);
 
       // Create a sideeffect expression to mark this as an assigns target
       // Type is inherited from the actual argument (after stripping typecast)
@@ -1353,83 +1432,28 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
-    // __assert_fail is Linux
-    // These take four arguments:
-    // "expression", "file.c", line, __func__
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    // Both take four arguments, but not in the same order. glibc's
+    // __assert_fail is (#e, file, line, __func__); Darwin's __assert_rtn is
+    // (__func__, file, line, #e) -- the FreeBSD __assert order handled below.
+    // Reading argument 0 for both put the enclosing function's name in every
+    // macOS counterexample where the failing expression belongs.
+    do_assert_fail(
+      function,
+      arguments,
+      dest,
+      base_name,
+      4,
+      base_name == "__assert_rtn" ? 3 : 0);
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
   {
     /* This is FreeBSD, taking 4 arguments: __func__, __FILE__, __LINE__, #e */
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[3], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    do_assert_fail(function, arguments, dest, base_name, 4, 3);
   }
   else if (base_name == "_wassert")
   {
-    // this is Windows
-
-    if (arguments.size() != 3)
-    {
-      log_error("`{}' expected to have three arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    // this is Windows: #e, __FILE__, __LINE__
+    do_assert_fail(function, arguments, dest, base_name, 3, 0);
   }
   else if (base_name == "operator new")
   {

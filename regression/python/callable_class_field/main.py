@@ -1,12 +1,13 @@
-# Storing callables in a class instance field, as opposed to a module-level
-# variable (which callable3 and friends already cover). This is the last of
-# the four features regression/python/concurrency_fail waits on (#4566) --
-# threading.Thread subclassing, queue.Queue and random.choice over a filtered
-# list all work now.
+# Calling a callable that was stored in a list. Storing one works -- drop the
+# call below and this verifies -- so the gap is the indirect call through the
+# element, not the container (#6640).
 #
-# ESBMC currently aborts rather than reporting anything: the list element type
-# comes out as empty/void, so dereferencet::construct_from_array asks it for a
-# width and the symbolic_type_excp escapes uncaught.
+# The two shapes fail differently, and only this one is a crash: through an
+# instance field ESBMC aborts on to_code_type's `type.id() == typet::t_code`,
+# while through a module-level list it reports `got invalid code for function
+# ...$list_elem$` and exits (callable_module_list pins that one). callable3
+# covers neither: it stores a callable in a module-level *variable* and then
+# calls a different function directly.
 from typing import List, Callable
 
 

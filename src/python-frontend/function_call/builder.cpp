@@ -1,4 +1,5 @@
 #include <python-frontend/function_call/builder.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
@@ -8,12 +9,14 @@
 #include <python-frontend/type/type_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 #include <util/message/message.h>
 #include <util/irep/std_expr.h>
 #include <python-frontend/python_expr_builder.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
+#include <set>
 
 using namespace python_expr;
 
@@ -61,6 +64,14 @@ static bool is_pylist_object_type(const typet &type, const namespacet &ns)
   return try_get_pylist_struct_type(type, ns).has_value();
 }
 
+/// Python types that define no __len__. Named rather than tested inline so the
+/// len() lowering stays one decision point wide.
+static bool is_unsized_python_type(const std::string &python_type)
+{
+  return python_type == "int" || python_type == "float" ||
+         python_type == "bool" || python_type == "complex";
+}
+
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
@@ -69,6 +80,12 @@ const std::string kEsbmcAssert = "__ESBMC_assert";
 const std::string kEsbmcUnreachable = "__ESBMC_unreachable";
 const std::string kLoopInvariant = "__loop_invariant";
 const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
+const std::string kEsbmcRequires = "__ESBMC_requires";
+const std::string kEsbmcEnsures = "__ESBMC_ensures";
+const std::string kEsbmcAssigns = "__ESBMC_assigns";
+const std::string kEsbmcOld = "__ESBMC_old";
+const std::string kEsbmcOldRaw = "__ESBMC_old_raw";
+const std::string kEsbmcReturnValue = "__ESBMC_return_value";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
 const std::string kEsbmcAtomicEnd = "__ESBMC_atomic_end";
@@ -78,6 +95,376 @@ const std::string kPytJoin = "__pyt_join";
 const std::string kPytTerminate = "__pyt_terminate";
 const std::string kPyLockBlockAndCheck = "__ESBMC_pylock_block_and_check";
 const std::string kPyLockReleaseWaiters = "__pyt_lock_release_waiters";
+
+typet function_call_builder::enclosing_return_type() const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+
+  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!sym || !sym->get_type().is_code())
+    return typet();
+
+  return to_code_type(sym->get_type()).return_type();
+}
+
+// Loop invariants and function-contract clauses share one shape: a bodiless
+// `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
+// marked ASSUME.
+static bool needs_bool_intrinsic_symbol(const std::string &name)
+{
+  return name == kEsbmcLoopInvariant || name == kEsbmcRequires ||
+         name == kEsbmcEnsures;
+}
+
+// Contract intrinsics the Python frontend does not lower yet. Named so that a
+// clause mentioning one says why, rather than reporting only that the clause is
+// impure and leaving the reader to guess which call was the problem.
+static bool is_unsupported_contract_intrinsic(const std::string &name)
+{
+  return name == "__ESBMC_assigns" || name == "__ESBMC_is_fresh" ||
+         name == "__ESBMC_forall" || name == "__ESBMC_exists";
+}
+
+void function_call_builder::check_contract_call(
+  const symbol_id &function_id) const
+{
+  const std::string &clause = function_id.get_function();
+
+  // Only `assigns` is reported from here: it is a statement in its own right,
+  // so nothing else sees it. The other unsupported intrinsics are meaningful
+  // only inside a clause, where check_contract_clause already rejects them by
+  // name. Reporting them here would fire on any call sharing the name, outside
+  // any clause, and blame contracts for it.
+  if (clause == kEsbmcAssigns)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} is not supported by the Python frontend yet",
+      clause,
+      call_.value("lineno", 0)));
+
+  if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
+    return;
+
+  // goto_convert aborts on any other arity, so reject it here where the user
+  // still gets a line number and a suggestion.
+  if (call_["args"].size() != 1)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes exactly one argument, got {}; combine conditions "
+      "with 'and'",
+      clause,
+      call_.value("lineno", 0),
+      call_["args"].size()));
+
+  check_contract_clause(call_["args"], clause);
+}
+
+// Node kinds a clause may contain. An allow-list rather than a deny-list: the
+// clause becomes one ASSUME/ASSERT, so anything needing a temporary, a branch
+// or an iteration does not survive it, and a construct nobody enumerated
+// should fail loudly instead of lowering into something else. Denying only
+// Call and Subscript let comprehensions and the walrus operator through.
+// Operator and context nodes carry their own `_type`, so they are listed too.
+// `In` / `NotIn` are absent because they are container operations.
+static bool is_pure_clause_node(const std::string &node_type)
+{
+  static const std::set<std::string> pure = {
+    "Name",  "Constant",  "BoolOp", "UnaryOp", "BinOp",  "Compare",
+    "IfExp", "Attribute", "Load",   "And",     "Or",     "Not",
+    "UAdd",  "USub",      "Invert", "Add",     "Sub",    "Mult",
+    "Div",   "FloorDiv",  "Mod",    "Pow",     "LShift", "RShift",
+    "BitOr", "BitXor",    "BitAnd", "Eq",      "NotEq",  "Lt",
+    "LtE",   "Gt",        "GtE",    "Is",      "IsNot"};
+  return pure.count(node_type) != 0;
+}
+
+/// Names the Python construct rather than the AST spelling where they differ.
+static std::string describe_clause_node(const std::string &node_type)
+{
+  if (node_type == "Call")
+    return "a function call";
+  if (node_type == "Subscript")
+    return "a subscript";
+  if (node_type == "NamedExpr")
+    return "an assignment expression";
+  if (
+    node_type == "ListComp" || node_type == "SetComp" ||
+    node_type == "DictComp" || node_type == "GeneratorExp")
+    return "a comprehension";
+  return "a " + node_type + " expression";
+}
+
+/// Scalars the wrapper can snapshot by value. Anything else is a pointer into
+/// the Python object model, whose extent and aliasing the contract layer has no
+/// way to state yet (#6938 P4).
+static bool is_snapshottable_scalar(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+         type.is_bool();
+}
+
+std::optional<exprt> function_call_builder::build_contract_intrinsic(
+  const symbol_id &function_id) const
+{
+  check_contract_call(function_id);
+
+  if (function_id.get_function() == kEsbmcOld)
+    return build_old_snapshot();
+
+  // Loop invariants and function-contract clauses share one shape: a bodiless
+  // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
+  // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
+  // routes any callee carrying a body to a plain FUNCTION_CALL instead.
+  if (!needs_bool_intrinsic_symbol(function_id.get_function()))
+    return std::nullopt;
+
+  const std::string &func_symbol_id = function_id.to_string();
+  if (converter_.symbol_table().find_symbol(func_symbol_id.c_str()) != nullptr)
+    return std::nullopt;
+
+  code_typet code_type;
+  code_type.return_type() = empty_typet();
+  code_typet::argumentt arg;
+  arg.type() = bool_type();
+  code_type.arguments().push_back(arg);
+
+  symbolt symbol = converter_.create_symbol(
+    converter_.python_file(),
+    function_id.get_function(),
+    func_symbol_id,
+    converter_.get_location_from_decl(call_),
+    code_type);
+  converter_.add_symbol(symbol);
+  return std::nullopt;
+}
+
+// Whether \p name is a parameter of the function being converted. Only a
+// parameter or a module-level global has a value from before the body ran; a
+// local does not exist yet at the point a snapshot would be taken.
+bool function_call_builder::names_enclosing_parameter(
+  const std::string &name) const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+
+  const symbolt *fn = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!fn || !fn->get_type().is_code())
+    return false;
+
+  sid.set_object(name);
+  const std::string param_id = sid.to_string();
+  for (const auto &argument : to_code_type(fn->get_type()).arguments())
+    if (argument.get_identifier() == param_id)
+      return true;
+
+  return false;
+}
+
+bool function_call_builder::names_module_global(const std::string &name) const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+  return converter_.symbol_table().find_symbol(sid.global_to_string()) !=
+         nullptr;
+}
+
+exprt function_call_builder::build_old_snapshot() const
+{
+  const int line = call_.value("lineno", 0);
+
+  // Outside a clause there is no "before" for the snapshot to name, and the
+  // instruction it plants would have no reader. Reporting it beats leaving a
+  // statement that looks like it did something.
+  if (!converter_.in_contract_clause())
+    throw std::runtime_error(fmt::format(
+      "{} at line {} is only meaningful inside a contract clause",
+      kEsbmcOld,
+      line));
+
+  if (call_["args"].size() != 1)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes exactly one argument, got {}",
+      kEsbmcOld,
+      line,
+      call_["args"].size()));
+
+  const nlohmann::json &arg = call_["args"][0];
+  if (arg.value("_type", "") != "Name")
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes a variable; {} cannot be snapshotted",
+      kEsbmcOld,
+      line,
+      describe_clause_node(arg.value("_type", ""))));
+
+  const std::string &name = arg.value("id", "");
+  if (!names_enclosing_parameter(name) && !names_module_global(name))
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes '{}', which is neither a parameter nor a "
+      "module-level global; a local has no pre-call value to snapshot",
+      kEsbmcOld,
+      line,
+      name));
+
+  exprt target = converter_.get_expr(arg);
+  if (!is_snapshottable_scalar(target.type()))
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes '{}', which is not an int, float or bool; only "
+      "scalars can be snapshotted by the Python frontend yet",
+      kEsbmcOld,
+      line,
+      arg.value("id", "")));
+
+  // Build what the C macro expands to,
+  // `*(__typeof__(x)*)__ESBMC_old_raw((void*)(&x))`, which Python cannot spell
+  // but the frontend can. Going through the same intrinsic keeps the snapshot
+  // instruction, the wrapper materialisation and the call-site one shared with
+  // C rather than reimplemented here.
+  const std::string raw_id = "c:@F@" + kEsbmcOldRaw;
+  const typet void_ptr = pointer_typet(empty_typet());
+  locationt location = converter_.get_location_from_decl(call_);
+
+  code_typet code_type;
+  code_type.return_type() = void_ptr;
+  code_typet::argumentt argument;
+  argument.type() = void_ptr;
+  code_type.arguments().push_back(argument);
+
+  if (converter_.symbol_table().find_symbol(raw_id.c_str()) == nullptr)
+  {
+    symbolt symbol = converter_.create_symbol(
+      converter_.python_file(), kEsbmcOldRaw, raw_id, location, code_type);
+    converter_.add_symbol(symbol);
+  }
+
+  exprt address = address_of_exprt(target);
+  address.make_typecast(void_ptr);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(raw_id, code_type);
+  call.arguments() = {address};
+  call.type() = void_ptr;
+  call.location() = location;
+
+  exprt typed = call;
+  typed.make_typecast(pointer_typet(target.type()));
+
+  exprt snapshot("dereference", target.type());
+  snapshot.copy_to_operands(typed);
+  snapshot.location() = location;
+  return snapshot;
+}
+
+void function_call_builder::check_clause_name(
+  const nlohmann::json &node,
+  const std::string &clause) const
+{
+  const std::string name = node.value("id", "");
+
+  if (name == kEsbmcReturnValue)
+  {
+    if (clause == kEsbmcRequires)
+      throw std::runtime_error(fmt::format(
+        "{} clause at line {} references {}; a precondition cannot mention "
+        "the return value",
+        clause,
+        node.value("lineno", 0),
+        kEsbmcReturnValue));
+
+    if (returns_no_value(enclosing_return_type()))
+      throw std::runtime_error(fmt::format(
+        "{} clause at line {} references {}, but '{}' returns None",
+        clause,
+        node.value("lineno", 0),
+        kEsbmcReturnValue,
+        converter_.current_function_name()));
+  }
+
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+
+  // A clause may also name a module-level global, which is not in the
+  // function's scope.
+  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  if (sym && sym->get_type() == any_type())
+    throw std::runtime_error(fmt::format(
+      "{} clause at line {} references '{}', whose type could not be "
+      "determined; annotate the parameter so the clause constrains its value",
+      clause,
+      node.value("lineno", 0),
+      name));
+}
+
+// A contract clause is lowered into one ASSUME/ASSERT, so its argument has to
+// survive as a pure expression. Three Python constructs do not: a call binds
+// to an SSA temporary that the contract wrapper never declares, so the clause
+// silently becomes nondeterministic; a subscript expands into a bounds-check
+// branch, which collapses the clause to a constant; and a parameter whose type
+// could not be inferred is a `void *`, so `o > 0` compares a pointer rather
+// than the value the source reads as. Reject all three instead of verifying a
+// different property than the one written. A parameter whose type *is* known,
+// including a list or str, stays allowed.
+void function_call_builder::check_contract_clause(
+  const nlohmann::json &node,
+  const std::string &clause) const
+{
+  if (!node.is_object())
+  {
+    if (node.is_array())
+      for (const auto &child : node)
+        check_contract_clause(child, clause);
+    return;
+  }
+
+  const std::string node_type = node.value("_type", "");
+  const std::string callee =
+    node_type == "Call" ? node["func"].value("id", "") : std::string();
+
+  // __ESBMC_old(x) is part of the clause language rather than a call whose
+  // result the clause depends on: it names the value x held before the body
+  // ran, and lowers to a snapshot taken there.
+  if (
+    !node_type.empty() && !is_pure_clause_node(node_type) &&
+    callee != kEsbmcOld)
+  {
+    throw std::runtime_error(fmt::format(
+      "{} clause at line {} contains {}; a contract clause must be a pure "
+      "expression{}",
+      clause,
+      node.value("lineno", 0),
+      describe_clause_node(node_type),
+      is_unsupported_contract_intrinsic(callee)
+        ? fmt::format(
+            " ({} is not supported by the Python frontend yet)", callee)
+        : ""));
+  }
+
+  // A precondition already speaks about the pre-state, and nothing rewrites a
+  // snapshot in it: `replace_old_in_expr` is applied to the ensures alone, so
+  // the requires would be asserted over a symbol no instruction defines.
+  if (callee == kEsbmcOld && clause == kEsbmcRequires)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} says nothing in a precondition, which already speaks "
+      "about the pre-state",
+      kEsbmcOld,
+      node.value("lineno", 0)));
+
+  if (node_type == "Name")
+    check_clause_name(node, clause);
+
+  for (const auto &child : node)
+    check_contract_clause(child, clause);
+}
 
 function_call_builder::function_call_builder(
   python_converter &converter,
@@ -129,6 +516,17 @@ bool function_call_builder::is_len_call(const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
   return func_name == kGetObjectSize || func_name == kStrlen;
+}
+
+/// True when @p arg is `name[...]` whose slice node is of kind @p slice_kind
+/// and whose base is a plain Name; the caller then tests that name's type.
+static bool is_name_subscript(const nlohmann::json &arg, const char *slice_kind)
+{
+  return arg["_type"] == "Subscript" && arg.contains("slice") &&
+         arg["slice"].is_object() &&
+         arg["slice"].value("_type", "") == slice_kind &&
+         arg.contains("value") && arg["value"].is_object() &&
+         arg["value"].value("_type", "") == "Name";
 }
 
 symbol_id function_call_builder::build_function_id() const
@@ -417,11 +815,20 @@ symbol_id function_call_builder::build_function_id() const
     }
     else if (arg["_type"] == "List")
       func_name = kGetObjectSize;
+    else if (arg["_type"] == "Dict")
+    {
+      // len({"a": 1}) -- a dict literal is dict-typed just as dict(...) is,
+      // so it needs the same size handler. Without this it fell to strlen over
+      // the dict struct and reported a wrong size; a dict bound to a name was
+      // never affected, because it reaches the dict-aware path by type.
+      func_name = "__ESBMC_len_dict";
+      function_id.clear();
+      function_id.set_prefix("esbmc:");
+      function_id.set_function(func_name);
+      return function_id;
+    }
     else if (
-      arg["_type"] == "Subscript" && arg.contains("slice") &&
-      arg["slice"].is_object() && arg["slice"].value("_type", "") == "Slice" &&
-      arg.contains("value") && arg["value"].is_object() &&
-      arg["value"].value("_type", "") == "Name" &&
+      is_name_subscript(arg, "Slice") &&
       th.get_var_type(arg["value"]["id"].get<std::string>()) == "bytes")
     {
       // Inline len(b[a:b]) where b is bytes: the slice is a wide-int array, so
@@ -431,10 +838,7 @@ symbol_id function_call_builder::build_function_id() const
       func_name = kGetObjectSize;
     }
     else if (
-      arg["_type"] == "Subscript" && arg.contains("slice") &&
-      arg["slice"].is_object() && arg["slice"].value("_type", "") == "List" &&
-      arg.contains("value") && arg["value"].is_object() &&
-      arg["value"].value("_type", "") == "Name" &&
+      is_name_subscript(arg, "List") &&
       th.get_var_type(arg["value"]["id"].get<std::string>()) != "str")
     {
       // len(a[[0, 2]]): fancy indexing always selects multiple elements into
@@ -708,6 +1112,24 @@ symbol_id function_call_builder::build_function_id() const
   return function_id;
 }
 
+exprt function_call_builder::len_of_bitvector_operand(
+  const nlohmann::json &arg) const
+{
+  // A single character also lowers to a bitvector and does have length 1, so
+  // tell the two apart by the Python type. Anything the annotator could not
+  // type keeps the historical answer: get_operand_type reports a BinOp as its
+  // left operand's type, so `3 * "x,"` looks like an int, and refusing on that
+  // alone would reject a real str/list.
+  const std::string arg_py_type =
+    converter_.get_type_handler().get_operand_type(arg);
+
+  if (is_unsized_python_type(arg_py_type))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + arg_py_type + "' has no len()");
+
+  return from_integer(1, long_long_int_type());
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
@@ -754,7 +1176,7 @@ exprt function_call_builder::build() const
     }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
-      return from_integer(1, long_long_int_type());
+      return len_of_bitvector_operand(call_["args"][0]);
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
@@ -1093,30 +1515,8 @@ exprt function_call_builder::build() const
     }
   }
 
-  // Add loop invariant symbol to symbol table
-  if (function_id.get_function() == kEsbmcLoopInvariant)
-  {
-    const auto &symbol_table = converter_.symbol_table();
-    const std::string &func_symbol_id = function_id.to_string();
-
-    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
-    {
-      code_typet code_type;
-      code_type.return_type() = empty_typet();
-      code_typet::argumentt arg;
-      arg.type() = bool_type();
-      code_type.arguments().push_back(arg);
-
-      const std::string &python_file = converter_.python_file();
-      const std::string &func_name = function_id.get_function();
-      locationt location = converter_.get_location_from_decl(call_);
-
-      symbolt symbol = converter_.create_symbol(
-        python_file, func_name, func_symbol_id, location, code_type);
-
-      converter_.add_symbol(symbol);
-    }
-  }
+  if (std::optional<exprt> intrinsic = build_contract_intrinsic(function_id))
+    return *intrinsic;
 
   // Handle NumPy functions
   if (is_numpy_call(function_id))
@@ -1132,6 +1532,10 @@ exprt function_call_builder::build() const
     return numpy_call.get();
   }
 
+  const bool saved = converter_.enter_contract_clause(
+    needs_bool_intrinsic_symbol(function_id.get_function()));
   function_call_expr call_expr(function_id, call_, converter_);
-  return call_expr.get();
+  exprt result = call_expr.get();
+  converter_.restore_contract_clause(saved);
+  return result;
 }

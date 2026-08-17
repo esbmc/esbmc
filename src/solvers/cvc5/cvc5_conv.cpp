@@ -450,6 +450,16 @@ smt_astt cvc5_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
     lhs->sort);
 }
 
+smt_astt cvc5_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    slv.mkTerm(
+      cvc5::Kind::FLOATINGPOINT_REM,
+      {to_solver_smt_ast<cvc5_smt_ast>(lhs)->a,
+       to_solver_smt_ast<cvc5_smt_ast>(rhs)->a}),
+    lhs->sort);
+}
+
 smt_astt cvc5_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
 {
   return new_ast(

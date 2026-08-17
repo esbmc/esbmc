@@ -76,8 +76,25 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
     list(APPEND ESBMC_TEST_CAPABILITIES arch32)
 endif()
 
+if(ESBMC_BUNDLE_LIBC)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libc)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
+
+# Tests covering behaviour that is genuinely OS-specific -- resource limits,
+# threading, signals, memory mapping, filesystem semantics -- named as
+# "<folder>/<test>". The macOS CI leg runs only the python/ suite, so without
+# this a change of that kind passes on Linux and fails on macOS with no signal
+# from CI; #6617 was fixed twice for exactly that reason. These carry the
+# platform-sensitive label, which the macOS leg also selects (#6619).
+set(ESBMC_PLATFORM_SENSITIVE_TESTS
+    # Deep expression nesting: needs the large-stack thread main.cpp spawns,
+    # since raising RLIMIT_STACK does not grow the main thread's stack on
+    # macOS even though setrlimit reports success (#6618).
+    esbmc/deep_binary_chain_pass
+    esbmc/deep_binary_chain_fail)
 
 # An optional 5th argument names a backend to run the suite under. The tool
 # string is shlex-split by testing_tool.py, so the extra option rides along with
@@ -92,6 +109,9 @@ function(add_esbmc_regression_test folder modes test)
         set(test_name "${test_name}[${solver}]")
         set(tool "${ESBMC_BIN} --default-solver=${solver}")
         set(extra_labels ";cross-backend;cross-backend/${solver}")
+    endif()
+    if("${folder}/${test}" IN_LIST ESBMC_PLATFORM_SENSITIVE_TESTS)
+        string(APPEND extra_labels ";platform-sensitive")
     endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
@@ -186,6 +206,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
+    set(REGRESSIONS_PYTHON_CONTRACTS python-contracts)
     set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
 endif()
 
@@ -255,6 +276,9 @@ set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
 
+# list of C++23 test suites
+set(REGRESSIONS_CPP23 esbmc-cpp23/cpp)
+
 # enable test case geeneration
 set(TEST_GENERATION witnesses/test_case_generation)
 
@@ -286,6 +310,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP20}
+                    ${REGRESSIONS_CPP23}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
@@ -295,6 +320,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
@@ -350,6 +376,7 @@ else()
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
+                    ${REGRESSIONS_CPP23}
                     ${REGRESSIONS_CPP20}
                     ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP14}
@@ -368,6 +395,7 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}

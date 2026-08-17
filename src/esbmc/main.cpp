@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <esbmc/esbmc_parseoptions.h>
+#include <esbmc/globals.h>
 #include <langapi/mode.h>
 
 #include <exception>
@@ -12,6 +13,30 @@
 #if __has_include(<cxxabi.h>)
 #  include <cxxabi.h>
 #  define ESBMC_HAVE_CXXABI 1
+#endif
+
+#ifdef __GLIBC__
+#  include <cstring>
+#  include <malloc.h>
+
+/* glibc gives a non-main thread its own arena, so running the work on the
+ * thread below leaves symbolic execution, encoding and the solver allocating
+ * from a secondary one. Capping the process at a single arena puts them back on
+ * the main arena and is worth ~5% of wall clock, but only together with the
+ * malloc_trim() once GOTO creation is done (esbmc/esbmc#6831): the two are a
+ * pair, and the trim alone is a 3% regression.
+ *
+ * --parallel-solving is the exception, since it allocates from several threads
+ * at once and one arena would serialise them. It has to be read out of argv
+ * because a thread's arena is fixed at its first allocation, long before the
+ * options are parsed. */
+static bool wants_parallel_solving(int argc, const char **argv)
+{
+  for (int i = 1; i < argc; i++)
+    if (strcmp(argv[i], "--parallel-solving") == 0)
+      return true;
+  return false;
+}
 #endif
 
 // Name the exception being handled, for the catch-all arm. A `catch (const
@@ -90,6 +115,13 @@ static void *run_main(void *arg)
 
 int main(int argc, const char **argv)
 {
+#ifdef __GLIBC__
+  if (!wants_parallel_solving(argc, argv))
+    mallopt(M_ARENA_MAX, 1);
+#endif
+
+  register_bundled_files();
+
 #ifndef _WIN32
   pthread_attr_t attr;
   if (pthread_attr_init(&attr) == 0)

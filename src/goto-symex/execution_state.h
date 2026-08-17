@@ -284,6 +284,22 @@ public:
   void assume(const expr2tc &assumption) override;
 
   /**
+   *  Implemented by goto_symext::symex_printf. Overridden only to record the
+   *  globals the arguments read: the frontend lowers a printf call to an OTHER
+   *  instruction, so the function-call path never analyses them.
+   */
+  void symex_printf(const expr2tc &lhs, expr2tc &code) override;
+
+  /**
+   *  Under --no-unwinding-assertions a truncated loop is cut with an
+   *  assumption, which drives the state guard false and so is indistinguishable
+   *  at the scheduler from a genuinely infeasible path. The remaining
+   *  iterations are not infeasible, only unexplored, so the subtree is not
+   *  exhausted and no thread may be put to sleep against it (issue #6831).
+   */
+  void note_bounded_loop_truncation() override;
+
+  /**
    *  Fetch reference to count of dynamic objects in this state.
    *  The goto_symext class knows that such a count exists, just it doesn't
    *  store it itself. So we instead provide a hook for it to fetch a reference
@@ -294,6 +310,12 @@ public:
 
   /** Like get_dynamic_counter, but with nondet symbols. */
   unsigned int &get_nondet_counter() override;
+
+  /** Zero the dynamic-object counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore -- never from this class's
+   *  constructor, which the reachability tree runs per interleaving and where
+   *  a reset would mint colliding object names (R15). */
+  static void reset_dynamic_counter();
 
   /**
    *  Fetch name of current execution guard.
@@ -461,6 +483,17 @@ public:
     const expr2tc &ptr,
     bool &to_global);
 
+  /**
+   *  Record what a dereference reaches when the pointer it goes through is not
+   *  a bare symbol (R29). No-op on any other expression, and on a target that
+   *  is not shared.
+   */
+  void record_aggregate_held_target(
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
   /** Record `key` as an object accessed by this transition, for MPOR. */
   void record_access_key(
     const expr2tc &key,
@@ -476,6 +509,27 @@ public:
    *  @return True if scheduling dependency exists between threads j and l
    */
   bool check_mpor_dependency(unsigned int j, unsigned int l) const;
+
+  /** The objects one transition read and wrote, as MPOR records them. */
+  struct transition_footprintt
+  {
+    std::set<expr2tc> reads, writes;
+  };
+
+  /** Footprint of the transition thread `tid` most recently completed. */
+  transition_footprintt last_transition_footprint(unsigned int tid) const
+  {
+    return {thread_last_reads.at(tid), thread_last_writes.at(tid)};
+  }
+
+  /**
+   *  As check_mpor_dependency, but against a footprint captured earlier rather
+   *  than against a thread's current one. Sleep sets need this: the transition
+   *  a sleeping thread would take is the one it took when it was put to sleep,
+   *  which its `thread_last_*` entries no longer describe.
+   */
+  bool
+  check_mpor_dependency(unsigned int j, const transition_footprintt &fp) const;
 
   /**
    *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
@@ -493,6 +547,12 @@ public:
   const std::vector<std::vector<int>> &get_dependency_chain() const
   {
     return dependency_chain;
+  }
+
+  /** Read-only accessor for the chain's run order, for the A6.4 harness. */
+  const std::vector<unsigned int> &get_thread_last_transition() const
+  {
+    return thread_last_transition;
   }
 
   /** Accessor method for cswitch_forced. Sets it to true. */
@@ -561,9 +621,9 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  /** Analyze the shared varables in a function call, this is because an argumemt
-   *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
   void analyze_args(const expr2tc &expr) override;
 
 public:
@@ -645,6 +705,14 @@ protected:
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependency_chain[i][j] here. */
   std::vector<std::vector<int>> dependency_chain;
+  /** Run-order ordinal of each thread's last completed transition; 0 for a
+   *  thread that has not run. Only advanced where the chain is maintained,
+   *  which is why it is the chain's own notion of time rather than CS_number.
+   *  DCij asserts a chain from Ti's last transition to Tj's, so every 1 must
+   *  point forward in this order (A6.4). */
+  std::vector<unsigned int> thread_last_transition;
+  /** Ordinal issued to the next completed transition. */
+  unsigned int transition_ordinal;
   /** MPOR scheduling outcome. If we've just taken a transition that MPOR
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */

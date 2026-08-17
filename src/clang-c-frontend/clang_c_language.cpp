@@ -1,4 +1,5 @@
 #include <util/base/compiler_defs.h>
+#include <clang-c-frontend/clang_c_adjust_irep2.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Frontend/ASTUnit.h>
@@ -220,6 +221,11 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-W" + inc);
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
+
+  // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
+  // include/esbmc.h so including it anywhere else is an error rather than a
+  // pile of undefined intrinsics (#4610).
+  compiler_args.emplace_back("-D__ESBMC_execution");
 
   // Ignore ctype defined by the system
   compiler_args.emplace_back("-D__NO_CTYPE");
@@ -450,9 +456,34 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context);
-  if (adjuster.adjust())
-    return true;
+  // Phase 6 hop-off: with --clang-c-irep2-adjust-only the IREP2-native pass
+  // *replaces* clang_c_adjust rather than shadowing it, mirroring
+  // --python-irep2-adjust-only. §60 shows the dispatcher's arms are one
+  // strongly-coupled component, so they cannot move singly; the divergence
+  // count under this flag is the metric for how much of it has moved
+  // (docs/roadmap/scope-clang-c-irep2.md §66). Default off.
+  const bool irep2_only =
+    config.options.get_bool_option("clang-c-irep2-adjust-only");
+
+  if (!irep2_only)
+  {
+    clang_c_adjust adjuster(new_context);
+    if (config.options.get_bool_option("clang-c-irep2-adjust"))
+      adjuster.set_irep2_owns_arms();
+    if (adjuster.adjust())
+      return true;
+  }
+
+  // Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only,
+  // so flag-on and flag-off are byte-identical by construction; what the flag
+  // buys is migrating every value in the corpus through get_value2(), which
+  // aborts on a construct migrate_expr cannot represent.
+  if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
+  {
+    clang_c_adjust_irep2 irep2_adjuster(new_context, irep2_only);
+    if (irep2_adjuster.adjust())
+      return true;
+  }
 
   return c_link(context, new_context, module);
 }
@@ -506,6 +537,21 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
+
+/* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
+ * names are implicitly declared as int-returning functions and havoc'd, so a
+ * program written against CBMC verifies against nondet rather than against the
+ * memory model. Bodies live in src/c2goto/library/builtin_libs.c. */
+__SIZE_TYPE__ __CPROVER_POINTER_OBJECT(const void *);
+__PTRDIFF_TYPE__ __CPROVER_POINTER_OFFSET(const void *);
+_Bool __CPROVER_same_object(const void *, const void *);
+__SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *);
+_Bool __CPROVER_DYNAMIC_OBJECT(const void *);
+_Bool __CPROVER_LIVE_OBJECT(const void *);
+_Bool __CPROVER_WRITEABLE_OBJECT(const void *);
+_Bool __CPROVER_r_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_w_ok(const void *, __SIZE_TYPE__);
+_Bool __CPROVER_rw_ok(const void *, __SIZE_TYPE__);
 
 // Contract predicate: indicates that a pointer points to freshly allocated memory
 // Signature: __ESBMC_is_fresh(p, size)

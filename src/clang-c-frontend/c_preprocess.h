@@ -12,9 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string>
 #include <util/message/message.h>
 
-bool c_preprocess(
-  const std::string &path,
-  std::ostream &outstream,
-  bool is_cpp);
+bool c_preprocess(const std::string &path, std::ostream &outstream);
 
 #endif

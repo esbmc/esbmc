@@ -767,6 +767,8 @@ std::string ieee_mul2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_div2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
+std::string ieee_rem2t::field_names[esbmct::num_type_fields] =
+  {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names[esbmct::num_type_fields] =
   {"value_1", "value_2", "value_3", "rounding_mode", "", ""};
 std::string ieee_sqrt2t::field_names[esbmct::num_type_fields] =
@@ -786,7 +788,7 @@ std::string pointer_object2t::field_names[esbmct::num_type_fields] =
 std::string pointer_capability2t::field_names[esbmct::num_type_fields] =
   {"pointer_obj", "", "", "", ""};
 std::string address_of2t::field_names[esbmct::num_type_fields] =
-  {"pointer_obj", "", "", "", ""};
+  {"pointer_obj", "implicit", "", "", ""};
 std::string byte_extract2t::field_names[esbmct::num_type_fields] =
   {"source_value", "source_offset", "big_endian", "", ""};
 std::string byte_update2t::field_names[esbmct::num_type_fields] =

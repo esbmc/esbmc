@@ -9,6 +9,7 @@ set(inputs
            stdlib.h
            string.h
            time.h
+           wchar.h
            __esbmc/stddefs.h
            semaphore.h
 

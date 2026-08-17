@@ -609,9 +609,18 @@ public:
    *         This only affects how constants are interpreted: if enabled, the
    *         expression 0 becomes a null_object2t reference in the value-set,
    *         while other constants are invalid2t/unknown2t; when disabled,
-   *         constant expressions do not generate any references in the
-   *         value-set.
+   *         constant expressions generate no references, except that a member
+   *         of a constant aggregate is still selected, since navigating to it
+   *         inserts nothing by itself.
    */
+  /// Stop an operand whose set is only `unknown` from vetoing the other's;
+  /// the `unknown` moves into @p dest. See
+  /// docs/design/pointer-integer-provenance.md.
+  void retire_objectless_operand(
+    object_mapt &op0_set,
+    object_mapt &op1_set,
+    object_mapt &dest) const;
+
   void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
@@ -620,6 +629,31 @@ public:
     bool under_deref = true) const;
 
 protected:
+  /** The constant cases of get_value_set_rec: what a value reaches this code as
+   *  once constant propagation has substituted it. */
+  void get_constant_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  /** The two aggregate literals of get_constant_value_set. Each consumes the
+   *  one suffix component naming the member it holds, since a literal has no
+   *  suffixed symbol name for the symbol case to look up. */
+  void get_constant_struct_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  void get_constant_union_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(

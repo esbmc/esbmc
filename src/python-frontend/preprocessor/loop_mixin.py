@@ -9,6 +9,7 @@ this mixin only adds methods.
 """
 import ast
 import copy
+import sys
 from typing import Dict, Optional, Set
 
 __all__ = ["LoopMixin"]
@@ -691,15 +692,19 @@ class LoopMixin:
             2. for item in enumerate(iterable, start):          # single variable gets tuple
         """
         enumerate_call = node.iter
-        # Generate unique variable names for this enumerate loop level
-        loop_id = self.enumerate_loop_counter
-        self.enumerate_loop_counter += 1
 
         # Step 1: Validate the enumerate call
         self._validate_enumerate_call(enumerate_call)
 
         # Step 2: Parse and validate the target structure
         target_info = self._parse_enumerate_target(node.target)
+
+        if target_info["type"] == "nested":
+            return self._unroll_nested_enumerate_for(node, target_info)
+
+        # Generate unique variable names for this enumerate loop level
+        loop_id = self.enumerate_loop_counter
+        self.enumerate_loop_counter += 1
 
         # Step 3: Extract and validate arguments
         iterable, start_value = self._parse_enumerate_arguments(enumerate_call, node)
@@ -741,6 +746,13 @@ class LoopMixin:
         is_unpacking = (isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2)
 
         if is_unpacking:
+            index_elt, value_elt = target.elts
+            if isinstance(index_elt, ast.Name) and isinstance(value_elt, (ast.Tuple, ast.List)):
+                return {
+                    "type": "nested",
+                    "index_var": index_elt.id,
+                    "value_target": value_elt,
+                }
             if not all(isinstance(elt, ast.Name) for elt in target.elts):
                 raise ValueError("enumerate unpacking target must contain only names")
             return {
@@ -758,6 +770,78 @@ class LoopMixin:
             if expected < 2:
                 raise ValueError(f"too many values to unpack (expected {expected})")
         raise ValueError("enumerate target must be a name, tuple, or list")
+
+    def _reject_unsupported_loop(self, node, message):
+        """Emit a located parser-stage diagnostic and abort, as threading lowering does."""
+        print(f"ERROR: {self.module_name}:{getattr(node, 'lineno', '?')}: {message}")
+        sys.exit(4)
+
+    @staticmethod
+    def _static_int_value(expr):
+        """Return the int an expression denotes statically, or None."""
+        if isinstance(expr, ast.Constant) and isinstance(expr.value, int):
+            return int(expr.value)
+        if (isinstance(expr, ast.UnaryOp) and isinstance(expr.op, (ast.UAdd, ast.USub))
+                and isinstance(expr.operand, ast.Constant) and isinstance(expr.operand.value, int)):
+            sign = -1 if isinstance(expr.op, ast.USub) else 1
+            return sign * int(expr.operand.value)
+        return None
+
+    def _nested_enumerate_source(self, node, arity):
+        """Return the (list literal, start) the unroll needs, or reject with the reason."""
+        iterable, start_value = self._parse_enumerate_arguments(node.iter, node)
+        literal = self._resolve_list_literal_iterable(iterable)
+        start = self._static_int_value(start_value)
+
+        blocker = None
+        if literal is None:
+            blocker = "the iterable is not a list literal"
+        elif start is None:
+            blocker = "the start argument is not a constant integer"
+        elif not self._can_safely_unroll_list_literal_for(node, literal):
+            blocker = "the loop body contains break/continue/return"
+        else:
+            for elt in literal.elts:
+                if not isinstance(elt, (ast.Tuple, ast.List)):
+                    blocker = "an element is not a tuple or list literal"
+                elif len(elt.elts) != arity:
+                    blocker = f"an element does not have {arity} items"
+                if blocker:
+                    break
+        if blocker:
+            self._reject_unsupported_loop(
+                node, f"enumerate() with a nested unpacking target is unsupported here: {blocker}")
+        return literal, start
+
+    def _unroll_nested_enumerate_for(self, node, target_info):
+        """Unroll `for i, (a, b) in enumerate(seq)` over a statically known list.
+
+        Nested patterns need a literal RHS; see _unroll_list_literal_for (#6744).
+        Shares its evaluate-once caveat: elements are not snapshotted, so an
+        element naming a body-mutated variable reads the mutated value.
+        """
+        value_target = target_info["value_target"]
+        literal, start = self._nested_enumerate_source(node, len(value_target.elts))
+
+        unrolled = []
+        for offset, elt in enumerate(literal.elts):
+            index_assign = ast.AnnAssign(
+                target=self.create_name_node(target_info["index_var"], ast.Store(), node),
+                annotation=self.create_name_node("int", ast.Load(), node),
+                value=self.create_constant_node(start + offset, node),
+                simple=1,
+            )
+            value_assign = ast.Assign(
+                targets=[copy.deepcopy(value_target)],
+                value=copy.deepcopy(elt),
+            )
+            unrolled.extend([index_assign, value_assign])
+            unrolled.extend(copy.deepcopy(stmt) for stmt in node.body)
+
+        for stmt in unrolled:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return unrolled
 
     def _parse_enumerate_arguments(self, enumerate_call, node):
         """Extract and validate iterable and start value from enumerate call."""

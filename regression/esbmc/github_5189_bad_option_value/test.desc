@@ -1,4 +1,4 @@
 CORE
 main.c
 --unwind abc
-^ERROR: (uncaught exception \[|the argument )
+^ERROR: Invalid command line: the argument .+for option .--unwind. is invalid

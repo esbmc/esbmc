@@ -413,6 +413,73 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   }
 }
 
+/// Base name of the variable a forall2t/exists2t binds, or an empty id when
+/// @p binder is not the (typecast of) address_of(symbol) shape the solver
+/// expects.
+static irep_idt quantifier_bound_name(const expr2tc &binder)
+{
+  expr2tc sym = binder;
+  while (is_typecast2t(sym))
+    sym = to_typecast2t(sym).from;
+  if (is_address_of2t(sym))
+    sym = to_address_of2t(sym).ptr_obj;
+  return is_symbol2t(sym) ? to_symbol2t(sym).thename : irep_idt();
+}
+
+void goto_symex_statet::rename_quantified(
+  expr2tc &expr,
+  const std::set<irep_idt> &bound)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  rename_type(expr);
+
+  if (is_symbol2t(expr))
+  {
+    if (!bound.count(to_symbol2t(expr).thename))
+    {
+      rename(expr);
+      return;
+    }
+
+    // A bound occurrence denotes the quantified variable, not the program
+    // variable of the same name: L2 renaming would substitute the latter's
+    // value and collapse the body into a constant (GitHub #7024). Stop at
+    // L1, the name rename_address() gives the binder operand, which no SSA
+    // definition constrains.
+    type2tc origtype = expr->type;
+    top().level1.rename(expr);
+    fixup_renamed_type(expr, origtype);
+    return;
+  }
+
+  if (is_forall2t(expr) || is_exists2t(expr))
+  {
+    const bool forall = is_forall2t(expr);
+    expr2tc &binder =
+      forall ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1;
+    expr2tc &body =
+      forall ? to_forall2t(expr).side_2 : to_exists2t(expr).side_2;
+
+    rename(binder);
+
+    std::set<irep_idt> inner = bound;
+    inner.insert(quantifier_bound_name(binder));
+    rename_quantified(body, inner);
+    return;
+  }
+
+  if (is_address_of2t(expr))
+  {
+    rename_address(to_address_of2t(expr).ptr_obj, bound);
+    return;
+  }
+
+  expr->Foreach_operand(
+    [this, &bound](expr2tc &e) { rename_quantified(e, bound); });
+}
+
 void goto_symex_statet::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
@@ -434,6 +501,10 @@ void goto_symex_statet::rename(expr2tc &expr)
     address_of2t &addrof = to_address_of2t(expr);
     rename_address(addrof.ptr_obj);
   }
+  else if (is_forall2t(expr) || is_exists2t(expr))
+  {
+    rename_quantified(expr, {});
+  }
   else
   {
     // do this recursively
@@ -442,6 +513,14 @@ void goto_symex_statet::rename(expr2tc &expr)
 }
 
 void goto_symex_statet::rename_address(expr2tc &expr)
+{
+  static const std::set<irep_idt> nothing_bound;
+  rename_address(expr, nothing_bound);
+}
+
+void goto_symex_statet::rename_address(
+  expr2tc &expr,
+  const std::set<irep_idt> &bound)
 {
   // rename symbols to their l1 storage names only (no value substitution)
 
@@ -469,13 +548,14 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else if (is_index2t(expr))
   {
     index2t &index = to_index2t(expr);
-    rename_address(index.source_value);
-    rename(index.index);
+    rename_address(index.source_value, bound);
+    rename_quantified(index.index, bound);
   }
   else
   {
     // do this recursively
-    expr->Foreach_operand([this](expr2tc &e) { rename_address(e); });
+    expr->Foreach_operand(
+      [this, &bound](expr2tc &e) { rename_address(e, bound); });
   }
 }
 

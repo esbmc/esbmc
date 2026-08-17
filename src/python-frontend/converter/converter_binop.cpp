@@ -10,6 +10,7 @@
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -24,6 +25,7 @@
 
 #include <functional>
 #include <map>
+#include <set>
 #include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -868,67 +870,33 @@ exprt python_converter::handle_membership_operator(
     "' operation");
 }
 
-exprt python_converter::build_tagged_scalar_eq_literal(
-  const exprt &tagged,
-  const exprt &literal)
+// Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
+// % is zero (for both int and float operands, unlike C/IEEE). Model it as a
+// guarded exception raise -- the same mechanism list indexing uses for
+// IndexError -- so that `try: x / 0 except ZeroDivisionError: ...` is treated
+// as SAFE while a bare division by zero propagates and fails. The built-in
+// C-level div-by-zero assertion cannot express this: it fires regardless of
+// the surrounding try/except, so caught divisions were wrongly reported.
+//
+// The guard is a statement planted into the enclosing block, so it is emitted
+// only where the division is really code-generated in its execution context:
+// not for a lambda body converted at its definition, not during the discarded
+// type-probe pass over an assignment RHS, and not inside a clause, which is a
+// specification rather than code.
+bool python_converter::needs_zero_division_guard(
+  const std::string &op,
+  const exprt &rhs) const
 {
-  exprt tagged_addr = python_expr::build_address_of(tagged);
-  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
-
-  if (literal.type().is_array())
-  {
-    const symbolt *eq_str_func =
-      symbol_table_.find_symbol("c:@F@__python_scalar_eq_str");
-    assert(eq_str_func && "__python_scalar_eq_str not found in symbol table");
-    exprt lit_addr = string_handler_.get_array_base_address(literal);
-    exprt lit_size = type_handler_.tagged_scalar_byte_size(literal);
-
-    exprt call = python_expr::build_call_expr(
-      *eq_str_func, int_type(), {tagged_addr, lit_type_id, lit_addr, lit_size});
-    return python_expr::build_equal(call, from_integer(1, int_type()));
-  }
+  if (op != "Div" && op != "FloorDiv" && op != "Mod")
+    return false;
 
   if (
-    !literal.type().is_bool() && !literal.type().is_signedbv() &&
-    !literal.type().is_unsignedbv())
-    throw std::runtime_error(
-      "comparing a dynamically-typed variable against this literal type is "
-      "not yet supported");
+    !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
+    !rhs.type().is_floatbv())
+    return false;
 
-  exprt lit_value = python_expr::build_typecast(
-    literal, signedbv_typet(config.ansi_c.long_long_int_width));
-
-  const symbolt *eq_num_func =
-    symbol_table_.find_symbol("c:@F@__python_scalar_eq_num");
-  assert(eq_num_func && "__python_scalar_eq_num not found in symbol table");
-  exprt call = python_expr::build_call_expr(
-    *eq_num_func, int_type(), {tagged_addr, lit_type_id, lit_value});
-  return python_expr::build_equal(call, from_integer(1, int_type()));
-}
-
-exprt python_converter::handle_tagged_scalar_comparison(
-  const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs)
-{
-  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
-  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
-
-  // A tagged-vs-tagged compare needs a size known only at runtime (each
-  // operand's `.size` field), so the byte-compare's memcmp fallback can't
-  // unwind to termination even though the real value is always tiny.
-  // Comparing against a literal doesn't have this problem, since its size is
-  // a compile-time constant. Refuse cleanly rather than risk a
-  // non-terminating run.
-  if (lhs_tagged && rhs_tagged)
-    throw std::runtime_error(
-      "comparing two dynamically-typed variables directly is not yet "
-      "supported");
-
-  exprt result = lhs_tagged ? build_tagged_scalar_eq_literal(lhs, rhs)
-                            : build_tagged_scalar_eq_literal(rhs, lhs);
-
-  return op == "NotEq" ? python_expr::build_not(result) : result;
+  return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+         !in_contract_clause_;
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -944,9 +912,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     right = element["value"];
 
-  // Convert operands to expressions
+  // Convert operands to expressions. current_lhs is cleared first so a
+  // constructor call in operand position (`r = V(2) + V(3)`) allocates its own
+  // self temp instead of constructing into the outer assignment target, which
+  // every operand would otherwise alias (#6257).
+  exprt *saved_lhs = current_lhs;
+  current_lhs = nullptr;
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
+  current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
@@ -966,11 +940,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
   {
-    if (op != "Eq" && op != "NotEq")
-      throw std::runtime_error(
-        "operator '" + op +
-        "' on a dynamically-typed variable is not yet supported");
-    return handle_tagged_scalar_comparison(op, lhs, rhs);
+    if (op == "Eq" || op == "NotEq")
+      return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+    if (op == "Add" || op == "Sub" || op == "Div")
+      return dynamic_type_handler_.handle_arithmetic(
+        op, lhs, rhs, get_location_from_decl(element));
+    throw std::runtime_error(
+      "operator '" + op +
+      "' on a dynamically-typed variable is not yet supported");
   }
 
   // Handle type identity checks (e.g., y is int, x is str)
@@ -995,7 +972,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // type-check it as a pointer/struct rather than as empty code.
     lhs = to_value_expr(lhs, ns);
     rhs = to_value_expr(rhs, ns);
-    return handle_none_comparison(op, lhs, rhs);
+
+    return handle_none_operand(op, lhs, rhs);
   }
 
   // Handle exceptions
@@ -1594,18 +1572,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         "values");
   }
 
-  // Python raises a *catchable* ZeroDivisionError when the divisor of /, //, or
-  // % is zero (for both int and float operands, unlike C/IEEE). Model it as a
-  // guarded exception raise — the same mechanism list indexing uses for
-  // IndexError — so that `try: x / 0 except ZeroDivisionError: ...` is treated
-  // as SAFE while a bare division by zero propagates and fails. The built-in
-  // C-level div-by-zero assertion cannot express this: it fires regardless of
-  // the surrounding try/except, so caught divisions were wrongly reported.
-  if (
-    (op == "Div" || op == "FloorDiv" || op == "Mod") &&
-    (rhs.type().is_signedbv() || rhs.type().is_unsignedbv() ||
-     rhs.type().is_floatbv()) &&
-    !converting_lambda_body_ && !in_rhs_type_probe_)
+  if (needs_zero_division_guard(op, rhs))
   {
     // The divisor is referenced by both the zero-check guard and the division
     // itself. If it carries a side effect (a call, or a nondet) it would be

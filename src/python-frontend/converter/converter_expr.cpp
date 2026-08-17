@@ -17,6 +17,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
@@ -458,6 +459,65 @@ exprt python_converter::get_named_expr(const nlohmann::json &element)
 
   return get_expr(target);
 }
+/// Node kinds whose value an attribute access may be applied to directly, as
+/// opposed to a plain name. Each converts to an object that
+/// resolve_member_on_base can look a member up on.
+static bool is_attribute_base_expression(const nlohmann::json &node_type)
+{
+  return node_type == "Subscript" || node_type == "Call" ||
+         node_type == "BinOp" || node_type == "UnaryOp";
+}
+
+/// The symbol `__ESBMC_return_value` names inside an `__ESBMC_ensures` clause,
+/// or null when the name is something else or the enclosing function returns
+/// nothing. The contracts pass rewrites it to the real return value, so the
+/// frontend only has to give it the enclosing function's return type for the
+/// clause to type-check.
+symbolt *python_converter::contract_return_value_symbol(
+  const std::string &var_name,
+  const nlohmann::json &element)
+{
+  if (var_name != "__ESBMC_return_value" || current_func_name_.empty())
+    return nullptr;
+
+  symbol_id ret_sid = create_symbol_id();
+  symbolt *func_symbol = find_symbol(ret_sid.to_string());
+  // A None-returning function has no value to name, and an empty-typed symbol
+  // crashes the encoder rather than failing here.
+  const typet ret_type = func_symbol && func_symbol->get_type().is_code()
+                           ? to_code_type(func_symbol->get_type()).return_type()
+                           : typet();
+  if (returns_no_value(ret_type))
+    return nullptr;
+
+  ret_sid.set_object(var_name);
+  symbolt ret_symbol = create_symbol(
+    current_python_file,
+    var_name,
+    ret_sid.to_string(),
+    get_location_from_decl(element),
+    ret_type);
+  ret_symbol.lvalue = true;
+  ret_symbol.file_local = true;
+  return add_symbol_and_get_ptr(ret_symbol);
+}
+
+/// The "variable is not defined" diagnostic for a Name that resolved to no
+/// symbol, naming the enclosing function when the reference is inside one.
+static std::string undefined_variable_message(
+  const std::string &var_name,
+  const std::string &func_name,
+  const locationt &location)
+{
+  std::ostringstream error_msg;
+  error_msg << "Variable '" << var_name << "' is not defined";
+  if (!func_name.empty())
+    error_msg << " in function '" << func_name << "'";
+  if (!location.get_line().empty())
+    error_msg << " at line " << location.get_line();
+  error_msg << ".";
+  return error_msg.str();
+}
 
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
@@ -849,16 +909,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        log_error("Cannot resolve nested attribute: {}", attr_name);
-        abort();
+        throw std::runtime_error(
+          fmt::format("Cannot resolve nested attribute: {}", attr_name));
       }
       else if (element["value"]["_type"] == "Name")
       {
         var_name = element["value"]["id"].get<std::string>();
       }
-      else if (element["value"]["_type"] == "Subscript")
+      else if (is_attribute_base_expression(element["value"]["_type"]))
       {
-        // Attribute access on a subscript result, e.g. `d[key].attr`.
+        // Attribute access on the value an expression produces rather than on
+        // a name: `d[key].attr`, `C().attr`, `(a + b).attr`, `(-a).attr`. A
+        // named instance (`c = a + b; c.attr`) already works; this covers the
+        // unnamed case for every receiver we can convert to an object.
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -869,35 +932,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           break;
         }
 
-        log_error(
-          "Cannot resolve attribute '{}' on subscript result", attr_name);
-        abort();
-      }
-      else if (element["value"]["_type"] == "Call")
-      {
-        // Attribute access on an inline call result, e.g. `C().attr`. Convert
-        // the call to its (materialised) instance and resolve the member on
-        // it, the same way `d[k].attr` is handled above. A named instance
-        // (`c = C(); c.attr`) already works; this covers the unnamed case.
-        exprt base_expr = get_expr(element["value"]);
-        const std::string &attr_name = element["attr"].get<std::string>();
-
-        exprt resolved = resolve_member_on_base(base_expr, attr_name);
-        if (!resolved.is_nil())
-        {
-          expr = resolved;
-          break;
-        }
-
-        log_error("Cannot resolve attribute '{}' on call result", attr_name);
-        abort();
+        throw std::runtime_error(fmt::format(
+          "Cannot resolve attribute '{}' on {} result",
+          attr_name,
+          element["value"]["_type"].get<std::string>()));
       }
       else
       {
-        log_error(
+        throw std::runtime_error(fmt::format(
           "Unsupported Attribute value type: {}",
-          element["value"]["_type"].get<std::string>());
-        abort();
+          element["value"]["_type"].get<std::string>()));
       }
 
       // Handle module attribute access (e.g., math.inf) — unless the module
@@ -934,9 +978,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         symbolt *symbol = find_symbol(module_sid.to_string());
         if (!symbol)
         {
-          log_error(
-            "Module member '{}' not found in module '{}'", attr_name, var_name);
-          abort();
+          throw std::runtime_error(fmt::format(
+            "Module member '{}' not found in module '{}'",
+            attr_name,
+            var_name));
         }
 
         expr = symbol_expr(*symbol);
@@ -1014,28 +1059,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
         }
-        locationt location = get_location_from_decl(element);
-        std::ostringstream error_msg;
-        if (!current_func_name_.empty())
+        if (symbolt *rv = contract_return_value_symbol(var_name, element))
         {
-          // Variable referenced inside a function
-          error_msg << "Variable '" << var_name
-                    << "' is not defined in function '" << current_func_name_
-                    << "'";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
+          expr = symbol_expr(*rv);
+          break;
         }
-        else
-        {
-          // Variable referenced at global scope
-          error_msg << "Variable '" << var_name << "' is not defined";
-          if (!location.get_line().empty())
-            error_msg << " at line " << location.get_line();
-          error_msg << ".";
-        }
-        log_error("{}", error_msg.str());
-        abort();
+
+        throw std::runtime_error(undefined_variable_message(
+          var_name, current_func_name_, get_location_from_decl(element)));
       }
     }
 
@@ -1051,6 +1082,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
           symbol = retyped;
       }
+
+      // Also resolve reads through a permanent tagged-object alias, if a
+      // branch join flagged this variable.
+      dynamic_type_handler_.resolve_read(symbol);
     }
 
     expr = symbol_expr(*symbol);

@@ -207,6 +207,14 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
+     {"clang-c-irep2-adjust",
+      NULL,
+      "Run the IREP2-native C adjuster alongside the legacy adjust pass "
+      "(Phase 6 migration; experimental, default off)"},
+     {"clang-c-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
+      "(Phase 6 hop-off; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
@@ -308,6 +316,25 @@ const struct group_opt_templ all_cmd_options[] = {
      {"i386-win32", NULL, "Set Windows/I386 architecture"},
 #endif
    }},
+  {"Floating-point",
+   {
+     {"round-to-nearest",
+      NULL,
+      "Round floating-point results towards the nearest even value (default)"},
+     {"round-to-even", NULL, "Alias for --round-to-nearest"},
+     {"round-to-plus-inf",
+      NULL,
+      "Round floating-point results towards plus infinity"},
+     {"round-to-minus-inf",
+      NULL,
+      "Round floating-point results towards minus infinity"},
+     {"round-to-zero", NULL, "Round floating-point results towards zero"},
+     {"fp-taylor-terms",
+      boost::program_options::value<int>()->value_name("n"),
+      "Terms the exp/log/pow operational models expand their Taylor series to, "
+      "between 2 and 12 (default 8). More terms are more accurate and more "
+      "expensive to solve"},
+   }},
   {"Witness",
    {{"witness-output",
      boost::program_options::value<std::string>()->value_name("path"),
@@ -348,7 +375,15 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-witnesses",
      boost::program_options::value<int>()->default_value(16)->value_name("n"),
      "Cap the number of witnesses reported per property "
-     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."},
+    {"full-traces",
+     NULL,
+     "Print every trace state in the multi-witness report instead of the "
+     "states closest to the failure. Only meaningful with --all-witnesses."},
+    {"ascii-report",
+     NULL,
+     "Draw the multi-witness report with ASCII instead of box-drawing "
+     "characters. Detected automatically from the locale; this forces it."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),
@@ -530,11 +565,22 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-context-bound",
      boost::program_options::value<int>()->default_value(20)->value_name("nr"),
      "Highest context bound tried by --incremental-context-bound"},
+    {"falsify-context-bound",
+     boost::program_options::value<int>()->default_value(0)->value_name("nr"),
+     "Before the chosen strategy runs, look for a violation with the context "
+     "bound raised from 1 to nr; such a violation is genuine, no proof is "
+     "claimed, and the strategy still runs when none is found (0 = off)"},
     {"state-hashing", NULL, "Enable state-hashing, prunes duplicate states"},
     {"no-goto-merge",
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"sleep-sets",
+     NULL,
+     "Prune schedules with sleep sets; only fires where the search is "
+     "exhaustive, so pair it with --no-por and no context bound. Ignored under "
+     "--schedule, --direct-interleavings, --interactive-ileaves and "
+     "--data-races-check-only (experimental, off by default)"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "Skip context switches on globals that are never written anywhere "
@@ -750,12 +796,18 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(-1)->value_name(
        "bits"),
      "Check if stack limit is respected"},
+    {"total-stack-limit",
+     boost::program_options::value<int>()->default_value(-1)->value_name(
+       "bits"),
+     "Bound the combined size of all live stack frames, excluding ESBMC's "
+     "own operational models. Accounted per symbolic path at declaration "
+     "points; over-approximates for spawned threads"},
     {"error-label",
      boost::program_options::value<std::string>()->value_name("label"),
      "Check if label is unreachable"},
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
-    {"malloc-zero-is-null", NULL, "Force malloc(0) to return NULL"},
+    {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "

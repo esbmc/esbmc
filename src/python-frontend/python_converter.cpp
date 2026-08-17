@@ -19,6 +19,7 @@
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -78,6 +79,7 @@ python_converter::python_converter(
     string_handler_(*this, symbol_table_, type_handler_, string_builder_),
     math_handler_(*this, symbol_table_, type_handler_),
     complex_handler_(*this, symbol_table_, type_handler_),
+    dynamic_type_handler_(*this, type_handler_),
     tuple_handler_(new tuple_handler(*this, type_handler_)),
     dict_handler_(new python_dict_handler(*this, symbol_table_, type_handler_)),
     typechecker_(new python_typechecking(*this)),
@@ -246,6 +248,30 @@ static std::string import_module_name(const nlohmann::json &node)
   return node["names"][0]["name"].get<std::string>();
 }
 
+// `import numpy as np` binds the alias, not the module name, so a lookup of
+// `np` misses and the attribute access aborts as an undefined variable
+// (#6296). Register the alias against the same file. Only the first name is
+// considered, matching import_module_name: an `import a as x, b as y` node
+// resolves to `a`, so binding `y` to it would be wrong. ImportFrom's names are
+// imported members rather than module aliases, and are excluded.
+void python_converter::register_import_alias(
+  const nlohmann::json &import_node,
+  const std::string &module_file)
+{
+  if (import_node["_type"] != "Import" || !import_node.contains("names"))
+    return;
+
+  const nlohmann::json &names = import_node["names"];
+  if (!names.is_array() || names.empty())
+    return;
+
+  const nlohmann::json &first = names[0];
+  if (!first.contains("asname") || first["asname"].is_null())
+    return;
+
+  imported_modules.emplace(first["asname"].get<std::string>(), module_file);
+}
+
 bool python_converter::import_module_into_block(
   const nlohmann::json &import_node,
   module_locator &locator,
@@ -253,8 +279,15 @@ bool python_converter::import_module_into_block(
 {
   const std::string module_name = import_module_name(import_node);
 
-  if (imported_modules.find(module_name) != imported_modules.end())
+  auto already = imported_modules.find(module_name);
+  if (already != imported_modules.end())
+  {
+    // Already converted, but this import node may bind an alias the earlier
+    // one did not -- a model importing `math` for its own use leaves a later
+    // `import math as m` with no binding for `m` (#6296).
+    register_import_alias(import_node, already->second);
     return true;
+  }
 
   // pre_collect_module_asts populates the pool before any import runs.
   // A miss here means the same module_locator could not open the file.
@@ -265,6 +298,7 @@ bool python_converter::import_module_into_block(
 
   current_python_file = nested_module_json["filename"].get<std::string>();
   imported_modules.emplace(module_name, current_python_file);
+  register_import_alias(import_node, current_python_file);
 
   // Process nested imports first.
   process_module_imports(nested_module_json, locator, block);

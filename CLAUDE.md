@@ -64,7 +64,9 @@ ctest -R "regression/esbmc/00_big_endian_01" --output-on-failure
 
 **Important: the Python frontend needs `python3` on `PATH`.** ESBMC's Python frontend invokes `python3` to run `parser.py`. `ast2json` is vendored in the source tree (`src/python-frontend/libs/ast2json`), so it no longer needs to be installed separately for Python regression tests. (`mypy` is an optional extra for type checking.)
 
-**Important: /tmp disk space.** Each regression test creates an `esbmc-headers-*` temp directory (~7.4MB) in `/tmp`. Running the full suite generates thousands of these (~70GB total). Clean them after test runs: `rm -rf /tmp/esbmc-headers-*`
+**Note: /tmp disk space.** C and C++ runs write nothing to `/tmp`: bundled clang headers, the C++ operational models and the internal libc are registered with `file_operations::filesystemt` and served to clang out of `.rodata` via `esbmc_clang_vfs()` (`src/clang-c-frontend/AST/vfs_adapter.h`). The Python and Solidity frontends extract to `/tmp`, because they fork `python3`/`solc` and a separate process cannot read ESBMC's memory. Clean up after large runs of those suites: `rm -rf /tmp/esbmc*`
+
+`regression/esbmc/bundled_headers_from_vfs` and `regression/esbmc-cpp/cpp/om_source_from_vfs` pin this: the first asserts clang is handed `-isystem /esbmc-vfs/libc/headers` and `-resource-dir /esbmc-vfs/clang`, the second that an OM source location in a counterexample reads `/esbmc-vfs/cpp/vector`. Reintroducing extraction turns those paths back into a temp directory and both fail. Note that asserting the temp directory is *empty* after a run would not work: `tmp_path`'s destructor removes what it created, so a run that extracts and cleans up is indistinguishable from one that never extracted.
 
 Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every PR should include at least two regression tests (one passing, one failing).
 
@@ -73,6 +75,7 @@ Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOR
 - Always run the project's test suite. If tests fail, fix the failures before committing — never commit broken or untested code.
 - **Regression suite cap.** When running the full regression suite, cap the run at **5 minutes** (300000 ms) — pass the timeout to the `Bash` tool's `timeout` parameter, or wrap the invocation with `timeout 5m …`. If the suite cannot complete in 5 minutes, narrow the scope (e.g. run only the affected subset) or ask the user before extending the limit.
 - **Lint and typecheck.** Run lint and typecheckers and fix any errors. For Python code, use `pylint`. For C++ code, ensure clang-format compliance (CI enforces this).
+- **Cyclomatic complexity.** `python3 scripts/complexity/ccn_report.py --gate` reports what the branch adds against its merge base, the same check the Complexity workflow runs on the PR (needs `pip install lizard==1.23.0`). It is advisory while the thresholds are being calibrated.
 
 ## Branching
 
@@ -113,6 +116,7 @@ After implementing any non-trivial coding task, before committing:
 1. **Simplify aggressively.** Remove unnecessary conditional checks, dead code, redundant abstractions, duplicate logic. Re-verify the code still works correctly. Apply the same pass to test code.
 2. **Verify with ESBMC** when the task touches C/C++ code or ESBMC's own headers/frontends. Use the `esbmc-verifier` agent to confirm the patch works and introduces no new errors. For non-ESBMC tasks (e.g. Python frontend, build scripts), run the project's normal lint/typecheck/test commands.
 3. **Code review.** Use the `code-reviewer` agent on the diff. Apply high-confidence findings; explain anything you skip.
+4. **Coverage gate.** Run the `esbmc-coverage` agent in Mode B on the diff before opening or updating any PR. Every executable line the diff adds must either be covered by a test in the same PR or triaged with a stated reason (vendored / dead / defensive / broken feature). A BLOCK verdict stops the PR — add the missing tests or re-scope.
 
 ## Available Subagents
 
@@ -121,6 +125,7 @@ These specialised agents are configured in `~/.claude/agents/` and should be pre
 - **`esbmc-verifier`** — Recommended formal-verification tool for this repo. Two modes: (A) bug-fixing inside ESBMC's own codebase — inspects GOTO IR (`--goto-functions-only`), VCCs (`--show-vcc`), and the symbol table; applies minimal patches; re-runs ESBMC to confirm `VERIFICATION SUCCESSFUL`; produces a two-tier harness package under `regression/<suite>/github_<N>/` (literal repro), `regression/<suite>/github_<N>-nondet/` (nondet generalisation), and an optional `_fail/` negative variant when the patch shifts a checker boundary. (B) Any external C/C++ codebase (application, library, firmware) — three-phase strategy (language-level safety → functional contracts via k-induction → bug-specific negative proofs) with stub-shadowing for whatever the module depends on (DBs, network, filesystem, hardware/RTOS, vendor SDKs). Invoke for the post-implementation ESBMC step (§Post-implementation Pass #2), for deterministic witnesses when sanitizers cannot reproduce a memory/UB bug (§Regression Tests for Memory/UB Bugs), and when diagnosing unexpected ESBMC results (§Debugging Verification Issues). Defaults to bitwuzla; honours `test.desc` flags when present. For one-shot sanity checks (`esbmc file.c --incremental-bmc`), call `esbmc` directly via Bash instead.
 - **`code-reviewer`** — Diff review against the priorities in §Code Review Priorities. Invoke for the post-implementation review step (§Post-implementation Pass #3).
 - **`creduce-reducer`** — Reduces C/C++ programs that trigger an ESBMC bug to a minimal reproducer using C-Reduce with property-preserving interestingness scripts. Use when filing or investigating ESBMC bug reports against large inputs.
+- **`esbmc-coverage`** — Codecov line coverage of ESBMC's own sources (distinct from `--branch-coverage`/`--cov-report-json`, which measure the program under verification). Mode B is the mandatory per-PR gate of §Post-implementation Pass #4: it scopes to the diff, requires each added executable line to be covered by a test in the same PR or triaged as vendored/dead/defensive/unwired, mutation-checks the PR's new tests, and returns PASS / PASS WITH NOTES / BLOCK without forcing an instrumented rebuild. Mode A runs coverage campaigns — it pulls the per-line uncovered map from the public Codecov API, triages gaps, adds regression and Catch2 tests, and proves the delta with `llvm-cov`. Uncovered lines are also the best source of dead-code candidates for `esbmc-verifier` Mode C.
 
 ## Regression Tests for Memory/UB Bugs
 

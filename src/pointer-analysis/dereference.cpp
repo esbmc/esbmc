@@ -22,6 +22,11 @@
 
 thread_local unsigned int dereferencet::invalid_counter = 0;
 
+void dereferencet::reset_object_counter()
+{
+  invalid_counter = 0;
+}
+
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -136,6 +141,8 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
+static expr2tc distribute_steps_over_if(const expr2tc &e);
+
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
@@ -174,6 +181,17 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
   {
     // Index/member ops applied on top of a dereference: resolve the chain
     // to a single dereference at the accumulated offset.
+
+    // A conditional inside the chain -- `(c ? *ra : *rb).x` -- must be lifted
+    // out first. The walk below accumulates the offset from the whole
+    // expression, which it cannot do across an `if`; pushing the steps into
+    // the arms gives each one a complete access path (#6717).
+    expr2tc lifted = distribute_steps_over_if(expr);
+    if (is_if2t(lifted))
+    {
+      expr = resolve_nonscalar_if(lifted, guard, mode);
+      break;
+    }
 
     expr2tc res = dereference_expr_nonscalar(expr, guard, mode, expr);
 
@@ -329,7 +347,7 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
-static bool is_aligned_member(const expr2tc &expr)
+static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 {
   if (!is_member2t(expr))
     return false;
@@ -345,11 +363,86 @@ static bool is_aligned_member(const expr2tc &expr)
     return false;
   }
 
-  /* non-packed structures have all members aligned
+  /* `#pragma pack(n)` leaves members at offsets that need not respect their own
+   * type's alignment, and the compiler emits an unaligned access for those, so
+   * a direct member read is not a misalignment. Unions place every member at
+   * offset 0, so only structs can under-align one.
    *
-   * TODO: This holds true only for non-padding members as padding is not
-   *       actually a member. We just treat it as one, which here is wrong. */
-  return true;
+   * TODO: For a non-packed struct this holds only for non-padding members, as
+   *       padding is not actually a member. We just treat it as one. */
+  if (!is_struct_type(structure->type))
+    return true;
+
+  const member2t &member = to_member2t(expr);
+  const BigInt offset =
+    member_offset_bits(structure->type, member.member, &ns) / 8;
+  return offset % alignment(migrate_type_back(member.type), ns) == 0;
+}
+
+/// Push member/index steps inside a conditional, so `(c ? a : b).f` becomes
+/// `c ? a.f : b.f`. Returns \p e unchanged when there is no conditional to
+/// lift. Both forms denote the same object; the rewrite only moves the
+/// selection outside the access path.
+static expr2tc distribute_steps_over_if(const expr2tc &e)
+{
+  if (is_member2t(e))
+  {
+    const member2t &m = to_member2t(e);
+    expr2tc src = distribute_steps_over_if(m.source_value);
+    if (is_if2t(src))
+    {
+      const if2t &i = to_if2t(src);
+      return if2tc(
+        e->type,
+        i.cond,
+        member2tc(e->type, i.true_value, m.member),
+        member2tc(e->type, i.false_value, m.member));
+    }
+    return src == m.source_value ? e : member2tc(e->type, src, m.member);
+  }
+
+  if (is_index2t(e))
+  {
+    const index2t &idx = to_index2t(e);
+    expr2tc src = distribute_steps_over_if(idx.source_value);
+    if (is_if2t(src))
+    {
+      const if2t &i = to_if2t(src);
+      return if2tc(
+        e->type,
+        i.cond,
+        index2tc(e->type, i.true_value, idx.index),
+        index2tc(e->type, i.false_value, idx.index));
+    }
+    return src == idx.source_value ? e : index2tc(e->type, src, idx.index);
+  }
+
+  return e;
+}
+
+/// Resolve each arm of a lifted conditional access path under the condition
+/// that selects it, so a dereference failure in one arm cannot fire when the
+/// other is taken. Arms that need no dereferencing are kept as they are.
+expr2tc dereferencet::resolve_nonscalar_if(
+  const expr2tc &expr,
+  guard2tc &guard,
+  modet mode)
+{
+  const if2t &ifref = to_if2t(expr);
+
+  auto resolve_arm =
+    [this, &guard, &mode](const expr2tc &arm, const expr2tc &cond) {
+      guard2tc saved(guard);
+      guard.add(cond);
+      expr2tc copy = arm;
+      expr2tc res = dereference_expr_nonscalar(copy, guard, mode, copy);
+      guard = std::move(saved);
+      return is_nil_expr(res) ? arm : res;
+    };
+
+  expr2tc t = resolve_arm(ifref.true_value, ifref.cond);
+  expr2tc f = resolve_arm(ifref.false_value, not2tc(ifref.cond));
+  return if2tc(expr->type, ifref.cond, t, f);
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
@@ -400,7 +493,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     expr2tc &structure = member.source_value;
     if (
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
-      !is_aligned_member(expr))
+      !is_aligned_member(expr, ns))
     {
       log_warning(
         "not checking alignment for access to packed {} {}",
@@ -560,6 +653,29 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   return value;
 }
 
+// Parameter names are not part of a function's type (C++ [dcl.fct]p5, C11
+// 6.7.6.3p15), but irep2 type equality compares argument_names too. An
+// out-of-line virtual definition gives its parameters fresh symbol ids, so the
+// vtable slot and the function symbol end up with code types that differ in
+// nothing else -- enough for the virtual call to lose its target (#6749).
+static bool same_function_pointer_ignoring_argument_names(
+  const type2tc &a,
+  const type2tc &b)
+{
+  if (!is_pointer_type(a) || !is_pointer_type(b))
+    return false;
+
+  const type2tc &sub_a = to_pointer_type(a).subtype;
+  const type2tc &sub_b = to_pointer_type(b).subtype;
+  if (!is_code_type(sub_a) || !is_code_type(sub_b))
+    return false;
+
+  const code_type2t &ca = to_code_type(sub_a);
+  const code_type2t &cb = to_code_type(sub_b);
+  return ca.arguments == cb.arguments && ca.ret_type == cb.ret_type &&
+         ca.ellipsis == cb.ellipsis;
+}
+
 bool dereferencet::dereference_type_compare(
   expr2tc &object,
   const type2tc &dereference_type) const
@@ -568,6 +684,10 @@ bool dereferencet::dereference_type_compare(
 
   // Test for simple equality
   if (object->type == dereference_type)
+    return true;
+
+  if (same_function_pointer_ignoring_argument_names(
+        object_type, dereference_type))
     return true;
 
   // Check for C++ subclasses; we can cast derived up to base safely.
@@ -1229,25 +1349,36 @@ void dereferencet::construct_from_array(
   }
   else
   {
-    // Dyn offset -- is alignment guarantee strong enough?
+    // Dyn offset -- is alignment guarantee strong enough? `alignment` is in
+    // bits here: the caller scaled it (see `alignment *= 8` in dereference()).
     is_correctly_aligned = (alignment >= subtype_size);
-    // Special case for pointer-typed array elements: `alignment` is in
-    // BYTES (value_set.h:139) while `subtype_size` is in BITS (set from
-    // type_byte_size_bits above). For an array of pointers reached
-    // through a struct-member pointer dereference, the unit mismatch
-    // wrongly forced the byte-extract branch, which hides the pointer
-    // RHS from value_sett::assign and breaks the downstream deref of
-    // the loaded pointer (issue #4435). Pointer subtypes are always
-    // accessed atomically, so a byte-equal-or-larger natural alignment
-    // makes the direct index2tc encoding sound. Keep the original
-    // comparison for non-pointer subtypes so over-approximated
-    // alignments on int / short / char arrays still trigger
-    // check_alignment (e.g. regression/esbmc/align-deref_fail).
-    if (
-      !is_correctly_aligned && is_pointer_type(arr_subtype) &&
-      alignment * 8 >= subtype_size)
-      is_correctly_aligned = true;
-    overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
+    /* A whole-element access needs no stitching. check_alignment() below
+     * asserts the offset lands on an element boundary, which is exactly the
+     * precondition index2tc needs, so an unproven alignment claim is a reason
+     * to *check*, not to decompose.
+     *
+     * Floats: reassembling one costs a fp.to_ieee_bv / to_fp round trip per
+     * byte, and SMT-LIB leaves the NaN pattern fp.to_ieee_bv returns
+     * unconstrained -- so once an intermediate is NaN the solver may pick a
+     * different pattern each time and the value read back is not the one
+     * stored (esbmc/esbmc#6922).
+     *
+     * Pointers: stitching hides the pointer RHS from value_sett::assign and
+     * breaks the downstream deref of the loaded pointer (esbmc/esbmc#4435).
+     * That used to be papered over by claiming such an access was aligned
+     * whenever alignment * 8 >= subtype_size -- an 8x over-approximation on
+     * an alignment already in bits, which also suppressed check_alignment, so
+     * a genuinely misaligned pointer read went unreported.
+     *
+     * Integer subtypes keep the original condition: their stitching is exact,
+     * and weakening it would stop over-approximated alignments reaching
+     * check_alignment (regression/esbmc/align-deref_fail). */
+    const bool whole_element =
+      deref_size == subtype_size &&
+      (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
+    overflows_boundaries =
+      whole_element ? false
+                    : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
   // No alignment guarantee: assert that it's correct.

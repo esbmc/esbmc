@@ -32,6 +32,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
 #include <util/expr/string_constant.h>
+#include <util/symtab/base_subobject.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -403,9 +404,13 @@ bool clang_cpp_convertert::get_method(
   // Copy assignment Operator/Move assignment Operator
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
+  // A captureless lambda's conversion-to-function-pointer operator and the
+  // static invoker it returns are implicit too, and skipping them left the
+  // conversion bodyless, so the pointer it yielded was invalid (issue #4077).
   if (
     md.isImplicit() && !is_ConstructorOrDestructor(md) &&
-    !is_CopyOrMoveOperator(md))
+    !is_CopyOrMoveOperator(md) && !md.isLambdaStaticInvoker() &&
+    !(md.getParent()->isLambda() && llvm::isa<clang::CXXConversionDecl>(md)))
     return false;
 
   if (clang_c_convertert::get_function(md, new_expr))
@@ -1079,11 +1084,46 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::ConditionalOperator &ternary =
       static_cast<const clang::ConditionalOperator &>(stmt);
 
+    // C++ [expr.cond]/2: a throw-expression operand contributes no value, so
+    // the branch has to become a statement rather than something the
+    // conditional's result is built from. Materialising a class-typed
+    // conditional takes the address of each branch, which for the throw is
+    // meaningless and used to abort inside the solver with an irep dump
+    // (issue #6717). Scalar conditionals never materialise, so they are
+    // unaffected and keep working.
+    if (
+      ternary.getType()->isRecordType() &&
+      (llvm::isa<clang::CXXThrowExpr>(
+         ternary.getTrueExpr()->IgnoreParenImpCasts()) ||
+       llvm::isa<clang::CXXThrowExpr>(
+         ternary.getFalseExpr()->IgnoreParenImpCasts())))
+    {
+      log_error(
+        "ESBMC currently does not support a throw-expression in a "
+        "class-typed conditional");
+      return true;
+    }
+
     bool elided = false;
     if (get_conditional_class_prvalue(ternary, new_expr, elided))
       return true;
     if (!elided && clang_c_convertert::get_expr(stmt, new_expr))
       return true;
+
+    // An lvalue conditional denotes an object, not a copy of one. The C path
+    // types the `if` from getType(), which drops the reference, so both
+    // branches were dereferenced into a temporary and an assignment through
+    // the conditional left the original untouched (issue #6717).
+    if (
+      !elided && ternary.isLValue() && new_expr.id() == "if" &&
+      new_expr.operands().size() == 3 &&
+      (is_reference(new_expr.op1().type()) ||
+       is_reference(new_expr.op2().type())))
+    {
+      typet ref = reference_typet();
+      ref.subtype() = new_expr.type();
+      new_expr.type() = ref;
+    }
     break;
   }
 
@@ -1592,11 +1632,39 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*aile.getSubExpr(), init))
       return true;
 
-    index_exprt ind = to_index_expr(init);
-
     const llvm::APInt &Int = aile.getArraySize();
     std::size_t size = Int.getSExtValue();
     exprt inits("constant", common.type());
+
+    // A class-typed element copies through its copy constructor, so the
+    // sub-expression is a CXXConstructExpr rather than the indexed read a
+    // scalar element yields. Casting it to an index walked off the end of the
+    // expression and crashed the frontend (issue #6717). A trivial
+    // constructor copies the representation and nothing else, so the
+    // element-wise read below says the same thing.
+    if (!init.is_index())
+    {
+      const auto *ctor = llvm::dyn_cast<clang::CXXConstructExpr>(
+        aile.getSubExpr()->IgnoreImplicit());
+      if (!ctor || !ctor->getConstructor()->isTrivial())
+      {
+        log_error(
+          "ESBMC currently does not support an array copy whose element "
+          "constructor is non-trivial");
+        return true;
+      }
+
+      const typet &elem_t = common.type().subtype();
+      for (std::size_t i = 0; i < size; ++i)
+        inits.copy_to_operands(
+          index_exprt(common, from_integer(i, index_type()), elem_t));
+
+      new_expr = inits;
+      break;
+    }
+
+    index_exprt ind = to_index_expr(init);
+
     // { ref->arr[0], ref->arr[1], ... ,ref->arr[i]}
     for (std::size_t i = 0; i < size; ++i)
     {
@@ -1824,6 +1892,43 @@ void clang_cpp_convertert::build_member_from_component(
   component.swap(member);
 }
 
+// A non-primary base subobject sits away from the start of the derived object
+// (multiple inheritance); `this` must be adjusted to that subobject before the
+// base destructor runs, otherwise ~Base reads the derived's leading storage
+// (github #6021). Prefer the structural address `&this->@base@B`, which derives
+// the offset from ESBMC's own layout and so agrees with the base ctor `this`
+// and the derived->base cast (#1866, #3894); `offset` is the clang-ABI fallback
+// for hierarchies that kept the legacy flattened layout (virtual bases, P5).
+exprt clang_cpp_convertert::base_dtor_this(
+  const clang::CXXRecordDecl &base,
+  const exprt &deref,
+  const irep_idt &this_id,
+  const typet &this_ptr_type,
+  uint64_t offset)
+{
+  std::string base_name, base_id;
+  get_decl_name(base, base_name, base_id);
+  const irep_idt comp = base_subobject_name(base_id);
+  const typet derived_struct = ns.follow(this_ptr_type.subtype());
+  const symbolt *base_sym = context.find_symbol(base_id);
+
+  if (
+    base_sym && derived_struct.is_struct() &&
+    to_struct_type(derived_struct).has_component(comp))
+    return address_of_exprt(
+      member_exprt(deref, comp, symbol_typet(base_sym->id)));
+
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  if (offset == 0)
+    return this_expr;
+
+  typet char_ptr = pointer_typet(char_type());
+  gen_typecast(ns, this_expr, char_ptr);
+  plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  return adjusted;
+}
+
 bool clang_cpp_convertert::build_destructor_chain(
   const clang::CXXDestructorDecl &dd,
   code_blockt &body)
@@ -1863,25 +1968,14 @@ bool clang_cpp_convertert::build_destructor_chain(
   };
 
   // Cast `this` to the base's expected pointer type and emit the call.
-  // A non-primary base subobject sits at a non-zero byte offset within the
-  // derived object (multiple inheritance); `this` must be adjusted to that
-  // subobject before the base destructor runs, otherwise ~Base reads the
-  // derived's leading storage (github #6021). This mirrors the method-receiver
-  // adjustment in clang_c_convert.cpp (char* + byte offset + reinterpret).
-  auto emit_base_dtor = [&](const symbolt &sym, uint64_t offset) {
-    exprt this_expr = symbol_exprt(this_id, this_ptr_type);
-    if (offset > 0)
-    {
-      typet char_ptr = pointer_typet(char_type());
-      gen_typecast(ns, this_expr, char_ptr);
-      plus_exprt adjusted(this_expr, from_integer(offset, index_type()));
-      adjusted.type() = char_ptr;
-      this_expr = adjusted;
-    }
-    gen_typecast(
-      ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
-    emit_dtor_call(sym, std::move(this_expr));
-  };
+  auto emit_base_dtor =
+    [&](const symbolt &sym, const clang::CXXRecordDecl *rec, uint64_t offset) {
+      exprt this_expr =
+        base_dtor_this(*rec, deref, this_id, this_ptr_type, offset);
+      gen_typecast(
+        ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
+      emit_dtor_call(sym, std::move(this_expr));
+    };
 
   // 1. Member subobjects, reverse declaration order (C++ [class.dtor]/9).
   llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
@@ -1960,7 +2054,7 @@ bool clang_cpp_convertert::build_destructor_chain(
     const symbolt *sym = lookup_dtor(rec->getDestructor());
     if (!sym)
       continue;
-    emit_base_dtor(*sym, layout.getBaseClassOffset(rec).getQuantity());
+    emit_base_dtor(*sym, rec, layout.getBaseClassOffset(rec).getQuantity());
   }
 
   // 3. Virtual base subobjects, reverse declaration order.
@@ -1979,9 +2073,70 @@ bool clang_cpp_convertert::build_destructor_chain(
     // Virtual-base offsets are dynamic; ESBMC keeps virtual bases at the
     // flattened offset 0, matching the method-receiver path which likewise
     // skips static adjustment for virtual bases.
-    emit_base_dtor(*sym, 0);
+    emit_base_dtor(*sym, rec, 0);
   }
 
+  return false;
+}
+
+bool clang_cpp_convertert::build_lambda_static_invoker(
+  const clang::CXXMethodDecl &invoker,
+  exprt &new_expr)
+{
+  const clang::CXXRecordDecl *closure = invoker.getParent();
+  const clang::CXXMethodDecl *call_op = closure->getLambdaCallOperator();
+  if (call_op == nullptr)
+    return true;
+
+  typet closure_type;
+#if CLANG_VERSION_MAJOR >= 22
+  clang::QualType closure_qual_type =
+    closure->getASTContext().getCanonicalTagType(closure);
+  if (get_type(*closure_qual_type.getTypePtr(), closure_type))
+#else
+  if (get_type(*closure->getTypeForDecl(), closure_type))
+#endif
+    return true;
+
+  exprt callee;
+  if (get_decl_ref(*call_op, callee))
+    return true;
+
+  // The lambda is captureless -- that is the only way a static invoker is
+  // formed -- so the closure carries no state and a fresh one is as good as
+  // the original.
+  symbolt &obj = anon_symbol.new_symbol(context, closure_type, "lambda_self");
+  obj.lvalue = true;
+  obj.file_local = true;
+
+  side_effect_expr_function_callt call;
+  call.function() = callee;
+  call.type() = static_cast<const code_typet &>(callee.type()).return_type();
+  call.arguments().push_back(address_of_exprt(symbol_expr(obj)));
+  for (const auto *param : invoker.parameters())
+  {
+    exprt arg;
+    if (get_decl_ref(*param, arg))
+      return true;
+    call.arguments().push_back(arg);
+  }
+
+  code_blockt body;
+  body.copy_to_operands(code_declt(symbol_expr(obj)));
+  if (call.type().is_empty())
+  {
+    codet expr_stmt("expression");
+    expr_stmt.copy_to_operands(call);
+    body.move_to_operands(expr_stmt);
+  }
+  else
+  {
+    code_returnt ret;
+    ret.return_value() = call;
+    body.copy_to_operands(ret);
+  }
+
+  new_expr = body;
   return false;
 }
 
@@ -1990,6 +2145,14 @@ bool clang_cpp_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &ftype)
 {
+  // Clang leaves a lambda's static invoker bodyless in the AST -- the
+  // forwarding body is synthesised in CodeGen, which never runs here -- so a
+  // captureless lambda converted to a function pointer called into an empty
+  // function (issue #4077).
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    if (md->isLambdaStaticInvoker())
+      return build_lambda_static_invoker(*md, new_expr);
+
   // For implicit or explicitly-defaulted destructors, Clang does not
   // synthesise a body (hasBody() returns false), leaving symbol.value as nil.
   // Start with an empty block; the member/base destructor chain is appended

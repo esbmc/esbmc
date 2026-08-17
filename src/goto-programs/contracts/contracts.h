@@ -42,6 +42,7 @@
 #include <goto-programs/frame_enforcer.h>
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -68,6 +69,7 @@ public:
     irep_idt
       temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
     expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+    expr2tc size_expr; ///< Extent the contract asked for, in bytes; may be nil
   };
 
   code_contractst(
@@ -114,6 +116,24 @@ public:
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
 
+  /// \brief Name of the first non-intrinsic call a clause in \p body depends
+  ///   on, empty when there is none.
+  std::string clause_call_callee(const goto_programt &body) const;
+
+  /// \brief Diagnostic for such a call, empty when there is none.
+  std::string clause_call_reason(const goto_programt &body) const;
+
+  /// \brief Whether \p func_sym has a body carrying contract clauses, or the
+  ///   __ESBMC_contract annotation. Used to pick the function the user
+  ///   annotated when a short name matches symbols from several modes.
+  bool declares_contracts(const symbolt &func_sym) const;
+
+  /// \brief Code symbols whose short name is \p short_name and which satisfy
+  ///   \p accept, in goto-function order.
+  std::vector<symbolt *> short_name_candidates(
+    const std::string &short_name,
+    const std::function<bool(const symbolt &)> &accept);
+
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that
   /// the post-call assertion can verify it is unchanged.
@@ -140,6 +160,8 @@ public:
       array_index; ///< Nil for scalars; nondet witness index for array fields
     type2tc
       member_type; ///< Array-field member type (for indexing); nil otherwise
+    expr2tc alias_exemption; ///< Nil, or a guard under which this location is
+                             ///< an assigns target reached by another name
   };
 
   /// \brief Snapshot for array element assigns compliance (Phase 2B).
@@ -244,6 +266,22 @@ private:
     const std::vector<expr2tc> &assigns_targets = {},
     bool check_assigns_compliance = false);
 
+  /// \brief A fresh lvalue symbol of \p type registered under \p name
+  expr2tc
+  declare_local_symbol(const std::string &name, const type2tc &type) const;
+
+  /// \brief Declare and havoc the value a replaced call returns
+  /// \param function_symbol Function symbol being called
+  /// \param ret_val Place the call assigns to, nil when the result is dropped
+  /// \param call_location Location to give the emitted instructions
+  /// \param replacement Program the declaration and havoc are appended to
+  /// \return The result symbol, nil for a function returning nothing
+  expr2tc declare_call_result(
+    const symbolt &function_symbol,
+    const expr2tc &ret_val,
+    const locationt &call_location,
+    goto_programt &replacement) const;
+
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
   /// \param function_body Function body (to extract contracts from)
@@ -318,6 +356,20 @@ private:
     const expr2tc &expr,
     const expr2tc &old_symbol,
     const expr2tc &new_expr) const;
+
+  /// \brief An assigns target with the callee's formals replaced by the
+  ///        arguments of one call
+  /// \param target_expr Assigns target as written in the callee
+  /// \param function_symbol The callee
+  /// \param actual_args Arguments at this call site
+  /// \param[out] is_pointer_param Whether the target was a pointer parameter
+  ///        and nothing else, the only shape whose havoc follows the pointer
+  /// \return The target expressed in the caller's terms
+  expr2tc instantiate_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    bool &is_pointer_param) const;
 
   // ========== __ESBMC_old support ==========
 
@@ -411,6 +463,25 @@ private:
     const locationt &location,
     const std::string &func_name,
     const std::map<irep_idt, param_extentt> &param_extents);
+
+  /// \brief Snapshot one scalar element of an array field of *p.
+  /// A whole-array rvalue read through the pointer is illegal C, so the
+  /// element (*p).field[k] is captured at a nondet witness index k, clamped
+  /// into range -- sound by the same forall-via-witness argument as Phase 2B.
+  /// Appends to \p result unless the field is one this check skips (a VLA, a
+  /// non-scalar element type, or a zero-length array, which has no element).
+  /// \param deref_expr The *p expression the field is read from
+  void materialize_ptr_deref_array_field(
+    const irep_idt &param_id,
+    const irep_idt &field,
+    const type2tc &ftype,
+    const type2tc &pointee,
+    const expr2tc &ptr_sym,
+    const expr2tc &deref_expr,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name,
+    std::vector<ptr_deref_snapshot_t> &result);
 
   /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
   /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
@@ -586,11 +657,16 @@ private:
   /// \param func Function symbol
   /// \param location Location information
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
-  /// \param allocated_ptrs Output: pointer-typed lvalues that received a heap
-  ///        allocation. Stack-backed struct params are not appended. Callers
-  ///        use this to emit matching free() calls at wrapper exit so
-  ///        --memory-leak-check does not blame the user's function for
-  ///        wrapper-internal allocations (CWE-401).
+  /// \param separated_params Those of \p skip_params whose __ESBMC_is_fresh
+  ///        the requires clause asserts unconditionally, and which therefore
+  ///        state separation. Only these are withheld from aliasing.
+  /// \param allocated_ptrs Output: snapshots of the heap allocations made
+  ///        here, taken at allocation time by retain_allocation_for_free
+  ///        rather than the lvalues themselves, which aliasing may reassign.
+  ///        Stack-backed struct params are not appended. Callers use this to
+  ///        emit matching free() calls at wrapper exit so --memory-leak-check
+  ///        does not blame the user's function for wrapper-internal
+  ///        allocations (CWE-401).
   /// \param param_extents Output: byte extent of each allocation, keyed by
   ///        parameter symbol, each tagged with whether it may be dereferenced.
   void add_pointer_validity_assumptions(
@@ -598,8 +674,79 @@ private:
     const symbolt &func,
     const locationt &location,
     const std::set<irep_idt> &skip_params,
+    const std::set<irep_idt> &separated_params,
     std::vector<expr2tc> &allocated_ptrs,
     std::map<irep_idt, param_extentt> &param_extents);
+
+  /// \brief Whether \p func can observe the extent of pointer parameter
+  ///        \p param: dereferences it, or lets it escape into a call.
+  ///
+  /// Gates the unstated-extent warning so it is not raised for a parameter
+  /// nothing reads through (#6511). Conservative: true whenever the body
+  /// cannot be inspected, since a missed warning is worse than a spurious one.
+  bool
+  param_extent_is_observable(const symbolt &func, const irep_idt &param) const;
+
+  /// \brief Lower __ESBMC_is_fresh in a requires clause for a replace site.
+  ///
+  /// \param separation Output: obligations the caller must discharge, one per
+  ///        pair of arguments the contract declares separate.
+  /// \return The requires clause with is_fresh temps rewritten.
+  expr2tc lower_is_fresh_in_requires(
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const std::vector<expr2tc> &actual_args,
+    expr2tc requires_clause,
+    std::vector<expr2tc> &separation);
+
+  /// \brief Mark snapshots whose location an assigns target may also name.
+  ///
+  /// Pointer parameters may alias, so a parameter can be another name for
+  /// memory the clause permits writing, and the frame assertion would report a
+  /// violation that is not one. Matched on the field, so a sibling stays
+  /// protected, and the base is read in the pre-state.
+  void attach_alias_exemptions(
+    std::vector<ptr_deref_snapshot_t> &result,
+    const std::vector<expr2tc> &assigns_targets,
+    const symbolt &original_func,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Snapshot a just-made allocation so the wrapper can free it.
+  ///
+  /// The lvalue that received the allocation is not a reliable handle on it.
+  /// Pointer parameters may alias (see emit_pointer_param_aliasing), so an
+  /// lvalue can be reassigned, or two lvalues can turn out to be one and the
+  /// second allocation overwrite the first. Freeing the lvalue would then free
+  /// one object twice and leak the other. Freeing this snapshot cannot.
+  ///
+  /// \param name Distinguishes this snapshot's symbol within \p func.
+  /// \return The snapshot symbol, to be registered for the matching free.
+  expr2tc retain_allocation_for_free(
+    goto_programt &wrapper,
+    const expr2tc &allocated,
+    const std::string &name,
+    const symbolt &func,
+    const locationt &location);
+
+  /// \brief Let harness-backed pointer parameters alias one another.
+  ///
+  /// Backing each pointer parameter separately would let a callee's proof rest
+  /// on the parameters addressing distinct objects, a hypothesis no contract
+  /// clause states and nothing checks at a replace site. Enforcing a function
+  /// and then replacing a call that passes one object twice would then prove
+  /// properties false in the real program (issue #6551). Parameters covered by
+  /// __ESBMC_is_fresh are excluded by their caller: is_fresh does state
+  /// separation, so it keeps it.
+  ///
+  /// \param params Pointer parameters backed by the harness, each with the
+  ///        pretty name used to build readable flag symbols.
+  void emit_pointer_param_aliasing(
+    goto_programt &wrapper,
+    const symbolt &func,
+    const locationt &location,
+    const std::vector<std::pair<expr2tc, std::string>> &params);
 
   /// \brief Back a struct/union pointer param with one stack-allocated element.
   ///
@@ -621,7 +768,8 @@ private:
 
   /// \brief Emit malloc + non-null ASSUME for one pointer parameter.
   /// Allocates a nondet number of bytes and assigns the result to \p p. The
-  /// caller registers \p p for the matching free.
+  /// caller registers a snapshot of \p p, not \p p itself, for the matching
+  /// free: see retain_allocation_for_free for why the lvalue will not do.
   /// \return The byte-extent expression of the allocation.
   expr2tc emit_pointer_param_malloc(
     goto_programt &wrapper,

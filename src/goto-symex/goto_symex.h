@@ -176,6 +176,16 @@ protected:
   virtual void do_simplify(expr2tc &expr);
 
   /**
+   *  The guard a branch decision is read from.
+   *  `is_false`/`is_true` are syntactic, so they hold only once the guard is
+   *  folded to a literal, and `do_simplify` is a no-op under --no-simplify.
+   *  Returns an unconditionally simplified copy under that flag, so a bounded
+   *  loop can still be seen to exit, and `guard` untouched otherwise.
+   *  @param guard The renamed branch guard.
+   */
+  expr2tc branch_decision_guard(const expr2tc &guard) const;
+
+  /**
    *  Dereference an expression.
    *  Finds dereference expressions within expr, takes the set of things that
    *  it might point at, according to value set tracking, and builds an
@@ -259,6 +269,21 @@ protected:
    *  propagation map.
    */
   void symex_dead(const expr2tc &code);
+
+  /** True when either stack limit is on. The DECL, DEAD and return sites must
+   *  agree, or the accounting desynchronises from the frames. */
+  bool stack_checks_enabled() const
+  {
+    return stack_limit > 0 || total_stack_limit > 0;
+  }
+
+  /**
+   *  Account expr's storage against the current frame and claim that neither
+   *  --stack-limit nor --total-stack-limit is exceeded.
+   *  @param expr Expr whose type gives the storage to account for.
+   *  @param subject Suffix naming what was being placed on the stack.
+   */
+  void check_stack_size(const expr2tc &expr, const std::string &subject = "");
 
   /**
    *  Interpret an ASSUME instruction.
@@ -948,6 +973,15 @@ protected:
     const bool hidden = false,
     const guard2tc &guard = guard2tc());
 
+  /** Give a value storage of its own, for __ESBMC_old.
+   *
+   *  Only an lvalue has an address, and dereference lowering can turn a read
+   *  through an untyped allocation into a value rebuilt from bytes. Snapshot
+   *  such a value into a symbol so the caller has something to point at.
+   *  @return A reference to the new storage, holding \p value.
+   */
+  expr2tc materialise_old_snapshot(const expr2tc &value, const guard2tc &guard);
+
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(
     const expr2tc &lhs,
@@ -1202,6 +1236,12 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Offer both outcomes C17 7.22.3p1 permits for a zero-sized malloc,
+   *  under --malloc-zero-is-null. Widens @p alloc_guard and @p rhs. */
+  void offer_malloc_zero_null(
+    const expr2tc &size,
+    expr2tc &rhs,
+    guard2tc &alloc_guard);
   /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
     const expr2tc &lhs,
@@ -1224,7 +1264,7 @@ protected:
     const sideeffect2t &code,
     const guard2tc &guard);
   /** Symbolic implementation of printf */
-  void symex_printf(const expr2tc &lhs, expr2tc &code);
+  virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Recover the variadic arguments hidden behind a va_list operand of a
    *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
    *  Succeeds only under conservative conditions guaranteeing the mapping is
@@ -1345,6 +1385,24 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
+  /** Per-callee history of uninterpreted-function applications the SMT backend
+   *  cannot encode natively, keyed on the mangled callee name. Each entry pairs
+   *  the renamed argument terms with the symbol standing for that application's
+   *  result, so a later call can be Ackermannised against it.
+   *  @see symex_uninterpreted_function */
+  std::map<irep_idt, std::vector<std::pair<std::vector<expr2tc>, expr2tc>>>
+    uf_applications;
+
+  /** Assume equal arguments imply an equal result against every earlier
+   *  application of \p identifier, and record this one.
+   *  @see symex_uninterpreted_function */
+  void assume_uf_congruence(
+    const irep_idt &identifier,
+    const irep_idt &name,
+    const std::vector<expr2tc> &arguments,
+    const expr2tc &result,
+    const type2tc &ret_type);
+
   /** Level-1 identities (base name, activation, thread) of va_list objects
    *  initialised by va_start, or by va_copy from a started source. Keyed on
    *  the l1 renaming so the same object is recognised across frames (a
@@ -1360,8 +1418,12 @@ protected:
 
   /** Disable return value optimization */
   bool no_return_value_opt;
-  /** Limit size for stack */
+  /** Limit size, in bits, for a single stack frame */
   unsigned long stack_limit;
+  /** Limit size, in bits, for every live stack frame taken together. Catches
+   *  overruns that come from call depth rather than from one oversized
+   *  frame, which stack_limit alone cannot see (esbmc/esbmc#4605). */
+  unsigned long total_stack_limit;
   /** Depth limit, as given by the --depth option */
   unsigned long depth_limit;
   /** Instruction number we are to break at -- that is, trap, to the debugger.

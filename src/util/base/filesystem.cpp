@@ -1,6 +1,8 @@
 #include <util/base/filesystem.h>
 #include <boost/filesystem.hpp>
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 #include <fstream>
 #include <vector>
 
@@ -56,9 +58,34 @@ static void unlock_tmp_path(int &fd)
 static std::vector<std::string> registered_tmp_paths;
 static std::vector<long> registered_pgroups;
 
+/* Signal-safe mirrors of the two registries above. A handler may run with the
+ * allocator lock held by the code it interrupted, so it must not touch the
+ * std:: containers: iterating them races with a concurrent push_back, and
+ * clearing the path vector frees the strings and re-enters malloc, which glibc
+ * catches as a heap-consistency assertion (#6201). These are fixed-capacity,
+ * written only at registration, and read by the handler with plain loads. */
+#ifndef _WIN32
+static constexpr size_t sig_max_tmps = 32;
+static constexpr size_t sig_path_max = 4096;
+static char sig_tmp_paths[sig_max_tmps][sig_path_max];
+static volatile sig_atomic_t sig_tmp_count = 0;
+
+static constexpr size_t sig_max_pgroups = 64;
+static volatile sig_atomic_t sig_pgroups[sig_max_pgroups];
+static volatile sig_atomic_t sig_pgroup_count = 0;
+#endif
+
 void file_operations::register_tmp_for_cleanup(const std::string &path)
 {
   registered_tmp_paths.push_back(path);
+#ifndef _WIN32
+  size_t n = static_cast<size_t>(sig_tmp_count);
+  if (n < sig_max_tmps && path.size() < sig_path_max)
+  {
+    memcpy(sig_tmp_paths[n], path.c_str(), path.size() + 1);
+    sig_tmp_count = static_cast<sig_atomic_t>(n + 1);
+  }
+#endif
 }
 
 void file_operations::cleanup_registered_tmps()
@@ -69,17 +96,35 @@ void file_operations::cleanup_registered_tmps()
     boost::filesystem::remove_all(p, ec);
   }
   registered_tmp_paths.clear();
+#ifndef _WIN32
+  sig_tmp_count = 0;
+#endif
 }
 
 void file_operations::register_pgroup_for_cleanup(long pgid)
 {
   registered_pgroups.push_back(pgid);
+#ifndef _WIN32
+  size_t n = static_cast<size_t>(sig_pgroup_count);
+  if (n < sig_max_pgroups)
+  {
+    sig_pgroups[n] = static_cast<sig_atomic_t>(pgid);
+    sig_pgroup_count = static_cast<sig_atomic_t>(n + 1);
+  }
+#endif
 }
 
 void file_operations::unregister_pgroup(long pgid)
 {
   auto &v = registered_pgroups;
   v.erase(std::remove(v.begin(), v.end(), pgid), v.end());
+#ifndef _WIN32
+  /* Clearing the slot rather than compacting keeps the mirror append-only, so
+   * a handler firing mid-update never observes a shifted or short array. */
+  for (sig_atomic_t i = 0; i < sig_pgroup_count; ++i)
+    if (sig_pgroups[i] == static_cast<sig_atomic_t>(pgid))
+      sig_pgroups[i] = 0;
+#endif
 }
 
 void file_operations::kill_registered_pgroups()
@@ -90,6 +135,186 @@ void file_operations::kill_registered_pgroups()
       killpg(static_cast<pid_t>(pgid), SIGKILL);
 #endif
   registered_pgroups.clear();
+#ifndef _WIN32
+  sig_pgroup_count = 0;
+#endif
+}
+
+#ifndef _WIN32
+void file_operations::kill_registered_pgroups_from_signal()
+{
+  for (sig_atomic_t i = 0; i < sig_pgroup_count; ++i)
+  {
+    sig_atomic_t pgid = sig_pgroups[i];
+    if (pgid > 0)
+      killpg(static_cast<pid_t>(pgid), SIGKILL);
+  }
+}
+
+void file_operations::remove_registered_tmps_from_signal()
+{
+  /* The temporaries are directory trees, and no async-signal-safe call removes
+   * one. fork() is safe, and a child that does nothing but execve() is too, so
+   * hand each tree to rm(1): the child never touches the inherited heap.
+   * argv is built here from static storage only. Best effort — if rm is
+   * missing the tree is simply left for /tmp ageing, as it would have been
+   * with no cleanup at all. */
+  static char arg_rm[] = "rm";
+  static char arg_rf[] = "-rf";
+  static char *const envp[] = {nullptr};
+
+  for (sig_atomic_t i = 0; i < sig_tmp_count; ++i)
+  {
+    if (sig_tmp_paths[i][0] == '\0')
+      continue;
+
+    pid_t pid = fork();
+    if (pid != 0)
+      continue;
+
+    /* Leave the caller's process group so a killpg() of it (signal_catcher)
+     * cannot take the child down before it has removed anything. */
+    setpgid(0, 0);
+    char *argv[] = {arg_rm, arg_rf, sig_tmp_paths[i], nullptr};
+    execve("/bin/rm", argv, envp);
+    _exit(127);
+  }
+}
+#endif
+
+file_data file_data::bundled(const char *data, size_t size)
+{
+  file_data f;
+  f._borrowed = std::string_view(data, size);
+  return f;
+}
+
+file_data file_data::owned(std::string data)
+{
+  file_data f;
+  f._owned = std::move(data);
+  f._bundled = false;
+  return f;
+}
+
+std::string_view file_data::view() const noexcept
+{
+  return _bundled ? _borrowed : std::string_view(_owned);
+}
+
+size_t file_data::size() const noexcept
+{
+  return view().size();
+}
+
+bool file_data::is_bundled() const noexcept
+{
+  return _bundled;
+}
+
+static bool is_sep(char c)
+{
+  return c == '/' || c == '\\';
+}
+
+bool file_operations::is_bundled_source(std::string_view file)
+{
+  /* clang_vfs_path() spells the root "C:/esbmc-vfs" on Windows, where a bare
+   * "/esbmc-vfs" would not satisfy clang's absolute-path grammar, and clang
+   * hands the rest of the path back with native separators. */
+  if (file.size() > 1 && file[1] == ':')
+    file.remove_prefix(2);
+
+  constexpr std::string_view root = std::string_view(ESBMC_VFS_ROOT).substr(1);
+  return file.size() > root.size() + 1 && is_sep(file[0]) &&
+         file.compare(1, root.size(), root) == 0 &&
+         is_sep(file[root.size() + 1]);
+}
+
+filesystemt &filesystemt::get()
+{
+  static filesystemt instance;
+  return instance;
+}
+
+void filesystemt::add_bundled(
+  const std::string &path,
+  const char *data,
+  size_t size)
+{
+  /* bundled_count() keys the overlay cache in esbmc_clang_vfs(), so silently
+   * replacing an entry would leave that cache stale -- in release builds too,
+   * hence not an assert. */
+  if (!_bundled.emplace(path, std::string_view(data, size)).second)
+  {
+    fprintf(stderr, "ERROR: bundled file registered twice: %s\n", path.c_str());
+    abort();
+  }
+}
+
+std::optional<file_data> filesystemt::read(const std::string &path) const
+{
+  auto it = _bundled.find(path);
+  if (it != _bundled.end())
+    return file_data::bundled(it->second.data(), it->second.size());
+
+  std::ifstream in(path, std::ios::binary | std::ios::ate);
+  if (!in)
+    return {};
+
+  std::streampos end = in.tellg();
+  if (end < 0) /* not seekable */
+    return {};
+
+  std::string contents(static_cast<size_t>(end), '\0');
+  in.seekg(0);
+  in.read(contents.data(), contents.size());
+  contents.resize(in.gcount());
+  return file_data::owned(std::move(contents));
+}
+
+bool filesystemt::exists(const std::string &path) const
+{
+  return _bundled.count(path) || boost::filesystem::exists(path);
+}
+
+bool filesystemt::readable(const std::string &path) const
+{
+  return _bundled.count(path) || std::ifstream(path);
+}
+
+size_t filesystemt::bundled_count() const noexcept
+{
+  return _bundled.size();
+}
+
+std::vector<std::string> filesystemt::list(const std::string &prefix) const
+{
+  std::vector<std::string> paths;
+  for_each_under(prefix, [&paths](const std::string &p, std::string_view) {
+    paths.push_back(p);
+  });
+  return paths;
+}
+
+const std::string &
+filesystemt::materialize(const std::string &prefix, const std::string &format)
+{
+  auto it = _materialized.find(prefix);
+  if (it != _materialized.end())
+    return it->second.path();
+
+  it = _materialized.emplace(prefix, create_tmp_dir(format)).first;
+  const std::string &dir = it->second.path();
+  for_each_under(
+    prefix, [&dir, &prefix](const std::string &p, std::string_view data) {
+      std::string_view rel = std::string_view(p).substr(prefix.size());
+      while (!rel.empty() && rel.front() == '/')
+        rel.remove_prefix(1);
+      create_path_and_write(
+        dir + "/" + std::string(rel), data.data(), data.size());
+    });
+  return dir;
 }
 
 tmp_path::tmp_path(std::string path, bool keep)

@@ -1,11 +1,14 @@
+#include <functional>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/exception_typeid.h>
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
+#include <util/base/filesystem.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
+#include <util/symtab/base_subobject.h>
 #include <util/irep/migrate.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/std_types.h>
@@ -110,7 +113,7 @@ public:
 
     track_uncaught_ = program_reads_uncaught(goto_functions);
 
-    may_throw = compute_may_throw(goto_functions);
+    may_throw = compute_may_throw(goto_functions, context);
 
     // Single scan: teach the registry any exception hierarchy that lives only in
     // THROW exception_lists (the Python frontend's classes have no `tag-`
@@ -255,11 +258,7 @@ public:
     const symbolt *s = ns.lookup(name);
     if (!s)
       return false;
-    const std::string file = s->location.file().as_string();
-    // OM/library models live under the extracted-headers temp dir at runtime
-    // ("-headers-") and under c2goto/library/ when built in-tree.
-    return file.find("-headers-") != std::string::npos ||
-           file.find("c2goto/library/") != std::string::npos;
+    return file_operations::is_bundled_source(s->location.file().as_string());
   }
 
   /// True if *user* code contains a real throw or catch — i.e. a user exception
@@ -577,10 +576,55 @@ private:
 
   // ---- may-throw analysis ------------------------------------------------
 
-  static std::set<irep_idt> compute_may_throw(const goto_functionst &gf)
+  /// Every function whose address the program takes, whether in a function
+  /// body or in a static initialiser -- a virtual table is the latter. A call
+  /// through a pointer can only land on one of these, so it needs exception
+  /// propagation only when one of them may throw. Treating *every* indirect
+  /// call as possibly-throwing instead costs a branch at each one: a C++
+  /// program whose only indirect calls are the virtual sink of <ostream> then
+  /// grows exception-propagation branches around every `cout << x`.
+  static std::set<irep_idt>
+  collect_address_taken(const goto_functionst &gf, const contextt &context)
   {
-    std::set<irep_idt> may;
-    std::map<irep_idt, std::set<irep_idt>> callees;
+    std::set<irep_idt> taken;
+
+    std::function<void(const expr2tc &)> scan = [&](const expr2tc &e) {
+      if (is_nil_expr(e))
+        return;
+      if (is_address_of2t(e))
+      {
+        const expr2tc &obj = to_address_of2t(e).ptr_obj;
+        if (is_symbol2t(obj) && is_code_type(obj->type))
+          taken.insert(to_symbol2t(obj).thename);
+      }
+      e->foreach_operand(scan);
+    };
+
+    for (const auto &fn : gf.function_map)
+      if (fn.second.body_available)
+        for (const auto &ins : fn.second.body.instructions)
+        {
+          scan(ins.code);
+          scan(ins.guard);
+        }
+
+    // Virtual tables live in the symbol table, not in any body: without this
+    // the set would miss every virtual method and the result would be unsound.
+    context.foreach_operand(
+      [&scan](const symbolt &s) { scan(s.get_value2()); });
+
+    return taken;
+  }
+
+  /// Seeds the may-throw fixpoint: \p may gets the functions that raise
+  /// directly, \p callees the direct call graph, \p indirect_callers the
+  /// functions that call through a pointer.
+  static void collect_may_throw_seeds(
+    const goto_functionst &gf,
+    std::set<irep_idt> &may,
+    std::map<irep_idt, std::set<irep_idt>> &callees,
+    std::set<irep_idt> &indirect_callers)
+  {
     for (const auto &fn : gf.function_map)
     {
       if (!fn.second.body_available)
@@ -592,21 +636,37 @@ private:
         else if (ins.type == FUNCTION_CALL)
         {
           const code_function_call2t &c = to_code_function_call2t(ins.code);
-          if (is_symbol2t(c.function))
+          if (!is_symbol2t(c.function))
           {
-            const irep_idt callee = to_symbol2t(c.function).thename;
-            if (
-              id2string(callee).find("__ESBMC_rethrow_exception_raw") !=
-              std::string::npos)
-              may.insert(fn.first);
-            else
-              callees[fn.first].insert(callee);
+            indirect_callers.insert(fn.first);
+            continue;
           }
+          const irep_idt callee = to_symbol2t(c.function).thename;
+          if (
+            id2string(callee).find("__ESBMC_rethrow_exception_raw") !=
+            std::string::npos)
+            may.insert(fn.first);
           else
-            may.insert(fn.first); // indirect call: callee may throw
+            callees[fn.first].insert(callee);
         }
       }
     }
+  }
+
+  static std::set<irep_idt>
+  compute_may_throw(const goto_functionst &gf, const contextt &context)
+  {
+    const std::set<irep_idt> address_taken = collect_address_taken(gf, context);
+
+    std::set<irep_idt> may;
+    std::set<irep_idt> indirect_callers;
+    std::map<irep_idt, std::set<irep_idt>> callees;
+    collect_may_throw_seeds(gf, may, callees, indirect_callers);
+
+    // An indirect call reaches only an address-taken function, so it forces
+    // exception propagation on its caller exactly when one of those may throw.
+    // That is a fixpoint of its own: resolving it can put a new function in
+    // `may`, which may in turn be address-taken.
     for (bool changed = true; changed;)
     {
       changed = false;
@@ -619,6 +679,16 @@ private:
               changed = true;
               break;
             }
+
+      if (!indirect_callers.empty())
+        for (const irep_idt &fn : address_taken)
+          if (may.count(fn))
+          {
+            for (const irep_idt &caller : indirect_callers)
+              changed |= may.insert(caller).second;
+            indirect_callers.clear();
+            break;
+          }
     }
     return may;
   }
@@ -1008,7 +1078,7 @@ private:
     if (!is_struct_type(st))
       return std::nullopt;
     const struct_type2t &s = to_struct_type(st);
-    const std::string want = "@base@" + id2string(target_tag);
+    const std::string want = base_subobject_name(id2string(target_tag));
     for (const irep_idt &m : s.member_names)
       if (m.as_string() == want)
         return member_offset(st, m, &ns);

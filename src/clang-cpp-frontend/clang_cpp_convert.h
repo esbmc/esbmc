@@ -94,6 +94,12 @@ protected:
     exprt &new_expr,
     const code_typet &ftype) override;
 
+  /** Body for a lambda's static invoker: forward to the closure's
+   *  operator(). Clang synthesises this in CodeGen, so the AST has none. */
+  bool build_lambda_static_invoker(
+    const clang::CXXMethodDecl &invoker,
+    exprt &new_expr);
+
   /**
    *  Get function params for C++
    *  contains conversion routines specific to C++ class member functions
@@ -167,6 +173,17 @@ protected:
    */
   bool
   build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
+
+  /*
+   * The `this` a base destructor is called with: the address of the derived
+   * object's base subobject, not the derived object itself.
+   */
+  exprt base_dtor_this(
+    const clang::CXXRecordDecl &base,
+    const exprt &deref,
+    const irep_idt &this_id,
+    const typet &this_ptr_type,
+    uint64_t offset);
 
   /*
    * Add additional annotations for class/struct/union fields

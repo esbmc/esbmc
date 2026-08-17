@@ -125,10 +125,7 @@ protected:
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_delete(exprt &expr, goto_programt &dest);
-  void remove_temporary_object(
-    exprt &expr,
-    goto_programt &dest,
-    bool result_is_used);
+  void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,
     goto_programt &dest,
@@ -168,6 +165,11 @@ protected:
     const exprt &function,
     const exprt::operandst &arguments,
     goto_programt &dest);
+
+  /// True when a contract clause should be dropped: no contract mode is
+  /// active, so the clause states nothing. Split out so the clause handling
+  /// adds no branching to do_function_call_symbol.
+  bool drop_inactive_contract_clause(bool is_clause) const;
 
   virtual void do_function_call_symbol(
     const exprt &lhs,
@@ -463,6 +465,16 @@ protected:
   // regression that motivated the gate.
   void
   emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
+
+  // The same four hooks differ only in arity and in which argument carries the
+  // failing expression; `expr_arg` names the latter.
+  void do_assert_fail(
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest,
+    const irep_idt &base_name,
+    std::size_t arity,
+    std::size_t expr_arg);
 
   // some built-in functions
   void do_abort(
