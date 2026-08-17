@@ -2,7 +2,7 @@ CORE
 main.c
 --multi-property --unwind 10
 ^VERIFICATION FAILED$
-FAILED: 'prod: false at file .*main\.c line 21
-PASSED: 'prod_task: done at file .*main\.c line 23
-PASSED: 'cons_task: done at file .*main\.c line 39
-\A(?![\s\S]*PASSED: 'prod: false)[\s\S]*\Z
+^ +FAILED .*line +21 +prod: false$
+^ +PASSED .*line +23 +prod_task: done$
+^ +PASSED .*line +39 +cons_task: done$
+\A(?![\s\S]*PASSED .*prod: false)[\s\S]*\Z
