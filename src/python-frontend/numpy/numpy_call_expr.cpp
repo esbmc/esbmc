@@ -2432,12 +2432,18 @@ static nlohmann::json resolve_numpy_logical_arg(
 {
   if (arg.is_object() && arg.value("_type", std::string()) == "Name")
   {
-    const nlohmann::json decl = json_utils::find_var_decl(
-      arg["id"].get<std::string>(),
-      converter.current_function_name(),
-      converter.ast());
-    if (decl.contains("value") && decl["value"].is_object())
-      arg = decl["value"];
+    // find_var_decl() below returns the first textual assignment to this
+    // name, not the one that actually reaches this use site. A reassigned
+    // name is left unresolved rather than risk reading a stale value.
+    const std::string &name = arg["id"].get<std::string>();
+    if (!json_utils::has_multiple_assignments_in_scope(
+          name, converter.current_function_name(), converter.ast()))
+    {
+      const nlohmann::json decl = json_utils::find_var_decl(
+        name, converter.current_function_name(), converter.ast());
+      if (decl.contains("value") && decl["value"].is_object())
+        arg = decl["value"];
+    }
   }
   if (arg.is_object() && arg.value("_type", std::string()) == "Call")
   {
@@ -5781,6 +5787,18 @@ exprt numpy_call_expr::get()
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
+        // find_var_decl() below returns the first textual assignment to
+        // this name, not the one that actually reaches this use site. A
+        // reassigned name is left as-is (var stays the unresolved Name)
+        // rather than risk resolving a stale declaration -- the caller's
+        // own scalar/list extraction then raises an explicit diagnostic on
+        // it, exactly as it already does for any other unresolvable
+        // operand.
+        if (json_utils::has_multiple_assignments_in_scope(
+              var["id"].get<std::string>(),
+              converter_.current_function_name(),
+              converter_.ast()))
+          return;
         var = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
         if (!var.contains("value") || !var["value"].is_object())
@@ -5814,9 +5832,15 @@ exprt numpy_call_expr::get()
               var = std::move(*evaluated);
               return;
             }
-            throw std::runtime_error(
-              "TypeError: numpy call composition exceeds the supported "
-              "chaining depth");
+            // Recognized comparison/logical call shape but not evaluable
+            // (e.g. a wrong argument count): leave the call itself
+            // unresolved -- NOT the args[0] fallback below, which would
+            // silently misread its argument as if it were the call's
+            // actual (unevaluated) result, the exact bug this whole fix
+            // closes -- so the caller's own extraction raises its own
+            // diagnostic instead of a misleading chaining-depth error.
+            var = var["value"];
+            return;
           }
           if (var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
