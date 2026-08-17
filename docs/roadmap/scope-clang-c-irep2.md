@@ -3860,7 +3860,7 @@ Next, in order:
 2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
 
-## 105. The `cstd` suite censused — and W4 has a witness
+## 106. The `cstd` suite censused — and W4 has a witness
 
 §101 said the unowned work would come from the suites never censused. `cstd`
 is the first of them, measured with `symtab_sweep.sh`:
@@ -3881,7 +3881,7 @@ the suite is not differently broken, it is more densely affected by the same
 things. `cstd` is libc-facing, so nearly every test calls `assert` and indexes a
 buffer.
 
-### 105.1 The new cause, and why it is W4
+### 106.1 The new cause, and why it is W4
 
 ```
 default:  signed char [14] str={ 'T', 'e', 's', 't', ' ', ... };
@@ -3901,7 +3901,7 @@ counterexample printer consuming the attributes. Until now W4 had no witness
 outside the C++ printer. It has fourteen in `cstd` alone, reachable from C with a
 single flag.
 
-### 105.2 Why the obvious fix is not available, and what that says about B-4
+### 106.2 Why the obvious fix is not available, and what that says about B-4
 
 `convert_constant` falls through to integer rendering only when `cformat` is
 absent, so teaching it to render a char-typed constant as `'T'` would be
@@ -3920,7 +3920,7 @@ twice, and neither can be closed while the other holds the type information. Tha
 is a stronger statement than §37 makes, and it is the reason this section stops
 at a finding rather than an arm.
 
-### 105.3 What follows
+### 106.3 What follows
 
 - `esbmc-unix` (438 tests) and `floats` (102) are still uncensused; `cstd`
   suggests they will be dense in the same four owned causes.
