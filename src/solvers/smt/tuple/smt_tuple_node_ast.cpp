@@ -24,6 +24,10 @@ void tuple_node_smt_ast::make_free(smt_solver_baset *ctx)
     struct_union_member_names(sort->get_tuple_type());
 
   elements.resize(members.size());
+  // A member-less tuple leaves the vector empty, so the early return above
+  // never latches and this would re-register on every call.
+  if (!elements.empty() && ctx->ctx_level > creation_ctx_level)
+    flat.note_elements_populated(this);
 
   unsigned int i = 0;
   for (auto const &it : members)
@@ -107,6 +111,16 @@ void tuple_node_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 
   // Just copy across element data.
   destination->elements = elements;
+
+  // convert_assign's LHS is an SSA symbol converted at the level its defining
+  // assignment is encoded at, so the destination is expected to be
+  // current-level and this registration to be redundant -- measured over 2133
+  // CORE tests that push and pop, where it never fired. Kept because nothing
+  // enforces that invariant, and the cost of it breaking silently is the
+  // use-after-free this whole change is about.
+  assert(destination->creation_ctx_level == ctx->ctx_level);
+  if (ctx->ctx_level > destination->creation_ctx_level)
+    flat.note_elements_populated(destination);
 }
 
 smt_astt tuple_node_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const

@@ -227,6 +227,10 @@ STATIC_CAPABILITIES = {
     # The 32-bit target (--32) is usable: multi-arch headers exist and the
     # frontend's type model matches them. See issue #1400.
     "arch32",
+    # The operational-model library is bundled as a goto binary. With
+    # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
+    # measuring the blob has nothing to measure.
+    "bundled_libc",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:
