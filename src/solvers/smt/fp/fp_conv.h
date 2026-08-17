@@ -118,6 +118,13 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
+  /** Convert the ieee remainder (SMT-LIB fp.rem, C's remainder()). The
+   *  operation is exact, so it takes no rounding mode.
+   *  @param lhs left hand side of the remainder
+   *  @param rhs right hand side of the remainder
+   *  @return The newly created fp.rem smt_ast. */
+  virtual smt_astt mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs);
+
   /** Convert the ieee arithmetic square-root (sqrt)
    *  @param op the sqrt radicand
    *  @param rm the rounding mode

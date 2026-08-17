@@ -8,12 +8,35 @@ namespace std
 {
 //Parameterized manipulators
 
-smanip setiosflags(ios_base::fmtflags mask);
-smanip resetiosflags(ios_base::fmtflags mask);
-smanip setbase(int base);
-smanip setfill(char c);
-smanip setprecision(int n);
-smanip setw(int n);
+inline smanip setiosflags(ios_base::fmtflags mask)
+{
+  return smanip(smanip::_setiosflags, mask);
+}
+
+inline smanip resetiosflags(ios_base::fmtflags mask)
+{
+  return smanip(smanip::_resetiosflags, mask);
+}
+
+inline smanip setbase(int base)
+{
+  return smanip(smanip::_setbase, base);
+}
+
+inline smanip setfill(char c)
+{
+  return smanip(smanip::_setfill, c);
+}
+
+inline smanip setprecision(int n)
+{
+  return smanip(smanip::_setprecision, n);
+}
+
+inline smanip setw(int n)
+{
+  return smanip(smanip::_setw, n);
+}
 
 } // namespace std
 

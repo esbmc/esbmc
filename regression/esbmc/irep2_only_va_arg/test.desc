@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto-functions-only --clang-c-irep2-adjust-only
+DECL signed int return_value\$___ESBMC_va_arg\$1;
+ASSIGN return_value\$___ESBMC_va_arg\$1=va_arg\(ap(\[0\])?\)
+DECL double return_value\$___ESBMC_va_arg\$2;
+ASSIGN return_value\$___ESBMC_va_arg\$2=va_arg\(ap(\[0\])?\)

@@ -42,6 +42,7 @@
 #include <goto-programs/frame_enforcer.h>
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -121,6 +122,17 @@ public:
 
   /// \brief Diagnostic for such a call, empty when there is none.
   std::string clause_call_reason(const goto_programt &body) const;
+
+  /// \brief Whether \p func_sym has a body carrying contract clauses, or the
+  ///   __ESBMC_contract annotation. Used to pick the function the user
+  ///   annotated when a short name matches symbols from several modes.
+  bool declares_contracts(const symbolt &func_sym) const;
+
+  /// \brief Code symbols whose short name is \p short_name and which satisfy
+  ///   \p accept, in goto-function order.
+  std::vector<symbolt *> short_name_candidates(
+    const std::string &short_name,
+    const std::function<bool(const symbolt &)> &accept);
 
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that
@@ -254,6 +266,22 @@ private:
     const std::vector<expr2tc> &assigns_targets = {},
     bool check_assigns_compliance = false);
 
+  /// \brief A fresh lvalue symbol of \p type registered under \p name
+  expr2tc
+  declare_local_symbol(const std::string &name, const type2tc &type) const;
+
+  /// \brief Declare and havoc the value a replaced call returns
+  /// \param function_symbol Function symbol being called
+  /// \param ret_val Place the call assigns to, nil when the result is dropped
+  /// \param call_location Location to give the emitted instructions
+  /// \param replacement Program the declaration and havoc are appended to
+  /// \return The result symbol, nil for a function returning nothing
+  expr2tc declare_call_result(
+    const symbolt &function_symbol,
+    const expr2tc &ret_val,
+    const locationt &call_location,
+    goto_programt &replacement) const;
+
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
   /// \param function_body Function body (to extract contracts from)
@@ -328,6 +356,20 @@ private:
     const expr2tc &expr,
     const expr2tc &old_symbol,
     const expr2tc &new_expr) const;
+
+  /// \brief An assigns target with the callee's formals replaced by the
+  ///        arguments of one call
+  /// \param target_expr Assigns target as written in the callee
+  /// \param function_symbol The callee
+  /// \param actual_args Arguments at this call site
+  /// \param[out] is_pointer_param Whether the target was a pointer parameter
+  ///        and nothing else, the only shape whose havoc follows the pointer
+  /// \return The target expressed in the caller's terms
+  expr2tc instantiate_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    bool &is_pointer_param) const;
 
   // ========== __ESBMC_old support ==========
 
