@@ -5571,6 +5571,50 @@ expr2tc ieee_div2t::do_simplify() const
     type, side_1, side_2, rounding_mode);
 }
 
+expr2tc ieee_rem2t::do_simplify() const
+{
+  // ieee_floatt has no remainder operation, so a constant-constant pair is
+  // left to the solver. What does fold are the operand facts that decide the
+  // result no matter what the other side is (IEEE 754 remainder; the
+  // operation is exact, so no rounding mode participates).
+  assert(is_floatbv_type(type));
+  const ieee_float_spect spec(to_floatbv_type(type));
+
+  if (is_constant_floatbv2t(side_1))
+  {
+    const ieee_floatt &v1 = to_constant_floatbv2t(side_1).value;
+    // NaN % y and inf % y are NaN for every y.
+    if (v1.is_NaN() || v1.is_infinity())
+      return constant_floatbv2tc(ieee_floatt::NaN(spec));
+  }
+
+  if (is_constant_floatbv2t(side_2))
+  {
+    const ieee_floatt &v2 = to_constant_floatbv2t(side_2).value;
+    // x % NaN and x % 0 are NaN for every x.
+    if (v2.is_NaN() || v2.is_zero())
+      return constant_floatbv2tc(ieee_floatt::NaN(spec));
+
+    // x % inf passes finite x through untouched (incl. the sign of a zero);
+    // infinite or NaN x was handled above when constant, and must not fold
+    // when symbolic.
+    if (v2.is_infinity() && is_constant_floatbv2t(side_1))
+    {
+      const ieee_floatt &v1 = to_constant_floatbv2t(side_1).value;
+      if (!v1.is_NaN() && !v1.is_infinity())
+        return side_1;
+    }
+
+    // 0 % y is x itself for any nonzero non-NaN y (sign preserved).
+    if (
+      is_constant_floatbv2t(side_1) &&
+      to_constant_floatbv2t(side_1).value.is_zero())
+      return side_1;
+  }
+
+  return expr2tc();
+}
+
 expr2tc ieee_fma2t::do_simplify() const
 {
   assert(is_floatbv_type(type));

@@ -849,3 +849,59 @@ smt_astt ir_ieee_convt::encode_ieee_fma(const expr2tc &expr)
   return ctx->apply_ieee754_semantics(
     real_result, fbv_type, nullptr, rounding_mode);
 }
+
+smt_astt ir_ieee_convt::encode_ieee_rem(const expr2tc &expr)
+{
+  smt_astt x = ctx->convert_ast(to_ieee_rem2t(expr).side_1);
+  smt_astt y = ctx->convert_ast(to_ieee_rem2t(expr).side_2);
+  smt_astt zero = ctx->get_zero_real();
+  const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+
+  /* IEEE 754 remainder: r = x - n*y with n the integer nearest x/y, even on
+   * ties. r is exact for every representable pair, so nothing is rounded,
+   * flushed or enclosed; instead of computing rne(x/y), r is pinned through
+   * a fresh integer n.
+   *
+   * All constraints are gated on the operands being finite with y nonzero:
+   * the remaining cases are either metadata (NaN) or passthrough (infinite
+   * y), and an ungated magnitude bound would wrongly constrain x to zero
+   * when y == 0. */
+  smt_astt n_int = ctx->mk_fresh(ctx->mk_int_sort(), "ieee_rem_n::", nullptr);
+  smt_astt k_int = ctx->mk_fresh(ctx->mk_int_sort(), "ieee_rem_k::", nullptr);
+  smt_astt n = ctx->mk_int2real(n_int);
+  smt_astt r = ctx->mk_sub(x, ctx->mk_mul(n, y));
+
+  smt_astt x_inf =
+    ctx->mk_or(is_pos_inf_real(x, fbv_type), is_neg_inf_real(x, fbv_type));
+  smt_astt y_inf =
+    ctx->mk_or(is_pos_inf_real(y, fbv_type), is_neg_inf_real(y, fbv_type));
+  smt_astt y_zero = ctx->mk_eq(y, zero);
+  smt_astt defined = ctx->mk_and(
+    ctx->mk_not(x_inf), ctx->mk_and(ctx->mk_not(y_inf), ctx->mk_not(y_zero)));
+
+  smt_astt abs_r = ctx->mk_ite(ctx->mk_lt(r, zero), ctx->mk_sub(zero, r), r);
+  smt_astt abs_y = ctx->mk_ite(ctx->mk_lt(y, zero), ctx->mk_sub(zero, y), y);
+  smt_astt two_abs_r = ctx->mk_add(abs_r, abs_r);
+
+  /* |r| <= |y| / 2, written 2|r| <= |y| to stay constant-free. */
+  ctx->assert_ast(
+    ctx->mk_or(ctx->mk_not(defined), ctx->mk_le(two_abs_r, abs_y)));
+
+  /* A tie (2|r| == |y|) must round n to even: force n = k + k there. k is
+   * otherwise unconstrained, so non-tie models are unaffected. */
+  smt_astt tie = ctx->mk_eq(two_abs_r, abs_y);
+  ctx->assert_ast(ctx->mk_or(
+    ctx->mk_not(ctx->mk_and(defined, tie)),
+    ctx->mk_eq(n_int, ctx->mk_add(k_int, k_int))));
+
+  /* Infinite y with finite x passes x through untouched. */
+  smt_astt result = ctx->mk_ite(ctx->mk_and(y_inf, ctx->mk_not(x_inf)), x, r);
+
+  /* NaN whenever an operand is NaN, x is infinite, or y is zero. */
+  smt_astt invalid = ctx->mk_or(x_inf, y_zero);
+  smt_astt nan_p = combine_nan_preds(
+    combine_nan_preds(get_nan_pred(x), get_nan_pred(y)), invalid);
+  if (nan_p)
+    store_nan_pred(result, nan_p);
+  return result;
+}
