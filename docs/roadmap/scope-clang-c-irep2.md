@@ -3339,6 +3339,71 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 98. The `DEAD` class: a live variable marked dead, and a hoist that does not fix it
+
+§97 left 13 untagged tests, most showing a `DEAD` instruction in a different
+place. Read properly, that class is two things, and only one of them is an
+unported arm.
+
+### 98.1 The defect
+
+For a `for` loop declaring its own variable:
+
+```c
+for (int i = 0; i < 10; ++i)
+  buf[i] = (char)nondet_int();
+```
+
+| path | placement |
+|---|---|
+| default | `DECL i`, the loop, `GOTO 1`, then `2: DEAD ...@i` |
+| `-only` | `DECL i`, **`DEAD ...@i`**, then the loop guard |
+
+Under the flag the loop variable is marked dead *before the body that reads and
+writes it*. That is a scope error, not a spelling one.
+
+No verdict impact is demonstrated: an assertion over a value accumulated in such
+a loop verifies identically on both paths (`--unwind 12`). Stated rather than
+implied, because "marks a live variable dead" sounds worse than what has been
+shown, and because symex's own treatment of `DEAD` for a scalar is what absorbs
+it. It remains a divergence that must close before the round-trip can be deleted.
+
+Pinned as `regression/esbmc/irep2_only_for_scope_knownbug`, KNOWNBUG, whose
+regex is confirmed to match the **default** path — so the test flips to CORE when
+the placement is fixed rather than being vacuously green.
+
+### 98.2 The arm this is not
+
+`clang_c_adjust::adjust_for` hoists the loop's init into an enclosing block —
+`for (a; b; c) d;` becomes `{ a; for (; b; c) d; }` — and its comment records
+that it is *"the only structurally-mutating adjust_* method"*, fenced on a
+non-nil init because re-running it would move a now-nil init into a fresh block
+and break goto_convert (#5298). That arm is unported, so it was the obvious
+candidate.
+
+It was written and measured, and **it is not the fix**. Ported, it:
+
+- fires on 4 of the sample's tests (a plain `for (int i = 0; ...)` does not reach
+  it: clang has already hoisted, so `init` is nil);
+- converges those tests — `github_4978` from 14 differing lines to 8,
+  `github_1890_2` 28 to 24, 33 767 to 33 743 corpus-wide;
+- **leaves the misplaced `DEAD` exactly where it was.**
+
+So it is a faithful port that moves location comments and nothing a test can
+meaningfully pin, while the defect that dominates its own class survives. Not
+shipped on its own for that reason; it belongs in the change that fixes §98.1,
+where the two can be gated together. The measurements are recorded here so the
+next attempt starts from them rather than repeating the dead end.
+
+### 98.3 Where to start
+
+The placement is `convert_block`'s destructor unwinding, not the adjuster: the
+`-only` and default goto programs differ in where `i`'s scope ends, and the
+adjuster only decides what block structure `goto_convert` is handed. The next
+step is to find which block the `-only` path puts the declaration in — the hoist
+above changes that structure and does *not* move the `DEAD`, which is the useful
+negative result.
 ## 93. The four tests that diverged against themselves
 
 PR #7086 recorded that `gcc_nested_func_02`, `gcc_nested_func_collision`,
