@@ -3339,3 +3339,87 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 105. `adjust_float_arith` probed: unreached by the corpus, and its scalar half
+## unreachable by construction
+
+§103.2 argued from one measurement that `adjust_float_arith`'s scalar path is
+dead. Probed properly, with an `fprintf` inside its `need_float_adjust` block and
+a run over 90 tests sampled across all four C suites:
+
+| | hits |
+|---|---:|
+| scalar float `+ - * /` | **0** |
+| vector-of-float `+ - * /` | **0** |
+
+The block is not reached by the corpus **at all**. It is reachable: a
+hand-written GCC vector-of-float program hits it twice. Nothing in
+`regression/esbmc`, `cstd`, `floats` or `esbmc-unix` does.
+
+### 105.1 Why the scalar half cannot be reached
+
+`adjust_expr` dispatches to `adjust_expr_binary_arithmetic` on the ids
+`+ - * / mod bitand bitxor bitor`. A float-typed node with one of those ids would
+have to come from the converter, and the converter does not produce one:
+`double c = a + b;` is already `IEEE_ADD(a, b)` in the symbol table **under
+`--clang-c-irep2-adjust-only`**, which never calls `adjust_float_arith` at all.
+So the id-rewrite is a no-op for scalars, and the rounding-mode attachment below
+it — guarded by an early `return` for vectors — is unreachable outright.
+
+That is a construction argument, not just a probe result, and it is the half of
+this that does not depend on corpus coverage.
+
+### 105.2 What was shipped instead of a deletion
+
+Not a deletion. `CLAUDE.md`'s C-Dead sub-mode wants the removed branch shown
+unreachable, and §29.4 is explicit that "no corpus input reaches it" is an honest
+negative rather than a proof — the vector half *is* reachable, so the arm cannot
+go as a unit.
+
+What the probe did expose is a **live path with no test**: vector float
+arithmetic was lowered by an arm nothing in the corpus executed.
+`regression/esbmc/gcc_vector_float_arith` pins all four operators, and a mutant
+that drops the vector lowering fails it — so the path is now protected before
+anyone tries to remove the arm around it.
+
+### 105.4 Extended to C++, and one reason not to delete after all
+
+§105.3 left the deletion to its own PR. Two further measurements, and it should
+stay left.
+
+`adjust_float_arith` is `clang_c_adjust`'s, which `clang_cpp_adjust` inherits, so
+CUDA, CHERI-C and C++ all reach it. The probe extended:
+
+| frontend | corpus | PROBE hits |
+|---|---|---:|
+| C | 90 tests, four suites | 0 |
+| C++ | 25 tests of `esbmc-cpp` | 0 |
+| C, C++ | a two-line `double c = a + b;` in each | 0 |
+
+So the block is unreached across both frontends, not just C.
+
+**And yet the rounding-mode `set` is not value-neutral to remove.** The arm sets
+`rounding_mode` to `symbol_exprt(CPROVER_PREFIX "rounding_mode")`, i.e.
+`__ESBMC_rounding_mode`; `migrate_rounding_mode` (`migrate.cpp:857`) defaults to
+`c:@__ESBMC_rounding_mode` when the attribute is absent. **Two different symbol
+names for the same thing**, and the unprefixed one is not the global the symbol
+table holds.
+
+That makes the deletion safe only on unreachability, not on equivalence — the
+"harmless even if reached" argument does not hold, because if it were ever
+reached the two spellings would differ. Worth recording on its own: an `ieee_*`
+node built by this arm carries a rounding-mode operand naming a symbol that does
+not exist, which would be a free variable at the solver. It never bites because
+nothing reaches it, and it is one more reason the arm reads as vestigial rather
+than as load-bearing.
+
+The deletion therefore needs the C-Dead gates on a shared arm reached by four
+frontends, of which this host can meaningfully exercise two. That is a Linux-CI
+job, and it is recorded here rather than attempted.
+
+### 105.3 For whoever takes the deletion
+
+- The scalar id-rewrite and the rounding-mode `set` can go on §105.1's argument,
+  leaving the vector branch.
+- That is a legacy-side simplification, not a port, and it needs its own PR with
+  the C-Dead gates; it does not block anything in Phase 6.
