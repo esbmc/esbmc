@@ -202,6 +202,9 @@ fold_float_constant(expr2tc &expr, const irep_idt &name, bool &handled)
   return true;
 }
 
+/// `sqrt`'s legacy arm additionally skips a `py:`-prefixed callee; this pass is
+/// constructed only from `clang_c_languaget::typecheck`, so no Python symbol
+/// can reach it and the guard has nothing to test.
 bool clang_c_adjust_irep2::adjust_float_builtin(
   expr2tc &expr,
   const irep_idt &name,

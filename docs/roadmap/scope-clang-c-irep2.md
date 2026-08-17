@@ -3656,6 +3656,7 @@ carried forward.
 
 On master this change takes the sample from 201 to 200. Its value is the output
 it stops printing, and that it lets the base-name arm's effect be seen.
+
 ## 92. The base-name defect in `declare_implicit_callee`
 
 The fix is one line: `declare_implicit_callee` gives the symbol
@@ -4153,6 +4154,9 @@ Next:
    exactly, and it owns the 11-test decay row.
 2. The conversion at assignment and binary arithmetic (12), with
    `adjust_float_arith`.
+
+3. `adjust_address_of`, which must bring #7010's assigns guard with it (§98.1).
+
 3. `adjust_address_of`, which must bring #7010's assigns guard with it (§108.1).
 
 ## 100. The function-designator sugar, and the cast that was not a conversion
