@@ -116,6 +116,58 @@ values, and treat an unobserved value as unobserved rather than impossible
 Exit criterion: the size of the "needed to disambiguate" set. Nothing else in
 this document should be built first.
 
+## 5.1 Phase 0, run (2026-08-17)
+
+Method as §5: an `fprintf` at each presentation reader, `test.desc` flags
+replayed, over 55 tests sampled from `regression/esbmc`, `cstd` and `floats`,
+printing under `--symbol-table-only` so `convert_constant` is exercised on every
+constant in the table.
+
+**`cpp_type` readers: zero hits.** `cpp_expr2string` and `goto2c/expr2c` are not
+reached from the C suites at all, so the C side of this scope is entirely about
+`#cformat`. §33.1's 949-directory C++ measurement remains the only data on
+`cpp_type`, and it is unaffected.
+
+**`#cformat`: 8 066 reads, and 90 % of them need nothing.**
+
+| shape of the value read | reads | derivable from the node without the attribute? |
+|---|---:|---|
+| `signedbv` integer text (`84`) | 7 007 | **yes** — `value` holds the same number |
+| `unsignedbv` integer text | 260 | **yes** — same |
+| `signedbv` char literal (`'T'`) | 200 | **no** — needs to know it was written `char`; §3's coupling |
+| `floatbv` decimal text (`1.000000`, `2.225074e-308`) | 599 | **partly** — a correct rendering is derivable from the ieee bits; *this* rendering is not |
+
+### 5.2 What that answers
+
+§4 asked for the size of the "needed to disambiguate" set before choosing an
+option. It is **two cases, both scalar**:
+
+1. **One bit**: this integer constant was written as a character. 200 reads, and
+   the only irreducible one — the §2 witness (`'T'` versus `84`) and §3's
+   `char`/`int8_t` problem are the same bit.
+2. **Float source text**: 599 reads. Not a spelling but a *formatting* choice.
+   A shortest-round-trip formatter would give a correct rendering from the value;
+   it would not reproduce `1.000000`. Whether that matters is a presentation
+   decision, not a carriage one.
+
+**So Option C collapses towards Option A.** The scalar-spelling field §33.3
+already recommended for catch-matching, plus one bit for char-ness, covers the C
+side. That is a materially smaller answer than "79 presentation spellings need a
+carrier", and it is the first estimate in this scope with a measurement under it.
+
+### 5.3 A simplification that falls out
+
+7 267 of the 8 066 reads are an integer whose value the node already carries.
+`convert_constant`'s `if (cformat != "")` branch could be narrowed to the char and
+float cases and print the rest from `value` — removing 90 % of the attribute's
+traffic without deciding carriage at all. PR #7122 did exactly this for the two
+*semantic* readers; this is the presentation counterpart, and it is the cheapest
+next step in this scope.
+
+Not attempted here: it changes printed output wherever the two spellings could
+disagree, so it needs the byte-identity gate over the counterexample-producing
+suites rather than the symbol-table dump alone.
+
 ## 6. Non-goals
 
 - Removing the six dead `#implicit` writes (`scope-clang-c-irep2.md` §33.4) —
