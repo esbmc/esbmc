@@ -1053,6 +1053,13 @@ It is also the cheapest to close.
 > missing STL facility but **G9** below. Probe G7 at `--std c++23`, not c++20 —
 > `std::unreachable` is a C++23 name and the OM gates it correctly.
 >
+> **Re-measured again 2026-08-17 — G9 is closed too; see §15 M9 (G9).** It took
+> #7046 *and* a `const` on `map`'s copy constructor. Two blockers behind it were
+> only visible once it lifted: **G10**, `<stddef.h>`'s one-shot guard defeating
+> clang's `__need_*` re-include protocol, and **G11**, `offsetof` not being an
+> integer constant expression — which is what stopped `immer`, and through it
+> all of `src/irep2`. `renaming.h` now reaches boost alone.
+>
 > | ID | Facility | 2026-07-27 | 2026-08-05 |
 > |---|---|---|---|
 > | G1 | `<type_traits>` (4 probes) | absent | **closed** |
@@ -1167,7 +1174,14 @@ Stated plainly, to avoid over-claiming:
    Measured on the real target rather than projected: `--parse-tree-only` over
    `src/goto-symex/execution_state.cpp` emits exactly one distinct error,
    `field has incomplete type 'mapped_type' (aka 'irept')`. A backlog of eight
-   has become a single decision (§13.2). *(b) Tractability* — the measurements
+   has become a single decision (§13.2). **Re-measured 2026-08-17: G9 is closed,
+   and closing it exposed G10 and G11 behind it (§15 M9 (G9)).** `irept`,
+   `immer` and `src/irep2` all parse; what a goto-symex header still stops at is
+   boost — `std::basic_string_view` and `std::basic_streambuf` absent as
+   templates, and `swprintf`/`vswprintf` undeclared. Still the operational
+   model, still not ESBMC's own headers, and one item shorter than it looks:
+   the wide-`printf` pair needs models, not declarations.
+   *(b) Tractability* — the measurements
    in §13.3 (a 4-key `unordered_map` loop takes 86 s at `--unwind 5` and times
    out at `--unwind 8`) put whole-TU verification out of reach **even after (a)
    is fixed**. Tier A is therefore *transcription*, and its fidelity rests on the
@@ -5912,6 +5926,85 @@ cannot fail teaches nothing; this adds that **a mutation which cannot be
 observed to have applied is not a mutation**. Both anti-vacuity twins here exist
 to catch the ordinary vacuity — an unreachable assertion — and neither would
 have caught this, because the fault was upstream of the tool entirely.
+
+### M9 (G9) — 2026-08-17, G9 closed, and the residue is boost
+
+G9 — `std::map` with an incomplete `mapped_type` — is closed. Two changes, both
+in the operational model, and only the first is the one §13.2 predicted:
+
+1. **#7046** moved `map`'s element storage behind pointers, so instantiating
+   `map<K, Node>` no longer requires `Node` to be complete.
+2. **`map(map &x)` → `map(const map &x)`.** [map.overview] gives the copy
+   constructor a `const map&` parameter; the model took a non-const reference,
+   so copying a const map was ill-formed. `irept::dt`'s copy constructor
+   initialises `named_sub` and `comments` from a `const dt &`, so `irep.h` still
+   did not parse after #7046 — the error had merely changed from `field has
+   incomplete type 'mapped_type'` to `no matching constructor for
+   initialization of 'named_subt'`. Nothing in §13.2's table anticipated this:
+   it is not a missing facility but a wrong signature on a present one, which a
+   distance-to-parse probe finds and a feature sweep does not.
+
+**Two further blockers, found by re-running the probe rather than by
+prediction.**
+
+- **G10 — `<stddef.h>`'s one-shot include guard.** clang's `<stddef.h>` is
+  documented as re-includable: a caller defines a `__need_*` macro to pull in
+  one type, which is how `<wchar.h>` obtains `wint_t`. ESBMC's shadowing header
+  wrapped the whole file, `__clang__` branch included, in
+  `__ESBMC_HEADERS_STDDEF_H_`, so every include after the first was a no-op and
+  the requested type never arrived. The reproducer is two lines —
+  `#include <stddef.h>` then `#include <cwchar>` fails on `using ::wint_t;`
+  while `<cwchar>` alone passes, which is why it survived so long. The guard now
+  covers only the non-clang fallback.
+- **G11 — `offsetof` is not an integer constant expression.**
+  `clang_c_language.cpp` redefined `__builtin_offsetof` as
+  `((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))` (#2772), which no
+  constant evaluator can fold, while C23 7.21p3 and [support.types.layout]/1
+  both require an ICE. Every `constexpr`, `static_assert` and non-type template
+  argument spelt with `offsetof` was therefore rejected. This is what actually
+  stopped `immer`: `node.hpp:131`'s `max_sizeof_inner` is a `constexpr` built
+  from `immer_offsetof` and feeds a non-type template argument, and `immer` is
+  `guard_seq`'s `vector_t` — so one macro accounted for the whole `src/irep2`
+  error cluster. `clang::Stmt::OffsetOfExprClass` has been lowered in
+  `clang_c_convert.cpp` since 2016, so the macro was shadowing a working path.
+
+**Why C keeps the macro, and the defect that discovery turned up.** Removing it
+outright turns four `regression/esbmc/github_2512_*` tests red, and the cause is
+not `offsetof`. Those tests are `container_of` idioms — `(void *)p - K` — and
+the failure reproduces with a literal `8` and no `offsetof` anywhere:
+`*(int *)((void *)&cc->link - 8) = 42` does **not** write `cc->val`, while the
+same expression through `char *` does. `__ESBMC_POINTER_OFFSET` of the result is
+0 and `__ESBMC_same_object` holds, so the pointer model and the dereference
+disagree with each other. That is a wrong-address store, not a false positive —
+unsound in the missed-bug direction — and the macro was masking it by keeping
+the offset opaque. Removing the macro for C is blocked on fixing that; the C++
+half, which is what this plan needs, is not.
+
+**Measured on this tree, `--std c++23`.** `#include <goto-symex/renaming.h>` now
+reaches boost and nothing else: `immer`, `src/irep2/guard_seq.h` and `irep.h`
+all parse. The residue is three items, all reached through `boost/lexical_cast`
+via `src/util/symtab/context.h`'s multi-index container:
+`std::basic_string_view` and `std::basic_streambuf` are absent as templates (the
+model has only the non-template `string_view` and `streambuf`), and
+`swprintf`/`vswprintf` are undeclared. The last is not a cheap add:
+`src/c2goto/headers/wchar.h` declares only routines that have a model, on the
+stated grounds that a mutating routine without one returns nondet and writes
+nothing, which is worse than absence.
+
+**What this moves and what it does not.** §14 item 1(a) is now three named
+operational-model items rather than one, and none of them is in ESBMC's own
+headers. §14 item 1(b) — tractability — is untouched, and so is item 8: Mode C
+on `src/**` still cannot be run, because the file still does not parse. These
+figures were measured on macOS/arm64 against homebrew's `immer` and boost, where
+§13.2's used the vendored `immer` on Linux; the two residues are not directly
+comparable and this one must be re-measured on Linux before being cited there.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc-cpp/map/map_copy_from_const{,_fail}` | `--unwind 2 --no-unwinding-assertions` | `SUCCESSFUL` / `FAILED`; both `PARSING ERROR` on the pre-patch control |
+| `regression/esbmc/stddef_reinclude_wint_t{,_fail}` | default | `SUCCESSFUL` / `FAILED`; both `PARSING ERROR` on the control |
+| `regression/esbmc-cpp/cpp/offsetof_constant_expression{,_fail}` | default | `SUCCESSFUL` / `FAILED`; both `PARSING ERROR` on the control |
+| `regression/esbmc-cpp/cpp/offsetof_layout_parity{,_fail}` | default | `SUCCESSFUL` / `FAILED` on **both** binaries — a parity guard, not a discriminating test. It pins that switching C++ to clang's lowering changed no offset, over packed, over-aligned, nested, union and array-indexed members |
 
 ---
 
