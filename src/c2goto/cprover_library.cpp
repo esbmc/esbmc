@@ -56,6 +56,13 @@ extern "C"
   extern const uint8_t sol64_buf[];
   extern const unsigned int sol64_buf_size;
 #endif
+
+#ifdef ENABLE_PYTHON_FRONTEND
+  extern const uint8_t py64_buf[];
+  extern const unsigned int py64_buf_size;
+  extern const uint8_t py64_fp_buf[];
+  extern const unsigned int py64_fp_buf_size;
+#endif
 }
 
 namespace
@@ -406,6 +413,68 @@ static void generate_symbol_deps(
   }
 }
 
+/* Linked only when the program actually mentions one of them. Every other
+ * library body arrives because the program declared it and left it empty, but
+ * esbmc_intrinsics.h is force-included, so these ten are "declared" in every
+ * translation unit and would otherwise be linked into programs that never call
+ * them -- ten function bodies to goto-convert, slice and encode, worth ~4% of
+ * wall clock on a 10 s task (esbmc/esbmc#6831). No operational model calls
+ * them; they exist so CBMC sources verify unchanged. */
+static bool is_cbmc_memory_primitive(const symbolt &s)
+{
+  static const std::unordered_set<std::string> names = {
+    "__CPROVER_POINTER_OBJECT",
+    "__CPROVER_POINTER_OFFSET",
+    "__CPROVER_same_object",
+    "__CPROVER_OBJECT_SIZE",
+    "__CPROVER_DYNAMIC_OBJECT",
+    "__CPROVER_LIVE_OBJECT",
+    "__CPROVER_WRITEABLE_OBJECT",
+    "__CPROVER_r_ok",
+    "__CPROVER_w_ok",
+    "__CPROVER_rw_ok"};
+  return names.find(id2string(s.get_function_name())) != names.end();
+}
+
+/// Names the program's own symbols refer to, including through their types.
+/// A function whose address is taken counts as referenced, since the reference
+/// appears in the value that takes it.
+static std::unordered_set<std::string> program_references(const contextt &ctx)
+{
+  std::multimap<irep_idt, irep_idt> deps;
+  ctx.foreach_operand([&deps](const symbolt &s) {
+    generate_symbol_deps(s.id, s.get_value(), deps);
+    generate_symbol_deps(s.id, s.get_type(), deps);
+  });
+
+  std::unordered_set<std::string> referenced;
+  for (const auto &dep : deps)
+    referenced.insert(id2string(dep.second));
+  return referenced;
+}
+
+/// Whether a library symbol belongs in the context handed to the rest of the
+/// run. `bundled_wholesale` frontends (Python, Solidity) filter upstream, so
+/// everything their blob carries is kept; for the rest a symbol is a library
+/// body the program declared and left empty, minus the memory primitives it
+/// never mentions.
+static bool store_library_symbol(
+  const contextt &context,
+  const symbolt &s,
+  bool bundled_wholesale,
+  const std::unordered_set<std::string> &referenced)
+{
+  if (bundled_wholesale)
+    return true;
+
+  const symbolt *symbol = context.find_symbol(s.id);
+  if (symbol == nullptr || !symbol->get_value().is_nil())
+    return false;
+
+  return !is_cbmc_memory_primitive(s) ||
+         referenced.find(id2string(s.id)) != referenced.end();
+}
+
 static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
@@ -455,6 +524,42 @@ static bool select_solidity_blob(
   return true;
 }
 #endif
+
+/// Merge the Python operational models into what was already read from clib.
+/// py64 holds only the models, so it is read whole; the libc, libm and pthread
+/// symbols they call stay in clib and are reached through the dependency
+/// closure below. Hence the skip: a declaration the models' headers carry must
+/// not displace the clib definition of that name, which the closure has no way
+/// to add once the id is taken.
+/// No-op for every other language, as select_solidity_blob is.
+static void
+read_python_blob(bool is_python, contextt &new_ctx, contextt &ignored_ctx)
+{
+#ifdef ENABLE_PYTHON_FRONTEND
+  if (!is_python)
+    return;
+
+  // 64-bit only, as sol64 is; the pair is the two float encodings.
+  const bool floatbv = !config.ansi_c.use_fixed_for_float;
+  const uint8_t *start = floatbv ? py64_fp_buf : py64_buf;
+  unsigned int size = floatbv ? py64_fp_buf_size : py64_buf_size;
+
+  contextt py_ctx, py_ignored;
+  goto_binary_reader py_reader;
+  if (py_reader.read_goto_binary_array(start, size, py_ctx, py_ignored))
+    abort();
+
+  py_ctx.foreach_operand([&new_ctx, &ignored_ctx](const symbolt &s) {
+    if (s.get_value().is_nil() && ignored_ctx.find_symbol(s.id))
+      return;
+    new_ctx.add(s);
+  });
+#else
+  (void)is_python;
+  (void)new_ctx;
+  (void)ignored_ctx;
+#endif
+}
 
 struct library_load_report
 {
@@ -531,7 +636,8 @@ void add_cprover_library(contextt &context, const languaget *language)
 
   goto_binary_reader goto_reader;
 
-  if (language && language->id() == "python")
+  const bool is_python = language && language->id() == "python";
+  if (is_python)
     goto_reader.set_functions_to_read(python_c_models);
 
   const uint8_t *lib_start = clib->start;
@@ -553,6 +659,8 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (goto_reader.read_goto_binary_array(
         lib_start, lib_size, new_ctx, ignored_ctx))
     abort();
+
+  read_python_blob(is_python, new_ctx, ignored_ctx);
   fine_timet read_stop = current_time();
 
   // Traverse symbols and get dependencies from both their nested types and values
@@ -589,22 +697,25 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Determine whether this language uses a whitelist-based loading strategy.
   // Python: uses whitelist with clib64 → symbols split between new_ctx/ignored_ctx.
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
-  bool uses_whitelist = language && language->id() == "python";
+  bool uses_whitelist = is_python;
+
+  const bool bundled_wholesale = is_solidity || uses_whitelist;
+
+  const std::unordered_set<std::string> referenced =
+    bundled_wholesale ? std::unordered_set<std::string>()
+                      : program_references(context);
 
   new_ctx.foreach_operand([&context,
                            &store_ctx,
                            &symbol_deps,
                            &to_include,
-                           &is_solidity,
-                           &uses_whitelist](const symbolt &s) {
-    const symbolt *symbol = context.find_symbol(s.id);
-    if (
-      (is_solidity || uses_whitelist) ||
-      (symbol != nullptr && symbol->get_value().is_nil()))
-    {
-      store_ctx.add(s);
-      ingest_symbol(s.id, symbol_deps, to_include);
-    }
+                           bundled_wholesale,
+                           &referenced](const symbolt &s) {
+    if (!store_library_symbol(context, s, bundled_wholesale, referenced))
+      return;
+
+    store_ctx.add(s);
+    ingest_symbol(s.id, symbol_deps, to_include);
   });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
