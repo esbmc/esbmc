@@ -2653,9 +2653,6 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
   else if (const char *ieee_name = ieee_arith_name(src.id()))
     return convert_function(src, ieee_name, precedence = 15);
 
-  else if (src.id() == "ieee_rem")
-    return convert_function(src, "IEEE_REM", precedence = 15);
-
   else if (src.id() == "width")
     return convert_function(src, "WIDTH", precedence = 15);
 

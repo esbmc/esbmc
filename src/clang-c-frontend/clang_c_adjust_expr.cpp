@@ -1684,14 +1684,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if (compare_float_suffix(identifier, "remainder"))
-    {
-      // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
-      // fp.rem. The fmod/remquo models are built on top of this (fmod.c).
-      exprt new_expr("ieee_rem", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
-    }
     else if (identifier == "__builtin_isinf_sign")
     {
       exprt isinf_expr("isinf", bool_typet());
