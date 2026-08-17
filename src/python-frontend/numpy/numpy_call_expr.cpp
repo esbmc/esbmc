@@ -2353,26 +2353,34 @@ static nlohmann::json numpy_compare_scalar(
 
 // Applies element_fn pairwise across lhs/rhs, broadcasting a scalar against a
 // list on either side. Shared by comparisons and logical_and/or, both at the
-// top-level dispatch and when evaluating a chained call.
+// top-level dispatch and when evaluating a chained call. When both operands
+// are lists, their lengths must agree -- indexing the shorter one past its
+// end is an out-of-bounds JSON access, not a controlled diagnostic.
 template <typename ElementFn>
 static nlohmann::json numpy_broadcast_binary(
   const nlohmann::json &lhs,
   const nlohmann::json &rhs,
   ElementFn element_fn)
 {
-  if (lhs.contains("elts") && lhs["elts"].is_array())
+  const bool lhs_is_list = lhs.contains("elts") && lhs["elts"].is_array();
+  const bool rhs_is_list = rhs.contains("elts") && rhs["elts"].is_array();
+
+  if (lhs_is_list && rhs_is_list && lhs["elts"].size() != rhs["elts"].size())
+    throw std::runtime_error(
+      "TypeError: numpy comparison/logical operands have mismatched "
+      "lengths");
+
+  if (lhs_is_list)
   {
     std::vector<nlohmann::json> out_elts;
     for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
     {
-      const auto &lhs_item = lhs["elts"][i];
-      const auto &rhs_item =
-        rhs.contains("elts") && rhs["elts"].is_array() ? rhs["elts"][i] : rhs;
-      out_elts.push_back(element_fn(lhs_item, rhs_item));
+      const nlohmann::json &rhs_item = rhs_is_list ? rhs["elts"][i] : rhs;
+      out_elts.push_back(element_fn(lhs["elts"][i], rhs_item));
     }
     return make_list_node(out_elts);
   }
-  if (rhs.contains("elts") && rhs["elts"].is_array())
+  if (rhs_is_list)
   {
     std::vector<nlohmann::json> out_elts;
     for (const auto &rhs_item : rhs["elts"])
