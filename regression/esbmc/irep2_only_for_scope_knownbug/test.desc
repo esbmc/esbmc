@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--goto-functions-only --clang-c-irep2-adjust-only
+^ *2: DEAD c:main\.c@[0-9]*@F@main@i$

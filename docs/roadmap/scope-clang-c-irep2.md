@@ -3340,6 +3340,243 @@ Next, in order:
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
 
+
+## 104. All four C suites censused — and no unowned cause remains
+
+`esbmc-unix` is the last of §101's list. **53 of 60 sampled tests differ**, and
+after correcting three tag rules (see below) every cause is owned. That closes
+the census:
+
+| suite | differing | dominant cause |
+|---|---|---|
+| `regression/esbmc` | 78 of 120 (65 %) | `__builtin_expect` — 37 (#7086) |
+| `cstd` | 134 of 142 (94 %) | warning 34 (#7093), `assert` 34 (#7087) |
+| `floats` | 97 of 102 (95 %) | name-matched builtins — 25 (#7088) |
+| `esbmc-unix` | 53 of 60 (88 %) | **padding — 46 (#7100)** |
+
+**Across all four, every measured divergence is owned by an open PR.** There is
+no adjuster arm left to write for the censused C corpus. §101 said that of one
+suite; it now holds for the corpus §1.2 prices.
+
+### 104.1 The dominant cause differs per suite, which changes the priorities
+
+This is the useful result, and it is not visible from any single suite.
+`#7100` (struct/union padding) accounts for 9 tests in `regression/esbmc` and
+**46 of 53** in `esbmc-unix`: the unix headers are dense in padded unions
+(`pthread_attr_t` is a union of a `char[36]` and a `long`, whose
+`union_pad#` is missing under the flag). A reviewer sizing these PRs from
+`regression/esbmc` alone would rank #7100 sixth; on the corpus it is first or
+second.
+
+Likewise #7088 barely registers in `regression/esbmc` and is the top cause in
+`floats`, where `fabs`/`inf` are everywhere.
+
+### 104.2 Three tag rules were wrong
+
+Recorded because the same rules will be reused:
+
+- `union_pad#` is a padding token that `anon_pad` does not match — unions pad
+  under a different name.
+- `&f` for a function designator (#7092) needs its own rule; it is not a
+  by-name pattern like the others.
+- `&"lit"[0]` versus `"lit"` is the string-literal half of the decay class
+  (#7098), and reads as a quoted-string difference rather than an index.
+
+Each initially produced an UNTAGGED test that looked like a new cause. §98.2 and
+§104.3 already record that symptom-tagging misattributes; this adds that it also
+*over*-reports, and the fix is to read every untagged residue rather than trust
+the tally.
+
+### 104.3 What is left, and it is not an arm
+
+- **Landing the PRs.** §99 gives the order and the two non-mechanical conflicts.
+  Master additionally does not build at 2284cf241d (#7111).
+- **W3/W4**, coupled per §102.2 and needing a design decision, not a port.
+- **`goto_convert`**, for §98's residual `DEAD` questions.
+- **`adjust_type` beyond padding** and **`adjust_float_arith`'s vector branch**,
+  both witnessless so far; §103.2 argues the latter's scalar path is dead
+  legacy code rather than unported work.
+## 103. The `floats` suite censused — and the `ieee_*` gap does not exist
+
+`floats` is the second of §101's uncensused suites: **97 of 102 differ**. By
+cause, over the first 50:
+
+| cause | tests | owner |
+|---|---:|---|
+| name-matched builtins (`fabs`, `inf`, ...) | 25 | #7088 |
+| `migrate_expr` renaming warning | 18 | #7093 |
+| `assert` base name | 18 | #7087 |
+| boolean cast on a condition | 4 | #7099 |
+| array-to-pointer decay | 3 | #7098 |
+| `for`-init hoist | 1 | #7105 |
+
+**Every cause is owned.** Like `cstd` (§102), the suite is denser in the same
+things rather than differently affected.
+
+### 103.1 A cause that was not there
+
+A first pass tagged 2 tests as an `ieee_*` promotion gap — the
+`adjust_float_arith` arm §104.2 deferred — on the strength of `IEEE_ADD` and
+friends appearing in the default symbol table and not under `-only`. The arm was
+written to close it. It fires **zero** times, and the tag was a false positive.
+
+Measured directly:
+
+```c
+double a = nondet_double(), b = nondet_double();
+double c = a + b;
+```
+
+`double c=IEEE_ADD(a, b);` on the default path **and** under `-only` on an
+unmodified baseline. The promotion is already there without the legacy arm.
+
+The two tagged tests are `Float-no-simp8`/`9`, and their `IEEE_*` lines sit
+inside **libm model functions absent from the `-only` symbol table altogether** —
+the same "1066 vs 1067 symbols" seen in §102's `cstd` samples. An unlowered
+builtin call (#7088) changes which operational-model functions get linked, so
+whole model bodies appear or disappear. The tag matched a consequence of a cause
+already owned, in a function that is not the program's.
+
+The arm was deleted rather than shipped. It would have been an arm with no
+witness, which is what §94.1 and §102.2 both declined to do.
+
+### 103.2 A dead-code candidate
+
+That measurement says something about the legacy pass, not just the port: if a
+float `+` is already an `ieee_add` before `clang_c_adjust` runs — which is what
+`-only` on an unmodified baseline demonstrates, since it never calls
+`adjust_float_arith` — then **`adjust_float_arith`'s scalar path is dead on the C
+frontend**. Its vector branch may not be; the arm explicitly handles a
+vector-of-float and returns before attaching a rounding mode.
+
+That makes it a candidate for the dead-code process rather than for porting:
+`CLAUDE.md`'s C-Dead sub-mode, with the vector case checked separately. Recorded
+here rather than acted on, because deleting a legacy arm needs its own proof and
+is not this scope's business.
+
+### 103.3 Suites remaining
+
+`esbmc-unix` (438) is the last of §101's list. On the evidence of `cstd` and
+`floats`, expect the same four owned causes and no new ones.
+## 99. The fifteen open PRs do not batch-merge — an integration attempt
+
+Fifteen Phase 6 PRs were open with none merged, so rather than add a sixteenth
+arm this section reports an attempt to merge them all onto master at once and
+measure the combined divergence. **The combined number was not obtained**: the
+integration does not build, for two reasons that matter to whoever lands them.
+
+### 99.1 The matcher move collides with a function master added
+
+PRs #7086/#7088 move `compare_float_suffix`, `compare_unscore_builtin`,
+`is_abs_builtin_name`, `is_name_matched_builtin` and `shadows_user_definition`
+out of `clang_c_adjust_expr.cpp` into `builtin_names.{h,cpp}`, deleting that
+region. Since those branches were cut, master gained **#7028**, which added
+`float_lowering_id` *inside the same region* and calls it from
+`do_special_functions`.
+
+Git flags this as a conflict, so it is not silent — but the conflict looks like
+"branch deleted a block, master edited it", and resolving it the obvious way
+(take the deletion) removes `float_lowering_id` and the build fails with
+`use of undeclared identifier 'float_lowering_id'`. The resolution has to keep
+master's new function and move only the five matchers.
+
+### 99.2 Adjacent helpers lose their shared closing brace
+
+Eight of the branches add a `static` helper and a dispatch line to
+`clang_c_adjust_irep2.cpp`, all in the same two places. When two of them are
+merged, git's conflict region covers each side's body but **not** the closing
+brace, which is shared context. Resolving with "keep both sides" therefore
+produces two function headers and one brace — `function definition is not
+allowed here` — and where the arms are longer it splices two bodies together
+(`redefinition of 'before0'`).
+
+Again: git does flag it. The hazard is that these conflicts *look* like the
+textbook "both added something, keep both" case and are not.
+
+### 99.3 What follows for the merge
+
+- **Merge one PR at a time, in number order, building after each.** The
+  dependency chain (#7086 → #7087 → #7088 → #7090 → #7091 → #7092) is only the
+  declared order; the master-based arms (#7093-#7102) touch the same two
+  places and will each need a trivial-but-manual resolution once the earlier
+  ones land.
+- **#7088 needs its own master merge before anything else**, because of §99.1.
+  That resolution is a judgement, not a mechanical one.
+- The doc-section collisions already seen (§92/§93 renumbering) are the benign
+  half of the same phenomenon and can be resolved by keeping both sides; the
+  source ones cannot.
+
+### 99.4 What this section does not claim
+
+No combined divergence figure. Every per-arm number in §§90-98 was measured
+against master with only that arm applied, and those stand; how far the fifteen
+together take the corpus is unmeasured, and will stay unmeasured until they can
+be built together. Stated plainly because the obvious summary — "201 down to N"
+— is one this scope has not earned.
+## 98. The `DEAD` class: a live variable marked dead, and a hoist that does not fix it
+
+§97 left 13 untagged tests, most showing a `DEAD` instruction in a different
+place. Read properly, that class is two things, and only one of them is an
+unported arm.
+
+### 98.1 The defect
+
+For a `for` loop declaring its own variable:
+
+```c
+for (int i = 0; i < 10; ++i)
+  buf[i] = (char)nondet_int();
+```
+
+| path | placement |
+|---|---|
+| default | `DECL i`, the loop, `GOTO 1`, then `2: DEAD ...@i` |
+| `-only` | `DECL i`, **`DEAD ...@i`**, then the loop guard |
+
+Under the flag the loop variable is marked dead *before the body that reads and
+writes it*. That is a scope error, not a spelling one.
+
+No verdict impact is demonstrated: an assertion over a value accumulated in such
+a loop verifies identically on both paths (`--unwind 12`). Stated rather than
+implied, because "marks a live variable dead" sounds worse than what has been
+shown, and because symex's own treatment of `DEAD` for a scalar is what absorbs
+it. It remains a divergence that must close before the round-trip can be deleted.
+
+Pinned as `regression/esbmc/irep2_only_for_scope_knownbug`, KNOWNBUG, whose
+regex is confirmed to match the **default** path — so the test flips to CORE when
+the placement is fixed rather than being vacuously green.
+
+### 98.2 The arm this is not
+
+`clang_c_adjust::adjust_for` hoists the loop's init into an enclosing block —
+`for (a; b; c) d;` becomes `{ a; for (; b; c) d; }` — and its comment records
+that it is *"the only structurally-mutating adjust_* method"*, fenced on a
+non-nil init because re-running it would move a now-nil init into a fresh block
+and break goto_convert (#5298). That arm is unported, so it was the obvious
+candidate.
+
+It was written and measured, and **it is not the fix**. Ported, it:
+
+- fires on 4 of the sample's tests (a plain `for (int i = 0; ...)` does not reach
+  it: clang has already hoisted, so `init` is nil);
+- converges those tests — `github_4978` from 14 differing lines to 8,
+  `github_1890_2` 28 to 24, 33 767 to 33 743 corpus-wide;
+- **leaves the misplaced `DEAD` exactly where it was.**
+
+So it is a faithful port that moves location comments and nothing a test can
+meaningfully pin, while the defect that dominates its own class survives. Not
+shipped on its own for that reason; it belongs in the change that fixes §98.1,
+where the two can be gated together. The measurements are recorded here so the
+next attempt starts from them rather than repeating the dead end.
+
+### 98.3 Where to start
+
+The placement is `convert_block`'s destructor unwinding, not the adjuster: the
+`-only` and default goto programs differ in where `i`'s scope ends, and the
+adjuster only decides what block structure `goto_convert` is handed. The next
+step is to find which block the `-only` path puts the declaration in — the hoist
+above changes that structure and does *not* move the `DEAD`, which is the useful
+negative result.
 ## 93. The four tests that diverged against themselves
 
 PR #7086 recorded that `gcc_nested_func_02`, `gcc_nested_func_collision`,
@@ -3623,13 +3860,13 @@ Next, in order:
 2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
 
-## 104. The conversions at binary operators and at assignment
+## 107. The conversions at binary operators and at assignment
 
 §96's census attributed 17 tests to "usual arithmetic conversions". §97 named
 them next. Both arms are ported here, **master-based rather than stacked** —
 the six-deep hop-off chain is unmerged, and neither arm needs it.
 
-### 104.1 Clang does most of this already
+### 107.1 Clang does most of this already
 
 The binary-arithmetic arm — `gen_typecast_arithmetic` over the operands, then
 the node's own type — fires on **one** test in the 297-test sample. That is not
@@ -3660,7 +3897,7 @@ separate assignment statement is the shape that reaches the adjuster —
 `r_ok18`'s, found by reading what the arm changed rather than by reasoning about
 C.
 
-### 104.2 What is left out
+### 107.2 What is left out
 
 - **`adjust_float_arith`'s `ieee_*` promotion**, which the same legacy function
   calls for `+ - * /`. That is the defect
@@ -3670,7 +3907,7 @@ C.
   gives those a complex lowering of their own; only the plain `assign` case is
   here.
 
-### 104.3 Result
+### 107.3 Result
 
 | | master | with both arms |
 |---|---:|---:|
