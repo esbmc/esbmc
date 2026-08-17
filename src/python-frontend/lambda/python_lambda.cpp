@@ -139,6 +139,19 @@ static bool is_param_used_as_callee(
   return false;
 }
 
+static void refuse_called_lambda_parameter(
+  const nlohmann::json &body_node,
+  const std::string &arg_name)
+{
+  if (!is_param_used_as_callee(body_node, arg_name))
+    return;
+
+  throw std::runtime_error(
+    "calling the lambda parameter '" + arg_name +
+    "' is not supported: higher-order lambda parameters have no inferred "
+    "signature");
+}
+
 typet python_lambda::infer_lambda_return_type(
   [[maybe_unused]] const nlohmann::json &body_node)
 {
@@ -248,11 +261,7 @@ void python_lambda::process_lambda_parameters(
   {
     std::string arg_name = arg["arg"].get<std::string>();
 
-    if (is_param_used_as_callee(body_node, arg_name))
-      throw std::runtime_error(
-        "calling the lambda parameter '" + arg_name +
-        "' is not supported: higher-order lambda parameters have no inferred "
-        "signature");
+    refuse_called_lambda_parameter(body_node, arg_name);
 
     // Determine parameter type from annotation or infer from usage
     typet param_type = double_type();
