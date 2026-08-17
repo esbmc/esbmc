@@ -56,6 +56,13 @@ extern "C"
   extern const uint8_t sol64_buf[];
   extern const unsigned int sol64_buf_size;
 #endif
+
+#ifdef ENABLE_PYTHON_FRONTEND
+  extern const uint8_t py64_buf[];
+  extern const unsigned int py64_buf_size;
+  extern const uint8_t py64_fp_buf[];
+  extern const unsigned int py64_fp_buf_size;
+#endif
 }
 
 namespace
@@ -518,6 +525,42 @@ static bool select_solidity_blob(
 }
 #endif
 
+/// Merge the Python operational models into what was already read from clib.
+/// py64 holds only the models, so it is read whole; the libc, libm and pthread
+/// symbols they call stay in clib and are reached through the dependency
+/// closure below. Hence the skip: a declaration the models' headers carry must
+/// not displace the clib definition of that name, which the closure has no way
+/// to add once the id is taken.
+/// No-op for every other language, as select_solidity_blob is.
+static void
+read_python_blob(bool is_python, contextt &new_ctx, contextt &ignored_ctx)
+{
+#ifdef ENABLE_PYTHON_FRONTEND
+  if (!is_python)
+    return;
+
+  // 64-bit only, as sol64 is; the pair is the two float encodings.
+  const bool floatbv = !config.ansi_c.use_fixed_for_float;
+  const uint8_t *start = floatbv ? py64_fp_buf : py64_buf;
+  unsigned int size = floatbv ? py64_fp_buf_size : py64_buf_size;
+
+  contextt py_ctx, py_ignored;
+  goto_binary_reader py_reader;
+  if (py_reader.read_goto_binary_array(start, size, py_ctx, py_ignored))
+    abort();
+
+  py_ctx.foreach_operand([&new_ctx, &ignored_ctx](const symbolt &s) {
+    if (s.get_value().is_nil() && ignored_ctx.find_symbol(s.id))
+      return;
+    new_ctx.add(s);
+  });
+#else
+  (void)is_python;
+  (void)new_ctx;
+  (void)ignored_ctx;
+#endif
+}
+
 struct library_load_report
 {
   bool is_solidity;
@@ -593,7 +636,8 @@ void add_cprover_library(contextt &context, const languaget *language)
 
   goto_binary_reader goto_reader;
 
-  if (language && language->id() == "python")
+  const bool is_python = language && language->id() == "python";
+  if (is_python)
     goto_reader.set_functions_to_read(python_c_models);
 
   const uint8_t *lib_start = clib->start;
@@ -615,6 +659,8 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (goto_reader.read_goto_binary_array(
         lib_start, lib_size, new_ctx, ignored_ctx))
     abort();
+
+  read_python_blob(is_python, new_ctx, ignored_ctx);
   fine_timet read_stop = current_time();
 
   // Traverse symbols and get dependencies from both their nested types and values
@@ -651,7 +697,7 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Determine whether this language uses a whitelist-based loading strategy.
   // Python: uses whitelist with clib64 → symbols split between new_ctx/ignored_ctx.
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
-  bool uses_whitelist = language && language->id() == "python";
+  bool uses_whitelist = is_python;
 
   const bool bundled_wholesale = is_solidity || uses_whitelist;
 

@@ -1,7 +1,9 @@
 # Plan — the per-task cost every SV-COMP run pays (issue #6831, cause 2)
 
-**Status:** in progress. W3 (both reader wins) and W4 (the cost is reported and
-pinned) are shipped; W0, W1, W2 and W5 are still plan only.
+**Status:** W0 closed (the term is a glibc secondary arena, not the library);
+W1, W3, W4 and W5 shipped or in review; W2 closed unbuilt, its premise refuted
+by measurement. Against the window's fast endpoint the oracle is back to
+×0.999 from ×1.070 — see §9.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 2 —
 a general slowdown tipping tasks already at the limit*, ~198 of 489 lost tasks,
 led by 131 `Juliet_Test` no-overflow tasks at a median of 99.1 s of a 100 s
@@ -268,6 +270,115 @@ at read time cannot beat not shipping the bytes down that path at all.
 **Exit:** a C task's deserialise+deps time down by ≥24 % (more, per §2.4), no
 verdict change in any suite, and Python/Solidity/C++ regressions unchanged.
 
+**Shipped as [#7058](https://github.com/esbmc/esbmc/pull/7058)** (Python half;
+`libm` not attempted). `py64` and `py64_fp` are built the way `sol64` is, and
+`clib64_fp.goto` drops from 3,369,011 to 2,348,422 bytes — **−30 %**.
+Interleaved A/B against the same build without the split:
+
+| program | wall | GOTO creation |
+|---|---|---|
+| `int main(void){return 0;}` (14 pairs) | 0.760 | **0.720** |
+| trivial Python (12 pairs) | 0.959 | **0.960** |
+
+**Exit met, and G2's worry did not materialise**: the plan expected Python to
+be flat at best, since it now reads two blobs, and it gains 4 %.
+
+Two things this cost that the sketch above did not anticipate:
+
+- **The split is not self-contained, so read order became load-bearing.**
+  `sol64` holds only Solidity symbols; the Python models call libc, libm and
+  the pthread helpers. `contextt::add` silently rejects duplicates, so clib is
+  read *first* (its definitions win) and a nil declaration carried by the
+  models' headers is dropped when clib holds the body in `ignored_ctx` — adding
+  it would shadow the definition the dependency closure then cannot reach. Get
+  that order backwards and libc bodies silently become declarations: a verdict
+  change, not a crash, which is what G1 exists to catch.
+- **Measurement discipline decided the outcome.** Single runs on a loaded host
+  said the split made C 45 % *slower* and Python 2.2× slower. Interleaved on
+  the same host at the same moment: ×0.72 and ×0.96. The numbers that looked
+  like a reason to revert were an artefact of a load average of 33.
+
+**Not done here:** the `libm` half (1,002 symbols, 26 %), which needs the same
+treatment behind `ENABLE_LIBM` and is a bigger question — unlike the Python
+models, libm is reachable from ordinary C, so it cannot be keyed off the
+frontend and a wrong answer drops a model a task needed. That is a G1
+soundness risk rather than a performance one.
+
+#### Both fixes together, against the fast endpoint
+
+`master` + #7051 + #7058 built in the bisect's build directory, 12 pairs on the
+oracle, library loaded:
+
+| metric | `978a007e73` | master+both | B/A |
+|---|---|---|---|
+| wall | 9.272 s | 10.398 s | **1.039** |
+| GOTO creation | 0.293 s | 0.210 s | **0.690** |
+| symex | 0.744 s | 0.782 s | 1.072 |
+| encoding | 4.069 s | 4.617 s | 1.081 |
+| solving | 2.026 s | 2.171 s | 1.012 |
+
+**×1.070 → ×1.039: about half the regression recovered**, and GOTO creation is
+now 31 % *below* the 2026-08-01 baseline rather than merely restored.
+
+The residue is symex and encoding, and the shortfall against what the parts
+predicted (×1.070 × ×0.953 ≈ ×1.02) is itself informative: **the two fixes
+overlap**. The arena fix's value came from trimming what the library load left
+in the arena; W1 makes that load smaller, so there is less left to trim. They
+are not additive, and anyone re-measuring one of them after the other lands
+should expect a smaller number than this plan quotes for it in isolation.
+
+#### The residue is ten model bodies nothing calls — and §4 W0 got this wrong
+
+The ~4 points left after both fixes are **entirely library-mediated**: the same
+A/B under `--no-library` is ×0.994. So they are not code layout and not creep.
+
+A trivial C program's GOTO program holds **6 function bodies on `978a007e73`
+and 16 on master**. The ten are exactly the `__CPROVER_*` primitives #6708
+added — `POINTER_OBJECT`, `POINTER_OFFSET`, `same_object`, `OBJECT_SIZE`,
+`DYNAMIC_OBJECT`, `LIVE_OBJECT`, `WRITEABLE_OBJECT`, `r_ok`, `w_ok`, `rw_ok` —
+linked with bodies into every C program, none of which calls them.
+
+Deleting them from `builtin_libs.c` and re-measuring against the same build,
+**20 pairs on an idle host** (a first pass at 12 pairs under load said ×0.958
+and ×0.920; those numbers were too generous and are corrected here):
+
+| metric | master+both | minus the ten | B/A |
+|---|---|---|---|
+| wall | 9.782 s | 9.625 s | **0.975** |
+| encoding | 4.467 s | 4.212 s | **0.936** |
+| symex | 0.790 s | 0.786 s | 0.999 |
+
+On plain `master`, the same removal via the shipped filter is worth only
+×0.994 (20 pairs). So the ten bodies cost **0.6–2.5 % depending on what else
+the build carries** — real, concentrated in encoding, and an order of magnitude
+short of "the rest of the regression".
+
+**This contradicts W0's hypothesis-2 probe above**, which ran the same deletion,
+found `Symex completed in` unchanged, and concluded "#6708 contributes nothing
+to the multiplicative term". That reading was right about symex and wrong about
+the total: unreferenced bodies cost nothing to *execute* and plenty to *encode*.
+The probe measured the one phase where the effect could not appear. Corrected:
+**#6708 is worth 0.6–2.5 % here, in encoding — real, but not the rest of the
+regression.** The first version of this section claimed ~4 %, from 12 pairs on
+a host at load average 33; 20 pairs on an idle host do not support it. Both
+that claim and the probe it corrected failed the same way, in opposite
+directions, and the fix for both is the same: measure the phase the mechanism
+predicts, with enough pairs, on a quiet machine.
+
+**So the regression's remaining ~2–3 points are still unattributed.** What is
+ruled out: the library as a whole (`--no-library` A/B), the arena (#7051), the
+blob size (#7058), and now these ten bodies at the scale first claimed.
+
+The fix is not to remove the primitives — a program that uses them needs them.
+It is to stop linking bodies nothing references. They arrive because
+`esbmc_intrinsics.h` is force-included, so the context holds a nil-valued
+declaration for each, and `add_cprover_library()`'s rule for the C path is
+"declared here, empty value → link the body". Every intrinsic in that header
+is therefore linked into every program whether or not it is mentioned. Options,
+cheapest first: drop function bodies with no callers after goto-conversion;
+or make the closure demand a reference rather than a declaration. Either is a
+change to shared linking behaviour, so G1 applies in full.
+
 ### W2 — Make the blob indexable, so loading is O(used) not O(total)
 
 The end state the issue asks for: seek to the symbols a task needs. Today this
@@ -290,6 +401,37 @@ committing to the design — if shared ireps dominate, the win collapses), and
 every consumer of the format (`c2goto`, `--binary`, goto binary round-trips)
 must move together. W1 delivers a large fraction of the win with none of this
 risk, which is why it is sequenced first.
+
+**Measured, and the risk is realised. Do not build this as sketched.**
+A throwaway probe in `reference_convert()` charges every byte of the stream to
+the record that owns it (a record's span minus the spans of records nested
+inside it), reading `clib64_fp` for `int main(void){return 0;}`:
+
+| | |
+|---|---|
+| distinct ireps (the pool) | **101,027** |
+| back-references to them | 209,803 |
+| bytes owned by distinct ireps | **3,363,256** |
+| bytes in the stream | 3,378,683 |
+
+**The pool is 99.5 % of the blob.** Two thirds of all irep slots are shared, so
+the sharing is real and load-bearing — but what is left once you factor it out
+is 15 KB of framing, not a set of substantial per-symbol records. Step 2 of the
+sketch, "read the index and the pool eagerly, deserialise a symbol record on
+first lookup", therefore reads 99.5 % of the bytes before it has done anything,
+and there is no version of it that is O(used).
+
+The alternative — self-contained records that duplicate whatever they share —
+is a size trade, not a free one: with 209,803 of 310,830 slots being repeats,
+independent records would inflate the blob severalfold, and §2.4 shows per-symbol
+cost *rising* with blob size. That is the wrong direction.
+
+**Recommendation: close W2.** What it was for is now largely delivered by other
+means — W1 removed 30 % of the bytes for C tasks and W3.1 made the remaining
+read ×0.805 — and §9 shows the fixed cost already a third below where the
+regression started. If loading ever needs to be sublinear again, the question
+to reopen is not indexing but whether the *frontend* can avoid asking for
+symbols it will not use.
 
 **Exit:** trivial-program library time proportional to symbols kept (≈100), not
 symbols present (3,847); `esbmc --binary` round-trip regressions pass.
@@ -453,3 +595,26 @@ used, superlinearly in its size, with 24 % of it Python models a C task can
 never call — but that fixed cost is not what lost the 131 Juliet tasks sitting
 at 99 s of a 100 s limit, so attribute the 3.5 % multiplicative term first (W0)
 and only then stop paying for models nobody asked for (W1–W4).
+
+**Outcome.** The multiplicative term was a glibc secondary arena, created the
+moment the run moved onto a worker thread; the fixed term was the blob, and
+neither was what the issue supposed. All three fixes together, 20 pairs on an
+idle host against the window's fast endpoint:
+
+| metric | `978a007e73` | with #7051 + #7058 + #7060 | B/A |
+|---|---|---|---|
+| wall | 9.794 s | 9.224 s | **0.999** |
+| GOTO creation | 0.308 s | 0.200 s | **0.670** |
+| symex | 0.748 s | 0.784 s | 1.065 |
+| encoding | 4.182 s | 4.042 s | 0.995 |
+| solving | 2.150 s | 1.965 s | 0.990 |
+
+**×1.070 → ×0.999: the regression is closed on this oracle**, and GOTO creation
+is a third faster than it was before the regression rather than merely
+restored. `symex` is the one phase still above parity; at ×1.065 of a 0.75 s
+phase it is ~50 ms of a 9.2 s run, and wall does not see it.
+
+The caveat that matters for the 131 tasks: this is ESBMC-bound time. A task
+that spends its 99 s inside the solver gains nothing from any of it (§W0's
+solver-bound workload measured ×0.994), so the score should be re-measured
+rather than predicted from these ratios.
