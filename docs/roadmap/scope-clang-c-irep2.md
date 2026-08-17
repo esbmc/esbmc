@@ -3340,6 +3340,86 @@ Next, in order:
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
 
+## 93. The four tests that diverged against themselves
+
+PR #7086 recorded that `gcc_nested_func_02`, `gcc_nested_func_collision`,
+`gcc_nested_func_sibling_calls_uncaptured` and `github_746` differ between two
+runs of the *same* binary on the same input, and recommended teaching
+`irep2_canon` to strip the noise. Three of the four are fixed at the source
+instead.
+
+`transform_nested_functions` wrote its rewritten source to
+`create_tmp_file("esbmc-nested.%%%%-%%%%.c")`. The helpers it lifts have
+internal linkage, so clang's USR for each embeds the **basename of the file it
+was parsed from** -- and `generateUSRForDecl` is what
+`clang_c_convertert::get_decl_name` uses. The random basename therefore reached
+the symbol table: same input, same flags, a different goto program every run.
+The `#line 1 "<source>"` directive already at the top of the rewritten file
+fixes locations, not USRs.
+
+The fix keeps the uniqueness and moves it somewhere the USR cannot see: a
+per-run temp **directory** with a deterministic file name inside it, derived
+from the source's basename (`esbmc-nested.main.c`). Two translation units whose
+sources share a basename collide, which is the hazard two real file-static
+functions in same-named files already carry.
+
+This is worth more than the gate it unblocks. A goto program that is not a
+function of its input undermines counterexample reproducibility and any caching
+keyed on it, and it silently defeats *any* differential harness -- this one
+spent two sessions attributing those tests to whichever patch was in hand before
+the self-comparison caught that they diverge against themselves.
+
+`github_746` is untouched: its difference is clang AST-dump node addresses in an
+error message, which is diagnostic text rather than program content, and belongs
+in the canonicaliser, as that note said.
+
+## 102. The migrate warning, and a correction to §92.2
+
+§96's census put the `migrate_expr` "missing renaming delimiters" warning at the
+top of the remaining causes, 31 tests. Taken on its own terms rather than as a
+divergence row:
+
+`sym_name_to_symbol` returns level0 immediately for a symbol it finds in the
+namespace. Reaching the warning means the symbol was *not* found, and the name
+carries no `?`/`!`; the function then treats it as level0 -- which is what it
+is. A level0 symbol carries no renaming delimiters by definition, so their
+absence is not an anomaly, and the message names no action. It fires once per
+occurrence.
+
+Measured over the sample: under `-only` every instance is an implicitly-declared
+callee (`assert` 23, `perror` 3, `strlen` 1, `signbit` 1) -- library functions
+used without their headers. On the **default path** it fires too, on
+`sizeof(int[n])`, a VLA type whose extent symbol is reached before it is in the
+context. Both are ordinary construction order, not defects.
+
+Demoted to `log_debug("migrate", ...)`. The information is unchanged at
+`--verbosity 9`.
+
+### 102.1 What was considered and dropped
+
+A first version kept `log_warning` for the level2 case -- a name carrying `#`
+but no delimiters is genuinely malformed. It was dropped because that is a
+**new branch whose reachability cannot be shown**: the names come from ESBMC's
+own renaming, which always emits delimiters, and no C input reaches it.
+`CLAUDE.md`'s dead-code rule is that an added branch must be proven reachable or
+removed, and an unprovable guard is worth less than the simpler code. If a
+malformed level2 name is ever produced, the guard can come back with the input
+that produces it.
+
+### 102.2 §92.2 overstated the masking
+
+§92.2 said the warning makes the divergence count "not a sufficient statistic"
+because an arm can be entirely correct and score zero, and put 17 tests behind
+it. That was measured on the base-name branch, where the `assert` tests had lost
+their goto difference and had only the warning left. At the current stack tip --
+which does **not** include that branch -- the warning is the sole difference in
+**2** of 105 tests, and on master in **1** of 201. The general point stands; the
+number attached to it was specific to one branch's state and should not be
+carried forward.
+
+On master this change takes the sample from 201 to 200. Its value is the output
+it stops printing, and that it lets the base-name arm's effect be seen.
+
 ## 92. The base-name defect in `declare_implicit_callee`
 
 The fix is one line: `declare_implicit_callee` gives the symbol

@@ -288,6 +288,13 @@ public:
 
   sexpr get_value(smt_astt a) const;
 
+  /// get_value() reads from the interactive pipe, so without it the solver can
+  /// still answer sat/unsat but no model can be recovered.
+  bool has_model() const override
+  {
+    return static_cast<bool>(emit_proc);
+  }
+
   tvt get_bool(smt_astt a) override;
   tvt l_get(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;

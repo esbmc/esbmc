@@ -80,13 +80,13 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (is_true(new_expr))
   {
-    if (options.get_bool_option("multi-property"))
-    {
-      record_property_verdict(msg, property_verdictt::Passed);
+    // A claim the simplifier discharged holds in every mode, not only under
+    // --multi-property, so record it either way (discussion #7023).
+    record_property_verdict(msg, property_verdictt::Passed);
 
+    if (options.get_bool_option("multi-property"))
       // Track trivially verified claims
       ++simplified_claims;
-    }
 
     // Strengthen the claim by assuming it when trivially true
     assume(claim_expr);
@@ -106,11 +106,10 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       claim_expr, *interval_domain_state)
       .is_true())
   {
+    record_property_verdict(msg, property_verdictt::Passed, "interval");
+
     if (options.get_bool_option("multi-property"))
-    {
-      record_property_verdict(msg, property_verdictt::Passed, "interval");
       ++simplified_claims;
-    }
 
     assume(claim_expr);
     return;
@@ -148,8 +147,12 @@ void goto_symext::record_property_verdict(
   property_verdictt verdict,
   const std::string &note)
 {
+  const locationt &location = cur_state->source.pc->location;
   goto_functionst::property_verdicts.record(
-    msg + " at " + cur_state->source.pc->location.as_string(), verdict, note);
+    msg + " at " + location.as_string(),
+    verdict,
+    property_location(location, msg),
+    note);
 }
 
 void goto_symext::assertion(
