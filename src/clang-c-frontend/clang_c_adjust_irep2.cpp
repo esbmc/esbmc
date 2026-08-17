@@ -24,18 +24,17 @@ bool clang_c_adjust_irep2::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  // Types first, in a pass of their own: a value's initialiser is built from
+  // its type, so padding a type after a value that uses it leaves the value
+  // short a component. clang_c_adjust::adjust() splits the walk for the same
+  // reason ("so that symbolic-type resolution always receives fixed up types").
+  if (sole_adjuster)
+    for (symbolt *s : symbol_list)
+      if (s->is_type)
+        pad_type_symbol(*s);
+
   for (symbolt *s : symbol_list)
   {
-    // clang_c_adjust reaches every type symbol through adjust_type, which pads
-    // a complete struct or union to its ABI layout. This pass walks values
-    // only, so under the hop-off the symbol table kept unpadded layouts --
-    // wrong offsets and sizeof, not a spelling difference (§96).
-    if (sole_adjuster && s->is_type)
-    {
-      pad_type_symbol(*s);
-      continue;
-    }
-
     if (!s->is_type && s->get_value().is_not_nil())
     {
       const expr2tc before = s->get_value2();
