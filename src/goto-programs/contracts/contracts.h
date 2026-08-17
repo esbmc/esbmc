@@ -266,6 +266,22 @@ private:
     const std::vector<expr2tc> &assigns_targets = {},
     bool check_assigns_compliance = false);
 
+  /// \brief A fresh lvalue symbol of \p type registered under \p name
+  expr2tc
+  declare_local_symbol(const std::string &name, const type2tc &type) const;
+
+  /// \brief Declare and havoc the value a replaced call returns
+  /// \param function_symbol Function symbol being called
+  /// \param ret_val Place the call assigns to, nil when the result is dropped
+  /// \param call_location Location to give the emitted instructions
+  /// \param replacement Program the declaration and havoc are appended to
+  /// \return The result symbol, nil for a function returning nothing
+  expr2tc declare_call_result(
+    const symbolt &function_symbol,
+    const expr2tc &ret_val,
+    const locationt &call_location,
+    goto_programt &replacement) const;
+
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
   /// \param function_body Function body (to extract contracts from)

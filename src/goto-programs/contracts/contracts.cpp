@@ -2650,35 +2650,37 @@ bool code_contractst::is_old_call(const expr2tc &expr) const
   return false;
 }
 
+// A fresh lvalue of \p type registered under \p name.
+//
+// Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc). This is
+// ESBMC's architecture: the symbol table is IRep1-based for global state, while
+// modern code (GOTO programs, contracts) uses IRep2 for local logic. Set the
+// symbol's IREP2 type directly via the migrate-layer chokepoint;
+// set_symbol_type stores the cache authoritatively and derives the legacy field
+// via migrate_type_back exactly once (esbmc/esbmc#4715, B2 S4b).
+expr2tc code_contractst::declare_local_symbol(
+  const std::string &name,
+  const type2tc &type) const
+{
+  symbolt symbol;
+  symbol.name = name;
+  symbol.id = name;
+  set_symbol_type(symbol, type);
+  symbol.lvalue = true;
+  symbol.static_lifetime = false;
+  symbol.file_local = false;
+
+  return symbol2tc(type, context.move_symbol_to_context(symbol)->id);
+}
+
 expr2tc code_contractst::create_snapshot_variable(
   const expr2tc &expr,
   const std::string &func_name,
   size_t index) const
 {
-  // Generate unique snapshot variable name
-  std::string snapshot_name =
-    "__ESBMC_old_snapshot_" + func_name + "_" + std::to_string(index);
-
-  // Create symbol and add to symbol table
-  // Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc).
-  // This is ESBMC's architecture: Symbol Table is IRep1-based for global state,
-  // while modern code (GOTO programs, contracts) uses IRep2 for local logic.
-  // Set the symbol's IREP2 type directly via the migrate-layer chokepoint;
-  // set_symbol_type stores the cache authoritatively and derives the legacy
-  // field via migrate_type_back exactly once (esbmc/esbmc#4715, B2 S4b).
-  symbolt snapshot_symbol;
-  snapshot_symbol.name = snapshot_name;
-  snapshot_symbol.id = snapshot_name;
-  set_symbol_type(snapshot_symbol, expr->type);
-  snapshot_symbol.lvalue = true;
-  snapshot_symbol.static_lifetime = false;
-  snapshot_symbol.file_local = false;
-
-  // Add to context (symbol table)
-  symbolt *added = context.move_symbol_to_context(snapshot_symbol);
-
-  // Return symbol expression (IRep2)
-  return symbol2tc(expr->type, added->id);
+  return declare_local_symbol(
+    "__ESBMC_old_snapshot_" + func_name + "_" + std::to_string(index),
+    expr->type);
 }
 
 expr2tc code_contractst::replace_old_in_expr(
@@ -4782,6 +4784,77 @@ static bool havoc_pointed_to_array(
   return true;
 }
 
+// The value the removed body would have returned: a fresh unconstrained one,
+// which is what `__ESBMC_return_value` is rewritten to.
+//
+// The caller's own lvalue cannot play that part. The ensures is instantiated
+// with the caller's argument expressions, so for `r = f(r)` it would carry `r`
+// on both sides and the ASSUME would read `r == r + 1` -- `assume false`, the
+// path dies, and a reachable assertion after the call goes unreported (#7009).
+// Naming the result separately keeps the arguments at their pre-call values
+// for as long as the clause speaks about them; the caller's place is written
+// once, after (§4.b).
+//
+// A discarded result still needs one. The ensures is assumed either way, and
+// with nothing to rewrite `__ESBMC_return_value` to it was assumed over a
+// symbol no instruction defines.
+expr2tc code_contractst::declare_call_result(
+  const symbolt &function_symbol,
+  const expr2tc &ret_val,
+  const locationt &call_location,
+  goto_programt &replacement) const
+{
+  type2tc result_type;
+  if (!is_nil_expr(ret_val))
+    result_type = ret_val->type;
+  else if (function_symbol.get_type().is_code())
+    result_type =
+      migrate_type(to_code_type(function_symbol.get_type()).return_type());
+
+  // A void function returns nothing for a clause to name.
+  if (is_nil_type(result_type) || is_empty_type(result_type))
+    return expr2tc();
+
+  // Unlike the three havoc sites, this one does not skip a pointer under
+  // --add-symex-value-sets. They leave existing state alone; this one is the
+  // result's only definition, and omitting it puts the ensures back over the
+  // caller's stale value. A pointer result therefore carries no value set, so
+  // a write through it is lost (github_7009_pointer_result_knownbug).
+  static size_t counter = 0;
+  expr2tc result = declare_local_symbol(
+    "__ESBMC_return_value$" + std::to_string(counter++), result_type);
+
+  goto_programt::targett decl = replacement.add_instruction(DECL);
+  decl->code = code_decl2tc(result_type, to_symbol2t(result).thename);
+  decl->location = call_location;
+  decl->location.comment("contract call result declaration");
+
+  goto_programt::targett assign = replacement.add_instruction(ASSIGN);
+  assign->code = code_assign2tc(result, gen_nondet(result_type));
+  assign->location = call_location;
+  assign->location.comment("contract call result");
+
+  return result;
+}
+
+// The caller's place takes the result only once the ensures has been assumed:
+// until then the arguments the clause was instantiated with must still hold
+// their pre-call values, and one of them can be that very place.
+static void write_back_call_result(
+  const expr2tc &ret_val,
+  const expr2tc &call_result,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  if (is_nil_expr(ret_val) || is_nil_expr(call_result))
+    return;
+
+  goto_programt::targett t = replacement.add_instruction(ASSIGN);
+  t->code = code_assign2tc(ret_val, call_result);
+  t->location = call_location;
+  t->location.comment("contract call result written back");
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -5062,9 +5135,13 @@ void code_contractst::generate_replacement_at_call(
     }
   }
 
+  // 2.5. Name the value the removed body would have returned.
+  expr2tc call_result =
+    declare_call_result(function_symbol, ret_val, call_location, replacement);
+
   // 3. Normalize ensures guard: replace return_value, fix types, normalize floating-point
   expr2tc ensures_guard =
-    normalize_ensures_guard_for_return_value(ensures_clause, ret_val);
+    normalize_ensures_guard_for_return_value(ensures_clause, call_result);
 
   // 3.b Replace __ESBMC_old() occurrences in ensures using call-site snapshots
   if (!callsite_snapshots.empty() && !is_nil_expr(ensures_guard))
@@ -5085,6 +5162,9 @@ void code_contractst::generate_replacement_at_call(
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
+
+  // 4.b The caller's place takes the result only now.
+  write_back_call_result(ret_val, call_result, call_location, replacement);
 
   // Replace the call with the replacement code.
   //
