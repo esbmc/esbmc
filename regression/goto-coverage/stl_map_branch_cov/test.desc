@@ -4,4 +4,4 @@ main.cpp
 ^Branches : 2
 ^Reached : 2
 ^Branch Coverage: 100%
-^COVERAGE ANALYSIS COMPLETE$
+^COVERAGE ANALYSIS INCOMPLETE: the percentages above are lower bounds$

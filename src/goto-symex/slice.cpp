@@ -386,7 +386,9 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
           claim_msg = id2string(it->comment);
         claim_loc = it->source.pc->location.as_string();
         claim_property = it->source.pc->location.property().as_string();
-        claim_cstr = id2string(it->comment) + " at " + claim_loc;
+        claim_comment = id2string(it->comment);
+        claim_location = it->source.pc->location;
+        claim_cstr = claim_comment + " at " + claim_loc;
         continue;
       }
 
