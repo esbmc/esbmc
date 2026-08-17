@@ -3339,13 +3339,16 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
-## 90. `assert` is two mechanisms, and neither of them is `assert`
+
+## 92. `assert` is two mechanisms, and neither of them is `assert`
+
+*(Renumbered from §90: master took that number for the unary-complex arm.)*
 
 §89 named `assert` as the next target on the strength of §88.3's twelve complex
 tests. Sized across the corpus first, as §89 asked, it splits into two unrelated
 causes, and the dominant one is not an assertion arm at all.
 
-### 90.1 The dominant cause is `__builtin_expect`, and it is a wrong verdict
+### 92.1 The dominant cause is `__builtin_expect`, and it is a wrong verdict
 
 Darwin's `assert.h` expands `assert(e)` to
 `__builtin_expect(!(e), 0) ? __assert_rtn(...) : (void)0` under `__DARWIN_UNIX03`.
@@ -3372,7 +3375,7 @@ in the libm operational model's `predict_true`/`predict_false`
 (`src/c2goto/library/libm/musl/libm.h:92`), and a nondet assertion is a wrong
 verdict wherever it occurs, not a formatting difference.
 
-### 90.2 The second cause is a base-name defect in §70's arm
+### 92.2 The second cause is a base-name defect in §70's arm
 
 A test that calls `assert` *without* including the header -- `complex_01` and
 its neighbours -- gets an implicit declaration, and §70's `declare_implicit_callee`
@@ -3388,7 +3391,7 @@ same defect visible from the other side.
 This is a one-line defect in an already-merged arm rather than a port, so it is
 the next slice and not this one.
 
-### 90.3 Scope: the reserved spellings only
+### 92.3 Scope: the reserved spellings only
 
 Ported here: `__builtin_expect`, `__builtin_popcount{,l,ll}` and the `__popcnt*`
 aliases, `__builtin_parity{,l,ll}`, `__builtin_bswap{16,32,64}`. All are
@@ -3410,7 +3413,7 @@ One representational note: `popcount2t`'s type is hard-fixed to `int32`
 supported target; a 16-bit-`int` target would diverge, and the fix would be to
 give `popcount2t` a type rather than to work around it here.
 
-### 90.4 Result
+### 92.4 Result
 
 Measured over a 297-test stride sample of `regression/esbmc`, control and
 patched binaries both saved before the sweep:
@@ -3443,7 +3446,7 @@ hint instead of the value kill both.
 | parity `popcount & 1` → `& 2` | `..._bit_ops` |
 | `bswap` → identity | `..._bit_ops` |
 
-## 91. Status
+## 93. Status
 
 `-only`: **131 of 297 diverge** on the stride sample (201 before this arm), 0
 regressions, default path unchanged. Unary complex (§88.3) is in flight
@@ -3459,9 +3462,9 @@ suite number is owed and not paid.
 
 Next, in order:
 
-1. **§90.2's base-name defect.** One line, and it closes the `assert` class
+1. **§92.2's base-name defect.** One line, and it closes the `assert` class
    §88.3 actually named.
-2. The name-matched builtin family (§90.3), which needs `shadows_user_definition`
+2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
 
 ## 94. The name-matched builtin family, and the guard it needs
