@@ -1022,6 +1022,20 @@ smt_astt mathsat_convt::mk_smt_fpbv_fma(
   return mk_from_bv_to_fp(fma, v1->sort);
 }
 
+smt_astt mathsat_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  // MathSAT has no fp.rem, so convert to BVFP and call the fp_api, as
+  // mk_smt_fpbv_fma does.
+  bool old_use_fp_api = use_fp_api;
+  use_fp_api = true;
+
+  smt_astt rem =
+    fp_convt::mk_smt_fpbv_rem(mk_from_fp_to_bv(lhs), mk_from_fp_to_bv(rhs));
+
+  use_fp_api = old_use_fp_api;
+  return mk_from_bv_to_fp(rem, lhs->sort);
+}
+
 void mathsat_convt::print_model()
 {
   /* we use a model iterator to retrieve the model values for all the

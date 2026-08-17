@@ -1551,6 +1551,150 @@ smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
   return ctx->mk_ite(c1, v1, result);
 }
 
+smt_astt fp_convt::mk_smt_fpbv_rem(smt_astt x, smt_astt y)
+{
+  assert(x->sort->get_data_width() == y->sort->get_data_width());
+  assert(x->sort->get_exponent_width() == y->sort->get_exponent_width());
+
+  unsigned ebits = x->sort->get_exponent_width();
+  unsigned sbits = x->sort->get_significand_width();
+
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
+  smt_astt nzero = mk_nzero(ebits, sbits);
+  smt_astt pzero = mk_pzero(ebits, sbits);
+
+  smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
+  smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
+  smt_astt x_is_pos = mk_is_pos(x);
+  smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
+  smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
+  smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
+  smt_astt y_is_inf = mk_smt_fpbv_is_inf(y);
+
+  // (x is NaN) || (y is NaN) -> NaN
+  smt_astt c1 = ctx->mk_or(x_is_nan, y_is_nan);
+  smt_astt v1 = nan;
+
+  // (x is +-oo) -> NaN
+  smt_astt c2 = x_is_inf;
+  smt_astt v2 = nan;
+
+  // (y is +-oo) -> x
+  smt_astt c3 = y_is_inf;
+  smt_astt v3 = x;
+
+  // (y is 0) -> NaN
+  smt_astt c4 = y_is_zero;
+  smt_astt v4 = nan;
+
+  // (x is 0) -> x
+  smt_astt c5 = x_is_zero;
+  smt_astt v5 = pzero;
+
+  // exp(x) < exp(y) - 1 -> x, since then |x| < |y|/2 already.
+  smt_astt x_exp_raw = extract_exponent(ctx, x);
+  smt_astt y_exp_raw = extract_exponent(ctx, y);
+  smt_astt one_ebits = ctx->mk_smt_bv(BigInt(1), ebits);
+  smt_astt y_exp_m1 = ctx->mk_bvsub(y_exp_raw, one_ebits);
+  smt_astt xe_lt_yem1 = ctx->mk_bvult(x_exp_raw, y_exp_m1);
+  smt_astt ye_neq_zero =
+    ctx->mk_not(ctx->mk_eq(y_exp_raw, ctx->mk_smt_bv(BigInt(0), ebits)));
+  smt_astt c6 = ctx->mk_and(ye_neq_zero, xe_lt_yem1);
+  smt_astt v6 = x;
+
+  // else the actual remainder.
+  smt_astt a_sgn, a_sig, a_exp, a_lz, b_sgn, b_sig, b_exp, b_lz;
+  unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
+  unpack(y, b_sgn, b_sig, b_exp, b_lz, true);
+
+  // The maximum exponent difference between two values of this format. The
+  // significands are aligned by shifting over that whole range, which is what
+  // makes this encoding exact -- and very wide (Z3's fpa2bv does the same).
+  const std::size_t max_exp_diff = (std::size_t{1} << ebits) - 3;
+
+  smt_astt a_exp_ext = ctx->mk_sign_ext(a_exp, 2);
+  smt_astt b_exp_ext = ctx->mk_sign_ext(b_exp, 2);
+  smt_astt a_lz_ext = ctx->mk_zero_ext(a_lz, 2);
+  smt_astt b_lz_ext = ctx->mk_zero_ext(b_lz, 2);
+
+  smt_astt exp_diff = ctx->mk_bvsub(
+    ctx->mk_bvsub(a_exp_ext, a_lz_ext), ctx->mk_bvsub(b_exp_ext, b_lz_ext));
+  smt_astt exp_diff_is_neg =
+    ctx->mk_bvsle(exp_diff, ctx->mk_smt_bv(BigInt(0), ebits + 2));
+
+  smt_astt zero3 = ctx->mk_smt_bv(BigInt(0), 3);
+  smt_astt a_sig_ext =
+    ctx->mk_concat(ctx->mk_zero_ext(a_sig, max_exp_diff), zero3);
+  smt_astt b_sig_ext =
+    ctx->mk_concat(ctx->mk_zero_ext(b_sig, max_exp_diff), zero3);
+
+  const std::size_t shift_ext = max_exp_diff + sbits - ebits + 1;
+  smt_astt lshift = ctx->mk_zero_ext(exp_diff, shift_ext);
+  smt_astt rshift = ctx->mk_zero_ext(ctx->mk_bvneg(exp_diff), shift_ext);
+  assert(
+    lshift->sort->get_data_width() == a_sig_ext->sort->get_data_width() &&
+    "remainder shift amount must match the extended significand width");
+
+  smt_astt shifted = ctx->mk_ite(
+    exp_diff_is_neg,
+    ctx->mk_bvashr(a_sig_ext, rshift),
+    ctx->mk_bvshl(a_sig_ext, lshift));
+  smt_astt huge_rem = ctx->mk_bvumod(shifted, b_sig_ext);
+  smt_astt huge_div = ctx->mk_bvudiv(shifted, b_sig_ext);
+  smt_astt huge_div_is_even =
+    ctx->mk_eq(ctx->mk_extract(huge_div, 0, 0), ctx->mk_smt_bv(BigInt(0), 1));
+
+  smt_astt rndd_sgn = a_sgn;
+  smt_astt rndd_exp = ctx->mk_bvsub(b_exp_ext, b_lz_ext);
+  smt_astt rndd_sig = ctx->mk_extract(huge_rem, sbits + 3, 0);
+  smt_astt rndd_sig_lz = mk_leading_zeros(rndd_sig, ebits + 2);
+
+  // The truncated remainder may land in [|y|/2, |y|), one |y| away from the
+  // round-to-nearest result; the leading-zero count of the raw remainder says
+  // whether its exponent reached exp(y) or exp(y)-1.
+  smt_astt rndd_exp_eq_y_exp =
+    ctx->mk_eq(rndd_sig_lz, ctx->mk_smt_bv(BigInt(1), ebits + 2));
+  smt_astt rndd_exp_eq_y_exp_m1 =
+    ctx->mk_eq(rndd_sig_lz, ctx->mk_smt_bv(BigInt(2), ebits + 2));
+
+  smt_astt y_sig_ext =
+    ctx->mk_concat(ctx->mk_zero_ext(b_sig, 2), ctx->mk_smt_bv(BigInt(0), 2));
+  smt_astt y_sig_le_rndd_sig = ctx->mk_bvsle(y_sig_ext, rndd_sig);
+  smt_astt y_sig_eq_rndd_sig = ctx->mk_eq(y_sig_ext, rndd_sig);
+
+  // A tie (remainder exactly |y|/2) goes to the even quotient.
+  smt_astt adj_cnd = ctx->mk_or(
+    ctx->mk_and(rndd_exp_eq_y_exp, y_sig_le_rndd_sig),
+    ctx->mk_or(
+      ctx->mk_and(
+        rndd_exp_eq_y_exp_m1,
+        ctx->mk_and(y_sig_le_rndd_sig, ctx->mk_not(y_sig_eq_rndd_sig))),
+      ctx->mk_and(
+        rndd_exp_eq_y_exp_m1,
+        ctx->mk_and(y_sig_eq_rndd_sig, ctx->mk_not(huge_div_is_even)))));
+
+  smt_astt rne_bv = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt rndd;
+  round(rne_bv, rndd_sgn, rndd_sig, rndd_exp, ebits, sbits, rndd);
+  smt_astt rounded_sub_y = mk_smt_fpbv_sub(rndd, y, rne_bv);
+  smt_astt rounded_add_y = mk_smt_fpbv_add(rndd, y, rne_bv);
+  smt_astt add_cnd = ctx->mk_not(ctx->mk_eq(rndd_sgn, b_sgn));
+  smt_astt adjusted = ctx->mk_ite(add_cnd, rounded_add_y, rounded_sub_y);
+  smt_astt v7 = ctx->mk_ite(adj_cnd, adjusted, rndd);
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c6, v6, v7);
+  result = ctx->mk_ite(c5, v5, result);
+  result = ctx->mk_ite(c4, v4, result);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  result = ctx->mk_ite(c1, v1, result);
+
+  // A zero result carries the sign of x.
+  smt_astt zeros = ctx->mk_ite(x_is_pos, pzero, nzero);
+  return ctx->mk_ite(mk_smt_fpbv_is_zero(result), zeros, result);
+}
+
 smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 {
   // +0 and -0 should return true

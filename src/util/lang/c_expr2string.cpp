@@ -2277,6 +2277,24 @@ static bool is_pointer_arithmetic(const exprt &e, const exprt *&ptr, exprt &idx)
   return false;
 }
 
+/// Display name of the two-operand IEEE arithmetic nodes, which all print as a
+/// call; null when `id` is not one of them.
+static const char *ieee_arith_name(const irep_idt &id)
+{
+  static const std::pair<const char *, const char *> names[] = {
+    {"ieee_add", "IEEE_ADD"},
+    {"ieee_sub", "IEEE_SUB"},
+    {"ieee_mul", "IEEE_MUL"},
+    {"ieee_div", "IEEE_DIV"},
+    {"ieee_rem", "IEEE_REM"}};
+
+  for (const auto &[node_id, name] : names)
+    if (id == node_id)
+      return name;
+
+  return nullptr;
+}
+
 std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
 {
   precedence = 16;
@@ -2632,17 +2650,8 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
   else if (src.id() == "=")
     return convert_binary(src, "==", precedence = 9, true);
 
-  else if (src.id() == "ieee_add")
-    return convert_function(src, "IEEE_ADD", precedence = 15);
-
-  else if (src.id() == "ieee_sub")
-    return convert_function(src, "IEEE_SUB", precedence = 15);
-
-  else if (src.id() == "ieee_mul")
-    return convert_function(src, "IEEE_MUL", precedence = 15);
-
-  else if (src.id() == "ieee_div")
-    return convert_function(src, "IEEE_DIV", precedence = 15);
+  else if (const char *ieee_name = ieee_arith_name(src.id()))
+    return convert_function(src, ieee_name, precedence = 15);
 
   else if (src.id() == "width")
     return convert_function(src, "WIDTH", precedence = 15);
