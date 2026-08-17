@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 3
+^ERROR: the result of 'iter\(\)' is not modelled \(no 'iterator' type\)$

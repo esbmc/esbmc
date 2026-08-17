@@ -59,6 +59,16 @@ engines:
       - 'src/util/lang/c_qualifiers.h'
       - 'src/util/lang/c_qualifiers.cpp'
 
+      # Bundled-file store. filesystemt::read() takes a path and returns an
+      # owning file_data; there is no caller-supplied buffer to overflow, and
+      # flawfinder flags the declaration in the header as well as the call in
+      # vfs_adapter.cpp purely on the name. The one genuine buffer write,
+      # istream::read() into a std::string sized from tellg(), is bounded by
+      # that string and truncated to gcount(). Same rationale as irep above.
+      - 'src/util/base/filesystem.h'
+      - 'src/util/base/filesystem.cpp'
+      - 'src/clang-c-frontend/AST/vfs_adapter.cpp'
+
   bandit:
     enabled: true
     exclude_paths:
