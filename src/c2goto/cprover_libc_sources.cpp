@@ -42,10 +42,6 @@ void register_bundled_libc()
     return;
   done = true;
 
-  // The blocks below are split between naming the singleton in full and using
-  // this reference; both spellings are in use, so bind it once.
-  file_operations::filesystemt &fs = file_operations::filesystemt::get();
-
 #define ESBMC_FLAIL(body, size, ...)                                           \
   file_operations::filesystemt::get().add_bundled(                             \
     vfs_headers + "/" #__VA_ARGS__, body, size);
