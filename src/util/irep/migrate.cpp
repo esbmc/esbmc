@@ -872,6 +872,46 @@ static expr2tc migrate_rounding_mode(const exprt &expr)
   return rm;
 }
 
+/// The two-operand IEEE nodes migrate identically: an n-ary irep splices into
+/// nested binaries, and the rounding mode comes from the irep's attribute when
+/// it carries one. False when `expr` is not one of them.
+static bool migrate_ieee_arith_2op(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (
+    id != "ieee_add" && id != "ieee_sub" && id != "ieee_mul" &&
+    id != "ieee_div" && id != "ieee_rem")
+    return false;
+
+  if (expr.operands().size() > 2)
+  {
+    splice_expr(expr, new_expr_ref);
+    return true;
+  }
+
+  type2tc type = migrate_type(expr.type());
+
+  expr2tc side1, side2;
+  convert_operand_pair(expr, side1, side2);
+
+  /* fp.rem is exact, so no rounding mode participates for ieee_rem; the field
+   * is the 2-op plumbing's and keeps the default symbol. */
+  const expr2tc rm = migrate_rounding_mode(expr);
+
+  if (id == "ieee_add")
+    new_expr_ref = ieee_add2tc(type, side1, side2, rm);
+  else if (id == "ieee_sub")
+    new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
+  else if (id == "ieee_mul")
+    new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
+  else if (id == "ieee_div")
+    new_expr_ref = ieee_div2tc(type, side1, side2, rm);
+  else
+    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
+
+  return true;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1440,77 +1480,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "ieee_add")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    const expr2tc rm = migrate_rounding_mode(expr);
-
-    new_expr_ref = ieee_add2tc(type, side1, side2, rm);
+  if (migrate_ieee_arith_2op(expr, new_expr_ref))
     return;
-  }
-
-  if (expr.id() == "ieee_sub")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    const expr2tc rm = migrate_rounding_mode(expr);
-
-    new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_mul")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    const expr2tc rm = migrate_rounding_mode(expr);
-
-    new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_div")
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    const expr2tc rm = migrate_rounding_mode(expr);
-
-    new_expr_ref = ieee_div2tc(type, side1, side2, rm);
-    return;
-  }
 
   if (expr.id() == "ieee_fma")
   {
@@ -3480,6 +3451,15 @@ exprt migrate_expr_back(const expr2tc &ref)
     // Add rounding mode
     divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return divval;
+  }
+  case expr2t::ieee_rem_id:
+  {
+    const ieee_rem2t &ref2 = to_ieee_rem2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt remval("ieee_rem", thetype);
+    remval.copy_to_operands(
+      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+    return remval;
   }
   case expr2t::ieee_fma_id:
   {

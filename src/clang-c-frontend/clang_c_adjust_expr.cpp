@@ -1358,6 +1358,44 @@ compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
          (identifier == underscore_name);
 }
 
+/// The float functions that lower to a node taking the call's arguments
+/// unchanged, keyed by base name; null when `expr` is not such a call.
+///
+/// The match is on the callee's base name, which a program is free to reuse --
+/// `int remainder(int, int)` is an ordinary definition, and the nodes below are
+/// floating-point only (`ieee_rem2t::do_simplify` asserts on the type). Lower
+/// only when the call is actually shaped like the C library function, so a
+/// same-named integer function keeps its body.
+static const char *float_lowering_id(
+  const irep_idt &identifier,
+  const side_effect_expr_function_callt &expr)
+{
+  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  static const std::pair<const char *, const char *> lowerings[] = {
+    {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
+
+  /* c2goto compiles the models with this same binary, and libm/remainder.c's
+   * own call is what puts ieee_rem into the model. The shape test would strip
+   * it there, so only a program's call is checked -- which is where a
+   * same-named integer definition can appear. */
+  if (!config.options.get_bool_option("building-c-library"))
+  {
+    if (!expr.type().is_floatbv())
+      return nullptr;
+
+    for (const exprt &arg : expr.arguments())
+      if (!arg.type().is_floatbv())
+        return nullptr;
+  }
+
+  for (const auto &[name, node_id] : lowerings)
+    if (compare_float_suffix(identifier, name))
+      return node_id;
+
+  return nullptr;
+}
+
 /// True for the abs builtins that may be lowered to an `abs` node. That node
 /// becomes `(x >= 0) ? x : -x`, ill-typed for anything but an arithmetic
 /// argument, so a program overloading the name for a class type --
@@ -1640,15 +1678,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if (compare_float_suffix(identifier, "nearbyint"))
+    else if (const char *node_id = float_lowering_id(identifier, expr))
     {
-      exprt new_expr("nearbyint", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
-    }
-    else if (compare_float_suffix(identifier, "fma"))
-    {
-      exprt new_expr("ieee_fma", expr.type());
+      exprt new_expr(node_id, expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }

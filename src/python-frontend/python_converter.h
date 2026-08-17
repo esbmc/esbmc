@@ -305,6 +305,10 @@ public:
   {
     in_contract_clause_ = saved;
   }
+  bool in_contract_clause() const
+  {
+    return in_contract_clause_;
+  }
 
 private:
   friend class complex_handler;

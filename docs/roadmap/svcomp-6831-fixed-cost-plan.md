@@ -1,21 +1,23 @@
 # Plan — the per-task cost every SV-COMP run pays (issue #6831, cause 2)
 
-**Status:** in progress. W3.1 (vector-backed read table) is shipped; everything
-else here is still plan only.
+**Status:** in progress. W3 (both reader wins) and W4 (the cost is reported and
+pinned) are shipped; W0, W1, W2 and W5 are still plan only.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 2 —
 a general slowdown tipping tasks already at the limit*, ~198 of 489 lost tasks,
 led by 131 `Juliet_Test` no-overflow tasks at a median of 99.1 s of a 100 s
 limit.
 **Companion plan:** [`svcomp-6831-schedule-space-plan.md`](svcomp-6831-schedule-space-plan.md)
 covers cause 1 (the schedule-space explosion). The two are independent.
-**Last updated:** 2026-08-09.
+**Last updated:** 2026-08-15.
 
 **Measurement environment.** All numbers below were measured on an x86_64 Linux
 host (Intel Xeon E5-2620 v4, 32 threads) against `build/src/esbmc/esbmc`, ESBMC
 8.4.0, `RelWithDebInfo`, built from `4be7fbe015`. Solver: Bitwuzla 0.9.0. Phase
 timings come from throwaway `std::chrono` instrumentation in
-`add_cprover_library()` and `read_bin_goto_object()`, since neither phase is
-reported today (that is W4). Reproducer: `int main(void){return 0;}` —
+`add_cprover_library()` and `read_bin_goto_object()`, since at the time neither
+phase was reported (W4 has since made `add_cprover_library()`'s four phases and
+its two symbol counts available from a normal run under
+`--verbosity c2goto:9`). Reproducer: `int main(void){return 0;}` —
 deliberately the smallest possible program, so everything measured is cost the
 input did not ask for.
 
@@ -303,9 +305,12 @@ Independent of W1/W2, no format change:
    slot is claimed before `read_irep()` recurses, since children are numbered
    after their parent. Re-measured interleaved on every frontend — GOTO creation
    ×0.805 (C, 15 pairs), ×0.883 (C++, 12), ×0.927 (Python, 12).
-2. **Do not populate a discarded `goto_functionst`** (§2.6): ~10 ms. Not started.
+2. **Do not populate a discarded `goto_functionst`** (§2.6): **shipped**
+   (`f6795ec90e`, #6914). The reader takes a nullable pointer and skips the
+   work when a caller wants symbols only. −10 ms C, −13 ms C++ on GOTO
+   creation, interleaved medians.
 
-**Exit:** both landed with before/after timings, full regression suite green,
+**Exit:** met — both landed with before/after timings, regression suite green,
 `--binary` reading of externally-produced goto binaries unaffected.
 
 ### W4 — Report the cost, so it cannot silently regrow
@@ -320,8 +325,45 @@ deserialisation time, dependency-scan time, symbols present, symbols kept. Then
 add a CI check that fails when the fixed cost of a trivial program regresses
 past a threshold — the metric this plan exists because nobody was watching.
 
-**Exit:** `esbmc trivial.c --verbosity …` reports the §2.1 breakdown, and a
-regression test pins the trivial-program budget.
+**Shipped.** `add_cprover_library()` reports all four §2.1 phases it owns
+(deserialise, dependency scan, select, link), the blob it read, and symbols
+present and kept, on one `log_debug("c2goto", …)` line — visible under
+`--verbosity c2goto:9`, silent by default, so no run's output changes. On the
+§2 host, `int main(void){return 0;}` now says: 3,854 symbols present, 104 kept,
+deserialise 0.149 s, dependency scan 0.091 s, select 0.001 s, link 0.000 s —
+i.e. the blob has gained 7 symbols since §2.2 was measured, which is exactly
+the drift this workstream exists to make visible.
+
+The blob name is in the line because Solidity loads two (sol64 in `typecheck`,
+clib in `final`), and because the report should say which one it measured.
+
+**A phase boundary the throwaway instrumentation of §2 got wrong.** The
+whitelist path scans dependencies a second time, inside the `to_include` loop,
+for every symbol it pulls out of `ignored_ctx`. Billing that to "select" made
+Python look like it scanned 3× faster than C (0.031 s vs 0.092 s) when it does
+the same work: attributed correctly, Python's scan is 0.090 s and its select is
+0.005 s. §2.1's C numbers are unaffected — C has no second scan — but any
+future Python figure must use the corrected split.
+
+Two deviations from the sketch above, both deliberate:
+
+- **No JSON entry.** ESBMC's only JSON output is the per-counterexample report
+  (`generate_json_report()`); there is no run summary to add a field to.
+  Creating one is out of scope here.
+- **The CI budget is a symbol ceiling, not a wall-clock threshold.** A time
+  threshold on a shared runner is a flake generator. `symbols kept` is
+  deterministic, drives every phase in §2.1, and is what actually grew.
+  `regression/esbmc/library_fixed_cost_budget` caps a trivial C program at 199
+  kept symbols (today 104); `regression/python/library_fixed_cost_budget` caps
+  a trivial Python program at 1,999 (today 1,176) and also covers the whitelist
+  path, where "present" is the `new_ctx` + `ignored_ctx` split. The bound is
+  one-sided on purpose: W1 and W2 exist to *reduce* the closure, and a floor
+  would make the metric's own guard fail on the improvement it is guarding.
+  Both carry `REQUIRES bundled_libc`, since `ESBMC_BUNDLE_LIBC=OFF` parses the
+  library from sources and leaves nothing to measure.
+
+**Exit:** met — `esbmc trivial.c --verbosity c2goto:9` reports the §2.1
+breakdown, and a regression test per frontend pins the trivial-program budget.
 
 ### W5 — Stop the 99 s/100 s band from generating false signals
 
@@ -384,9 +426,10 @@ a model a task needed and turn a `false` into a `true`.
   the blob. Measure the pool before designing around it.
 - **Single-machine measurement.** §2 is one host. Ratios are indicative;
   orderings are reliable.
-- **The OM library will keep growing.** Without W4 the next 33 KB of models
-  costs the next SV-COMP run the same way, and the next investigation starts
-  from zero again.
+- **The OM library will keep growing.** W4 now makes the growth visible from a
+  normal run and fails a test when a trivial program's closure moves, so the
+  next 33 KB of models is no longer silent — but visibility is not a fix, and
+  the cost still lands on every task until W1/W2.
 
 ---
 
