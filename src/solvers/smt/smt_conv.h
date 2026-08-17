@@ -60,6 +60,11 @@ public:
   /** Boolean model value of an expression. */
   tvt l_get(const expr2tc &expr);
 
+  /** Whether a satisfiable result can be turned into a model. False for the
+   *  subprocess SMT-LIB backends with no interactive model solver attached:
+   *  they answer sat/unsat, but get() and l_get() have nothing to read. */
+  bool has_model() const;
+
   /** Assert a boolean expression into the solver context. */
   void assert_expr(const expr2tc &e);
 
