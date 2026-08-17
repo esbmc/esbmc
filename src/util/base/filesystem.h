@@ -252,6 +252,10 @@ public:
 
   bool exists(const std::string &path) const;
 
+  /** @brief Whether the contents of `path` can actually be obtained. Unlike
+   *         exists(), a file that refuses to open does not qualify. */
+  bool readable(const std::string &path) const;
+
   /** @brief How many bundled files are registered. Only ever grows, so a
    *         change means new registrations arrived. */
   size_t bundled_count() const noexcept;

@@ -222,14 +222,14 @@ TEST_CASE(
   REQUIRE(is_bundled_source("/esbmc-vfs/cpp/thread"));
   REQUIRE(is_bundled_source("C:/esbmc-vfs/cpp/thread"));
   REQUIRE(is_bundled_source("C:\\esbmc-vfs\\cpp\\thread"));
-  REQUIRE(is_bundled_source("/home/u/esbmc/src/c2goto/library/stdlib.c"));
+  REQUIRE(is_bundled_source("/esbmc-vfs/libc/library/stdlib.c"));
   REQUIRE(!is_bundled_source("/home/u/main.cpp"));
   REQUIRE(!is_bundled_source("/usr/include/math.h"));
 
   REQUIRE(!is_bundled_source("/home/u/esbmc-vfs/main.c"));
   REQUIRE(!is_bundled_source("/esbmc-vfs-notes/main.c"));
-  REQUIRE(!is_bundled_source("/home/u/proj/c2goto/library/main.c"));
-  REQUIRE(!is_bundled_source("/home/u/src/c2goto/library-of-mine/main.c"));
+  // c2goto compiles the models from the VFS, so a checkout is just user code.
+  REQUIRE(!is_bundled_source("/home/u/esbmc/src/c2goto/library/stdlib.c"));
 }
 
 TEST_CASE("list walks a prefix recursively", "[core][util][filesystem]")
