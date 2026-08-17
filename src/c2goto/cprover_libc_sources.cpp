@@ -42,21 +42,20 @@ void register_bundled_libc()
     return;
   done = true;
 
+  file_operations::filesystemt &fs = file_operations::filesystemt::get();
+
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  file_operations::filesystemt::get().add_bundled(                             \
-    vfs_headers + "/" #__VA_ARGS__, body, size);
+  fs.add_bundled(vfs_headers + "/" #__VA_ARGS__, body, size);
 #include <headers/libc_hdr.h>
 #undef ESBMC_FLAIL
 
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  file_operations::filesystemt::get().add_bundled(                             \
-    vfs_library + "/" #__VA_ARGS__, body, size);
+  fs.add_bundled(vfs_library + "/" #__VA_ARGS__, body, size);
 #include <libc.h>
 #undef ESBMC_FLAIL
 
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  file_operations::filesystemt::get().add_bundled(                             \
-    vfs_libm + "/" #__VA_ARGS__, body, size);
+  fs.add_bundled(vfs_libm + "/" #__VA_ARGS__, body, size);
 #include <libm.h>
 #undef ESBMC_FLAIL
 
