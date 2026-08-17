@@ -188,6 +188,11 @@ public:
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
 
+  /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
+   *  rem), which share an operand layout and differ only in the solver call
+   *  they end up in. */
+  smt_astt convert_ieee_arith_2op(const expr2tc &expr);
+
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
    *  depending on the type of the expression.

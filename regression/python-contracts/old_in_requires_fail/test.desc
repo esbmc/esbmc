@@ -1,0 +1,4 @@
+CORE
+main.py
+--enforce-contract bump
+^ERROR: __ESBMC_old at line 4 says nothing in a precondition, which already speaks about the pre-state$

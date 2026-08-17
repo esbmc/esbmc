@@ -4,4 +4,4 @@ main.cpp
 ^Reached Conditions:  8
 ^Total Conditions:  8
 ^Condition Coverage: 87.5%
-^COVERAGE ANALYSIS COMPLETE$
+^COVERAGE ANALYSIS INCOMPLETE: the percentages above are lower bounds$

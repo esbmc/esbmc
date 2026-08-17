@@ -3136,6 +3136,209 @@ Next, in order:
    quietly. Size it across the whole corpus first; the 12 are only the ones
    §88 happened to look at.
 
+## 90. Unary complex, and a corpus that could not report it
+
+`clang_c_adjust::adjust_expr_unary_complex` lowers `-z` into a negated pair and
+GNU `~z` into a conjugated one. It is dispatched under
+`(unary- || bitnot) && type is complex` (`clang_c_adjust_expr.cpp:134`), which
+`is_complex_unary` mirrors exactly.
+
+§88.3 named it as this arm's successor and said "No corpus test covers it,
+which is why no census row ever pointed at it". The first clause is wrong.
+`complex_23` applies both operators over both element types, `complex_24`
+conjugates, and `complex_25:39` conjugates a *call*. Three tests, all inside
+the swept suites, none of them new.
+
+What they cannot do is report. None of the three includes `<assert.h>`, and an
+implicitly-declared `assert` stays a `FUNCTION_CALL` under `-only` (§88.3, and
+§91 for how much narrower that target is than it looked), so `complex_23`'s
+eight assertions are never checked and it returns SUCCESSFUL whether or not
+`-z` was lowered:
+
+| test | default path | `-only`, pre-patch | `-only`, post-patch |
+|---|---|---|---|
+| `complex_23` (`-z`, `~z`, both element types) | SUCCESSFUL | SUCCESSFUL | SUCCESSFUL |
+| `complex_24` (`~z`, property violated) | **FAILED** | SUCCESSFUL | SUCCESSFUL |
+
+`complex_24` is the sharp one: `-only` reports a *wrong verdict* on it, and did
+so before this arm and after it, because what is broken there is the assertion,
+not the operator.
+
+So the census was not blind to unary complex; it was reading a corpus in which
+the arm that would have reported it is itself unported. The two claims §88.3
+ran together -- "no row pointed at it" and "no test covers it" -- come apart
+here, and only the first was ever measured.
+
+### 90.1 The arm, and where the element type stops mattering
+
+Placement follows §80's rule, as §88.1's did: the node migrates cleanly, so the
+arm belongs in the native walk and not in `migrate.cpp`.
+
+`member2t` and `constant_struct2t` already accept a complex source (§88.1), so
+what is left is choosing which component to negate. Unlike §88's arm, the
+element type does not also pick a component *operator*: negation is a sign-bit
+flip, exact and independent of the rounding mode, so there is no `ieee_neg` to
+select and no `c:@__ESBMC_rounding_mode` symbol to name. The integral element
+type reaches the same six lines and -- unlike §88.1's integer division, which
+brings a divisor check the float form is exempt from -- brings nothing with it.
+That is the whole reason this arm is short where §88's is a switch.
+
+`complex_23`'s five unary sites, pre-patch under `-only`, post-patch, and on
+the default path:
+
+| site | `-only`, pre-patch | `-only`, post-patch | default path |
+|---|---|---|---|
+| `n = -z` | `n=-z` | `n={ .real=-z.real, .imag=-z.imag }` | identical to post-patch |
+| `c = ~z` | `c=~z` | `c={ .real=z.real, .imag=-z.imag }` | identical to post-patch |
+| `t = -z` (typedef'd) | `t=-z` | `t={ .real=-z.real, .imag=-z.imag }` | identical to post-patch |
+| `ni = -zi` (`__complex__ int`) | `ni=-zi` | `ni={ .real=-zi.real, .imag=-zi.imag }` | identical to post-patch |
+| `ci = ~zi` (`__complex__ int`) | `ci=~zi` | `ci={ .real=zi.real, .imag=-zi.imag }` | identical to post-patch |
+
+Post-patch and default agree character for character on all five. What still
+separates the two dumps for this test is `assert`, and nothing else.
+
+### 90.2 The declined operand, measured rather than argued
+
+The legacy unary path calls `bind_sideeffect_operands` too
+(`clang_c_adjust_expr.cpp:666`), so §88.2's decline transfers unchanged: each
+operand is read once per component, the temporary-binding half is unported, and
+the arm returns rather than lowering an operand that performs a side effect.
+
+§88.2 defended that with two claims it could not measure, because `complex_25`
+mixes binary and unary operators and core-dumps on the binary ones first. A
+unary-only program -- `-f()` and `~f()` over a call that increments a counter,
+the shape `complex_25:35` and `:39` already use -- separates them:
+
+| probe | default path | `-only`, guard present | `-only`, guard removed |
+|---|---|---|---|
+| components **read** | SUCCESSFUL | *core dump, no verdict* | **FAILED**: `calls == 1` |
+| components **unread** | SUCCESSFUL | SUCCESSFUL | **FAILED**: `calls == 1` |
+
+Both halves hold: declining costs a verdict, lowering would cost correctness,
+and the violated property is exactly the double evaluation §88.2 predicted.
+
+The second row is the one worth keeping. §88.2 concluded that declining is
+"measurably identical to that abort" from `complex_25` core-dumping either way,
+and that generalises less far than it looks: the crash comes from *reading* the
+declined result, not from declining it. A program that leaves the result unread
+never presents a complex-typed node to the encoder, while the call counter
+still records the double evaluation. So the guard is pinnable by a *passing*
+test, and `irep2_only_complex_unary_sideeffect` is it -- SUCCESSFUL with the
+guard, FAILED on `calls == 1` without it, both measured.
+
+`complex_25` remains blocked: it asserts `calls == 2` immediately after `-f()`,
+but it reads its results and its `f() + z` reaches the binary arm's decline, so
+it still core-dumps under `-only`. It is no longer the only candidate, which is
+the correction -- "the operand binding blocks all coverage of the decline" was
+inferred from the one test that happened to be in front of us, and it is wrong
+in the same shape §90's opening catches §88.3 in.
+
+### 90.3 Result and gate
+
+The arm moves no row into byte-identity, and the divergence total does not
+move:
+
+| | before | after |
+|---|---:|---:|
+| `-only` divergences | 1 598 of 2 818 | 1 598 of 2 821 |
+| complex tests byte-identical to the default path | 14 of 27 | 14 of 27 |
+| `-only` rows whose dump changed | -- | 2 |
+| default-path rows whose dump changed | -- | 0 of 2 821 |
+
+Both sweeps carry zero timeout rows. The two changed rows are `complex_23` and
+`complex_24`; both still diverge, on `assert`. The denominator moves by three,
+not five: §88's three tests entered the corpus after its own sweep was taken,
+and two draft names from that section (`irep2_only_complex_div`,
+`..._div_fail`) left with it.
+
+Reported this way on purpose. The instrument is GOTO-level byte identity
+against the default path, and on this corpus it cannot see this arm, because
+every existing test that exercises unary complex is quietened by `assert`
+before the difference can reach a verdict. What the arm does buy is visible
+one level down: five sites in `complex_23` that now match character for
+character, and two of the three new tests, which core-dump under `-only`
+without it.
+
+Three tests pin the arm at the verdict, the first two following §88.3's shape
+-- nondet operands assumed into NaN-free ranges, expected values written as
+scalar expressions over the components, so a mutated formula is not restated on
+both sides of the comparison. `irep2_only_complex_unary` asserts `-z` and `~z`
+over both element types, over a typedef'd complex, and over `-(z * z)`, whose
+operand is the binary arm's own output and so is read out of a struct literal
+rather than a symbol; `irep2_only_complex_unary_fail` keeps a genuinely
+violated property reportable through the lowering;
+`irep2_only_complex_unary_sideeffect` pins the decline of §90.2.
+
+Mutation-checked, one rebuild per mutant:
+
+| mutant | killed by |
+|---|---|
+| arm disabled | `..._unary`, `..._unary_fail` -- core dump, no verdict |
+| real component not negated for `-z` | `..._unary` |
+| imaginary component not negated | `..._unary`, `..._unary_fail` |
+| real component negated for `~z` too | `..._unary` |
+| `is_neg2t` swapped for `is_bitnot2t` | `..._unary` |
+| side-effect guard removed | `..._sideeffect` |
+
+`..._unary_fail` earns its place on the second mutant: dropping the imaginary
+negation makes `~z` the identity, which turns the violated property true and
+the test SUCCESSFUL.
+
+`..._sideeffect` is the only one of the three that the first mutant does *not*
+kill, and that is the point of it: disabling the arm and declining inside it
+leave an unread result in the same place, so the test separates the guard from
+the arm rather than restating it. It is also a Phase-2 contract test rather
+than a scaffold -- single evaluation of a side-effecting operand stays true
+once the binding lands and the decline goes away, so nothing here has to be
+deleted to make progress.
+
+The same shape pins the binary arm's identical guard, which shipped untested in
+§88: `f() + z` with the result unread is SUCCESSFUL under `-only` today.
+Left for the commit that ports the binding, since that is what gives the two
+guards a common fix.
+
+## 91. Status
+
+`-only`: **1 598 of 2 821 diverge; 167 error, none of them ours.** Shadow: 2,
+both the §62 VLA defect. Default path unchanged: 0 of 2 821 rows moved.
+
+All three sweeps carry zero timeout rows. The shadow sweep first reported a
+third row -- this section's own `irep2_only_complex_unary` -- which was an
+artefact of editing that test between sweeps, not a shadow-mode divergence; on
+one source revision the three modes agree byte for byte on it. Recorded because
+a manifest is only comparable against another taken over the same inputs, and
+nothing in the harness checks that.
+
+`assert` is still the next target, but §88.3 mis-scoped it and §90's opening
+only found half of that. Of the 13 diverging complex rows:
+
+- **10** call `assert` with no `<assert.h>` in the file. That is the shape that
+  stays a `FUNCTION_CALL`: with the header, assertions lower and report
+  normally under `-only` -- `complex_24` plus one `#include` reports FAILED,
+  the same verdict the default path gives it. So the target is the
+  *implicitly-declared* callee path (§70's neighbourhood), not `assert`
+  lowering, and the fix is narrower than "port `assert`".
+- **`complex_25`, `complex_26`** diverge on §88.2's unported operand binding,
+  visible as the `main.c:13$complex$` temporary the default path declares and
+  this mode does not.
+- **`github_268`** has nothing to do with either: 10 882 diff lines of missing
+  `(_Bool)` casts on conditions and array-to-pointer decay in call arguments.
+
+Only `complex_23` has been measured down to a single remaining cause. For the
+other nine the implicit-declaration path is established as *a* cause, not as
+the only one -- which is the distinction §88.3 lost, and worth holding onto
+before sizing the target.
+
+Next, in order:
+
+1. **The implicitly-declared `assert`**, sized across the whole corpus rather
+   than across the complex tests, and sized as "how many rows have this as
+   their *last* difference" rather than "how many contain it".
+2. **The complex operand binding** (§88.2, §90.2). It is what `complex_25` and
+   `complex_26` diverge on, it closes the corpus's last complex crash, and it
+   retires both arms' declines together. The work is reproducing the
+   temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
+   closely enough that `c_link` renames it the same way across TUs.
 ## 90. `assert` is two mechanisms, and neither of them is `assert`
 
 §89 named `assert` as the next target on the strength of §88.3's twelve complex

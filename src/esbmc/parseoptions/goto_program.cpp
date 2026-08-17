@@ -16,6 +16,9 @@
 #include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
+#ifdef __GLIBC__
+#  include <malloc.h>
+#endif
 #include <limits>
 #include <util/expr/expr_util.h>
 #include <iostream>
@@ -129,6 +132,15 @@ bool esbmc_parseoptionst::get_goto_program(
     log_status(
       "GOTO program creation time: {}s",
       time2string(create_stop - create_start));
+
+#ifdef __GLIBC__
+    /* Building the GOTO program allocates and frees the whole
+     * operational-model library, and with one arena (see main.cpp) those blocks
+     * are in the arena everything after this point allocates from. Handing them
+     * back here is what keeps encoding from paying for them (esbmc/esbmc#6831).
+     */
+    malloc_trim(0);
+#endif
 
     fine_timet process_start = current_time();
     if (process_goto_program(options, goto_functions))
@@ -794,7 +806,7 @@ void esbmc_parseoptionst::preprocessing()
     }
 #ifdef ENABLE_OLD_FRONTEND
     std::ostringstream oss;
-    if (c_preprocess(filename, oss, false))
+    if (c_preprocess(filename, oss))
       log_error("PREPROCESSING ERROR");
     log_status("{}", oss.str());
 #endif
