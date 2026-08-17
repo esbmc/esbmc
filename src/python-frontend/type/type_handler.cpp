@@ -421,6 +421,35 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
   return shape;
 }
 
+/// `ast_type` may be a call-result tag the intrinsic map invents for a builtin
+/// rather than a name from the source (`iter` -> "iterator", `map` -> "map",
+/// `filter` -> "filter"). No such type is modelled, so resolution lands here --
+/// but reporting a NameError blames a name the program never mentions. Name the
+/// builtin instead (esbmc/esbmc#7081). Returns if `ast_type` is not one.
+static void throw_if_unmodelled_builtin_result(const std::string &ast_type)
+{
+  std::vector<std::string> producers;
+  for (const auto &[builtin, result_type] :
+       python_annotation_intrinsics::builtin_functions())
+    if (result_type == ast_type && builtin != ast_type)
+      producers.push_back(builtin);
+
+  if (
+    producers.empty() &&
+    !python_annotation_intrinsics::builtin_functions().count(ast_type))
+    return;
+
+  std::string msg = "the result of ";
+  if (producers.empty())
+    msg += "the '" + ast_type + "' builtin";
+  else
+    for (size_t i = 0; i < producers.size(); ++i)
+      msg += (i ? ", " : "") + std::string("'") + producers[i] + "()'";
+
+  throw std::runtime_error(
+    msg + " is not modelled (no '" + ast_type + "' type)");
+}
+
 /// Convert a Python AST type to an ESBMC internal irep type.
 /// This function maps high-level Python types (from AST) to low-level internal
 /// ESBMC representations using `typet`. It supports core built-in types
@@ -731,33 +760,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
   if (!is_defined)
   {
-    // `ast_type` may be a call-result tag the intrinsic map invents for a
-    // builtin rather than a name from the source (`iter` -> "iterator",
-    // `map` -> "map", `filter` -> "filter"). No such type is modelled, so
-    // resolution lands here — but reporting a NameError blames a name the
-    // program never mentions. Name the builtin instead (esbmc/esbmc#7081).
-    std::vector<std::string> producers;
-    for (const auto &[builtin, result_type] :
-         python_annotation_intrinsics::builtin_functions())
-      if (result_type == ast_type && builtin != ast_type)
-        producers.push_back(builtin);
-
-    if (
-      !producers.empty() ||
-      python_annotation_intrinsics::builtin_functions().count(ast_type))
-    {
-      std::string msg = "the result of ";
-      if (producers.empty())
-        msg += "the '" + ast_type + "' builtin";
-      else
-      {
-        for (size_t i = 0; i < producers.size(); ++i)
-          msg += (i ? ", " : "") + std::string("'") + producers[i] + "()'";
-      }
-      throw std::runtime_error(
-        msg + " is not modelled (no '" + ast_type + "' type)");
-    }
-
+    throw_if_unmodelled_builtin_result(ast_type);
     throw std::runtime_error(
       "NameError: name '" + ast_type + "' is not defined");
   }
