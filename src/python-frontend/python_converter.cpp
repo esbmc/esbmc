@@ -507,6 +507,103 @@ void python_converter::convert_extra_translation_unit(
   combined_user_code.copy_to_operands(extra_code);
 }
 
+/// The function \p name defined directly in \p body, or an empty node.
+static nlohmann::json
+module_function(const nlohmann::json &body, const std::string &name)
+{
+  for (const auto &element : body)
+    if (element["_type"] == "FunctionDef" && element["name"] == name)
+      return element;
+  return nlohmann::json();
+}
+
+/// The classes in \p body defining a method \p name, restricted to \p only when
+/// that is non-empty. \p node receives the last match found.
+static std::vector<std::string> classes_defining(
+  const nlohmann::json &body,
+  const std::string &only,
+  const std::string &name,
+  nlohmann::json &node)
+{
+  std::vector<std::string> owners;
+  for (const auto &element : body)
+  {
+    if (element["_type"] != "ClassDef")
+      continue;
+    if (!only.empty() && element["name"] != only)
+      continue;
+
+    nlohmann::json method = module_function(element["body"], name);
+    if (method.empty())
+      continue;
+
+    node = method;
+    owners.push_back(element["name"].get<std::string>());
+  }
+  return owners;
+}
+
+static bool takes_self(const nlohmann::json &node)
+{
+  if (!node.contains("args") || !node["args"].contains("args"))
+    return false;
+
+  for (const auto &arg : node["args"]["args"])
+    if (arg.contains("arg") && arg["arg"] == "self")
+      return true;
+  return false;
+}
+
+void python_converter::find_entry_function(
+  const std::string &target,
+  nlohmann::json &node,
+  std::string &owning_class) const
+{
+  const std::string::size_type dot = target.rfind('.');
+  const bool qualified = dot != std::string::npos;
+  const std::string class_part = qualified ? target.substr(0, dot) : "";
+  const std::string func_part = qualified ? target.substr(dot + 1) : target;
+  const nlohmann::json &body = (*ast_json)["body"];
+
+  // A module-level function of that name wins, as it did when only the module
+  // body was searched.
+  if (!qualified)
+  {
+    node = module_function(body, func_part);
+    if (!node.empty())
+    {
+      owning_class.clear();
+      return;
+    }
+  }
+
+  std::vector<std::string> owners =
+    classes_defining(body, class_part, func_part, node);
+
+  if (owners.empty())
+    throw std::runtime_error("Function " + target + " not found");
+
+  // A bare name several classes define says nothing about which was meant, and
+  // guessing would harness a different function than the one asked for.
+  if (owners.size() > 1)
+    throw std::runtime_error(
+      "--function: '" + target + "' is defined by " +
+      std::to_string(owners.size()) + " classes; qualify it as Class.method");
+
+  // The entry harness gives every parameter an arbitrary value, and `self` is
+  // a class instance the scalar scope cannot invent. Harnessing over an object
+  // no constructor built would verify against a nondet pointer rather than an
+  // instance, so refuse instead (#6938 P4.5).
+  if (takes_self(node))
+    throw std::runtime_error(
+      "--function: '" + target +
+      "' is an instance method, and its 'self' parameter is a class "
+      "instance the entry harness cannot build; verify it through its "
+      "callers, or make it a @staticmethod");
+
+  owning_class = owners.front();
+}
+
 void python_converter::convert()
 {
   main_python_file = (*ast_json)["filename"].get<std::string>();
@@ -630,18 +727,9 @@ void python_converter::convert()
      */
 
     nlohmann::json function_node;
-    // Find function node in AST
-    for (const auto &element : (*ast_json)["body"])
-    {
-      if (element["_type"] == "FunctionDef" && element["name"] == function)
-      {
-        function_node = element;
-        break;
-      }
-    }
-
-    if (function_node.empty())
-      throw std::runtime_error("Function " + function + " not found");
+    std::string owning_class;
+    find_entry_function(function, function_node, owning_class);
+    current_class_name_ = owning_class;
 
     code_blockt block;
 
@@ -688,9 +776,10 @@ void python_converter::convert()
     // Convert a single function
     get_function_definition(function_node);
 
-    // Get function symbol
+    // Get function symbol. Take the name from the node rather than the option,
+    // which carries the class for a `Class.method` target.
     symbol_id sid = create_symbol_id();
-    sid.set_function(function);
+    sid.set_function(function_node["name"].get<std::string>());
     symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)

@@ -1,0 +1,4 @@
+CORE
+main.py
+--enforce-contract add --function add
+^ERROR: --function: 'add' is an instance method, and its 'self' parameter is a class instance the entry harness cannot build; verify it through its callers, or make it a @staticmethod$

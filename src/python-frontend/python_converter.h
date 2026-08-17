@@ -558,6 +558,23 @@ private:
 
   symbol_id create_symbol_id() const;
 
+  /**
+   * @brief Locate the function `--function` names, and the class owning it.
+   *
+   * Searches the module body and, for a method, the body of each class. A
+   * method is named either `Class.method` or, when only one class defines it,
+   * by its bare name. Only the module body used to be searched, so a method
+   * could not be given an entry harness at all.
+   *
+   * @param owning_class Set to the class name for a method, cleared otherwise
+   * @throws std::runtime_error if the name is missing, ambiguous, or names an
+   *         instance method, whose `self` the harness cannot build
+   */
+  void find_entry_function(
+    const std::string &target,
+    nlohmann::json &node,
+    std::string &owning_class) const;
+
   symbol_id create_symbol_id(const std::string &filename) const;
 
   void promote_int_to_float(exprt &op, const typet &target_type) const;
