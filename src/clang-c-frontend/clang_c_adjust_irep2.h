@@ -99,6 +99,10 @@ private:
   /// (§49.2), so the rebuild passes the original through (§84).
   void adjust_if_expr(expr2tc &expr);
 
+  /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
+  /// and adjust_for apply to a statement's controlling expression (§95).
+  void adjust_statement_condition(expr2tc &expr);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 

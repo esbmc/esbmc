@@ -3339,3 +3339,58 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 95. A statement's controlling expression, and the census re-run on master
+
+Re-censusing the 202 tests that diverge on current master, tagged by cause:
+
+| cause | tests | owner |
+|---|---:|---|
+| `__builtin_expect` | 112 | PR #7086 |
+| `migrate_expr` renaming warning | 31 | PR #7093 |
+| array-to-pointer decay | 29 | PR #7098 |
+| `assert` as a FUNCTION_CALL | 25 | PR #7087 |
+| function-to-pointer decay | 21 | PR #7092 |
+| **boolean cast on a condition** | **19** | **— none** |
+| usual arithmetic conversions | 15 | PR #7097 |
+
+Every large cause had an open PR except one, which is what this arm takes.
+Tagging by owner rather than by symptom is the reading §98.2 and §104.3 both
+argued for; done this way it selects the next task without a guess.
+
+### 95.1 The arm
+
+`adjust_ifthenelse`, `adjust_while` (which also serves `dowhile`) and
+`adjust_for` each apply `gen_typecast_bool` to the statement's controlling
+expression, because goto_convert's branch lowering wants a boolean guard and
+clang leaves `if (a)` with `a` an `int`. `switch` is deliberately not in the
+list: its selector is an integer.
+
+This is the statement-level counterpart of §84's `adjust_if_expr`, which does
+the same for the *ternary* operator's condition. The two are separate arms
+because they are separate legacy functions over separate node kinds.
+
+`code_for2t`'s condition is optional (`for (;;)`), which the nil check covers;
+the other three always have one.
+
+### 95.2 Result
+
+| | master | with the arm |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 202 | **201** |
+| tests with a boolean-cast difference | 19 | **16** |
+| regressions | -- | **0** |
+
+The headline moves by one and the class it targets by three, which is the now
+familiar gap: a test carrying this difference usually carries others too, and
+only clears when the last of them goes. The class count is the honest measure of
+this arm; the divergence count measures the backlog.
+
+| mutant | killed by |
+|---|---|
+| arm absent (master) | `..._statement_conditions` |
+| `code_for2t` dropped from the statement list | `..._statement_conditions` |
+
+The second mutant is there because `for` reaches its condition through a
+different field than the other three, so a list that omits it still compiles and
+still passes an `if`-only test.
