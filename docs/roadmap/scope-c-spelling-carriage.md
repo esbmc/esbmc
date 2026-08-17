@@ -14,12 +14,44 @@ carried on legacy nodes by two `#`-attributes:
 | attribute | written by | read by |
 |---|---|---|
 | `#cpp_type` | the clang converters | `clang_cpp_adjust_expr`'s exception-id builder (**semantics**); `cpp_expr2string`, `goto2c/expr2c` (**presentation**) |
-| `#cformat` | `util/expr/string2array.cpp:25` | `c_expr2stringt::convert_constant` (**presentation**) |
+| `#cformat` | `constant_exprt`'s `(BigInt, typet)` ctor (`std_expr.h:1102`); `string2array.cpp:25` for the char hint | `c_expr2stringt::convert_constant`, `goto2c/expr2c` (**presentation**); `padding.cpp`, `type_byte_size.cpp`, `goto_check.cpp` (**semantics** — §1.1) |
 
 B-4 asks for no `#`-attribute escape hatch into a shared pass. Both attributes
 are exactly that, and the two consumer classes are why this has resisted
 closure: W3 is the semantics reader, W4 the printers, and they have been treated
 as separable.
+
+### 1.1 `#cformat` is not a presentation attribute — correction
+
+The table above first listed `#cformat` as written by `string2array` and read only
+by `convert_constant`. That was wrong, and it changes what a carriage decision has
+to cover.
+
+`constant_exprt(BigInt value, typet type)` sets **`value`** to
+`integer2binary(value, bv_width(type))` and **`#cformat`** to
+`integer2string(value)` — the same number twice, in binary and decimal. Three
+semantics-bearing readers took the decimal one:
+
+| site | what it decides |
+|---|---|
+| `clang-c-frontend/padding.cpp:276` | an explicit `__attribute__((aligned(N)))` for struct layout |
+| `util/expr/type_byte_size.cpp:646` | the same alignment, for object size |
+| `goto-programs/goto_check.cpp:560` | an array's width in an input-overflow check |
+
+`#cformat` was therefore carrying a *value a consumer needed*, not a spelling a
+printer preferred. The first two now call `to_integer` on the constant instead
+(PR #7122), gated on byte-identical goto output over 70 tests; a mutant that
+ignores the value trips `adjust_type`'s own `sz % a == 0` assertion, so the
+readers are live.
+
+`goto_check.cpp:560` is left: its expression is an array size, not a constant for
+a VLA, so switching it needs a constant-or-not branch with no witness.
+
+**Consequence.** Two of five `#cformat` readers are no longer readers, and the
+remaining semantic one is a different problem (an array width, not a spelling).
+What is left to decide about `#cformat` is only the char hint of §2 — which is
+the presentation question this document is about. The correction narrows this
+scope rather than widening it.
 
 ## 2. What is measured
 
