@@ -171,6 +171,14 @@ public:
   /** Pop one context on the SMT assertion stack. */
   virtual void pop_ctx();
 
+  /** Whether a satisfiable result can be turned into a model. False for the
+   *  subprocess SMT-LIB backends with no interactive model solver attached:
+   *  they answer sat/unsat, but get() and l_get() have nothing to read. */
+  virtual bool has_model() const
+  {
+    return true;
+  }
+
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
    *  returning a single smt_ast that represents the converted expressions

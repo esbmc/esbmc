@@ -1,6 +1,7 @@
 #include <util/base/filesystem.h>
 #include <boost/filesystem.hpp>
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 #include <fstream>
 #include <vector>
@@ -180,6 +181,141 @@ void file_operations::remove_registered_tmps_from_signal()
   }
 }
 #endif
+
+file_data file_data::bundled(const char *data, size_t size)
+{
+  file_data f;
+  f._borrowed = std::string_view(data, size);
+  return f;
+}
+
+file_data file_data::owned(std::string data)
+{
+  file_data f;
+  f._owned = std::move(data);
+  f._bundled = false;
+  return f;
+}
+
+std::string_view file_data::view() const noexcept
+{
+  return _bundled ? _borrowed : std::string_view(_owned);
+}
+
+size_t file_data::size() const noexcept
+{
+  return view().size();
+}
+
+bool file_data::is_bundled() const noexcept
+{
+  return _bundled;
+}
+
+static bool is_sep(char c)
+{
+  return c == '/' || c == '\\';
+}
+
+bool file_operations::is_bundled_source(std::string_view file)
+{
+  /* clang_vfs_path() spells the root "C:/esbmc-vfs" on Windows, where a bare
+   * "/esbmc-vfs" would not satisfy clang's absolute-path grammar, and clang
+   * hands the rest of the path back with native separators. */
+  if (file.size() > 1 && file[1] == ':')
+    file.remove_prefix(2);
+
+  constexpr std::string_view root = std::string_view(ESBMC_VFS_ROOT).substr(1);
+  return file.size() > root.size() + 1 && is_sep(file[0]) &&
+         file.compare(1, root.size(), root) == 0 &&
+         is_sep(file[root.size() + 1]);
+}
+
+filesystemt &filesystemt::get()
+{
+  static filesystemt instance;
+  return instance;
+}
+
+void filesystemt::add_bundled(
+  const std::string &path,
+  const char *data,
+  size_t size)
+{
+  /* bundled_count() keys the overlay cache in esbmc_clang_vfs(), so silently
+   * replacing an entry would leave that cache stale -- in release builds too,
+   * hence not an assert. */
+  if (!_bundled.emplace(path, std::string_view(data, size)).second)
+  {
+    fprintf(stderr, "ERROR: bundled file registered twice: %s\n", path.c_str());
+    abort();
+  }
+}
+
+std::optional<file_data> filesystemt::read(const std::string &path) const
+{
+  auto it = _bundled.find(path);
+  if (it != _bundled.end())
+    return file_data::bundled(it->second.data(), it->second.size());
+
+  std::ifstream in(path, std::ios::binary | std::ios::ate);
+  if (!in)
+    return {};
+
+  std::streampos end = in.tellg();
+  if (end < 0) /* not seekable */
+    return {};
+
+  std::string contents(static_cast<size_t>(end), '\0');
+  in.seekg(0);
+  in.read(contents.data(), contents.size());
+  contents.resize(in.gcount());
+  return file_data::owned(std::move(contents));
+}
+
+bool filesystemt::exists(const std::string &path) const
+{
+  return _bundled.count(path) || boost::filesystem::exists(path);
+}
+
+bool filesystemt::readable(const std::string &path) const
+{
+  return _bundled.count(path) || std::ifstream(path);
+}
+
+size_t filesystemt::bundled_count() const noexcept
+{
+  return _bundled.size();
+}
+
+std::vector<std::string> filesystemt::list(const std::string &prefix) const
+{
+  std::vector<std::string> paths;
+  for_each_under(prefix, [&paths](const std::string &p, std::string_view) {
+    paths.push_back(p);
+  });
+  return paths;
+}
+
+const std::string &
+filesystemt::materialize(const std::string &prefix, const std::string &format)
+{
+  auto it = _materialized.find(prefix);
+  if (it != _materialized.end())
+    return it->second.path();
+
+  it = _materialized.emplace(prefix, create_tmp_dir(format)).first;
+  const std::string &dir = it->second.path();
+  for_each_under(
+    prefix, [&dir, &prefix](const std::string &p, std::string_view data) {
+      std::string_view rel = std::string_view(p).substr(prefix.size());
+      while (!rel.empty() && rel.front() == '/')
+        rel.remove_prefix(1);
+      create_path_and_write(
+        dir + "/" + std::string(rel), data.data(), data.size());
+    });
+  return dir;
+}
 
 tmp_path::tmp_path(std::string path, bool keep)
   : _path(std::move(path)), _lock_fd(lock_tmp_path(_path)), _keep(keep)

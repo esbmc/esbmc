@@ -3,6 +3,7 @@
 
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/property_verdict.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
@@ -12,6 +13,7 @@
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
+#include <set>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/config/options.h>
@@ -185,10 +187,53 @@ protected:
     const std::unordered_multiset<std::string> &reached_mul_claims);
 
 private:
-  /// Report each property checked during the run once, with the verdict that
+  /// Report each of the program's properties once, with the verdict that
   /// dominates across every thread interleaving explored, followed by a
-  /// summary.
-  void report_property_verdicts() const;
+  /// summary. A phase that decided nothing and does not conclude the run stays
+  /// silent, leaving the report to the phase that does.
+  void report_property_verdicts(smt_resultt res) const;
+
+  /// Print the property table, grouped by file and function.
+  void print_property_rows(
+    const std::vector<struct property_rowt> &rows,
+    const struct property_countst &counts) const;
+
+  /// Print the "** N of M properties failed, ..." line.
+  void
+  print_property_summary(size_t total, const struct property_countst &) const;
+
+  /// Render the verdict table as coverage goals rather than properties.
+  void report_coverage_goal_verdicts(
+    const std::map<std::string, property_resultt> &verdicts) const;
+
+  /// Enter every assertion in \p eq into the verdict table as NotChecked, so
+  /// the report covers the whole program rather than only those properties
+  /// some phase happened to reach a verdict on (discussion #7023).
+  void seed_property_verdicts(const symex_target_equationt &eq) const;
+
+  /// Record Failed for every assertion in \p eq that \p smt_conv's model
+  /// falsifies, so the report names them even when the counterexample itself
+  /// is suppressed. Call only where a SAT result witnesses a real violation:
+  /// an inductive-step or forward-condition model does not.
+  void record_violated_properties(
+    smt_convt &smt_conv,
+    const symex_target_equationt &eq) const;
+
+  /// Source files whose assertions come from ESBMC's own operational models,
+  /// so the report can sort them after the user's code. Empty for Python,
+  /// where a hidden body does not imply a model (remove_library_assertions).
+  std::set<std::string> library_files;
+
+  /// Whether this phase concludes the run, i.e. report_result() will print a
+  /// VERIFICATION verdict for \p res rather than deepen the search. The
+  /// property report describes the whole run, so an iterative strategy must
+  /// not emit one table per k.
+  bool reports_final_verdict(smt_resultt res) const;
+
+  /// Whether \p res establishes that *every* property holds, as opposed to a
+  /// merely bounded round such as a k-induction base case. Must agree with the
+  /// path through report_result() that reaches report_success().
+  bool all_properties_proved(smt_resultt res) const;
 
   static constexpr size_t default_barren_interleaving_budget = 100;
 
