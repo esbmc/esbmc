@@ -120,6 +120,10 @@ private:
   /// function designator to a pointer at a call (§98).
   void adjust_call_arguments(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_symbol's function-designator sugar
+  /// (§100).
+  void adjust_function_designators(expr2tc &expr);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 

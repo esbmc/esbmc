@@ -3556,3 +3556,87 @@ Next:
 2. The conversion at assignment and binary arithmetic (12), with
    `adjust_float_arith`.
 3. `adjust_address_of`, which must bring #7010's assigns guard with it (§98.1).
+
+## 100. The function-designator sugar, and the cast that was not a conversion
+
+§98.2 located this arm: `clang_c_adjust::adjust_symbol` wraps a symbol whose
+type is `code` in an implicit `address_of`, and `adjust_side_effect_function_call`
+strips that sugar back off when the call is direct. Both halves port; the
+`implicit` bit `address_of2t` already carries (#6912, added for exactly this)
+is what tells `f(x)` from a user-written `(&f)(x)`.
+
+### 100.1 A spurious cast, and a predicate that already existed
+
+With the sugar in place and nothing else, the argument came out as
+`apply((signed int (*)(signed int))(&callee), 1)` where the default path has
+`apply(&callee, 1)`. The cast comes from §98's argument conversion:
+`implicit_typecast_followed` reaches its "very generous: between any two
+function pointers it's ok" branch, and then casts anyway, because the decision
+after that branch is a bare `src_type == dest_type` -- and IREP2's
+`code_type2t::fields` includes `argument_names`, which hold *symbol ids*, not
+source spellings. Naming both parameters `x` does not make them equal; only
+being the same declaration does.
+
+This is #6749's defect in a second place, and the predicate written for it --
+`same_function_pointer_ignoring_argument_names`, with C11 6.7.6.3p15 and C++
+[dcl.fct]p5 in its comment -- was `static` in `dereference.cpp`. Moved verbatim
+to `irep2/irep2_utils.h` and used from both, on §94.1's reasoning: a second copy
+of "when are two function types the same" is the shape of bug this file keeps
+finding.
+
+Not done here, and worth its own decision: the same `src_type == dest_type`
+sits in `implicit_typecast_followed` itself, so *every* consumer of the IREP2
+`c_typecast` -- `python_adjust` included -- can still be handed this cast. Fixing
+it there would be one condition and would need its own A/B over the Python
+corpus, which is why it is named rather than done.
+
+### 100.2 Applied from the parent, not at the symbol
+
+`address_of2t`'s constructor asserts its operand is not another `address_of`
+(`irep2_expr.h:1417`). The legacy pass builds `&(&f)` for a user-written `&f`
+and collapses it in `adjust_address_of`; IREP2 cannot build it at all. So the
+sugar runs over a node's *operands*, skipping the case where the node is itself
+an `address_of` -- the nesting is never constructed rather than constructed and
+undone.
+
+Order matters and cost an iteration: the arm has to run **before**
+`adjust_call_callee`, because that is what reads the sugar to decide the call is
+direct. Placed after it, every direct call in the corpus kept its `&` and the
+probes went from 0 differing lines to ~300.
+
+### 100.3 Result
+
+| | before | after |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 112 | **105** |
+| function-to-pointer decay divergences | 11 | **3** |
+| regressions | -- | **0** |
+
+Default path unchanged: of the 105 tests diverging under both binaries, all but
+the four §90.4 self-nondeterministic ones produce byte-identical default-path
+dumps. That check matters more than usual here, because this is the first arm in
+the sequence to touch a file outside the frontend.
+
+| mutant | killed by |
+|---|---|
+| arm absent (the control binary) | `..._fn_designator` |
+| the `&(&f)` guard removed | `..._fn_designator_call` |
+| the implicit-`address_of` strip removed | `..._fn_designator` |
+
+## 101. Status
+
+`-only` on the 297-test sample: **105 of 297** (201 at the start of this
+sequence).
+
+Remaining causes, re-censused: the `migrate_expr` renaming warning (31, and
+§92.2 explains why it masks arms rather than being one), array-to-pointer decay
+(16), usual arithmetic conversions (12), function-to-pointer decay (3).
+
+Next:
+
+1. The conversion at **assignment and binary arithmetic** (12), which brings
+   `adjust_float_arith`'s `ieee_*` promotion with it.
+2. `adjust_address_of`, which owns most of the remaining array decay and **must
+   carry #7010's assigns guard** (§98.1).
+3. The `src_type == dest_type` decision in `implicit_typecast_followed` (§100.1),
+   which is shared and needs a Python A/B.
