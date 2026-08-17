@@ -3339,3 +3339,130 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 92. `assert` is two mechanisms, and neither of them is `assert`
+
+*(Renumbered from §90: master took that number for the unary-complex arm.)*
+
+§89 named `assert` as the next target on the strength of §88.3's twelve complex
+tests. Sized across the corpus first, as §89 asked, it splits into two unrelated
+causes, and the dominant one is not an assertion arm at all.
+
+### 92.1 The dominant cause is `__builtin_expect`, and it is a wrong verdict
+
+Darwin's `assert.h` expands `assert(e)` to
+`__builtin_expect(!(e), 0) ? __assert_rtn(...) : (void)0` under `__DARWIN_UNIX03`.
+`do_special_functions` folds `__builtin_expect(v, hint)` to `v`
+(`clang_c_adjust_expr.cpp:1587`); the IREP2 pass did not, so the call survives
+into the goto program. It has no body, so its result is nondet:
+
+```c
+#include <assert.h>
+int main(void) { int x = 1; assert(x == 1); return 0; }
+```
+
+`VERIFICATION SUCCESSFUL` on the default path, `VERIFICATION FAILED` under
+`-only`. Every `assert` on this host was nondet in this mode, which is why the
+class was large. That is a different kind of finding from §82/§84/§88, all of
+which were shape divergences: this one is a wrong answer, and the divergence
+count was measuring it only incidentally.
+
+**Host-dependence, stated rather than discovered later.** glibc's `assert.h`
+does not use `__builtin_expect`, so the share this arm carries here (36 of 70
+diverging tests in a first sample) will be smaller on Linux CI. The arm is worth
+landing regardless: `__builtin_expect` occurs directly in four corpus files and
+in the libm operational model's `predict_true`/`predict_false`
+(`src/c2goto/library/libm/musl/libm.h:92`), and a nondet assertion is a wrong
+verdict wherever it occurs, not a formatting difference.
+
+### 92.2 The second cause is a base-name defect in §70's arm
+
+A test that calls `assert` *without* including the header -- `complex_01` and
+its neighbours -- gets an implicit declaration, and §70's `declare_implicit_callee`
+declares it. `clang_c_adjust` sets `new_symbol.id = identifier` and
+`new_symbol.name = f_op.name()`, the base name; the IREP2 arm sets **both** to
+the identifier. `do_function_call_symbol` matches on the base name
+(`builtin_functions.cpp:933`), so under `-only` the symbol is named
+`c:@F@assert`, nothing matches, and the call stays a `FUNCTION_CALL` where the
+default path emits `ASSERT` -- exactly the shape §88.3 reported. `migrate_expr`
+also warns that `c:@F@assert` is "missing renaming delimiters", which is the
+same defect visible from the other side.
+
+This is a one-line defect in an already-merged arm rather than a port, so it is
+the next slice and not this one.
+
+### 92.3 Scope: the reserved spellings only
+
+Ported here: `__builtin_expect`, `__builtin_popcount{,l,ll}` and the `__popcnt*`
+aliases, `__builtin_parity{,l,ll}`, `__builtin_bswap{16,32,64}`. All are
+`__builtin_`-prefixed, which `is_name_matched_builtin`'s comment
+(`clang_c_adjust_expr.cpp:1381-1385`) calls out as reserved: a program
+cannot supply its own definition, so unlike `is_name_matched_builtin`'s family
+(`abs`, `isnan`, `isinf`, `inf`, `huge_val`, ...) they need no
+`shadows_user_definition` query. That family, and the composite lowerings
+(`__builtin_isinf_sign`, `__builtin_fpclassify`), are the natural successor.
+
+**Not ported: the relational family.** `__builtin_isgreater` and its siblings
+occur **zero** times in the C corpus's sources. §39.1 of the parent roadmap
+records what porting an unexercised construct costs -- jimple's `nondet` override
+held a byte-identity claim for nine PRs because nothing executed it -- so they
+wait for a slice that brings its own tests.
+
+One representational note: `popcount2t`'s type is hard-fixed to `int32`
+(`irep2_expr.h:1074`) where the legacy node uses `int_type()`. Identical on every
+supported target; a 16-bit-`int` target would diverge, and the fix would be to
+give `popcount2t` a type rather than to work around it here.
+
+### 92.4 Result
+
+Measured over a 297-test stride sample of `regression/esbmc`, control and
+patched binaries both saved before the sweep:
+
+| | control | patched |
+|---|---:|---:|
+| diverging under `-only` | 201 | **131** |
+| identical | 96 | 166 |
+| tests that regressed (SAME → DIFF) | -- | **0** |
+
+Default path unchanged: of the 131 tests diverging under both binaries, 127
+produce byte-identical default-path dumps. The other four
+(`gcc_nested_func_02`, `gcc_nested_func_collision`,
+`gcc_nested_func_sibling_calls_uncaptured`, `github_746`) differ **against
+themselves** -- re-running one binary twice on the same input reproduces the
+difference. The nested-function transform names its synthetic file
+`esbmc-nested.<rand>.c` and the clang AST dump prints node addresses, and
+`irep2_canon` strips neither. Any A/B over this corpus will show those four
+forever; they should be added to the canonicaliser rather than re-investigated.
+
+Three tests pin the arm, at the verdict: the fold is invisible in shape terms
+once it has happened, so only a value distinguishes it. The hint operand is
+`0` in the passing test and `1` in the failing one, which makes returning the
+hint instead of the value kill both.
+
+| mutant | killed by |
+|---|---|
+| arm disabled | `..._expect`, `..._bit_ops` |
+| `__builtin_expect` yields the hint, not the value | `..._expect`, `..._expect_fail` |
+| parity `popcount & 1` → `& 2` | `..._bit_ops` |
+| `bswap` → identity | `..._bit_ops` |
+
+## 93. Status
+
+`-only`: **131 of 297 diverge** on the stride sample (201 before this arm), 0
+regressions, default path unchanged. Unary complex (§88.3) is in flight
+separately.
+
+Gates run: 694 unit tests green; the 85-test
+`gcc_popcount|gcc_bswap|builtin_|complex_|irep2_only|csmith|github_223` slice
+green. **The whole-suite gate did not run** -- the machine's 1-minute load
+average was above 10 and `ctest -L esbmc` did not complete inside the 5-minute
+cap at any stride tried. Stated rather than omitted: this arm is gated on
+`sole_adjuster` and so cannot reach the default path by construction, but the
+suite number is owed and not paid.
+
+Next, in order:
+
+1. **§92.2's base-name defect.** One line, and it closes the `assert` class
+   §88.3 actually named.
+2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
+   ported alongside it -- a symbol-table query, so the same shape of work as §70.
