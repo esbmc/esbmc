@@ -58,6 +58,15 @@ static bool is_complex_unary(const expr2tc &expr)
   return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
 }
 
+/// The comparisons clang_c_adjust routes through adjust_expr_rel. IREP2 already
+/// types these bool, so only the operand half of that arm ports.
+static bool is_relational(const expr2tc &expr)
+{
+  return is_equality2t(expr) || is_notequal2t(expr) || is_lessthan2t(expr) ||
+         is_lessthanequal2t(expr) || is_greaterthan2t(expr) ||
+         is_greaterthanequal2t(expr);
+}
+
 void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 {
   if (is_nil_expr(expr))
@@ -95,6 +104,9 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
+
+  if (is_relational(expr))
+    adjust_relational(expr);
 
   if (is_sideeffect2t(expr))
     adjust_special_functions(expr);
@@ -272,6 +284,24 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   if (args.size() == 1)
     fold_unary_builtin(name, args[0], expr);
+}
+
+void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
+{
+  expr2tc op0 = *expr->get_sub_expr(0);
+  expr2tc op1 = *expr->get_sub_expr(1);
+  if (is_nil_expr(op0) || is_nil_expr(op1))
+    return;
+
+  const expr2tc before0 = op0, before1 = op1;
+  c_implicit_typecast_arithmetic(op0, op1, ns);
+  if (op0 == before0 && op1 == before1)
+    return;
+
+  // In-place operand surgery: never round-trip a resolved subtree through
+  // migrate_expr_back (docs/roadmap/frontends-to-irep2.md §38.3).
+  unsigned i = 0;
+  expr->Foreach_operand([&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
 }
 
 void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)

@@ -3579,3 +3579,106 @@ Next:
    slice: the warning comes from `sym_name_to_symbol`, shared by every frontend,
    and firing it is inherent to migrating a body before its implicit callee is
    declared. Not the one-liner §93 implied.
+
+## 96. The divergence set, censused -- and §95's next target was the wrong one
+
+§95 named the CPROVER intrinsic family next, on the strength of its appearing in
+the leftover call-position census. Sized properly before starting it, it is
+**three tests**. Classifying all 129 remaining divergences by cause first, as
+§89 asked and §92.2 insisted on:
+
+| cause | tests |
+|---|---:|
+| `migrate_expr` "missing renaming delimiters" warning | 31 |
+| array-to-pointer decay | 29 |
+| `assert` left as a FUNCTION_CALL (§92, PR pending) | 25 |
+| usual arithmetic conversions | 17 |
+| function-to-pointer decay | 12 |
+| CPROVER intrinsics (`same_object`, `POINTER_OFFSET`, ...) | ~3 |
+
+`DEAD` placement appears in 43, but in **no** test is it the whole diff: it is
+cascade, an extra declaration's shadow rather than a cause. The census asks
+whether a tag ever appears alone before it is worth a slice, and that check is
+what kept a 43-row entry off this list.
+
+### 96.1 The arm
+
+The three conversion rows above are one mechanism -- `gen_typecast_arithmetic`,
+which `clang_c_adjust` calls from `adjust_expr_rel` and
+`adjust_expr_binary_arithmetic` -- and its IREP2 counterpart is the shared
+`c_implicit_typecast_arithmetic(expr2tc &, expr2tc &, ns)` that §38.1 named as
+Phase 4's already-extracted helper. This ports the **relational** call site
+only. `adjust_expr_rel`'s other half, `expr.type() = bool_type()`, has nothing to
+do: IREP2's comparison kinds are bool-typed by construction.
+
+Binary arithmetic is deliberately not in this slice. That call site also carries
+`adjust_float_arith`'s `ieee_*` promotion, which is the defect
+`scope-coupled-arith-assign-conversion.md` §17 spent three sections on for
+Python (#6839); it deserves its own gates rather than a shared A/B with this.
+
+### 96.2 Result
+
+| | before | after |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 129 | **122** |
+| regressions | -- | **0** |
+
+Seven tests reach byte-identity: `fam_true_2`, `github_263`,
+`simplifier-equality-fail`, `simplifier{17,19,21}_no`, `simplifier4`.
+
+The per-cause counts barely move (array decay 29 → 26, promotion 17 → 17), and
+that is the honest reading: the same conversion is owed at assignment, at binary
+arithmetic and at call arguments, and this arm covers one operator position of
+several. What it does clear, it clears completely.
+
+### 96.3 The tests were written twice
+
+The first pair asserted `-1 < 1u` and a local `int a[4]` compared against a
+pointer. Both passed **against the control binary**, which is to say they proved
+nothing: clang already inserts the arithmetic conversions for `i < u`, so the
+adjuster has no work there, and the local-array shape does not reach this arm at
+all (it aborts under `-only` in `irep2_utils`' width assertion, before and
+after).
+
+Rewriting them at the shapes the arm demonstrably fires on -- taken from the
+diffs of the seven tests it cleared, not from what the C standard suggests it
+ought to do -- gives an array-typed **struct member** compared against a
+pointer (`fam_true_2`'s shape) and a comparison whose operands are both
+**boolean** (`simplifier17_no`'s). Both now differ from the control and match
+the default path exactly.
+
+| mutant | killed by |
+|---|---|
+| arm absent (the control binary itself) | both |
+| only `op0` written back, `op1` left alone | `..._bool_operands` |
+
+The second mutant survived the first draft of `..._bool_operands`, whose regex
+pinned only the left operand's cast. A comparison arm has two operands and a
+test for it must say so.
+
+### 96.4 A soundness note from `github_263`
+
+Worth recording separately because it is not a formatting difference. Comparing
+two rows of a 2-D array, `a[0] < a[MAX-1]`, the default path emits one assertion
+on the decayed pointers. Under `-only` before this arm it emitted **array-bounds
+claims instead** -- different properties, not a differently-spelled one. A
+divergence census that only counted tests would have scored that the same as a
+missing cast.
+
+## 97. Status
+
+`-only` on the 297-test sample: **122 of 297** (201 at the start of this
+sequence; §90 → 131, §94 → 129, this arm → 122).
+
+Gates: 694 unit tests green; 130 of 130 in the
+`irep2_only|simplifier|fam_|github_263|complex_` slice green. Whole-suite gate
+still owed (§91) -- retried at three strides this session and it does not
+complete inside the 5-minute cap under this machine's load.
+
+Next, by the §96 census rather than by guess:
+
+1. **Function-to-pointer decay** (12 tests) -- the same conversion mechanism at
+   argument position, `adjust_function_call_arguments`' `gen_typecast`.
+2. **The conversion at assignment and binary arithmetic** (17), taking
+   `adjust_float_arith` with it.
+3. The CPROVER intrinsics (~3), which are cheap but small.
