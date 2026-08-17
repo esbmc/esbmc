@@ -8,9 +8,10 @@
 // `ClassName(...)` so class instances get CPython reference semantics (a
 // pointer to a non-expiring object) and survive escaping their defining
 // function, instead of dangling as expired stack locals. This body is a
-// placeholder: symex intercepts the call (symex_mem_inf) and allocates a typed,
-// non-expiring infinite object of the class struct carried by the call's
-// result pointer type.
+// placeholder: symex intercepts the call (the __ESBMC_new_object handler in
+// goto_symext::run_intrinsic) and allocates a typed, non-expiring dynamic
+// object -- a single value, not an infinite array -- of the class struct
+// carried by the call's result pointer type.
 void *__ESBMC_new_object()
 {
   return 0;
