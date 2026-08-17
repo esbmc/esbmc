@@ -581,6 +581,18 @@ smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
   expr2tc address = add2tc(addr_type, from_start, ptr_offs);
   expr2tc pointer = address;
 
+  /* Object 0 is NULL and occupies the single address 0; finalize_pointer_chain
+   * makes every other live object disjoint from it, so only NULL has address
+   * zero. Those constraints exist only for objects symex registered, so a
+   * pointer whose object id is a free variable -- one returned by an
+   * unmodelled function, say -- escaped the invariant and the solver could
+   * place it at address 0. A `p != NULL` assumption was then lost the moment
+   * the pointer went through its numeric address, which is what any store into
+   * an untyped byte object does (#7008). */
+  assert_expr(implies2tc(
+    notequal2tc(obj_num, gen_zero(obj_num->type)),
+    notequal2tc(address, gen_zero(address->type))));
+
   if (config.ansi_c.cheri && can_carry_provenance(cast.type))
   {
     /* encode capability information */

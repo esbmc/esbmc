@@ -70,6 +70,11 @@ public:
   /** Integer-encoding path for ieee_fma (fused multiply-add). */
   smt_astt encode_ieee_fma(const expr2tc &expr);
 
+  /** Encode ieee_rem2t (IEEE 754 remainder, C's remainder()). Exact, so no
+   *  rounding, enclosure or flush; r is pinned as x - n*y through a fresh
+   *  integer n nearest x/y, even on ties. */
+  smt_astt encode_ieee_rem(const expr2tc &expr);
+
   /** Record that the SMT AST t may be NaN; nan_pred is a boolean SMT term
    *  that is true iff t holds a NaN value (e.g. not(operand >= 0) for
    *  sqrt with a negative operand). */

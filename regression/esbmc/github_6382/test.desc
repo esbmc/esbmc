@@ -3,5 +3,5 @@ main.c
 --multi-property --unwind 11 --context-bound 2 --no-standard-checks --no-library-assertions
 ^VERIFICATION SUCCESSFUL$
 ^Removed [1-9]\d* library assertion\(s\)$
-PASSED: 'assert data equal at file .*main\.c line \d+
+^ +PASSED .*line +\d+ +assert data equal$
 \A(?![\s\S]*Sem is not initialized)[\s\S]*\Z

@@ -23,6 +23,12 @@ public:
 private:
   exprt create_expr_from_call();
 
+  // np.arange(...) with constant, small arguments materialized to a literal
+  // list, falling back to the operational model for genuinely non-constant
+  // arguments (see numpy_call_expr.cpp for the full rationale). Split out of
+  // get() to keep that function's own decision count from growing further.
+  exprt get_arange_expr();
+
   bool is_math_function() const;
 
   void broadcast_check(const nlohmann::json &operands) const;

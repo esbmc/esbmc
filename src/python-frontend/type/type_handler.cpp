@@ -4,8 +4,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/python_typechecking.h>
+#include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/symbol_id.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/config/config.h>
 #include <util/symtab/context.h>
 #include <util/lang/c_types.h>
@@ -419,6 +421,35 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
   return shape;
 }
 
+/// `ast_type` may be a call-result tag the intrinsic map invents for a builtin
+/// rather than a name from the source (`iter` -> "iterator", `map` -> "map",
+/// `filter` -> "filter"). No such type is modelled, so resolution lands here --
+/// but reporting a NameError blames a name the program never mentions. Name the
+/// builtin instead (esbmc/esbmc#7081). Returns if `ast_type` is not one.
+static void throw_if_unmodelled_builtin_result(const std::string &ast_type)
+{
+  std::vector<std::string> producers;
+  for (const auto &[builtin, result_type] :
+       python_annotation_intrinsics::builtin_functions())
+    if (result_type == ast_type && builtin != ast_type)
+      producers.push_back(builtin);
+
+  if (
+    producers.empty() &&
+    !python_annotation_intrinsics::builtin_functions().count(ast_type))
+    return;
+
+  std::string msg = "the result of ";
+  if (producers.empty())
+    msg += "the '" + ast_type + "' builtin";
+  else
+    for (size_t i = 0; i < producers.size(); ++i)
+      msg += (i ? ", " : "") + std::string("'") + producers[i] + "()'";
+
+  throw std::runtime_error(
+    msg + " is not modelled (no '" + ast_type + "' type)");
+}
+
 /// Convert a Python AST type to an ESBMC internal irep type.
 /// This function maps high-level Python types (from AST) to low-level internal
 /// ESBMC representations using `typet`. It supports core built-in types
@@ -727,9 +758,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
       return get_typet(ret, type_size);
   }
 
-  // If still not found, it's a NameError
   if (!is_defined)
   {
+    throw_if_unmodelled_builtin_result(ast_type);
     throw std::runtime_error(
       "NameError: name '" + ast_type + "' is not defined");
   }
@@ -1159,6 +1190,20 @@ exprt type_handler::tagged_scalar_byte_size(const exprt &value) const
   const size_t width_bits =
     std::stoull(value.type().width().as_string(), nullptr, 10);
   return from_integer(BigInt(width_bits / 8), size_type());
+}
+
+bool type_handler::is_string_type(const typet &t) const
+{
+  return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+}
+
+bool type_handler::is_numeric_scalar_type(const typet &t) const
+{
+  if (t.is_floatbv() || t.is_bool())
+    return true;
+  if (t.is_signedbv() || t.is_unsignedbv())
+    return bv_width(t) >= 16;
+  return false;
 }
 
 typet type_handler::get_list_element_type() const

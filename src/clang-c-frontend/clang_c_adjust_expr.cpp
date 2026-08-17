@@ -1020,6 +1020,41 @@ void clang_c_adjust::adjust_type(typet &type)
   }
 }
 
+/// A compound assignment over a complex operand has to be expanded here.
+/// goto_convert's remove_assignment rebuilds `a op b` long after adjustment, so
+/// the component-level lowering would never see it and the SMT layer would be
+/// handed a raw complex operator (#6713). An lvalue with its own side effect is
+/// left alone: expanding it would evaluate that effect twice, and a loud
+/// failure downstream beats a wrong answer.
+bool clang_c_adjust::lower_complex_compound_assignment(exprt &expr)
+{
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
+  const typet type0 = op0.type();
+
+  if (
+    (type0.id() != "complex" && op1.type().id() != "complex") ||
+    contains_sideeffect(op0))
+    return false;
+
+  static const std::map<irep_idt, irep_idt> complex_compound_ops = {
+    {"assign+", "+"}, {"assign-", "-"}, {"assign*", "*"}, {"assign_div", "/"}};
+
+  auto it = complex_compound_ops.find(expr.statement());
+  if (it == complex_compound_ops.end())
+    return false;
+
+  exprt rhs(it->second, type0);
+  rhs.location() = expr.location();
+  rhs.copy_to_operands(op0, op1);
+  if (!lower_complex_binary_arithmetic(rhs))
+    return false;
+
+  expr.statement("assign");
+  expr.op1().swap(rhs);
+  return true;
+}
+
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -1036,44 +1071,22 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     return;
   }
 
-  // A compound assignment over a complex operand has to be expanded here.
-  // goto_convert's remove_assignment rebuilds `a op b` long after adjustment,
-  // so the component-level lowering would never see it and the SMT layer
-  // would be handed a raw complex operator (#6713). An lvalue with its own
-  // side effect is left alone: expanding it would evaluate that effect twice,
-  // and a loud failure downstream beats a wrong answer.
+  if (lower_complex_compound_assignment(expr))
+    return;
+
   if (
-    (type0.id() == "complex" || op1.type().id() == "complex") &&
-    !contains_sideeffect(op0))
-  {
-    static const std::map<irep_idt, irep_idt> complex_compound_ops = {
-      {"assign+", "+"},
-      {"assign-", "-"},
-      {"assign*", "*"},
-      {"assign_div", "/"}};
-
-    auto it = complex_compound_ops.find(statement);
-    if (it != complex_compound_ops.end())
-    {
-      exprt rhs(it->second, type0);
-      rhs.location() = expr.location();
-      rhs.copy_to_operands(op0, op1);
-      if (lower_complex_binary_arithmetic(rhs))
-      {
-        expr.statement("assign");
-        expr.op1().swap(rhs);
-        return;
-      }
-    }
-  }
-
-  if (statement == "assign_shl" || statement == "assign_shr")
+    statement == "assign_shl" || statement == "assign_shr" ||
+    statement == "assign_lshr" || statement == "assign_ashr")
   {
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
     {
-      if (statement == "assign_shl")
+      // The C converter now picks the kind (§76); Solidity still emits the
+      // untyped assign_shr, so the rewrite below stays for it.
+      if (
+        statement == "assign_shl" || statement == "assign_lshr" ||
+        statement == "assign_ashr")
         return;
 
       if (type0.id() == "unsignedbv")
@@ -1236,6 +1249,37 @@ void clang_c_adjust::adjust_side_effect_function_call(
   do_special_functions(expr);
 }
 
+// The expression a chain of typecasts wraps, which is where the address the
+// caller wrote actually sits.
+static exprt *strip_typecasts(exprt &e)
+{
+  exprt *p = &e;
+  while (p->id() == "typecast" && p->operands().size() == 1)
+    p = &p->op0();
+  return p;
+}
+
+static bool is_address_of_array(exprt &arg, const namespacet &ns)
+{
+  const exprt *addr = strip_typecasts(arg);
+  return addr->is_address_of() && addr->operands().size() == 1 &&
+         is_array_like(ns.follow(addr->op0().type()));
+}
+
+// Undo the `&a` -> `&a[0]` rewrite adjust_address_of applies to every array.
+static void restore_array_lvalue(exprt &arg)
+{
+  exprt *addr = strip_typecasts(arg);
+  if (
+    !addr->is_address_of() || addr->operands().size() != 1 ||
+    !addr->op0().is_index() || addr->op0().operands().size() != 2)
+    return;
+
+  exprt array = addr->op0().op0();
+  addr->type() = pointer_typet(array.type());
+  addr->op0().swap(array);
+}
+
 void clang_c_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
@@ -1244,10 +1288,24 @@ void clang_c_adjust::adjust_function_call_arguments(
   exprt::operandst &arguments = expr.arguments();
   const code_typet::argumentst &argument_types = code_type.arguments();
 
+  // An assigns clause names an lvalue, and array-to-pointer decay is the one
+  // conversion that loses which lvalue it was: adjust_address_of rewrites `&a`
+  // to `&a[0]`, after which the clause is indistinguishable from one that
+  // named the first element, and the frame silently shrinks to it (#7010).
+  // Keep the pointer-to-array `&a` C already gave us for this callee alone.
+  const bool keeps_array_lvalues =
+    f_op.is_symbol() && f_op.identifier() == "c:@F@__ESBMC_assigns_impl";
+
   for (unsigned i = 0; i < arguments.size(); i++)
   {
     exprt &op = arguments[i];
+    const bool was_array_lvalue =
+      keeps_array_lvalues && is_address_of_array(op, ns);
+
     adjust_expr(op);
+
+    if (was_array_lvalue)
+      restore_array_lvalue(op);
 
     if (i < argument_types.size())
     {
@@ -1298,6 +1356,44 @@ compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
          (identifier == builtin_name) ||
          compare_float_suffix(identifier, underscore_name) ||
          (identifier == underscore_name);
+}
+
+/// The float functions that lower to a node taking the call's arguments
+/// unchanged, keyed by base name; null when `expr` is not such a call.
+///
+/// The match is on the callee's base name, which a program is free to reuse --
+/// `int remainder(int, int)` is an ordinary definition, and the nodes below are
+/// floating-point only (`ieee_rem2t::do_simplify` asserts on the type). Lower
+/// only when the call is actually shaped like the C library function, so a
+/// same-named integer function keeps its body.
+static const char *float_lowering_id(
+  const irep_idt &identifier,
+  const side_effect_expr_function_callt &expr)
+{
+  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  static const std::pair<const char *, const char *> lowerings[] = {
+    {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
+
+  /* c2goto compiles the models with this same binary, and libm/remainder.c's
+   * own call is what puts ieee_rem into the model. The shape test would strip
+   * it there, so only a program's call is checked -- which is where a
+   * same-named integer definition can appear. */
+  if (!config.options.get_bool_option("building-c-library"))
+  {
+    if (!expr.type().is_floatbv())
+      return nullptr;
+
+    for (const exprt &arg : expr.arguments())
+      if (!arg.type().is_floatbv())
+        return nullptr;
+  }
+
+  for (const auto &[name, node_id] : lowerings)
+    if (compare_float_suffix(identifier, name))
+      return node_id;
+
+  return nullptr;
 }
 
 /// True for the abs builtins that may be lowered to an `abs` node. That node
@@ -1582,15 +1678,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if (compare_float_suffix(identifier, "nearbyint"))
+    else if (const char *node_id = float_lowering_id(identifier, expr))
     {
-      exprt new_expr("nearbyint", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
-    }
-    else if (compare_float_suffix(identifier, "fma"))
-    {
-      exprt new_expr("ieee_fma", expr.type());
+      exprt new_expr(node_id, expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }

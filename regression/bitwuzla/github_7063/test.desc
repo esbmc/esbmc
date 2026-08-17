@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property --loop-invariant-check --bitwuzla
+^VERIFICATION FAILED$
+^Violated property:$
+^  FAILED +\[main\.assertion\.1\] +line 15 +loop invariant base case$
+^\*\* 3 of 4 properties failed, 1 passed$
+\A(?![\s\S]*Can't get boolean value)[\s\S]*\Z

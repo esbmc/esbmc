@@ -1,0 +1,4 @@
+CORE
+main.c
+--gcc-nested-functions --no-library --goto-functions-only
+esbmc-nested\.main\.c@F@__esbmc_nested_

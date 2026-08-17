@@ -1043,7 +1043,10 @@ void goto_convertt::convert_assign(
   {
     remove_sideeffects(rhs, dest);
 
-    if (rhs.type().is_code())
+    // to_code() asserts on the expression id, so test that rather than the
+    // type: a dereferenced function pointer is code-*typed* but is not a
+    // statement, and a member callee reaches here in that shape.
+    if (rhs.is_code())
     {
       convert(to_code(rhs), dest);
       return;
