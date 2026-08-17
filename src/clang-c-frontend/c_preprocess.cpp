@@ -19,7 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <util/config/config.h>
 #include <util/base/i2string.h>
-#include <clang-cpp-frontend/esbmc_internal_cpp.h>
 extern "C"
 {
 #include <cpp/iface.h>
@@ -159,13 +158,10 @@ static const char *cpp_ansic_defs[] = {
   "__STDC__",
   nullptr};
 
-static const char *cpp_cpp_defs[] = {"__cplusplus=1", nullptr};
-
 int configure_and_run_cpp(
   const char *out_file_buf,
   const std::string &path,
-  const char **platformdefs,
-  bool is_cpp);
+  const char **platformdefs);
 
 void setup_cpp_defs(const char **defs)
 {
@@ -182,7 +178,7 @@ void setup_cpp_defs(const char **defs)
 #  include <sys/wait.h>
 #  include <unistd.h>
 
-bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
+bool c_preprocess(const std::string &path, std::ostream &outstream)
 {
   char out_file_buf[32], stderr_file_buf[32];
   pid_t pid;
@@ -251,14 +247,14 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
   defs = cpp_linux_defs;
 #  endif
 
-  exit(configure_and_run_cpp(out_file_buf, path, defs, is_cpp));
+  exit(configure_and_run_cpp(out_file_buf, path, defs));
 }
 
 #else /* __WIN32__ */
 
 #  include <io.h>
 
-bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
+bool c_preprocess(const std::string &path, std::ostream &outstream)
 {
   int err, ret;
   char out_file_buf[288], tmpdir[256];
@@ -269,7 +265,7 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
   GetTempPath(sizeof(tmpdir), tmpdir);
   GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
 
-  ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs, is_cpp);
+  ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs);
   if (ret != 0)
   {
     log_error("Preprocessor returned an error");
@@ -291,8 +287,7 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 int configure_and_run_cpp(
   const char *out_file_buf,
   const std::string &path,
-  const char **platform_defs,
-  bool is_cpp)
+  const char **platform_defs)
 {
   int ret;
 
@@ -308,9 +303,6 @@ int configure_and_run_cpp(
   setup_cpp_defs(cpp_normal_defs);
   setup_cpp_defs(platform_defs);
   setup_cpp_defs(cpp_ansic_defs);
-
-  if (is_cpp)
-    setup_cpp_defs(cpp_cpp_defs);
 
   if (config.options.get_bool_option("deadlock-check"))
   {
@@ -342,8 +334,6 @@ int configure_and_run_cpp(
   for (auto const &it : config.ansi_c.include_paths)
     record_include(it.c_str());
 
-  if (is_cpp)
-    record_include(esbmct::abstract_cpp_includes().c_str());
   record_include("/usr/include");
   record_builtin_macros();
 
