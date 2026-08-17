@@ -155,18 +155,42 @@ already recommended for catch-matching, plus one bit for char-ness, covers the C
 side. That is a materially smaller answer than "79 presentation spellings need a
 carrier", and it is the first estimate in this scope with a measurement under it.
 
-### 5.3 A simplification that falls out
+### 5.3 The simplification that does *not* fall out
 
-7 267 of the 8 066 reads are an integer whose value the node already carries.
-`convert_constant`'s `if (cformat != "")` branch could be narrowed to the char and
-float cases and print the rest from `value` — removing 90 % of the attribute's
-traffic without deciding carriage at all. PR #7122 did exactly this for the two
-*semantic* readers; this is the presentation counterpart, and it is the cheapest
-next step in this scope.
+7 267 of the 8 066 reads are an integer whose value the node already carries, so
+narrowing `convert_constant`'s `if (cformat != "")` branch to the char and float
+cases looks free. **It is not**, and the reason is worth recording before someone
+tries it.
 
-Not attempted here: it changes printed output wherever the two spellings could
-disagree, so it needs the byte-identity gate over the counterexample-producing
-suites rather than the symbol-table dump alone.
+The bitvector fall-through does not simply print the number. It has two special
+renderings, both there to emit *legal C*:
+
+| value | fall-through | `#cformat` |
+|---|---|---|
+| `>= LLONG_MAX` | `0x` + hex | plain decimal |
+| `== LLONG_MIN` | `-9223372036854775807 - 1` | plain decimal |
+
+The second exists because the decimal literal for `LLONG_MIN` is not
+representable as a C literal. Measured on a two-constant program:
+
+```
+unsigned long long a = 18446744073709551615ULL;   ->  18446744073709551615
+long long b = (-9223372036854775807LL - 1);       ->  -9223372036854775807 - 1
+```
+
+`a` prints decimal, so `#cformat` won and the fall-through would have given hex.
+`b` prints the split form, so `#cformat` was absent there and the fall-through
+ran. **The two paths disagree, and both are already in use in the same program.**
+
+So the change is not a neutral cleanup gated on byte-identity; it is a deliberate
+decision to render large integers as hex and `LLONG_MIN` as a subtraction, in
+exchange for dropping 90 % of the attribute's traffic. That may well be the right
+trade — the fall-through's forms are the more defensible ones — but it is an
+output change to be argued for, not a refactor.
+
+**Corrects the previous wording of this section**, which described it as
+narrowable "without deciding carriage at all". Deciding carriage is exactly what
+it needs: whether the printed form should follow the source text or the type.
 
 ## 6. Non-goals
 
