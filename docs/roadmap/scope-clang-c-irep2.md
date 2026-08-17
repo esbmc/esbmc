@@ -3395,3 +3395,466 @@ the tally.
 - **`adjust_type` beyond padding** and **`adjust_float_arith`'s vector branch**,
   both witnessless so far; §103.2 argues the latter's scalar path is dead
   legacy code rather than unported work.
+## 103. The `floats` suite censused — and the `ieee_*` gap does not exist
+
+`floats` is the second of §101's uncensused suites: **97 of 102 differ**. By
+cause, over the first 50:
+
+| cause | tests | owner |
+|---|---:|---|
+| name-matched builtins (`fabs`, `inf`, ...) | 25 | #7088 |
+| `migrate_expr` renaming warning | 18 | #7093 |
+| `assert` base name | 18 | #7087 |
+| boolean cast on a condition | 4 | #7099 |
+| array-to-pointer decay | 3 | #7098 |
+| `for`-init hoist | 1 | #7105 |
+
+**Every cause is owned.** Like `cstd` (§102), the suite is denser in the same
+things rather than differently affected.
+
+### 103.1 A cause that was not there
+
+A first pass tagged 2 tests as an `ieee_*` promotion gap — the
+`adjust_float_arith` arm §104.2 deferred — on the strength of `IEEE_ADD` and
+friends appearing in the default symbol table and not under `-only`. The arm was
+written to close it. It fires **zero** times, and the tag was a false positive.
+
+Measured directly:
+
+```c
+double a = nondet_double(), b = nondet_double();
+double c = a + b;
+```
+
+`double c=IEEE_ADD(a, b);` on the default path **and** under `-only` on an
+unmodified baseline. The promotion is already there without the legacy arm.
+
+The two tagged tests are `Float-no-simp8`/`9`, and their `IEEE_*` lines sit
+inside **libm model functions absent from the `-only` symbol table altogether** —
+the same "1066 vs 1067 symbols" seen in §102's `cstd` samples. An unlowered
+builtin call (#7088) changes which operational-model functions get linked, so
+whole model bodies appear or disappear. The tag matched a consequence of a cause
+already owned, in a function that is not the program's.
+
+The arm was deleted rather than shipped. It would have been an arm with no
+witness, which is what §94.1 and §102.2 both declined to do.
+
+### 103.2 A dead-code candidate
+
+That measurement says something about the legacy pass, not just the port: if a
+float `+` is already an `ieee_add` before `clang_c_adjust` runs — which is what
+`-only` on an unmodified baseline demonstrates, since it never calls
+`adjust_float_arith` — then **`adjust_float_arith`'s scalar path is dead on the C
+frontend**. Its vector branch may not be; the arm explicitly handles a
+vector-of-float and returns before attaching a rounding mode.
+
+That makes it a candidate for the dead-code process rather than for porting:
+`CLAUDE.md`'s C-Dead sub-mode, with the vector case checked separately. Recorded
+here rather than acted on, because deleting a legacy arm needs its own proof and
+is not this scope's business.
+
+### 103.3 Suites remaining
+
+`esbmc-unix` (438) is the last of §101's list. On the evidence of `cstd` and
+`floats`, expect the same four owned causes and no new ones.
+## 99. The fifteen open PRs do not batch-merge — an integration attempt
+
+Fifteen Phase 6 PRs were open with none merged, so rather than add a sixteenth
+arm this section reports an attempt to merge them all onto master at once and
+measure the combined divergence. **The combined number was not obtained**: the
+integration does not build, for two reasons that matter to whoever lands them.
+
+### 99.1 The matcher move collides with a function master added
+
+PRs #7086/#7088 move `compare_float_suffix`, `compare_unscore_builtin`,
+`is_abs_builtin_name`, `is_name_matched_builtin` and `shadows_user_definition`
+out of `clang_c_adjust_expr.cpp` into `builtin_names.{h,cpp}`, deleting that
+region. Since those branches were cut, master gained **#7028**, which added
+`float_lowering_id` *inside the same region* and calls it from
+`do_special_functions`.
+
+Git flags this as a conflict, so it is not silent — but the conflict looks like
+"branch deleted a block, master edited it", and resolving it the obvious way
+(take the deletion) removes `float_lowering_id` and the build fails with
+`use of undeclared identifier 'float_lowering_id'`. The resolution has to keep
+master's new function and move only the five matchers.
+
+### 99.2 Adjacent helpers lose their shared closing brace
+
+Eight of the branches add a `static` helper and a dispatch line to
+`clang_c_adjust_irep2.cpp`, all in the same two places. When two of them are
+merged, git's conflict region covers each side's body but **not** the closing
+brace, which is shared context. Resolving with "keep both sides" therefore
+produces two function headers and one brace — `function definition is not
+allowed here` — and where the arms are longer it splices two bodies together
+(`redefinition of 'before0'`).
+
+Again: git does flag it. The hazard is that these conflicts *look* like the
+textbook "both added something, keep both" case and are not.
+
+### 99.3 What follows for the merge
+
+- **Merge one PR at a time, in number order, building after each.** The
+  dependency chain (#7086 → #7087 → #7088 → #7090 → #7091 → #7092) is only the
+  declared order; the master-based arms (#7093-#7102) touch the same two
+  places and will each need a trivial-but-manual resolution once the earlier
+  ones land.
+- **#7088 needs its own master merge before anything else**, because of §99.1.
+  That resolution is a judgement, not a mechanical one.
+- The doc-section collisions already seen (§92/§93 renumbering) are the benign
+  half of the same phenomenon and can be resolved by keeping both sides; the
+  source ones cannot.
+
+### 99.4 What this section does not claim
+
+No combined divergence figure. Every per-arm number in §§90-98 was measured
+against master with only that arm applied, and those stand; how far the fifteen
+together take the corpus is unmeasured, and will stay unmeasured until they can
+be built together. Stated plainly because the obvious summary — "201 down to N"
+— is one this scope has not earned.
+## 98. The `DEAD` class: a live variable marked dead, and a hoist that does not fix it
+
+§97 left 13 untagged tests, most showing a `DEAD` instruction in a different
+place. Read properly, that class is two things, and only one of them is an
+unported arm.
+
+### 98.1 The defect
+
+For a `for` loop declaring its own variable:
+
+```c
+for (int i = 0; i < 10; ++i)
+  buf[i] = (char)nondet_int();
+```
+
+| path | placement |
+|---|---|
+| default | `DECL i`, the loop, `GOTO 1`, then `2: DEAD ...@i` |
+| `-only` | `DECL i`, **`DEAD ...@i`**, then the loop guard |
+
+Under the flag the loop variable is marked dead *before the body that reads and
+writes it*. That is a scope error, not a spelling one.
+
+No verdict impact is demonstrated: an assertion over a value accumulated in such
+a loop verifies identically on both paths (`--unwind 12`). Stated rather than
+implied, because "marks a live variable dead" sounds worse than what has been
+shown, and because symex's own treatment of `DEAD` for a scalar is what absorbs
+it. It remains a divergence that must close before the round-trip can be deleted.
+
+Pinned as `regression/esbmc/irep2_only_for_scope_knownbug`, KNOWNBUG, whose
+regex is confirmed to match the **default** path — so the test flips to CORE when
+the placement is fixed rather than being vacuously green.
+
+### 98.2 The arm this is not
+
+`clang_c_adjust::adjust_for` hoists the loop's init into an enclosing block —
+`for (a; b; c) d;` becomes `{ a; for (; b; c) d; }` — and its comment records
+that it is *"the only structurally-mutating adjust_* method"*, fenced on a
+non-nil init because re-running it would move a now-nil init into a fresh block
+and break goto_convert (#5298). That arm is unported, so it was the obvious
+candidate.
+
+It was written and measured, and **it is not the fix**. Ported, it:
+
+- fires on 4 of the sample's tests (a plain `for (int i = 0; ...)` does not reach
+  it: clang has already hoisted, so `init` is nil);
+- converges those tests — `github_4978` from 14 differing lines to 8,
+  `github_1890_2` 28 to 24, 33 767 to 33 743 corpus-wide;
+- **leaves the misplaced `DEAD` exactly where it was.**
+
+So it is a faithful port that moves location comments and nothing a test can
+meaningfully pin, while the defect that dominates its own class survives. Not
+shipped on its own for that reason; it belongs in the change that fixes §98.1,
+where the two can be gated together. The measurements are recorded here so the
+next attempt starts from them rather than repeating the dead end.
+
+### 98.3 Where to start
+
+The placement is `convert_block`'s destructor unwinding, not the adjuster: the
+`-only` and default goto programs differ in where `i`'s scope ends, and the
+adjuster only decides what block structure `goto_convert` is handed. The next
+step is to find which block the `-only` path puts the declaration in — the hoist
+above changes that structure and does *not* move the `DEAD`, which is the useful
+negative result.
+## 93. The four tests that diverged against themselves
+
+PR #7086 recorded that `gcc_nested_func_02`, `gcc_nested_func_collision`,
+`gcc_nested_func_sibling_calls_uncaptured` and `github_746` differ between two
+runs of the *same* binary on the same input, and recommended teaching
+`irep2_canon` to strip the noise. Three of the four are fixed at the source
+instead.
+
+`transform_nested_functions` wrote its rewritten source to
+`create_tmp_file("esbmc-nested.%%%%-%%%%.c")`. The helpers it lifts have
+internal linkage, so clang's USR for each embeds the **basename of the file it
+was parsed from** -- and `generateUSRForDecl` is what
+`clang_c_convertert::get_decl_name` uses. The random basename therefore reached
+the symbol table: same input, same flags, a different goto program every run.
+The `#line 1 "<source>"` directive already at the top of the rewritten file
+fixes locations, not USRs.
+
+The fix keeps the uniqueness and moves it somewhere the USR cannot see: a
+per-run temp **directory** with a deterministic file name inside it, derived
+from the source's basename (`esbmc-nested.main.c`). Two translation units whose
+sources share a basename collide, which is the hazard two real file-static
+functions in same-named files already carry.
+
+This is worth more than the gate it unblocks. A goto program that is not a
+function of its input undermines counterexample reproducibility and any caching
+keyed on it, and it silently defeats *any* differential harness -- this one
+spent two sessions attributing those tests to whichever patch was in hand before
+the self-comparison caught that they diverge against themselves.
+
+`github_746` is untouched: its difference is clang AST-dump node addresses in an
+error message, which is diagnostic text rather than program content, and belongs
+in the canonicaliser, as that note said.
+
+## 102. The migrate warning, and a correction to §92.2
+
+§96's census put the `migrate_expr` "missing renaming delimiters" warning at the
+top of the remaining causes, 31 tests. Taken on its own terms rather than as a
+divergence row:
+
+`sym_name_to_symbol` returns level0 immediately for a symbol it finds in the
+namespace. Reaching the warning means the symbol was *not* found, and the name
+carries no `?`/`!`; the function then treats it as level0 -- which is what it
+is. A level0 symbol carries no renaming delimiters by definition, so their
+absence is not an anomaly, and the message names no action. It fires once per
+occurrence.
+
+Measured over the sample: under `-only` every instance is an implicitly-declared
+callee (`assert` 23, `perror` 3, `strlen` 1, `signbit` 1) -- library functions
+used without their headers. On the **default path** it fires too, on
+`sizeof(int[n])`, a VLA type whose extent symbol is reached before it is in the
+context. Both are ordinary construction order, not defects.
+
+Demoted to `log_debug("migrate", ...)`. The information is unchanged at
+`--verbosity 9`.
+
+### 102.1 What was considered and dropped
+
+A first version kept `log_warning` for the level2 case -- a name carrying `#`
+but no delimiters is genuinely malformed. It was dropped because that is a
+**new branch whose reachability cannot be shown**: the names come from ESBMC's
+own renaming, which always emits delimiters, and no C input reaches it.
+`CLAUDE.md`'s dead-code rule is that an added branch must be proven reachable or
+removed, and an unprovable guard is worth less than the simpler code. If a
+malformed level2 name is ever produced, the guard can come back with the input
+that produces it.
+
+### 102.2 §92.2 overstated the masking
+
+§92.2 said the warning makes the divergence count "not a sufficient statistic"
+because an arm can be entirely correct and score zero, and put 17 tests behind
+it. That was measured on the base-name branch, where the `assert` tests had lost
+their goto difference and had only the warning left. At the current stack tip --
+which does **not** include that branch -- the warning is the sole difference in
+**2** of 105 tests, and on master in **1** of 201. The general point stands; the
+number attached to it was specific to one branch's state and should not be
+carried forward.
+
+On master this change takes the sample from 201 to 200. Its value is the output
+it stops printing, and that it lets the base-name arm's effect be seen.
+## 92. The base-name defect in `declare_implicit_callee`
+
+The fix is one line: `declare_implicit_callee` gives the symbol
+`get_pretty_name(id)` -- the existing helper in `util/symtab/pretty.h`, which is
+the same `rfind('@')` split every other consumer of a mangled C identifier uses
+-- instead of the identifier itself.
+
+`complex_01`'s goto program is byte-identical to the default path afterwards.
+
+### 92.1 What it actually fixes is a vacuous pass
+
+Before: `assert(x == 2)` with `x == 1` and no `#include <assert.h>` reports
+**VERIFICATION SUCCESSFUL** under `-only`, because no `ASSERT` is emitted at
+all. That is the dangerous direction -- the `__builtin_expect` defect (PR #7086)
+reported a spurious failure, which is loud; this one silently drops the property
+and reports success. Both are wrong verdicts and only one of them complains.
+
+`irep2_only_implicit_assert_fail` pins it at the verdict (FAILED, SUCCESSFUL on
+master) and `irep2_only_implicit_assert` pins the emitted `ASSERT` in the goto
+dump (`FUNCTION_CALL: c:@F@assert(x == 1)` on master). Both discriminate against
+a control binary.
+
+### 92.2 The divergence count does not move, and the reason is instructive
+
+| | control | patched |
+|---|---:|---:|
+| full-output divergence, 297-test sample | 201 | **201** |
+| of those, goto program identical (warning-only) | 1 | **17** |
+
+The arm closes 16 tests at the goto level and the headline metric registers
+nothing, because what replaces the missing `ASSERT` is a *different* divergence
+on the same tests: `migrate_expr` warns
+
+```
+WARNING: migrate_expr: symbol 'c:@F@assert' missing renaming delimiters,
+treating as level0 with base name 'c:@F@assert'
+```
+
+once per occurrence, on stderr, which the A/B captures. The symbol genuinely is
+not in the context when the enclosing body is migrated -- `get_value2()` runs
+before `declare_implicit_callee` adds it -- so this is inherent to the ordering,
+not to the fix.
+
+Two consequences worth carrying forward. First, **the divergence count is not a
+sufficient statistic for this phase any more**: an arm can be entirely correct
+and score zero. §89 already moved the instrument once, from "what aborts" to
+"what the divergence set is made of"; this moves it again, to "goto program
+versus diagnostics", and the sweep should report both columns from here on.
+Second, the warning is itself a candidate: it is emitted for every
+implicitly-declared callee under `-only` and says nothing a user can act on.
+
+### 92.3 A local-only failure class, explained
+
+`irep2_only_complex_arith` and `irep2_only_complex_arith_int` fail on master on
+this host and pass in CI. The cause is PR #7086's finding: they call `assert`, Darwin's
+`assert.h` routes it through `__builtin_expect`, and the nondet result violates
+the assertion. glibc's `assert.h` does not, so CI never saw it. PR #7086's arm makes
+both pass locally. Anyone baselining this suite on macOS should expect that
+class to disappear with it rather than treat it as noise.
+
+## 93. Status
+
+`-only` on the 297-test sample: **201 of 297 by full output** (unchanged by this
+arm, §92.2), **184 by goto program** (200 before). PR #7086's arm, measured
+separately from master, takes the full-output count to 131.
+
+Gates: 42 of 44 in the
+`irep2_only|complex_|gcc_popcount|gcc_bswap|github_223` slice green; the two
+failures are the §92.3 pair and fail on master identically. The whole-suite gate
+is still owed.
+
+Next:
+
+1. The name-matched builtin family with `shadows_user_definition` (PR #7088).
+2. The `missing renaming delimiters` warning (§92.2) -- worth closing on its own
+   terms, and it unblocks the divergence metric.
+
+## 92. `assert` is two mechanisms, and neither of them is `assert`
+
+*(Renumbered from §90: master took that number for the unary-complex arm.)*
+
+§89 named `assert` as the next target on the strength of §88.3's twelve complex
+tests. Sized across the corpus first, as §89 asked, it splits into two unrelated
+causes, and the dominant one is not an assertion arm at all.
+
+### 92.1 The dominant cause is `__builtin_expect`, and it is a wrong verdict
+
+Darwin's `assert.h` expands `assert(e)` to
+`__builtin_expect(!(e), 0) ? __assert_rtn(...) : (void)0` under `__DARWIN_UNIX03`.
+`do_special_functions` folds `__builtin_expect(v, hint)` to `v`
+(`clang_c_adjust_expr.cpp:1587`); the IREP2 pass did not, so the call survives
+into the goto program. It has no body, so its result is nondet:
+
+```c
+#include <assert.h>
+int main(void) { int x = 1; assert(x == 1); return 0; }
+```
+
+`VERIFICATION SUCCESSFUL` on the default path, `VERIFICATION FAILED` under
+`-only`. Every `assert` on this host was nondet in this mode, which is why the
+class was large. That is a different kind of finding from §82/§84/§88, all of
+which were shape divergences: this one is a wrong answer, and the divergence
+count was measuring it only incidentally.
+
+**Host-dependence, stated rather than discovered later.** glibc's `assert.h`
+does not use `__builtin_expect`, so the share this arm carries here (36 of 70
+diverging tests in a first sample) will be smaller on Linux CI. The arm is worth
+landing regardless: `__builtin_expect` occurs directly in four corpus files and
+in the libm operational model's `predict_true`/`predict_false`
+(`src/c2goto/library/libm/musl/libm.h:92`), and a nondet assertion is a wrong
+verdict wherever it occurs, not a formatting difference.
+
+### 92.2 The second cause is a base-name defect in §70's arm
+
+A test that calls `assert` *without* including the header -- `complex_01` and
+its neighbours -- gets an implicit declaration, and §70's `declare_implicit_callee`
+declares it. `clang_c_adjust` sets `new_symbol.id = identifier` and
+`new_symbol.name = f_op.name()`, the base name; the IREP2 arm sets **both** to
+the identifier. `do_function_call_symbol` matches on the base name
+(`builtin_functions.cpp:933`), so under `-only` the symbol is named
+`c:@F@assert`, nothing matches, and the call stays a `FUNCTION_CALL` where the
+default path emits `ASSERT` -- exactly the shape §88.3 reported. `migrate_expr`
+also warns that `c:@F@assert` is "missing renaming delimiters", which is the
+same defect visible from the other side.
+
+This is a one-line defect in an already-merged arm rather than a port, so it is
+the next slice and not this one.
+
+### 92.3 Scope: the reserved spellings only
+
+Ported here: `__builtin_expect`, `__builtin_popcount{,l,ll}` and the `__popcnt*`
+aliases, `__builtin_parity{,l,ll}`, `__builtin_bswap{16,32,64}`. All are
+`__builtin_`-prefixed, which `is_name_matched_builtin`'s comment
+(`clang_c_adjust_expr.cpp:1381-1385`) calls out as reserved: a program
+cannot supply its own definition, so unlike `is_name_matched_builtin`'s family
+(`abs`, `isnan`, `isinf`, `inf`, `huge_val`, ...) they need no
+`shadows_user_definition` query. That family, and the composite lowerings
+(`__builtin_isinf_sign`, `__builtin_fpclassify`), are the natural successor.
+
+**Not ported: the relational family.** `__builtin_isgreater` and its siblings
+occur **zero** times in the C corpus's sources. §39.1 of the parent roadmap
+records what porting an unexercised construct costs -- jimple's `nondet` override
+held a byte-identity claim for nine PRs because nothing executed it -- so they
+wait for a slice that brings its own tests.
+
+One representational note: `popcount2t`'s type is hard-fixed to `int32`
+(`irep2_expr.h:1074`) where the legacy node uses `int_type()`. Identical on every
+supported target; a 16-bit-`int` target would diverge, and the fix would be to
+give `popcount2t` a type rather than to work around it here.
+
+### 92.4 Result
+
+Measured over a 297-test stride sample of `regression/esbmc`, control and
+patched binaries both saved before the sweep:
+
+| | control | patched |
+|---|---:|---:|
+| diverging under `-only` | 201 | **131** |
+| identical | 96 | 166 |
+| tests that regressed (SAME → DIFF) | -- | **0** |
+
+Default path unchanged: of the 131 tests diverging under both binaries, 127
+produce byte-identical default-path dumps. The other four
+(`gcc_nested_func_02`, `gcc_nested_func_collision`,
+`gcc_nested_func_sibling_calls_uncaptured`, `github_746`) differ **against
+themselves** -- re-running one binary twice on the same input reproduces the
+difference. The nested-function transform names its synthetic file
+`esbmc-nested.<rand>.c` and the clang AST dump prints node addresses, and
+`irep2_canon` strips neither. Any A/B over this corpus will show those four
+forever; they should be added to the canonicaliser rather than re-investigated.
+
+Three tests pin the arm, at the verdict: the fold is invisible in shape terms
+once it has happened, so only a value distinguishes it. The hint operand is
+`0` in the passing test and `1` in the failing one, which makes returning the
+hint instead of the value kill both.
+
+| mutant | killed by |
+|---|---|
+| arm disabled | `..._expect`, `..._bit_ops` |
+| `__builtin_expect` yields the hint, not the value | `..._expect`, `..._expect_fail` |
+| parity `popcount & 1` → `& 2` | `..._bit_ops` |
+| `bswap` → identity | `..._bit_ops` |
+
+## 93. Status
+
+`-only`: **131 of 297 diverge** on the stride sample (201 before this arm), 0
+regressions, default path unchanged. Unary complex (§88.3) is in flight
+separately.
+
+Gates run: 694 unit tests green; the 85-test
+`gcc_popcount|gcc_bswap|builtin_|complex_|irep2_only|csmith|github_223` slice
+green. **The whole-suite gate did not run** -- the machine's 1-minute load
+average was above 10 and `ctest -L esbmc` did not complete inside the 5-minute
+cap at any stride tried. Stated rather than omitted: this arm is gated on
+`sole_adjuster` and so cannot reach the default path by construction, but the
+suite number is owed and not paid.
+
+Next, in order:
+
+1. **§92.2's base-name defect.** One line, and it closes the `assert` class
+   §88.3 actually named.
+2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
+   ported alongside it -- a symbol-table query, so the same shape of work as §70.
