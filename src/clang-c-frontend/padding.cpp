@@ -273,9 +273,14 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   const exprt &alignment = static_cast<const exprt &>(type.find("alignment"));
   if (alignment.is_not_nil())
   {
-    const auto tmp_i = string2integer(alignment.cformat().as_string());
-    if (tmp_i > max_alignment)
-      max_alignment = tmp_i;
+    /* Read the constant's value, not its `#cformat` text. constant_exprt stores
+     * the value in `value` and a decimal rendering in `#cformat`; the latter is
+     * a presentation attribute that a node built any other way need not carry,
+     * and reading it made an explicit alignment depend on one. */
+    BigInt tmp_i = 0;
+    if (!to_integer(alignment, tmp_i))
+      if (tmp_i > max_alignment)
+        max_alignment = tmp_i;
   }
   // Is the struct packed, without any alignment specification?
   else if (type.get_bool("packed"))
