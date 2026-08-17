@@ -7,6 +7,9 @@ typedef struct { int coeffs[4]; } P;
 extern P *g;
 void f(P *b) {
   __ESBMC_requires(b != 0);
+  /* Guarded: b must stay able to equal g on entry, which is the case the
+   * laundering guard exists for. */
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(P)));
   __ESBMC_requires(__ESBMC_is_fresh(g, sizeof(P)));
   __ESBMC_assigns(g);
   __ESBMC_assigns(g->coeffs);

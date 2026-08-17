@@ -43,6 +43,7 @@ void printer_init(Printer *self) {
 
 // Fib timer reaction
 void fib_reaction_timer(Fib *self, int *out) {
+  __ESBMC_requires(__ESBMC_is_fresh(self, sizeof(Fib)));
     __ESBMC_requires(self != NULL);
     __ESBMC_requires(out != NULL);
     __ESBMC_requires(__ESBMC_is_fresh(out, sizeof(int)));

@@ -15,6 +15,10 @@ void callee(P *a, P *b)
 {
   __ESBMC_requires(a != 0);
   __ESBMC_requires(b != 0);
+  /* Guarded so it states the extent without also stating separation, which is
+   * what an unconditional is_fresh would add and what this test must not have. */
+  __ESBMC_requires(a == 0 || __ESBMC_is_fresh(a, sizeof(P)));
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(P)));
   __ESBMC_assigns(a->coeffs);
   __ESBMC_ensures(a->coeffs[0] == 1);
   __ESBMC_ensures(b->coeffs[0] == __ESBMC_old(b->coeffs[0]));

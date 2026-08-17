@@ -6,6 +6,9 @@ typedef struct { int x; } S;
 void f(S *r, S *b) {
   __ESBMC_requires(r != 0);
   __ESBMC_requires(b != 0);
+  /* Guarded: b has to stay free to alias r for the frame check to be tested. */
+  __ESBMC_requires(r == 0 || __ESBMC_is_fresh(r, sizeof(S)));
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(S)));
   __ESBMC_assigns(*r);
   __ESBMC_ensures(r->x == 1);
   r->x = 1;

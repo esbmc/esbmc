@@ -21,6 +21,7 @@ typedef struct
 
 void set_entity(Entity *e, int x, int y, int f)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(e, sizeof(Entity)));
   __ESBMC_requires(e != NULL);
   __ESBMC_ensures(e->pos.x == x && e->pos.y == y);
   __ESBMC_ensures(e->flags == f);

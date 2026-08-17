@@ -14,6 +14,7 @@ typedef struct {
 // Function that demonstrates multiple __ESBMC_old references
 // The same expression __ESBMC_old(s->inUse) appears 3 times
 int request(State *s) {
+  __ESBMC_requires(__ESBMC_is_fresh(s, sizeof(State)));
     __ESBMC_requires(s != NULL);
     
     // These ensures clauses reference __ESBMC_old(s->inUse) multiple times

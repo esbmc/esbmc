@@ -15,6 +15,7 @@ typedef struct
 
 void init_buf(Buf *b, int *d, int sz)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(b, sizeof(Buf)));
   __ESBMC_requires(b != NULL && d != NULL && sz > 0);
   __ESBMC_ensures(b->data == d);
   __ESBMC_ensures(b->size == sz);
