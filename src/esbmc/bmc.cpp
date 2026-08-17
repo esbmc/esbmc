@@ -25,6 +25,7 @@
 #include <regex>
 #include <ac_config.h>
 #include <esbmc/bmc.h>
+#include <esbmc/property_report.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/build_goto_trace.h>
@@ -114,6 +115,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   interleaving_number = 0;
   interleaving_failed = 0;
 
+  // The Python frontend hides functions imported from the user's own modules
+  // too, so there a hidden body does not mean "our operational model" and the
+  // report must not demote them (same caveat as remove_library_assertions).
+  if (config.language.lid != language_idt::PYTHON)
+    library_files = collect_library_assertion_files(funcs);
+
   ltl_results_seen[ltl_res_bad] = 0;
   ltl_results_seen[ltl_res_failing] = 0;
   ltl_results_seen[ltl_res_succeeding] = 0;
@@ -194,6 +201,37 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   {
     sarif_goto_trace(options, ns, goto_trace, dead_store_advisories);
     dead_store_sarif_written = true;
+  }
+}
+
+void bmct::record_violated_properties(
+  smt_convt &smt_conv,
+  const symex_target_equationt &eq) const
+{
+  // A subprocess SMT-LIB backend answers sat/unsat without necessarily being
+  // able to produce a model (that is what --result-only buys there). Which
+  // claim failed is then genuinely unknown, so leave the properties
+  // NotChecked rather than guess -- and do not ask, because get-value would
+  // have nothing to read.
+  if (!smt_conv.has_model())
+    return;
+
+  for (const auto &step : eq.SSA_steps)
+  {
+    if (!step.is_assert() || step.ignore)
+      continue;
+
+    // Same idiom as build_goto_trace: an unevaluatable condition renders as
+    // violated, not as held.
+    if (smt_conv.l_get(step.cond_expr).is_true())
+      continue;
+
+    const locationt &location = step.source.pc->location;
+    const std::string description = id2string(step.comment);
+    goto_functionst::property_verdicts.record(
+      description + " at " + location.as_string(),
+      property_verdictt::Failed,
+      property_location(location, description));
   }
 }
 
@@ -501,10 +539,15 @@ void bmct::report_trace(smt_resultt &res, const symex_target_equationt &eq)
       break;
     if (!bs && show_cex)
     {
+      // --show-cex on an inductive-step or forward-condition SAT: that model
+      // starts from a havoc'd state, so it witnesses no violation of the
+      // program and must not reach a verdict (multi_property_check draws the
+      // same line at its `is ? Unknown : Failed`).
       error_trace(*runtime_solver, eq);
     }
     else if (!is && !fc)
     {
+      record_violated_properties(*runtime_solver, eq);
       error_trace(*runtime_solver, eq);
     }
     break;
@@ -1761,12 +1804,23 @@ smt_resultt bmct::start_bmc()
     dead_store_sarif_written = true;
   }
 
-  if (options.get_bool_option("multi-property"))
-    // multi-property traces are output during the run(eq); the verdicts are
-    // held back until every interleaving has been explored
-    report_property_verdicts();
-  else
+  // multi-property traces are output during the run(eq); the verdicts are
+  // held back until every interleaving has been explored
+  if (!options.get_bool_option("multi-property"))
     report_trace(res, *eq);
+
+  // A single monolithic UNSAT refutes the disjunction of every claim's
+  // violation, so on a genuinely conclusive run each claim holds. Anything
+  // weaker leaves the properties this phase never separated out as NotChecked.
+  if (all_properties_proved(res))
+    goto_functionst::property_verdicts.promote_unchecked_to_passed();
+
+  // The report describes the whole run, so an iterative strategy prints it
+  // with its final verdict rather than once per k. --multi-property has
+  // always reported per phase, and keeps doing so where a phase decided
+  // something.
+  if (reports_final_verdict(res) || options.get_bool_option("multi-property"))
+    report_property_verdicts(res);
   report_result(res);
 
   // Dead-store advisories are verdict-independent, but the trace paths that
@@ -2135,6 +2189,8 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       if (step.is_assert() && !step.ignore)
         ++remaining_asserts;
     }
+
+    seed_property_verdicts(*eq);
 
     if (
       options.get_bool_option("program-only") ||
@@ -2557,6 +2613,9 @@ smt_resultt bmct::multi_property_check(
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
+    const property_locationt claim_ploc =
+      property_location(claim.claim_location, claim.claim_comment);
+
     if (fail_fast_hit)
     {
       // The skipped probes were never solved. Counting them as unreached
@@ -2564,7 +2623,7 @@ smt_resultt bmct::multi_property_check(
       if (claim.claim_property == "instrumented assertion")
       {
         goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Unknown);
+          claim.claim_cstr, property_verdictt::Unknown, claim_ploc);
         note_undecided_cov_goal("--multi-fail-fast limit reached");
       }
       return;
@@ -2694,6 +2753,7 @@ smt_resultt bmct::multi_property_check(
         goto_functionst::property_verdicts.record(
           claim.claim_cstr,
           is_vacuous ? property_verdictt::Unknown : property_verdictt::Passed,
+          claim_ploc,
           is_vacuous ? "vacuous discharge: path assumptions are unsatisfiable; "
                        "possible causes include an over-constrained loop "
                        "invariant, requires clause, or upstream assume"
@@ -2702,6 +2762,7 @@ smt_resultt bmct::multi_property_check(
         goto_functionst::property_verdicts.record(
           claim.claim_cstr,
           is ? property_verdictt::Unknown : property_verdictt::Failed,
+          claim_ploc,
           is ? "inductive step could not prove this claim" : "");
       else
       {
@@ -2718,7 +2779,7 @@ smt_resultt bmct::multi_property_check(
           // Neither reached nor unreached. Recorded so the goal still gets a
           // line and the run closes as INCOMPLETE.
           goto_functionst::property_verdicts.record(
-            claim.claim_cstr, property_verdictt::Unknown);
+            claim.claim_cstr, property_verdictt::Unknown, claim_ploc);
           note_undecided_cov_goal(
             solver_result == P_SMTLIB
               ? "SMT formula only, no solving performed"
@@ -3046,10 +3107,212 @@ smt_resultt bmct::multi_property_check(
   return final_result;
 }
 
-void bmct::report_property_verdicts() const
+void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
 {
-  if (options.get_bool_option("result-only"))
+  // A coverage or dead-code run fills the same table with reachability probes
+  // rather than properties, and renders them in its own vocabulary; seeding
+  // would invent goals it never instrumented.
+  if (
+    options.get_bool_option("coverage-measurement") ||
+    options.get_bool_option("dead-code-check"))
     return;
+
+  for (const auto &step : eq.SSA_steps)
+  {
+    if (!step.is_assert())
+      continue;
+
+    const locationt &location = step.source.pc->location;
+    const std::string description = id2string(step.comment);
+    goto_functionst::property_verdicts.record(
+      description + " at " + location.as_string(),
+      property_verdictt::NotChecked,
+      property_location(location, description));
+  }
+}
+
+bool bmct::reports_final_verdict(smt_resultt res) const
+{
+  if (options.get_bool_option("k-induction-parallel"))
+    return false;
+
+  const bool fc = options.get_bool_option("forward-condition");
+  const bool is = options.get_bool_option("inductive-step");
+
+  if (res == P_SATISFIABLE)
+    return !is && !fc;
+
+  if (res != P_UNSATISFIABLE)
+    return false;
+
+  if (is && options.get_bool_option("termination"))
+    return true;
+
+  // An intermediate round of an iterative strategy deepens rather than
+  // concludes; reporting here would print one table per k.
+  return !options.get_bool_option("base-case") &&
+         !options.get_bool_option("suppress-bounded-success");
+}
+
+bool bmct::all_properties_proved(smt_resultt res) const
+{
+  // Stricter than report_result() on report_incomplete alone: a run cut short
+  // by --multi-fail-fast or --multi-property-interleavings still reports
+  // SUCCESSFUL, having found no violation, but claims it never solved are not
+  // thereby proved, and promoting them would invent per-property results the
+  // run's own "report is partial" note contradicts.
+  if (
+    res != P_UNSATISFIABLE || report_incomplete || vacuity_detected ||
+    ltl_uninstrumented)
+    return false;
+
+  // Modes whose SAT/UNSAT is not a statement about the program's properties,
+  // and rounds already known not to prove them.
+  static const char *const disqualifying[] = {
+    "k-induction-parallel",
+    "diagnose-unknown-properties",
+    "coverage-measurement",
+    "dead-code-check",
+    "kind-violation-found",
+    "suppress-bounded-success"};
+  for (const char *option : disqualifying)
+    if (options.get_bool_option(option))
+      return false;
+
+  const bool is = options.get_bool_option("inductive-step");
+  if (
+    is && (options.get_bool_option("termination") ||
+           options.get_bool_option("disable-inductive-step")))
+    return false;
+
+  // A base case alone is bounded: it refutes a bug up to k, it does not prove
+  // the property. Only multi-property records a per-claim verdict there.
+  return !options.get_bool_option("base-case") ||
+         options.get_bool_option("multi-property");
+}
+
+/// A coverage run records probes in the same table, but a probe is a
+/// reachability question, not a property: SAT means the location is reachable,
+/// so it must not be labelled a violation (issue #6387). Rendered separately,
+/// and deliberately unchanged, so a coverage report keeps its own vocabulary.
+void bmct::report_coverage_goal_verdicts(
+  const std::map<std::string, property_resultt> &verdicts) const
+{
+  const bool is_color = options.get_bool_option("color");
+  const std::string GREEN = is_color ? "\033[32m" : "";
+  const std::string YELLOW = is_color ? "\033[33m" : "";
+  const std::string RESET = is_color ? "\033[0m" : "";
+
+  size_t unreached = 0, reached = 0, undecided = 0;
+  for (const auto &[property, result] : verdicts)
+  {
+    const char *label = nullptr;
+    const std::string *color = nullptr;
+    switch (result.verdict)
+    {
+    case property_verdictt::Passed:
+    case property_verdictt::NotChecked:
+      ++unreached;
+      label = "- UNREACHED";
+      color = &YELLOW;
+      break;
+    case property_verdictt::Unknown:
+      ++undecided;
+      label = "? UNDECIDED";
+      color = &YELLOW;
+      break;
+    case property_verdictt::Failed:
+      ++reached;
+      label = "✓ REACHED";
+      color = &GREEN;
+      break;
+    }
+
+    log_status(
+      "{}{}{}: '{}'{}",
+      *color,
+      label,
+      RESET,
+      prettify_solidity_expr(property),
+      result.note.empty() ? "" : " (" + result.note + ")");
+  }
+
+  std::ostringstream oss;
+  oss << "Coverage goals: " << verdicts.size() << " " << GREEN << "✓ "
+      << reached << " reached" << RESET;
+  if (unreached > 0)
+    oss << ", - " << unreached << " unreached";
+  if (undecided > 0)
+    oss << ", " << YELLOW << "? " << undecided << " undecided" << RESET;
+
+  log_result("{}", oss.str());
+}
+
+void bmct::print_property_rows(
+  const std::vector<property_rowt> &rows,
+  const property_countst &counts) const
+{
+  const bool is_color = options.get_bool_option("color");
+  const std::string RESET = is_color ? "\033[0m" : "";
+
+  log_result("\n** Results:");
+
+  std::string group;
+  for (const auto &row : rows)
+  {
+    const char *color = "";
+    if (is_color)
+      color = row.verdict == property_verdictt::Failed   ? "\033[31m"
+              : row.verdict == property_verdictt::Passed ? "\033[32m"
+                                                         : "\033[33m";
+
+    const std::string row_group =
+      row.file + (row.function.empty() ? "" : ", function " + row.function);
+    if (row_group != group)
+    {
+      group = row_group;
+      log_result("{}", group);
+    }
+
+    log_result(
+      "  {}{:<11}{}  {:<{}}  line {:>{}}  {}{}",
+      color,
+      verdict_label(row.verdict),
+      RESET,
+      "[" + row.id + "]",
+      counts.id_width,
+      row.line,
+      counts.line_width,
+      prettify_solidity_expr(row.description),
+      row.note.empty() ? "" : " (" + row.note + ")");
+  }
+}
+
+void bmct::print_property_summary(size_t total, const property_countst &counts)
+  const
+{
+  const bool is_color = options.get_bool_option("color");
+  const std::string GREEN = is_color ? "\033[32m" : "";
+  const std::string RED = is_color ? "\033[31m" : "";
+  const std::string YELLOW = is_color ? "\033[33m" : "";
+  const std::string RESET = is_color ? "\033[0m" : "";
+
+  std::ostringstream oss;
+  oss << "\n** " << (counts.failed > 0 ? RED : "") << counts.failed << " of "
+      << total << " properties failed" << (counts.failed > 0 ? RESET : "");
+  if (counts.passed > 0)
+    oss << ", " << GREEN << counts.passed << " passed" << RESET;
+  if (counts.unknown > 0)
+    oss << ", " << YELLOW << counts.unknown << " unknown" << RESET;
+  if (counts.not_checked > 0)
+    oss << ", " << YELLOW << counts.not_checked << " not checked" << RESET;
+
+  log_result("{}", oss.str());
+}
+
+void bmct::report_property_verdicts(smt_resultt res) const
+{
+  const bool final = reports_final_verdict(res);
 
   // --dead-code-check turns --multi-property on implicitly. Its live-branch
   // probes reach a verdict of Failed, which contradicts both the [Dead code]
@@ -3063,95 +3326,62 @@ void bmct::report_property_verdicts() const
   if (verdicts.empty())
     return;
 
-  // ANSI color codes
-  bool is_color = options.get_bool_option("color");
-  const std::string GREEN = is_color ? "\033[32m" : "";
-  const std::string RED = is_color ? "\033[31m" : "";
-  const std::string YELLOW = is_color ? "\033[33m" : "";
-  const std::string RESET = is_color ? "\033[0m" : "";
-
-  // A coverage run records probes in the same table, but a probe is a
-  // reachability question, not a property: SAT means the location is
-  // reachable, so it must not be labelled a violation (issue #6387).
-  const bool is_cov = options.get_bool_option("coverage-measurement");
-
-  size_t passed = 0, failed = 0, unknown = 0;
-  for (const auto &[property, result] : verdicts)
+  if (options.get_bool_option("coverage-measurement"))
   {
-    const char *label = nullptr;
-    const std::string *color = nullptr;
-    switch (result.verdict)
-    {
-    case property_verdictt::Passed:
-      ++passed;
-      label = is_cov ? "- UNREACHED" : "✓ PASSED";
-      color = is_cov ? &YELLOW : &GREEN;
-      break;
-    case property_verdictt::Unknown:
-      ++unknown;
-      label = is_cov ? "? UNDECIDED" : "? UNKNOWN";
-      color = &YELLOW;
-      break;
-    case property_verdictt::Failed:
-      ++failed;
-      label = is_cov ? "✓ REACHED" : "✗ FAILED";
-      color = is_cov ? &GREEN : &RED;
-      break;
-    }
-
-    log_status(
-      "{}{}{}: '{}'{}",
-      *color,
-      label,
-      RESET,
-      prettify_solidity_expr(property),
-      result.note.empty() ? "" : " (" + result.note + ")");
+    report_coverage_goal_verdicts(verdicts);
+    return;
   }
 
-  std::ostringstream properties_oss;
-  if (is_cov)
-  {
-    properties_oss << "Coverage goals: " << verdicts.size() << " " << GREEN
-                   << "✓ " << failed << " reached" << RESET;
-    if (passed > 0)
-      properties_oss << ", - " << passed << " unreached";
-    if (unknown > 0)
-      properties_oss << ", " << YELLOW << "? " << unknown << " undecided"
-                     << RESET;
-  }
-  else
-  {
-    properties_oss << "Properties: " << verdicts.size() << " verified";
+  const std::vector<property_rowt> rows =
+    build_property_rows(verdicts, library_files);
+  const property_countst counts = count_properties(rows);
 
-    if (passed > 0)
-      properties_oss << " " << GREEN << "✓ " << passed << " passed" << RESET;
+  // An intermediate phase of an iterative strategy that decided nothing has
+  // nothing to report; another phase will.
+  if (!final && !counts.anything_decided())
+    return;
 
-    if (failed > 0)
-      properties_oss << ", " << RED << "✗ " << failed << " failed" << RESET;
+  print_property_rows(rows, counts);
+  print_property_summary(rows.size(), counts);
 
-    if (unknown > 0)
-      properties_oss << ", " << YELLOW << "? " << unknown << " unknown"
-                     << RESET;
-  }
+  const size_t failed = counts.failed;
+  const size_t not_checked = counts.not_checked;
 
-  log_result("{}", properties_oss.str());
+  // A violation was found but pinned on nothing: the solver answered sat
+  // without a model to attribute it with (the subprocess SMT-LIB backends
+  // under --result-only). Saying so beats a table that reads as contradicting
+  // the verdict below it.
+  if (res == P_SATISFIABLE && failed == 0)
+    log_result(
+      "   (a violation exists, but this solver produced no model, so which "
+      "property it violates could not be determined)");
+  // Without --multi-property the run encodes one formula and stops at the
+  // first violation, so it cannot separate the properties it never decided.
+  // Say which flag would decide them rather than leave the gap unexplained.
+  else if (not_checked > 0 && !options.get_bool_option("multi-property"))
+    log_result(
+      "   (this mode stops at the first violation; use --multi-property for a "
+      "verdict on every property)");
 
   // Every property may have been discharged during symbolic execution, in
-  // which case no solver ever ran and there is nothing to time.
-  if (!solver_stats.name.empty())
+  // which case no solver ever ran and there is nothing to time. Average over
+  // the properties that reached a verdict, not over the whole table: the
+  // never-checked ones cost the solver nothing and would dilute it.
+  const size_t decided = counts.passed + counts.failed + counts.unknown;
+  if (!solver_stats.name.empty() && decided > 0)
   {
     std::ostringstream timing_oss;
     timing_oss << "Solver: " << solver_stats.name
                << " • Decision procedure total time: "
                << time2string(solver_stats.total_time_ms) << "s"
                << " • Avg: "
-               << time2string(solver_stats.total_time_ms / verdicts.size())
+               << time2string(solver_stats.total_time_ms / decided)
                << "s/property";
     log_result("{}", timing_oss.str());
   }
 
   if (report_incomplete)
-    log_status(
+    log_result(
       "This report is partial: the run stopped before every property reached "
       "a verdict, so properties are missing above, and a passing verdict "
       "holds only for the thread interleavings explored. Raise "
