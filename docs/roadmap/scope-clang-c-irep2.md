@@ -3339,3 +3339,59 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 104. All four C suites censused — and no unowned cause remains
+
+`esbmc-unix` is the last of §101's list. **53 of 60 sampled tests differ**, and
+after correcting three tag rules (see below) every cause is owned. That closes
+the census:
+
+| suite | differing | dominant cause |
+|---|---|---|
+| `regression/esbmc` | 78 of 120 (65 %) | `__builtin_expect` — 37 (#7086) |
+| `cstd` | 134 of 142 (94 %) | warning 34 (#7093), `assert` 34 (#7087) |
+| `floats` | 97 of 102 (95 %) | name-matched builtins — 25 (#7088) |
+| `esbmc-unix` | 53 of 60 (88 %) | **padding — 46 (#7100)** |
+
+**Across all four, every measured divergence is owned by an open PR.** There is
+no adjuster arm left to write for the censused C corpus. §101 said that of one
+suite; it now holds for the corpus §1.2 prices.
+
+### 104.1 The dominant cause differs per suite, which changes the priorities
+
+This is the useful result, and it is not visible from any single suite.
+`#7100` (struct/union padding) accounts for 9 tests in `regression/esbmc` and
+**46 of 53** in `esbmc-unix`: the unix headers are dense in padded unions
+(`pthread_attr_t` is a union of a `char[36]` and a `long`, whose
+`union_pad#` is missing under the flag). A reviewer sizing these PRs from
+`regression/esbmc` alone would rank #7100 sixth; on the corpus it is first or
+second.
+
+Likewise #7088 barely registers in `regression/esbmc` and is the top cause in
+`floats`, where `fabs`/`inf` are everywhere.
+
+### 104.2 Three tag rules were wrong
+
+Recorded because the same rules will be reused:
+
+- `union_pad#` is a padding token that `anon_pad` does not match — unions pad
+  under a different name.
+- `&f` for a function designator (#7092) needs its own rule; it is not a
+  by-name pattern like the others.
+- `&"lit"[0]` versus `"lit"` is the string-literal half of the decay class
+  (#7098), and reads as a quoted-string difference rather than an index.
+
+Each initially produced an UNTAGGED test that looked like a new cause. §98.2 and
+§104.3 already record that symptom-tagging misattributes; this adds that it also
+*over*-reports, and the fix is to read every untagged residue rather than trust
+the tally.
+
+### 104.3 What is left, and it is not an arm
+
+- **Landing the PRs.** §99 gives the order and the two non-mechanical conflicts.
+  Master additionally does not build at 2284cf241d (#7111).
+- **W3/W4**, coupled per §102.2 and needing a design decision, not a port.
+- **`goto_convert`**, for §98's residual `DEAD` questions.
+- **`adjust_type` beyond padding** and **`adjust_float_arith`'s vector branch**,
+  both witnessless so far; §103.2 argues the latter's scalar path is dead
+  legacy code rather than unported work.
