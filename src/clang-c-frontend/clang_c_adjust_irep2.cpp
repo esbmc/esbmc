@@ -4,6 +4,7 @@
 #include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 #include <util/symtab/namespace.h>
+#include <util/symtab/pretty.h>
 #include <utility>
 
 bool clang_c_adjust_irep2::adjust()
@@ -357,9 +358,14 @@ void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
   if (context.find_symbol(id) != nullptr)
     return;
 
+  // symbol2t carries only the linkage identifier, so the base name
+  // clang_c_adjust copies off the symbol expression (`f_op.name()`) has to be
+  // recovered from it. do_function_call_symbol matches
+  // `assert`/`__ESBMC_assume` and the rest on the base name, so leaving the
+  // identifier here leaves an assert as a plain FUNCTION_CALL (§90.2).
   symbolt sym;
   sym.id = id;
-  sym.name = id;
+  sym.name = get_pretty_name(id2string(id));
   sym.location = loc;
   sym.set_type(migrate_type_back(callee->type));
   sym.mode = "C";
