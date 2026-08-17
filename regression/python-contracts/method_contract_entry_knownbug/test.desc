@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--enforce-contract add --function add
+^VERIFICATION SUCCESSFUL$
