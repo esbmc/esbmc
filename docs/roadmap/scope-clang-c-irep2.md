@@ -3339,3 +3339,59 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+
+## 99. The fifteen open PRs do not batch-merge — an integration attempt
+
+Fifteen Phase 6 PRs were open with none merged, so rather than add a sixteenth
+arm this section reports an attempt to merge them all onto master at once and
+measure the combined divergence. **The combined number was not obtained**: the
+integration does not build, for two reasons that matter to whoever lands them.
+
+### 99.1 The matcher move collides with a function master added
+
+PRs #7086/#7088 move `compare_float_suffix`, `compare_unscore_builtin`,
+`is_abs_builtin_name`, `is_name_matched_builtin` and `shadows_user_definition`
+out of `clang_c_adjust_expr.cpp` into `builtin_names.{h,cpp}`, deleting that
+region. Since those branches were cut, master gained **#7028**, which added
+`float_lowering_id` *inside the same region* and calls it from
+`do_special_functions`.
+
+Git flags this as a conflict, so it is not silent — but the conflict looks like
+"branch deleted a block, master edited it", and resolving it the obvious way
+(take the deletion) removes `float_lowering_id` and the build fails with
+`use of undeclared identifier 'float_lowering_id'`. The resolution has to keep
+master's new function and move only the five matchers.
+
+### 99.2 Adjacent helpers lose their shared closing brace
+
+Eight of the branches add a `static` helper and a dispatch line to
+`clang_c_adjust_irep2.cpp`, all in the same two places. When two of them are
+merged, git's conflict region covers each side's body but **not** the closing
+brace, which is shared context. Resolving with "keep both sides" therefore
+produces two function headers and one brace — `function definition is not
+allowed here` — and where the arms are longer it splices two bodies together
+(`redefinition of 'before0'`).
+
+Again: git does flag it. The hazard is that these conflicts *look* like the
+textbook "both added something, keep both" case and are not.
+
+### 99.3 What follows for the merge
+
+- **Merge one PR at a time, in number order, building after each.** The
+  dependency chain (#7086 → #7087 → #7088 → #7090 → #7091 → #7092) is only the
+  declared order; the master-based arms (#7093-#7102) touch the same two
+  places and will each need a trivial-but-manual resolution once the earlier
+  ones land.
+- **#7088 needs its own master merge before anything else**, because of §99.1.
+  That resolution is a judgement, not a mechanical one.
+- The doc-section collisions already seen (§92/§93 renumbering) are the benign
+  half of the same phenomenon and can be resolved by keeping both sides; the
+  source ones cannot.
+
+### 99.4 What this section does not claim
+
+No combined divergence figure. Every per-arm number in §§90-98 was measured
+against master with only that arm applied, and those stand; how far the fifteen
+together take the corpus is unmeasured, and will stay unmeasured until they can
+be built together. Stated plainly because the obvious summary — "201 down to N"
+— is one this scope has not earned.
