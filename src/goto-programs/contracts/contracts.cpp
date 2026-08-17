@@ -974,24 +974,96 @@ static expr2tc unwrap_array_decay(const expr2tc &expr)
     if (is_index2t(addr.ptr_obj))
     {
       const index2t &idx = to_index2t(addr.ptr_obj);
-      // Check if index is 0
-      if (is_constant_int2t(idx.index))
-      {
-        const constant_int2t &idx_val = to_constant_int2t(idx.index);
-        if (idx_val.value == 0)
-        {
-          // Check if source is an array type
-          if (is_array_type(idx.source_value->type))
-          {
-            // Return the original array
-            return idx.source_value;
-          }
-        }
-      }
+      // Any constant index, not only 0. `&b[2]` is not the decay a compiler
+      // produces, but it names a place inside b that the callee then writes
+      // forward from, and the array is the only object we can widen to. That
+      // over-havocs b[0..1]; havocking more than the callee writes loses the
+      // caller information rather than granting it any, so it is the safe
+      // direction, and it is what a decayed `b` already does.
+      if (is_constant_int2t(idx.index) && is_array_type(idx.source_value->type))
+        return idx.source_value;
     }
   }
 
   return expr;
+}
+
+// The place a havoc writes to. Substituting a formal with an array argument
+// re-introduces the decay the collection step stripped once — `p` becomes
+// `&b[0]` — and an address is not a place to assign to. Widening back to the
+// whole array also covers everything the callee reaches through the decayed
+// pointer (#6961). Any other address_of names its own operand.
+static expr2tc havoc_place(const expr2tc &target)
+{
+  expr2tc place = unwrap_array_decay(target);
+  if (is_address_of2t(place))
+    return to_address_of2t(place).ptr_obj;
+  return place;
+}
+
+// Pointees a havoc has nothing to write through: void and function pointees
+// name no object, and a pointer pointee is left alone under
+// --add-symex-value-sets, as the loop-invariant havoc does. Shared by both
+// pointer-havoc paths so the two cannot drift apart.
+static bool skip_pointee_havoc(const type2tc &pointee)
+{
+  if (is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee))
+    return true;
+
+  return config.options.get_bool_option("add-symex-value-sets") &&
+         is_pointer_type(pointee);
+}
+
+// A pointer parameter is pass-by-value, so the callee cannot change the
+// caller's pointer, only what it points at. Havocking the argument itself both
+// misses that write and invents a bogus pointer, which the ensures ASSUME then
+// dereferences. Only the first element is reached this way; widening needs an
+// object, which only the decay case names. Nil when there is nothing to write
+// through.
+static expr2tc havoc_through_pointer(const expr2tc &place, const namespacet &ns)
+{
+  if (!is_pointer_type(place))
+    return place;
+
+  type2tc pointee = ns.follow(to_pointer_type(place->type).subtype);
+  if (skip_pointee_havoc(pointee))
+    return expr2tc();
+
+  return dereference2tc(pointee, place);
+}
+
+expr2tc code_contractst::instantiate_assigns_target(
+  const expr2tc &target_expr,
+  const symbolt &function_symbol,
+  const std::vector<expr2tc> &actual_args,
+  bool &is_pointer_param) const
+{
+  is_pointer_param = false;
+  expr2tc instantiated = target_expr;
+
+  if (!function_symbol.get_type().is_code())
+    return instantiated;
+
+  const code_typet::argumentst &params =
+    to_code_type(function_symbol.get_type()).arguments();
+
+  for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+  {
+    irep_idt param_id = params[i].get_identifier();
+    if (param_id.empty() || is_nil_expr(actual_args[i]))
+      continue;
+
+    type2tc param_type = migrate_type(params[i].type());
+    expr2tc param_symbol = symbol2tc(param_type, param_id);
+    // The whole target is the formal, so the havoc has an argument to follow
+    // rather than a subexpression that already names its own place.
+    if (instantiated == param_symbol)
+      is_pointer_param = is_pointer_type(param_type);
+    instantiated =
+      replace_symbol_in_expr(instantiated, param_symbol, actual_args[i]);
+  }
+
+  return instantiated;
 }
 
 std::vector<expr2tc>
@@ -4852,30 +4924,37 @@ void code_contractst::generate_replacement_at_call(
     // Now assigns targets are expression trees that need parameter substitution
     for (const expr2tc &target_expr : assigns_target_exprs)
     {
-      // Substitute function parameters with actual call arguments
-      expr2tc instantiated_target = target_expr;
+      bool target_is_pointer_param = false;
+      expr2tc instantiated_target = instantiate_assigns_target(
+        target_expr, function_symbol, actual_args, target_is_pointer_param);
 
-      if (function_symbol.get_type().is_code())
+      // `&x` names the place already, and havoc_place resolves it to x.
+      // Following the pointer as well would write through x rather than to it,
+      // which for an `int **pp` argument means havocking `*x` -- a dereference
+      // of whatever the caller's pointer happens to hold.
+      const bool names_place_directly = is_address_of2t(instantiated_target);
+      instantiated_target = havoc_place(instantiated_target);
+
+      if (target_is_pointer_param && !names_place_directly)
       {
-        const code_typet &code_type = to_code_type(function_symbol.get_type());
-        const code_typet::argumentst &params = code_type.arguments();
-
-        for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+        instantiated_target = havoc_through_pointer(instantiated_target, ns);
+        if (is_nil_expr(instantiated_target))
         {
-          const code_typet::argumentt &param = params[i];
-          irep_idt param_id = param.get_identifier();
-
-          if (!param_id.empty() && !is_nil_expr(actual_args[i]))
-          {
-            type2tc param_type = migrate_type(param.type());
-            expr2tc param_symbol = symbol2tc(param_type, param_id);
-            instantiated_target = replace_symbol_in_expr(
-              instantiated_target, param_symbol, actual_args[i]);
-          }
+          // The frame the contract named cannot be written, so say so: a
+          // dropped target reads exactly like one that was havocked.
+          log_warning(
+            "__ESBMC_assigns: nothing can be written through the pointer "
+            "parameter named at {}; the caller keeps its pre-call value",
+            call_location.as_string());
+          continue;
         }
       }
 
-      // Skip pointer havoc in value-set mode (consistent with loop invariant)
+      // Skip pointer havoc in value-set mode (consistent with loop invariant).
+      // Tested on the place actually written, after widening and after
+      // following a pointer parameter: the skip is about assigning a pointer,
+      // not about writing through one, and a target the contract named should
+      // not vanish because it was reached through a pointer variable.
       if (
         config.options.get_bool_option("add-symex-value-sets") &&
         is_pointer_type(instantiated_target))
@@ -4957,17 +5036,7 @@ void code_contractst::generate_replacement_at_call(
       // one was missing it. ns.follow() is a no-op for non-symbol types.
       type2tc pointee_type = ns.follow(ptr_type.subtype);
 
-      // Skip void*, function pointers, and unknown/nil pointed-to types
-      if (
-        is_empty_type(pointee_type) || is_code_type(pointee_type) ||
-        is_nil_type(pointee_type))
-        continue;
-
-      // Skip pointer-to-pointer havoc in value-set mode (consistent with
-      // loop-invariant havoc behaviour)
-      if (
-        config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(pointee_type))
+      if (skip_pointee_havoc(pointee_type))
         continue;
 
       // If precise assigns clause was provided it already handled this arg
