@@ -3341,6 +3341,123 @@ Next, in order:
    closely enough that `c_link` renames it the same way across TUs.
 
 
+## 104. All four C suites censused — and no unowned cause remains
+
+`esbmc-unix` is the last of §101's list. **53 of 60 sampled tests differ**, and
+after correcting three tag rules (see below) every cause is owned. That closes
+the census:
+
+| suite | differing | dominant cause |
+|---|---|---|
+| `regression/esbmc` | 78 of 120 (65 %) | `__builtin_expect` — 37 (#7086) |
+| `cstd` | 134 of 142 (94 %) | warning 34 (#7093), `assert` 34 (#7087) |
+| `floats` | 97 of 102 (95 %) | name-matched builtins — 25 (#7088) |
+| `esbmc-unix` | 53 of 60 (88 %) | **padding — 46 (#7100)** |
+
+**Across all four, every measured divergence is owned by an open PR.** There is
+no adjuster arm left to write for the censused C corpus. §101 said that of one
+suite; it now holds for the corpus §1.2 prices.
+
+### 104.1 The dominant cause differs per suite, which changes the priorities
+
+This is the useful result, and it is not visible from any single suite.
+`#7100` (struct/union padding) accounts for 9 tests in `regression/esbmc` and
+**46 of 53** in `esbmc-unix`: the unix headers are dense in padded unions
+(`pthread_attr_t` is a union of a `char[36]` and a `long`, whose
+`union_pad#` is missing under the flag). A reviewer sizing these PRs from
+`regression/esbmc` alone would rank #7100 sixth; on the corpus it is first or
+second.
+
+Likewise #7088 barely registers in `regression/esbmc` and is the top cause in
+`floats`, where `fabs`/`inf` are everywhere.
+
+### 104.2 Three tag rules were wrong
+
+Recorded because the same rules will be reused:
+
+- `union_pad#` is a padding token that `anon_pad` does not match — unions pad
+  under a different name.
+- `&f` for a function designator (#7092) needs its own rule; it is not a
+  by-name pattern like the others.
+- `&"lit"[0]` versus `"lit"` is the string-literal half of the decay class
+  (#7098), and reads as a quoted-string difference rather than an index.
+
+Each initially produced an UNTAGGED test that looked like a new cause. §98.2 and
+§104.3 already record that symptom-tagging misattributes; this adds that it also
+*over*-reports, and the fix is to read every untagged residue rather than trust
+the tally.
+
+### 104.3 What is left, and it is not an arm
+
+- **Landing the PRs.** §99 gives the order and the two non-mechanical conflicts.
+  Master additionally does not build at 2284cf241d (#7111).
+- **W3/W4**, coupled per §102.2 and needing a design decision, not a port.
+- **`goto_convert`**, for §98's residual `DEAD` questions.
+- **`adjust_type` beyond padding** and **`adjust_float_arith`'s vector branch**,
+  both witnessless so far; §103.2 argues the latter's scalar path is dead
+  legacy code rather than unported work.
+## 103. The `floats` suite censused — and the `ieee_*` gap does not exist
+
+`floats` is the second of §101's uncensused suites: **97 of 102 differ**. By
+cause, over the first 50:
+
+| cause | tests | owner |
+|---|---:|---|
+| name-matched builtins (`fabs`, `inf`, ...) | 25 | #7088 |
+| `migrate_expr` renaming warning | 18 | #7093 |
+| `assert` base name | 18 | #7087 |
+| boolean cast on a condition | 4 | #7099 |
+| array-to-pointer decay | 3 | #7098 |
+| `for`-init hoist | 1 | #7105 |
+
+**Every cause is owned.** Like `cstd` (§102), the suite is denser in the same
+things rather than differently affected.
+
+### 103.1 A cause that was not there
+
+A first pass tagged 2 tests as an `ieee_*` promotion gap — the
+`adjust_float_arith` arm §104.2 deferred — on the strength of `IEEE_ADD` and
+friends appearing in the default symbol table and not under `-only`. The arm was
+written to close it. It fires **zero** times, and the tag was a false positive.
+
+Measured directly:
+
+```c
+double a = nondet_double(), b = nondet_double();
+double c = a + b;
+```
+
+`double c=IEEE_ADD(a, b);` on the default path **and** under `-only` on an
+unmodified baseline. The promotion is already there without the legacy arm.
+
+The two tagged tests are `Float-no-simp8`/`9`, and their `IEEE_*` lines sit
+inside **libm model functions absent from the `-only` symbol table altogether** —
+the same "1066 vs 1067 symbols" seen in §102's `cstd` samples. An unlowered
+builtin call (#7088) changes which operational-model functions get linked, so
+whole model bodies appear or disappear. The tag matched a consequence of a cause
+already owned, in a function that is not the program's.
+
+The arm was deleted rather than shipped. It would have been an arm with no
+witness, which is what §94.1 and §102.2 both declined to do.
+
+### 103.2 A dead-code candidate
+
+That measurement says something about the legacy pass, not just the port: if a
+float `+` is already an `ieee_add` before `clang_c_adjust` runs — which is what
+`-only` on an unmodified baseline demonstrates, since it never calls
+`adjust_float_arith` — then **`adjust_float_arith`'s scalar path is dead on the C
+frontend**. Its vector branch may not be; the arm explicitly handles a
+vector-of-float and returns before attaching a rounding mode.
+
+That makes it a candidate for the dead-code process rather than for porting:
+`CLAUDE.md`'s C-Dead sub-mode, with the vector case checked separately. Recorded
+here rather than acted on, because deleting a legacy arm needs its own proof and
+is not this scope's business.
+
+### 103.3 Suites remaining
+
+`esbmc-unix` (438) is the last of §101's list. On the evidence of `cstd` and
+`floats`, expect the same four owned causes and no new ones.
 ## 99. The fifteen open PRs do not batch-merge — an integration attempt
 
 Fifteen Phase 6 PRs were open with none merged, so rather than add a sixteenth
