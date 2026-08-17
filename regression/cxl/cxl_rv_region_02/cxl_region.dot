@@ -1,0 +1,21 @@
+digraph state_automaton {
+	{node [shape = plaintext, style=invis, label=""] "__init_cfg_idle"};
+	{node [shape = doublecircle] "cfg_idle"};
+	{node [shape = circle] "cfg_interleave_active"};
+	{node [shape = circle] "cfg_active"};
+	{node [shape = circle] "cfg_commit"};
+	"__init_cfg_idle" -> "cfg_idle";
+	"cfg_idle" [label = "cfg_idle"];
+	"cfg_idle" -> "cfg_interleave_active" [ label = "set_size" ];
+	"cfg_interleave_active" [label = "cfg_interleave_active"];
+	"cfg_interleave_active" -> "cfg_active" [ label = "add_target" ];
+	"cfg_active" [label = "cfg_active"];
+	"cfg_active" -> "cfg_active" [ label = "add_target" ];
+	"cfg_active" -> "cfg_commit" [ label = "commit" ];
+	"cfg_commit" [label = "cfg_commit"];
+	"cfg_commit" -> "cfg_idle" [ label = "reset" ];
+	{ rank = min ;
+		"__init_cfg_idle";
+		"cfg_idle";
+	}
+}
