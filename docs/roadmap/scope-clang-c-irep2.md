@@ -3382,6 +3382,41 @@ arithmetic was lowered by an arm nothing in the corpus executed.
 that drops the vector lowering fails it — so the path is now protected before
 anyone tries to remove the arm around it.
 
+### 105.4 Extended to C++, and one reason not to delete after all
+
+§105.3 left the deletion to its own PR. Two further measurements, and it should
+stay left.
+
+`adjust_float_arith` is `clang_c_adjust`'s, which `clang_cpp_adjust` inherits, so
+CUDA, CHERI-C and C++ all reach it. The probe extended:
+
+| frontend | corpus | PROBE hits |
+|---|---|---:|
+| C | 90 tests, four suites | 0 |
+| C++ | 25 tests of `esbmc-cpp` | 0 |
+| C, C++ | a two-line `double c = a + b;` in each | 0 |
+
+So the block is unreached across both frontends, not just C.
+
+**And yet the rounding-mode `set` is not value-neutral to remove.** The arm sets
+`rounding_mode` to `symbol_exprt(CPROVER_PREFIX "rounding_mode")`, i.e.
+`__ESBMC_rounding_mode`; `migrate_rounding_mode` (`migrate.cpp:857`) defaults to
+`c:@__ESBMC_rounding_mode` when the attribute is absent. **Two different symbol
+names for the same thing**, and the unprefixed one is not the global the symbol
+table holds.
+
+That makes the deletion safe only on unreachability, not on equivalence — the
+"harmless even if reached" argument does not hold, because if it were ever
+reached the two spellings would differ. Worth recording on its own: an `ieee_*`
+node built by this arm carries a rounding-mode operand naming a symbol that does
+not exist, which would be a free variable at the solver. It never bites because
+nothing reaches it, and it is one more reason the arm reads as vestigial rather
+than as load-bearing.
+
+The deletion therefore needs the C-Dead gates on a shared arm reached by four
+frontends, of which this host can meaningfully exercise two. That is a Linux-CI
+job, and it is recorded here rather than attempted.
+
 ### 105.3 For whoever takes the deletion
 
 - The scalar id-rewrite and the rounding-mode `set` can go on §105.1's argument,
