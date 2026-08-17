@@ -2501,6 +2501,38 @@ static std::optional<nlohmann::json> evaluate_numpy_logical_not_call(
   return make_bool_constant_node(!numpy_logical_as_bool(arg));
 }
 
+// Shared by evaluate_numpy_where_call() below and the top-level "where"
+// dispatch, so the length validation lives in exactly one place. When x or y
+// is a list, it must have the same length as cond -- indexing a shorter one
+// past its end is an out-of-bounds JSON access, not a controlled diagnostic.
+static nlohmann::json numpy_where_select(
+  const nlohmann::json &cond,
+  const nlohmann::json &x,
+  const nlohmann::json &y)
+{
+  if (!cond.contains("elts") || !cond["elts"].is_array())
+    return numpy_logical_as_bool(cond) ? x : y;
+
+  const bool x_is_list = x.contains("elts") && x["elts"].is_array();
+  const bool y_is_list = y.contains("elts") && y["elts"].is_array();
+  const std::size_t n = cond["elts"].size();
+  if (
+    (x_is_list && x["elts"].size() != n) ||
+    (y_is_list && y["elts"].size() != n))
+    throw std::runtime_error(
+      "TypeError: numpy.where() operands have mismatched lengths");
+
+  std::vector<nlohmann::json> out_elts;
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
+    out_elts.push_back(
+      choose_x ? (x_is_list ? x["elts"][i] : x)
+               : (y_is_list ? y["elts"][i] : y));
+  }
+  return make_list_node(out_elts);
+}
+
 static std::optional<nlohmann::json> evaluate_numpy_where_call(
   const nlohmann::json &args,
   python_converter &converter,
@@ -2512,20 +2544,7 @@ static std::optional<nlohmann::json> evaluate_numpy_where_call(
     resolve_numpy_logical_arg(args[0], converter, depth);
   const nlohmann::json x = resolve_numpy_logical_arg(args[1], converter, depth);
   const nlohmann::json y = resolve_numpy_logical_arg(args[2], converter, depth);
-  if (!cond.contains("elts") || !cond["elts"].is_array())
-    return numpy_logical_as_bool(cond) ? x : y;
-
-  std::vector<nlohmann::json> out_elts;
-  for (std::size_t i = 0; i < cond["elts"].size(); ++i)
-  {
-    const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
-    const nlohmann::json &chosen =
-      choose_x
-        ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
-        : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
-    out_elts.push_back(chosen);
-  }
-  return make_list_node(out_elts);
+  return numpy_where_select(cond, x, y);
 }
 
 // Evaluates a numpy comparison/logical Call node to its literal JSON result
@@ -5902,22 +5921,10 @@ exprt numpy_call_expr::get()
       auto cond = get_arg(0);
       auto x = get_arg(1);
       auto y = get_arg(2);
-      if (cond.contains("elts") && cond["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (std::size_t i = 0; i < cond["elts"].size(); ++i)
-        {
-          const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
-          const auto &chosen =
-            choose_x
-              ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
-              : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
-          out_elts.push_back(chosen);
-        }
-        return to_list_expr(make_list_node(out_elts));
-      }
-      return numpy_logical_as_bool(cond) ? converter_.get_expr(x)
-                                         : converter_.get_expr(y);
+      const nlohmann::json result = numpy_where_select(cond, x, y);
+      return result.value("_type", std::string()) == "List"
+               ? to_list_expr(result)
+               : to_expr(result);
     }
 
     auto parse_shape = [&](const nlohmann::json &shape_node) {
