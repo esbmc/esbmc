@@ -91,8 +91,40 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
 
+  if (is_code_for2t(expr))
+    hoist_for_init(expr);
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
+}
+
+void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
+{
+  const code_for2t &f = to_code_for2t(expr);
+  if (is_nil_expr(f.init))
+    return;
+
+  locationt end_location;
+  if (!is_nil_expr(f.body) && is_code_block2t(f.body))
+    end_location = to_code_block2t(f.body).end_location;
+
+  const expr2tc bare =
+    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+
+  // Splice a block-shaped init rather than nesting it: an inner block would end
+  // the declaration's scope at its own closing brace, so the variable would be
+  // DEAD before the loop that reads it. clang_c_adjust moves the init operand
+  // itself, which is why the legacy hoist puts the declaration directly in the
+  // wrapper.
+  std::vector<expr2tc> ops;
+  if (is_code_block2t(f.init))
+    for (const expr2tc &op : to_code_block2t(f.init).operands)
+      ops.push_back(op);
+  else
+    ops.push_back(f.init);
+  ops.push_back(bare);
+
+  expr = code_block2tc(ops, f.location, end_location);
 }
 
 void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)

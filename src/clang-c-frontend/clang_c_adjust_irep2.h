@@ -99,6 +99,8 @@ private:
   /// (§49.2), so the rebuild passes the original through (§84).
   void adjust_if_expr(expr2tc &expr);
 
+  void hoist_for_init(expr2tc &expr);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 
