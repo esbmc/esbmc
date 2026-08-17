@@ -29,6 +29,14 @@
 //                    subheaders. Include the ones we use.
 //
 // We use Boost.Process to run the Python interpreter in a separate process.
+//
+// v1's locale.hpp uses std::codecvt_utf8, deprecated in C++17. Boost is not
+// ours to fix and the include lists it with -I rather than -isystem (the
+// nlohmann pin needs that precedence, see ExternalDependencies.cmake), so
+// -Werror would stop on a third-party header. Silence it across the include
+// only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #if defined(__APPLE__) || (BOOST_VERSION == 108700)
 #  include <boost/process/v1.hpp>
 namespace bp = boost::process::v1;
@@ -41,6 +49,7 @@ namespace bp = boost::process::v1;
 #  include <boost/process.hpp>
 namespace bp = boost::process;
 #endif
+#pragma GCC diagnostic pop
 
 namespace fs = boost::filesystem;
 
@@ -50,29 +59,21 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
-// TODO: Rename this function as it is dumping other files now.
-static const std::string &dump_python_script()
-{
-  // Dump all Python (.py) files from src/python-frontend into a temporary directory
-  static bool dumped = false;
-  static auto p =
-    file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
-  if (!dumped)
-  {
-    dumped = true;
-#define ESBMC_FLAIL(body, size, ...)                                           \
-  {                                                                            \
-    fs::path filePath(fs::path(p.path()) / #__VA_ARGS__);                      \
-    fs::path directory = filePath.parent_path();                               \
-    if (!directory.empty() && !fs::exists(directory))                          \
-      fs::create_directories(directory);                                       \
-    std::ofstream(filePath.string()).write(body, size);                        \
-  }
+static const std::string vfs_prefix =
+  std::string(file_operations::ESBMC_VFS_ROOT) + "/python";
 
+void python_languaget::register_bundled()
+{
+  static bool done = false;
+  if (done)
+    return;
+  done = true;
+
+#define ESBMC_FLAIL(body, size, ...)                                           \
+  file_operations::filesystemt::get().add_bundled(                             \
+    vfs_prefix + "/" #__VA_ARGS__, body, size);
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
-  }
-  return p.path();
 }
 
 languaget *new_python_language()
@@ -88,7 +89,10 @@ bool python_languaget::parse(const std::string &path)
   if (!fs::exists(script))
     return true;
 
-  ast_output_dir = dump_python_script();
+  // The parser runs in a forked python3, which can only read real files.
+  register_bundled();
+  ast_output_dir = file_operations::filesystemt::get().materialize(
+    vfs_prefix, "esbmc-python-astgen-%%%%-%%%%-%%%%");
   fs::path parser_path(ast_output_dir);
   parser_path /= "parser/__main__.py";
 

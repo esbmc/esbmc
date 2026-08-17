@@ -397,25 +397,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (get_struct_union_class_fields(*rd_def, t))
     return true;
 
-  // Check for packed and aligned attributes
-  if (rd_def->hasAttrs())
-  {
-    const auto &attrs = rd_def->getAttrs();
-    for (const auto &attr : attrs)
-    {
-      if (attr->getKind() == clang::attr::Packed)
-        t.set("packed", true);
-
-      if (attr->getKind() == clang::attr::Aligned)
-      {
-        const clang::AlignedAttr &aattr =
-          static_cast<const clang::AlignedAttr &>(*attr);
-
-        if (process_aligned_attribute(aattr, t))
-          return true;
-      }
-    }
-  }
+  if (process_record_layout_attributes(*rd_def, t))
+    return true;
 
   /* We successfully constructed the type of this symbol; complete the
    * incomplete-type symbol with the now-complete type definition, in place.
@@ -4351,7 +4334,12 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_Shr:
-    new_expr = exprt("shr", t);
+    // C11 6.5.7p3: the operands are promoted and the result has the type of
+    // the promoted left operand, which is `t`. IREP2 has no signedness-
+    // agnostic shift, and the choice cannot be made after conversion without
+    // redoing that promotion (scope-clang-c-irep2.md §72), so make it here
+    // where clang has already applied it.
+    new_expr = exprt(t.id() == "unsignedbv" ? "lshr" : "ashr", t);
     break;
 
   case clang::BO_Rem:
@@ -4530,6 +4518,19 @@ bool clang_c_convertert::get_compound_assign_expr(
     if (opcode != clang::BO_ShlAssign && opcode != clang::BO_ShrAssign)
       gen_typecast(ns, rhs, computation_type);
     new_expr.add("computation_type") = computation_type;
+  }
+
+  // IREP2 has no signedness-agnostic shift, and the choice cannot be made after
+  // conversion without redoing the promotion (scope-clang-c-irep2.md §72, §76).
+  // Mirror adjust_side_effect_assignment: for `E1 >>= E2` the kind follows E1's
+  // own type, per C11 6.5.16.2p3's rewrite to `E1 = E1 >> E2`.
+  if (new_expr.statement() == "assign_shr")
+  {
+    const typet lhs_type = ns.follow(lhs.type());
+    if (lhs_type.id() == "unsignedbv")
+      new_expr.statement("assign_lshr");
+    else if (lhs_type.id() == "signedbv")
+      new_expr.statement("assign_ashr");
   }
 
   new_expr.copy_to_operands(lhs, rhs);
@@ -4890,6 +4891,24 @@ void clang_c_convertert::get_decl_name(
                                        location_begin.column().as_string();
       std::string kind_name = rd.getKindName().str();
       name = kind_name + " __anon_" + kind_name + "_at_" + location_begin_str;
+
+      /* A lambda closure declared inside a function template is a distinct
+       * type in every instantiation, but file/line/column are shared by all
+       * of them, so the name above collides. get_struct_union_class() then
+       * finds the first instantiation's symbol already present and returns
+       * early, leaving the later instantiations' operator() with no body --
+       * symex assigns a nondet return and the verdict is silently wrong
+       * (esbmc/esbmc#6969). Qualify with the enclosing specialisation, which
+       * is what clang's own USRs for the closure's methods already carry. */
+      const auto *parent =
+        llvm::dyn_cast_or_null<clang::FunctionDecl>(rd.getDeclContext());
+      if (parent && parent->getTemplateSpecializationArgs())
+      {
+        std::string parent_name, parent_id;
+        get_decl_name(*parent, parent_name, parent_id);
+        name += "_" + parent_id;
+      }
+
       std::replace(name.begin(), name.end(), '.', '_');
     }
     else if (
@@ -5161,6 +5180,50 @@ clang_c_convertert::get_top_FunctionDecl_from_Stmt(const clang::Stmt &stmt)
   }
 
   return nullptr;
+}
+
+bool clang_c_convertert::process_record_layout_attributes(
+  const clang::RecordDecl &rd,
+  typet &t) const
+{
+  if (!rd.hasAttrs())
+    return false;
+
+  for (const auto &attr : rd.getAttrs())
+  {
+    switch (attr->getKind())
+    {
+    case clang::attr::Packed:
+      t.set("packed", true);
+      break;
+
+    /* clang models `#pragma pack(n)` as MaxFieldAlignmentAttr, not as
+     * attr::Packed: it caps every member's alignment at n bytes, and n == 1 is
+     * exactly what attr::Packed means. */
+    case clang::attr::MaxFieldAlignment:
+    {
+      const auto &mattr =
+        static_cast<const clang::MaxFieldAlignmentAttr &>(*attr);
+      const unsigned bytes = mattr.getAlignment() / config.ansi_c.char_width;
+      if (bytes == 1)
+        t.set("packed", true);
+      else if (bytes > 1)
+        t.set("max_field_alignment", bytes);
+      break;
+    }
+
+    case clang::attr::Aligned:
+      if (process_aligned_attribute(
+            static_cast<const clang::AlignedAttr &>(*attr), t))
+        return true;
+      break;
+
+    default:
+      break;
+    }
+  }
+
+  return false;
 }
 
 bool clang_c_convertert::process_aligned_attribute(

@@ -164,7 +164,7 @@ public:
 
   ios()
   {
-    ios_base();
+    __fill = ' ';
   }
   virtual ~ios()
   {
@@ -209,11 +209,17 @@ ios_base::ios_base()
 {
   __streambuf_state = goodbit;
   __exception = goodbit;
+  // [ios.base.cons]: width starts at 0, precision at 6.
+  __width = 0;
+  __precision = 6;
 }
 
+/* Caveat: __flags is `static`, so format state is shared between every
+ * stream -- `cout << hex` changes the base a later ostringstream formats in.
+ * Making it a member of the virtual ios_base base costs ~15x in symex. */
 ios_base::fmtflags ios_base::flags() const
 {
-  return (bool)__flags;
+  return __flags;
 }
 
 ios_base::fmtflags ios_base::flags(ios_base::fmtflags fmtfl)

@@ -347,7 +347,7 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
-static bool is_aligned_member(const expr2tc &expr)
+static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 {
   if (!is_member2t(expr))
     return false;
@@ -363,11 +363,20 @@ static bool is_aligned_member(const expr2tc &expr)
     return false;
   }
 
-  /* non-packed structures have all members aligned
+  /* `#pragma pack(n)` leaves members at offsets that need not respect their own
+   * type's alignment, and the compiler emits an unaligned access for those, so
+   * a direct member read is not a misalignment. Unions place every member at
+   * offset 0, so only structs can under-align one.
    *
-   * TODO: This holds true only for non-padding members as padding is not
-   *       actually a member. We just treat it as one, which here is wrong. */
-  return true;
+   * TODO: For a non-packed struct this holds only for non-padding members, as
+   *       padding is not actually a member. We just treat it as one. */
+  if (!is_struct_type(structure->type))
+    return true;
+
+  const member2t &member = to_member2t(expr);
+  const BigInt offset =
+    member_offset_bits(structure->type, member.member, &ns) / 8;
+  return offset % alignment(migrate_type_back(member.type), ns) == 0;
 }
 
 /// Push member/index steps inside a conditional, so `(c ? a : b).f` becomes
@@ -484,7 +493,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     expr2tc &structure = member.source_value;
     if (
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
-      !is_aligned_member(expr))
+      !is_aligned_member(expr, ns))
     {
       log_warning(
         "not checking alignment for access to packed {} {}",
@@ -1340,25 +1349,36 @@ void dereferencet::construct_from_array(
   }
   else
   {
-    // Dyn offset -- is alignment guarantee strong enough?
+    // Dyn offset -- is alignment guarantee strong enough? `alignment` is in
+    // bits here: the caller scaled it (see `alignment *= 8` in dereference()).
     is_correctly_aligned = (alignment >= subtype_size);
-    // Special case for pointer-typed array elements: `alignment` is in
-    // BYTES (value_set.h:139) while `subtype_size` is in BITS (set from
-    // type_byte_size_bits above). For an array of pointers reached
-    // through a struct-member pointer dereference, the unit mismatch
-    // wrongly forced the byte-extract branch, which hides the pointer
-    // RHS from value_sett::assign and breaks the downstream deref of
-    // the loaded pointer (issue #4435). Pointer subtypes are always
-    // accessed atomically, so a byte-equal-or-larger natural alignment
-    // makes the direct index2tc encoding sound. Keep the original
-    // comparison for non-pointer subtypes so over-approximated
-    // alignments on int / short / char arrays still trigger
-    // check_alignment (e.g. regression/esbmc/align-deref_fail).
-    if (
-      !is_correctly_aligned && is_pointer_type(arr_subtype) &&
-      alignment * 8 >= subtype_size)
-      is_correctly_aligned = true;
-    overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
+    /* A whole-element access needs no stitching. check_alignment() below
+     * asserts the offset lands on an element boundary, which is exactly the
+     * precondition index2tc needs, so an unproven alignment claim is a reason
+     * to *check*, not to decompose.
+     *
+     * Floats: reassembling one costs a fp.to_ieee_bv / to_fp round trip per
+     * byte, and SMT-LIB leaves the NaN pattern fp.to_ieee_bv returns
+     * unconstrained -- so once an intermediate is NaN the solver may pick a
+     * different pattern each time and the value read back is not the one
+     * stored (esbmc/esbmc#6922).
+     *
+     * Pointers: stitching hides the pointer RHS from value_sett::assign and
+     * breaks the downstream deref of the loaded pointer (esbmc/esbmc#4435).
+     * That used to be papered over by claiming such an access was aligned
+     * whenever alignment * 8 >= subtype_size -- an 8x over-approximation on
+     * an alignment already in bits, which also suppressed check_alignment, so
+     * a genuinely misaligned pointer read went unreported.
+     *
+     * Integer subtypes keep the original condition: their stitching is exact,
+     * and weakening it would stop over-approximated alignments reaching
+     * check_alignment (regression/esbmc/align-deref_fail). */
+    const bool whole_element =
+      deref_size == subtype_size &&
+      (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
+    overflows_boundaries =
+      whole_element ? false
+                    : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
   // No alignment guarantee: assert that it's correct.

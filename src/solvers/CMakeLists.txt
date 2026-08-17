@@ -13,7 +13,7 @@ add_subdirectory(prop)
 add_subdirectory(smt)
 
 
-add_library(solve solve.cpp)
+add_library(solve solve.cpp smt/simplification_equivalence.cpp)
 target_link_libraries(solve PUBLIC smt PRIVATE smttuple smtfp fmt::fmt)
 target_include_directories(solve
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}

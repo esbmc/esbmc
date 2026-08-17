@@ -169,6 +169,15 @@ jobs:
           ESBMC_OPTS: ${{ inputs.options }}
       - name: Show summary (ESBMC)
         run: tail $HOME/esbmc-output/*results*.txt
+      - name: Show the marginal band (ESBMC)
+        # Tasks finishing within 5% of the limit flip on any timing change, in
+        # either direction, and read as a regression in the score when they do
+        # (esbmc/esbmc#6831). Report them next to the summary so a score move
+        # can be attributed without re-running the set.
+        continue-on-error: true
+        run: |
+          python3 ./esbmc-src/scripts/competitions/svcomp/marginal_timeouts.py \
+            $HOME/esbmc-output/*results*.xml.bz2
       - name: Save logs
         if: ${{ inputs.output != '' }}
         run: cp $HOME/output.zip $HOME/${{ inputs.output }}

@@ -76,6 +76,10 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
     list(APPEND ESBMC_TEST_CAPABILITIES arch32)
 endif()
 
+if(ESBMC_BUNDLE_LIBC)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libc)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 
@@ -202,6 +206,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
+    set(REGRESSIONS_PYTHON_CONTRACTS python-contracts)
     set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
 endif()
 
@@ -315,6 +320,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
@@ -389,6 +395,7 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}

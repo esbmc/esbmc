@@ -211,6 +211,10 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Run the IREP2-native C adjuster alongside the legacy adjust pass "
       "(Phase 6 migration; experimental, default off)"},
+     {"clang-c-irep2-adjust-only",
+      NULL,
+      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
+      "(Phase 6 hop-off; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
@@ -792,6 +796,12 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(-1)->value_name(
        "bits"),
      "Check if stack limit is respected"},
+    {"total-stack-limit",
+     boost::program_options::value<int>()->default_value(-1)->value_name(
+       "bits"),
+     "Bound the combined size of all live stack frames, excluding ESBMC's "
+     "own operational models. Accounted per symbolic path at declaration "
+     "points; over-approximates for spawned threads"},
     {"error-label",
      boost::program_options::value<std::string>()->value_name("label"),
      "Check if label is unreachable"},

@@ -26,13 +26,13 @@ public:
   /// clang_cpp_adjust derives from this class, and the IREP2 pass is wired into
   /// clang_c_languaget::typecheck alone, so a global option check here would
   /// disable the rewrite for C++ with nothing to replace it.
-  void set_irep2_owns_index()
+  void set_irep2_owns_arms()
   {
-    irep2_owns_index = true;
+    irep2_owns_arms = true;
   }
 
 protected:
-  bool irep2_owns_index = false;
+  bool irep2_owns_arms = false;
   contextt &context;
   namespacet ns;
   symbol_generator tmp_symbol{"clang_c_adjust::"};
@@ -71,6 +71,11 @@ protected:
   void adjust_side_effect_statement_expression(side_effect_exprt &expr);
   virtual void adjust_member(member_exprt &expr);
   void adjust_expr_binary_arithmetic(exprt &expr);
+  /** Rewrite a binary arithmetic expression over complex operands into the
+   *  component-level form, in place. Expects both operands already adjusted;
+   *  returns false when neither is complex, leaving @p expr untouched. */
+  bool lower_complex_binary_arithmetic(exprt &expr);
+  bool lower_complex_compound_assignment(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
   void bind_sideeffect_operands(exprt &expr, code_blockt &block);
   void finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
