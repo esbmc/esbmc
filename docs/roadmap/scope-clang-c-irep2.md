@@ -3339,6 +3339,38 @@ Next, in order:
    retires both arms' declines together. The work is reproducing the
    temporary's name -- `<file>:<line>$complex$`, `file_local`, module-tagged --
    closely enough that `c_link` renames it the same way across TUs.
+## 93. The four tests that diverged against themselves
+
+PR #7086 recorded that `gcc_nested_func_02`, `gcc_nested_func_collision`,
+`gcc_nested_func_sibling_calls_uncaptured` and `github_746` differ between two
+runs of the *same* binary on the same input, and recommended teaching
+`irep2_canon` to strip the noise. Three of the four are fixed at the source
+instead.
+
+`transform_nested_functions` wrote its rewritten source to
+`create_tmp_file("esbmc-nested.%%%%-%%%%.c")`. The helpers it lifts have
+internal linkage, so clang's USR for each embeds the **basename of the file it
+was parsed from** -- and `generateUSRForDecl` is what
+`clang_c_convertert::get_decl_name` uses. The random basename therefore reached
+the symbol table: same input, same flags, a different goto program every run.
+The `#line 1 "<source>"` directive already at the top of the rewritten file
+fixes locations, not USRs.
+
+The fix keeps the uniqueness and moves it somewhere the USR cannot see: a
+per-run temp **directory** with a deterministic file name inside it, derived
+from the source's basename (`esbmc-nested.main.c`). Two translation units whose
+sources share a basename collide, which is the hazard two real file-static
+functions in same-named files already carry.
+
+This is worth more than the gate it unblocks. A goto program that is not a
+function of its input undermines counterexample reproducibility and any caching
+keyed on it, and it silently defeats *any* differential harness -- this one
+spent two sessions attributing those tests to whichever patch was in hand before
+the self-comparison caught that they diverge against themselves.
+
+`github_746` is untouched: its difference is clang AST-dump node addresses in an
+error message, which is diagnostic text rather than program content, and belongs
+in the canonicaliser, as that note said.
 
 ## 102. The migrate warning, and a correction to §92.2
 
