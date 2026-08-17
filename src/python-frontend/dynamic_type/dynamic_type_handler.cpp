@@ -568,7 +568,13 @@ exprt dynamic_type_handler::build_isinstance_check(
       tagged_type_id,
       type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
 
-  return false_exprt();
+  // object is Python's top type; every value is an instance of it.
+  if (type_name == "object")
+    return true_exprt();
+
+  throw std::runtime_error(
+    "isinstance() against this type is not yet supported for a "
+    "dynamically-typed variable");
 }
 
 dynamic_type_handler::scope_guard::scope_guard(
