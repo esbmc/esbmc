@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--branch-coverage --unwind 3 --no-unwinding-assertions
+^Branches : 0$
+^Branch Coverage: N/A \(no branches\)$
+^COVERAGE ANALYSIS COMPLETE$
