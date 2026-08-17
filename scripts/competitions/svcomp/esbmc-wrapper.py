@@ -235,7 +235,7 @@ esbmc_path = "./esbmc "
 # as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
 # in the fopen/fclose models.
 esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
-esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
+esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
@@ -265,6 +265,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
+    # --smt-symex-guard also turns on --smt-during-symex, which is what makes
+    # sibling schedules share a solver context (issue #6831, W3.3); do not add
+    # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 

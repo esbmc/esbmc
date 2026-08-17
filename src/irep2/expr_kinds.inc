@@ -59,7 +59,6 @@ IREP2_EXPR(ieee_add,              "ieee_add")
 IREP2_EXPR(ieee_sub,              "ieee_sub")
 IREP2_EXPR(ieee_mul,              "ieee_mul")
 IREP2_EXPR(ieee_div,              "ieee_div")
-IREP2_EXPR(ieee_rem,              "ieee_rem")
 IREP2_EXPR(ieee_fma,              "ieee_fma")
 IREP2_EXPR(ieee_sqrt,             "ieee_sqrt")
 IREP2_EXPR(popcount,              "popcount")
@@ -156,3 +155,9 @@ IREP2_EXPR(sizeof,                "sizeof")
 // function, and consumed only at SMT conversion time, where the solver's
 // native uninterpreted-function support enforces functional congruence.
 IREP2_EXPR(uninterpreted_func,    "uninterpreted_func")
+
+// IEEE 754 remainder (SMT-LIB fp.rem). Appended rather than grouped with the
+// other ieee_* kinds, for the same reason as the V.4 kinds above: enum
+// position is expr2t::expr_id, so inserting mid-list renumbers every later
+// kind.
+IREP2_EXPR(ieee_rem,              "ieee_rem")

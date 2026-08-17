@@ -11,6 +11,7 @@
 #include <goto-symex/symex_invariant.h>
 #include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
+#include <set>
 #include <stack>
 #include <string>
 #include <unordered_set>
@@ -371,6 +372,17 @@ public:
    *  @param expr Expression to rename contents of.
    */
   void rename_address(expr2tc &expr);
+
+  void rename_address(expr2tc &expr, const std::set<irep_idt> &bound);
+
+  /**
+   *  Rename an expression occurring under quantifiers, stopping at L1 for
+   *  the variables they bind so those stay free for the solver. Otherwise
+   *  identical to rename().
+   *  @param expr Expression to rename contents of.
+   *  @param bound Names bound by the enclosing quantifiers.
+   */
+  void rename_quantified(expr2tc &expr, const std::set<irep_idt> &bound);
 
   /**
    *  Make an L2 and value set assignment.
