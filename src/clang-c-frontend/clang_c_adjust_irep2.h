@@ -99,6 +99,9 @@ private:
   /// (§49.2), so the rebuild passes the original through (§84).
   void adjust_if_expr(expr2tc &expr);
 
+  /// Pad a complete struct or union type symbol to its ABI layout (§96).
+  void pad_type_symbol(symbolt &symbol);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 
