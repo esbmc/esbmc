@@ -101,34 +101,85 @@ static bool is_width_suffixed(const std::string &name, const std::string &stem)
   return suffix.empty() || suffix == "l" || suffix == "ll";
 }
 
+/// The ordered-comparison builtins, which differ from the plain operators only
+/// in being defined when an operand is NaN.
+static void fold_comparison_builtin(
+  const std::string &name,
+  const expr2tc &l,
+  const expr2tc &r,
+  expr2tc &expr)
+{
+  if (name == "__builtin_isgreater")
+    expr = greaterthan2tc(l, r);
+  else if (name == "__builtin_isgreaterequal")
+    expr = greaterthanequal2tc(l, r);
+  else if (name == "__builtin_isless")
+    expr = lessthan2tc(l, r);
+  else if (name == "__builtin_islessequal")
+    expr = lessthanequal2tc(l, r);
+  else if (name == "__builtin_islessgreater")
+    expr = or2tc(lessthan2tc(l, r), greaterthan2tc(l, r));
+  else if (name == "__builtin_isunordered")
+    expr = or2tc(isnan2tc(l), isnan2tc(r));
+}
+
+/// The one-argument builtins that lower to a single IREP2 node.
+static void
+fold_unary_builtin(const std::string &name, const expr2tc &arg, expr2tc &expr)
+{
+  if (
+    is_width_suffixed(name, "__builtin_popcount") || name == "__popcnt" ||
+    name == "__popcnt16" || name == "__popcnt64")
+    expr = popcount2tc(arg);
+  else if (is_width_suffixed(name, "__builtin_parity"))
+    // parity(x) = popcount(x) & 1.
+    expr = bitand2tc(
+      get_int32_type(), popcount2tc(arg), constant_int2tc(get_int32_type(), 1));
+  else if (
+    name == "__builtin_bswap16" || name == "__builtin_bswap32" ||
+    name == "__builtin_bswap64")
+    expr = bswap2tc(expr->type, arg);
+}
+
 /// The lowerings `do_special_functions` selects by base name rather than by a
 /// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
 ///
 /// `sqrt`'s legacy arm additionally skips a `py:`-prefixed callee; this pass is
 /// constructed only from `clang_c_languaget::typecheck`, so no Python symbol
 /// can reach it and the guard has nothing to test.
-bool clang_c_adjust_irep2::adjust_float_builtin(
-  expr2tc &expr,
-  const irep_idt &name,
-  const std::vector<expr2tc> &args)
+/// The argument-less float constants. `handled` distinguishes "not one of
+/// these" from "one of these, but declined".
+static bool
+fold_float_constant(expr2tc &expr, const irep_idt &name, bool &handled)
 {
   const bool is_inf = compare_unscore_builtin(name, "inf") ||
                       compare_unscore_builtin(name, "huge_val");
   const bool is_nan = name != "nan" && compare_unscore_builtin(name, "nan");
 
-  if (is_inf || is_nan)
-  {
-    // The fixed-point spelling is a bit pattern built off bv_width rather than
-    // an ieee_floatt, and has no constant_floatbv2t to land on. Decline instead
-    // of guessing: the call stays where this mode already had it.
-    if (config.ansi_c.use_fixed_for_float || !is_floatbv_type(expr->type))
-      return false;
+  handled = is_inf || is_nan;
+  if (!handled)
+    return false;
 
-    const ieee_float_spect spec(to_floatbv_type(expr->type));
-    expr = constant_floatbv2tc(
-      is_inf ? ieee_floatt::plus_infinity(spec) : ieee_floatt::NaN(spec));
-    return true;
-  }
+  // The fixed-point spelling is a bit pattern built off bv_width rather than
+  // an ieee_floatt, and has no constant_floatbv2t to land on. Decline instead
+  // of guessing: the call stays where this mode already had it.
+  if (config.ansi_c.use_fixed_for_float || !is_floatbv_type(expr->type))
+    return false;
+
+  const ieee_float_spect spec(to_floatbv_type(expr->type));
+  expr = constant_floatbv2tc(
+    is_inf ? ieee_floatt::plus_infinity(spec) : ieee_floatt::NaN(spec));
+  return true;
+}
+
+bool clang_c_adjust_irep2::adjust_float_builtin(
+  expr2tc &expr,
+  const irep_idt &name,
+  const std::vector<expr2tc> &args)
+{
+  bool handled = false;
+  if (const bool folded = fold_float_constant(expr, name, handled); handled)
+    return folded;
 
   if (args.size() != 1)
     return false;
@@ -203,43 +254,14 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
   if (adjust_float_builtin(expr, s->name, args))
     return;
 
-  // The ordered-comparison builtins, which differ from the plain operators only
-  // in being defined when an operand is NaN.
   if (args.size() == 2)
   {
-    const expr2tc &l = args[0], &r = args[1];
-    if (name == "__builtin_isgreater")
-      expr = greaterthan2tc(l, r);
-    else if (name == "__builtin_isgreaterequal")
-      expr = greaterthanequal2tc(l, r);
-    else if (name == "__builtin_isless")
-      expr = lessthan2tc(l, r);
-    else if (name == "__builtin_islessequal")
-      expr = lessthanequal2tc(l, r);
-    else if (name == "__builtin_islessgreater")
-      expr = or2tc(lessthan2tc(l, r), greaterthan2tc(l, r));
-    else if (name == "__builtin_isunordered")
-      expr = or2tc(isnan2tc(l), isnan2tc(r));
+    fold_comparison_builtin(name, args[0], args[1], expr);
     return;
   }
 
-  if (args.size() != 1)
-    return;
-
-  const expr2tc &arg = args[0];
-
-  if (
-    is_width_suffixed(name, "__builtin_popcount") || name == "__popcnt" ||
-    name == "__popcnt16" || name == "__popcnt64")
-    expr = popcount2tc(arg);
-  else if (is_width_suffixed(name, "__builtin_parity"))
-    // parity(x) = popcount(x) & 1.
-    expr = bitand2tc(
-      get_int32_type(), popcount2tc(arg), constant_int2tc(get_int32_type(), 1));
-  else if (
-    name == "__builtin_bswap16" || name == "__builtin_bswap32" ||
-    name == "__builtin_bswap64")
-    expr = bswap2tc(expr->type, arg);
+  if (args.size() == 1)
+    fold_unary_builtin(name, args[0], expr);
 }
 
 void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)
