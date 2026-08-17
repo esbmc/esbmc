@@ -406,6 +406,68 @@ static void generate_symbol_deps(
   }
 }
 
+/* Linked only when the program actually mentions one of them. Every other
+ * library body arrives because the program declared it and left it empty, but
+ * esbmc_intrinsics.h is force-included, so these ten are "declared" in every
+ * translation unit and would otherwise be linked into programs that never call
+ * them -- ten function bodies to goto-convert, slice and encode, worth ~4% of
+ * wall clock on a 10 s task (esbmc/esbmc#6831). No operational model calls
+ * them; they exist so CBMC sources verify unchanged. */
+static bool is_cbmc_memory_primitive(const symbolt &s)
+{
+  static const std::unordered_set<std::string> names = {
+    "__CPROVER_POINTER_OBJECT",
+    "__CPROVER_POINTER_OFFSET",
+    "__CPROVER_same_object",
+    "__CPROVER_OBJECT_SIZE",
+    "__CPROVER_DYNAMIC_OBJECT",
+    "__CPROVER_LIVE_OBJECT",
+    "__CPROVER_WRITEABLE_OBJECT",
+    "__CPROVER_r_ok",
+    "__CPROVER_w_ok",
+    "__CPROVER_rw_ok"};
+  return names.find(id2string(s.get_function_name())) != names.end();
+}
+
+/// Names the program's own symbols refer to, including through their types.
+/// A function whose address is taken counts as referenced, since the reference
+/// appears in the value that takes it.
+static std::unordered_set<std::string> program_references(const contextt &ctx)
+{
+  std::multimap<irep_idt, irep_idt> deps;
+  ctx.foreach_operand([&deps](const symbolt &s) {
+    generate_symbol_deps(s.id, s.get_value(), deps);
+    generate_symbol_deps(s.id, s.get_type(), deps);
+  });
+
+  std::unordered_set<std::string> referenced;
+  for (const auto &dep : deps)
+    referenced.insert(id2string(dep.second));
+  return referenced;
+}
+
+/// Whether a library symbol belongs in the context handed to the rest of the
+/// run. `bundled_wholesale` frontends (Python, Solidity) filter upstream, so
+/// everything their blob carries is kept; for the rest a symbol is a library
+/// body the program declared and left empty, minus the memory primitives it
+/// never mentions.
+static bool store_library_symbol(
+  const contextt &context,
+  const symbolt &s,
+  bool bundled_wholesale,
+  const std::unordered_set<std::string> &referenced)
+{
+  if (bundled_wholesale)
+    return true;
+
+  const symbolt *symbol = context.find_symbol(s.id);
+  if (symbol == nullptr || !symbol->get_value().is_nil())
+    return false;
+
+  return !is_cbmc_memory_primitive(s) ||
+         referenced.find(id2string(s.id)) != referenced.end();
+}
+
 static void ingest_symbol(
   irep_idt name,
   std::multimap<irep_idt, irep_idt> &deps,
@@ -591,20 +653,23 @@ void add_cprover_library(contextt &context, const languaget *language)
   // Solidity: uses dedicated sol64 binary → ALL symbols in new_ctx, no whitelist.
   bool uses_whitelist = language && language->id() == "python";
 
+  const bool bundled_wholesale = is_solidity || uses_whitelist;
+
+  const std::unordered_set<std::string> referenced =
+    bundled_wholesale ? std::unordered_set<std::string>()
+                      : program_references(context);
+
   new_ctx.foreach_operand([&context,
                            &store_ctx,
                            &symbol_deps,
                            &to_include,
-                           &is_solidity,
-                           &uses_whitelist](const symbolt &s) {
-    const symbolt *symbol = context.find_symbol(s.id);
-    if (
-      (is_solidity || uses_whitelist) ||
-      (symbol != nullptr && symbol->get_value().is_nil()))
-    {
-      store_ctx.add(s);
-      ingest_symbol(s.id, symbol_deps, to_include);
-    }
+                           bundled_wholesale,
+                           &referenced](const symbolt &s) {
+    if (!store_library_symbol(context, s, bundled_wholesale, referenced))
+      return;
+
+    store_ctx.add(s);
+    ingest_symbol(s.id, symbol_deps, to_include);
   });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
