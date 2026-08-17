@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.cpp
 --ir --unwind 2 --big-endian
 

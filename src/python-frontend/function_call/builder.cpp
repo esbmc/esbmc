@@ -83,6 +83,8 @@ const std::string kEsbmcLoopInvariant = "__ESBMC_loop_invariant";
 const std::string kEsbmcRequires = "__ESBMC_requires";
 const std::string kEsbmcEnsures = "__ESBMC_ensures";
 const std::string kEsbmcAssigns = "__ESBMC_assigns";
+const std::string kEsbmcOld = "__ESBMC_old";
+const std::string kEsbmcOldRaw = "__ESBMC_old_raw";
 const std::string kEsbmcReturnValue = "__ESBMC_return_value";
 const std::string kEsbmcCover = "__ESBMC_cover";
 const std::string kEsbmcAtomicBegin = "__ESBMC_atomic_begin";
@@ -122,9 +124,8 @@ static bool needs_bool_intrinsic_symbol(const std::string &name)
 // impure and leaving the reader to guess which call was the problem.
 static bool is_unsupported_contract_intrinsic(const std::string &name)
 {
-  return name == "__ESBMC_assigns" || name == "__ESBMC_old" ||
-         name == "__ESBMC_is_fresh" || name == "__ESBMC_forall" ||
-         name == "__ESBMC_exists";
+  return name == "__ESBMC_assigns" || name == "__ESBMC_is_fresh" ||
+         name == "__ESBMC_forall" || name == "__ESBMC_exists";
 }
 
 void function_call_builder::check_contract_call(
@@ -194,6 +195,171 @@ static std::string describe_clause_node(const std::string &node_type)
   return "a " + node_type + " expression";
 }
 
+/// Scalars the wrapper can snapshot by value. Anything else is a pointer into
+/// the Python object model, whose extent and aliasing the contract layer has no
+/// way to state yet (#6938 P4).
+static bool is_snapshottable_scalar(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+         type.is_bool();
+}
+
+std::optional<exprt> function_call_builder::build_contract_intrinsic(
+  const symbol_id &function_id) const
+{
+  check_contract_call(function_id);
+
+  if (function_id.get_function() == kEsbmcOld)
+    return build_old_snapshot();
+
+  // Loop invariants and function-contract clauses share one shape: a bodiless
+  // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
+  // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
+  // routes any callee carrying a body to a plain FUNCTION_CALL instead.
+  if (!needs_bool_intrinsic_symbol(function_id.get_function()))
+    return std::nullopt;
+
+  const std::string &func_symbol_id = function_id.to_string();
+  if (converter_.symbol_table().find_symbol(func_symbol_id.c_str()) != nullptr)
+    return std::nullopt;
+
+  code_typet code_type;
+  code_type.return_type() = empty_typet();
+  code_typet::argumentt arg;
+  arg.type() = bool_type();
+  code_type.arguments().push_back(arg);
+
+  symbolt symbol = converter_.create_symbol(
+    converter_.python_file(),
+    function_id.get_function(),
+    func_symbol_id,
+    converter_.get_location_from_decl(call_),
+    code_type);
+  converter_.add_symbol(symbol);
+  return std::nullopt;
+}
+
+// Whether \p name is a parameter of the function being converted. Only a
+// parameter or a module-level global has a value from before the body ran; a
+// local does not exist yet at the point a snapshot would be taken.
+bool function_call_builder::names_enclosing_parameter(
+  const std::string &name) const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+
+  const symbolt *fn = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!fn || !fn->get_type().is_code())
+    return false;
+
+  sid.set_object(name);
+  const std::string param_id = sid.to_string();
+  for (const auto &argument : to_code_type(fn->get_type()).arguments())
+    if (argument.get_identifier() == param_id)
+      return true;
+
+  return false;
+}
+
+bool function_call_builder::names_module_global(const std::string &name) const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+  return converter_.symbol_table().find_symbol(sid.global_to_string()) !=
+         nullptr;
+}
+
+exprt function_call_builder::build_old_snapshot() const
+{
+  const int line = call_.value("lineno", 0);
+
+  // Outside a clause there is no "before" for the snapshot to name, and the
+  // instruction it plants would have no reader. Reporting it beats leaving a
+  // statement that looks like it did something.
+  if (!converter_.in_contract_clause())
+    throw std::runtime_error(fmt::format(
+      "{} at line {} is only meaningful inside a contract clause",
+      kEsbmcOld,
+      line));
+
+  if (call_["args"].size() != 1)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes exactly one argument, got {}",
+      kEsbmcOld,
+      line,
+      call_["args"].size()));
+
+  const nlohmann::json &arg = call_["args"][0];
+  if (arg.value("_type", "") != "Name")
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes a variable; {} cannot be snapshotted",
+      kEsbmcOld,
+      line,
+      describe_clause_node(arg.value("_type", ""))));
+
+  const std::string &name = arg.value("id", "");
+  if (!names_enclosing_parameter(name) && !names_module_global(name))
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes '{}', which is neither a parameter nor a "
+      "module-level global; a local has no pre-call value to snapshot",
+      kEsbmcOld,
+      line,
+      name));
+
+  exprt target = converter_.get_expr(arg);
+  if (!is_snapshottable_scalar(target.type()))
+    throw std::runtime_error(fmt::format(
+      "{} at line {} takes '{}', which is not an int, float or bool; only "
+      "scalars can be snapshotted by the Python frontend yet",
+      kEsbmcOld,
+      line,
+      arg.value("id", "")));
+
+  // Build what the C macro expands to,
+  // `*(__typeof__(x)*)__ESBMC_old_raw((void*)(&x))`, which Python cannot spell
+  // but the frontend can. Going through the same intrinsic keeps the snapshot
+  // instruction, the wrapper materialisation and the call-site one shared with
+  // C rather than reimplemented here.
+  const std::string raw_id = "c:@F@" + kEsbmcOldRaw;
+  const typet void_ptr = pointer_typet(empty_typet());
+  locationt location = converter_.get_location_from_decl(call_);
+
+  code_typet code_type;
+  code_type.return_type() = void_ptr;
+  code_typet::argumentt argument;
+  argument.type() = void_ptr;
+  code_type.arguments().push_back(argument);
+
+  if (converter_.symbol_table().find_symbol(raw_id.c_str()) == nullptr)
+  {
+    symbolt symbol = converter_.create_symbol(
+      converter_.python_file(), kEsbmcOldRaw, raw_id, location, code_type);
+    converter_.add_symbol(symbol);
+  }
+
+  exprt address = address_of_exprt(target);
+  address.make_typecast(void_ptr);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt(raw_id, code_type);
+  call.arguments() = {address};
+  call.type() = void_ptr;
+  call.location() = location;
+
+  exprt typed = call;
+  typed.make_typecast(pointer_typet(target.type()));
+
+  exprt snapshot("dereference", target.type());
+  snapshot.copy_to_operands(typed);
+  snapshot.location() = location;
+  return snapshot;
+}
+
 void function_call_builder::check_clause_name(
   const nlohmann::json &node,
   const std::string &clause) const
@@ -261,11 +427,16 @@ void function_call_builder::check_contract_clause(
   }
 
   const std::string node_type = node.value("_type", "");
+  const std::string callee =
+    node_type == "Call" ? node["func"].value("id", "") : std::string();
 
-  if (!node_type.empty() && !is_pure_clause_node(node_type))
+  // __ESBMC_old(x) is part of the clause language rather than a call whose
+  // result the clause depends on: it names the value x held before the body
+  // ran, and lowers to a snapshot taken there.
+  if (
+    !node_type.empty() && !is_pure_clause_node(node_type) &&
+    callee != kEsbmcOld)
   {
-    const std::string callee =
-      node_type == "Call" ? node["func"].value("id", "") : std::string();
     throw std::runtime_error(fmt::format(
       "{} clause at line {} contains {}; a contract clause must be a pure "
       "expression{}",
@@ -277,6 +448,16 @@ void function_call_builder::check_contract_clause(
             " ({} is not supported by the Python frontend yet)", callee)
         : ""));
   }
+
+  // A precondition already speaks about the pre-state, and nothing rewrites a
+  // snapshot in it: `replace_old_in_expr` is applied to the ensures alone, so
+  // the requires would be asserted over a symbol no instruction defines.
+  if (callee == kEsbmcOld && clause == kEsbmcRequires)
+    throw std::runtime_error(fmt::format(
+      "{} at line {} says nothing in a precondition, which already speaks "
+      "about the pre-state",
+      kEsbmcOld,
+      node.value("lineno", 0)));
 
   if (node_type == "Name")
     check_clause_name(node, clause);
@@ -1334,35 +1515,8 @@ exprt function_call_builder::build() const
     }
   }
 
-  check_contract_call(function_id);
-
-  // Loop invariants and function-contract clauses share one shape: a bodiless
-  // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
-  // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
-  // routes any callee carrying a body to a plain FUNCTION_CALL instead.
-  if (needs_bool_intrinsic_symbol(function_id.get_function()))
-  {
-    const auto &symbol_table = converter_.symbol_table();
-    const std::string &func_symbol_id = function_id.to_string();
-
-    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
-    {
-      code_typet code_type;
-      code_type.return_type() = empty_typet();
-      code_typet::argumentt arg;
-      arg.type() = bool_type();
-      code_type.arguments().push_back(arg);
-
-      const std::string &python_file = converter_.python_file();
-      const std::string &func_name = function_id.get_function();
-      locationt location = converter_.get_location_from_decl(call_);
-
-      symbolt symbol = converter_.create_symbol(
-        python_file, func_name, func_symbol_id, location, code_type);
-
-      converter_.add_symbol(symbol);
-    }
-  }
+  if (std::optional<exprt> intrinsic = build_contract_intrinsic(function_id))
+    return *intrinsic;
 
   // Handle NumPy functions
   if (is_numpy_call(function_id))

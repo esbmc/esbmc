@@ -51,6 +51,13 @@ static bool is_binary_arith(const expr2tc &expr)
   return is_add2t(expr) || is_sub2t(expr) || is_mul2t(expr) || is_div2t(expr);
 }
 
+/// `-z` and GNU `~z` (conjugation) are the only unary operators clang leaves
+/// carrying a complex type.
+static bool is_complex_unary(const expr2tc &expr)
+{
+  return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
+}
+
 /// The comparisons clang_c_adjust routes through adjust_expr_rel. IREP2 already
 /// types these bool, so only the operand half of that arm ports.
 static bool is_relational(const expr2tc &expr)
@@ -97,6 +104,9 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
+
+  if (is_complex_unary(expr))
+    adjust_complex_unary(expr);
 
   if (is_relational(expr))
     adjust_relational(expr);
@@ -466,6 +476,27 @@ void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
     break;
   }
   }
+
+  expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)
+{
+  const expr2tc op = *expr->get_sub_expr(0);
+
+  // Same double-evaluation decline as adjust_complex_arith (§88.2, §90.2).
+  if (contains_sideeffect(op))
+    return;
+
+  const type2tc ct = expr->type;
+  const type2tc et = to_complex_type(ct).subtype;
+
+  // No ieee_ form is needed here, unlike the binary operators: negation is a
+  // sign-bit flip, exact and independent of the rounding mode.
+  expr2tc re = member2tc(et, op, "real");
+  if (is_neg2t(expr))
+    re = neg2tc(et, re);
+  const expr2tc im = neg2tc(et, member2tc(et, op, "imag"));
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
 }

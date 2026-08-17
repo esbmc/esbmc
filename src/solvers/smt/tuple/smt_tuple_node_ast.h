@@ -32,7 +32,10 @@ public:
     smt_solver_baset *ctx,
     smt_sortt s,
     std::string _name)
-    : smt_ast(ctx, s), name(std::move(_name)), flat(f)
+    : smt_ast(ctx, s),
+      name(std::move(_name)),
+      flat(f),
+      creation_ctx_level(ctx->ctx_level)
   {
   }
   ~tuple_node_smt_ast() override = default;
@@ -43,6 +46,12 @@ public:
 
   smt_tuple_node_flattener &flat;
   std::vector<smt_astt> elements;
+
+  /** Context level this AST was created at. @ref elements are allocated
+   *  lazily, so they can belong to a deeper level than the AST itself; those
+   *  outlive their contents unless the flattener clears them on the way back
+   *  down (issue #6831). */
+  const unsigned int creation_ctx_level;
 
   smt_astt
   ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const override;
