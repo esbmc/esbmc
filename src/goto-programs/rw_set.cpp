@@ -148,6 +148,32 @@ void rw_sett::assign(const expr2tc &lhs, const expr2tc &rhs)
   read_write_rec(lhs, false, true, "", guard2tc(), expr2tc());
 }
 
+// The FP nodes carry __ESBMC_rounding_mode as an extra operand that the legacy
+// exprt form did not expose positionally, so a foreach_operand walk would
+// register the rounding mode as a shared object. Return the value operands
+// alone, or nothing when expr is not one of those nodes.
+static std::vector<expr2tc> ieee_value_operands(const expr2tc &expr)
+{
+  if (is_ieee_add2t(expr))
+    return {to_ieee_add2t(expr).side_1, to_ieee_add2t(expr).side_2};
+  if (is_ieee_sub2t(expr))
+    return {to_ieee_sub2t(expr).side_1, to_ieee_sub2t(expr).side_2};
+  if (is_ieee_mul2t(expr))
+    return {to_ieee_mul2t(expr).side_1, to_ieee_mul2t(expr).side_2};
+  if (is_ieee_div2t(expr))
+    return {to_ieee_div2t(expr).side_1, to_ieee_div2t(expr).side_2};
+  if (is_ieee_rem2t(expr))
+    return {to_ieee_rem2t(expr).side_1, to_ieee_rem2t(expr).side_2};
+  if (is_ieee_fma2t(expr))
+    return {
+      to_ieee_fma2t(expr).value_1,
+      to_ieee_fma2t(expr).value_2,
+      to_ieee_fma2t(expr).value_3};
+  if (is_ieee_sqrt2t(expr))
+    return {to_ieee_sqrt2t(expr).value};
+  return {};
+}
+
 void rw_sett::read_write_rec(
   const expr2tc &expr,
   bool r,
@@ -299,30 +325,9 @@ void rw_sett::read_write_rec(
                                               : to_nearbyint2t(expr).from;
     read_write_rec(from, r, w, suffix, guard, original_expr, dereferenced);
   }
-  else if (
-    is_ieee_add2t(expr) || is_ieee_sub2t(expr) || is_ieee_mul2t(expr) ||
-    is_ieee_div2t(expr) || is_ieee_fma2t(expr) || is_ieee_sqrt2t(expr))
+  else if (std::vector<expr2tc> values = ieee_value_operands(expr);
+           !values.empty())
   {
-    // Same rationale: recurse into the FP value operands, never the rounding
-    // mode. foreach_operand would also visit rounding_mode, so list the value
-    // operands explicitly.
-    std::vector<expr2tc> values;
-    if (is_ieee_add2t(expr))
-      values = {to_ieee_add2t(expr).side_1, to_ieee_add2t(expr).side_2};
-    else if (is_ieee_sub2t(expr))
-      values = {to_ieee_sub2t(expr).side_1, to_ieee_sub2t(expr).side_2};
-    else if (is_ieee_mul2t(expr))
-      values = {to_ieee_mul2t(expr).side_1, to_ieee_mul2t(expr).side_2};
-    else if (is_ieee_div2t(expr))
-      values = {to_ieee_div2t(expr).side_1, to_ieee_div2t(expr).side_2};
-    else if (is_ieee_fma2t(expr))
-      values = {
-        to_ieee_fma2t(expr).value_1,
-        to_ieee_fma2t(expr).value_2,
-        to_ieee_fma2t(expr).value_3};
-    else
-      values = {to_ieee_sqrt2t(expr).value};
-
     for (const expr2tc &v : values)
       read_write_rec(v, r, w, suffix, guard, original_expr, dereferenced);
   }

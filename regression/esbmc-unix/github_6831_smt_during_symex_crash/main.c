@@ -7,8 +7,8 @@ int g = 0, h = 0;
 int *a[2] = {&g, &h};
 int **ap;
 
-// SIGSEGV under --smt-during-symex: an array-of-pointers select caches ASTs
-// that pop_ctx frees on DFS backtrack (issue #6831, W3.3).
+// Segfaulted under --smt-during-symex: an array-of-pointers select projects
+// tuple elements that pop_ctx had already destroyed (issue #6831, W3.3).
 void *writer(void *arg)
 {
   (void)arg;
