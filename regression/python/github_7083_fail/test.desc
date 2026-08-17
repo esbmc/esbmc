@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 6
+^ERROR: __ESBMC_new_object bound to a non-pointer lvalue of type struct; the frontend must allocate class instances through a pointer$
