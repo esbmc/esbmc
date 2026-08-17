@@ -49,6 +49,44 @@ void frame_enforcert::materialize_snapshots(
   }
 }
 
+static const expr2tc &strip_typecasts(const expr2tc &e)
+{
+  const expr2tc *leaf = &e;
+  while (is_typecast2t(*leaf))
+    leaf = &to_typecast2t(*leaf).from;
+  return *leaf;
+}
+
+// The parameter a path is rooted at, and the field of *that* parameter the path
+// goes through: `o->sub->a` is rooted at `o` through `sub`. Recording that much
+// lets the per-field check hold every other field of `*o` unchanged, which is
+// what catches a write to `o->x`. What happens under `o->sub` is not covered --
+// the pointee of a field is not a parameter, so Phase 2C has nothing to root a
+// snapshot at (github_7055_assigns_multilevel_inner_knownbug).
+static bool root_pointer_field(const expr2tc &e, irep_idt &ptr, irep_idt &field)
+{
+  if (!is_member2t(e))
+    return false;
+
+  // A cast anywhere along the path -- `((Inner *)o->sub)->a` -- must not lose
+  // the root, or the target falls back to direct_targets and no obligation is
+  // generated at all.
+  const member2t &mem = to_member2t(e);
+  const expr2tc &src = strip_typecasts(mem.source_value);
+  if (!is_dereference2t(src))
+    return false;
+
+  const expr2tc &under = strip_typecasts(to_dereference2t(src).value);
+  if (is_symbol2t(under))
+  {
+    ptr = to_symbol2t(under).thename;
+    field = mem.member;
+    return true;
+  }
+
+  return root_pointer_field(under, ptr, field);
+}
+
 frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
   const std::vector<expr2tc> &explicit_assigns)
 {
@@ -87,8 +125,17 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
         }
         else
         {
-          // Complex pointer expression — fall back to direct_targets
-          result.direct_targets.push_back(target);
+          // A path through more than one pointer, e.g. `o->sub->a`. Record the
+          // parameter it is rooted at and the field it enters, so the per-field
+          // check still holds every other field of that parameter unchanged.
+          // Left in direct_targets it matched no snapshot and no obligation was
+          // generated at all, so a body writing outside its frame verified
+          // (#7055).
+          irep_idt root_ptr, root_field;
+          if (root_pointer_field(target, root_ptr, root_field))
+            result.ptr_field_targets[root_ptr].insert(root_field);
+          else
+            result.direct_targets.push_back(target);
         }
       }
       else
