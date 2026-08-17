@@ -3,8 +3,12 @@
 
 #include "ios"
 #include "definitions.h"
-//#include "iomanip"
-//#include "cstring"
+#include "cstring"
+
+/* Widest field a stream can hold. Matches STRING_CAPACITY in <string>, which
+ * is what ostringstream::str() has to fit the result into. */
+#define OSTREAM_CAPACITY 128
+#define OSTREAM_NUM_SIZE 24
 
 namespace std
 {
@@ -14,7 +18,16 @@ class ostream : virtual public ios
   typedef int streamoff;
 
 public:
-  explicit ostream(streambuf *sb);
+  /* Both constructors need a body: an undefined one leaves the object -- its
+   * vtable pointer included -- unconstructed, and the first insertion then
+   * dereferences a bad pointer through the sink dispatch below. */
+  explicit ostream(streambuf *sb)
+  {
+    _filesize = nondet_uint();
+    _filepos = 0;
+    __streambuf = sb;
+  }
+
   ostream()
   {
     _filesize = nondet_uint();
@@ -25,23 +38,15 @@ public:
   {
   }
 
-  /* width/fill/precision are members of ios_base/ios, not of ostream
-   * ([ostream.formatted] lists no such members). Declaring them here hid the
-   * inherited overload sets: `cout.precision()` did not resolve at all, and
-   * `cout.precision(3)` / `cout.fill(c)` bound to void-returning stubs whose
-   * bodies were commented out, so the setting was silently discarded.
-   * ostream::width was declared and never defined, so it returned a
-   * nondeterministic value. Removing all four lets the inherited members
-   * through. */
+  /* width/fill/precision stay inherited: [ostream.formatted] gives ostream no
+   * such members, and redeclaring them here hides the ios_base overload
+   * sets. */
   void put(char c);
-  //	void write(char str[], size_t n);
   ostream &write(const char *s, streamsize n);
   streampos tellp();                                    //model
   ostream &seekp(streampos pos);                        //model
   ostream &seekp(streamoff off, ios_base::seekdir dir); //model
   ostream &flush();
-  ios_base::fmtflags flags() const;
-  ios_base::fmtflags flags(ios_base::fmtflags fmtfl);
 
   class sentry
   {
@@ -57,73 +62,152 @@ public:
   ostream &operator=(const ostream &); // disabled
   static streamsize _filesize;
   static ios::streampos _filepos;
+
+  /* The character sink the inserters below feed. It hangs off the base, so
+   * that a chain whose static type is ostream& -- a manipulator, a
+   * user-defined inserter, any helper taking ostream& -- still reaches the
+   * derived stream's buffer, which is what github #7016 was about. cout & co.
+   * inherit the discarding default.
+   *
+   * Virtual rather than a `bool _sink` data member tested in place: symex
+   * resolves the dispatch from the object's dynamic type and drops the append
+   * path outright, whereas a flag stops constant-folding as soon as any
+   * unrelated pointer write (a std::string operation, say) widens the value
+   * set -- the appends then cost one --incremental-bmc k step per character.
+   * Appends take an explicit length for the same reason: strlen() over a
+   * 128-byte buffer is a loop no unwind bound folds away.
+   *
+   * _discard() also consumes width(): [ostream.formatted.reqmts] has a
+   * formatted insertion reset it whether or not anything is buffered. */
+  virtual bool _discard()
+  {
+    width(0);
+    return true;
+  }
+  virtual void _sink_write(const char *s, streamsize n)
+  {
+  }
+  virtual void _sink_fill(char c, streamsize n)
+  {
+  }
+
+  void _put_field(const char *s, streamsize n);
+  int _base() const;
+  /* `bytes` is sizeof the source type: [ostream.inserters.arithmetic] routes a
+   * signed value through the *same-width* unsigned type when the base is not
+   * decimal, so `<< hex << -1` is width-sensitive ("ffffffff" for int). */
+  void _put_num(long long val, unsigned bytes);
+  void _put_unum(unsigned long long val);
+  void _put_double(double val);
+  void _apply(const smanip &m);
 };
 //ios::streampos ostream::_filepos = 0;
 
 // Ostream shift output operators: these are explicitly enumerated by the
-// spec, and thus we can't template them, or crazy things happen. Until
-// someone knows how much of this to model, just discard the data for now.
+// spec, and thus we can't template them, or crazy things happen.
 
 inline ostream &operator<<(ostream &o, bool val)
 {
+  if (o.flags() & ios_base::boolalpha)
+    o._put_field(val ? "true" : "false", val ? 4 : 5);
+  else
+    o._put_field(val ? "1" : "0", 1);
+  return o;
+}
+inline ostream &operator<<(ostream &o, char val)
+{
+  char s[2] = {val, '\0'};
+  o._put_field(s, 1);
+  return o;
+}
+inline ostream &operator<<(ostream &o, signed char val)
+{
+  return o << (char)val;
+}
+inline ostream &operator<<(ostream &o, unsigned char val)
+{
+  return o << (char)val;
+}
+inline ostream &operator<<(ostream &o, const char *val)
+{
+  // strlen() is a loop; keep it off the path of a stream that discards.
+  if (!o._discard())
+    o._put_field(val, strlen(val));
   return o;
 }
 inline ostream &operator<<(ostream &o, short val)
 {
+  o._put_num(val, sizeof(short));
   return o;
 }
 inline ostream &operator<<(ostream &o, unsigned short val)
 {
+  o._put_unum(val);
   return o;
 }
 inline ostream &operator<<(ostream &o, int val)
 {
+  o._put_num(val, sizeof(int));
   return o;
 }
 inline ostream &operator<<(ostream &o, unsigned int val)
 {
+  o._put_unum(val);
   return o;
 }
 #if defined(__clang__) ||                                                      \
   __WORDSIZE == 64 // Is the same type as 'int' otherwise.
 inline ostream &operator<<(ostream &o, long val)
 {
+  o._put_num(val, sizeof(long));
   return o;
 }
 inline ostream &operator<<(ostream &o, unsigned long val)
 {
+  o._put_unum(val);
   return o;
 }
 #endif
 inline ostream &operator<<(ostream &o, long long val)
 {
+  o._put_num(val, sizeof(long long));
   return o;
 }
 inline ostream &operator<<(ostream &o, unsigned long long val)
 {
+  o._put_unum(val);
   return o;
 }
 inline ostream &operator<<(ostream &o, float val)
 {
+  o._put_double(val);
   return o;
 }
 inline ostream &operator<<(ostream &o, double val)
 {
+  o._put_double(val);
   return o;
 }
 #if defined(__clang__)
 // Identical to double under ESBMC.
 inline ostream &operator<<(ostream &o, long double val)
 {
+  o._put_double((double)val);
   return o;
 }
 #endif
+inline ostream &operator<<(ostream &o, const void *val)
+{
+  o._put_unum((unsigned long long)val);
+  return o;
+}
 inline ostream &operator<<(ostream &o, void *val)
 {
-  return o;
+  return o << (const void *)val;
 }
 inline ostream &operator<<(ostream &o, const smanip &val)
 {
+  o._apply(val);
   return o;
 }
 
@@ -142,14 +226,229 @@ using basic_ostream = ostream;
 
 namespace std
 {
+/* [ostream.formatted.reqmts]: a formatted insertion pads to width() with
+ * fill() and then resets width() to 0. */
+void ostream::_put_field(const char *s, streamsize n)
+{
+  if (_discard())
+    return;
+
+  streamsize w = width();
+  width(0);
+  streamsize pad = (n < w) ? w - n : 0;
+
+  if (flags() & ios_base::left)
+  {
+    _sink_write(s, n);
+    _sink_fill(fill(), pad);
+  }
+  else
+  {
+    _sink_fill(fill(), pad);
+    _sink_write(s, n);
+  }
+}
+
+// The converters return the number of characters written, so that no caller
+// has to strlen() the result back.
+int _ostream_utoa_base(unsigned long long v, int base, bool upper, char *s)
+{
+  char rev[OSTREAM_NUM_SIZE];
+  int n = 0;
+  do
+  {
+    int d = (int)(v % (unsigned long long)base);
+    rev[n++] = (char)(d < 10 ? '0' + d : (upper ? 'A' : 'a') + (d - 10));
+    v /= (unsigned long long)base;
+  } while (v != 0);
+
+  int i = 0;
+  while (n > 0)
+    s[i++] = rev[--n];
+  s[i] = '\0';
+  return i;
+}
+
+int _ostream_utoa(unsigned long long v, char *s)
+{
+  return _ostream_utoa_base(v, 10, false, s);
+}
+
+int _ostream_itoa(long long val, char *s)
+{
+  if (val >= 0)
+    return _ostream_utoa((unsigned long long)val, s);
+
+  s[0] = '-';
+  // Negating in unsigned avoids the overflow on LLONG_MIN.
+  return 1 + _ostream_utoa(0ULL - (unsigned long long)val, s + 1);
+}
+
+int ostream::_base() const
+{
+  fmtflags b = flags() & ios_base::basefield;
+  if (b == ios_base::hex)
+    return 16;
+  if (b == ios_base::oct)
+    return 8;
+  return 10;
+}
+
+void ostream::_put_num(long long val, unsigned bytes)
+{
+  if (_discard())
+    return;
+
+  char buf[OSTREAM_NUM_SIZE + 1];
+  int base = _base();
+  if (base == 10)
+  {
+    _put_field(buf, _ostream_itoa(val, buf));
+    return;
+  }
+
+  // Reinterpret in the same-width unsigned type, without shifting by the full
+  // width (undefined when bytes == sizeof(long long)).
+  unsigned long long u = (unsigned long long)val;
+  if (bytes < sizeof(unsigned long long))
+    u &= (1ULL << (bytes * 8)) - 1ULL;
+  _put_field(
+    buf, _ostream_utoa_base(u, base, (flags() & ios_base::uppercase) != 0, buf));
+}
+
+void ostream::_put_unum(unsigned long long val)
+{
+  if (_discard())
+    return;
+
+  char buf[OSTREAM_NUM_SIZE];
+  _put_field(
+    buf,
+    _ostream_utoa_base(
+      val, _base(), (flags() & ios_base::uppercase) != 0, buf));
+}
+
+/* %g-like formatting to `sig` significant digits, with trailing zeros and a
+ * trailing '.' stripped to match the iostream default. Long double maps to
+ * double under ESBMC. Deviations from %g a caller can observe: the integer
+ * part must fit in `int`; a leading "0." counts against `sig`; there is no
+ * switch to exponent notation; and NaN/infinity are not handled. Each digit
+ * emitted costs one loop iteration, so a program printing wide values needs a
+ * matching --unwind. */
+int _ostream_dtoa(double val, int sig, char *out)
+{
+  int len = 0;
+  if (val < 0)
+  {
+    out[len++] = '-';
+    val = -val;
+  }
+  int ipart = (int)val;
+  int idigits = _ostream_utoa((unsigned long long)ipart, out + len);
+
+  // A double carries no more than 17 significant decimal digits, and 10^prec
+  // has to stay inside long long.
+  if (sig > 15)
+    sig = 15;
+  // Ternary, not `if (prec < 0) prec = 0;`. With `--unwind 10`
+  // (no `--incremental-bmc`) ESBMC's interval domain widens `prec`
+  // through the if-clamp and produces a false positive on a later
+  // `len` invariant; the ternary is opaque to that widening. Verified
+  // against regression/esbmc-cpp/stream/sstream_str_{char,double,float}
+  // (issue #4401).
+  int prec = (idigits < sig) ? (sig - idigits) : 0;
+
+  char fbuf[OSTREAM_NUM_SIZE];
+  int flen = 0;
+  if (prec > 0)
+  {
+    double fpart = val - (double)ipart;
+    long long mult = 1;
+    for (int i = 0; i < prec; i++)
+      mult *= 10;
+    long long fint = (long long)(fpart * (double)mult + 0.5);
+
+    // Half-up rounding can produce fint == mult (e.g. fpart = 0.999999,
+    // mult = 1e6). Promote the carry into ipart and re-emit so the
+    // leading digit is not silently dropped from the fractional buffer.
+    if (fint >= mult)
+    {
+      ipart++;
+      idigits = _ostream_utoa((unsigned long long)ipart, out + len);
+      fint = 0;
+    }
+
+    flen = prec;
+    for (int j = prec; j > 0; fint /= 10)
+      fbuf[--j] = (char)('0' + (int)(fint % 10));
+    while (flen > 0 && fbuf[flen - 1] == '0')
+      flen--;
+  }
+
+  len += idigits;
+  if (flen > 0)
+  {
+    out[len++] = '.';
+    for (int i = 0; i < flen; i++)
+      out[len++] = fbuf[i];
+  }
+  out[len] = '\0';
+  return len;
+}
+
+void ostream::_put_double(double val)
+{
+  if (_discard())
+    return;
+
+  char buf[OSTREAM_CAPACITY];
+  _put_field(buf, _ostream_dtoa(val, (int)precision(), buf));
+}
+
+/* Only width and fill reach the output; the remaining settings are recorded
+ * so that a later flags()/precision() query answers consistently. */
+void ostream::_apply(const smanip &m)
+{
+  switch (m._kind)
+  {
+  case smanip::_setw:
+    // streamsize is unsigned here, and setw(-1) is well-formed and means "no
+    // padding" ([ios.base]); assigning it raw would ask for a 4e9-wide field.
+    width(m._arg > 0 ? (streamsize)m._arg : 0);
+    break;
+  case smanip::_setfill:
+    fill((char)m._arg);
+    break;
+  case smanip::_setprecision:
+    precision(m._arg > 0 ? (streamsize)m._arg : 0);
+    break;
+  case smanip::_setbase:
+    setf(
+      m._arg == 8 ? ios_base::oct : (m._arg == 16 ? ios_base::hex
+                                                  : ios_base::dec),
+      ios_base::basefield);
+    break;
+  case smanip::_setiosflags:
+    setf(m._arg);
+    break;
+  case smanip::_resetiosflags:
+    unsetf(m._arg);
+    break;
+  }
+}
+
+// [ostream.unformatted]: no padding, and width() is left alone.
 void ostream::put(char c)
 {
+  char s[2] = {c, '\0'};
+  _sink_write(s, 1);
 }
 
 //	void ostream::write(char str[], size_t n)
 ostream &ostream::write(const char *s, streamsize n)
 {
   _filepos = n;
+  _sink_write(s, n);
   return *this;
 }
 
@@ -193,14 +492,18 @@ inline ostream &flush(ostream &os)
   return os.flush();
 }
 
-inline ostream& boolalpha(ostream& os) 
-{
-  return os;
-}
-
 inline ostream &operator<<(ostream &o, ostream& (*manip)(ostream&))
 {
   return manip(o);
+}
+
+/* [ostream.manip] also reaches the ios_base manipulators -- left, right, hex,
+ * boolalpha and the rest, declared in <ios> as ios_base&(*)(ios_base&).
+ * Without this overload they convert to `const void*` and print a pointer. */
+inline ostream &operator<<(ostream &o, ios_base &(*manip)(ios_base &))
+{
+  manip(o);
+  return o;
 }
 
 } // namespace std
