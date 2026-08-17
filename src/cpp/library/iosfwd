@@ -5,11 +5,12 @@
 //
 // ESBMC forces -nostdinc++ and resolves #include <...> only against this
 // bundled OM tree, so <iosfwd> must exist here for TUs that include it to
-// parse.  The stream OMs define *concrete* (non-template) classes rather than
+// parse.  Most stream OMs are *concrete* (non-template) classes rather than
 // the standard basic_*<charT> templates with typedefs, so these forward
 // declarations name those concrete classes directly.  Using the standard
 // "template <...> class basic_ostream; typedef basic_ostream<char> ostream;"
-// form would redefine e.g. ostream and break <ostream>.
+// form would redefine e.g. ostream and break <ostream>.  The <sstream>
+// classes are the exception -- they really are templates (github #7017).
 
 namespace std
 {
@@ -23,10 +24,37 @@ class filebuf;
 class ifstream;
 class ofstream;
 class fstream;
-class stringbuf;
-class istringstream;
-class ostringstream;
-class stringstream;
+
+template <class CharT>
+struct char_traits;
+template <class T>
+class allocator;
+
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_stringbuf;
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_istringstream;
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_ostringstream;
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_stringstream;
+
+typedef basic_stringbuf<char> stringbuf;
+typedef basic_istringstream<char> istringstream;
+typedef basic_ostringstream<char> ostringstream;
+typedef basic_stringstream<char> stringstream;
 } // namespace std
 
 #endif

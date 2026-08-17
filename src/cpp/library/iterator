@@ -344,9 +344,16 @@ public:
     : out_stream(&s), delim(delimiter)
   {
   }
-  ostream_iterator(ostream_iterator<T, charT, traits> &x); /* :
-			out_stream(x.out_stream), delim(x.delim) {
-	}*/
+  /* Needs a body for the same reason ostream's own constructors do: an
+   * undefined one leaves out_stream unconstrained, and std::copy takes the
+   * iterator by value -- an insertion through the copy then dispatches on a
+   * vtable pointer no value set can pin down, surfacing as "No target
+   * candidate" and a bogus invalid-pointer violation on a safe program.
+   * [ostream.iterator.cons] declares the parameter const. */
+  ostream_iterator(const ostream_iterator<T, charT, traits> &x)
+    : out_stream(x.out_stream), delim(x.delim)
+  {
+  }
   ~ostream_iterator()
   {
   }
