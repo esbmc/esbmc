@@ -2397,6 +2397,19 @@ static nlohmann::json numpy_broadcast_binary(
 // misread (the exact failure mode this fix closes).
 static constexpr int max_numpy_logical_chain_depth = 4;
 
+// Single owner of the chaining-depth diagnostic (regex-pinned by
+// regression/numpy/chaining_depth_exceeded_fail) so recursing one level
+// deeper than the supported bound always reports the same, correct reason --
+// resolve_numpy_logical_arg() is the only place that actually recurses, so
+// it is the only call site that can legitimately hit this.
+static void check_numpy_logical_chain_depth(int next_depth)
+{
+  if (next_depth > max_numpy_logical_chain_depth)
+    throw std::runtime_error(
+      "TypeError: numpy call composition exceeds the supported chaining "
+      "depth");
+}
+
 static std::optional<nlohmann::json> evaluate_numpy_logical_call(
   const nlohmann::json &call_node,
   python_converter &converter,
@@ -2405,10 +2418,13 @@ static std::optional<nlohmann::json> evaluate_numpy_logical_call(
 // Resolves one argument of a numpy comparison/logical call: a Name is
 // followed to its declaration; a Call to a recognized constructor is
 // materialized; a Call to another comparison/logical function is evaluated
-// recursively via evaluate_numpy_logical_call(). Anything else (a function
-// parameter, a call to an unrelated numpy function) is left unchanged, so
-// the caller's own numeric/list extraction fails on it exactly as it
-// already does for any other unresolvable operand.
+// recursively via evaluate_numpy_logical_call(), or left unresolved if that
+// recognized call shape still isn't evaluable (e.g. a wrong argument count)
+// rather than being misreported as a chaining-depth failure. Anything else
+// (a function parameter, a call to an unrelated numpy function) is also left
+// unchanged, so the caller's own numeric/list extraction raises an explicit
+// TypeError on it exactly as it already does for any other unresolvable
+// operand (see numpy_logical_as_bool/_double).
 static nlohmann::json resolve_numpy_logical_arg(
   nlohmann::json arg,
   python_converter &converter,
@@ -2431,13 +2447,11 @@ static nlohmann::json resolve_numpy_logical_arg(
       return *materialized;
     if (is_numpy_logical_comparison_call(arg, converter.ast()))
     {
+      check_numpy_logical_chain_depth(depth + 1);
       if (
         std::optional<nlohmann::json> evaluated =
           evaluate_numpy_logical_call(arg, converter, depth + 1))
         return *evaluated;
-      throw std::runtime_error(
-        "TypeError: numpy call composition exceeds the supported chaining "
-        "depth");
     }
   }
   return arg;
@@ -2553,14 +2567,15 @@ static std::optional<nlohmann::json> evaluate_numpy_where_call(
 // (np.logical_not(np.equal(a, b))) or via an intermediate variable
 // (x = np.equal(a, b); np.logical_not(x)). Mirrors the top-level dispatch in
 // numpy_call_expr::get() for these same functions; both share the helpers
-// above instead of each reimplementing broadcasting/comparison logic.
+// above instead of each reimplementing broadcasting/comparison logic. Every
+// caller already checks the chaining depth before reaching here (see
+// check_numpy_logical_chain_depth()), so this only re-validates the call
+// shape itself.
 static std::optional<nlohmann::json> evaluate_numpy_logical_call(
   const nlohmann::json &call_node,
   python_converter &converter,
   int depth)
 {
-  if (depth > max_numpy_logical_chain_depth)
-    return std::nullopt;
   if (!is_numpy_logical_comparison_call(call_node, converter.ast()))
     return std::nullopt;
 
@@ -5837,10 +5852,9 @@ exprt numpy_call_expr::get()
           std::optional<nlohmann::json> evaluated =
             evaluate_numpy_logical_call(arg, converter_, 0))
           arg = std::move(*evaluated);
-        else
-          throw std::runtime_error(
-            "TypeError: numpy call composition exceeds the supported "
-            "chaining depth");
+        // else: recognized shape but not evaluable (e.g. a wrong argument
+        // count) -- leave arg unresolved so the caller's own scalar/list
+        // extraction raises its own diagnostic for that failure.
       }
       return arg;
     };
