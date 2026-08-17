@@ -714,9 +714,16 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     // Check that at_pos and exm_pos are valid before using them
     if (at_pos == std::string::npos || exm_pos == std::string::npos)
     {
-      log_warning(
-        "migrate_expr: symbol '{}' missing renaming delimiters, "
-        "treating as level0 with base name '{}'",
+      /* A level0 symbol carries no renaming delimiters by definition, so their
+       * absence is not an anomaly: all this has established is that the symbol
+       * was not in the namespace, which is ordinary while a context is still
+       * being built -- an implicitly-declared callee, or a local reached before
+       * it is added. There is nothing for a reader to act on, and it fired once
+       * per occurrence. */
+      log_debug(
+        "migrate",
+        "migrate_expr: symbol '{}' is not in the namespace; treating as "
+        "level0 with base name '{}'",
         init,
         thename);
       return symbol2tc(

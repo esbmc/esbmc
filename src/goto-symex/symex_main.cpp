@@ -80,13 +80,13 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (is_true(new_expr))
   {
-    if (options.get_bool_option("multi-property"))
-    {
-      record_property_verdict(msg, property_verdictt::Passed);
+    // A claim the simplifier discharged holds in every mode, not only under
+    // --multi-property, so record it either way (discussion #7023).
+    record_property_verdict(msg, property_verdictt::Passed);
 
+    if (options.get_bool_option("multi-property"))
       // Track trivially verified claims
       ++simplified_claims;
-    }
 
     // Strengthen the claim by assuming it when trivially true
     assume(claim_expr);
@@ -106,11 +106,10 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       claim_expr, *interval_domain_state)
       .is_true())
   {
+    record_property_verdict(msg, property_verdictt::Passed, "interval");
+
     if (options.get_bool_option("multi-property"))
-    {
-      record_property_verdict(msg, property_verdictt::Passed, "interval");
       ++simplified_claims;
-    }
 
     assume(claim_expr);
     return;
@@ -148,8 +147,12 @@ void goto_symext::record_property_verdict(
   property_verdictt verdict,
   const std::string &note)
 {
+  const locationt &location = cur_state->source.pc->location;
   goto_functionst::property_verdicts.record(
-    msg + " at " + cur_state->source.pc->location.as_string(), verdict, note);
+    msg + " at " + location.as_string(),
+    verdict,
+    property_location(location, msg),
+    note);
 }
 
 void goto_symext::assertion(
@@ -510,6 +513,27 @@ void goto_symext::symex_assert()
   simplify_python_builtins(tmp);
 
   claim(tmp, msg);
+}
+
+/* The frontend must bind __ESBMC_new_object's result to a pointer; a
+ * non-pointer lvalue is a frontend bug, not a property of the program. Report
+ * it rather than letting to_pointer_type() surface it as an irep2 cast error
+ * with no source location (esbmc/esbmc#7083). Checked unconditionally: an
+ * assert is compiled out of release builds, which is exactly where the
+ * unintelligible failure was observed. */
+static void
+require_new_object_pointer_lvalue(const code_function_call2t &func_call)
+{
+  if (is_pointer_type(func_call.ret->type))
+    return;
+
+  const std::string loc = func_call.location.as_string();
+  log_error(
+    "__ESBMC_new_object bound to a non-pointer lvalue of type {}{}; the "
+    "frontend must allocate class instances through a pointer",
+    get_type_id(func_call.ret->type),
+    loc.empty() ? "" : (" at " + loc));
+  abort();
 }
 
 void goto_symext::run_intrinsic(
@@ -1066,8 +1090,7 @@ void goto_symext::run_intrinsic(
   // size-1 dynamic object.
   if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
   {
-    assert(
-      is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    require_new_object_pointer_lvalue(func_call);
     const expr2tc &lhs = func_call.ret;
     const type2tc base = to_pointer_type(lhs->type).subtype;
     const guard2tc &guard = cur_state->guard;
