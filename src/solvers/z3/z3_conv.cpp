@@ -1772,6 +1772,14 @@ smt_astt z3_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
     lhs->sort);
 }
 
+smt_astt z3_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  const z3_smt_ast *mlhs = to_solver_smt_ast<z3_smt_ast>(lhs);
+  const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, mlhs->a, mrhs->a)), lhs->sort);
+}
+
 smt_astt z3_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 {
   return new_ast(
