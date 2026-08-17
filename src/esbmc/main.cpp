@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <esbmc/esbmc_parseoptions.h>
+#include <esbmc/globals.h>
 #include <langapi/mode.h>
 
 #include <exception>
@@ -118,6 +119,8 @@ int main(int argc, const char **argv)
   if (!wants_parallel_solving(argc, argv))
     mallopt(M_ARENA_MAX, 1);
 #endif
+
+  register_bundled_files();
 
 #ifndef _WIN32
   pthread_attr_t attr;
