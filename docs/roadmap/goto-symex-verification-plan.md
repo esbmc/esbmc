@@ -5977,7 +5977,9 @@ same expression through `char *` does. `__ESBMC_POINTER_OFFSET` of the result is
 0 and `__ESBMC_same_object` holds, so the pointer model and the dereference
 disagree with each other. That is a wrong-address store, not a false positive —
 unsound in the missed-bug direction — and the macro was masking it by keeping
-the offset opaque. Removing the macro for C is blocked on fixing that; the C++
+the offset opaque. Filed as **#7127**: the offset is applied with the wrong
+sign, so `p - k` writes at `p + k`, and the trigger is backwards arithmetic on
+a `void *` whose base is a member address. Removing the macro for C is blocked on fixing that; the C++
 half, which is what this plan needs, is not.
 
 **Measured on this tree, `--std c++23`.** `#include <goto-symex/renaming.h>` now

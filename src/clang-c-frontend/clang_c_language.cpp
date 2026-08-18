@@ -698,7 +698,7 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
  * or non-type template argument may be spelt with offsetof. clang's
  * OffsetOfExpr is lowered in clang_c_convert.cpp and agrees with the expansion
  * on every layout in regression/esbmc-cpp/cpp/offsetof_layout_parity. C keeps
- * the expansion because dropping it there exposes a separate void*-arithmetic
+ * the expansion because dropping it there exposes #7127, a void*-arithmetic
  * dereference defect that regression/esbmc/github_2512_* stands on. */
 #ifndef __cplusplus
 #define __builtin_offsetof(type, member) \
