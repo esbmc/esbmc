@@ -112,10 +112,14 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
 
-  if (is_code_for2t(expr))
-    hoist_for_init(expr);
+  /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
+   * block is not a statement-with-condition, so the loop's guard would never
+   * reach the conversion. */
   if (is_statement_with_condition(expr))
     adjust_statement_condition(expr);
+
+  if (is_code_for2t(expr))
+    hoist_for_init(expr);
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
