@@ -1388,9 +1388,17 @@ void python_converter::get_function_definition(
   bool annotation_is_optional = false;
 
   // Determine return type
-  if (
-    return_node.is_null() ||
-    (return_node["_type"] == "Constant" && return_node["value"].is_null()))
+  if (return_node.is_null())
+  {
+    // Detects a genuine int/str return divergence, so the function gets a
+    // tagged return type instead of the post-hoc scan below narrowing to
+    // whichever branch it sees first.
+    type.return_type() =
+      dynamic_type_handler_.detect_dynamic_return_type(function_node["body"])
+        ? type_handler_.get_tagged_object_type()
+        : empty_typet();
+  }
+  else if (return_node["_type"] == "Constant" && return_node["value"].is_null())
   {
     type.return_type() = empty_typet();
   }
@@ -1606,6 +1614,7 @@ void python_converter::get_function_definition(
 
   bool already_optional =
     annotation_is_optional || is_user_class_pointer(type.return_type()) ||
+    type_handler_.is_tagged_scalar_type(type.return_type()) ||
     (type.return_type().is_struct() && to_struct_type(type.return_type())
                                          .tag()
                                          .as_string()
