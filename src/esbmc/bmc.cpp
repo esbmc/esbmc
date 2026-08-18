@@ -49,6 +49,7 @@
 #include <util/symtab/show_symbol_table.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
+#include <util/ssa/fingerprint.h>
 #include <atomic>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -2448,6 +2449,43 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   return ltl_res_good;
 }
 
+// P0 measurement instrumentation for a cross-run VCC cache: emits one line
+// per solved claim with the digest of its sliced cone under each
+// normalisation, so the recurrence rate can be counted without a cache
+// existing yet.
+static void dump_claim_fingerprint(
+  const std::string &path,
+  const symex_target_equationt::SSA_stepst &cone,
+  smt_resultt result,
+  const std::string &loc,
+  const std::string &msg)
+{
+  const char *verdict = result == P_UNSATISFIABLE ? "UNSAT"
+                        : result == P_SATISFIABLE ? "SAT"
+                                                  : "OTHER";
+
+  std::string line = fmt::format(
+    "{:016x}\t{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\t{}",
+    ssa_cone_digest(cone, fingerprint_modet::raw),
+    ssa_cone_digest(cone, fingerprint_modet::counters),
+    ssa_cone_digest(cone, fingerprint_modet::srcloc),
+    ssa_cone_digest(cone, fingerprint_modet::full),
+    ssa_cone_size(cone),
+    verdict,
+    loc,
+    msg);
+
+  static std::mutex dump_mutex;
+  std::lock_guard<std::mutex> lock(dump_mutex);
+  if (path == "-")
+  {
+    std::cout << "VCC-FP " << line << "\n";
+    return;
+  }
+  std::ofstream out(path, std::ios::app);
+  out << line << "\n";
+}
+
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
@@ -2526,6 +2564,8 @@ smt_resultt bmct::multi_property_check(
 
   // For incr/kind in multi-property
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
+  const std::string fingerprint_dump =
+    options.get_option("vcc-fingerprint-dump");
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -2575,6 +2615,7 @@ smt_resultt bmct::multi_property_check(
                        &is_dead_code,
                        &is_cov_run,
                        &is_keep_verified,
+                       &fingerprint_dump,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt,
@@ -2725,6 +2766,14 @@ smt_resultt bmct::multi_property_check(
     fine_timet solve_start = current_time();
     smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
+
+    if (!fingerprint_dump.empty())
+      dump_claim_fingerprint(
+        fingerprint_dump,
+        local_eq.SSA_steps,
+        solver_result,
+        claim.claim_loc,
+        claim.claim_msg);
 
     // After UNSAT, probe whether the path to the kept claim is reachable.
     // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.

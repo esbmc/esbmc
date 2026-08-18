@@ -3,7 +3,7 @@ target_include_directories(algorithms
     PRIVATE ${Boost_INCLUDE_DIRS}
     )
 
-add_library(cache ssa/cache.cpp)
+add_library(cache ssa/cache.cpp ssa/fingerprint.cpp)
 target_link_libraries(cache algorithms)
 
 add_library(filesystem base/filesystem.cpp)

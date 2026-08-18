@@ -388,6 +388,11 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"output-goto",
      boost::program_options::value<std::string>(),
      "Export generated goto program"},
+    {"vcc-fingerprint-dump",
+     boost::program_options::value<std::string>(),
+     "Append one line per solved claim (digest of its sliced cone under each "
+     "SSA-name normalisation, cone size, verdict, location) to this file; "
+     "'-' writes to stdout prefixed with VCC-FP"},
     {"cex-output",
      boost::program_options::value<std::string>(),
      "Save the counterexample into a file or, "
