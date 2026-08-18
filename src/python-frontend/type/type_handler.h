@@ -212,6 +212,10 @@ public:
 
   exprt tagged_scalar_type_id(const typet &type) const;
 
+  exprt tagged_scalar_type_matches(
+    const exprt &tagged_type_id,
+    const typet &literal_type) const;
+
   exprt tagged_scalar_byte_size(const exprt &value) const;
 
   // A Python str is a char array or char*.
