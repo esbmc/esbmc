@@ -642,8 +642,9 @@ BigInt alignment(const typet &type, const namespacet &ns)
   BigInt a_int = 0;
 
   // we trust it blindly, no matter how nonsensical
+  // The constant's value, not its `#cformat` text; see padding.cpp for why.
   if (given_alignment.is_not_nil())
-    a_int = string2integer(given_alignment.cformat().as_string());
+    to_integer(given_alignment, a_int);
 
   // alignment but no packing
   if (a_int > 0 && !type.get_bool("packed"))
