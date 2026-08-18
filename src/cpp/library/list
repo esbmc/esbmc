@@ -1,6 +1,8 @@
 #ifndef __STL_LIST
 #define __STL_LIST
 
+#include <stdlib.h>
+
 #include "definitions.h"
 #include "type_traits"
 #include "vector"
@@ -41,13 +43,25 @@ public:
     size_type next_idx;
   };
 
-  node _pool[LIST_MAX_SIZE];
+  // Held behind a pointer, not as a by-value array: an array member requires
+  // the element type to be complete at instantiation, which rules out the
+  // recursive list<Node> member that tree-shaped code declares.
+  // [container.requirements.general] (N4510) requires vector, list and
+  // forward_list to accept an incomplete element type. See #7029 for the same
+  // fix on map, which is *not* obliged to accept one.
+  node *_pool;
   size_type _sentinel_prev;
   size_type _sentinel_next;
   // Monotonic high-water mark for the pool. erase does not reclaim
   // slots; total alloc per list instance is bounded by LIST_MAX_SIZE.
   size_type _next_free;
   size_type _size;
+
+  void __om_allocate()
+  {
+    _pool = static_cast<node *>(malloc(sizeof(node) * LIST_MAX_SIZE));
+    __ESBMC_assume(_pool);
+  }
 
   void _init()
   {
@@ -263,12 +277,14 @@ public:
 
   list()
   {
+    __om_allocate();
     _init();
   }
 
 #if __cplusplus >= 201103L
   list(std::initializer_list<value_type> init)
   {
+    __om_allocate();
     _init();
     for (const value_type *it = init.begin(); it != init.end(); ++it)
       this->push_back(*it);
@@ -277,6 +293,7 @@ public:
 
   list(size_type n, const value_type &value = value_type())
   {
+    __om_allocate();
     _init();
     for (size_type i = 0; i < n; i++)
       push_back(value);
@@ -284,6 +301,7 @@ public:
 
   list(value_type *t1, value_type *t2)
   {
+    __om_allocate();
     _init();
     for (value_type *p = t1; p != t2; ++p)
       push_back(*p);
@@ -291,6 +309,7 @@ public:
 
   list(iterator first, iterator last)
   {
+    __om_allocate();
     _init();
     for (iterator it = first; it != last; ++it)
       push_back(*it);
@@ -306,6 +325,7 @@ public:
   // step on the symbolic next_idx.
   list(const list<T> &x)
   {
+    __om_allocate();
     _sentinel_prev = x._sentinel_prev;
     _sentinel_next = x._sentinel_next;
     _next_free = x._next_free;
@@ -330,6 +350,7 @@ public:
 
   ~list()
   {
+    free(_pool);
   }
 
   typedef iterator const_iterator;
