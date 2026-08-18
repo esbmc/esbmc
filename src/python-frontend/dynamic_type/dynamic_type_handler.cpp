@@ -363,16 +363,20 @@ exprt dynamic_type_handler::handle_comparison(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
 
-  // A tagged-vs-tagged compare needs a size known only at runtime (each
-  // operand's `.size` field), so the byte-compare's memcmp fallback can't
-  // unwind to termination even though the real value is always tiny.
-  // Comparing against a literal doesn't have this problem, since its size is
-  // a compile-time constant. Refuse cleanly rather than risk a
-  // non-terminating run.
   if (lhs_tagged && rhs_tagged)
-    throw std::runtime_error(
-      "comparing two dynamically-typed variables directly is not yet "
-      "supported");
+  {
+    const symbolt *eq_obj_func =
+      converter_.symbol_table().find_symbol("c:@F@__python_scalar_eq_obj");
+    assert(eq_obj_func && "__python_scalar_eq_obj not found in symbol table");
+    exprt call = build_call_expr(
+      *eq_obj_func,
+      int_type(),
+      {build_address_of(lhs),
+       build_address_of(rhs),
+       type_handler_.tagged_scalar_type_id(long_long_int_type())});
+    exprt equal = build_equal(call, from_integer(1, int_type()));
+    return op == "NotEq" ? build_not(equal) : equal;
+  }
 
   exprt result =
     lhs_tagged ? build_eq_literal(lhs, rhs) : build_eq_literal(rhs, lhs);
@@ -518,7 +522,8 @@ exprt dynamic_type_handler::handle_arithmetic(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
 
-  // Same runtime-size concern as handle_comparison's tagged-vs-tagged case.
+  // Equality can settle a type_id mismatch without knowing either type;
+  // arithmetic cannot, since it needs the concrete type to pick an operation.
   if (lhs_tagged && rhs_tagged)
     throw std::runtime_error(
       "'" + op +

@@ -945,6 +945,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (op == "Add" || op == "Sub" || op == "Div")
       return dynamic_type_handler_.handle_arithmetic(
         op, lhs, rhs, get_location_from_decl(element));
+    // Tagging only ever stores a number or a string (get_var_assign rejects
+    // every other rvalue), so a tagged operand is never None. Only a literal
+    // None folds: any other operand may carry side effects that get_expr has
+    // not emitted yet, and returning a constant would discard them.
+    if (op == "Is" || op == "IsNot")
+    {
+      const auto &other =
+        type_handler_.is_tagged_scalar_type(lhs.type()) ? right : left;
+      if (
+        other.value("_type", "") == "Constant" && other.contains("value") &&
+        other["value"].is_null())
+        return migrate_expr_back(
+          op == "IsNot" ? gen_true_expr() : gen_false_expr());
+    }
     throw std::runtime_error(
       "operator '" + op +
       "' on a dynamically-typed variable is not yet supported");
