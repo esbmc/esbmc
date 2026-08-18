@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 2
+^VERIFICATION FAILED$
+^.*assertion return_value\$_strlen.*$

@@ -11,6 +11,7 @@
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
@@ -1056,19 +1057,31 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // len(obj) where obj's class defines __len__: dispatch to obj.__len__().
   // The builtin len path only recognises the model container types (list,
-  // tuple, dict, str/bytes), so a user-defined __len__ is otherwise ignored
-  // and len falls through to strlen over the struct — a wrong length.
+  // tuple, dict, str/bytes) and otherwise falls through to strlen over the
+  // struct, which stops at the first zero byte and answers 0 for a freshly
+  // constructed object — silently turning `for v in obj`, whose bound is
+  // len(obj), into a dead loop (#7085). Handle a class receiver here instead.
   if (
     element.contains("func") && element["func"].is_object() &&
     element["func"].value("_type", "") == "Name" &&
     element["func"].value("id", "") == "len" && element.contains("args") &&
-    element["args"].is_array() && element["args"].size() == 1 &&
-    has_dunder_method(element["args"][0], "__len__"))
+    element["args"].is_array() && element["args"].size() == 1)
   {
-    return get_expr(build_dunder_call(
-      element["args"][0], "__len__", nlohmann::json::array(), element));
+    const nlohmann::json &arg = element["args"][0];
+    if (has_dunder_method(arg, "__len__"))
+      return get_expr(
+        build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
+
+    // A class with no __len__ has no length in Python. Gated on a ClassDef in
+    // the user's AST so the model container types, whose structs also carry a
+    // class tag, keep their own len handling.
+    const std::string cls = dunder_receiver_classname(arg);
+    if (
+      !cls.empty() && json_utils::is_class(cls, *ast_json) &&
+      class_defines_no_len(cls))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError", "object of type '" + cls + "' has no len()");
   }
 
   function_call_builder call_builder(*this, element);

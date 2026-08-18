@@ -1281,6 +1281,8 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+  std::string dunder_receiver_classname(const nlohmann::json &value_node);
+  bool class_defines_no_len(const std::string &class_name);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);

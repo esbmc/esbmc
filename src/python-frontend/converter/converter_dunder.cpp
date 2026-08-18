@@ -62,9 +62,8 @@ symbolt *python_converter::find_dunder_method(
   return find_symbol(sid.to_string());
 }
 
-bool python_converter::has_dunder_method(
-  const nlohmann::json &value_node,
-  const std::string &dunder_name)
+std::string
+python_converter::dunder_receiver_classname(const nlohmann::json &value_node)
 {
   std::string class_name = type_handler_.get_var_classname(value_node);
 
@@ -81,6 +80,46 @@ bool python_converter::has_dunder_method(
       class_name = func.value("id", "");
   }
 
+  return class_name;
+}
+
+// Whether `class_name` and its whole ancestry provably define no __len__.
+// A base that is not itself a class in this AST -- a model class, or a
+// builtin like `list` -- takes its length from code this pass cannot see, so
+// the answer is "unknown" rather than "no".
+bool python_converter::class_defines_no_len(const std::string &class_name)
+{
+  if (find_dunder_method(class_name, "__len__"))
+    return false;
+
+  const auto class_node =
+    json_utils::find_class((*ast_json)["body"], class_name);
+  if (class_node == nlohmann::json() || !class_node.contains("bases"))
+    return false;
+
+  // Terminates: a cycle needs a base that is textually later than its
+  // subclass, and class conversion rejects a not-yet-defined base first.
+  for (const auto &base : class_node["bases"])
+  {
+    const std::string base_name = base.contains("id")
+                                    ? base["id"].get<std::string>()
+                                    : base.value("attr", "");
+    if (base_name.empty() || base_name == "object")
+      continue;
+    if (!json_utils::is_class(base_name, *ast_json))
+      return false;
+    if (!class_defines_no_len(base_name))
+      return false;
+  }
+
+  return true;
+}
+
+bool python_converter::has_dunder_method(
+  const nlohmann::json &value_node,
+  const std::string &dunder_name)
+{
+  const std::string class_name = dunder_receiver_classname(value_node);
   if (class_name.empty())
     return false;
 
