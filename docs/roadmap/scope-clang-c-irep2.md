@@ -3861,6 +3861,72 @@ Next, in order:
 2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
 
+## 106. The `cstd` suite censused — and W4 has a witness
+
+§101 said the unowned work would come from the suites never censused. `cstd`
+is the first of them, measured with `symtab_sweep.sh`:
+
+**134 of 142 differ** (94 %), against 78 of 120 (65 %) for `regression/esbmc`.
+Over the first 60, by cause:
+
+| cause | tests | owner |
+|---|---:|---|
+| `migrate_expr` renaming warning | 34 | #7093 |
+| `assert` base name | 34 | #7087 |
+| boolean cast on a condition | 21 | #7099 |
+| array-to-pointer decay | 17 | #7098 |
+| **`#cformat` char hint lost** | **14** | **— none** |
+
+The four owned causes carry most of it, which is the useful half of the answer:
+the suite is not differently broken, it is more densely affected by the same
+things. `cstd` is libc-facing, so nearly every test calls `assert` and indexes a
+buffer.
+
+### 106.1 The new cause, and why it is W4
+
+```
+default:  signed char [14] str={ 'T', 'e', 's', 't', ' ', ... };
+-only:    signed char [14] str={ 84, 101, 115, 116, 32, ... };
+```
+
+Same fourteen values; only the rendering differs. `string2array`
+(`util/expr/string2array.cpp:25`) sets `#cformat` to `'T'` on each element as it
+converts a string literal to a char array, and `c_expr2stringt::convert_constant`
+(`util/lang/c_expr2string.cpp:1120`) prints `cformat` verbatim when present.
+`scope-coupled-arith-assign-conversion.md` §20.1 item 7 already records that the
+**IREP2 `c_typecastt` copy does not do `string2array`** — this is that gap, seen
+from the printer.
+
+That makes it **W4**, the wall §4 lists as "untouched, deferred": the
+counterexample printer consuming the attributes. Until now W4 had no witness
+outside the C++ printer. It has fourteen in `cstd` alone, reachable from C with a
+single flag.
+
+### 106.2 Why the obvious fix is not available, and what that says about B-4
+
+`convert_constant` falls through to integer rendering only when `cformat` is
+absent, so teaching it to render a char-typed constant as `'T'` would be
+additive — the default path, where the hint is present, could not change.
+
+It is still not available. A legacy `typet` cannot distinguish `char` from
+`int8_t`: both are `signedbv` of width 8. What distinguishes them is
+**`#cpp_type`** — which is one of the three W3 attributes. So inferring the
+rendering from the type requires reading a W3 attribute to decide whether to stop
+reading a W3 attribute.
+
+**W3 and W4 are therefore coupled**, and §37's conclusion that B-4 "has no
+viable executable content left" needs this qualification: the semantics half
+(§33's four scalar spellings) and the presentation half are the same problem seen
+twice, and neither can be closed while the other holds the type information. That
+is a stronger statement than §37 makes, and it is the reason this section stops
+at a finding rather than an arm.
+
+### 106.3 What follows
+
+- `esbmc-unix` (438 tests) and `floats` (102) are still uncensused; `cstd`
+  suggests they will be dense in the same four owned causes.
+- The `#cformat` class needs the W3 semantics/presentation split (§33) decided
+  first. It is not an adjuster arm.
 ## 101. The symbol-table census, and what it says is left
 
 §100.1 established that the adjuster's output is the symbol table, not the goto
