@@ -106,6 +106,9 @@ private:
   /// own definition and no shadows_user_definition query is needed (§90).
   void adjust_special_functions(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
+  void adjust_address_of(expr2tc &expr);
+
   /// Pad a complete struct or union type symbol to its ABI layout (§96).
   void pad_type_symbol(symbolt &symbol);
   /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's conversion
