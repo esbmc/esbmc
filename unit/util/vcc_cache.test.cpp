@@ -1,0 +1,119 @@
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+
+#include <util/ssa/vcc_cache.h>
+
+#include <filesystem>
+#include <fstream>
+
+namespace
+{
+std::string scratch_dir(const std::string &tag)
+{
+  const auto dir =
+    std::filesystem::temp_directory_path() / ("esbmc-vcc-cache-test-" + tag);
+  std::filesystem::remove_all(dir);
+  return dir.string();
+}
+
+optionst with_option(const std::string &name, const std::string &value)
+{
+  optionst o;
+  o.set_option(name, value);
+  return o;
+}
+} // namespace
+
+TEST_CASE("a recorded cone is proved, an unrecorded one is not", "[vcc_cache]")
+{
+  const std::string dir = scratch_dir("roundtrip");
+  optionst options;
+  vcc_cachet cache(dir, options);
+
+  const std::string cone = "step 1\nguard\ncond\n";
+
+  REQUIRE_FALSE(cache.proved(cone));
+  cache.record(cone);
+  REQUIRE(cache.proved(cone));
+  REQUIRE_FALSE(cache.proved(cone + "extra\n"));
+
+  REQUIRE(cache.hits() == 1);
+  REQUIRE(cache.misses() == 2);
+
+  std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("recording twice is idempotent", "[vcc_cache]")
+{
+  const std::string dir = scratch_dir("idempotent");
+  optionst options;
+  vcc_cachet cache(dir, options);
+
+  const std::string cone = "step 1\nrepeat\n";
+  cache.record(cone);
+  cache.record(cone);
+  REQUIRE(cache.proved(cone));
+
+  size_t entries = 0;
+  for (const auto &e : std::filesystem::recursive_directory_iterator(dir))
+    if (e.path().extension() == ".vcc")
+      ++entries;
+  REQUIRE(entries == 1);
+
+  std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("an entry whose text does not match is a miss", "[vcc_cache]")
+{
+  const std::string dir = scratch_dir("collision");
+  optionst options;
+  vcc_cachet cache(dir, options);
+
+  const std::string cone = "step 1\noriginal\n";
+  cache.record(cone);
+
+  // Stand in for a digest collision: the entry exists but holds another cone.
+  for (const auto &e : std::filesystem::recursive_directory_iterator(dir))
+    if (e.path().extension() == ".vcc")
+    {
+      std::ofstream out(e.path(), std::ios::binary | std::ios::trunc);
+      out << "a different cone\n";
+    }
+
+  REQUIRE_FALSE(cache.proved(cone));
+
+  std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("a proof does not carry across option sets", "[vcc_cache]")
+{
+  const std::string dir = scratch_dir("context");
+  const std::string cone = "step 1\nshared\n";
+
+  vcc_cachet floats(dir, with_option("floatbv", "1"));
+  floats.record(cone);
+  REQUIRE(floats.proved(cone));
+
+  vcc_cachet fixed(dir, with_option("fixedbv", "1"));
+  REQUIRE_FALSE(fixed.proved(cone));
+
+  std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("the cache's own controls are not part of the key", "[vcc_cache]")
+{
+  const std::string dir = scratch_dir("controls");
+  const std::string cone = "step 1\ncontrols\n";
+
+  vcc_cachet plain(dir, with_option("vcc-cache", dir));
+  plain.record(cone);
+
+  // --vcc-cache-verify must read what a plain run wrote, or it can never
+  // check anything.
+  optionst verifying;
+  verifying.set_option("vcc-cache", dir);
+  verifying.set_option("vcc-cache-verify", true);
+  REQUIRE(vcc_cachet(dir, verifying).proved(cone));
+
+  std::filesystem::remove_all(dir);
+}

@@ -41,5 +41,18 @@ uint64_t ssa_cone_digest(
   const symex_target_equationt::SSA_stepst &steps,
   fingerprint_modet mode);
 
+/**
+ * @brief The canonical text a cone's digest is taken over.
+ *
+ * A persistent cache stores this alongside the digest and compares it on a
+ * hit, so a digest collision cannot turn into a wrong verdict.
+ */
+std::string ssa_cone_text(
+  const symex_target_equationt::SSA_stepst &steps,
+  fingerprint_modet mode);
+
+/// FNV-1a over \p s. Stable across processes, unlike irep2's crc().
+uint64_t fingerprint_hash(const std::string &s);
+
 /// Number of steps the digest covered.
 size_t ssa_cone_size(const symex_target_equationt::SSA_stepst &steps);

@@ -154,13 +154,32 @@ private:
   std::map<std::string, unsigned> type_locs;
 };
 
-void mix(uint64_t &h, uint64_t v)
+/// Digest one expression under \p n. The copy is what gets mutated: irep2's
+/// copy-on-write detaches on the first write, so the equation being solved is
+/// left untouched.
+///
+/// Digested from pretty()'s text, NOT from crc(): irep_idt::hash() returns the
+/// string-pool index (irep_idt.h:172), which is interning-order dependent, so
+/// crc() is only meaningful within one process. Any persistent key has to be
+/// built from the characters of a name.
+std::string normalised_text(const expr2tc &e, normalisert &n)
 {
-  h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-}
+  if (is_nil_expr(e))
+    return "nil";
 
-/// FNV-1a over the bytes of \p s.
-uint64_t hash_text(const std::string &s)
+  expr2tc copy = e;
+  n(copy);
+  std::string text = copy->pretty(0);
+  n.canonicalise_text(text);
+  // Set ESBMC_FP_DEBUG to diff the normalised text of two runs; that is how
+  // both position-bearing name forms above were found.
+  if (getenv("ESBMC_FP_DEBUG"))
+    std::cerr << "FP " << text << "\n";
+  return text;
+}
+} // namespace
+
+uint64_t fingerprint_hash(const std::string &s)
 {
   uint64_t h = 0xcbf29ce484222325ULL;
   for (unsigned char c : s)
@@ -171,54 +190,33 @@ uint64_t hash_text(const std::string &s)
   return h;
 }
 
-/// Digest one expression under \p n. The copy is what gets mutated: irep2's
-/// copy-on-write detaches on the first write, so the equation being solved is
-/// left untouched.
-///
-/// Digested from pretty()'s text, NOT from crc(): irep_idt::hash() returns the
-/// string-pool index (irep_idt.h:172), which is interning-order dependent, so
-/// crc() is only meaningful within one process. Any persistent key has to be
-/// built from the characters of a name.
-void digest_expr(uint64_t &h, const expr2tc &e, normalisert &n)
-{
-  if (is_nil_expr(e))
-  {
-    mix(h, 1);
-    return;
-  }
-
-  expr2tc copy = e;
-  n(copy);
-  std::string text = copy->pretty(0);
-  n.canonicalise_text(text);
-  // Set ESBMC_FP_DEBUG to diff the normalised text of two runs; that is how
-  // both position-bearing name forms above were found.
-  if (getenv("ESBMC_FP_DEBUG"))
-    std::cerr << "FP " << text << "\n";
-  mix(h, hash_text(text));
-}
-} // namespace
-
-uint64_t ssa_cone_digest(
+std::string ssa_cone_text(
   const symex_target_equationt::SSA_stepst &steps,
   fingerprint_modet mode)
 {
   // One normaliser across the whole cone: canonical ids must agree between
-  // steps, or two occurrences of the same symbol would digest differently.
+  // steps, or two occurrences of the same symbol would render differently.
   normalisert n(mode);
-  uint64_t h = 0xcbf29ce484222325ULL;
+  std::string out;
 
   for (const auto &step : steps)
   {
     if (step.ignore)
       continue;
 
-    mix(h, static_cast<uint64_t>(step.type));
-    digest_expr(h, step.guard, n);
-    digest_expr(h, step.cond, n);
+    out += "step " + std::to_string(static_cast<int>(step.type)) + "\n";
+    out += normalised_text(step.guard, n) + "\n";
+    out += normalised_text(step.cond, n) + "\n";
   }
 
-  return h;
+  return out;
+}
+
+uint64_t ssa_cone_digest(
+  const symex_target_equationt::SSA_stepst &steps,
+  fingerprint_modet mode)
+{
+  return fingerprint_hash(ssa_cone_text(steps, mode));
 }
 
 size_t ssa_cone_size(const symex_target_equationt::SSA_stepst &steps)

@@ -50,6 +50,7 @@
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <util/ssa/fingerprint.h>
+#include <util/ssa/vcc_cache.h>
 #include <atomic>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -2566,6 +2567,25 @@ smt_resultt bmct::multi_property_check(
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
   const std::string fingerprint_dump =
     options.get_option("vcc-fingerprint-dump");
+
+  // Cross-run cache of discharged claims. Held to the modes where a claim's
+  // sliced cone is the whole of what the verdict depends on: the k-induction
+  // phases re-use one claim across base/forward/inductive step, a coverage or
+  // dead-code probe is not a property, and past the first interleaving a claim
+  // carries a schedule the cone does not name. These are the exclusions the
+  // in-run assertion_cache already makes (see the bmct constructor).
+  const std::string vcc_cache_dir = options.get_option("vcc-cache");
+  const bool vcc_cache_verify = options.get_bool_option("vcc-cache-verify");
+  std::unique_ptr<vcc_cachet> vcc_cache;
+  if (
+    !vcc_cache_dir.empty() && !is_cov_run && !is_dead_code &&
+    !options.get_bool_option("k-induction") &&
+    !options.get_bool_option("forward-condition") &&
+    !options.get_bool_option("inductive-step") &&
+    !options.get_bool_option("incremental-bmc") &&
+    !options.get_bool_option("ltl") &&
+    !options.get_bool_option("smt-during-symex") && interleaving_number <= 1)
+    vcc_cache = std::make_unique<vcc_cachet>(vcc_cache_dir, options);
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -2616,6 +2636,8 @@ smt_resultt bmct::multi_property_check(
                        &is_cov_run,
                        &is_keep_verified,
                        &fingerprint_dump,
+                       &vcc_cache,
+                       &vcc_cache_verify,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt,
@@ -2711,6 +2733,20 @@ smt_resultt bmct::multi_property_check(
       features.run(local_eq.SSA_steps);
     }
 
+    std::string cone_text;
+    bool cached_proof = false;
+    if (vcc_cache)
+    {
+      cone_text = ssa_cone_text(local_eq.SSA_steps, fingerprint_modet::srcloc);
+      cached_proof = vcc_cache->proved(cone_text);
+      if (cached_proof && !vcc_cache_verify)
+      {
+        goto_functionst::property_verdicts.record(
+          claim.claim_cstr, property_verdictt::Passed, claim_ploc, "");
+        return;
+      }
+    }
+
     // Initialize a solver
     smt_convt *solver_ptr = &runtime_solver;
     std::unique_ptr<smt_convt> new_solver;
@@ -2787,6 +2823,23 @@ smt_resultt bmct::multi_property_check(
       if (is_vacuous)
         vacuity_detected = true;
     }
+
+    if (vcc_cache)
+    {
+      // A vacuous discharge reports Unknown, not Passed, so it is not a proof
+      // and must not be stored.
+      if (solver_result == P_UNSATISFIABLE && !is_vacuous)
+        vcc_cache->record(cone_text);
+      else if (cached_proof)
+      {
+        log_error(
+          "VCC cache: stored proof of '{}' contradicted by the solver",
+          claim.claim_cstr);
+        std::lock_guard lock(result_mutex);
+        final_result = P_ERROR;
+      }
+    }
+
 
     // A claim is re-checked in every thread interleaving, and can be
     // discharged in one schedule while being violated in another. Record the
@@ -3145,6 +3198,14 @@ smt_resultt bmct::multi_property_check(
   // SEQUENTIAL
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
+
+  // A warm run solves nothing, so without this the report shows no solver
+  // activity at all and gives no sign of where the verdicts came from.
+  if (vcc_cache)
+    log_status(
+      "VCC cache: {} claim(s) reused, {} solved",
+      vcc_cache->hits(),
+      vcc_cache->misses());
 
   // For coverage with fixed bound unwinding
   if (
