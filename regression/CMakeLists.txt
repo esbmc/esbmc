@@ -80,6 +80,13 @@ if(ESBMC_BUNDLE_LIBC)
     list(APPEND ESBMC_TEST_CAPABILITIES bundled_libc)
 endif()
 
+# The bundled musl libm is only reached where the host's own <math.h> does not
+# shadow it. On Windows the UCRT headers declare cosf/pow themselves, so no
+# /esbmc-vfs libm source ever enters the goto program.
+if(NOT WIN32)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libm)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 
