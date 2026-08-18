@@ -30,6 +30,8 @@ irep2_canon() {
     -e '/^GOTO program creation time:/d' \
     -e '/^GOTO program processing time:/d' \
     -e '/ time: [0-9.]*s$/d' \
+    -e '/^operational-model library (clib):/d' \
+    -e 's|0x[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*|0xADDR|g' \
     -e 's|^\([[:space:]]*//\) [0-9][0-9]* file |\1 file |' \
     -e "s|${repo}|REPO_ROOT|g" \
     -e 's|/var/folders/[^/ ]*/[^/ ]*/T/esbmc[._-][0-9A-Za-z-]*|HDR|g' \
