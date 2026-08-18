@@ -284,14 +284,14 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
         env:
-          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
         run: ./scripts/build.sh -b Debug -k ON
       - name: Run tests
         env:
-          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
         run: mkdir -p build/coverage && cd build/ && ctest -j32 --progress . || true
       - name: Merge coverage data
-        run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
+        run: llvm-profdata merge -sparse --failure-mode=warn /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
       - name: Generate lcov coverage report
         run: |
           llvm-cov export -format=lcov \
@@ -317,4 +317,7 @@ jobs:
           path: coverage.info
           retention-days: 5
       - name: Clean tmp files
+        # Also on failure: a cancelled or failed run otherwise leaves its
+        # profraw directory behind, and this runner's /tmp fills up.
+        if: always()
         run: rm -rf /tmp/esbmc*
