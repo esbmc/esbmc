@@ -59,6 +59,15 @@ static bool is_complex_unary(const expr2tc &expr)
   return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
 }
 
+/// The statements whose controlling expression clang_c_adjust converts to bool
+/// (adjust_ifthenelse, adjust_while, adjust_for). `switch` is not among them:
+/// its selector is an integer.
+static bool is_statement_with_condition(const expr2tc &expr)
+{
+  return is_code_ifthenelse2t(expr) || is_code_while2t(expr) ||
+         is_code_dowhile2t(expr) || is_code_for2t(expr);
+}
+
 /// The comparisons clang_c_adjust routes through adjust_expr_rel. IREP2 already
 /// types these bool, so only the operand half of that arm ports.
 static bool is_relational(const expr2tc &expr)
@@ -109,6 +118,9 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
+
+  if (is_statement_with_condition(expr))
+    adjust_statement_condition(expr);
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
@@ -295,6 +307,53 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   if (args.size() == 1)
     fold_unary_builtin(name, args[0], expr);
+}
+
+/// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
+/// adjust_while and adjust_for applies to its controlling expression.
+/// goto_convert's branch lowering rejects a non-boolean guard, so this is the
+/// statement-level counterpart of adjust_if_expr's operand half.
+void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
+{
+  expr2tc cond;
+  if (is_code_ifthenelse2t(expr))
+    cond = to_code_ifthenelse2t(expr).cond;
+  else if (is_code_while2t(expr))
+    cond = to_code_while2t(expr).cond;
+  else if (is_code_dowhile2t(expr))
+    cond = to_code_dowhile2t(expr).cond;
+  else
+    cond = to_code_for2t(expr).cond;
+
+  // A `for` may omit its condition entirely.
+  if (is_nil_expr(cond) || is_bool_type(cond->type))
+    return;
+
+  const expr2tc before = cond;
+  c_implicit_typecast(cond, get_bool_type(), ns);
+  if (cond == before)
+    return;
+
+  if (is_code_ifthenelse2t(expr))
+  {
+    const code_ifthenelse2t &i = to_code_ifthenelse2t(expr);
+    expr = code_ifthenelse2tc(cond, i.then_case, i.else_case, i.location);
+  }
+  else if (is_code_while2t(expr))
+  {
+    const code_while2t &w = to_code_while2t(expr);
+    expr = code_while2tc(cond, w.body, w.location);
+  }
+  else if (is_code_dowhile2t(expr))
+  {
+    const code_dowhile2t &w = to_code_dowhile2t(expr);
+    expr = code_dowhile2tc(cond, w.body, w.location);
+  }
+  else
+  {
+    const code_for2t &f = to_code_for2t(expr);
+    expr = code_for2tc(f.init, cond, f.iter, f.body, f.location);
+  }
 }
 
 void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
