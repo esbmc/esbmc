@@ -28,18 +28,18 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
         env:
-          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
         run: ./scripts/build.sh -b Debug -k ON
       - name: Run tests
         env:
-          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m.profraw"
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
         # -I <shard>,,4 walks the suite with a stride of 4, so the shards
         # partition it exactly and interleave slow suites across all four.
         run: |
           mkdir -p build/coverage && cd build/ && \
           ctest -j4 --progress --timeout 600 -I ${{ matrix.shard }},,4 . || true
       - name: Merge coverage data
-        run: llvm-profdata merge -sparse /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
+        run: llvm-profdata merge -sparse --failure-mode=warn /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
       - name: Generate lcov coverage report
         run: |
           llvm-cov export -format=lcov \
@@ -59,6 +59,11 @@ jobs:
           name: coverage-shard-${{ matrix.shard }}
           path: coverage.info
           retention-days: 1
+      - name: Clean tmp files
+        # Four shards each leave a profraw directory behind otherwise, and a
+        # run that fails before this point never cleans up at all.
+        if: always()
+        run: rm -rf /tmp/esbmc*
 
   upload:
     name: Upload coverage to Codecov
