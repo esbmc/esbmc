@@ -3,6 +3,7 @@
 
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <util/message/message.h>
 #include <util/ssa/fingerprint.h>
 
 #include <unistd.h>
@@ -91,8 +92,9 @@ std::string capture_stderr(const std::function<void()> &body)
 
   std::string text;
   rewind(sink);
-  for (int c = fgetc(sink); c != EOF; c = fgetc(sink))
-    text.push_back(static_cast<char>(c));
+  char buffer[4096];
+  for (size_t n; (n = fread(buffer, 1, sizeof(buffer), sink)) > 0;)
+    text.append(buffer, n);
   fclose(sink);
   return text;
 }
@@ -213,12 +215,14 @@ TEST_CASE(
     ssa_cone_digest(after, fingerprint_modet::counters));
 }
 
-TEST_CASE("ESBMC_FP_DEBUG echoes the text each mode digests", "[fingerprint]")
+TEST_CASE(
+  "the fingerprint module echoes the text each mode digests",
+  "[fingerprint]")
 {
   symex_target_equationt::SSA_stepst steps;
   add_step(steps, local("x", 100, 0), 7);
 
-  setenv("ESBMC_FP_DEBUG", "1", 1);
+  messaget::state.modules["fingerprint"] = VerbosityLevel::Debug;
   const std::string dumped = capture_stderr(
     [&steps]
     {
@@ -229,7 +233,7 @@ TEST_CASE("ESBMC_FP_DEBUG echoes the text each mode digests", "[fingerprint]")
             fingerprint_modet::full})
         ssa_cone_text(steps, mode);
     });
-  unsetenv("ESBMC_FP_DEBUG");
+  messaget::state.modules["fingerprint"] = VerbosityLevel::None;
 
   // The dump is how a digest mismatch between two runs is diagnosed, so each
   // line has to say which mode produced it.

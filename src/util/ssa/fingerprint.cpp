@@ -1,10 +1,9 @@
 #include <util/ssa/fingerprint.h>
 
 #include <irep2/irep2_utils.h>
+#include <util/message/message.h>
 
 #include <cctype>
-#include <cstdlib>
-#include <iostream>
 #include <algorithm>
 #include <map>
 #include <string>
@@ -29,11 +28,9 @@ sym_keyt key_of(const symbol2t &s)
     s.node_num};
 }
 
-/// ESBMC names a local `c:<file>@<character-offset>@F@<fn>@<var>`
-/// (clang-c-frontend). The offset moves whenever anything textually earlier in
-/// the file changes, so it has to go before a name can be compared across
-/// edits. Returns the name with that segment removed; other shapes
-/// (`c:@F@main`, `__ESBMC_alloc`) are returned unchanged.
+/// Drops the `<file>@<character-offset>@` of a local's name
+/// `c:<file>@<offset>@F@<fn>@<var>`: the offset moves whenever anything
+/// textually earlier changes. Other shapes are returned unchanged.
 std::string strip_source_position(const std::string &name)
 {
   const size_t colon = name.find(':');
@@ -55,10 +52,9 @@ std::string strip_source_position(const std::string &name)
   return name.substr(0, colon + 1) + name.substr(at2 + 1);
 }
 
-/// Anonymous struct/union/enum types are named `..._at_<file>_<line>_<col>`
-/// (clang-c-frontend), so a type's name moves with any edit above its
-/// declaration exactly as a local's name does. Types are not reached by
-/// Foreach_operand, so the suffix is interned here, on the serialised text.
+/// Anonymous types are named `..._at_<file>_<line>_<col>`, which moves with
+/// any edit above the declaration. Types are not reached by Foreach_operand,
+/// so the suffix is interned here, on the serialised text.
 const char *mode_name(fingerprint_modet m)
 {
   switch (m)
@@ -241,14 +237,11 @@ private:
   std::map<std::string, unsigned> type_locs;
 };
 
-/// Digest one expression under \p n. The copy is what gets mutated: irep2's
-/// copy-on-write detaches on the first write, so the equation being solved is
-/// left untouched.
+/// Digest one expression under \p n; the mutated copy leaves the equation
+/// being solved untouched, since irep2 detaches on the first write.
 ///
-/// Digested from pretty()'s text, NOT from crc(): irep_idt::hash() returns the
-/// string-pool index (irep_idt.h:172), which is interning-order dependent, so
-/// crc() is only meaningful within one process. Any persistent key has to be
-/// built from the characters of a name.
+/// From pretty() text, never crc(): irep_idt::hash() is the string-pool index
+/// (irep_idt.h:172), so crc() only means anything within one process.
 std::string normalised_text(const expr2tc &e, normalisert &n)
 {
   if (is_nil_expr(e))
@@ -258,10 +251,9 @@ std::string normalised_text(const expr2tc &e, normalisert &n)
   n(copy);
   std::string text = copy->pretty(0);
   n.canonicalise_text(text);
-  // Set ESBMC_FP_DEBUG to diff the normalised text of two runs; that is how
-  // both position-bearing name forms above were found.
-  if (getenv("ESBMC_FP_DEBUG"))
-    std::cerr << "FP[" << mode_name(n.get_mode()) << "] " << text << "\n";
+  // --verbosity fingerprint:debug diffs the text two runs digest, which is how
+  // a mismatch between them gets diagnosed; each line names its mode.
+  log_debug("fingerprint", "FP[{}] {}", mode_name(n.get_mode()), text);
   return text;
 }
 } // namespace

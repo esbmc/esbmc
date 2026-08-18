@@ -2450,10 +2450,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   return ltl_res_good;
 }
 
-// P0 measurement instrumentation for a cross-run VCC cache: emits one line
-// per solved claim with the digest of its sliced cone under each
-// normalisation, so the recurrence rate can be counted without a cache
-// existing yet.
+/// One line per solved claim, digesting its cone under each normalisation:
+/// the instrument for measuring what --vcc-cache can reuse.
 static void dump_claim_fingerprint(
   const std::string &path,
   const symex_target_equationt::SSA_stepst &cone,
@@ -2480,7 +2478,7 @@ static void dump_claim_fingerprint(
   std::lock_guard<std::mutex> lock(dump_mutex);
   if (path == "-")
   {
-    std::cout << "VCC-FP " << line << "\n";
+    log_status("VCC-FP {}", line);
     return;
   }
   std::ofstream out(path, std::ios::app);
@@ -2568,12 +2566,8 @@ smt_resultt bmct::multi_property_check(
   const std::string fingerprint_dump =
     options.get_option("vcc-fingerprint-dump");
 
-  // Cross-run cache of discharged claims. Held to the modes where a claim's
-  // sliced cone is the whole of what the verdict depends on: the k-induction
-  // phases re-use one claim across base/forward/inductive step, a coverage or
-  // dead-code probe is not a property, and past the first interleaving a claim
-  // carries a schedule the cone does not name. These are the exclusions the
-  // in-run assertion_cache already makes (see the bmct constructor).
+  // Only where a claim's sliced cone is all its verdict depends on -- the
+  // exclusions the in-run assertion_cache makes, plus the coverage probes.
   const std::string vcc_cache_dir = options.get_option("vcc-cache");
   const bool vcc_cache_verify = options.get_bool_option("vcc-cache-verify");
   std::unique_ptr<vcc_cachet> vcc_cache;

@@ -34,17 +34,10 @@ std::string vcc_cache_context(const optionst &options)
   std::ostringstream ctx;
   ctx << "esbmc " << ESBMC_VERSION << '\n';
 
-  // option_map is a std::map, so this enumeration is complete and ordered.
-  // Every option is folded in unabridged except the cache's own controls,
-  // which select the store and the instrumentation rather than what is
-  // verified: leaving them in would key each cache to its own directory and
-  // stop --vcc-cache-verify from ever reading what a plain run wrote. This is
-  // the only exclusion; curating a wider list of "options that matter" is how
-  // a cache like this goes unsound.
-  // "input-file" joins them: the source path is not semantic -- it is
-  // stripped out of every symbol name before a cone is digested (see
-  // fingerprint.h) -- and keeping it would stop a cache from transferring
-  // between two checkouts of the same tree, which is the CI case.
+  // Every option is folded in unabridged except the cache's own controls and
+  // the source path, none of which change what is verified -- the path is
+  // stripped from symbol names before a cone is digested. Curating a wider
+  // exclusion list is how a cache like this goes unsound.
   static const std::set<std::string> not_semantic = {
     "vcc-cache", "vcc-cache-verify", "vcc-fingerprint-dump", "input-file"};
   for (const auto &[name, value] : options.option_map)
