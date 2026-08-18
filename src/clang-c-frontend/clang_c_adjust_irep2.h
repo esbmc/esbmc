@@ -106,6 +106,8 @@ private:
   /// own definition and no shadows_user_definition query is needed (§90).
   void adjust_special_functions(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
+  void adjust_address_of(expr2tc &expr);
   /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's conversion
   /// half: the usual arithmetic conversions over the operands, then the node's
   /// own type. adjust_float_arith's ieee_* promotion is not part of this
