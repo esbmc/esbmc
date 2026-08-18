@@ -1,5 +1,6 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith/arith_tools.h>
@@ -1199,7 +1200,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
       }
       else
       {
-        // clang will complain about this already, no need for us to do the same!
+        // clang will complain about this already, no need for us to do the
+        // same!
 
         // maybe this is an undeclared function
         // let's just add it
@@ -1324,40 +1326,6 @@ void clang_c_adjust::adjust_function_call_arguments(
   }
 }
 
-static inline bool
-compare_float_suffix(const irep_idt &identifier, const std::string &name)
-{
-  return (identifier == name) || ((identifier == (name + "f"))) ||
-         ((identifier == (name + "d"))) || ((identifier == (name + "l")));
-}
-
-static inline bool
-compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
-{
-  // compare a given identifier with a set of possible names, e.g,
-  //
-  // compare_unscore_builtin(identifier, "isnan")
-  //
-  // will compare identifier to:
-  // isnan
-  // __isnan
-  // __isnanf
-  // __isnanl
-  // __isnand
-  // __builtin_isnan
-  // __builtin_isnanf
-  // __builtin_isnanl
-  // __builtin_isnand
-  const std::string builtin_name = "__builtin_" + name;
-  const std::string underscore_name = "__" + name;
-
-  return (identifier == name) ||
-         compare_float_suffix(identifier, builtin_name) ||
-         (identifier == builtin_name) ||
-         compare_float_suffix(identifier, underscore_name) ||
-         (identifier == underscore_name);
-}
-
 /// The float functions that lower to a node taking the call's arguments
 /// unchanged, keyed by base name; null when `expr` is not such a call.
 ///
@@ -1396,43 +1364,12 @@ static const char *float_lowering_id(
   return nullptr;
 }
 
-/// True for the abs builtins that may be lowered to an `abs` node. That node
-/// becomes `(x >= 0) ? x : -x`, ill-typed for anything but an arithmetic
-/// argument, so a program overloading the name for a class type --
-/// std::abs(complex) is why <complex> ships without it -- keeps its call.
-static inline bool is_abs_builtin_name(const irep_idt &identifier)
-{
-  return identifier == "abs" || identifier == "labs" ||
-         identifier == "imaxabs" || identifier == "llabs" ||
-         compare_float_suffix(identifier, "fabs") ||
-         compare_unscore_builtin(identifier, "fabs");
-}
-
 /// The `abs` node lowers to `(x >= 0) ? x : -x`, which is ill-typed for
 /// anything else -- std::abs(complex) is why <complex> ships without it.
 bool clang_c_adjust::has_single_arithmetic_argument(
   const side_effect_expr_function_callt &expr) const
 {
   return expr.arguments().size() == 1 && is_number(expr.arguments()[0].type());
-}
-
-/// The lowerings in do_special_functions match a callee's base name, so a
-/// program that defines one of these names itself would have its body discarded
-/// and the builtin verified in its place (#6904). These are all spellings a
-/// program is free to reuse -- `mylib::abs`, `mylib::isinf` -- unlike the
-/// `__builtin_`-prefixed and CPROVER-prefixed entries, which are reserved.
-static inline bool is_name_matched_builtin(const irep_idt &identifier)
-{
-  return is_abs_builtin_name(identifier) ||
-         compare_unscore_builtin(identifier, "isnan") ||
-         compare_unscore_builtin(identifier, "isinf") ||
-         compare_unscore_builtin(identifier, "isnormal") ||
-         compare_unscore_builtin(identifier, "signbit") ||
-         compare_unscore_builtin(identifier, "isfinite") ||
-         compare_float_suffix(identifier, "finite") ||
-         compare_unscore_builtin(identifier, "finite") ||
-         compare_unscore_builtin(identifier, "inf") ||
-         compare_unscore_builtin(identifier, "huge_val");
 }
 
 /// True when lowering this call would throw away a definition the program
@@ -1442,18 +1379,8 @@ bool clang_c_adjust::shadows_user_definition(
   const irep_idt &identifier,
   const exprt &f_op) const
 {
-  if (!is_name_matched_builtin(identifier))
-    return false;
-
-  /* c2goto compiles the operational models themselves, where libm/fabs.c and
-   * friends do define these names. Those definitions are the models, not a
-   * program's, so honouring them here would stop every call inside the models
-   * folding to its native node and blow the encoding up (#6904). */
-  if (config.options.get_bool_option("building-c-library"))
-    return false;
-
-  const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
-  return s != nullptr && !s->get_value().is_nil();
+  return builtin_shadows_user_definition(
+    context, identifier, to_symbol_expr(f_op).get_identifier());
 }
 
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
