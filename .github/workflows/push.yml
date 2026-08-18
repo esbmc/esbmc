@@ -59,6 +59,11 @@ jobs:
           name: coverage-shard-${{ matrix.shard }}
           path: coverage.info
           retention-days: 1
+      - name: Clean tmp files
+        # Four shards each leave a profraw directory behind otherwise, and a
+        # run that fails before this point never cleans up at all.
+        if: always()
+        run: rm -rf /tmp/esbmc*
 
   upload:
     name: Upload coverage to Codecov

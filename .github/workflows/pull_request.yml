@@ -317,4 +317,7 @@ jobs:
           path: coverage.info
           retention-days: 5
       - name: Clean tmp files
+        # Also on failure: a cancelled or failed run otherwise leaves its
+        # profraw directory behind, and this runner's /tmp fills up.
+        if: always()
         run: rm -rf /tmp/esbmc*
