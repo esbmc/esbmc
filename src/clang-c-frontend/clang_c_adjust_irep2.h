@@ -107,6 +107,9 @@ private:
   void adjust_special_functions(expr2tc &expr);
 
   void hoist_for_init(expr2tc &expr);
+  /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
+  /// and adjust_for apply to a statement's controlling expression (§95).
+  void adjust_statement_condition(expr2tc &expr);
   /// The name-matched half of do_special_functions: `isnan`, `abs`, `sqrt`,
   /// `inf` and friends. Split from adjust_special_functions because these
   /// spellings are not reserved, so they run behind
