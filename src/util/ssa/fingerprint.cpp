@@ -5,9 +5,12 @@
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
+#include <algorithm>
 #include <map>
 #include <string>
+#include <set>
 #include <tuple>
+#include <vector>
 
 namespace
 {
@@ -56,6 +59,22 @@ std::string strip_source_position(const std::string &name)
 /// (clang-c-frontend), so a type's name moves with any edit above its
 /// declaration exactly as a local's name does. Types are not reached by
 /// Foreach_operand, so the suffix is interned here, on the serialised text.
+const char *mode_name(fingerprint_modet m)
+{
+  switch (m)
+  {
+  case fingerprint_modet::raw:
+    return "raw";
+  case fingerprint_modet::counters:
+    return "counters";
+  case fingerprint_modet::srcloc:
+    return "srcloc";
+  case fingerprint_modet::full:
+    return "full";
+  }
+  return "?";
+}
+
 void canonicalise_type_locations(
   std::string &text,
   std::map<std::string, unsigned> &ids)
@@ -78,6 +97,22 @@ void canonicalise_type_locations(
   }
 }
 
+/// The character offset out of `c:<file>@<offset>@...`, or 0.
+unsigned offset_of(const std::string &name)
+{
+  const size_t colon = name.find(':');
+  if (colon == std::string::npos)
+    return 0;
+  const size_t at1 = name.find('@', colon);
+  if (at1 == std::string::npos)
+    return 0;
+  unsigned value = 0;
+  for (size_t i = at1 + 1; i < name.size() && isdigit((unsigned char)name[i]);
+       ++i)
+    value = value * 10 + (name[i] - '0');
+  return value;
+}
+
 class normalisert
 {
 public:
@@ -85,9 +120,71 @@ public:
   {
   }
 
-  void operator()(expr2tc &e)
+  /// Collect every symbol the cone mentions, then name them from that set
+  /// alone. Numbering by order of first occurrence would make the result
+  /// depend on the order symex happened to emit the steps in, which is not
+  /// stable across unrelated edits.
+  void collect(const expr2tc &e)
   {
     if (is_nil_expr(e))
+      return;
+
+    e->foreach_operand([this](const expr2tc &sub) { collect(sub); });
+
+    if (is_symbol2t(e))
+      seen.insert(key_of(to_symbol2t(e)));
+  }
+
+  /// Assign every collected symbol its canonical name. Ranking is by the
+  /// original counters, so an edit that shifts them all by the same amount
+  /// leaves the ranks -- and the digest -- unchanged.
+  void assign_names()
+  {
+    std::map<std::string, std::vector<sym_keyt>> groups;
+    for (const sym_keyt &k : seen)
+      groups[group_key(k)].push_back(k);
+
+    for (auto &[base, members] : groups)
+    {
+      std::sort(
+        members.begin(),
+        members.end(),
+        [](const sym_keyt &a, const sym_keyt &b)
+        {
+          return std::tie(
+                   std::get<1>(a),
+                   std::get<2>(a),
+                   std::get<3>(a),
+                   std::get<4>(a),
+                   std::get<5>(a),
+                   std::get<0>(a)) <
+                 std::tie(
+                   std::get<1>(b),
+                   std::get<2>(b),
+                   std::get<3>(b),
+                   std::get<4>(b),
+                   std::get<5>(b),
+                   std::get<0>(b));
+        });
+
+      // Two symbols that differ only in the stripped offset are ordered by it,
+      // which a uniform shift preserves.
+      std::stable_sort(
+        members.begin(),
+        members.end(),
+        [](const sym_keyt &a, const sym_keyt &b)
+        { return offset_of(std::get<0>(a)) < offset_of(std::get<0>(b)); });
+
+      for (size_t i = 0; i < members.size(); ++i)
+        names[members[i]] = mode == fingerprint_modet::full
+                              ? "v" + std::to_string(i)
+                              : base + "#" + std::to_string(i);
+    }
+  }
+
+  void operator()(expr2tc &e)
+  {
+    if (is_nil_expr(e) || mode == fingerprint_modet::raw)
       return;
 
     e->Foreach_operand([this](expr2tc &sub) { (*this)(sub); });
@@ -96,28 +193,26 @@ public:
       return;
 
     symbol2t &s = to_symbol2t(e);
-    const sym_keyt k = key_of(s);
+    auto it = names.find(key_of(s));
+    if (it == names.end())
+      return;
 
+    s.thename = irep_idt(it->second);
     if (mode == fingerprint_modet::full)
-    {
-      s.thename = irep_idt("v" + std::to_string(intern(ids, k)));
       s.rlevel = symbol_renaming_level::level1;
-      s.level1_num = 0;
-      s.level2_num = 0;
-    }
-    else
-    {
-      if (mode == fingerprint_modet::srcloc)
-        s.thename = irep_idt(disambiguate(s.thename.as_string()));
-      s.level1_num = 0;
-      s.level2_num = intern(per_name[s.thename.as_string()], k);
-    }
+    s.level1_num = 0;
+    s.level2_num = 0;
     s.thread_num = 0;
     s.node_num = 0;
   }
 
   /// Canonicalise location-bearing type names in \p text. No-op under `raw`
   /// and `counters`, which are the un-normalised baselines.
+  fingerprint_modet get_mode() const
+  {
+    return mode;
+  }
+
   void canonicalise_text(std::string &text)
   {
     if (mode == fingerprint_modet::srcloc || mode == fingerprint_modet::full)
@@ -125,32 +220,24 @@ public:
   }
 
 private:
-  static unsigned intern(std::map<sym_keyt, unsigned> &m, const sym_keyt &k)
+  /// Symbols are numbered within a group, so the group key decides what a
+  /// mode treats as "the same symbol under a different version".
+  std::string group_key(const sym_keyt &k) const
   {
-    const unsigned next = m.size();
-    return m.emplace(k, next).first->second;
-  }
-
-  /// Two locals in sibling scopes differ only in the stripped offset, so the
-  /// stripped name is suffixed with a first-occurrence index to keep distinct
-  /// symbols distinct.
-  const std::string &disambiguate(const std::string &orig)
-  {
-    auto it = stripped.find(orig);
-    if (it != stripped.end())
-      return it->second;
-
-    const std::string base = strip_source_position(orig);
-    auto &n = stripped_count[base];
-    return stripped.emplace(orig, base + "#" + std::to_string(n++))
-      .first->second;
+    switch (mode)
+    {
+    case fingerprint_modet::full:
+      return std::string();
+    case fingerprint_modet::srcloc:
+      return strip_source_position(std::get<0>(k));
+    default:
+      return std::get<0>(k);
+    }
   }
 
   fingerprint_modet mode;
-  std::map<sym_keyt, unsigned> ids;
-  std::map<std::string, std::map<sym_keyt, unsigned>> per_name;
-  std::map<std::string, std::string> stripped;
-  std::map<std::string, unsigned> stripped_count;
+  std::set<sym_keyt> seen;
+  std::map<sym_keyt, std::string> names;
   std::map<std::string, unsigned> type_locs;
 };
 
@@ -174,7 +261,7 @@ std::string normalised_text(const expr2tc &e, normalisert &n)
   // Set ESBMC_FP_DEBUG to diff the normalised text of two runs; that is how
   // both position-bearing name forms above were found.
   if (getenv("ESBMC_FP_DEBUG"))
-    std::cerr << "FP " << text << "\n";
+    std::cerr << "FP[" << mode_name(n.get_mode()) << "] " << text << "\n";
   return text;
 }
 } // namespace
@@ -197,17 +284,36 @@ std::string ssa_cone_text(
   // One normaliser across the whole cone: canonical ids must agree between
   // steps, or two occurrences of the same symbol would render differently.
   normalisert n(mode);
-  std::string out;
 
   for (const auto &step : steps)
   {
     if (step.ignore)
       continue;
-
-    out += "step " + std::to_string(static_cast<int>(step.type)) + "\n";
-    out += normalised_text(step.guard, n) + "\n";
-    out += normalised_text(step.cond, n) + "\n";
+    n.collect(step.guard);
+    n.collect(step.cond);
   }
+  n.assign_names();
+
+  std::vector<std::string> rendered;
+  for (const auto &step : steps)
+  {
+    if (step.ignore)
+      continue;
+
+    rendered.push_back(
+      "step " + std::to_string(static_cast<int>(step.type)) + "\n" +
+      normalised_text(step.guard, n) + "\n" + normalised_text(step.cond, n) +
+      "\n");
+  }
+
+  // The steps are conjuncts, so their order carries no meaning -- and symex
+  // does not emit them in a stable order across unrelated edits. Sorting makes
+  // two runs that produced the same set of constraints agree.
+  std::sort(rendered.begin(), rendered.end());
+
+  std::string out;
+  for (const auto &step : rendered)
+    out += step;
 
   return out;
 }

@@ -41,8 +41,12 @@ std::string vcc_cache_context(const optionst &options)
   // stop --vcc-cache-verify from ever reading what a plain run wrote. This is
   // the only exclusion; curating a wider list of "options that matter" is how
   // a cache like this goes unsound.
+  // "input-file" joins them: the source path is not semantic -- it is
+  // stripped out of every symbol name before a cone is digested (see
+  // fingerprint.h) -- and keeping it would stop a cache from transferring
+  // between two checkouts of the same tree, which is the CI case.
   static const std::set<std::string> not_semantic = {
-    "vcc-cache", "vcc-cache-verify", "vcc-fingerprint-dump"};
+    "vcc-cache", "vcc-cache-verify", "vcc-fingerprint-dump", "input-file"};
   for (const auto &[name, value] : options.option_map)
     if (!not_semantic.count(name))
       ctx << "opt " << name << '=' << value << '\n';
