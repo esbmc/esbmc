@@ -3860,6 +3860,225 @@ Next, in order:
 2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
 
+## 105. `adjust_float_arith` probed: unreached by the corpus, and its scalar half
+## unreachable by construction
+
+§103.2 argued from one measurement that `adjust_float_arith`'s scalar path is
+dead. Probed properly, with an `fprintf` inside its `need_float_adjust` block and
+a run over 90 tests sampled across all four C suites:
+
+| | hits |
+|---|---:|
+| scalar float `+ - * /` | **0** |
+| vector-of-float `+ - * /` | **0** |
+
+The block is not reached by the corpus **at all**. It is reachable: a
+hand-written GCC vector-of-float program hits it twice. Nothing in
+`regression/esbmc`, `cstd`, `floats` or `esbmc-unix` does.
+
+### 105.1 Why the scalar half cannot be reached
+
+`adjust_expr` dispatches to `adjust_expr_binary_arithmetic` on the ids
+`+ - * / mod bitand bitxor bitor`. A float-typed node with one of those ids would
+have to come from the converter, and the converter does not produce one:
+`double c = a + b;` is already `IEEE_ADD(a, b)` in the symbol table **under
+`--clang-c-irep2-adjust-only`**, which never calls `adjust_float_arith` at all.
+So the id-rewrite is a no-op for scalars, and the rounding-mode attachment below
+it — guarded by an early `return` for vectors — is unreachable outright.
+
+That is a construction argument, not just a probe result, and it is the half of
+this that does not depend on corpus coverage.
+
+### 105.2 What was shipped instead of a deletion
+
+Not a deletion. `CLAUDE.md`'s C-Dead sub-mode wants the removed branch shown
+unreachable, and §29.4 is explicit that "no corpus input reaches it" is an honest
+negative rather than a proof — the vector half *is* reachable, so the arm cannot
+go as a unit.
+
+What the probe did expose is a **live path with no test**: vector float
+arithmetic was lowered by an arm nothing in the corpus executed.
+`regression/esbmc/gcc_vector_float_arith` pins all four operators, and a mutant
+that drops the vector lowering fails it — so the path is now protected before
+anyone tries to remove the arm around it.
+
+### 105.4 Extended to C++, and one reason not to delete after all
+
+§105.3 left the deletion to its own PR. Two further measurements, and it should
+stay left.
+
+`adjust_float_arith` is `clang_c_adjust`'s, which `clang_cpp_adjust` inherits, so
+CUDA, CHERI-C and C++ all reach it. The probe extended:
+
+| frontend | corpus | PROBE hits |
+|---|---|---:|
+| C | 90 tests, four suites | 0 |
+| C++ | 25 tests of `esbmc-cpp` | 0 |
+| C, C++ | a two-line `double c = a + b;` in each | 0 |
+
+So the block is unreached across both frontends, not just C.
+
+**And yet the rounding-mode `set` is not value-neutral to remove.** The arm sets
+`rounding_mode` to `symbol_exprt(CPROVER_PREFIX "rounding_mode")`, i.e.
+`__ESBMC_rounding_mode`; `migrate_rounding_mode` (`migrate.cpp:857`) defaults to
+`c:@__ESBMC_rounding_mode` when the attribute is absent. **Two different symbol
+names for the same thing**, and the unprefixed one is not the global the symbol
+table holds.
+
+That makes the deletion safe only on unreachability, not on equivalence — the
+"harmless even if reached" argument does not hold, because if it were ever
+reached the two spellings would differ. Worth recording on its own: an `ieee_*`
+node built by this arm carries a rounding-mode operand naming a symbol that does
+not exist, which would be a free variable at the solver. It never bites because
+nothing reaches it, and it is one more reason the arm reads as vestigial rather
+than as load-bearing.
+
+The deletion therefore needs the C-Dead gates on a shared arm reached by four
+frontends, of which this host can meaningfully exercise two. That is a Linux-CI
+job, and it is recorded here rather than attempted.
+
+### 105.3 For whoever takes the deletion
+
+- The scalar id-rewrite and the rounding-mode `set` can go on §105.1's argument,
+  leaving the vector branch.
+- That is a legacy-side simplification, not a port, and it needs its own PR with
+  the C-Dead gates; it does not block anything in Phase 6.
+## 106. The `cstd` suite censused — and W4 has a witness
+
+§101 said the unowned work would come from the suites never censused. `cstd`
+is the first of them, measured with `symtab_sweep.sh`:
+
+**134 of 142 differ** (94 %), against 78 of 120 (65 %) for `regression/esbmc`.
+Over the first 60, by cause:
+
+| cause | tests | owner |
+|---|---:|---|
+| `migrate_expr` renaming warning | 34 | #7093 |
+| `assert` base name | 34 | #7087 |
+| boolean cast on a condition | 21 | #7099 |
+| array-to-pointer decay | 17 | #7098 |
+| **`#cformat` char hint lost** | **14** | **— none** |
+
+The four owned causes carry most of it, which is the useful half of the answer:
+the suite is not differently broken, it is more densely affected by the same
+things. `cstd` is libc-facing, so nearly every test calls `assert` and indexes a
+buffer.
+
+### 106.1 The new cause, and why it is W4
+
+```
+default:  signed char [14] str={ 'T', 'e', 's', 't', ' ', ... };
+-only:    signed char [14] str={ 84, 101, 115, 116, 32, ... };
+```
+
+Same fourteen values; only the rendering differs. `string2array`
+(`util/expr/string2array.cpp:25`) sets `#cformat` to `'T'` on each element as it
+converts a string literal to a char array, and `c_expr2stringt::convert_constant`
+(`util/lang/c_expr2string.cpp:1120`) prints `cformat` verbatim when present.
+`scope-coupled-arith-assign-conversion.md` §20.1 item 7 already records that the
+**IREP2 `c_typecastt` copy does not do `string2array`** — this is that gap, seen
+from the printer.
+
+That makes it **W4**, the wall §4 lists as "untouched, deferred": the
+counterexample printer consuming the attributes. Until now W4 had no witness
+outside the C++ printer. It has fourteen in `cstd` alone, reachable from C with a
+single flag.
+
+### 106.2 Why the obvious fix is not available, and what that says about B-4
+
+`convert_constant` falls through to integer rendering only when `cformat` is
+absent, so teaching it to render a char-typed constant as `'T'` would be
+additive — the default path, where the hint is present, could not change.
+
+It is still not available. A legacy `typet` cannot distinguish `char` from
+`int8_t`: both are `signedbv` of width 8. What distinguishes them is
+**`#cpp_type`** — which is one of the three W3 attributes. So inferring the
+rendering from the type requires reading a W3 attribute to decide whether to stop
+reading a W3 attribute.
+
+**W3 and W4 are therefore coupled**, and §37's conclusion that B-4 "has no
+viable executable content left" needs this qualification: the semantics half
+(§33's four scalar spellings) and the presentation half are the same problem seen
+twice, and neither can be closed while the other holds the type information. That
+is a stronger statement than §37 makes, and it is the reason this section stops
+at a finding rather than an arm.
+
+### 106.3 What follows
+
+- `esbmc-unix` (438 tests) and `floats` (102) are still uncensused; `cstd`
+  suggests they will be dense in the same four owned causes.
+- The `#cformat` class needs the W3 semantics/presentation split (§33) decided
+  first. It is not an adjuster arm.
+## 101. The symbol-table census, and what it says is left
+
+§100.1 established that the adjuster's output is the symbol table, not the goto
+program. That instrument is now in the harness — `irep2_symtab_dump` in
+`scripts/irep2-migration/lib.sh` and `symtab_sweep.sh` beside it — so the
+question "what does this pass still do differently" can be asked directly.
+
+Over the first 120 tests of the §1.2 sample, `--clang-c-irep2-adjust-only`:
+**78 differing symbol tables, 42 identical.** Blank-line-only differences are
+ignored (`diff -B`): the printer varies its blank lines with block nesting,
+which four tests differ by and nothing was adjusted differently in them.
+
+Every remaining cause is owned by an open PR:
+
+| cause | tests | owner |
+|---|---:|---|
+| `__builtin_expect` left as a call | 37 | #7086 |
+| `migrate_expr` renaming warning | 22 | #7093 |
+| array-to-pointer decay | 15 | #7098 |
+| struct/union padding | 14 | #7100 |
+| `for`-init hoist | 13 | #7105 |
+| boolean cast on a condition | 9 | #7099 |
+| conversion at a call argument | (in the residue) | #7091 |
+| nested-function file name | (in the residue) | #7094 |
+
+**There is no unowned adjuster work left in this sample.** That is the honest
+answer to "what is the next arm": there isn't one here. Sixteen PRs carry the
+whole of the measured gap, and the next material step is landing them, not
+writing another arm (§99 gives the order and the two conflicts to expect).
+
+What the census does *not* cover, and where the next unowned work will come from
+when it is needed:
+
+- **The other suites.** This sample is `regression/esbmc`; `esbmc-unix`,
+  `cstd`, `floats` and the rest are in §1.2's corpus and have never been
+  symbol-table censused.
+- **`adjust_type` beyond padding** — symbol-type resolution and VLA size
+  expressions (§96.2), unported and witnessless so far.
+- **`goto_convert`**, which is where §98's remaining `DEAD` questions live, and
+  which is not this scope's subject.
+## 97. The baseline was two tests too high
+
+§96's residue read left `intrinsic_unroll_misplaced_warning` and `github_746`
+untagged. Neither is a divergence: their whole diff is run-to-run noise the
+canonicaliser did not strip.
+
+| test | the entire difference |
+|---|---|
+| `intrinsic_unroll_misplaced_warning` | `operational-model library (clib): ... deserialise 0.197s ...` vs `0.198s` |
+| `github_746` | clang AST-dump node addresses in an error message (`0x8e529b0a8`) |
+
+Both differ **against themselves** — the same binary, twice, on the same input.
+§90.4 flagged the second and PR #7094 fixed three of that group at the source
+(the nested-function transform's random file name, which was a real defect); this
+is the remainder, which is diagnostic text and belongs in `irep2_canon` exactly
+as §90.4 said.
+
+`irep2_canon` now drops the clib summary line and rewrites hex addresses to
+`0xADDR`.
+
+**Every divergence count in §§90-96 is therefore two too high.** Master's
+baseline is **200 of 297**, not 202. The per-arm deltas are unaffected — both
+tests were noise on both sides of every A/B — but the absolute numbers should be
+read with this correction, and re-measured counts from here use the fixed
+canonicaliser.
+
+The lesson is the one §90.4 already stated and this scope keeps re-learning: run
+the same binary twice before believing a diff. It cost three sessions of
+mis-attribution for the nested-function group, and two units of a headline
+number here.
 ## 94. The name-matched builtin family, and the guard it needs
 
 §90.3 deferred these because they are the spellings a program may reuse:
