@@ -108,6 +108,19 @@ private:
 
   /// Pad a complete struct or union type symbol to its ABI layout (§96).
   void pad_type_symbol(symbolt &symbol);
+  /// The name-matched half of do_special_functions: `isnan`, `abs`, `sqrt`,
+  /// `inf` and friends. Split from adjust_special_functions because these
+  /// spellings are not reserved, so they run behind
+  /// builtin_shadows_user_definition (§94).
+  bool adjust_float_builtin(
+    expr2tc &expr,
+    const irep_idt &name,
+    const std::vector<expr2tc> &args);
+
+  /// IREP2 form of clang_c_adjust::adjust_expr_rel's operand half: the usual
+  /// arithmetic conversions over a comparison's operands, which is also what
+  /// decays an array operand compared against a pointer (§96).
+  void adjust_relational(expr2tc &expr);
 
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
