@@ -106,6 +106,16 @@ private:
   /// own definition and no shadows_user_definition query is needed (§90).
   void adjust_special_functions(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's conversion
+  /// half: the usual arithmetic conversions over the operands, then the node's
+  /// own type. adjust_float_arith's ieee_* promotion is not part of this
+  /// (§104.2).
+  void adjust_binary_arith_operands(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's plain
+  /// "assign" case: the node takes the target's type, and the source converts
+  /// to it.
+  void adjust_plain_assignment(expr2tc &expr);
   /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
   /// and adjust_for apply to a statement's controlling expression (§95).
   void adjust_statement_condition(expr2tc &expr);

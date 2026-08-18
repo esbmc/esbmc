@@ -4518,3 +4518,70 @@ Next:
    carry #7010's assigns guard** (§108.1).
 3. The `src_type == dest_type` decision in `implicit_typecast_followed` (§100.1),
    which is shared and needs a Python A/B.
+## 107. The conversions at binary operators and at assignment
+
+§96's census attributed 17 tests to "usual arithmetic conversions". §97 named
+them next. Both arms are ported here, **master-based rather than stacked** —
+the six-deep hop-off chain is unmerged, and neither arm needs it.
+
+### 107.1 Clang does most of this already
+
+The binary-arithmetic arm — `gen_typecast_arithmetic` over the operands, then
+the node's own type — fires on **one** test in the 297-test sample. That is not
+a bug in the port: clang inserts the usual arithmetic conversions into its own
+AST for the ordinary integer and floating types, so `gen_typecast_arithmetic`
+has nothing left to do. The shape where it does is a **bit-precise** operand:
+
+```c
+_ExtInt(10) x, y;
+_ExtInt(10) z = x + y;      // -only gave `x + y`, the default path
+                            // `(signed int)x + (signed int)y`
+```
+
+Proven live before shipping, per §90.4's rule: the arm changes
+`bitvector_04`'s dump and nothing else in the sample.
+
+The assignment arm is wider, and its most visible effect is not arithmetic at
+all — it is **array-to-pointer decay at an assignment statement**:
+
+```c
+int a[3]; int *p;
+p = a;                      // -only gave `ASSIGN p=a`
+```
+
+Clang inserts the decay for the *initialiser* `int *p = a;`, which is why the
+first draft of the test passed against the control and proved nothing. The
+separate assignment statement is the shape that reaches the adjuster —
+`r_ok18`'s, found by reading what the arm changed rather than by reasoning about
+C.
+
+### 107.2 What is left out
+
+- **`adjust_float_arith`'s `ieee_*` promotion**, which the same legacy function
+  calls for `+ - * /`. That is the defect
+  `scope-coupled-arith-assign-conversion.md` §17 spent three sections on for
+  Python (#6839) and it deserves its own gates rather than a shared A/B.
+- **Compound assignment** (`assign+`, ...). `adjust_side_effect_assignment`
+  gives those a complex lowering of their own; only the plain `assign` case is
+  here.
+
+### 107.3 Result
+
+| | master | with both arms |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 201 | **200** |
+| tests whose `-only` dump changes | -- | **4** |
+| regressions | -- | **0** |
+
+One test reaches byte-identity (`github_286_8`); three more move toward it
+(`bitvector_04`, `github_65`, `r_ok18`). A one-test gain is a fair return for
+this arm and is reported as such: the census row it was drawn from counted
+*symptoms at the stack tip*, and §98.2 already recorded that a symptom-tagged
+census names where a difference shows up rather than what produced it. This is
+the second time that distinction has cost a prediction.
+
+| mutant | killed by |
+|---|---|
+| arm absent (master, for both) | both tests |
+| assignment arm disabled | `..._assign_array_decay` only |
+| binary-arithmetic arm disabled | `..._bitint_arith` only |
