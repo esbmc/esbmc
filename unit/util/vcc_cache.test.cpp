@@ -117,3 +117,50 @@ TEST_CASE("the cache's own controls are not part of the key", "[vcc_cache]")
 
   std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("a cache directory that cannot be created is inert", "[vcc_cache]")
+{
+  const std::string path = scratch_dir("not-a-directory");
+  std::ofstream(path) << "occupied\n";
+
+  optionst options;
+  vcc_cachet cache(path, options);
+
+  const std::string cone = "step 1\nblocked\n";
+  // Nothing can be written, so the run must go on solving rather than fail.
+  cache.record(cone);
+  REQUIRE_FALSE(cache.proved(cone));
+  REQUIRE(cache.hits() == 0);
+
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("a failed rename leaves no temporary behind", "[vcc_cache]")
+{
+  const std::string dir = scratch_dir("rename-fails");
+  optionst options;
+  vcc_cachet cache(dir, options);
+
+  const std::string cone = "step 1\nrenamed\n";
+  cache.record(cone);
+
+  // Make the entry's own path un-renamable-onto by turning it into a
+  // directory; the temp file must not be left lying in the store.
+  std::filesystem::path entry;
+  for (const auto &e : std::filesystem::recursive_directory_iterator(dir))
+    if (e.path().extension() == ".vcc")
+      entry = e.path();
+  REQUIRE_FALSE(entry.empty());
+  std::filesystem::remove(entry);
+  std::filesystem::create_directory(entry);
+
+  cache.record(cone);
+
+  size_t leftovers = 0;
+  for (const auto &e : std::filesystem::recursive_directory_iterator(dir))
+    if (e.path().filename().string().find(".tmp") != std::string::npos)
+      ++leftovers;
+  REQUIRE(leftovers == 0);
+
+  std::filesystem::remove_all(dir);
+}

@@ -5,6 +5,10 @@
 #include <irep2/irep2_utils.h>
 #include <util/ssa/fingerprint.h>
 
+#include <unistd.h>
+#include <cstdio>
+#include <functional>
+
 namespace
 {
 expr2tc local(const std::string &name, unsigned offset, unsigned version)
@@ -29,6 +33,68 @@ void add_step(
   s.type = goto_trace_stept::ASSIGNMENT;
   s.guard = gen_true_expr();
   s.cond = equality2tc(lhs, constant_int2tc(get_int32_type(), BigInt(literal)));
+}
+expr2tc plain(const std::string &name, unsigned version)
+{
+  return symbol2tc(
+    get_int32_type(),
+    irep_idt(name),
+    symbol_renaming_level::level2,
+    0,
+    version,
+    0,
+    0);
+}
+
+void add_bare_step(
+  symex_target_equationt::SSA_stepst &steps,
+  goto_trace_stept::typet type)
+{
+  steps.emplace_back();
+  steps.back().type = type;
+}
+
+void add_typed_step(
+  symex_target_equationt::SSA_stepst &steps,
+  const std::string &tag)
+{
+  const type2tc anon = struct_type2tc(
+    std::vector<type2tc>{get_int32_type()},
+    std::vector<irep_idt>{"f"},
+    std::vector<irep_idt>{"f"},
+    irep_idt(tag),
+    false);
+
+  steps.emplace_back();
+  auto &s = steps.back();
+  s.type = goto_trace_stept::ASSIGNMENT;
+  s.guard = gen_true_expr();
+  s.cond = equality2tc(
+    symbol2tc(
+      anon, "c:t.c@100@F@main@s", symbol_renaming_level::level2, 0, 1, 0, 0),
+    symbol2tc(
+      anon, "c:t.c@100@F@main@s", symbol_renaming_level::level2, 0, 0, 0, 0));
+}
+
+std::string capture_stderr(const std::function<void()> &body)
+{
+  fflush(stderr);
+  const int saved = dup(STDERR_FILENO);
+  FILE *sink = tmpfile();
+  dup2(fileno(sink), STDERR_FILENO);
+
+  body();
+
+  fflush(stderr);
+  dup2(saved, STDERR_FILENO);
+  close(saved);
+
+  std::string text;
+  rewind(sink);
+  for (int c = fgetc(sink); c != EOF; c = fgetc(sink))
+    text.push_back(static_cast<char>(c));
+  fclose(sink);
+  return text;
 }
 } // namespace
 
@@ -88,4 +154,91 @@ TEST_CASE("ignored steps are excluded", "[fingerprint]")
   REQUIRE(
     ssa_cone_digest(kept, fingerprint_modet::srcloc) ==
     ssa_cone_digest(with_ignored, fingerprint_modet::srcloc));
+}
+
+TEST_CASE("a name with no source position is left alone", "[fingerprint]")
+{
+  // `__ESBMC_alloc` carries no `c:` prefix and `c:t.c@100` no closing `@`, so
+  // there is nothing for srcloc to strip and it must agree with counters.
+  for (const char *name : {"__ESBMC_alloc", "c:t.c@100"})
+  {
+    symex_target_equationt::SSA_stepst steps;
+    add_step(steps, plain(name, 3), 7);
+    add_step(steps, plain(name, 4), 8);
+
+    REQUIRE(
+      ssa_cone_digest(steps, fingerprint_modet::srcloc) ==
+      ssa_cone_digest(steps, fingerprint_modet::counters));
+  }
+
+  // A name that does carry one is rewritten, so the two modes part company.
+  symex_target_equationt::SSA_stepst positioned;
+  add_step(positioned, local("x", 100, 3), 7);
+
+  REQUIRE(
+    ssa_cone_digest(positioned, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(positioned, fingerprint_modet::counters));
+}
+
+TEST_CASE("a step with no guard or condition still counts", "[fingerprint]")
+{
+  symex_target_equationt::SSA_stepst output, skip, empty;
+  add_bare_step(output, goto_trace_stept::OUTPUT);
+  add_bare_step(skip, goto_trace_stept::SKIP);
+
+  REQUIRE(ssa_cone_size(output) == 1);
+  // The step type is all such a step contributes, and it must contribute it.
+  REQUIRE(
+    ssa_cone_digest(output, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(skip, fingerprint_modet::srcloc));
+  REQUIRE(
+    ssa_cone_digest(output, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(empty, fingerprint_modet::srcloc));
+}
+
+TEST_CASE(
+  "an anonymous type's location does not change the digest",
+  "[fingerprint]")
+{
+  symex_target_equationt::SSA_stepst before, after;
+  add_typed_step(before, "anon_struct_at_t.c_3_9");
+  // The same type after an edit inserted a line above its declaration.
+  add_typed_step(after, "anon_struct_at_t.c_5_9");
+
+  REQUIRE(
+    ssa_cone_digest(before, fingerprint_modet::srcloc) ==
+    ssa_cone_digest(after, fingerprint_modet::srcloc));
+  REQUIRE(
+    ssa_cone_digest(before, fingerprint_modet::counters) !=
+    ssa_cone_digest(after, fingerprint_modet::counters));
+}
+
+TEST_CASE("ESBMC_FP_DEBUG echoes the text each mode digests", "[fingerprint]")
+{
+  symex_target_equationt::SSA_stepst steps;
+  add_step(steps, local("x", 100, 0), 7);
+
+  setenv("ESBMC_FP_DEBUG", "1", 1);
+  const std::string dumped = capture_stderr(
+    [&steps]
+    {
+      for (auto mode :
+           {fingerprint_modet::raw,
+            fingerprint_modet::counters,
+            fingerprint_modet::srcloc,
+            fingerprint_modet::full})
+        ssa_cone_text(steps, mode);
+    });
+  unsetenv("ESBMC_FP_DEBUG");
+
+  // The dump is how a digest mismatch between two runs is diagnosed, so each
+  // line has to say which mode produced it.
+  REQUIRE(dumped.find("FP[raw] ") != std::string::npos);
+  REQUIRE(dumped.find("FP[counters] ") != std::string::npos);
+  REQUIRE(dumped.find("FP[srcloc] ") != std::string::npos);
+  REQUIRE(dumped.find("FP[full] ") != std::string::npos);
+
+  REQUIRE(
+    capture_stderr([&steps] { ssa_cone_text(steps, fingerprint_modet::raw); })
+      .empty());
 }

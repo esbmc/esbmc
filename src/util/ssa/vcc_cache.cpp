@@ -106,14 +106,22 @@ void vcc_cachet::record(const std::string &cone_text) const
     std::filesystem::path(path).parent_path(), ec);
 
   // Written aside and renamed so a concurrent reader never sees a partial
-  // entry and read it back as a mismatch.
+  // entry and reads it back as a mismatch.
   const std::string tmp = path + ".tmp" + std::to_string(current_pid());
+  std::ofstream out(tmp, std::ios::binary);
+  if (!out)
+    return;
+  out << cone_text;
+  out.close();
+
+  // A short write would publish an entry that can never match, wasting its
+  // slot for good; drop it rather than rename it into place.
+  if (!out)
   {
-    std::ofstream out(tmp, std::ios::binary);
-    if (!out)
-      return;
-    out << cone_text;
+    std::filesystem::remove(tmp, ec);
+    return;
   }
+
   std::filesystem::rename(tmp, path, ec);
   if (ec)
     std::filesystem::remove(tmp, ec);
