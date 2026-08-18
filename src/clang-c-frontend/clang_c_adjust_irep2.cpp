@@ -59,6 +59,13 @@ static bool is_complex_unary(const expr2tc &expr)
   return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
 }
 
+/// The operators clang_c_adjust routes through adjust_expr_binary_arithmetic.
+static bool is_arith_or_bitwise(const expr2tc &expr)
+{
+  return is_binary_arith(expr) || is_modulus2t(expr) || is_bitand2t(expr) ||
+         is_bitor2t(expr) || is_bitxor2t(expr);
+}
+
 /// The statements whose controlling expression clang_c_adjust converts to bool
 /// (adjust_ifthenelse, adjust_while, adjust_for). `switch` is not among them:
 /// its selector is an integer.
@@ -123,6 +130,12 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_sideeffect2t(expr))
     adjust_special_functions(expr);
+
+  if (is_arith_or_bitwise(expr))
+    adjust_binary_arith_operands(expr);
+
+  if (is_sideeffect_assign2t(expr))
+    adjust_plain_assignment(expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:
@@ -294,6 +307,55 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   if (args.size() == 1)
     fold_unary_builtin(name, args[0], expr);
+}
+
+void clang_c_adjust_irep2::adjust_binary_arith_operands(expr2tc &expr)
+{
+  expr2tc op0 = *expr->get_sub_expr(0);
+  expr2tc op1 = *expr->get_sub_expr(1);
+  if (is_nil_expr(op0) || is_nil_expr(op1))
+    return;
+
+  // A complex operand is adjust_complex_arith's, and it decomposes the node
+  // rather than converting it.
+  if (is_complex_type(op0->type) || is_complex_type(op1->type))
+    return;
+
+  const expr2tc before0 = op0, before1 = op1;
+  c_implicit_typecast_arithmetic(op0, op1, ns);
+
+  if (op0 != before0 || op1 != before1)
+  {
+    unsigned i = 0;
+    expr->Foreach_operand(
+      [&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  }
+
+  // adjust_expr_binary_arithmetic re-types the node once the operands agree.
+  // Not folded into the branch above: the operands can already agree with each
+  // other and still disagree with the node.
+  if (
+    op0->type == op1->type && is_number_type(op0->type) &&
+    expr->type != op0->type)
+    expr = expr->with_type(op0->type);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's "assign" case:
+/// the node takes the target's type and the source converts to it. The compound
+/// operators ("assign+", ...) are a larger arm carrying a complex lowering of
+/// their own, and are left where this mode already had them.
+void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
+{
+  const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+  if (a.op != "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+    return;
+
+  const type2tc target = a.lhs->type;
+  expr2tc rhs = a.rhs;
+  c_implicit_typecast(rhs, target, ns);
+
+  if (rhs != a.rhs || expr->type != target)
+    expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
 }
 
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
