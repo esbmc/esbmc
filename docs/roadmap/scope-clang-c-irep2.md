@@ -3861,6 +3861,46 @@ Next, in order:
 2. The name-matched builtin family (§92.3), which needs `shadows_user_definition`
    ported alongside it -- a symbol-table query, so the same shape of work as §70.
 
+## 101. The symbol-table census, and what it says is left
+
+§100.1 established that the adjuster's output is the symbol table, not the goto
+program. That instrument is now in the harness — `irep2_symtab_dump` in
+`scripts/irep2-migration/lib.sh` and `symtab_sweep.sh` beside it — so the
+question "what does this pass still do differently" can be asked directly.
+
+Over the first 120 tests of the §1.2 sample, `--clang-c-irep2-adjust-only`:
+**78 differing symbol tables, 42 identical.** Blank-line-only differences are
+ignored (`diff -B`): the printer varies its blank lines with block nesting,
+which four tests differ by and nothing was adjusted differently in them.
+
+Every remaining cause is owned by an open PR:
+
+| cause | tests | owner |
+|---|---:|---|
+| `__builtin_expect` left as a call | 37 | #7086 |
+| `migrate_expr` renaming warning | 22 | #7093 |
+| array-to-pointer decay | 15 | #7098 |
+| struct/union padding | 14 | #7100 |
+| `for`-init hoist | 13 | #7105 |
+| boolean cast on a condition | 9 | #7099 |
+| conversion at a call argument | (in the residue) | #7091 |
+| nested-function file name | (in the residue) | #7094 |
+
+**There is no unowned adjuster work left in this sample.** That is the honest
+answer to "what is the next arm": there isn't one here. Sixteen PRs carry the
+whole of the measured gap, and the next material step is landing them, not
+writing another arm (§99 gives the order and the two conflicts to expect).
+
+What the census does *not* cover, and where the next unowned work will come from
+when it is needed:
+
+- **The other suites.** This sample is `regression/esbmc`; `esbmc-unix`,
+  `cstd`, `floats` and the rest are in §1.2's corpus and have never been
+  symbol-table censused.
+- **`adjust_type` beyond padding** — symbol-type resolution and VLA size
+  expressions (§96.2), unported and witnessless so far.
+- **`goto_convert`**, which is where §98's remaining `DEAD` questions live, and
+  which is not this scope's subject.
 ## 97. The baseline was two tests too high
 
 §96's residue read left `intrinsic_unroll_misplaced_warning` and `github_746`
