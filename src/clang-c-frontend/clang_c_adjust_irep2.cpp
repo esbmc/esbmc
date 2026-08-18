@@ -91,6 +91,10 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 /// one test so adjust_expr does not repeat it per arm.
 void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
+  // First: the sugar has to be in place before adjust_call_callee decides
+  // whether this call is direct, since that is what it reads.
+  adjust_function_designators(expr);
+
   if (is_and2t(expr) || is_or2t(expr) || is_not2t(expr))
     adjust_boolean_operands(expr);
 
@@ -167,6 +171,12 @@ fold_unary_builtin(const std::string &name, const expr2tc &arg, expr2tc &expr)
     expr = bswap2tc(expr->type, arg);
 }
 
+/// The lowerings `do_special_functions` selects by base name rather than by a
+/// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
+///
+/// `sqrt`'s legacy arm additionally skips a `py:`-prefixed callee; this pass is
+/// constructed only from `clang_c_languaget::typecheck`, so no Python symbol
+/// can reach it and the guard has nothing to test.
 /// The argument-less float constants. `handled` distinguishes "not one of
 /// these" from "one of these, but declined".
 static bool
@@ -322,6 +332,22 @@ void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)
     expr = if2tc(expr->type, cond, tv, fv, i.location);
 }
 
+/// A function designator used as a value is sugar for `&f`
+/// (clang_c_adjust::adjust_symbol). Applied from the parent rather than at the
+/// symbol itself: `address_of2t` asserts its operand is not another address_of,
+/// so a user-written `&f` must not be wrapped again -- where the legacy pass
+/// builds `&(&f)` and collapses it in adjust_address_of, this never builds it.
+void clang_c_adjust_irep2::adjust_function_designators(expr2tc &expr)
+{
+  if (is_address_of2t(expr))
+    return;
+
+  expr->Foreach_operand([](expr2tc &op) {
+    if (!is_nil_expr(op) && is_symbol2t(op) && is_code_type(op->type))
+      op = address_of2tc(op->type, op, true);
+  });
+}
+
 void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
 {
   expr2tc callee;
@@ -335,7 +361,23 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
     callee = se.operand;
   }
 
-  if (is_nil_expr(callee) || !is_pointer_type(callee->type))
+  if (is_nil_expr(callee))
+    return;
+
+  // `f(x)` arrives as a call through the &f sugar adjust_symbol inserted; strip
+  // it back off so goto_convert sees a direct call. A user-written `(&f)(x)`
+  // carries the same shape and is told apart only by the implicit bit (§100).
+  if (is_address_of2t(callee) && to_address_of2t(callee).implicit)
+  {
+    const expr2tc target = to_address_of2t(callee).ptr_obj;
+    if (is_code_function_call2t(expr))
+      to_code_function_call2t(expr).function = target;
+    else
+      to_sideeffect2t(expr).operand = target;
+    return;
+  }
+
+  if (!is_pointer_type(callee->type))
     return;
 
   const expr2tc deref =
@@ -384,7 +426,14 @@ void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
       continue;
 
     if (i < params.size())
+    {
+      // Two function-pointer types differing only in argument_names denote the
+      // same type (C11 6.7.6.3p15); casting between them is a divergence, not a
+      // conversion (§100.1).
+      if (same_function_pointer_ignoring_argument_names(arg->type, params[i]))
+        continue;
       c_implicit_typecast(arg, params[i], ns);
+    }
     else if (is_array_type(ns.follow(arg->type)))
       // A variadic argument has no parameter type to convert against; only the
       // array decay is owed.
