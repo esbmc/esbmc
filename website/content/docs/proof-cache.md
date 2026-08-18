@@ -8,24 +8,111 @@ the ones your edit could not have affected. The proof cache stores the claims
 ESBMC has already discharged and skips the solver when it meets one again, so a
 re-run only pays for what actually changed.
 
-It is off by default and enabled by pointing `--vcc-cache` at a directory:
+## Getting started
+
+Point `--vcc-cache` at a directory. It is created if it does not exist, and the
+run needs `--multi-property`, which is what splits verification into per-claim
+proofs:
 
 ```bash
-# First run: solves every claim and records the ones it proves
-esbmc example.c --multi-property --vcc-cache .esbmc-cache
-
-# After editing one function: only the affected claims reach the solver
 esbmc example.c --multi-property --vcc-cache .esbmc-cache
 ```
 
-Each run reports what it reused:
+Nothing else changes: the same properties are checked and the same verdict is
+reported. The only new output is a line saying what the run reused.
+
+### A worked example
+
+```c
+#include <assert.h>
+
+int scale(int v)
+{
+  int r = v * 2;
+  assert(r >= v || v < 0);
+  return r;
+}
+
+int clamp(int v, int hi)
+{
+  if (v > hi)
+    v = hi;
+  assert(v <= hi);
+  return v;
+}
+
+int main(void)
+{
+  int x = nondet_int();
+  __ESBMC_assume(x > 0 && x < 100);
+
+  int a[8];
+  a[x % 8] = scale(x % 10);
+  assert(a[x % 8] >= 0);
+
+  return clamp(x, 50);
+}
+```
+
+The first run has an empty cache and solves everything:
 
 ```
-VCC cache: 44 claim(s) reused, 8 solved
+$ esbmc example.c --multi-property --vcc-cache .esbmc-cache
+VCC cache: 2 claim(s) reused, 5 solved
+** 0 of 7 properties failed, 7 passed
+VERIFICATION SUCCESSFUL
 ```
 
-The cache requires `--multi-property`, which is what splits a run into
-per-claim proofs.
+Seven properties, five distinct proofs — the two reused on this first run are
+claims whose constraints are identical to another claim in the same file, which
+the cache also collapses.
+
+Now change `clamp`'s assertion to `assert(v < hi + 1);` and run again. Only
+that claim is re-proved; the array bounds checks and `scale`'s assertion come
+straight from the cache:
+
+```
+$ esbmc example.c --multi-property --vcc-cache .esbmc-cache
+Solving claim 'assertion v < hi + 1 at file example.c line 14 column 3 function clamp'
+VCC cache: 6 claim(s) reused, 1 solved
+VERIFICATION SUCCESSFUL
+```
+
+### Using it in CI
+
+The cache pays off most across CI runs, where the same file is re-verified after
+a small change. Persist the directory between jobs — with GitHub Actions:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: .esbmc-cache
+    key: esbmc-cache-${{ github.sha }}
+    restore-keys: esbmc-cache-
+
+- run: esbmc src/example.c --multi-property --vcc-cache .esbmc-cache
+```
+
+`restore-keys` matters: it lets a job start from the previous commit's cache
+rather than an empty one. The source path is deliberately not part of a claim's
+identity, so a cache restored into a different workspace directory still hits.
+
+Add the directory to `.gitignore` — it is build output, not source.
+
+### What invalidates what
+
+An edit invalidates a claim when it changes the constraints that claim depends
+on, so the blast radius follows the code, not the line numbers:
+
+- Changing an expression inside one assertion re-proves that claim alone.
+- Changing a branch condition reaches further, because the guard it produces is
+  part of what other claims downstream depend on.
+- Adding or removing a function, or anything that changes the program's set of
+  objects, can invalidate claims that touch memory even in untouched functions.
+
+Measured across `regression/esbmc`, inserting a statement into one function left
+**90.9%** of a file's claims (350 of 385) reusable, with every verdict
+unchanged.
 
 ## What a claim is keyed on
 
@@ -37,16 +124,6 @@ agrees.
 
 The cone is compared in full before an entry is used, so a hash collision costs
 a re-solve rather than producing a wrong answer.
-
-Because the key is the claim's own dependencies rather than its position, an
-edit invalidates only the claims that genuinely read what you changed. Editing
-one function typically leaves the rest of the file cached: measured across
-`regression/esbmc`, inserting a statement into one function left **90.9%** of
-the file's claims (350 of 385) reusable, with every verdict unchanged.
-
-The source path is deliberately *not* part of the key, so a cache carries over
-between two checkouts of the same tree — the usual CI arrangement, where each
-job runs in a different workspace directory.
 
 ## Only proofs are stored
 
