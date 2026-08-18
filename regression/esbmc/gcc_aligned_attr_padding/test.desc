@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto-functions-only
+struct s \{ signed int a; signed char c; unsigned _ExtInt\(88\) anon_pad#2; \}
