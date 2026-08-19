@@ -110,6 +110,9 @@ private:
   void adjust_address_of(expr2tc &expr);
 
   void hoist_for_init(expr2tc &expr);
+
+  /// Pad a complete struct or union type symbol to its ABI layout (§96).
+  void pad_type_symbol(symbolt &symbol);
   /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's conversion
   /// half: the usual arithmetic conversions over the operands, then the node's
   /// own type. adjust_float_arith's ieee_* promotion is not part of this

@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
 #include <util/irep/migrate.h>
 #include <util/lang/c_typecast.h>
@@ -26,6 +27,15 @@ bool clang_c_adjust_irep2::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  // Types first, in a pass of their own: a value's initialiser is built from
+  // its type, so padding a type after a value that uses it leaves the value
+  // short a component. clang_c_adjust::adjust() splits the walk for the same
+  // reason ("so that symbolic-type resolution always receives fixed up types").
+  if (sole_adjuster)
+    for (symbolt *s : symbol_list)
+      if (s->is_type)
+        pad_type_symbol(*s);
+
   for (symbolt *s : symbol_list)
   {
     if (!s->is_type && s->get_value().is_not_nil())
@@ -43,6 +53,21 @@ bool clang_c_adjust_irep2::adjust()
 
   migrate_namespace_lookup = old_ns;
   return false;
+}
+
+/// add_padding on a complete struct or union, which is the half of
+/// clang_c_adjust::adjust_type that the corpus shows is load-bearing here. The
+/// function is shared (clang-c-frontend/padding.h) and idempotent --
+/// adjust_type asserts that re-padding is a no-op -- so this reuses it rather
+/// than reimplementing a layout algorithm over type2tc.
+void clang_c_adjust_irep2::pad_type_symbol(symbolt &symbol)
+{
+  typet t = symbol.get_type();
+  if ((!t.is_struct() && !t.is_union()) || t.incomplete())
+    return;
+
+  add_padding(t, ns);
+  symbol.set_type(std::move(t));
 }
 
 /// The operators C admits over a complex operand: `mod` and the bitwise ones
