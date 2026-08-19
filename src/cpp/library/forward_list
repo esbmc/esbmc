@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "definitions.h"
+#include "type_traits"
 #if __cplusplus >= 201103L
 #  include <initializer_list>
 #endif
@@ -20,6 +21,38 @@ namespace std
 // std::forward_list deliberately has no size(); mutation is expressed
 // relative to the *preceding* position, which is what before_begin and the
 // _after operations are for.
+
+// Mirrors __om_list_pool in <list>; forward_list has its own capacity.
+template <class node_t, bool complete>
+struct __om_fwd_pool;
+
+template <class node_t>
+struct __om_fwd_pool<node_t, true>
+{
+  node_t buf[FORWARD_LIST_MAX_SIZE];
+  void allocate()
+  {
+  }
+  void release()
+  {
+  }
+};
+
+template <class node_t>
+struct __om_fwd_pool<node_t, false>
+{
+  node_t *buf;
+  void allocate()
+  {
+    buf = static_cast<node_t *>(malloc(sizeof(node_t) * FORWARD_LIST_MAX_SIZE));
+    __ESBMC_assume(buf);
+  }
+  void release()
+  {
+    free(buf);
+  }
+};
+
 template <class T>
 class forward_list
 {
@@ -43,11 +76,13 @@ public:
     size_type next_idx;
   };
 
-  // Held behind a pointer, not as a by-value array: an array member requires
-  // the element type to be complete at instantiation.
-  // [container.requirements.general] (N4510) requires vector, list and
-  // forward_list to accept an incomplete element type.
-  node *_pool;
+  // [container.requirements.general] (N4510) requires forward_list to accept an
+  // incomplete element type, which a by-value `node _storage.buf[N]` member rules out.
+  // Only the complete specialisation of __om_fwd_pool names that array. The
+  // array is kept for the complete case because routing every access through a
+  // heap object costs symex enough to time the list suite out; see the same
+  // shape in <list>.
+  __om_fwd_pool<node, __om_list_complete<T>::value> _storage;
   size_type _head;
   size_type _free;
 
@@ -75,16 +110,16 @@ public:
 
     reference operator*()
     {
-      return owner->_pool[idx].data;
+      return owner->_storage.buf[idx].data;
     }
     pointer operator->()
     {
-      return &owner->_pool[idx].data;
+      return &owner->_storage.buf[idx].data;
     }
 
     iterator &operator++()
     {
-      idx = (idx == BEFORE_BEGIN) ? owner->_head : owner->_pool[idx].next_idx;
+      idx = (idx == BEFORE_BEGIN) ? owner->_head : owner->_storage.buf[idx].next_idx;
       return *this;
     }
     iterator operator++(int)
@@ -108,8 +143,7 @@ public:
 
   void __om_allocate()
   {
-    _pool = static_cast<node *>(malloc(sizeof(node) * FORWARD_LIST_MAX_SIZE));
-    __ESBMC_assume(_pool);
+    _storage.allocate();
   }
 
   forward_list() : _head(SENTINEL), _free(0)
@@ -119,7 +153,7 @@ public:
 
   ~forward_list()
   {
-    free(_pool);
+    _storage.release();
   }
 
 #if __cplusplus >= 201103L
@@ -146,7 +180,7 @@ public:
   {
     __om_allocate();
     for (size_type i = 0; i < x._free; i++)
-      _pool[i] = x._pool[i];
+      _storage.buf[i] = x._storage.buf[i];
   }
 
   forward_list<T> &operator=(const forward_list<T> &x)
@@ -156,7 +190,7 @@ public:
       _head = x._head;
       _free = x._free;
       for (size_type i = 0; i < x._free; i++)
-        _pool[i] = x._pool[i];
+        _storage.buf[i] = x._storage.buf[i];
     }
     return *this;
   }
@@ -173,11 +207,11 @@ public:
 
   reference front()
   {
-    return _pool[_head].data;
+    return _storage.buf[_head].data;
   }
   const_reference front() const
   {
-    return _pool[_head].data;
+    return _storage.buf[_head].data;
   }
 
   iterator before_begin()
@@ -198,15 +232,15 @@ public:
     __ESBMC_assert(
       _free < FORWARD_LIST_MAX_SIZE, "forward_list exceeded its bounded pool");
     size_type slot = _free++;
-    _pool[slot].data = value;
-    _pool[slot].next_idx = _head;
+    _storage.buf[slot].data = value;
+    _storage.buf[slot].next_idx = _head;
     _head = slot;
   }
 
   void pop_front()
   {
     __ESBMC_assert(_head != SENTINEL, "pop_front on an empty forward_list");
-    _head = _pool[_head].next_idx;
+    _head = _storage.buf[_head].next_idx;
   }
 
   void clear()
@@ -222,17 +256,17 @@ public:
     __ESBMC_assert(
       _free < FORWARD_LIST_MAX_SIZE, "forward_list exceeded its bounded pool");
     size_type slot = _free++;
-    _pool[slot].data = value;
+    _storage.buf[slot].data = value;
 
     if (pos.idx == BEFORE_BEGIN)
     {
-      _pool[slot].next_idx = _head;
+      _storage.buf[slot].next_idx = _head;
       _head = slot;
     }
     else
     {
-      _pool[slot].next_idx = _pool[pos.idx].next_idx;
-      _pool[pos.idx].next_idx = slot;
+      _storage.buf[slot].next_idx = _storage.buf[pos.idx].next_idx;
+      _storage.buf[pos.idx].next_idx = slot;
     }
     return iterator(this, slot);
   }
@@ -241,14 +275,14 @@ public:
   // follows it.
   iterator erase_after(iterator pos)
   {
-    size_type victim = (pos.idx == BEFORE_BEGIN) ? _head : _pool[pos.idx].next_idx;
+    size_type victim = (pos.idx == BEFORE_BEGIN) ? _head : _storage.buf[pos.idx].next_idx;
     __ESBMC_assert(victim != SENTINEL, "erase_after past the end");
 
-    size_type after = _pool[victim].next_idx;
+    size_type after = _storage.buf[victim].next_idx;
     if (pos.idx == BEFORE_BEGIN)
       _head = after;
     else
-      _pool[pos.idx].next_idx = after;
+      _storage.buf[pos.idx].next_idx = after;
     return iterator(this, after);
   }
 };

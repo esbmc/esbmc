@@ -14,6 +14,39 @@
 
 namespace std
 {
+
+// Only this specialisation names node[LIST_MAX_SIZE], so the incomplete case
+// never forms an array of an incomplete type.
+template <class node_t, bool complete>
+struct __om_list_pool;
+
+template <class node_t>
+struct __om_list_pool<node_t, true>
+{
+  node_t buf[LIST_MAX_SIZE];
+  void allocate()
+  {
+  }
+  void release()
+  {
+  }
+};
+
+template <class node_t>
+struct __om_list_pool<node_t, false>
+{
+  node_t *buf;
+  void allocate()
+  {
+    buf = static_cast<node_t *>(malloc(sizeof(node_t) * LIST_MAX_SIZE));
+    __ESBMC_assume(buf);
+  }
+  void release()
+  {
+    free(buf);
+  }
+};
+
 template <class T>
 class list
 {
@@ -43,13 +76,17 @@ public:
     size_type next_idx;
   };
 
-  // Held behind a pointer, not as a by-value array: an array member requires
-  // the element type to be complete at instantiation, which rules out the
-  // recursive list<Node> member that tree-shaped code declares.
-  // [container.requirements.general] (N4510) requires vector, list and
-  // forward_list to accept an incomplete element type. See #7029 for the same
-  // fix on map, which is *not* obliged to accept one.
-  node *_pool;
+  // [container.requirements.general] (N4510) requires list and forward_list to
+  // accept an incomplete element type, which a by-value `node _storage.buf[N]` member
+  // rules out: it completes `node`, and so `T`, at instantiation. Only the
+  // complete specialisation of __om_list_pool ever names that array, so the
+  // recursive list<Node> member tree-shaped code declares still instantiates.
+  //
+  // The array is kept for the complete case because the indirection is not
+  // free here: routing every `_storage.buf[i]` through a heap object costs symex
+  // enough to push list_sort-4 from ~5s to over the 120s cap. See #7029 for the
+  // same completeness fix on map, which is *not* obliged to accept one.
+  __om_list_pool<node, __om_list_complete<T>::value> _storage;
   size_type _sentinel_prev;
   size_type _sentinel_next;
   // Monotonic high-water mark for the pool. erase does not reclaim
@@ -59,8 +96,7 @@ public:
 
   void __om_allocate()
   {
-    _pool = static_cast<node *>(malloc(sizeof(node) * LIST_MAX_SIZE));
-    __ESBMC_assume(_pool);
+    _storage.allocate();
   }
 
   void _init()
@@ -76,7 +112,7 @@ public:
     __ESBMC_assert(_next_free < LIST_MAX_SIZE, "list capacity exceeded");
     size_type idx = _next_free;
     ++_next_free;
-    _pool[idx].data = x;
+    _storage.buf[idx].data = x;
     return idx;
   }
 
@@ -86,37 +122,37 @@ public:
   {
     if (pos_idx == SENTINEL)
     {
-      _pool[n_idx].prev_idx = _sentinel_prev;
-      _pool[n_idx].next_idx = SENTINEL;
+      _storage.buf[n_idx].prev_idx = _sentinel_prev;
+      _storage.buf[n_idx].next_idx = SENTINEL;
       if (_sentinel_prev != SENTINEL)
-        _pool[_sentinel_prev].next_idx = n_idx;
+        _storage.buf[_sentinel_prev].next_idx = n_idx;
       else
         _sentinel_next = n_idx;
       _sentinel_prev = n_idx;
     }
     else
     {
-      size_type prev = _pool[pos_idx].prev_idx;
-      _pool[n_idx].prev_idx = prev;
-      _pool[n_idx].next_idx = pos_idx;
+      size_type prev = _storage.buf[pos_idx].prev_idx;
+      _storage.buf[n_idx].prev_idx = prev;
+      _storage.buf[n_idx].next_idx = pos_idx;
       if (prev != SENTINEL)
-        _pool[prev].next_idx = n_idx;
+        _storage.buf[prev].next_idx = n_idx;
       else
         _sentinel_next = n_idx;
-      _pool[pos_idx].prev_idx = n_idx;
+      _storage.buf[pos_idx].prev_idx = n_idx;
     }
   }
 
   void _unlink(size_type n_idx)
   {
-    size_type p = _pool[n_idx].prev_idx;
-    size_type nx = _pool[n_idx].next_idx;
+    size_type p = _storage.buf[n_idx].prev_idx;
+    size_type nx = _storage.buf[n_idx].next_idx;
     if (p != SENTINEL)
-      _pool[p].next_idx = nx;
+      _storage.buf[p].next_idx = nx;
     else
       _sentinel_next = nx;
     if (nx != SENTINEL)
-      _pool[nx].prev_idx = p;
+      _storage.buf[nx].prev_idx = p;
     else
       _sentinel_prev = p;
   }
@@ -125,14 +161,14 @@ public:
   {
     if (idx == SENTINEL)
       return SENTINEL;
-    return _pool[idx].next_idx;
+    return _storage.buf[idx].next_idx;
   }
 
   size_type _prev_idx(size_type idx) const
   {
     if (idx == SENTINEL)
       return _sentinel_prev;
-    return _pool[idx].prev_idx;
+    return _storage.buf[idx].prev_idx;
   }
 
   class iterator
@@ -159,11 +195,11 @@ public:
 
     reference operator*()
     {
-      return owner->_pool[idx].data;
+      return owner->_storage.buf[idx].data;
     }
     pointer operator->()
     {
-      return &owner->_pool[idx].data;
+      return &owner->_storage.buf[idx].data;
     }
 
     iterator &operator++()
@@ -223,11 +259,11 @@ public:
 
     reference operator*()
     {
-      return owner->_pool[idx].data;
+      return owner->_storage.buf[idx].data;
     }
     pointer operator->()
     {
-      return &owner->_pool[idx].data;
+      return &owner->_storage.buf[idx].data;
     }
 
     reverse_iterator &operator++()
@@ -318,7 +354,7 @@ public:
   // Bulk pool copy bounded by x._next_free (the high-water mark — slots
   // at indices >= _next_free have never been allocated and are
   // unreachable through prev/next links). Copying by index instead of
-  // walking the linked list via x._pool[i].next_idx lets ESBMC unroll
+  // walking the linked list via x._storage.buf[i].next_idx lets ESBMC unroll
   // with a concrete index bound: under a low --unwind the loop
   // terminates naturally at x._next_free, instead of speculatively
   // unrolling to --unwind with a fresh LIST_MAX_SIZE-way case split per
@@ -331,7 +367,7 @@ public:
     _next_free = x._next_free;
     _size = x._size;
     for (size_type i = 0; i < x._next_free; i++)
-      _pool[i] = x._pool[i];
+      _storage.buf[i] = x._storage.buf[i];
   }
 
   list<T> &operator=(const list<T> &x)
@@ -343,14 +379,14 @@ public:
       _next_free = x._next_free;
       _size = x._size;
       for (size_type i = 0; i < x._next_free; i++)
-        _pool[i] = x._pool[i];
+        _storage.buf[i] = x._storage.buf[i];
     }
     return *this;
   }
 
   ~list()
   {
-    free(_pool);
+    _storage.release();
   }
 
   typedef iterator const_iterator;
@@ -439,20 +475,20 @@ public:
 
   reference front()
   {
-    return _pool[_sentinel_next].data;
+    return _storage.buf[_sentinel_next].data;
   }
   const_reference front() const
   {
-    return _pool[_sentinel_next].data;
+    return _storage.buf[_sentinel_next].data;
   }
 
   reference back()
   {
-    return _pool[_sentinel_prev].data;
+    return _storage.buf[_sentinel_prev].data;
   }
   const_reference back() const
   {
-    return _pool[_sentinel_prev].data;
+    return _storage.buf[_sentinel_prev].data;
   }
 
   void resize(size_type sz, value_type c = value_type())
@@ -532,7 +568,7 @@ public:
 
   iterator erase(iterator position)
   {
-    size_type nx = _pool[position.idx].next_idx;
+    size_type nx = _storage.buf[position.idx].next_idx;
     _unlink(position.idx);
     --_size;
     return iterator(this, nx);
@@ -797,10 +833,10 @@ public:
     // Swap prev/next of every node, then swap sentinel ends.
     for (size_type i = _sentinel_next; i != SENTINEL;)
     {
-      size_type nx = _pool[i].next_idx;
-      size_type p = _pool[i].prev_idx;
-      _pool[i].prev_idx = nx;
-      _pool[i].next_idx = p;
+      size_type nx = _storage.buf[i].next_idx;
+      size_type p = _storage.buf[i].prev_idx;
+      _storage.buf[i].prev_idx = nx;
+      _storage.buf[i].next_idx = p;
       i = nx;
     }
     size_type tmp = _sentinel_prev;
@@ -841,10 +877,10 @@ bool operator==(const list<int> &x, const list<int> &y)
   {
     if (ix == list<int>::SENTINEL)
       return iy == list<int>::SENTINEL;
-    if (x._pool[ix].data != y._pool[iy].data)
+    if (x._storage.buf[ix].data != y._storage.buf[iy].data)
       return false;
-    ix = x._pool[ix].next_idx;
-    iy = y._pool[iy].next_idx;
+    ix = x._storage.buf[ix].next_idx;
+    iy = y._storage.buf[iy].next_idx;
   }
   return true;
 }
@@ -864,10 +900,10 @@ bool operator==(const list<double> &x, const list<double> &y)
   {
     if (ix == list<double>::SENTINEL)
       return iy == list<double>::SENTINEL;
-    if (x._pool[ix].data != y._pool[iy].data)
+    if (x._storage.buf[ix].data != y._storage.buf[iy].data)
       return false;
-    ix = x._pool[ix].next_idx;
-    iy = y._pool[iy].next_idx;
+    ix = x._storage.buf[ix].next_idx;
+    iy = y._storage.buf[iy].next_idx;
   }
   return true;
 }

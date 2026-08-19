@@ -1011,6 +1011,28 @@ using aligned_storage_t = typename aligned_storage<Len, Align>::type;
 
 #endif // __cplusplus >= 201103L
 
+
+// void_t over a value, so sizeof(T) can be used as the SFINAE probe.
+template <__SIZE_TYPE__>
+struct __om_list_void
+{
+  typedef void type;
+};
+
+// True when T is complete here. A member array of an incomplete type is
+// ill-formed, so a container's pool shape has to be chosen on this.
+template <class T, class = void>
+struct __om_list_complete
+{
+  static const bool value = false;
+};
+
+template <class T>
+struct __om_list_complete<T, typename __om_list_void<sizeof(T)>::type>
+{
+  static const bool value = true;
+};
+
 } // namespace std
 
 #endif // ESBMC_TYPE_TRAITS
