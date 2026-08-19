@@ -2259,7 +2259,7 @@ public:
   }
 #endif
 
-  bool operator==(multimap &y)
+  bool operator==(const multimap &y) const
   {
     if (this->_size != y._size)
       return false;
@@ -2271,7 +2271,7 @@ public:
     return true;
   }
 
-  bool operator!=(multimap &y)
+  bool operator!=(const multimap &y) const
   {
     if (this->_size != y._size)
       return true;

@@ -858,33 +858,51 @@ public:
   }
 
   // comparators:
-  bool operator==(const deque<T> &rhv)
+  bool operator==(const deque<T> &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
-    int i = 0;
-    while (i != this->size())
-    {
+    for (size_type i = 0; i < this->size(); i++)
       if (this->at(i) != rhv[i])
         return false;
-      i++;
-    }
     return true;
   }
 
-  bool operator!=(const deque<T> &rhv)
+  bool operator!=(const deque<T> &rhv) const
   {
     return (!(*this == rhv));
   }
 
-  bool operator>=(const deque<T> &rhv)
+  /* [container.requirements]: the ordering is the lexicographical comparison
+   * of the two ranges, so the first differing element decides it and the
+   * lengths matter only when one range is a prefix of the other. Comparing
+   * sizes instead made {2} <= {1, 3}. */
+  bool operator<(const deque<T> &rhv) const
   {
-    return ((*this == rhv) || (this->size() > rhv.size()));
+    size_type n = this->size() < rhv.size() ? this->size() : rhv.size();
+    for (size_type i = 0; i < n; i++)
+    {
+      if ((*this)[i] < rhv[i])
+        return true;
+      if (rhv[i] < (*this)[i])
+        return false;
+    }
+    return this->size() < rhv.size();
   }
 
-  bool operator<=(const deque<T> &rhv)
+  bool operator>(const deque<T> &rhv) const
   {
-    return ((*this == rhv) || (this->size() < rhv.size()));
+    return rhv < *this;
+  }
+
+  bool operator>=(const deque<T> &rhv) const
+  {
+    return !(*this < rhv);
+  }
+
+  bool operator<=(const deque<T> &rhv) const
+  {
+    return !(rhv < *this);
   }
 
 private:
