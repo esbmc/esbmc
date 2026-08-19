@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-08-16.
+**Updated:** 2026-08-18.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -17,7 +17,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Missing | Only the narrow identity-return pattern is supported. Non-trivial returns such as `def f(a): return a[0]`, functions with multiple parameters, and functions with more than one statement still need a real fix in the assignment/type-inference pipeline. Previous attempts hit double conversion in `create_symbol_for_unannotated_assign` / `get_var_assign` and wrapper-type confusion before variable type selection. |
-| Final shared-buffer view model | Missing | ADR-NP-003 etapa 1 is only a conservative guard layer. The runtime representation still copies many view-like operations. Etapa 2 must connect `ndarray_descriptor` `buffer_id`, `offset`, and `strides` to indexing, assignment, transpose, reshape/ravel, escape checks, `.flat`, and writable `nditer` so supported views alias like real NumPy. |
+| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases the narrowest case — a 1-D, unit-stride, literal-bound slice assigned to a bare name — via a pointer into the source array's own storage (`numpy_pointer_view_lengths_`; `try_build_1d_pointer_view` in `list_access.cpp`), with reads, writes, `len()`, `.shape`, and `.ndim` all observing the real aliasing. Row/column views, transpose, reshape/ravel, `.flat`, step≠1 slices, symbolic bounds, and writable `nditer` are still copy-or-reject and remain to be wired to the same `buffer_id`/`offset`/`strides` model. |
 | Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
 | `a.sort()` / `a.argsort()` / `a.tolist()` method forms | Missing | These are not plain method-to-module rewrites. `a.sort()` is in-place while `np.sort(a)` returns a copy; `a.argsort()` needs `np.argsort()` to support variables first; `a.tolist()` needs new array-to-list conversion logic. |
 | `a.any()` / `a.all()` method forms | Missing, cause unclear | `a.any()` currently dispatches like Python builtin `any()` with no argument (`ERROR: any() expected at least 1 argument, got 0`). Root-cause before adding a rewrite, since it may indicate a broader method-dispatch issue. |
@@ -34,7 +34,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
 | Structured arrays | Record dtypes. |
-| Views / strides | Final shared-buffer alias semantics, writable views, offset/stride based assignment, and broad non-literal stride support. |
+| Views / strides | Row/column and higher-rank view aliasing, transpose/reshape/ravel views, writable `.flat`/`nditer`, and non-literal-stride slices — the 1-D unit-stride literal-bound case now aliases via pointer (ADR-NP-003 etapa 2). |
 | Iteration | Writable `nditer`, advanced `op_flags`, multi-operand iteration, and mutation through `.flat`. |
 
 ---
@@ -48,9 +48,11 @@ Architectural decisions that gate specific pendencies here (referenced as
 3. **Scalability wall** (#5121): arrays are still represented as fully
    unrolled value lists. Large arrays can explode even when the operation is
    conceptually simple.
-4. **Basic-indexing views still do not alias at runtime.** Covered mutations
-   are rejected conservatively, but the final ADR-NP-003 descriptor model is
-   still needed to replace rejection with faithful aliasing.
+4. **Most basic-indexing views still do not alias at runtime.** Only the
+   narrowest case — a 1-D, unit-stride, literal-bound slice assigned to a
+   bare name — aliases so far (ADR-NP-003 etapa 2). Other covered mutations
+   are still rejected conservatively pending the rest of the descriptor
+   model.
 
 No known soundness bugs remain open (the numpy call-result chaining gap that
 used to be listed here — a `Name` argument whose declaration was itself a
@@ -86,9 +88,11 @@ an explicit "not supported yet" diagnostic, not a wrong answer.
 Nothing below blocks community testing (see above); this is post-release
 backlog, in priority order:
 
-1. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — wire shared
-   `buffer_id`/`offset`/`strides` metadata into reads, writes, views, and
-   escape handling.
+1. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — the
+   pointer-based aliasing technique is now validated for 1-D, unit-stride,
+   literal-bound slices; extend the same `buffer_id`/`offset`/`strides`
+   wiring to row/column views, transpose, reshape/ravel, escape handling,
+   `.flat`, and writable `nditer`.
 2. **General array returns** — consolidate assignment/type inference so user
    functions can return non-trivial NumPy arrays and sub-arrays safely.
 3. **Remaining array method forms** — design `a.sort()`, `a.argsort()`,
@@ -113,10 +117,11 @@ isolated gap through several commits of core fix plus a matching review
 round; items below with multiple named consumers or distinct designs are
 sized accordingly instead of assumed to be one PR each.
 
-1. **Shared-buffer view descriptors (ADR-NP-003 etapa 2)** (~3 PRs) —
-   `buffer_id`/`offset`/`strides` must reach 7 distinct consumers
-   (indexing, assignment, transpose, reshape/ravel, escape checks, `.flat`,
-   writable `nditer`); one PR risks becoming too large to review.
+1. **Shared-buffer view descriptors (ADR-NP-003 etapa 2)** (~2 PRs
+   remaining) — indexing and assignment landed for the 1-D, unit-stride,
+   literal-bound slice case via pointer aliasing; `buffer_id`/`offset`/
+   `strides` still need to reach row/column views, transpose,
+   reshape/ravel, escape checks, `.flat`, and writable `nditer`.
 2. **General array returns** (~2 PRs) — root-cause the shared
    assignment/type-selection issue (two prior attempts already hit it)
    before extending to broader return support.
