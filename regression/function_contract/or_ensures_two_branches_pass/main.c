@@ -10,6 +10,7 @@ typedef struct { int x; int y; } S;
 
 void f(S *p, int select)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(S)));
   __ESBMC_requires(p != NULL);
   __ESBMC_requires(select == 0 || select == 1);
   __ESBMC_ensures(

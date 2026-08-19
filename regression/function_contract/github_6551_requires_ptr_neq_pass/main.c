@@ -9,6 +9,10 @@ void callee(P *a, P *b)
 {
   __ESBMC_requires(a != 0);
   __ESBMC_requires(b != 0);
+  /* Guarded, so the extent is stated but the separation is not: a != b below
+   * is what has to carry it, which is the point of the test. */
+  __ESBMC_requires(a == 0 || __ESBMC_is_fresh(a, sizeof(P)));
+  __ESBMC_requires(b == 0 || __ESBMC_is_fresh(b, sizeof(P)));
   __ESBMC_requires(a != b);
   __ESBMC_assigns(a->coeffs);
   __ESBMC_ensures(a->coeffs[0] == 1);

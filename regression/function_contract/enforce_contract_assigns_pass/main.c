@@ -23,7 +23,8 @@ typedef struct {
 void init_point(Point *p)
 {
     __ESBMC_requires(p != NULL);
-    
+    __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(Point)));
+
     __ESBMC_assigns(p->x, p->y, p->z);
     __ESBMC_ensures(p->x == 0);
     __ESBMC_ensures(p->y == 0);
