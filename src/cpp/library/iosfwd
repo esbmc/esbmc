@@ -16,7 +16,6 @@ namespace std
 {
 class ios_base;
 class ios;
-class streambuf;
 class istream;
 class ostream;
 class iostream;
@@ -29,6 +28,13 @@ template <class CharT>
 struct char_traits;
 template <class T>
 class allocator;
+
+/* streambuf really is basic_streambuf<char> (#5868), so it joins the <sstream>
+ * classes as one of the templates named here rather than a concrete class.
+ * The default template argument stays in <streambuf> with the definition. */
+template <class CharT, class Traits>
+class basic_streambuf;
+typedef basic_streambuf<char, char_traits<char> > streambuf;
 
 template <
   class CharT,
