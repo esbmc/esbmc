@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 
+#include "memory" /* std::allocator, for the Allocator parameter */
 #include "utility"
 #include "vector"
 #include "functional"
@@ -14,7 +15,14 @@
 
 namespace std
 {
-template <class Key, class T, class Compare = less<Key> >
+// [associative.reqmts]: the Allocator parameter completes the signature. The
+// fixed arrays below do the allocating, so it is carried for the signature
+// and the allocator_type typedef only.
+template <
+  class Key,
+  class T,
+  class Compare = less<Key>,
+  class Allocator = allocator<pair<const Key, T> > >
 class map
 {
 public:
@@ -1232,7 +1240,14 @@ public:
   }
 };
 
-template <class Key, class T, class Compare = less<Key> >
+// [associative.reqmts]: the Allocator parameter completes the signature. The
+// fixed arrays below do the allocating, so it is carried for the signature
+// and the allocator_type typedef only.
+template <
+  class Key,
+  class T,
+  class Compare = less<Key>,
+  class Allocator = allocator<pair<const Key, T> > >
 class multimap
 {
 public:
