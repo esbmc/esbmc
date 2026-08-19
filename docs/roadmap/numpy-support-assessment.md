@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-08-14.
+**Updated:** 2026-08-16.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -51,65 +51,87 @@ Architectural decisions that gate specific pendencies here (referenced as
 4. **Basic-indexing views still do not alias at runtime.** Covered mutations
    are rejected conservatively, but the final ADR-NP-003 descriptor model is
    still needed to replace rejection with faithful aliasing.
-5. **Chaining one numpy call as another's argument is broken for
-   non-constructor sources.** `np.logical_not(np.equal(a, b))` and
-   `np.where(np.greater(a, b), x, y)` fail even when every operand is a
-   plain literal list (no `arange`/constructor involved), both nested
-   directly and through an intermediate variable — confirmed by direct
-   execution. The comparison/logical dispatch block only knows how to
-   resolve a `Name` argument back to a *constructor* call (`zeros`, `full`,
-   `arange`, ...); a `Name` whose declaration is itself a call to another
-   numpy function (`equal`, `greater`, ...) falls through to the old blind
-   `args[0]` read, silently substituting that inner call's first argument
-   for its actual (unevaluated) result. Found while extending
-   `np.greater`/`np.equal` to accept `np.arange(...)` directly as an
-   argument; those two now work — this is a distinct, pre-existing gap in
-   general call composition, not arange-specific.
+
+No known soundness bugs remain open (the numpy call-result chaining gap that
+used to be listed here — a `Name` argument whose declaration was itself a
+non-constructor numpy call resolving to the wrong operand instead of its
+evaluated result — was fixed: `evaluate_numpy_logical_call()` now evaluates
+`greater`/`less`/`greater_equal`/`less_equal`/`equal`/`not_equal`/
+`logical_and`/`logical_or`/`logical_not`/`where` chained as another numpy
+call's argument, nested directly or via an intermediate variable, including
+more than one level of chaining; a chain past the supported depth declines
+explicitly instead of misreading. See `regression/numpy/chaining_*`).
+
+---
+
+## Community testing readiness
+
+ESBMC's standard across every frontend (C, C++, Solidity, Java/Kotlin) is
+sound-but-incomplete, not full language/library coverage: whatever falls
+outside the currently supported subset must reject with an explicit
+diagnostic (ADR-NP principle 3) rather than silently return a wrong
+verdict. By that bar, every gap in "Missing indexing / slicing" and
+"Missing API surface" above is **not** a blocker for community testing —
+each one already rejects explicitly instead of misbehaving.
+
+With the call-result chaining fix above, there are no known soundness bugs
+left in this file. **A build can be cut for community testing at any point
+from here** — everything remaining is documented backlog that surfaces as
+an explicit "not supported yet" diagnostic, not a wrong answer.
 
 ---
 
 ## Prioritised next steps
 
-1. **General numpy call composition** — a `Name` argument whose declaration
-   is itself a call to another numpy function (not a constructor) resolves
-   incorrectly; root-cause and fix the shared resolve_var pattern instead of
-   special-casing each affected dispatch block again.
-2. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — wire shared
+Nothing below blocks community testing (see above); this is post-release
+backlog, in priority order:
+
+1. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — wire shared
    `buffer_id`/`offset`/`strides` metadata into reads, writes, views, and
    escape handling.
-3. **General array returns** — consolidate assignment/type inference so user
+2. **General array returns** — consolidate assignment/type inference so user
    functions can return non-trivial NumPy arrays and sub-arrays safely.
-4. **Remaining array method forms** — design `a.sort()`, `a.argsort()`,
+3. **Remaining array method forms** — design `a.sort()`, `a.argsort()`,
    `a.tolist()`, `a.any()`, and `a.all()` individually.
-5. **Symbolic and broader multi-axis slicing** — support cases beyond the
+4. **Symbolic and broader multi-axis slicing** — support cases beyond the
    literal/fixed-shape recuts.
-6. **Advanced dtype and constructor parity** — structured/object/custom dtype
+5. **Advanced dtype and constructor parity** — structured/object/custom dtype
    policy, diagnostics, and propagation.
-7. **Random and iteration depth** — probability/replacement `choice`, extra
+6. **Random and iteration depth** — probability/replacement `choice`, extra
    distributions, writable `nditer`, and real `.flat` mutation.
-8. **Linear algebra breadth** — larger matrices, symbolic entries, and more
+7. **Linear algebra breadth** — larger matrices, symbolic entries, and more
    faithful `norm`/`eig`/`svd`.
 
 ---
 
 ## Suggested next PRs
 
-1. **Fix numpy call-result chaining** — `np.logical_not(np.equal(...))`,
-   `np.where(np.greater(...), ...)`, and similar compositions, both nested
-   and through an intermediate variable; small and isolated, currently the
-   first prioritized roadmap item.
-2. **Shared-buffer view descriptors (ADR-NP-003 etapa 2)** — unblock writable
-   views, writable `.flat`, and writable `nditer`.
-3. **General array returns** — fix the shared assignment/type-selection root
-   cause before adding broader return support.
-4. **Remaining array method forms** — implement method-specific designs for
-   sort/argsort/tolist/any/all.
-5. **Advanced dtype and constructors** — define dtype policy and improve
-   constructor diagnostics/propagation.
-6. **Random and iteration depth** — extend random/choice and iteration
-   semantics.
-7. **Linear algebra expansion** — extend matrix-size and symbolic-entry
-   policies.
+Each roadmap item above groups several sub-efforts; sizing them 1 PR per
+item undercounts the real work. The two most recent NumPy PRs (arange
+small-range performance, and this call-chaining fix) each took a small,
+isolated gap through several commits of core fix plus a matching review
+round; items below with multiple named consumers or distinct designs are
+sized accordingly instead of assumed to be one PR each.
+
+1. **Shared-buffer view descriptors (ADR-NP-003 etapa 2)** (~3 PRs) —
+   `buffer_id`/`offset`/`strides` must reach 7 distinct consumers
+   (indexing, assignment, transpose, reshape/ravel, escape checks, `.flat`,
+   writable `nditer`); one PR risks becoming too large to review.
+2. **General array returns** (~2 PRs) — root-cause the shared
+   assignment/type-selection issue (two prior attempts already hit it)
+   before extending to broader return support.
+3. **Remaining array method forms** (~3 PRs) — `sort`/`argsort` (in-place vs
+   copy semantics), `tolist` (new conversion logic), and `any`/`all` (root
+   cause still unclear) are three distinct designs, not one.
+4. **Advanced dtype and constructors** (~2 PRs) — dtype policy
+   (object/structured/custom) separate from constructor
+   diagnostics/propagation.
+5. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
+   separate from writable `nditer`/`.flat` (which also depends on item 1).
+6. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
+   separate from fuller `eig`/`svd`/`norm`.
+
+**Total to close every item in this file: ~14 PRs.**
 
 ---
 

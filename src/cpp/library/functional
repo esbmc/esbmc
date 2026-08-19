@@ -923,6 +923,41 @@ auto invoke(Func &&f, Args &&...args)
 {
   return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }
+
+/* [func.bind.place]: _1..._N have distinct unspecified types and
+ * is_placeholder<decltype(_n)>::value == n. Distinct *types* is the load-bearing
+ * part -- boost/bind partially specialises its own is_placeholder on each of the
+ * first nine, which collapses to a redefinition if they share one. The objects
+ * are declared and not defined because nothing here consumes them: std::bind is
+ * not modelled, so a placeholder is never read. */
+namespace placeholders
+{
+template <int N>
+struct __ph
+{
+};
+
+extern __ph<1> _1;
+extern __ph<2> _2;
+extern __ph<3> _3;
+extern __ph<4> _4;
+extern __ph<5> _5;
+extern __ph<6> _6;
+extern __ph<7> _7;
+extern __ph<8> _8;
+extern __ph<9> _9;
+extern __ph<10> _10;
+} // namespace placeholders
+
+template <class T>
+struct is_placeholder : integral_constant<int, 0>
+{
+};
+
+template <int N>
+struct is_placeholder<placeholders::__ph<N> > : integral_constant<int, N>
+{
+};
 #endif
 
 } // namespace std

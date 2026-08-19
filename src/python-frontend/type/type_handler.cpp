@@ -1,5 +1,6 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -1167,12 +1168,28 @@ bool type_handler::is_tagged_scalar_type(const typet &t) const
 
 exprt type_handler::tagged_scalar_type_id(const typet &type) const
 {
-  const std::string type_name =
-    type == bool_type() ? "int" : type_to_string(type);
   constant_exprt type_id(size_type());
   type_id.set_value(integer2binary(
-    std::hash<std::string>{}(type_name), config.ansi_c.address_width));
+    std::hash<std::string>{}(type_to_string(type)),
+    config.ansi_c.address_width));
   return type_id;
+}
+
+exprt type_handler::tagged_scalar_type_matches(
+  const exprt &tagged_type_id,
+  const typet &literal_type) const
+{
+  if (
+    !literal_type.is_bool() && !literal_type.is_signedbv() &&
+    !literal_type.is_unsignedbv())
+    return python_expr::build_equal(
+      tagged_type_id, tagged_scalar_type_id(literal_type));
+
+  exprt int_id = tagged_scalar_type_id(long_long_int_type());
+  exprt bool_id = tagged_scalar_type_id(bool_type());
+  return python_expr::build_or(
+    python_expr::build_equal(tagged_type_id, int_id),
+    python_expr::build_equal(tagged_type_id, bool_id));
 }
 
 exprt type_handler::tagged_scalar_byte_size(const exprt &value) const

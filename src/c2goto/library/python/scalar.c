@@ -49,11 +49,11 @@ __ESBMC_HIDE:;
 
 int __python_scalar_eq_num(
   const PyObject *tagged,
-  size_t type_id,
+  int type_matches,
   long long value)
 {
 __ESBMC_HIDE:;
-  if (!tagged || tagged->type_id != type_id)
+  if (!tagged || !type_matches)
     return 0;
   return *(const long long *)tagged->value == value;
 }
@@ -74,14 +74,15 @@ __ESBMC_HIDE:;
 // Models a runtime type mismatch (e.g. `x + 1` where `x` holds a str) as a
 // Python TypeError, the same way IndexError/KeyError are modeled elsewhere
 // in this library: an assert on the path that would have raised.
-long long
-__python_scalar_add_num(const PyObject *tagged, size_t type_id, long long value)
+long long __python_scalar_add_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && tagged->type_id == type_id,
-    "TypeError: unsupported operand type(s) for +");
-  if (!tagged || tagged->type_id != type_id)
+    tagged && type_matches, "TypeError: unsupported operand type(s) for +");
+  if (!tagged || !type_matches)
     return 0;
   return *(const long long *)tagged->value + value;
 }
@@ -124,15 +125,14 @@ __ESBMC_HIDE:;
 // subtraction order matters.
 long long __python_scalar_sub_num(
   const PyObject *tagged,
-  size_t type_id,
+  int type_matches,
   long long value,
   int tagged_is_left)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && tagged->type_id == type_id,
-    "TypeError: unsupported operand type(s) for -");
-  if (!tagged || tagged->type_id != type_id)
+    tagged && type_matches, "TypeError: unsupported operand type(s) for -");
+  if (!tagged || !type_matches)
     return 0;
   long long tagged_val = *(const long long *)tagged->value;
   return tagged_is_left ? tagged_val - value : value - tagged_val;
@@ -141,15 +141,14 @@ __ESBMC_HIDE:;
 // Python's / is always true division, even for two ints.
 double __python_scalar_div_num(
   const PyObject *tagged,
-  size_t type_id,
+  int type_matches,
   long long value,
   int tagged_is_left)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && tagged->type_id == type_id,
-    "TypeError: unsupported operand type(s) for /");
-  if (!tagged || tagged->type_id != type_id)
+    tagged && type_matches, "TypeError: unsupported operand type(s) for /");
+  if (!tagged || !type_matches)
     return 0.0;
   long long tagged_val = *(const long long *)tagged->value;
   return tagged_is_left ? (double)tagged_val / (double)value

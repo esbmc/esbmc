@@ -77,6 +77,13 @@ public:
     const locationt &location);
 
   /**
+   * @brief Builds isinstance(tagged, type_name)
+   */
+  exprt build_isinstance_check(
+    const exprt &tagged,
+    const std::string &type_name) const;
+
+  /**
    * @brief RAII: adds `dynamic_type_names` to the transient tagged-name set
    * for the duration of converting one if/else's branches; removes on exit
    * only what it added, keeping nested invocations independent
