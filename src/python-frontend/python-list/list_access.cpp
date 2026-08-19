@@ -1354,9 +1354,13 @@ const symbolt &python_list::get_str_slice_sym()
 // automatically via ordinary pointer semantics -- no manual synchronization
 // needed. Declines (returns std::nullopt) for: step != 1, char/string
 // slices (own null-terminator semantics), a source element type that is
-// itself an array (row/column views -- future PRs), a non-symbol base, and
-// any slice not the direct RHS of a plain assignment (current_lhs unset) --
-// the caller falls through to the existing copy for all of these.
+// itself an array (row/column views -- future PRs), a non-symbol base, any
+// slice not the direct RHS of a plain assignment (current_lhs unset), and a
+// source that is not a tracked numpy array -- `handle_range_slice` is
+// shared by numpy arrays, plain Python lists, and bytes/str, and this ADR
+// is numpy-scoped: a `bytes`/list slice must keep the existing copy
+// semantics (github PR review, bytes_slice_len regression) -- the caller
+// falls through to the existing copy for all of these.
 std::optional<exprt> python_list::try_build_1d_pointer_view(
   const exprt &array,
   const typet &elem_type,
@@ -1369,7 +1373,8 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
   if (
     step_val != 1 || needs_null_term || ns.follow(elem_type).is_array() ||
     !array.is_symbol() || !converter_.current_lhs ||
-    !converter_.current_lhs->is_symbol())
+    !converter_.current_lhs->is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
     return std::nullopt;
 
   // Pointer arithmetic, not build_index(array, literal_start, elem_type):
