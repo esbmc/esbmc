@@ -145,8 +145,7 @@ public:
       std::sort(
         members.begin(),
         members.end(),
-        [](const sym_keyt &a, const sym_keyt &b)
-        {
+        [](const sym_keyt &a, const sym_keyt &b) {
           return std::tie(
                    std::get<1>(a),
                    std::get<2>(a),
@@ -168,8 +167,9 @@ public:
       std::stable_sort(
         members.begin(),
         members.end(),
-        [](const sym_keyt &a, const sym_keyt &b)
-        { return offset_of(std::get<0>(a)) < offset_of(std::get<0>(b)); });
+        [](const sym_keyt &a, const sym_keyt &b) {
+          return offset_of(std::get<0>(a)) < offset_of(std::get<0>(b));
+        });
 
       for (size_t i = 0; i < members.size(); ++i)
         names[members[i]] = mode == fingerprint_modet::full

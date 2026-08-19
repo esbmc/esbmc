@@ -223,16 +223,14 @@ TEST_CASE(
   add_step(steps, local("x", 100, 0), 7);
 
   messaget::state.modules["fingerprint"] = VerbosityLevel::Debug;
-  const std::string dumped = capture_stderr(
-    [&steps]
-    {
-      for (auto mode :
-           {fingerprint_modet::raw,
-            fingerprint_modet::counters,
-            fingerprint_modet::srcloc,
-            fingerprint_modet::full})
-        ssa_cone_text(steps, mode);
-    });
+  const std::string dumped = capture_stderr([&steps] {
+    for (auto mode :
+         {fingerprint_modet::raw,
+          fingerprint_modet::counters,
+          fingerprint_modet::srcloc,
+          fingerprint_modet::full})
+      ssa_cone_text(steps, mode);
+  });
   messaget::state.modules["fingerprint"] = VerbosityLevel::None;
 
   // The dump is how a digest mismatch between two runs is diagnosed, so each
@@ -242,7 +240,7 @@ TEST_CASE(
   REQUIRE(dumped.find("FP[srcloc] ") != std::string::npos);
   REQUIRE(dumped.find("FP[full] ") != std::string::npos);
 
-  REQUIRE(
-    capture_stderr([&steps] { ssa_cone_text(steps, fingerprint_modet::raw); })
-      .empty());
+  REQUIRE(capture_stderr([&steps] {
+            ssa_cone_text(steps, fingerprint_modet::raw);
+          }).empty());
 }
