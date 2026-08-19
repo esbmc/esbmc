@@ -6,7 +6,6 @@
 #include <util/message/message.h>
 
 #include <cctype>
-#include <tuple>
 #include <algorithm>
 #include <map>
 #include <string>
@@ -137,9 +136,9 @@ public:
         members.begin(),
         members.end(),
         [](const std::string &a, const std::string &b) {
-          return std::make_tuple(
-                   offset_of(a), ssa_version_of(a), std::cref(a)) <
-                 std::make_tuple(offset_of(b), ssa_version_of(b), std::cref(b));
+          const auto ka = std::make_pair(offset_of(a), ssa_version_of(a));
+          const auto kb = std::make_pair(offset_of(b), ssa_version_of(b));
+          return ka != kb ? ka < kb : a < b;
         });
 
       for (size_t i = 0; i < members.size(); ++i)
