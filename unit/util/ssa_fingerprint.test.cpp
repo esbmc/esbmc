@@ -7,7 +7,6 @@
 #include <util/message/message.h>
 #include <util/ssa/fingerprint.h>
 
-
 namespace
 {
 expr2tc local(const std::string &name, unsigned offset, unsigned version)
