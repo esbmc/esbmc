@@ -3458,6 +3458,7 @@ is not this scope's business.
 
 `esbmc-unix` (438) is the last of §101's list. On the evidence of `cstd` and
 `floats`, expect the same four owned causes and no new ones.
+
 ## 99. The fifteen open PRs do not batch-merge — an integration attempt
 
 Fifteen Phase 6 PRs were open with none merged, so rather than add a sixteenth
@@ -3513,6 +3514,7 @@ against master with only that arm applied, and those stand; how far the fifteen
 together take the corpus is unmeasured, and will stay unmeasured until they can
 be built together. Stated plainly because the obvious summary — "201 down to N"
 — is one this scope has not earned.
+
 ## 98. The `DEAD` class: a live variable marked dead, and a hoist that does not fix it
 
 §97 left 13 untagged tests, most showing a `DEAD` instruction in a different
@@ -4587,6 +4589,7 @@ the second time that distinction has cost a prediction.
 | assignment arm disabled | `..._assign_array_decay` only |
 | binary-arithmetic arm disabled | `..._bitint_arith` only |
 
+
 ## 94. `adjust_address_of`'s array decay, and a guard that had no witness
 
 `&a` on an array is `&a[0]`: the pointer designates the first element, not the
@@ -4637,9 +4640,49 @@ registered on macOS (`gotcha`: run its `test.desc` by hand, as here).
 
 ### 94.3 Result
 
+## 100. §98 was wrong: the hoist is the fix, and the bug was in my port
+
+§98.2 reported that porting `adjust_for`'s block hoist "leaves the misplaced
+`DEAD` exactly where it was" and concluded it was not the fix. That conclusion
+was wrong. The hoist *is* the fix; the port had a bug that made it look
+otherwise.
+
+### 100.1 The instrument §98 should have used
+
+§98 compared goto programs. The adjuster's output is the **symbol table**, and
+`--symbol-table-only` shows it directly:
+
+```
+default:  {  signed int i=0;    for(; i < 3; i++;) s += i;  }
+-only:       for(signed int i=0; ; i < 3; i++;) s += i;
+```
+
+One command, and the hoist is visibly the difference. Three iterations of this
+scope inferred adjuster behaviour from goto programs — two stages downstream —
+when the pass's own output was one flag away. That is the reusable lesson.
+
+### 100.2 The bug
+
+`f.init` is itself block-shaped, and the first port made it a single operand of
+the new wrapper:
+
+```
+default:  {  signed int i=0;   for(...) ... }
+first port: { { signed int i=0; } for(...) ... }
+```
+
+The inner block ends the declaration's scope at its own closing brace, so `i`
+is DEAD before the loop that reads it — the very symptom the arm was meant to
+fix, reproduced by the arm. `clang_c_adjust` moves the init *operand* into the
+wrapper, so its declaration sits directly there; the port must splice a
+block-shaped init rather than nest it.
+
+### 100.3 Result
+
 | | master | with the arm |
 |---|---:|---:|
 | `-only` divergence, 297-test sample | 202 | **200** |
+
 | regressions | -- | **0** |
 
 Cleared: `github_159_postdecrement_fail`, `github_159_preincrement_fail`, whose
@@ -4653,3 +4696,29 @@ would be the same unwitnessed instrumentation §94.1 just removed.
 | mutant | killed by |
 |---|---|
 | arm absent (master) | `..._address_of_array` |
+
+| differing lines corpus-wide | 33 767 | **25 341** |
+| regressions | -- | **0** |
+
+The line count is the number that matters here: **−8 426, a 25 % reduction**,
+the largest of any arm in this sequence, and all of it was hidden behind the
+nesting bug. Two tests clear outright (`github_1067`, `github_286_2`); the rest
+converge substantially because a wrong scope perturbs every location and
+destructor placement after it.
+
+| mutant | killed by |
+|---|---|
+| arm absent (master) | `..._for_scope` |
+| splice replaced by nesting (the original bug) | `..._for_scope` |
+
+The second mutant is the one worth having: it is not a hypothetical, it is the
+code that shipped in the §98 measurement.
+
+### 100.4 Consequences for #7102
+
+PR #7102 records §98's conclusion and adds
+`irep2_only_for_scope_knownbug` as KNOWNBUG. Both are now wrong: the KNOWNBUG
+passes with this arm, so `testing_tool.py` would exit 77 (unexpected pass). When
+these two land, #7102's test must become CORE or be dropped in favour of
+`irep2_only_for_scope` here, and §98.2's "not the fix" must be read together
+with this section.
