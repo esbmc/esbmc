@@ -1598,7 +1598,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::SUBSCRIPT:
   {
+    // current_lhs being set does not mean this Subscript IS the assignment's
+    // whole RHS -- for `x = a[1:3][0]` the outer Subscript's base is the
+    // inner `a[1:3]`, converted here with current_lhs still == &x. Left
+    // unguarded, the numpy 1-D pointer-view path (list_access.cpp's
+    // try_build_1d_pointer_view) would retype x to a pointer for an
+    // intermediate value that is never itself the bound name. Null
+    // current_lhs for this nested conversion, matching the same
+    // save/null/restore idiom used around other non-RHS sub-conversions
+    // (converter_binop.cpp, list_construction.cpp).
+    exprt *saved_lhs_for_base = current_lhs;
+    current_lhs = nullptr;
     exprt array = get_expr(element["value"]);
+    current_lhs = saved_lhs_for_base;
 
     // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
     // integer returns a cpp-throw side effect), propagate the exception rather
