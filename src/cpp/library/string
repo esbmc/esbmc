@@ -1684,8 +1684,13 @@ void basic_string<CharT, Traits, Alloc>::resize(size_t n, char c)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
-  for (size_t i = this->_size; i < n; i++)
-    this->str[i] = c;
+  // Iterate from 0 rather than from _size: a size_t index starting at the
+  // symbolic old size wraps past the i < n test, so the loop never converges
+  // unless the caller bounds it with --unwind or --incremental-bmc.
+  size_t old_size = this->_size;
+  for (size_t i = 0; i < n; i++)
+    if (i >= old_size)
+      this->str[i] = c;
   this->_size = n;
   this->str[n] = '\0';
 }
