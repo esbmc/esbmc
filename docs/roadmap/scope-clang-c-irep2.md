@@ -4697,6 +4697,7 @@ would be the same unwitnessed instrumentation §94.1 just removed.
 |---|---|
 | arm absent (master) | `..._address_of_array` |
 
+
 | differing lines corpus-wide | 33 767 | **25 341** |
 | regressions | -- | **0** |
 
@@ -4722,3 +4723,67 @@ passes with this arm, so `testing_tool.py` would exit 77 (unexpected pass). When
 these two land, #7102's test must become CORE or be dropped in favour of
 `irep2_only_for_scope` here, and §98.2's "not the fix" must be read together
 with this section.
+
+## 96. The type symbols were never walked
+
+§95's census left 29 tests with no cause any open PR owned. Reading five of
+them found three showing the same thing: struct and union types in the `-only`
+symbol table have **no padding**.
+
+```
+default:  struct s { signed int a; signed char c; unsigned _ExtInt(24) anon_pad#2; }
+-only:    struct s { signed int a; signed char c; }
+```
+
+### 96.1 Why, and why it is not cosmetic
+
+`clang_c_adjust::adjust()` walks the symbol list twice over: once for every
+**type** symbol, through `adjust_type`, which pads a complete struct or union
+(`clang_c_adjust_expr.cpp:1006`); and once for values. `clang_c_adjust_irep2`
+only ever walked values — `if (!s->is_type && s->get_value().is_not_nil())`.
+Type symbols were skipped entirely, so nothing padded them.
+
+That is a layout difference, not a spelling one. The symbol table's type is what
+ESBMC sizes objects and computes member offsets from, so every hole in a
+`-only` layout shifts the members after it. It is the most consequential
+divergence this scope has found, and it was invisible in the census because the
+tests carrying it were tagged by whatever *else* they also diverged on.
+
+### 96.2 Reuse, not reimplementation
+
+`add_padding` is shared (`clang-c-frontend/padding.h`), operates on `typet`, and
+`adjust_type`'s own `#ifndef NDEBUG` block asserts it is idempotent — it re-pads
+a copy and requires the result to be equal. So the arm calls it rather than
+growing a second layout algorithm over `type2tc`; §94.1 and §100.1 are two
+records of what a second copy of a shared rule costs here.
+
+Only the padding half of `adjust_type` is ported. The rest — resolving a
+`symbol` type through the symbol table, and adjusting a VLA's size expression —
+has no witness in the corpus under this flag, and §94.1 is the standing reason
+not to ship an arm without one.
+
+### 96.3 Result
+
+| | master | with the arm |
+|---|---:|---:|
+| `-only` divergence, 297-test sample | 202 | **193** |
+| regressions | -- | **0** |
+
+Nine tests reach byte-identity: `github_{133_flex_array,170,345_false,357,6950_fail}`,
+`github_732-1-align_check`, `github_963-no-union`, `overflow_24`,
+`time_h_localtime_r_null_fail`. The best single-arm result on master since the
+sequence began, and the reason is that padding is a *precondition* for the rest
+rather than one more spelling: several of those tests had no other cause left.
+
+The union half is exercised by the corpus rather than by the test —
+`github_345_false` is a bitfield union and clears here — while the test pins the
+struct cases directly, including interior padding (`char` then `int`) as well as
+tail padding.
+
+| mutant | killed by |
+|---|---|
+| arm absent (master) | `..._struct_padding` |
+
+`sizeof(struct s)` is **not** a usable probe: clang folds it in its own AST, so
+it reads 8 on both paths and a verdict test built on it passes against the
+control. The first draft of this test did exactly that and proved nothing.
