@@ -536,12 +536,11 @@ public:
     this->_size = 0;
   }
 
-  map(map &x)
+  map(const map &x)
   {
     this->__om_allocate();
     this->_size = x._size;
-    size_type s = x._size;
-    for (int i = 0; i < s; i++)
+    for (int i = 0; i < x._size; i++)
     {
       this->_key[i] = x._key[i];
       this->_value[i] = x._value[i];
