@@ -120,8 +120,9 @@ public:
       std::sort(
         members.begin(),
         members.end(),
-        [](const irep_idt &a, const irep_idt &b)
-        { return offset_of(a.as_string()) < offset_of(b.as_string()); });
+        [](const irep_idt &a, const irep_idt &b) {
+          return offset_of(a.as_string()) < offset_of(b.as_string());
+        });
 
       for (size_t i = 0; i < members.size(); ++i)
         names[members[i]] = mode == fingerprint_modet::full
@@ -174,8 +175,9 @@ ssa_cone_keyt ssa_cone_key(
   }
   n.assign_names();
 
-  const irep2_name_mappert rename = [&n](const irep_idt &id)
-  { return n.rename(id); };
+  const irep2_name_mappert rename = [&n](const irep_idt &id) {
+    return n.rename(id);
+  };
 
   // Steps are fed in equation order: convert_internal_step encodes a claim as
   // implies(assumpt_expr, cond) over the assumes seen before it, so the

@@ -2490,28 +2490,47 @@ static bool vcc_cache_hit(
 /// Store a fresh proof, or report a stored one the solver just contradicted.
 /// Returns true when the run must fail: under --vcc-cache-verify a hit that
 /// does not re-prove means the cache is wrong about this claim.
-static bool vcc_cache_store(
+static void vcc_cache_store(
   vcc_cachet *cache,
   const std::string &cone_key,
   bool hit,
   smt_resultt solver_result,
   bool is_vacuous,
-  const std::string &claim)
+  const std::string &claim,
+  smt_resultt &final_result,
+  std::mutex &result_mutex)
 {
   if (cache == nullptr)
-    return false;
+    return;
   // A vacuous discharge reports Unknown, not Passed, so it is not a proof and
   // must not be stored.
   if (solver_result == P_UNSATISFIABLE && !is_vacuous)
   {
     cache->record(cone_key);
-    return false;
+    return;
   }
   if (!hit)
-    return false;
+    return;
+
   log_error(
     "VCC cache: stored proof of '{}' contradicted by the solver", claim);
-  return true;
+  std::lock_guard lock(result_mutex);
+  final_result = P_ERROR;
+}
+
+/// A dead-code probe is advisory and a non-probe claim in a coverage run is
+/// not being reported, so neither prints a per-claim solve (issue #4495).
+static bool
+coverage_silences_claim(bool goto_cov, bool dead_code, const std::string &prop)
+{
+  return goto_cov && (dead_code || prop != "instrumented assertion");
+}
+
+/// A coverage probe: SAT means "this location is reachable". It is not a
+/// property, so it must not be reported as one (issue #6387).
+static bool is_coverage_goal(bool cov_run, const std::string &prop)
+{
+  return cov_run && prop == "instrumented assertion";
 }
 
 /// Build the cache only where a stored proof would be sound; nullptr disables
@@ -2862,13 +2881,8 @@ smt_resultt bmct::multi_property_check(
     // detection is advisory: silence every per-claim solve/trace so only the
     // final [Dead code] summary is shown (issue #4495).
     bool is_cov_silent =
-      is_goto_cov &&
-      (is_dead_code || claim.claim_property != "instrumented assertion");
-    // A coverage probe: SAT means "this location is reachable". It is not a
-    // property, so it must not be reported as one (issue #6387). Keyed off
-    // is_cov_run so a --dead-code-check probe keeps its own handling.
-    const bool is_cov_goal =
-      is_cov_run && claim.claim_property == "instrumented assertion";
+      coverage_silences_claim(is_goto_cov, is_dead_code, claim.claim_property);
+    const bool is_cov_goal = is_coverage_goal(is_cov_run, claim.claim_property);
 
     if (!is_cov_silent)
       log_status(
@@ -2901,17 +2915,15 @@ smt_resultt bmct::multi_property_check(
         vacuity_detected = true;
     }
 
-    if (vcc_cache_store(
-          vcc_cache.get(),
-          cone_key,
-          cached_proof,
-          solver_result,
-          is_vacuous,
-          claim.claim_cstr))
-    {
-      std::lock_guard lock(result_mutex);
-      final_result = P_ERROR;
-    }
+    vcc_cache_store(
+      vcc_cache.get(),
+      cone_key,
+      cached_proof,
+      solver_result,
+      is_vacuous,
+      claim.claim_cstr,
+      final_result,
+      result_mutex);
 
     // A claim is re-checked in every thread interleaving, and can be
     // discharged in one schedule while being violated in another. Record the
