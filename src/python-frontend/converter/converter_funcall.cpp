@@ -332,11 +332,10 @@ bool python_converter::is_identity_function(
   return false;
 }
 
-/// The builtin len path only recognises the model container types (list, tuple,
-/// dict, str/bytes) and otherwise falls through to strlen over the struct, which
-/// stops at the first zero byte and answers 0 for a freshly constructed object
-/// -- silently turning `for v in obj`, whose bound is len(obj), into a dead loop
-/// (#7085).
+/// The builtin len path recognises only the model container types and otherwise
+/// falls through to strlen over the struct. That stops at the first zero byte
+/// and answers 0 for a freshly constructed object, silently turning
+/// `for v in obj` -- whose bound is len(obj) -- into a dead loop (#7085).
 bool python_converter::try_len_on_class(
   const nlohmann::json &element,
   exprt &result)
