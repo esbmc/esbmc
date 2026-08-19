@@ -844,17 +844,40 @@ struct invoke_result : detail::invoke_result_impl<void, F, Args...>
 template <class F, class... Args>
 using invoke_result_t = typename invoke_result<F, Args...>::type;
 
-// is_convertible (simplified)
+// is_convertible
 namespace detail
 {
+// [meta.rel]: the trait is defined by copy-initialising the return value of
+// `To test() { return declval<From>(); }`, so passing by value is the test --
+// a static_cast here would also accept an `explicit` conversion operator.
+template <class To>
+auto test_convertible_dest(To) -> void;
+
 template <class From, class To>
-auto test_convertible(int) -> decltype(static_cast<To>(declval<From>()), true_type{});
+auto test_convertible(int)
+  -> decltype(test_convertible_dest<To>(declval<From>()), true_type{});
 template <class From, class To>
 false_type test_convertible(...);
+
+template <class From, class To>
+struct is_convertible_impl : decltype(test_convertible<From, To>(0))
+{
+};
+
+// [meta.rel]: when To is a function or array type, or From is void, the result
+// is is_void<To> -- the by-value probe above cannot be formed for those.
+template <class From, class To>
+struct is_convertible_base
+  : conditional<
+      is_void<From>::value || is_function<To>::value || is_array<To>::value,
+      is_void<To>,
+      is_convertible_impl<From, To>>::type
+{
+};
 } // namespace detail
 
 template <class From, class To>
-struct is_convertible : decltype(detail::test_convertible<From, To>(0))
+struct is_convertible : detail::is_convertible_base<From, To>
 {
 };
 
