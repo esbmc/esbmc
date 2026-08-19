@@ -1,16 +1,14 @@
-# A class that does define __len__ still dispatches to it.
-
-class C:
+class Box:
     def __init__(self) -> None:
-        self.n: int = 5
+        self.n: int = 7
 
     def __len__(self) -> int:
         return self.n
 
 
 def main():
-    c = C()
-    assert len(c) == 5
+    b = Box()
+    assert len(b) == 7
 
 
 main()

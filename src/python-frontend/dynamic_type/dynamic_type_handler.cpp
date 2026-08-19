@@ -321,13 +321,13 @@ exprt dynamic_type_handler::build_eq_literal(
   const exprt &literal)
 {
   exprt tagged_addr = build_address_of(tagged);
-  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
 
   if (literal.type().is_array())
   {
     const symbolt *eq_str_func =
       converter_.symbol_table().find_symbol("c:@F@__python_scalar_eq_str");
     assert(eq_str_func && "__python_scalar_eq_str not found in symbol table");
+    exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
     exprt lit_addr =
       converter_.get_string_handler().get_array_base_address(literal);
     exprt lit_size = type_handler_.tagged_scalar_byte_size(literal);
@@ -346,12 +346,16 @@ exprt dynamic_type_handler::build_eq_literal(
 
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
+  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
+  exprt type_matches = build_typecast(
+    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
+    int_type());
 
   const symbolt *eq_num_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_eq_num");
   assert(eq_num_func && "__python_scalar_eq_num not found in symbol table");
   exprt call = build_call_expr(
-    *eq_num_func, int_type(), {tagged_addr, lit_type_id, lit_value});
+    *eq_num_func, int_type(), {tagged_addr, type_matches, lit_value});
   return build_equal(call, from_integer(1, int_type()));
 }
 
@@ -386,13 +390,13 @@ exprt dynamic_type_handler::build_add_literal(
   bool tagged_is_left)
 {
   exprt tagged_addr = build_address_of(tagged);
-  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
 
   if (literal.type().is_array())
   {
     const symbolt *add_str_func =
       converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_str");
     assert(add_str_func && "__python_scalar_add_str not found in symbol table");
+    exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
     exprt lit_addr =
       converter_.get_string_handler().get_array_base_address(literal);
     exprt lit_size = type_handler_.tagged_scalar_byte_size(literal);
@@ -416,6 +420,10 @@ exprt dynamic_type_handler::build_add_literal(
 
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
+  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
+  exprt type_matches = build_typecast(
+    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
+    int_type());
 
   const symbolt *add_num_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_num");
@@ -423,7 +431,7 @@ exprt dynamic_type_handler::build_add_literal(
   return build_call_expr(
     *add_num_func,
     signedbv_typet(config.ansi_c.long_long_int_width),
-    {tagged_addr, lit_type_id, lit_value});
+    {tagged_addr, type_matches, lit_value});
 }
 
 exprt dynamic_type_handler::build_sub_literal(
@@ -443,15 +451,18 @@ exprt dynamic_type_handler::build_sub_literal(
   assert(sub_func && "__python_scalar_sub_num not found in symbol table");
 
   exprt tagged_addr = build_address_of(tagged);
-  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
+  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
+  exprt type_matches = build_typecast(
+    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
+    int_type());
 
   return build_call_expr(
     *sub_func,
     signedbv_typet(config.ansi_c.long_long_int_width),
     {tagged_addr,
-     lit_type_id,
+     type_matches,
      lit_value,
      from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
 }
@@ -474,14 +485,14 @@ exprt dynamic_type_handler::build_div_literal(
   assert(div_func && "__python_scalar_div_num not found in symbol table");
 
   exprt tagged_addr = build_address_of(tagged);
-  exprt lit_type_id = type_handler_.tagged_scalar_type_id(literal.type());
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
 
   // A catchable raise, not an assert, so it's guarded only when the type
   // matches.
   exprt tagged_type_id = build_member(tagged, "type_id", size_type());
-  exprt type_matches = build_equal(tagged_type_id, lit_type_id);
+  exprt type_matches =
+    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type());
   exprt tagged_numeric_value = build_dereference(
     build_typecast(
       build_member(tagged, "value", pointer_typet(empty_typet())),
@@ -504,7 +515,7 @@ exprt dynamic_type_handler::build_div_literal(
     *div_func,
     double_type(),
     {tagged_addr,
-     lit_type_id,
+     build_typecast(type_matches, int_type()),
      lit_value,
      from_integer(BigInt(tagged_is_left ? 1 : 0), int_type())});
 }
@@ -536,6 +547,34 @@ exprt dynamic_type_handler::handle_arithmetic(
   assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
   return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
                     : build_div_literal(rhs, lhs, false, location);
+}
+
+exprt dynamic_type_handler::build_isinstance_check(
+  const exprt &tagged,
+  const std::string &type_name) const
+{
+  exprt tagged_type_id = build_member(tagged, "type_id", size_type());
+
+  if (type_name == "bool")
+    return build_equal(
+      tagged_type_id, type_handler_.tagged_scalar_type_id(bool_type()));
+
+  if (type_name == "int")
+    return type_handler_.tagged_scalar_type_matches(
+      tagged_type_id, long_long_int_type());
+
+  if (type_name == "str")
+    return build_equal(
+      tagged_type_id,
+      type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+
+  // object is Python's top type; every value is an instance of it.
+  if (type_name == "object")
+    return true_exprt();
+
+  throw std::runtime_error(
+    "isinstance() against this type is not yet supported for a "
+    "dynamically-typed variable");
 }
 
 dynamic_type_handler::scope_guard::scope_guard(

@@ -547,6 +547,11 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
+  /// Lowers len(obj) when obj is a class instance -- dispatching to its
+  /// __len__, or raising TypeError as CPython does when it defines none.
+  /// Returns nil when @p element is not such a call.
+  exprt get_len_on_class_instance(const nlohmann::json &element);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -1281,13 +1286,14 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
-  std::string dunder_receiver_classname(const nlohmann::json &value_node);
-  bool class_defines_no_len(const std::string &class_name);
 
-  /// Handle `len(x)` where x is a user class: dispatch to __len__, or raise
-  /// TypeError where the class defines none. Returns false when this call is
-  /// not that shape, leaving the builtin len path to it.
-  bool try_len_on_class(const nlohmann::json &element, exprt &result);
+  /// Class @p value_node is an instance of, or "" when it is not an instance.
+  /// Resolves both a bound name and a constructor temporary.
+  std::string instance_class_name(const nlohmann::json &value_node);
+
+  /// True when @p value_node denotes a user-defined class instance, as opposed
+  /// to a model container that merely resolves to a class name.
+  bool is_class_instance(const nlohmann::json &value_node);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);

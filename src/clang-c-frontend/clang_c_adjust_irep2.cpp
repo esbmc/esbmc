@@ -101,6 +101,9 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 
   if (sole_adjuster)
     adjust_sole_arms(expr);
+
+  if (sole_adjuster && is_address_of2t(expr))
+    adjust_address_of(expr);
 }
 
 /// The arms that only run when this pass is the sole adjuster, gathered behind
@@ -126,8 +129,14 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
 
+  /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
+   * block is not a statement-with-condition, so the loop's guard would never
+   * reach the conversion. */
   if (is_statement_with_condition(expr))
     adjust_statement_condition(expr);
+
+  if (is_code_for2t(expr))
+    hoist_for_init(expr);
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
@@ -320,6 +329,58 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   if (args.size() == 1)
     fold_unary_builtin(name, args[0], expr);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_address_of's array decay: `&a` on an
+/// array is `&a[0]`, and the pointer's subtype follows the element.
+///
+/// The conditional distribution the legacy arm also does -- `&(c ? a : b)` into
+/// `c ? &a : &b`, which #6291 needs for the pointer analysis to resolve either
+/// arm -- is not ported: no corpus input reaches it under this flag, and an arm
+/// no test executes is the trap §90.4 records.
+void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
+{
+  const address_of2t &a = to_address_of2t(expr);
+  if (is_nil_expr(a.ptr_obj))
+    return;
+
+  const type2tc obj_type = ns.follow(a.ptr_obj->type);
+  if (!is_array_type(obj_type))
+    return;
+
+  const type2tc &elem = to_array_type(obj_type).subtype;
+  const expr2tc idx =
+    index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
+  expr = address_of2tc(elem, idx, a.implicit);
+}
+
+void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
+{
+  const code_for2t &f = to_code_for2t(expr);
+  if (is_nil_expr(f.init))
+    return;
+
+  locationt end_location;
+  if (!is_nil_expr(f.body) && is_code_block2t(f.body))
+    end_location = to_code_block2t(f.body).end_location;
+
+  const expr2tc bare =
+    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+
+  // Splice a block-shaped init rather than nesting it: an inner block would end
+  // the declaration's scope at its own closing brace, so the variable would be
+  // DEAD before the loop that reads it. clang_c_adjust moves the init operand
+  // itself, which is why the legacy hoist puts the declaration directly in the
+  // wrapper.
+  std::vector<expr2tc> ops;
+  if (is_code_block2t(f.init))
+    for (const expr2tc &op : to_code_block2t(f.init).operands)
+      ops.push_back(op);
+  else
+    ops.push_back(f.init);
+  ops.push_back(bare);
+
+  expr = code_block2tc(ops, f.location, end_location);
 }
 
 void clang_c_adjust_irep2::adjust_binary_arith_operands(expr2tc &expr)

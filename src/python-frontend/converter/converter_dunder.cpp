@@ -59,11 +59,15 @@ symbolt *python_converter::find_dunder_method(
     return nullptr;
 
   symbol_id sid(file, class_name, dunder_name);
-  return find_symbol(sid.to_string());
+  if (symbolt *sym = find_symbol(sid.to_string()))
+    return sym;
+
+  return find_function_in_base_classes(
+    class_name, sid.to_string(), dunder_name, false);
 }
 
 std::string
-python_converter::dunder_receiver_classname(const nlohmann::json &value_node)
+python_converter::instance_class_name(const nlohmann::json &value_node)
 {
   std::string class_name = type_handler_.get_var_classname(value_node);
 
@@ -83,43 +87,12 @@ python_converter::dunder_receiver_classname(const nlohmann::json &value_node)
   return class_name;
 }
 
-// Whether `class_name` and its whole ancestry provably define no __len__.
-// A base that is not itself a class in this AST -- a model class, or a
-// builtin like `list` -- takes its length from code this pass cannot see, so
-// the answer is "unknown" rather than "no".
-bool python_converter::class_defines_no_len(const std::string &class_name)
-{
-  if (find_dunder_method(class_name, "__len__"))
-    return false;
-
-  const auto class_node =
-    json_utils::find_class((*ast_json)["body"], class_name);
-  if (class_node == nlohmann::json() || !class_node.contains("bases"))
-    return false;
-
-  // Terminates: a cycle needs a base that is textually later than its
-  // subclass, and class conversion rejects a not-yet-defined base first.
-  for (const auto &base : class_node["bases"])
-  {
-    const std::string base_name = base.contains("id")
-                                    ? base["id"].get<std::string>()
-                                    : base.value("attr", "");
-    if (base_name.empty() || base_name == "object")
-      continue;
-    if (!json_utils::is_class(base_name, *ast_json))
-      return false;
-    if (!class_defines_no_len(base_name))
-      return false;
-  }
-
-  return true;
-}
-
 bool python_converter::has_dunder_method(
   const nlohmann::json &value_node,
   const std::string &dunder_name)
 {
-  const std::string class_name = dunder_receiver_classname(value_node);
+  const std::string class_name = instance_class_name(value_node);
+
   if (class_name.empty())
     return false;
 
@@ -253,6 +226,31 @@ bool python_converter::is_user_class_struct_type(const typet &t)
 bool python_converter::is_user_class_pointer(const typet &t)
 {
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
+}
+
+bool python_converter::is_class_instance(const nlohmann::json &value_node)
+{
+  const std::string node_type = value_node.value("_type", "");
+  if (node_type == "Call")
+    return type_handler_.is_constructor_call(value_node);
+
+  if (node_type != "Name")
+    return false;
+
+  // The bound type decides, not the annotation's name: `a: List[int]` resolves
+  // to a class named List, but its struct is a model container that owns its
+  // own operator and length paths (#7085).
+  symbol_id sid(python_file(), current_classname(), current_function_name());
+  sid.set_object(value_node.value("id", ""));
+
+  symbolt *sym = find_symbol(sid.to_string());
+  if (!sym)
+    sym = find_symbol(sid.global_to_string());
+  if (!sym)
+    return false;
+
+  const typet &t = sym->get_type();
+  return is_user_class_pointer(t) || is_user_class_struct_type(t);
 }
 
 // move_symbol_to_context() only overwrites an existing symbol's type when

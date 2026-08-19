@@ -1,5 +1,6 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
@@ -11,7 +12,6 @@
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
-#include <python-frontend/exception/python_exception_handler.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
@@ -332,41 +332,28 @@ bool python_converter::is_identity_function(
   return false;
 }
 
-/// The builtin len path recognises only the model container types and otherwise
-/// falls through to strlen over the struct. That stops at the first zero byte
-/// and answers 0 for a freshly constructed object, silently turning
-/// `for v in obj` -- whose bound is len(obj) -- into a dead loop (#7085).
-bool python_converter::try_len_on_class(
-  const nlohmann::json &element,
-  exprt &result)
+exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 {
   if (
     !element.contains("func") || !element["func"].is_object() ||
     element["func"].value("_type", "") != "Name" ||
     element["func"].value("id", "") != "len" || !element.contains("args") ||
     !element["args"].is_array() || element["args"].size() != 1)
-    return false;
+    return nil_exprt();
 
   const nlohmann::json &arg = element["args"][0];
   if (has_dunder_method(arg, "__len__"))
-  {
-    result = get_expr(
+    return get_expr(
       build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
-    return true;
-  }
 
-  // A class with no __len__ has no length in Python. Gated on a ClassDef in the
-  // user's AST so the model container types, whose structs also carry a class
-  // tag, keep their own len handling.
-  const std::string cls = dunder_receiver_classname(arg);
-  if (
-    cls.empty() || !json_utils::is_class(cls, *ast_json) ||
-    !class_defines_no_len(cls))
-    return false;
+  // Without a __len__ the builtin path measures the struct with strlen and
+  // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
+  const std::string cls = instance_class_name(arg);
+  if (!cls.empty() && is_class_instance(arg))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
 
-  result = get_exception_handler().gen_exception_raise(
-    "TypeError", "object of type '" + cls + "' has no len()");
-  return true;
+  return nil_exprt();
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -1095,9 +1082,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  exprt len_on_class;
-  if (try_len_on_class(element, len_on_class))
-    return len_on_class;
+  if (exprt len_expr = get_len_on_class_instance(element);
+      len_expr.is_not_nil())
+    return len_expr;
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
