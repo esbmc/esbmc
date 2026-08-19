@@ -657,16 +657,14 @@ bool try_get_literal_int(const nlohmann::json &node, BigInt &out)
   return false;
 }
 
-// out_start, when non-null, receives the normalized (negative-index-adjusted,
-// clamped) literal start offset -- the same value used to compute the
-// length below, exposed for callers that need the actual byte/element
-// offset into the source (e.g. building a pointer view), not just the
-// resulting slice length.
-std::optional<long long> literal_slice_length(
+// Resolves literal lower/upper bounds (or their step-dependent defaults)
+// into raw, negative-index-adjusted start/stop values -- not yet clamped to
+// the source length, that is literal_slice_length's job below. nullopt when
+// either given bound is present but not a compile-time literal.
+std::optional<std::pair<long long, long long>> resolve_literal_slice_bounds(
   const nlohmann::json &slice_node,
   long long source_len,
-  long long step,
-  long long *out_start = nullptr)
+  long long step)
 {
   auto bound = [&](const char *name) -> std::optional<long long> {
     if (!slice_node.contains(name) || slice_node[name].is_null())
@@ -695,6 +693,27 @@ std::optional<long long> literal_slice_length(
   if (has_upper && stop < 0)
     stop += source_len;
 
+  return std::make_pair(start, stop);
+}
+
+// out_start, when non-null, receives the normalized (negative-index-adjusted,
+// clamped) literal start offset -- the same value used to compute the
+// length below, exposed for callers that need the actual byte/element
+// offset into the source (e.g. building a pointer view), not just the
+// resulting slice length.
+std::optional<long long> literal_slice_length(
+  const nlohmann::json &slice_node,
+  long long source_len,
+  long long step,
+  long long *out_start = nullptr)
+{
+  std::optional<std::pair<long long, long long>> bounds =
+    resolve_literal_slice_bounds(slice_node, source_len, step);
+  if (!bounds)
+    return std::nullopt;
+  long long start = bounds->first;
+  long long stop = bounds->second;
+
   if (step < 0)
   {
     start = std::min(std::max(start, -1LL), source_len - 1);
@@ -713,6 +732,17 @@ std::optional<long long> literal_slice_length(
   if (start >= stop)
     return 0;
   return ((stop - start - 1) / step) + 1;
+}
+
+// Real identity of a numpy array's source symbol (ADR-NP-003's canonical
+// buffer_id), 0 for a non-symbol source. See docs/roadmap/
+// numpy-support-assessment.md, "Definitive view descriptor model", for why
+// nothing consults this yet.
+std::size_t numpy_symbol_buffer_id(const exprt &array)
+{
+  return array.is_symbol()
+           ? std::hash<std::string>{}(array.identifier().as_string())
+           : 0;
 }
 
 void append_array_shape(const typet &type, std::vector<long long> &shape)
@@ -1663,17 +1693,8 @@ exprt python_list::handle_range_slice(
           std::vector<long long> view_shape;
           view_shape.push_back(*static_slice_len);
           append_array_shape(ns.follow(elem_type), view_shape);
-          // buffer_id identifies the real source symbol (ADR-NP-003's
-          // canonical shape) but nothing consults it yet -- the pointer
-          // branch below relies on numpy_view_copy_sources_
-          // (converter_stmt.cpp) for real buffer identity instead. See
-          // docs/roadmap/numpy-support-assessment.md, "Definitive view
-          // descriptor model".
-          const std::size_t buffer_id =
-            array.is_symbol()
-              ? std::hash<std::string>{}(array.identifier().as_string())
-              : 0;
-          ndarray_descriptor descriptor(view_shape, "", buffer_id);
+          ndarray_descriptor descriptor(
+            view_shape, "", numpy_symbol_buffer_id(array));
           descriptor.validate();
 
           if (
