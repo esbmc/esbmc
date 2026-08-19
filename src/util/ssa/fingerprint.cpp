@@ -10,26 +10,10 @@
 #include <map>
 #include <string>
 #include <set>
-#include <tuple>
 #include <vector>
 
 namespace
 {
-/// (base name, level, l1, l2, thread, node) — a symbol's full SSA identity.
-using sym_keyt =
-  std::tuple<std::string, int, unsigned, unsigned, unsigned, unsigned>;
-
-sym_keyt key_of(const symbol2t &s)
-{
-  return {
-    s.thename.as_string(),
-    static_cast<int>(s.rlevel),
-    s.level1_num,
-    s.level2_num,
-    s.thread_num,
-    s.node_num};
-}
-
 /// Drops the `<file>@<character-offset>@` of a local's name
 /// `c:<file>@<offset>@F@<fn>@<var>`: the offset moves whenever anything
 /// textually earlier changes. Other shapes are returned unchanged.
