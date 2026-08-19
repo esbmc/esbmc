@@ -2514,7 +2514,8 @@ static bool vcc_cache_store(
   }
   if (!hit)
     return false;
-  log_error("VCC cache: stored proof of '{}' contradicted by the solver", claim);
+  log_error(
+    "VCC cache: stored proof of '{}' contradicted by the solver", claim);
   return true;
 }
 
@@ -2527,7 +2528,8 @@ static std::unique_ptr<vcc_cachet> make_vcc_cache(
   bool is_dead_code,
   const BigInt &interleaving_number)
 {
-  if (!vcc_cache_usable(options, dir, is_cov_run, is_dead_code, interleaving_number))
+  if (!vcc_cache_usable(
+        options, dir, is_cov_run, is_dead_code, interleaving_number))
     return nullptr;
   return std::make_unique<vcc_cachet>(dir, options);
 }
