@@ -1283,6 +1283,11 @@ private:
     const std::string &dunder_name);
   std::string dunder_receiver_classname(const nlohmann::json &value_node);
   bool class_defines_no_len(const std::string &class_name);
+
+  /// Handle `len(x)` where x is a user class: dispatch to __len__, or raise
+  /// TypeError where the class defines none. Returns false when this call is
+  /// not that shape, leaving the builtin len path to it.
+  bool try_len_on_class(const nlohmann::json &element, exprt &result);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);

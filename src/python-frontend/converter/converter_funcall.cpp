@@ -331,6 +331,45 @@ bool python_converter::is_identity_function(
 
   return false;
 }
+
+/// The builtin len path only recognises the model container types (list, tuple,
+/// dict, str/bytes) and otherwise falls through to strlen over the struct, which
+/// stops at the first zero byte and answers 0 for a freshly constructed object
+/// -- silently turning `for v in obj`, whose bound is len(obj), into a dead loop
+/// (#7085).
+bool python_converter::try_len_on_class(
+  const nlohmann::json &element,
+  exprt &result)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return false;
+
+  const nlohmann::json &arg = element["args"][0];
+  if (has_dunder_method(arg, "__len__"))
+  {
+    result =
+      get_expr(build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
+    return true;
+  }
+
+  // A class with no __len__ has no length in Python. Gated on a ClassDef in the
+  // user's AST so the model container types, whose structs also carry a class
+  // tag, keep their own len handling.
+  const std::string cls = dunder_receiver_classname(arg);
+  if (
+    cls.empty() || !json_utils::is_class(cls, *ast_json) ||
+    !class_defines_no_len(cls))
+    return false;
+
+  result = get_exception_handler().gen_exception_raise(
+    "TypeError", "object of type '" + cls + "' has no len()");
+  return true;
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1057,32 +1096,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // The builtin len path only recognises the model container types (list,
-  // tuple, dict, str/bytes) and otherwise falls through to strlen over the
-  // struct, which stops at the first zero byte and answers 0 for a freshly
-  // constructed object — silently turning `for v in obj`, whose bound is
-  // len(obj), into a dead loop (#7085). Handle a class receiver here instead.
-  if (
-    element.contains("func") && element["func"].is_object() &&
-    element["func"].value("_type", "") == "Name" &&
-    element["func"].value("id", "") == "len" && element.contains("args") &&
-    element["args"].is_array() && element["args"].size() == 1)
-  {
-    const nlohmann::json &arg = element["args"][0];
-    if (has_dunder_method(arg, "__len__"))
-      return get_expr(
-        build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
-
-    // A class with no __len__ has no length in Python. Gated on a ClassDef in
-    // the user's AST so the model container types, whose structs also carry a
-    // class tag, keep their own len handling.
-    const std::string cls = dunder_receiver_classname(arg);
-    if (
-      !cls.empty() && json_utils::is_class(cls, *ast_json) &&
-      class_defines_no_len(cls))
-      return get_exception_handler().gen_exception_raise(
-        "TypeError", "object of type '" + cls + "' has no len()");
-  }
+  exprt len_on_class;
+  if (try_len_on_class(element, len_on_class))
+    return len_on_class;
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
