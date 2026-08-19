@@ -184,8 +184,30 @@ struct allocator_traits
   typedef typename Alloc::value_type value_type;
   typedef value_type *pointer;
   typedef const value_type *const_pointer;
+  typedef void *void_pointer;
+  typedef const void *const_void_pointer;
   typedef size_t size_type;
   typedef ptrdiff_t difference_type;
+
+  /* [allocator.traits.types]: rebind_alloc is Alloc::rebind<T>::other when the
+   * allocator supplies one, which every allocator the models see does --
+   * std::allocator above, and boost multi_index's, which needs rebind_alloc to
+   * build its node allocators. The standard's fallback of rewriting the first
+   * template argument is not modelled. */
+  template <class T>
+  using rebind_alloc = typename Alloc::template rebind<T>::other;
+  template <class T>
+  using rebind_traits = allocator_traits<rebind_alloc<T> >;
+
+  typedef false_type propagate_on_container_copy_assignment;
+  typedef false_type propagate_on_container_move_assignment;
+  typedef false_type propagate_on_container_swap;
+  typedef true_type is_always_equal;
+
+  static Alloc select_on_container_copy_construction(const Alloc &a)
+  {
+    return a;
+  }
 
   static pointer allocate(Alloc &a, size_type n)
   {
