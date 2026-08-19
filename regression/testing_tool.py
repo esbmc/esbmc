@@ -231,6 +231,9 @@ STATIC_CAPABILITIES = {
     # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
     # measuring the blob has nothing to measure.
     "bundled_libc",
+    # The bundled musl libm is reached rather than shadowed by the host's own
+    # <math.h>. Not so on Windows, where the UCRT declares cosf/pow itself.
+    "bundled_libm",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:

@@ -106,6 +106,49 @@ private:
   /// own definition and no shadows_user_definition query is needed (§90).
   void adjust_special_functions(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
+  void adjust_address_of(expr2tc &expr);
+
+  void hoist_for_init(expr2tc &expr);
+
+  /// Pad a complete struct or union type symbol to its ABI layout (§96).
+  void pad_type_symbol(symbolt &symbol);
+  /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's conversion
+  /// half: the usual arithmetic conversions over the operands, then the node's
+  /// own type. adjust_float_arith's ieee_* promotion is not part of this
+  /// (§104.2).
+  void adjust_binary_arith_operands(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's plain
+  /// "assign" case: the node takes the target's type, and the source converts
+  /// to it.
+  void adjust_plain_assignment(expr2tc &expr);
+  /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
+  /// and adjust_for apply to a statement's controlling expression (§95).
+  void adjust_statement_condition(expr2tc &expr);
+  /// The name-matched half of do_special_functions: `isnan`, `abs`, `sqrt`,
+  /// `inf` and friends. Split from adjust_special_functions because these
+  /// spellings are not reserved, so they run behind
+  /// builtin_shadows_user_definition (§94).
+  bool adjust_float_builtin(
+    expr2tc &expr,
+    const irep_idt &name,
+    const std::vector<expr2tc> &args);
+
+  /// IREP2 form of clang_c_adjust::adjust_expr_rel's operand half: the usual
+  /// arithmetic conversions over a comparison's operands, which is also what
+  /// decays an array operand compared against a pointer (§96).
+  void adjust_relational(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_function_call_arguments' conversion
+  /// half: convert each argument to its parameter type, which is what decays a
+  /// function designator to a pointer at a call (§108).
+  void adjust_call_arguments(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_symbol's function-designator sugar
+  /// (§100).
+  void adjust_function_designators(expr2tc &expr);
+
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 

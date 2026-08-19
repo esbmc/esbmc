@@ -1,5 +1,6 @@
 CORE
 main.c
 --goto-functions-only
+REQUIRES bundled_libm
 file ([A-Za-z]:)?/esbmc-vfs/libc/library/libm/musl/__cosdf\.c line \d+
 file ([A-Za-z]:)?/esbmc-vfs/libc/library/libm/pow\.c line \d+
