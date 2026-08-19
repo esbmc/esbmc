@@ -1649,6 +1649,12 @@ exprt python_list::handle_range_slice(
           std::vector<long long> view_shape;
           view_shape.push_back(*static_slice_len);
           append_array_shape(ns.follow(elem_type), view_shape);
+          // buffer_id identifies the real source symbol (ADR-NP-003's
+          // canonical shape) but nothing consults it yet -- the pointer
+          // branch below relies on numpy_view_copy_sources_
+          // (converter_stmt.cpp) for real buffer identity instead. See
+          // docs/roadmap/numpy-support-assessment.md, "Definitive view
+          // descriptor model".
           const std::size_t buffer_id =
             array.is_symbol()
               ? std::hash<std::string>{}(array.identifier().as_string())
