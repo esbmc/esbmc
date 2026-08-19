@@ -2,4 +2,3 @@ CORE
 main.py
 --unwind 6
 ^VERIFICATION FAILED$
-^\s*uncaught exception: TypeError$
