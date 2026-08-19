@@ -1,0 +1,5 @@
+CORE
+main.c
+--result-only --multi-property --multi-fail-fast 0
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*PASSED)[\s\S]*\Z

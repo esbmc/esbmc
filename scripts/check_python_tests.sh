@@ -27,6 +27,9 @@ ignored_dirs=(
   "cover5"
   "concurrency_fail"
   "threading_thread_skip_join_fail"
+  # A data race does not manifest deterministically under CPython, so the
+  # _fail expectation (non-zero exit) cannot be checked there.
+  "threading_thread_increment_race_no_flag_fail"
   "convert-byte-update2"
   "constants"
   "decimal"
@@ -207,7 +210,12 @@ for dir in */; do
   # NameError under direct execution and can only be validated via ESBMC.
   # Detecting them by content means an intrinsic-using test no longer needs a
   # manual ignore-list entry (e.g. github_5104, github_5105).
-  if grep -qE '__ESBMC|__VERIFIER_|nondet_' "$dir/main.py"; then
+  #
+  # Comments are stripped first: a test that only *mentions* an intrinsic while
+  # calling none is plain Python, and matching the mention skipped it silently
+  # -- 22 tests were being reported as "expected" without ever being run.
+  if sed 's/#.*//' "$dir/main.py" |
+    grep -qE '__ESBMC|__VERIFIER_|nondet_'; then
     echo "🚫 IGNORED: $dir (uses ESBMC intrinsics, not runnable under CPython)"
     continue
   fi

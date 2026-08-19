@@ -258,13 +258,6 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   const auto &type_arg = args[1];
 
-  // A tagged-scalar operand has no single static C type for isinstance()
-  // to check against -- its real type lives in the runtime `.type_id`
-  // field, which isinstance() does not consult yet.
-  if (converter_.get_type_handler().is_tagged_scalar_type(obj_expr.type()))
-    throw std::runtime_error(
-      "isinstance() on a dynamically-typed variable is not yet supported");
-
   // Check if the first argument is a type object (e.g., x = int; isinstance(x, str))
   // Type objects themselves are not instances of other types (except 'type')
   if (obj_arg["_type"] == "Name")
@@ -366,6 +359,13 @@ exprt function_call_expr::handle_isinstance() const
 
   // Build isinstance check for a given type name
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    // A tagged-scalar operand's real type lives in the runtime `.type_id`
+    // field rather than in a single static C type, so it needs its own
+    // check instead of the static-type comparisons below.
+    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+      return converter_.dynamic_type_handler_.build_isinstance_check(
+        obj_expr, type_name);
+
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
     {

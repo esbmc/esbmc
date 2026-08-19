@@ -547,6 +547,11 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
+  /// Lowers len(obj) when obj is a class instance -- dispatching to its
+  /// __len__, or raising TypeError as CPython does when it defines none.
+  /// Returns nil when @p element is not such a call.
+  exprt get_len_on_class_instance(const nlohmann::json &element);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -1092,6 +1097,17 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
+  /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
+  /// of the static-type-driven paths can handle. Throws for an operator this
+  /// mode does not model.
+  exprt handle_tagged_scalar_binop(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
   /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
@@ -1281,6 +1297,14 @@ private:
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+
+  /// Class @p value_node is an instance of, or "" when it is not an instance.
+  /// Resolves both a bound name and a constructor temporary.
+  std::string instance_class_name(const nlohmann::json &value_node);
+
+  /// True when @p value_node denotes a user-defined class instance, as opposed
+  /// to a model container that merely resolves to a class name.
+  bool is_class_instance(const nlohmann::json &value_node);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);

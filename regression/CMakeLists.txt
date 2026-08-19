@@ -80,6 +80,13 @@ if(ESBMC_BUNDLE_LIBC)
     list(APPEND ESBMC_TEST_CAPABILITIES bundled_libc)
 endif()
 
+# The bundled musl libm is only reached where the host's own <math.h> does not
+# shadow it. On Windows the UCRT headers declare cosf/pow themselves, so no
+# /esbmc-vfs libm source ever enters the goto program.
+if(NOT WIN32)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libm)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 
@@ -655,6 +662,13 @@ set(_slow_regression_tests
     # touch its code path. Give it the 2x budget so transient CI slowness does
     # not flap it.
     "regression/python/set_variadic_methods"
+    # github_4634 verifies SUCCESSFUL but searches without a k bound
+    # (--incremental-bmc --unlimited-k-steps, with --data-races-check and
+    # --state-hashing), so its cost is set by how many steps it takes to
+    # converge rather than by a fixed unwind. It measures ~107s locally
+    # against the 120s cap and timed out on the DebugOpt Linux runner in
+    # #7073 CI -- a comment-only change that cannot reach its code path.
+    "regression/esbmc/github_4634"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")

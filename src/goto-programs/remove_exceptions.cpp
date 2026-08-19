@@ -4,6 +4,7 @@
 #include <goto-programs/exception_globals.h>
 #include <goto-programs/goto_functions.h>
 
+#include <util/base/filesystem.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/context.h>
 #include <util/symtab/symbol.h>
@@ -257,11 +258,7 @@ public:
     const symbolt *s = ns.lookup(name);
     if (!s)
       return false;
-    const std::string file = s->location.file().as_string();
-    // OM/library models live under the extracted-headers temp dir at runtime
-    // ("-headers-") and under c2goto/library/ when built in-tree.
-    return file.find("-headers-") != std::string::npos ||
-           file.find("c2goto/library/") != std::string::npos;
+    return file_operations::is_bundled_source(s->location.file().as_string());
   }
 
   /// True if *user* code contains a real throw or catch — i.e. a user exception
