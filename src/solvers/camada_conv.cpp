@@ -13,19 +13,19 @@
  * fork/exec/setrlimit/select, so camada builds it -- and installs its header
  * -- only where that exists. */
 #if CAMADA_HAVE_SMTLIB
-#  include <camada/smtlibsolver.h>
+#  include <camada/solvers/smtlibsolver.h>
 #endif
 #if CAMADA_HAVE_BITWUZLA
-#  include <camada/bitwuzlasolver.h>
+#  include <camada/solvers/bitwuzlasolver.h>
 #endif
 #if CAMADA_HAVE_MATHSAT
-#  include <camada/mathsatsolver.h>
+#  include <camada/solvers/mathsatsolver.h>
 #endif
 #if CAMADA_HAVE_YICES
-#  include <camada/yicessolver.h>
+#  include <camada/solvers/yicessolver.h>
 #endif
 #if CAMADA_HAVE_Z3
-#  include <camada/z3solver.h>
+#  include <camada/solvers/z3solver.h>
 #endif
 
 #include <algorithm>
@@ -77,14 +77,14 @@ public:
   /* camada v0.15 pins Z3 back to 4.13.3, whose z3::context has no move
    * constructor, so Z3Solver takes a z3::config (or nothing) instead of a
    * context. Mirror both shapes. */
-  explicit esbmc_z3_solver(camada::ArrayEncoding arrays)
-    : camada::Z3Solver(arrays)
+  explicit esbmc_z3_solver(const camada::SolverConfig &config)
+    : camada::Z3Solver(config)
   {
     setSolver(make_solver(camada::Z3Solver::context()));
   }
 
-  explicit esbmc_z3_solver(z3::config &cfg, camada::ArrayEncoding arrays)
-    : camada::Z3Solver(cfg, arrays)
+  explicit esbmc_z3_solver(z3::config &cfg, const camada::SolverConfig &config)
+    : camada::Z3Solver(cfg, config)
   {
     setSolver(make_solver(camada::Z3Solver::context()));
   }
@@ -125,33 +125,23 @@ private:
 class esbmc_yices_solver : public camada::YicesSolver
 {
 public:
+  /* Camada builds the context from SolverConfig::Logic already; the
+   * subclass exists only to rebuild it in push-pop mode, which
+   * --smt-during-symex needs and SolverConfig has no field for. */
   explicit esbmc_yices_solver(
-    const char *logic,
     bool enable_push_pop,
-    camada::ArrayEncoding arrays)
-    : camada::YicesSolver(arrays),
-      logic(logic),
-      enable_push_pop(enable_push_pop)
+    const camada::SolverConfig &config)
+    : camada::YicesSolver(config)
   {
-    destroy_and_recreate();
+    if (enable_push_pop)
+      recreateContextWithConfig(config.Logic.c_str(), configure_push_pop);
   }
 
 private:
-  void destroy_and_recreate()
-  {
-    if (enable_push_pop)
-      recreateContextWithConfig(logic, configure_push_pop);
-    else
-      recreateContext(logic);
-  }
-
   static void configure_push_pop(ctx_config_t *config)
   {
     yices_set_config(config, "mode", "push-pop");
   }
-
-  const char *logic;
-  bool enable_push_pop;
 };
 #endif
 
@@ -160,34 +150,14 @@ class esbmc_mathsat_solver : public camada::MathSATSolver
 {
 public:
   explicit esbmc_mathsat_solver(
-    const msat_config &config,
-    camada::ArrayEncoding arrays)
-    : camada::MathSATSolver(config, arrays)
+    const msat_config &msat_cfg,
+    const camada::SolverConfig &config)
+    : camada::MathSATSolver(msat_cfg, config)
   {
   }
 };
 #endif
 
-#if CAMADA_HAVE_BITWUZLA
-class esbmc_bitwuzla_solver : public camada::BitwuzlaSolver
-{
-public:
-  explicit esbmc_bitwuzla_solver(camada::ArrayEncoding arrays)
-    : camada::BitwuzlaSolver(camada::UnsatAssumptionsMode::Off, arrays)
-  {
-  }
-
-  // Bitwuzla cannot decide equality over native constant arrays
-  // ("Equality over constant arrays not fully supported yet" -> the solve
-  // aborts). Opt into camada's lazy constant-array lowering, the same way
-  // its Yices backend does, so the equalities ESBMC emits over list/dict
-  // arrays are dischargeable.
-  bool nativeConstArraySupport() const override
-  {
-    return false;
-  }
-};
-#endif
 
 camada::RM to_camada_rm(ieee_floatt::rounding_modet rm)
 {
@@ -259,16 +229,31 @@ std::string wrap_smtlib_dump(std::string smt_formula)
  * the wire, so the script stays inside the declared logic and parses in any
  * standard SMT-LIB v2 solver. It is also what the non-native backends already
  * use, so this is not a new code path. */
-/* maybe_unused: only the SMT-LIB backends ask for a tuple encoding, and they
- * are not built everywhere (see CAMADA_HAVE_SMTLIB). */
-[[maybe_unused]] camada::TupleEncoding pick_tuple_encoding(const optionst &)
+/* camada v0.18 gathers what used to be separate constructor arguments --
+ * array encoding, tuple encoding, logic, unsat-assumption mode -- into one
+ * SolverConfig. Build it in one place so every backend gets the same choices.
+ *
+ * Logic is left empty here: only the backends that name one (MathSAT, Yices,
+ * SMT-LIB) set it, and they do so from pick_logic() at their own call site.
+ *
+ * UseUnsatAssumptions stays false (the v0.18 default): ESBMC never calls
+ * getUnsatAssumptions(), and producing cores costs solve time on every check
+ * in the backends that must track assumption participation. */
+camada::SolverConfig pick_solver_config(const optionst &)
 {
-  return camada::TupleEncoding::Camada;
+  camada::SolverConfig config;
+  config.Arrays = camada::ArrayEncoding::Native;
+  config.Tuples = camada::TupleEncoding::Camada;
+  return config;
 }
 
-camada::ArrayEncoding pick_array_encoding(const optionst &)
+/* Same, plus the concrete logic the SMT-LIB backends announce. */
+[[maybe_unused]] camada::SolverConfig
+smtlib_config(const optionst &options, const std::string &logic)
 {
-  return camada::ArrayEncoding::Native;
+  camada::SolverConfig config = pick_solver_config(options);
+  config.Logic = logic;
+  return config;
 }
 
 /* maybe_unused: the backends that name a logic (MathSAT, Yices, SMT-LIB) are
@@ -304,10 +289,7 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
 
   if (prog.empty())
     return std::make_unique<camada::SMTLIBSolver>(
-      out.empty() ? "-" : out,
-      pick_tuple_encoding(options),
-      logic,
-      pick_array_encoding(options));
+      out.empty() ? "-" : out, smtlib_config(options, logic));
 
   /* Camada spawns the child with execvp and no shell, so the command arrives
    * as an argv. Split on whitespace: enough for the documented "solver
@@ -344,19 +326,10 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
    * run. */
   if (out.empty())
     return std::make_unique<camada::SMTLIBSolver>(
-      camada::SMTLIBProcessTag{},
-      argv,
-      pick_tuple_encoding(options),
-      logic,
-      pick_array_encoding(options));
+      camada::SMTLIBProcessTag{}, argv, smtlib_config(options, logic));
 
   return std::make_unique<camada::SMTLIBSolver>(
-    camada::SMTLIBProcessTag{},
-    argv,
-    out,
-    pick_tuple_encoding(options),
-    logic,
-    pick_array_encoding(options));
+    camada::SMTLIBProcessTag{}, argv, out, smtlib_config(options, logic));
 }
 
 /* Re-scan a one-shot run's captured output with camada's own strict scanner
@@ -399,10 +372,7 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
    * here would launch the solver from the dump. */
   if (options.get_bool_option("smt-formula-only"))
     return std::make_unique<camada::SMTLIBSolver>(
-      formula_path,
-      pick_tuple_encoding(options),
-      logic,
-      pick_array_encoding(options));
+      formula_path, smtlib_config(options, logic));
 
   std::vector<std::string> model_argv;
   const std::string model = oneshot_options::model_prog(options, name);
@@ -428,9 +398,7 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
     prog,
     model_argv,
     [](long pgid) { file_operations::register_pgroup_for_cleanup(pgid); },
-    pick_tuple_encoding(options),
-    logic,
-    pick_array_encoding(options));
+    smtlib_config(options, logic));
 }
 #endif /* CAMADA_HAVE_SMTLIB */
 
@@ -441,14 +409,13 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
 
 camada::SMTSolverRef create_esbmc_cvc5_solver(const optionst &options)
 {
-  return camada::createCVC5Solver(
-    camada::UnsatAssumptionsMode::Off, pick_array_encoding(options));
+  return camada::createCVC5Solver(pick_solver_config(options));
 }
 
 camada::SMTSolverRef create_esbmc_bitwuzla_solver(const optionst &options)
 {
 #if CAMADA_HAVE_BITWUZLA
-  return std::make_unique<esbmc_bitwuzla_solver>(pick_array_encoding(options));
+  return camada::createBitwuzlaSolver(pick_solver_config(options));
 #else
   (void)options;
   unsupported("Bitwuzla support in Camada");
@@ -467,7 +434,7 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
    * modes; the plain path uses the default context. */
   std::unique_ptr<esbmc_z3_solver> solver;
   if (!z3_debug && !smtlib2_compliant)
-    solver = std::make_unique<esbmc_z3_solver>(pick_array_encoding(options));
+    solver = std::make_unique<esbmc_z3_solver>(pick_solver_config(options));
   else
   {
     z3::config cfg;
@@ -482,7 +449,7 @@ camada::SMTSolverRef create_esbmc_z3_solver(const optionst &options)
     cfg.set("smtlib2_compliant", "true");
 
     solver =
-      std::make_unique<esbmc_z3_solver>(cfg, pick_array_encoding(options));
+      std::make_unique<esbmc_z3_solver>(cfg, pick_solver_config(options));
   }
   solver->configure();
   return solver;
@@ -516,7 +483,7 @@ camada::SMTSolverRef create_esbmc_mathsat_solver(const optionst &options)
   msat_set_option(config, "theory.arr.enable_witness", "true");
 
   auto solver = std::make_unique<esbmc_mathsat_solver>(
-    config, pick_array_encoding(options));
+    config, smtlib_config(options, logic));
   msat_destroy_config(config);
   return solver;
 #else
@@ -530,9 +497,7 @@ camada::SMTSolverRef create_esbmc_yices_solver(const optionst &options)
 #if CAMADA_HAVE_YICES
   const std::string logic = pick_logic(options, false);
   return std::make_unique<esbmc_yices_solver>(
-    logic.c_str(),
-    options.get_bool_option("smt-during-symex"),
-    pick_array_encoding(options));
+    options.get_bool_option("smt-during-symex"), smtlib_config(options, logic));
 #else
   (void)options;
   unsupported("Yices support in Camada");

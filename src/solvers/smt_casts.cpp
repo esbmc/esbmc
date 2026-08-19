@@ -31,8 +31,10 @@ smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   if (is_fixedbv_type(cast.from))
   {
     smt_astt from = convert_ast(cast.from);
-    return fbvt.is_saturating ? solver->mkFXPToFXPSat(from, to_sort)
-                              : solver->mkFXPToFXP(from, to_sort);
+    return fbvt.is_saturating
+             ? solver->mkFXPToFXPSat(
+                 from, to_sort, camada::FXPRM::TowardNegative)
+             : solver->mkFXPToFXP(from, to_sort, camada::FXPRM::TowardNegative);
   }
 
   // int -> fixed: the source type's signedness governs the value. _Sat
@@ -46,7 +48,8 @@ smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
           convert_ast(cast.from),
           solver->mkFXPSort(
             cast.from->type->get_width(), 0, is_signedbv_type(cast.from))),
-        to_sort);
+        to_sort,
+        camada::FXPRM::TowardNegative);
     return solver->mkFXPFromBV(
       convert_ast(cast.from), is_signedbv_type(cast.from), to_sort);
   }
@@ -57,7 +60,9 @@ smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
       convert_ast(cast.from), mk_smt_bv(BigInt(1), 1), mk_smt_bv(BigInt(0), 1));
     if (fbvt.is_saturating)
       return solver->mkFXPToFXPSat(
-        solver->mkFXPFromRawBV(bit, solver->mkFXPSort(1, 0, false)), to_sort);
+        solver->mkFXPFromRawBV(bit, solver->mkFXPSort(1, 0, false)),
+        to_sort,
+        camada::FXPRM::TowardNegative);
     return solver->mkFXPFromBV(bit, false, to_sort);
   }
 
@@ -66,8 +71,10 @@ smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   // saturates, where they clamp (NaN -> 0).
   if (is_floatbv_type(cast.from))
     return fbvt.is_saturating
-             ? solver->mkFPToFXPSat(convert_ast(cast.from), to_sort)
-             : solver->mkFPToFXP(convert_ast(cast.from), to_sort);
+             ? solver->mkFPToFXPSat(
+                 convert_ast(cast.from), to_sort, camada::FXPRM::TowardZero)
+             : solver->mkFPToFXP(
+                 convert_ast(cast.from), to_sort, camada::FXPRM::TowardZero);
 
   log_error("unexpected typecast to fixedbv");
   abort();
@@ -220,7 +227,7 @@ smt_solver_baset::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
      * converts with C's modular integer-conversion semantics — no saturation
      * even from a _Sat source (saturation is a property of fixed-point
      * DESTINATIONS; pinned by the execution oracle). */
-    return solver->mkFXPToBV(a, to_width);
+    return solver->mkFXPToBV(a, to_width, camada::FXPRM::TowardZero);
 
   if (from_width == to_width)
   {

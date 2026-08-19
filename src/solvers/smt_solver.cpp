@@ -712,8 +712,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (is_fixedbv_type(expr) && !int_encoding)
     {
       const mul2t &mul = to_mul2t(expr);
-      a = is_sat_fixedbv(expr->type) ? solver->mkFXPMulSat(args[0], args[1])
-                                     : solver->mkFXPMul(args[0], args[1]);
+      a =
+        is_sat_fixedbv(expr->type)
+          ? solver->mkFXPMulSat(args[0], args[1], camada::FXPRM::TowardNegative)
+          : solver->mkFXPMul(args[0], args[1], camada::FXPRM::TowardNegative);
       a = fxp_align_result(a, expr, mul.side_1, mul.side_2);
     }
     else if (int_encoding)
@@ -732,8 +734,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
     if (is_fixedbv_type(expr) && !int_encoding)
     {
-      a = is_sat_fixedbv(expr->type) ? solver->mkFXPDivSat(args[0], args[1])
-                                     : solver->mkFXPDiv(args[0], args[1]);
+      a =
+        is_sat_fixedbv(expr->type)
+          ? solver->mkFXPDivSat(args[0], args[1], camada::FXPRM::TowardNegative)
+          : solver->mkFXPDiv(args[0], args[1], camada::FXPRM::TowardNegative);
       a = fxp_align_result(a, expr, d.side_1, d.side_2);
     }
     else if (int_encoding)
@@ -1229,7 +1233,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::fixedbv_sqrt_id:
   {
     assert(is_fixedbv_type(expr));
-    a = solver->mkFXPSqrt(args[0]);
+    a = solver->mkFXPSqrt(args[0], camada::FXPRM::NearestTiesToEven);
     break;
   }
   case expr2t::fixedbv_exp_id:
@@ -2503,8 +2507,9 @@ smt_astt smt_solver_baset::fxp_align_result(
     return a;
 
   smt_sortt s = convert_sort(expr->type);
-  return is_sat_fixedbv(expr->type) ? solver->mkFXPToFXPSat(a, s)
-                                    : solver->mkFXPToFXP(a, s);
+  return is_sat_fixedbv(expr->type)
+           ? solver->mkFXPToFXPSat(a, s, camada::FXPRM::TowardNegative)
+           : solver->mkFXPToFXP(a, s, camada::FXPRM::TowardNegative);
 }
 
 smt_astt smt_solver_baset::fxp_shift_amount(smt_astt amount, unsigned int width)
