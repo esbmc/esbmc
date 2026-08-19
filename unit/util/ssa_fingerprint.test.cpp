@@ -98,21 +98,41 @@ std::string capture_stderr(const std::function<void()> &body)
   fclose(sink);
   return text;
 }
+void add_typed_step(
+  symex_target_equationt::SSA_stepst &steps,
+  goto_trace_stept::typet type,
+  const expr2tc &cond)
+{
+  steps.emplace_back();
+  auto &s = steps.back();
+  s.type = type;
+  s.guard = gen_true_expr();
+  s.cond = cond;
+}
 } // namespace
 
-TEST_CASE("step order does not change the digest", "[fingerprint]")
+TEST_CASE(
+  "moving an assume across the claim changes the digest",
+  "[fingerprint]")
 {
-  symex_target_equationt::SSA_stepst forward, reversed;
-  for (int i = 0; i < 4; ++i)
-    add_step(forward, local("x", 100 + 10 * i, i), i);
-  for (int i = 3; i >= 0; --i)
-    add_step(reversed, local("x", 100 + 10 * i, i), i);
+  const expr2tc assumption = greaterthan2tc(
+    local("x", 100, 0), constant_int2tc(get_int32_type(), BigInt(0)));
+  const expr2tc claim = notequal2tc(
+    local("x", 100, 0), constant_int2tc(get_int32_type(), BigInt(5)));
 
-  // The steps are conjuncts; symex does not emit them in a stable order
-  // across unrelated edits, so the canonical form must not depend on it.
+  symex_target_equationt::SSA_stepst assumed_first, asserted_first;
+  add_typed_step(assumed_first, goto_trace_stept::ASSUME, assumption);
+  add_typed_step(assumed_first, goto_trace_stept::ASSERT, claim);
+  add_typed_step(asserted_first, goto_trace_stept::ASSERT, claim);
+  add_typed_step(asserted_first, goto_trace_stept::ASSUME, assumption);
+
+  // convert_internal_step encodes a claim as implies(assumpt_expr, cond),
+  // where assumpt_expr holds only the assumes seen *before* it. The same steps
+  // in a different order are therefore a different proof obligation, and the
+  // digest must not equate them.
   REQUIRE(
-    ssa_cone_digest(forward, fingerprint_modet::srcloc) ==
-    ssa_cone_digest(reversed, fingerprint_modet::srcloc));
+    ssa_cone_digest(assumed_first, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(asserted_first, fingerprint_modet::srcloc));
 }
 
 TEST_CASE(

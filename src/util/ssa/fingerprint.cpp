@@ -298,11 +298,6 @@ std::string ssa_cone_text(
       "\n");
   }
 
-  // The steps are conjuncts, so their order carries no meaning -- and symex
-  // does not emit them in a stable order across unrelated edits. Sorting makes
-  // two runs that produced the same set of constraints agree.
-  std::sort(rendered.begin(), rendered.end());
-
   std::string out;
   for (const auto &step : rendered)
     out += step;
