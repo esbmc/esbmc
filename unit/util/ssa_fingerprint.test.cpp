@@ -7,19 +7,6 @@
 #include <util/message/message.h>
 #include <util/ssa/fingerprint.h>
 
-// capture_stderr redirects fd 2; the POSIX spellings live in <io.h> on MSVC.
-#ifdef _WIN32
-#  include <io.h>
-#  define dup _dup
-#  define dup2 _dup2
-#  define close _close
-#  define fileno _fileno
-#  define STDERR_FILENO 2
-#else
-#  include <unistd.h>
-#endif
-#include <cstdio>
-#include <functional>
 
 namespace
 {
@@ -88,27 +75,6 @@ void add_typed_step(
       anon, "c:t.c@100@F@main@s", symbol_renaming_level::level2, 0, 0, 0, 0));
 }
 
-std::string capture_stderr(const std::function<void()> &body)
-{
-  fflush(stderr);
-  const int saved = dup(STDERR_FILENO);
-  FILE *sink = tmpfile();
-  dup2(fileno(sink), STDERR_FILENO);
-
-  body();
-
-  fflush(stderr);
-  dup2(saved, STDERR_FILENO);
-  close(saved);
-
-  std::string text;
-  rewind(sink);
-  char buffer[4096];
-  for (size_t n; (n = fread(buffer, 1, sizeof(buffer), sink)) > 0;)
-    text.append(buffer, n);
-  fclose(sink);
-  return text;
-}
 void add_typed_step(
   symex_target_equationt::SSA_stepst &steps,
   goto_trace_stept::typet type,
