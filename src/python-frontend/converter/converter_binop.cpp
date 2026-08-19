@@ -899,7 +899,6 @@ bool python_converter::needs_zero_division_guard(
          !in_contract_clause_;
 }
 
-
 /// A tagged-scalar operand needs runtime dispatch instead of any of the
 /// static-type-driven paths, none of which know how to handle a PyObject-shaped
 /// operand.
@@ -918,9 +917,9 @@ exprt python_converter::handle_tagged_scalar_binop(
       op, lhs, rhs, get_location_from_decl(element));
 
   // Tagging only ever stores a number or a string (get_var_assign rejects every
-  // other rvalue), so a tagged operand is never None. Only a literal None folds:
-  // any other operand may carry side effects that get_expr has not emitted yet,
-  // and returning a constant would discard them.
+  // other rvalue), so a tagged operand is never None. Only a literal None
+  // folds: any other operand may carry side effects that get_expr has not
+  // emitted yet, and returning a constant would discard them.
   if (op == "Is" || op == "IsNot")
   {
     const auto &other =
