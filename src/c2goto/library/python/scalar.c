@@ -58,6 +58,39 @@ __ESBMC_HIDE:;
   return *(const long long *)tagged->value == value;
 }
 
+// Tagged-vs-tagged equality. Dispatching on `type_id` before any byte compare
+// keeps the numeric arm at a fixed width, so only two tagged strings reach
+// the byte loop below, which the numeric case would otherwise pay for too.
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id)
+{
+__ESBMC_HIDE:;
+  // Python compares across types as unequal rather than coercing.
+  if (a->type_id != b->type_id)
+    return 0;
+  if (a->type_id == num_type_id)
+    return *(const long long *)a->value == *(const long long *)b->value;
+  if (a->size != b->size)
+    return 0;
+  // `.size` is only known at runtime, so memcmp's loop bound would be
+  // symbolic and never unwind to completion; a compile-time bound keeps this
+  // loop finite. Do not "simplify" it back to memcmp. `.size` counts the
+  // trailing NUL, so the limit here is 255 characters -- one below the length
+  // bound __python_strnlen_bounded applies.
+  __ESBMC_assert(
+    a->size <= ESBMC_PY_STRNLEN_BOUND, "tagged str exceeds the modelled bound");
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= a->size)
+      break;
+    if (((const uint8_t *)a->value)[i] != ((const uint8_t *)b->value)[i])
+      return 0;
+  }
+  return 1;
+}
+
 int __python_scalar_eq_str(
   const PyObject *tagged,
   size_t type_id,

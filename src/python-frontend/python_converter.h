@@ -1097,6 +1097,17 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
+  /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
+  /// of the static-type-driven paths can handle. Throws for an operator this
+  /// mode does not model.
+  exprt handle_tagged_scalar_binop(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
   /**
    * @brief Converts function calls in binary operands to side effects.
    * @param lhs Left operand expression (may be modified).
