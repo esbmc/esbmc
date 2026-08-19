@@ -3,9 +3,14 @@
  * ESBMC's own bit-vector encoding, --fp2bv, gets it right. See #7021. */
 #include <assert.h>
 #include <math.h>
+
+extern double __VERIFIER_nondet_double(void);
+
 int main(void)
 {
-  double s = copysign(NAN, -2.0);
+  double m = __VERIFIER_nondet_double();
+  __ESBMC_assume(m < 0.0);
+  double s = copysign(NAN, m);
   assert(isnan(s) && signbit(s));
   return 0;
 }
