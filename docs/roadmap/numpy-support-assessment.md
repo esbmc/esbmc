@@ -17,7 +17,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Missing | Only the narrow identity-return pattern is supported. Non-trivial returns such as `def f(a): return a[0]`, functions with multiple parameters, and functions with more than one statement still need a real fix in the assignment/type-inference pipeline. Previous attempts hit double conversion in `create_symbol_for_unannotated_assign` / `get_var_assign` and wrapper-type confusion before variable type selection. |
-| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases the narrowest case — a 1-D, unit-stride, literal-bound slice assigned to a bare name — via a pointer into the source array's own storage (`numpy_pointer_view_lengths_`; `try_build_1d_pointer_view` in `list_access.cpp`), with reads, writes, `len()`, `.shape`, and `.ndim` all observing the real aliasing. Row/column views, transpose, reshape/ravel, `.flat`, step≠1 slices, symbolic bounds, and writable `nditer` are still copy-or-reject and remain to be wired to the same `buffer_id`/`offset`/`strides` model. |
+| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases the narrowest case — a 1-D, unit-stride, literal-bound slice assigned to a bare name — via a pointer into the source array's own storage, with reads, writes, `len()`, `.shape`, and `.ndim` all observing the real aliasing. That aliasing is tracked by two frontend-only maps (`numpy_view_copy_sources_` in `converter_stmt.cpp`, pre-existing; `numpy_pointer_view_lengths_` in `python_converter.h`, new), not by `ndarray_descriptor`: its `buffer_id`/`offset`/`capacity` are populated with real values at the 1-D call site but nothing consults them yet, and its constructor computes `capacity` from the *view's own* shape, which is the wrong quantity for validating an offset into the larger source buffer. Making `ndarray_descriptor` itself the consulted structure (rather than the two maps) needs that capacity/shape coupling fixed first. Row/column views, transpose, reshape/ravel, `.flat`, step≠1 slices, symbolic bounds, and writable `nditer` are still copy-or-reject and remain to be wired to whichever model wins. |
 | Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
 | `a.sort()` / `a.argsort()` / `a.tolist()` method forms | Missing | These are not plain method-to-module rewrites. `a.sort()` is in-place while `np.sort(a)` returns a copy; `a.argsort()` needs `np.argsort()` to support variables first; `a.tolist()` needs new array-to-list conversion logic. |
 | `a.any()` / `a.all()` method forms | Missing, cause unclear | `a.any()` currently dispatches like Python builtin `any()` with no argument (`ERROR: any() expected at least 1 argument, got 0`). Root-cause before adding a rewrite, since it may indicate a broader method-dispatch issue. |
@@ -90,9 +90,16 @@ backlog, in priority order:
 
 1. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — the
    pointer-based aliasing technique is now validated for 1-D, unit-stride,
-   literal-bound slices; extend the same `buffer_id`/`offset`/`strides`
-   wiring to row/column views, transpose, reshape/ravel, escape handling,
-   `.flat`, and writable `nditer`.
+   literal-bound slices; extend the same wiring to row/column views,
+   transpose, reshape/ravel, escape handling, `.flat`, and writable
+   `nditer`. Before or alongside that: decide whether `ndarray_descriptor`
+   should become the actually-consulted structure (its constructor
+   currently computes `capacity` from the view's own shape, not the source
+   buffer's, so offset validation against the real buffer isn't possible
+   without an API change) or whether the existing
+   `numpy_view_copy_sources_`/`numpy_pointer_view_lengths_` maps remain the
+   real mechanism and `ndarray_descriptor` stays a shape/rank sanity check
+   only.
 2. **General array returns** — consolidate assignment/type inference so user
    functions can return non-trivial NumPy arrays and sub-arrays safely.
 3. **Remaining array method forms** — design `a.sort()`, `a.argsort()`,
