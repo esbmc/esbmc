@@ -4,7 +4,11 @@ target_include_directories(algorithms
     )
 
 add_library(cache ssa/cache.cpp ssa/fingerprint.cpp ssa/vcc_cache.cpp)
-target_link_libraries(cache algorithms)
+# fingerprint.cpp digests SSA steps, so cache now depends on irep2 and the
+# util core. Declared here rather than at each consumer: without it the Linux
+# linker, which does not revisit an archive, leaves the irep2 vtables and
+# irept::remove_ref undefined in anything that links cache.
+target_link_libraries(cache algorithms irep2 util_esbmc)
 
 add_library(filesystem base/filesystem.cpp)
 target_include_directories(filesystem

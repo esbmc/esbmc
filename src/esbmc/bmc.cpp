@@ -2450,8 +2450,98 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   return ltl_res_good;
 }
 
+/// A cached proof is only sound where the claim's sliced cone is everything its
+/// verdict depends on. The k-induction phases and --incremental-bmc qualify:
+/// each sets its phase flags and unwind on this optionst before running, so
+/// both are already part of a claim's key.
+static bool vcc_cache_usable(
+  const optionst &options,
+  const std::string &dir,
+  bool is_cov_run,
+  bool is_dead_code,
+  const BigInt &interleaving_number)
+{
+  if (dir.empty() || is_cov_run || is_dead_code || interleaving_number > 1)
+    return false;
+
+  static const char *const excluded[] = {"ltl", "smt-during-symex"};
+  for (const char *opt : excluded)
+    if (options.get_bool_option(opt))
+      return false;
+  return true;
+}
+
+/// Look the claim's cone up in the cache. Returns true when the stored proof
+/// stands in for solving; `cone_text` and `hit` are set for the store step.
+static bool vcc_cache_hit(
+  vcc_cachet *cache,
+  bool verify,
+  const symex_target_equationt::SSA_stepst &steps,
+  std::string &cone_text,
+  bool &hit)
+{
+  if (cache == nullptr)
+    return false;
+  cone_text = ssa_cone_text(steps, fingerprint_modet::srcloc);
+  hit = cache->proved(cone_text);
+  return hit && !verify;
+}
+
+/// Store a fresh proof, or report a stored one the solver just contradicted.
+/// Returns true when the run must fail: under --vcc-cache-verify a hit that
+/// does not re-prove means the cache is wrong about this claim.
+static bool vcc_cache_store(
+  vcc_cachet *cache,
+  const std::string &cone_text,
+  bool hit,
+  smt_resultt solver_result,
+  bool is_vacuous,
+  const std::string &claim)
+{
+  if (cache == nullptr)
+    return false;
+  // A vacuous discharge reports Unknown, not Passed, so it is not a proof and
+  // must not be stored.
+  if (solver_result == P_UNSATISFIABLE && !is_vacuous)
+  {
+    cache->record(cone_text);
+    return false;
+  }
+  if (!hit)
+    return false;
+  log_error(
+    "VCC cache: stored proof of '{}' contradicted by the solver", claim);
+  return true;
+}
+
+/// Build the cache only where a stored proof would be sound; nullptr disables
+/// every cache interaction downstream.
+static std::unique_ptr<vcc_cachet> make_vcc_cache(
+  const optionst &options,
+  const std::string &dir,
+  bool is_cov_run,
+  bool is_dead_code,
+  const BigInt &interleaving_number)
+{
+  if (!vcc_cache_usable(
+        options, dir, is_cov_run, is_dead_code, interleaving_number))
+    return nullptr;
+  return std::make_unique<vcc_cachet>(dir, options);
+}
+
+/// A warm run solves nothing, so without this the report shows no solver
+/// activity at all and gives no sign of where the verdicts came from.
+static void log_vcc_cache_summary(const vcc_cachet *cache)
+{
+  if (cache == nullptr)
+    return;
+  log_status(
+    "VCC cache: {} claim(s) reused, {} solved", cache->hits(), cache->misses());
+}
+
 /// One line per solved claim, digesting its cone under each normalisation:
 /// the instrument for measuring what --vcc-cache can reuse.
+/// No-op when --vcc-fingerprint-dump was not given.
 static void dump_claim_fingerprint(
   const std::string &path,
   const symex_target_equationt::SSA_stepst &cone,
@@ -2459,6 +2549,9 @@ static void dump_claim_fingerprint(
   const std::string &loc,
   const std::string &msg)
 {
+  if (path.empty())
+    return;
+
   const char *verdict = result == P_UNSATISFIABLE ? "UNSAT"
                         : result == P_SATISFIABLE ? "SAT"
                                                   : "OTHER";
@@ -2570,12 +2663,8 @@ smt_resultt bmct::multi_property_check(
   // exclusions the in-run assertion_cache makes, plus the coverage probes.
   const std::string vcc_cache_dir = options.get_option("vcc-cache");
   const bool vcc_cache_verify = options.get_bool_option("vcc-cache-verify");
-  std::unique_ptr<vcc_cachet> vcc_cache;
-  if (
-    !vcc_cache_dir.empty() && !is_cov_run && !is_dead_code &&
-    !options.get_bool_option("ltl") &&
-    !options.get_bool_option("smt-during-symex") && interleaving_number <= 1)
-    vcc_cache = std::make_unique<vcc_cachet>(vcc_cache_dir, options);
+  std::unique_ptr<vcc_cachet> vcc_cache = make_vcc_cache(
+    options, vcc_cache_dir, is_cov_run, is_dead_code, interleaving_number);
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -2725,16 +2814,16 @@ smt_resultt bmct::multi_property_check(
 
     std::string cone_text;
     bool cached_proof = false;
-    if (vcc_cache)
+    if (vcc_cache_hit(
+          vcc_cache.get(),
+          vcc_cache_verify,
+          local_eq.SSA_steps,
+          cone_text,
+          cached_proof))
     {
-      cone_text = ssa_cone_text(local_eq.SSA_steps, fingerprint_modet::srcloc);
-      cached_proof = vcc_cache->proved(cone_text);
-      if (cached_proof && !vcc_cache_verify)
-      {
-        goto_functionst::property_verdicts.record(
-          claim.claim_cstr, property_verdictt::Passed, claim_ploc, "");
-        return;
-      }
+      goto_functionst::property_verdicts.record(
+        claim.claim_cstr, property_verdictt::Passed, claim_ploc, "");
+      return;
     }
 
     // Initialize a solver
@@ -2793,13 +2882,12 @@ smt_resultt bmct::multi_property_check(
     smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
 
-    if (!fingerprint_dump.empty())
-      dump_claim_fingerprint(
-        fingerprint_dump,
-        local_eq.SSA_steps,
-        solver_result,
-        claim.claim_loc,
-        claim.claim_msg);
+    dump_claim_fingerprint(
+      fingerprint_dump,
+      local_eq.SSA_steps,
+      solver_result,
+      claim.claim_loc,
+      claim.claim_msg);
 
     // After UNSAT, probe whether the path to the kept claim is reachable.
     // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
@@ -2814,22 +2902,17 @@ smt_resultt bmct::multi_property_check(
         vacuity_detected = true;
     }
 
-    if (vcc_cache)
+    if (vcc_cache_store(
+          vcc_cache.get(),
+          cone_text,
+          cached_proof,
+          solver_result,
+          is_vacuous,
+          claim.claim_cstr))
     {
-      // A vacuous discharge reports Unknown, not Passed, so it is not a proof
-      // and must not be stored.
-      if (solver_result == P_UNSATISFIABLE && !is_vacuous)
-        vcc_cache->record(cone_text);
-      else if (cached_proof)
-      {
-        log_error(
-          "VCC cache: stored proof of '{}' contradicted by the solver",
-          claim.claim_cstr);
-        std::lock_guard lock(result_mutex);
-        final_result = P_ERROR;
-      }
+      std::lock_guard lock(result_mutex);
+      final_result = P_ERROR;
     }
-
 
     // A claim is re-checked in every thread interleaving, and can be
     // discharged in one schedule while being violated in another. Record the
@@ -3191,11 +3274,7 @@ smt_resultt bmct::multi_property_check(
 
   // A warm run solves nothing, so without this the report shows no solver
   // activity at all and gives no sign of where the verdicts came from.
-  if (vcc_cache)
-    log_status(
-      "VCC cache: {} claim(s) reused, {} solved",
-      vcc_cache->hits(),
-      vcc_cache->misses());
+  log_vcc_cache_summary(vcc_cache.get());
 
   // For coverage with fixed bound unwinding
   if (
