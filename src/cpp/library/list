@@ -193,11 +193,11 @@ public:
       return *this;
     }
 
-    reference operator*()
+    reference operator*() const
     {
       return owner->_storage.buf[idx].data;
     }
-    pointer operator->()
+    pointer operator->() const
     {
       return &owner->_storage.buf[idx].data;
     }
@@ -257,11 +257,11 @@ public:
       return *this;
     }
 
-    reference operator*()
+    reference operator*() const
     {
       return owner->_storage.buf[idx].data;
     }
-    pointer operator->()
+    pointer operator->() const
     {
       return &owner->_storage.buf[idx].data;
     }

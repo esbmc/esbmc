@@ -56,7 +56,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     iterator(const iterator &x)
@@ -79,12 +79,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -138,7 +138,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     const_iterator(const const_iterator &x)
@@ -169,12 +169,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -236,7 +236,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     int *it_size;
 
@@ -262,12 +262,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -359,7 +359,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     const int *it_size;
 
@@ -394,12 +394,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1269,7 +1269,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     iterator(const iterator &x)
@@ -1292,12 +1292,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1351,7 +1351,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
 
     const_iterator(const const_iterator &x)
@@ -1382,12 +1382,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1449,7 +1449,7 @@ public:
   public:
     key_type *it_key;
     mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     int *it_size;
 
@@ -1475,12 +1475,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return this->it_pair;
     }
@@ -1572,7 +1572,7 @@ public:
   public:
     const key_type *it_key;
     const mapped_type *it_value;
-    value_type it_pair;
+    mutable value_type it_pair;
     int it_pos;
     const int *it_size;
 
@@ -1607,12 +1607,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &(this->it_pair);
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return this->it_pair;
     }

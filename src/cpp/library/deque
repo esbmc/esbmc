@@ -49,12 +49,12 @@ public:
       return *this;
     }
 
-    T *operator->()
+    T *operator->() const
     {
       return pointer;
     }
 
-    T &operator*()
+    T &operator*() const
     {
       if (vec_pos != 0)
         return vec_pos[pos];
@@ -179,9 +179,15 @@ public:
       return *this;
     }
 
-    const T *operator->();
+    /* Declared and never defined: a declaration-only member converts as a call
+     * returning a nondeterministic value, so `it->m` satisfied neither the
+     * property nor its negation. */
+    const T *operator->() const
+    {
+      return &vec_pos[pos];
+    }
 
-    const T &operator*()
+    const T &operator*() const
     {
       return vec_pos[pos];
     }
@@ -286,12 +292,12 @@ public:
       return *this;
     }
 
-    T *operator->()
+    T *operator->() const
     {
       return pointer;
     }
 
-    T &operator*()
+    T &operator*() const
     {
       return *pointer;
     }
