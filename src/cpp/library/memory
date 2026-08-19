@@ -174,6 +174,41 @@ struct default_delete
 };
 
 #if __cplusplus >= 201103L
+namespace __alloc_detail
+{
+/* [allocator.traits.types]: rebind_alloc<T> is Alloc::rebind<T>::other when
+ * that qualified-id is valid, and otherwise Alloc<T, Args...> for an Alloc
+ * spelled Alloc<U, Args...>. fmt's own allocator supplies no rebind member and
+ * needs the second form. */
+template <class Alloc, class T>
+struct replace_first_arg;
+
+template <
+  template <class, class...>
+  class Alloc,
+  class U,
+  class... Args,
+  class T>
+struct replace_first_arg<Alloc<U, Args...>, T>
+{
+  using type = Alloc<T, Args...>;
+};
+
+template <class Alloc, class T, class = void>
+struct rebind_alloc : replace_first_arg<Alloc, T>
+{
+};
+
+template <class Alloc, class T>
+struct rebind_alloc<
+  Alloc,
+  T,
+  void_t<typename Alloc::template rebind<T>::other>>
+{
+  using type = typename Alloc::template rebind<T>::other;
+};
+} // namespace __alloc_detail
+
 // Minimal allocator_traits (github #6063): delegates to the allocator's own
 // members. Static member functions of class templates convert to GOTO
 // correctly (unlike free-function templates in OM headers).
@@ -189,13 +224,8 @@ struct allocator_traits
   typedef size_t size_type;
   typedef ptrdiff_t difference_type;
 
-  /* [allocator.traits.types]: rebind_alloc is Alloc::rebind<T>::other when the
-   * allocator supplies one, which every allocator the models see does --
-   * std::allocator above, and boost multi_index's, which needs rebind_alloc to
-   * build its node allocators. The standard's fallback of rewriting the first
-   * template argument is not modelled. */
   template <class T>
-  using rebind_alloc = typename Alloc::template rebind<T>::other;
+  using rebind_alloc = typename __alloc_detail::rebind_alloc<Alloc, T>::type;
   template <class T>
   using rebind_traits = allocator_traits<rebind_alloc<T> >;
 
