@@ -7,7 +7,17 @@
 #include <util/message/message.h>
 #include <util/ssa/fingerprint.h>
 
-#include <unistd.h>
+// capture_stderr redirects fd 2; the POSIX spellings live in <io.h> on MSVC.
+#ifdef _WIN32
+#  include <io.h>
+#  define dup _dup
+#  define dup2 _dup2
+#  define close _close
+#  define fileno _fileno
+#  define STDERR_FILENO 2
+#else
+#  include <unistd.h>
+#endif
 #include <cstdio>
 #include <functional>
 
