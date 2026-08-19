@@ -1908,8 +1908,16 @@ void python_converter::record_numpy_view_copy(
 
 void python_converter::clear_numpy_view_copy(const exprt &lhs)
 {
-  if (lhs.is_symbol())
-    numpy_view_copy_sources_.erase(lhs.identifier().as_string());
+  if (!lhs.is_symbol())
+    return;
+  // Every call site here means lhs is being rebound away from view-copy
+  // tracking; a stale pointer-backed view entry (ADR-NP-003 etapa 2, set by
+  // list_access.cpp's try_build_1d_pointer_view) must not survive that
+  // rebind either, or len()/.shape/.ndim/write guards could misread a
+  // reused symbol id against the old view's tracked length.
+  const std::string lhs_id = lhs.identifier().as_string();
+  numpy_view_copy_sources_.erase(lhs_id);
+  numpy_pointer_view_lengths_.erase(lhs_id);
 }
 
 void python_converter::update_numpy_array_binding(
