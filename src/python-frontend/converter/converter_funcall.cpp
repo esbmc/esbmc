@@ -350,8 +350,8 @@ bool python_converter::try_len_on_class(
   const nlohmann::json &arg = element["args"][0];
   if (has_dunder_method(arg, "__len__"))
   {
-    result =
-      get_expr(build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
+    result = get_expr(
+      build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
     return true;
   }
 
