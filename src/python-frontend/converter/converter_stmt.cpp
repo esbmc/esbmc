@@ -1920,6 +1920,75 @@ void python_converter::clear_numpy_view_copy(const exprt &lhs)
   numpy_pointer_view_lengths_.erase(lhs_id);
 }
 
+void python_converter::detach_numpy_pointer_views_of(
+  const std::string &rebound_id,
+  const locationt &location,
+  codet &target_block)
+{
+  const namespacet ns(symbol_table_);
+
+  // numpy_view_copy_sources_ is mutated below (erase), so collect the
+  // matching keys first rather than erasing mid-iteration.
+  std::vector<std::string> view_ids;
+  for (const auto &entry : numpy_view_copy_sources_)
+    if (entry.second == rebound_id)
+      view_ids.push_back(entry.first);
+
+  for (const std::string &view_id : view_ids)
+  {
+    auto len_it = numpy_pointer_view_lengths_.find(view_id);
+    if (len_it == numpy_pointer_view_lengths_.end())
+      continue; // a plain copied view (etapa 1); already independent
+
+    symbolt *view_symbol = symbol_table_.find_symbol(view_id);
+    if (!view_symbol)
+      continue;
+
+    // The view's own DECL was already emitted with pointer_typet at its
+    // creation point; retyping the symbol table entry now would desync it
+    // from that DECL. Keep the declared type and just repoint the pointer
+    // *value* at a fresh, independent snapshot instead.
+    const exprt old_ptr = symbol_expr(*view_symbol);
+    const typet ptr_type = old_ptr.type();
+    const typet elem_type = ns.follow(view_symbol->get_type()).subtype();
+    const std::size_t length = len_it->second;
+
+    array_typet snapshot_type(elem_type, from_integer(length, size_type()));
+    symbolt &snapshot =
+      create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
+    code_declt snap_decl(symbol_expr(snapshot));
+    snap_decl.location() = location;
+    target_block.copy_to_operands(snap_decl);
+
+    // Copy what the view currently sees (still the pre-rebind source
+    // storage at this point in program order) into the snapshot.
+    for (std::size_t i = 0; i < length; ++i)
+    {
+      exprt idx = from_integer(i, size_type());
+      exprt src = python_expr::build_index(old_ptr, idx, elem_type);
+      exprt dst =
+        python_expr::build_index(symbol_expr(snapshot), idx, elem_type);
+      code_assignt elem_assign(dst, src);
+      elem_assign.location() = location;
+      target_block.copy_to_operands(elem_assign);
+    }
+
+    // Address-of the snapshot symbol directly rather than
+    // build_index(snapshot, 0, ...): a zero-length view (e.g. a[3:3])
+    // makes that index2tc an out-of-bounds subscript on an empty array.
+    exprt new_ptr = python_expr::build_typecast(
+      python_expr::build_address_of(symbol_expr(snapshot)), ptr_type);
+    code_assignt repoint(old_ptr, new_ptr);
+    repoint.location() = location;
+    target_block.copy_to_operands(repoint);
+
+    // The view no longer aliases rebound_id's storage; drop the source
+    // link so a later write to the (new) rebound_id array is not held
+    // responsible for a view it can no longer affect.
+    numpy_view_copy_sources_.erase(view_id);
+  }
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3666,6 +3735,18 @@ void python_converter::get_var_assign(
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
   current_lhs = &lhs;
   is_converting_lhs = false;
+
+  // A bare `a = ...` rebind is invisible to reject_unsafe_numpy_view_target
+  // (Subscript targets only); detach any live pointer-backed view of the
+  // old `a` before its storage is overwritten below, so the view keeps
+  // observing what it saw pre-rebind instead of silently switching to
+  // whatever `a` is rebound to. Common to both the annotated and
+  // unannotated assignment branches above -- the annotator may inject an
+  // annotation onto what the user wrote as a plain `a = ...`, routing it
+  // through either one.
+  if (target.value("_type", "") == "Name" && lhs_symbol)
+    detach_numpy_pointer_views_of(
+      lhs_symbol->id.as_string(), location_begin, target_block);
 
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 

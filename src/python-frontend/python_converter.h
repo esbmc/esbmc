@@ -967,6 +967,17 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  /// Detach every live pointer-backed view (ADR-NP-003 etapa 2) of
+  /// @p rebound_id from its storage, right before a plain `Name = ...`
+  /// assignment rebinds that symbol to a new value. Real NumPy rebind
+  /// semantics leave the old array object -- and anything still viewing it
+  /// -- untouched; without this, a view's raw pointer would keep aliasing
+  /// the same storage and silently start observing the new value instead.
+  void detach_numpy_pointer_views_of(
+    const std::string &rebound_id,
+    const locationt &location,
+    codet &target_block);
+
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
 
