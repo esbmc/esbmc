@@ -543,13 +543,29 @@ static std::vector<std::string> classes_defining(
   return owners;
 }
 
-static bool takes_self(const nlohmann::json &node)
+/// The receiver name \p node declares as a parameter, or an empty string. The
+/// frontend binds `self` and `cls` to the enclosing class wherever they appear,
+/// so a static method spelling a parameter that way has no class to bind to.
+static std::string receiver_named_parameter(const nlohmann::json &node)
 {
   if (!node.contains("args") || !node["args"].contains("args"))
-    return false;
+    return "";
 
   for (const auto &arg : node["args"]["args"])
-    if (arg.contains("arg") && arg["arg"] == "self")
+    if (arg["arg"] == "self" || arg["arg"] == "cls")
+      return arg["arg"].get<std::string>();
+  return "";
+}
+
+/// Whether \p node carries the builtin @staticmethod decorator. A dotted
+/// spelling names some other object, so only a bare Name counts.
+static bool is_staticmethod(const nlohmann::json &node)
+{
+  if (!node.contains("decorator_list"))
+    return false;
+
+  for (const auto &decorator : node["decorator_list"])
+    if (decorator["_type"] == "Name" && decorator["id"] == "staticmethod")
       return true;
   return false;
 }
@@ -590,16 +606,28 @@ void python_converter::find_entry_function(
       "--function: '" + target + "' is defined by " +
       std::to_string(owners.size()) + " classes; qualify it as Class.method");
 
-  // The entry harness gives every parameter an arbitrary value, and `self` is
-  // a class instance the scalar scope cannot invent. Harnessing over an object
+  // The entry harness gives every parameter an arbitrary value, and every
+  // method but a static one takes a receiver -- an instance or the class
+  // itself -- that the scalar scope cannot invent. Harnessing over an object
   // no constructor built would verify against a nondet pointer rather than an
-  // instance, so refuse instead (#6938 P4.5).
-  if (takes_self(node))
+  // instance, so refuse instead (#6938 P4.5). The decorator decides this, not
+  // the receiver's name, which Python does not fix.
+  if (!is_staticmethod(node))
     throw std::runtime_error(
       "--function: '" + target +
-      "' is an instance method, and its 'self' parameter is a class "
-      "instance the entry harness cannot build; verify it through its "
-      "callers, or make it a @staticmethod");
+      "' is not a @staticmethod, and its receiver is a class instance the "
+      "entry harness cannot build; verify it through its callers, or make "
+      "it a @staticmethod");
+
+  const std::string receiver = receiver_named_parameter(node);
+  if (!receiver.empty())
+    throw std::runtime_error(
+      "--function: '" + target +
+      "' is a @staticmethod taking a parameter "
+      "named '" +
+      receiver +
+      "', which the frontend binds to the enclosing "
+      "class; rename it to harness this function");
 
   owning_class = owners.front();
 }
