@@ -657,10 +657,16 @@ bool try_get_literal_int(const nlohmann::json &node, BigInt &out)
   return false;
 }
 
+// out_start, when non-null, receives the normalized (negative-index-adjusted,
+// clamped) literal start offset -- the same value used to compute the
+// length below, exposed for callers that need the actual byte/element
+// offset into the source (e.g. building a pointer view), not just the
+// resulting slice length.
 std::optional<long long> literal_slice_length(
   const nlohmann::json &slice_node,
   long long source_len,
-  long long step)
+  long long step,
+  long long *out_start = nullptr)
 {
   auto bound = [&](const char *name) -> std::optional<long long> {
     if (!slice_node.contains(name) || slice_node[name].is_null())
@@ -693,6 +699,8 @@ std::optional<long long> literal_slice_length(
   {
     start = std::min(std::max(start, -1LL), source_len - 1);
     stop = std::min(std::max(stop, -1LL), source_len - 1);
+    if (out_start)
+      *out_start = start;
     if (start <= stop)
       return 0;
     return ((start - stop - 1) / -step) + 1;
@@ -700,6 +708,8 @@ std::optional<long long> literal_slice_length(
 
   start = std::min(std::max(start, 0LL), source_len);
   stop = std::min(std::max(stop, 0LL), source_len);
+  if (out_start)
+    *out_start = start;
   if (start >= stop)
     return 0;
   return ((stop - start - 1) / step) + 1;
@@ -1337,6 +1347,40 @@ const symbolt &python_list::get_str_slice_sym()
   return *sym;
 }
 
+// ADR-NP-003 etapa 2, first slice: a 1-D, unit-stride, literal-bound slice
+// assigned directly to a bare name (current_lhs set) becomes a pointer into
+// the base array's own storage instead of an independent copy. Reads/
+// writes through either the view or the base then observe each other
+// automatically via ordinary pointer semantics -- no manual synchronization
+// needed. Declines (returns std::nullopt) for: step != 1, char/string
+// slices (own null-terminator semantics), a source element type that is
+// itself an array (row/column views -- future PRs), a non-symbol base, and
+// any slice not the direct RHS of a plain assignment (current_lhs unset) --
+// the caller falls through to the existing copy for all of these.
+std::optional<exprt> python_list::try_build_1d_pointer_view(
+  const exprt &array,
+  const typet &elem_type,
+  long long step_val,
+  bool needs_null_term,
+  long long literal_start,
+  long long static_slice_len)
+{
+  const namespacet ns(converter_.symbol_table());
+  if (
+    step_val != 1 || needs_null_term || ns.follow(elem_type).is_array() ||
+    !array.is_symbol() || !converter_.current_lhs)
+    return std::nullopt;
+
+  exprt view_ptr = build_address_of(
+    build_index(array, from_integer(literal_start, size_type()), elem_type));
+  converter_.current_lhs->type() = pointer_typet(elem_type);
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
+                                           .as_string()] =
+    static_cast<std::size_t>(static_slice_len);
+  return view_ptr;
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1596,16 +1640,31 @@ exprt python_list::handle_range_slice(
         const long long source_len =
           binary2integer(src_type.size().value().c_str(), false).to_int64() -
           (needs_null_term ? 1 : 0);
+        long long literal_start = 0;
         if (
-          std::optional<long long> static_slice_len =
-            literal_slice_length(slice_node, source_len, step_val))
+          std::optional<long long> static_slice_len = literal_slice_length(
+            slice_node, source_len, step_val, &literal_start))
         {
           result_size = from_integer(*static_slice_len, size_type());
           std::vector<long long> view_shape;
           view_shape.push_back(*static_slice_len);
           append_array_shape(ns.follow(elem_type), view_shape);
-          ndarray_descriptor descriptor(view_shape, "", 0);
+          const std::size_t buffer_id =
+            array.is_symbol()
+              ? std::hash<std::string>{}(array.identifier().as_string())
+              : 0;
+          ndarray_descriptor descriptor(view_shape, "", buffer_id);
           descriptor.validate();
+
+          if (
+            std::optional<exprt> view_ptr = try_build_1d_pointer_view(
+              array,
+              elem_type,
+              step_val,
+              needs_null_term,
+              literal_start,
+              *static_slice_len))
+            return *view_ptr;
         }
       }
     }

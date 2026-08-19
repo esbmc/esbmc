@@ -1825,12 +1825,28 @@ void python_converter::reject_unsafe_numpy_view_target(
   if (root_id.empty())
     return;
 
+  // A view symbol this PR's 1-D slice aliasing retyped to a pointer (see
+  // list_access.cpp's handle_range_slice, which populates
+  // numpy_pointer_view_lengths_ exactly for that case) genuinely aliases
+  // its source's storage: writing through it, or through the source while
+  // it is live, is sound pointer semantics, not the copy-divergence this
+  // guard otherwise exists to reject. Checking membership in that map
+  // (rather than just "is this symbol's type a pointer") avoids misreading
+  // some other, unrelated pointer-typed symbol as one of these views.
+  auto is_pointer_backed = [this](const std::string &id) {
+    return numpy_pointer_view_lengths_.count(id) != 0;
+  };
+
   if (numpy_view_copy_sources_.count(root_id) != 0)
+  {
+    if (is_pointer_backed(root_id))
+      return;
     throw std::runtime_error(
       "TypeError: writing through a copied numpy view is not supported");
+  }
 
   for (const auto &entry : numpy_view_copy_sources_)
-    if (entry.second == root_id)
+    if (entry.second == root_id && !is_pointer_backed(entry.first))
       throw std::runtime_error(
         "TypeError: writing to a numpy array with a live copied view is not "
         "supported");

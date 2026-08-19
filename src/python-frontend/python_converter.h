@@ -552,6 +552,25 @@ private:
   /// Returns nil when @p element is not such a call.
   exprt get_len_on_class_instance(const nlohmann::json &element);
 
+  // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+  // slice views). Split out of get_function_call() to keep that already
+  // large function's own decision count from growing further; see
+  // converter_funcall.cpp for the full rationale.
+  std::optional<exprt>
+  try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
+
+  // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
+  // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
+  // scalar element type, not a shape, so the view's own tracked logical
+  // length is used instead. Split out of get_expr() to keep that already
+  // large function's own decision count from growing further; see
+  // converter_expr.cpp for the full rationale. Returns std::nullopt for
+  // any other attribute or an untracked symbol, so the caller falls
+  // through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_pointer_view_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -1409,6 +1428,14 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
+  // A pointer-backed numpy view's element count (ADR-NP-003 etapa 2, 1-D
+  // slice views): __ESBMC_get_object_size on a pointer reports the base
+  // object's remaining size from that offset, not the view's own logical
+  // length (which may be shorter, e.g. an empty view still points at a
+  // valid position), so len() looks the value up here instead for a
+  // tracked view symbol -- see list_access.cpp's handle_range_slice and
+  // converter_funcall.cpp's len() dispatch.
+  std::unordered_map<std::string, std::size_t> numpy_pointer_view_lengths_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

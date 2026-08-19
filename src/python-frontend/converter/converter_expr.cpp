@@ -519,6 +519,26 @@ static std::string undefined_variable_message(
   return error_msg.str();
 }
 
+// v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003 etapa
+// 2, 1-D slice views): its own logical length is tracked separately, since
+// unwrapping the pointer reaches only the scalar element type, not a shape.
+// Views are always rank 1 in this PR's scope.
+std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  const auto it = numpy_pointer_view_lengths_.find(symbol.id.as_string());
+  if (it == numpy_pointer_view_lengths_.end())
+    return std::nullopt;
+
+  if (attr_name == "shape")
+    return build_shape_tuple_expr(
+      *this, {from_integer(it->second, int_type())});
+  if (attr_name == "ndim")
+    return from_integer(1, int_type());
+  return std::nullopt;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1111,6 +1131,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (!is_class_attr && element["_type"] == "Attribute")
     {
       const std::string &attr_name = element["attr"].get<std::string>();
+
+      if (
+        std::optional<exprt> view_attr =
+          try_get_numpy_pointer_view_shape_attr(*symbol, attr_name))
+      {
+        expr = *view_attr;
+        break;
+      }
 
       if (attr_name == "shape")
       {
