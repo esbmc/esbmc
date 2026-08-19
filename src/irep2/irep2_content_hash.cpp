@@ -37,6 +37,7 @@ struct walkert
 {
   hashert &out;
   const irep2_name_mappert &rename;
+  const irep2_symbol_mappert &rename_symbol;
 
   void field(const irep_idt &v)
   {
@@ -104,6 +105,14 @@ struct walkert
     out.number(e->expr_id);
     type(e->type);
 
+    // A symbol's SSA version is an ordinary field (level2_num), so hashing it
+    // would pin the digest to the absolute version symex happened to reach.
+    if (e->expr_id == expr2t::symbol_id)
+    {
+      out.text(rename_symbol(static_cast<const symbol2t &>(*e)));
+      return;
+    }
+
     switch (e->expr_id)
     {
 #define IREP2_EXPR(kind, _)                                                    \
@@ -146,11 +155,12 @@ struct walkert
 void irep2_content_hash(
   const expr2tc &e,
   const irep2_name_mappert &rename,
+  const irep2_symbol_mappert &rename_symbol,
   uint64_t &lo,
   uint64_t &hi)
 {
   hashert h{lo, hi};
-  walkert{h, rename}.expr(e);
+  walkert{h, rename, rename_symbol}.expr(e);
   lo = h.lo;
   hi = h.hi;
 }

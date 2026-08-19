@@ -6,6 +6,7 @@
 #include <util/message/message.h>
 
 #include <cctype>
+#include <tuple>
 #include <algorithm>
 #include <map>
 #include <string>
@@ -38,10 +39,6 @@ std::string strip_source_position(const std::string &name)
   return name.substr(0, colon + 1) + name.substr(at2 + 1);
 }
 
-/// Anonymous types are named `..._at_<file>_<line>_<col>`, which moves with
-/// any edit above the declaration. Types are not reached by Foreach_operand,
-/// so the suffix is interned here, on the serialised text.
-
 /// The character offset out of `c:<file>@<offset>@...`, or 0.
 unsigned offset_of(const std::string &name)
 {
@@ -67,6 +64,40 @@ std::string strip_type_location(const std::string &name)
   return at == std::string::npos ? name : name.substr(0, at);
 }
 
+/// The `#<n>` L2 version symex appends to every SSA name. Cut like the
+/// character offset: a cone's versions are re-indexed from zero, so a claim
+/// does not digest differently merely because symex numbered more branches
+/// before reaching it (esbmc/esbmc#7143).
+std::string strip_ssa_version(const std::string &name)
+{
+  const size_t hash = name.rfind('#');
+  // An unsigned counter is at most 10 digits; a longer run is not one, and
+  // accumulating it would wrap the sort key.
+  if (
+    hash == std::string::npos || hash + 1 == name.size() ||
+    name.size() - hash - 1 > 10)
+    return name;
+
+  for (size_t i = hash + 1; i < name.size(); ++i)
+    if (!isdigit(static_cast<unsigned char>(name[i])))
+      return name;
+
+  return name.substr(0, hash);
+}
+
+/// The `<n>` out of a trailing `#<n>`, or 0.
+unsigned ssa_version_of(const std::string &name)
+{
+  const std::string base = strip_ssa_version(name);
+  if (base.size() == name.size())
+    return 0;
+
+  unsigned value = 0;
+  for (size_t i = base.size() + 1; i < name.size(); ++i)
+    value = value * 10 + (name[i] - '0');
+  return value;
+}
+
 class normalisert
 {
 public:
@@ -85,7 +116,7 @@ public:
     e->foreach_operand([this](const expr2tc &sub) { collect(sub); });
 
     if (is_symbol2t(e))
-      seen.insert(to_symbol2t(e).thename);
+      seen.insert(to_symbol2t(e).get_symbol_name());
   }
 
   void assign_names()
@@ -93,42 +124,57 @@ public:
     if (mode == fingerprint_modet::raw)
       return;
 
-    std::map<std::string, std::vector<irep_idt>> groups;
-    for (const irep_idt &id : seen)
-      groups[strip_source_position(id.as_string())].push_back(id);
+    std::map<std::string, std::vector<std::string>> groups;
+    for (const std::string &id : seen)
+      groups[strip_ssa_version(strip_source_position(id))].push_back(id);
 
     for (auto &[base, members] : groups)
     {
       // Two locals that differ only in the stripped offset are ordered by it,
-      // which an edit shifting every later offset equally preserves.
+      // which an edit shifting every later offset equally preserves; the SSA
+      // version orders the assignments to one name within the cone.
       std::sort(
         members.begin(),
         members.end(),
-        [](const irep_idt &a, const irep_idt &b) {
-          return offset_of(a.as_string()) < offset_of(b.as_string());
+        [](const std::string &a, const std::string &b) {
+          return std::make_tuple(
+                   offset_of(a), ssa_version_of(a), std::cref(a)) <
+                 std::make_tuple(offset_of(b), ssa_version_of(b), std::cref(b));
         });
 
       for (size_t i = 0; i < members.size(); ++i)
         names[members[i]] = mode == fingerprint_modet::full
                               ? "v" + std::to_string(name_count++)
-                              : base + "#" + std::to_string(i);
+                              : base + '\x01' + std::to_string(i);
     }
   }
 
-  /// The name a symbol contributes to the hash.
+  /// The token a symbol contributes to the hash. The renaming level is
+  /// appended because get_symbol_name() renders level0 and level1_global
+  /// alike, and a cache key must not merge two distinct symbols.
+  std::string rename_symbol(const symbol2t &sym) const
+  {
+    const std::string id = sym.get_symbol_name();
+    auto it = names.find(id);
+    return (it != names.end() ? it->second : id) + '/' +
+           static_cast<char>('0' + static_cast<int>(sym.rlevel));
+  }
+
+  /// The form of a name reached outside a symbol node -- a type tag, a struct
+  /// component, or the symbol named by symbol_type2t/code_decl2t. The last has
+  /// no identity to canonicalise against here, so it is only stripped, which
+  /// costs hits rather than merging anything.
   std::string rename(const irep_idt &id) const
   {
-    auto it = names.find(id);
-    if (it != names.end())
-      return it->second;
-    return mode == fingerprint_modet::raw ? id.as_string()
-                                          : strip_type_location(id.as_string());
+    if (mode == fingerprint_modet::raw)
+      return id.as_string();
+    return strip_type_location(strip_source_position(id.as_string()));
   }
 
 private:
   fingerprint_modet mode;
-  std::set<irep_idt> seen;
-  std::map<irep_idt, std::string> names;
+  std::set<std::string> seen;
+  std::map<std::string, std::string> names;
   size_t name_count = 0;
 };
 
@@ -162,6 +208,9 @@ ssa_cone_keyt ssa_cone_key(
   const irep2_name_mappert rename = [&n](const irep_idt &id) {
     return n.rename(id);
   };
+  const irep2_symbol_mappert rename_symbol = [&n](const symbol2t &sym) {
+    return n.rename_symbol(sym);
+  };
 
   // Steps are fed in equation order: convert_internal_step encodes a claim as
   // implies(assumpt_expr, cond) over the assumes seen before it, so the
@@ -174,8 +223,8 @@ ssa_cone_keyt ssa_cone_key(
 
     key.lo ^= static_cast<uint64_t>(step.type);
     key.lo *= 0x100000001b3ULL;
-    irep2_content_hash(step.guard, rename, key.lo, key.hi);
-    irep2_content_hash(step.cond, rename, key.lo, key.hi);
+    irep2_content_hash(step.guard, rename, rename_symbol, key.lo, key.hi);
+    irep2_content_hash(step.cond, rename, rename_symbol, key.lo, key.hi);
   }
   return key;
 }
