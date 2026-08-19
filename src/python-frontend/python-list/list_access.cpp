@@ -1368,12 +1368,21 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
   const namespacet ns(converter_.symbol_table());
   if (
     step_val != 1 || needs_null_term || ns.follow(elem_type).is_array() ||
-    !array.is_symbol() || !converter_.current_lhs)
+    !array.is_symbol() || !converter_.current_lhs ||
+    !converter_.current_lhs->is_symbol())
     return std::nullopt;
 
-  exprt view_ptr = build_address_of(
-    build_index(array, from_integer(literal_start, size_type()), elem_type));
-  converter_.current_lhs->type() = pointer_typet(elem_type);
+  // Pointer arithmetic, not build_index(array, literal_start, elem_type):
+  // an empty slice at the very end of the source (literal_start ==
+  // source_len) computes a one-past-the-end address, legal to form but not
+  // to dereference (C 6.5.6p8). index2tc would route it through the array
+  // bounds checker as an out-of-bounds subscript; add2tc over the decayed
+  // pointer is checked under pointer, not array-index, rules.
+  const typet view_ptr_type = pointer_typet(elem_type);
+  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt view_ptr = build_add(
+    base_ptr, from_integer(literal_start, size_type()), view_ptr_type);
+  converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
   converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
                                            .as_string()] =
