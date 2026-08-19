@@ -3,6 +3,7 @@
 
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
+#include <fmt/format.h>
 #include <util/message/message.h>
 #include <util/ssa/fingerprint.h>
 
@@ -178,28 +179,18 @@ TEST_CASE("ignored steps are excluded", "[fingerprint]")
     ssa_cone_digest(with_ignored, fingerprint_modet::srcloc));
 }
 
-TEST_CASE("a name with no source position is left alone", "[fingerprint]")
+TEST_CASE("a name with no source position is not merged", "[fingerprint]")
 {
   // `__ESBMC_alloc` carries no `c:` prefix and `c:t.c@100` no closing `@`, so
-  // there is nothing for srcloc to strip and it must agree with counters.
-  for (const char *name : {"__ESBMC_alloc", "c:t.c@100"})
-  {
-    symex_target_equationt::SSA_stepst steps;
-    add_step(steps, plain(name, 3), 7);
-    add_step(steps, plain(name, 4), 8);
-
-    REQUIRE(
-      ssa_cone_digest(steps, fingerprint_modet::srcloc) ==
-      ssa_cone_digest(steps, fingerprint_modet::counters));
-  }
-
-  // A name that does carry one is rewritten, so the two modes part company.
-  symex_target_equationt::SSA_stepst positioned;
-  add_step(positioned, local("x", 100, 3), 7);
+  // there is nothing for srcloc to strip. Such names must still stay distinct
+  // from one another.
+  symex_target_equationt::SSA_stepst one, other;
+  add_step(one, plain("__ESBMC_alloc", 3), 7);
+  add_step(other, plain("c:t.c@100", 3), 7);
 
   REQUIRE(
-    ssa_cone_digest(positioned, fingerprint_modet::srcloc) !=
-    ssa_cone_digest(positioned, fingerprint_modet::counters));
+    ssa_cone_digest(one, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(other, fingerprint_modet::srcloc));
 }
 
 TEST_CASE("a step with no guard or condition still counts", "[fingerprint]")
@@ -231,36 +222,19 @@ TEST_CASE(
     ssa_cone_digest(before, fingerprint_modet::srcloc) ==
     ssa_cone_digest(after, fingerprint_modet::srcloc));
   REQUIRE(
-    ssa_cone_digest(before, fingerprint_modet::counters) !=
-    ssa_cone_digest(after, fingerprint_modet::counters));
+    ssa_cone_digest(before, fingerprint_modet::raw) !=
+    ssa_cone_digest(after, fingerprint_modet::raw));
 }
 
-TEST_CASE(
-  "the fingerprint module echoes the text each mode digests",
-  "[fingerprint]")
+TEST_CASE("the key is 32 hex digits and matches the digest", "[fingerprint]")
 {
   symex_target_equationt::SSA_stepst steps;
   add_step(steps, local("x", 100, 0), 7);
 
-  messaget::state.modules["fingerprint"] = VerbosityLevel::Debug;
-  const std::string dumped = capture_stderr([&steps] {
-    for (auto mode :
-         {fingerprint_modet::raw,
-          fingerprint_modet::counters,
-          fingerprint_modet::srcloc,
-          fingerprint_modet::full})
-      ssa_cone_text(steps, mode);
-  });
-  messaget::state.modules["fingerprint"] = VerbosityLevel::None;
-
-  // The dump is how a digest mismatch between two runs is diagnosed, so each
-  // line has to say which mode produced it.
-  REQUIRE(dumped.find("FP[raw] ") != std::string::npos);
-  REQUIRE(dumped.find("FP[counters] ") != std::string::npos);
-  REQUIRE(dumped.find("FP[srcloc] ") != std::string::npos);
-  REQUIRE(dumped.find("FP[full] ") != std::string::npos);
-
-  REQUIRE(capture_stderr([&steps] {
-            ssa_cone_text(steps, fingerprint_modet::raw);
-          }).empty());
+  const std::string key = ssa_cone_key_string(steps, fingerprint_modet::srcloc);
+  REQUIRE(key.size() == 32);
+  REQUIRE(key.find_first_not_of("0123456789abcdef") == std::string::npos);
+  REQUIRE(
+    key.substr(0, 16) ==
+    fmt::format("{:016x}", ssa_cone_digest(steps, fingerprint_modet::srcloc)));
 }

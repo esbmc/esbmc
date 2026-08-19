@@ -1,5 +1,5 @@
 CORE
 main.c
 --multi-property --vcc-fingerprint-dump -
-^VCC-FP [0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9]+\s+UNSAT\s
+^VCC-FP [0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9a-f]{16}\s+[0-9]+\s+UNSAT\s
 ^VERIFICATION SUCCESSFUL$

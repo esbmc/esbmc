@@ -7,11 +7,10 @@
 /**
  * @brief Content-addressed store of claims already proved unsatisfiable.
  *
- * A claim's key is a digest of its sliced SSA cone (see fingerprint.h)
- * combined with a fingerprint of everything else the verdict was contingent
- * on: the ESBMC build, every option in effect, and the data model. An entry
- * stores the cone's canonical text, which is compared on a hit, so a digest
- * collision degrades to a miss rather than to a wrong verdict.
+ * A claim's key is the 128-bit digest of its sliced SSA cone (see
+ * fingerprint.h) combined with a fingerprint of everything else the verdict was
+ * contingent on: the ESBMC build, every option in effect, and the data model.
+ * An entry is the file named by that key; its presence is the proof.
  *
  * Only UNSAT is stored. A cached SAT could not reproduce its counterexample,
  * and a report must never show a trace that was not just produced.
@@ -23,11 +22,11 @@ public:
   /// \param options every option in effect, folded into each key
   vcc_cachet(const std::string &dir, const optionst &options);
 
-  /// True iff an entry exists whose stored cone text equals \p cone_text.
-  bool proved(const std::string &cone_text) const;
+  /// True iff a proof is stored for \p cone_key.
+  bool proved(const std::string &cone_key) const;
 
-  /// Record \p cone_text as proved. Idempotent.
-  void record(const std::string &cone_text) const;
+  /// Record \p cone_key as proved. Idempotent.
+  void record(const std::string &cone_key) const;
 
   size_t hits() const
   {
@@ -39,7 +38,7 @@ public:
   }
 
 private:
-  std::string entry_path(const std::string &cone_text) const;
+  std::string entry_path(const std::string &cone_key) const;
 
   std::string dir;
   /// Digest of the ESBMC build, the option set, and the data model.

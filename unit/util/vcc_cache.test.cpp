@@ -63,24 +63,17 @@ TEST_CASE("recording twice is idempotent", "[vcc_cache]")
   std::filesystem::remove_all(dir);
 }
 
-TEST_CASE("an entry whose text does not match is a miss", "[vcc_cache]")
+TEST_CASE("a different key is a miss", "[vcc_cache]")
 {
-  const std::string dir = scratch_dir("collision");
+  const std::string dir = scratch_dir("distinct");
   optionst options;
   vcc_cachet cache(dir, options);
 
-  const std::string cone = "step 1\noriginal\n";
-  cache.record(cone);
-
-  // Stand in for a digest collision: the entry exists but holds another cone.
-  for (const auto &e : std::filesystem::recursive_directory_iterator(dir))
-    if (e.path().extension() == ".vcc")
-    {
-      std::ofstream out(e.path(), std::ios::binary | std::ios::trunc);
-      out << "a different cone\n";
-    }
-
-  REQUIRE_FALSE(cache.proved(cone));
+  // Entries are named by a 128-bit key and hold nothing; presence is the
+  // proof, so distinctness is the whole safety argument.
+  cache.record("0123456789abcdef0123456789abcdef");
+  REQUIRE(cache.proved("0123456789abcdef0123456789abcdef"));
+  REQUIRE_FALSE(cache.proved("0123456789abcdef0123456789abcdee"));
 
   std::filesystem::remove_all(dir);
 }

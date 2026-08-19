@@ -2472,18 +2472,18 @@ static bool vcc_cache_usable(
 }
 
 /// Look the claim's cone up in the cache. Returns true when the stored proof
-/// stands in for solving; `cone_text` and `hit` are set for the store step.
+/// stands in for solving; `cone_key` and `hit` are set for the store step.
 static bool vcc_cache_hit(
   vcc_cachet *cache,
   bool verify,
   const symex_target_equationt::SSA_stepst &steps,
-  std::string &cone_text,
+  std::string &cone_key,
   bool &hit)
 {
   if (cache == nullptr)
     return false;
-  cone_text = ssa_cone_text(steps, fingerprint_modet::srcloc);
-  hit = cache->proved(cone_text);
+  cone_key = ssa_cone_key_string(steps, fingerprint_modet::srcloc);
+  hit = cache->proved(cone_key);
   return hit && !verify;
 }
 
@@ -2492,7 +2492,7 @@ static bool vcc_cache_hit(
 /// does not re-prove means the cache is wrong about this claim.
 static bool vcc_cache_store(
   vcc_cachet *cache,
-  const std::string &cone_text,
+  const std::string &cone_key,
   bool hit,
   smt_resultt solver_result,
   bool is_vacuous,
@@ -2504,7 +2504,7 @@ static bool vcc_cache_store(
   // must not be stored.
   if (solver_result == P_UNSATISFIABLE && !is_vacuous)
   {
-    cache->record(cone_text);
+    cache->record(cone_key);
     return false;
   }
   if (!hit)
@@ -2557,9 +2557,8 @@ static void dump_claim_fingerprint(
                                                   : "OTHER";
 
   std::string line = fmt::format(
-    "{:016x}\t{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\t{}",
+    "{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\t{}",
     ssa_cone_digest(cone, fingerprint_modet::raw),
-    ssa_cone_digest(cone, fingerprint_modet::counters),
     ssa_cone_digest(cone, fingerprint_modet::srcloc),
     ssa_cone_digest(cone, fingerprint_modet::full),
     ssa_cone_size(cone),
@@ -2812,13 +2811,13 @@ smt_resultt bmct::multi_property_check(
       features.run(local_eq.SSA_steps);
     }
 
-    std::string cone_text;
+    std::string cone_key;
     bool cached_proof = false;
     if (vcc_cache_hit(
           vcc_cache.get(),
           vcc_cache_verify,
           local_eq.SSA_steps,
-          cone_text,
+          cone_key,
           cached_proof))
     {
       goto_functionst::property_verdicts.record(
@@ -2904,7 +2903,7 @@ smt_resultt bmct::multi_property_check(
 
     if (vcc_cache_store(
           vcc_cache.get(),
-          cone_text,
+          cone_key,
           cached_proof,
           solver_result,
           is_vacuous,

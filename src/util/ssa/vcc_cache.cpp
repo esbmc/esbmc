@@ -63,57 +63,41 @@ vcc_cachet::vcc_cachet(const std::string &dir, const optionst &options)
     log_warning("VCC cache: cannot create {}: {}", dir, ec.message());
 }
 
-std::string vcc_cachet::entry_path(const std::string &cone_text) const
+std::string vcc_cachet::entry_path(const std::string &cone_key) const
 {
   const std::string key =
-    fmt::format("{:016x}", fingerprint_hash(context + cone_text));
+    fmt::format("{:016x}{}", fingerprint_hash(context), cone_key);
   return dir + "/" + key.substr(0, 2) + "/" + key + ".vcc";
 }
 
-bool vcc_cachet::proved(const std::string &cone_text) const
+bool vcc_cachet::proved(const std::string &cone_key) const
 {
-  std::ifstream in(entry_path(cone_text), std::ios::binary);
-  if (in)
+  std::error_code ec;
+  if (std::filesystem::exists(entry_path(cone_key), ec))
   {
-    std::ostringstream stored;
-    stored << in.rdbuf();
-    // The stored text is compared in full, so a digest collision is a miss.
-    if (stored.str() == cone_text)
-    {
-      ++hit_count;
-      return true;
-    }
-    log_warning("VCC cache: digest collision, re-solving");
+    ++hit_count;
+    return true;
   }
 
   ++miss_count;
   return false;
 }
 
-void vcc_cachet::record(const std::string &cone_text) const
+void vcc_cachet::record(const std::string &cone_key) const
 {
-  const std::string path = entry_path(cone_text);
+  const std::string path = entry_path(cone_key);
 
   std::error_code ec;
   std::filesystem::create_directories(
     std::filesystem::path(path).parent_path(), ec);
 
-  // Written aside and renamed so a concurrent reader never sees a partial
-  // entry and reads it back as a mismatch.
+  // Written aside and renamed so a concurrent reader never sees a half-created
+  // entry.
   const std::string tmp = path + ".tmp" + std::to_string(current_pid());
   std::ofstream out(tmp, std::ios::binary);
   if (!out)
     return;
-  out << cone_text;
   out.close();
-
-  // A short write would publish an entry that can never match, wasting its
-  // slot for good; drop it rather than rename it into place.
-  if (!out)
-  {
-    std::filesystem::remove(tmp, ec);
-    return;
-  }
 
   std::filesystem::rename(tmp, path, ec);
   if (ec)

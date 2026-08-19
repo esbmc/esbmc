@@ -179,16 +179,25 @@ directory is safe to delete at any time — the next run simply repopulates it.
 ## Diagnosing a cache that does not hit
 
 `--vcc-fingerprint-dump` writes one line per solved claim giving the digest of
-its cone, its size, the verdict and its location:
+its cone under each normalisation, its size, the verdict and its location:
 
 ```bash
 esbmc example.c --multi-property --vcc-fingerprint-dump fp.tsv
 esbmc example.c --multi-property --vcc-fingerprint-dump -   # to the log
 ```
 
-Comparing the dumps from two runs shows which claims changed identity. For the
-full text behind a digest, raise the `fingerprint` log module:
+Comparing the dumps from two runs shows which claims changed identity.
 
-```bash
-esbmc example.c --multi-property --vcc-fingerprint-dump - --verbosity fingerprint:9
-```
+## Cost
+
+Keying a claim means hashing its sliced cone, which is work a run without the
+cache does not do. On a solver-heavy task that cost is around 30% of the run,
+so a **first** run is slower, and a run that can never hit is slower for
+nothing. The cache pays from the second run onwards, and only where the solver
+is a real share of the time: on a small program, parsing and symbolic execution
+dominate and no proof cache can help.
+
+That makes it the wrong tool for one-shot verification -- a competition run, or
+a CI job that verifies each file exactly once with no persistent directory. It
+is the right tool for the edit-and-recheck loop, where the same file is
+verified repeatedly.
