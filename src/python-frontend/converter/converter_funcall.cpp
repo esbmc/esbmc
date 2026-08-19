@@ -1,5 +1,6 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
@@ -330,6 +331,31 @@ bool python_converter::is_identity_function(
 
   return false;
 }
+
+exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return nil_exprt();
+
+  const nlohmann::json &arg = element["args"][0];
+  if (has_dunder_method(arg, "__len__"))
+    return get_expr(
+      build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
+
+  // Without a __len__ the builtin path measures the struct with strlen and
+  // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
+  const std::string cls = instance_class_name(arg);
+  if (!cls.empty() && is_class_instance(arg))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+
+  return nil_exprt();
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1056,20 +1082,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // len(obj) where obj's class defines __len__: dispatch to obj.__len__().
-  // The builtin len path only recognises the model container types (list,
-  // tuple, dict, str/bytes), so a user-defined __len__ is otherwise ignored
-  // and len falls through to strlen over the struct — a wrong length.
-  if (
-    element.contains("func") && element["func"].is_object() &&
-    element["func"].value("_type", "") == "Name" &&
-    element["func"].value("id", "") == "len" && element.contains("args") &&
-    element["args"].is_array() && element["args"].size() == 1 &&
-    has_dunder_method(element["args"][0], "__len__"))
-  {
-    return get_expr(build_dunder_call(
-      element["args"][0], "__len__", nlohmann::json::array(), element));
-  }
+  if (exprt len_expr = get_len_on_class_instance(element);
+      len_expr.is_not_nil())
+    return len_expr;
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
