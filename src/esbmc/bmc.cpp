@@ -2573,10 +2573,6 @@ smt_resultt bmct::multi_property_check(
   std::unique_ptr<vcc_cachet> vcc_cache;
   if (
     !vcc_cache_dir.empty() && !is_cov_run && !is_dead_code &&
-    !options.get_bool_option("k-induction") &&
-    !options.get_bool_option("forward-condition") &&
-    !options.get_bool_option("inductive-step") &&
-    !options.get_bool_option("incremental-bmc") &&
     !options.get_bool_option("ltl") &&
     !options.get_bool_option("smt-during-symex") && interleaving_number <= 1)
     vcc_cache = std::make_unique<vcc_cachet>(vcc_cache_dir, options);

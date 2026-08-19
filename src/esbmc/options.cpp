@@ -392,9 +392,9 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "Reuse claims already proved unsatisfiable in an earlier run, keyed on "
      "the claim's sliced SSA cone, this ESBMC build, every option in effect "
-     "and the data model. Only proofs are stored. Ignored under k-induction, "
-     "--forward-condition, --ltl, --smt-during-symex, coverage modes and "
-     "past the first thread interleaving"},
+     "and the data model. Only proofs are stored. Ignored under --ltl, "
+     "--smt-during-symex, coverage modes and past the first thread "
+     "interleaving"},
     {"vcc-cache-verify",
      NULL,
      "Consult --vcc-cache but solve every claim anyway, reporting an error if "

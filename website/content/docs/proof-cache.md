@@ -148,13 +148,18 @@ esbmc example.c --multi-property --vcc-cache .esbmc-cache --vcc-cache-verify
 This gives up the speed-up, so it is meant for validating the cache — for
 example on a nightly job — rather than for routine runs.
 
+## Unwinding strategies
+
+`--k-induction` and `--incremental-bmc` are cached like any other run. Both
+raise the unwinding bound as they go and, for k-induction, move between the
+base case, the forward condition and the inductive step. Each of those is set
+on the option set before the run, and the option set is part of a claim's key,
+so a proof from one phase or bound is never reused for another.
+
 ## When the cache is inactive
 
 Naming a cache directory is ignored, and every claim solved normally, under:
 
-- `--k-induction`, `--forward-condition` and `--inductive-step`, where one claim
-  is re-used across phases that mean different things
-- `--incremental-bmc`, where the unwinding bound changes within the run
 - `--ltl` and `--smt-during-symex`
 - the coverage modes and `--dead-code-check`, whose probes are reachability
   questions rather than properties
