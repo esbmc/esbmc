@@ -1109,6 +1109,37 @@ void uninitialized_fill(
     ::new (static_cast<void *>(&*first))
       typename iterator_traits<ForwardIterator>::value_type(value);
 }
+
+/* The _n forms, which take a count rather than an end iterator. */
+template <class InputIterator, class Size, class ForwardIterator>
+ForwardIterator
+uninitialized_copy_n(InputIterator first, Size n, ForwardIterator result)
+{
+  for (Size i = 0; i < n; ++i, ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(*first);
+  return result;
+}
+
+template <class InputIterator, class Size, class ForwardIterator>
+ForwardIterator
+uninitialized_move_n(InputIterator first, Size n, ForwardIterator result)
+{
+  for (Size i = 0; i < n; ++i, ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(::std::move(*first));
+  return result;
+}
+
+template <class ForwardIterator, class Size, class T>
+ForwardIterator
+uninitialized_fill_n(ForwardIterator first, Size n, const T &value)
+{
+  for (Size i = 0; i < n; ++i, ++first)
+    ::new (static_cast<void *>(&*first))
+      typename iterator_traits<ForwardIterator>::value_type(value);
+  return first;
+}
 #endif
 
 } // namespace std
