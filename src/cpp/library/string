@@ -2396,8 +2396,15 @@ __esbmc_string_compare(const char *s1, size_t n1, const char *s2, size_t n2)
 {
 __ESBMC_HIDE:
   size_t rlen = n1 < n2 ? n1 : n2;
-  for (size_t i = 0; i < rlen; i++)
+  /* The trip count is spelled as the fixed buffer size rather than rlen, which
+   * is symbolic: ESBMC unwinds syntactically, so a loop bounded only by a
+   * symbolic length never converges and every comparison had to be run with an
+   * explicit --unwind. A string cannot be longer than its buffer, so the two
+   * bounds agree. */
+  for (size_t i = 0; i < STRING_CAPACITY; i++)
   {
+    if (i >= rlen)
+      break;
     unsigned char c1 = (unsigned char)s1[i];
     unsigned char c2 = (unsigned char)s2[i];
     if (c1 != c2)
