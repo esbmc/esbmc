@@ -723,4 +723,11 @@ private:
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
+
+  /// Element type already handed out for one syntactic pop() site, keyed by
+  /// list symbol and source position. The assignment path converts its RHS
+  /// more than once, and build_pop_list_call consumes a list_type_map entry
+  /// per call, so without this the second conversion of a single pop() sees an
+  /// empty map and falls back to the list's annotation (#4780).
+  static std::unordered_map<std::string, typet> pop_elem_type_memo;
 };
