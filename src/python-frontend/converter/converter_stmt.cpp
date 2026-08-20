@@ -1902,14 +1902,24 @@ void python_converter::record_numpy_view_copy(
     return;
   }
 
-  if (numpy_array_symbols_.count(source_id) == 0)
+  std::string storage_id = source_id;
+  std::set<std::string> seen_aliases;
+  auto alias_it = numpy_array_storage_aliases_.find(storage_id);
+  while (alias_it != numpy_array_storage_aliases_.end() &&
+         seen_aliases.insert(alias_it->first).second)
+  {
+    storage_id = alias_it->second;
+    alias_it = numpy_array_storage_aliases_.find(storage_id);
+  }
+
+  if (numpy_array_symbols_.count(storage_id) == 0)
   {
     clear_numpy_view_copy(lhs);
     return;
   }
 
   const std::string lhs_id = lhs.identifier().as_string();
-  numpy_view_copy_sources_[lhs_id] = source_id;
+  numpy_view_copy_sources_[lhs_id] = storage_id;
   numpy_array_symbols_.insert(lhs_id);
 }
 
