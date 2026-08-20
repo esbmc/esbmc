@@ -1086,9 +1086,21 @@ basic_string<CharT, Traits, Alloc>::basic_string(const CharT *s)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "basic_string<CharT, Traits, Alloc> invalid");
-  _size = strlen(s);
-
-  strcpy(str, s);
+  /* strlen and strcpy both scan to a NUL. That folds for a plain literal, but
+   * not once the source is a conditional -- `std::string(x ? x : "")`, which is
+   * how <filesystem>'s path is built -- and the constructor then never
+   * converged. Measuring the length while copying, bounded by the fixed buffer,
+   * removes both scans. */
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (s[k] == '\0')
+      break;
+    str[k] = s[k];
+    n++;
+  }
+  str[n] = '\0';
+  _size = n;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
