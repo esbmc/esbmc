@@ -3580,7 +3580,7 @@ exprt python_list::extract_pyobject_value(
   }
 
   // For char* strings and None (_Bool*), the void* already contains the pointer
-  // value For all other types, the void* contains a pointer to the value
+  // value. For all other types, the void* contains a pointer to the value.
   if (
     elem_type.is_pointer() &&
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))

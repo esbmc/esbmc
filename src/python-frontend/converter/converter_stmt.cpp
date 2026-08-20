@@ -5717,8 +5717,8 @@ void python_converter::get_return_statements(
     target_block.copy_to_operands(temp_decl);
 
     // If a constructor is being invoked, the temporary variable is passed as
-    // 'self' For constructors, we don't set LHS because they modify the object
-    // through the first parameter (self), not through LHS
+    // 'self'. For constructors, we don't set LHS because they modify the object
+    // through the first parameter (self), not through LHS.
     bool is_constructor = type_handler_.is_constructor_call(ast_node["value"]);
 
     // Set the LHS of the function call to our temporary variable (only for
