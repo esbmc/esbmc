@@ -4,6 +4,7 @@
 #include "definitions.h"
 #include "OM_compiler_defs.h" // OM_NOEXCEPT
 #include "char_traits.h"
+#include "iterator_tags.h"
 #include "cstring"
 #include "cstdio"
 #include "cassert"
@@ -43,41 +44,52 @@ public:
   class iterator
   {
   public:
-    char *pointer;
+    /* [iterator.traits] reads these five from the iterator itself, so without
+     * them iterator_traits<basic_string<char>::iterator>::difference_type does
+     * not resolve and a generic algorithm over a string iterator fails. The
+     * data member below was named `pointer` and had to move aside for the
+     * typedef the traits require. */
+    typedef ::std::random_access_iterator_tag iterator_category;
+    typedef CharT value_type;
+    typedef ::std::ptrdiff_t difference_type;
+    typedef CharT *pointer;
+    typedef CharT &reference;
+
+    char *ptr;
     char *it_str;
     int pos;
 
     iterator(const iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
       it_str = i.it_str;
     }
 
     iterator()
     {
-      pointer = NULL;
+      ptr = NULL;
       pos = 0;
       it_str = NULL;
     }
 
     iterator(char *p_pointer)
     {
-      pointer = p_pointer;
+      ptr = p_pointer;
       pos = 0;
       it_str = p_pointer;
     }
 
     iterator &operator=(const const_iterator &right)
     {
-      this->pointer = right.pointer;
+      this->ptr = right.ptr;
       this->pos = right.pos;
       return *this;
     }
 
     iterator &operator=(const iterator &right)
     {
-      this->pointer = right.pointer;
+      this->ptr = right.ptr;
       this->pos = right.pos;
       this->it_str = right.it_str;
       return *this;
@@ -85,12 +97,12 @@ public:
 
     char *operator->()
     {
-      return pointer;
+      return ptr;
     }
 
     char &operator*()
     {
-      return *pointer;
+      return *ptr;
     }
 
     CC_DIAGNOSTIC_PUSH()
@@ -99,7 +111,7 @@ public:
     iterator operator-(int n) const
     {
       iterator buffer;
-      buffer.pointer = pointer - sizeof(char) * n;
+      buffer.ptr = ptr - sizeof(char) * n;
       buffer.pos = pos - n;
       buffer.it_str = it_str;
       __ESBMC_assert(buffer.pos >= 0, "underflow");
@@ -109,47 +121,47 @@ public:
     iterator operator+(int n) const
     {
       iterator buffer;
-      buffer.pointer = pointer + sizeof(char) * n;
+      buffer.ptr = ptr + sizeof(char) * n;
       buffer.pos = pos + n;
       buffer.it_str = it_str;
       return buffer;
     }
 
-    //operator increases pointer address, but returns old value.
+    //operator increases ptr address, but returns old value.
     //It's like "++c"
     iterator &operator++()
     {
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return *this;
     }
 
-    //operator increases pointer address and returns new value
+    //operator increases ptr address and returns new value
     //It's like "c++"
     iterator operator++(int _b)
     {
       iterator buffer = *this;
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return buffer;
     }
-    //operator decreases pointer address, but returns old value.
+    //operator decreases ptr address, but returns old value.
     //It's like "--c"
     iterator &operator--()
     {
-      pointer = pointer - sizeof(char);
+      ptr = ptr - sizeof(char);
       pos--;
       return *this;
     }
 
     CC_DIAGNOSTIC_POP()
 
-    //operator decreases pointer address and returns new value
+    //operator decreases ptr address and returns new value
     //It's like "c--"
     iterator operator--(int _b)
     {
       iterator buffer = *this;
-      pointer = pointer - sizeof(char);
+      ptr = ptr - sizeof(char);
       pos--;
       return buffer;
     }
@@ -159,12 +171,12 @@ public:
 
     bool operator==(const iterator &right) const
     {
-      return (pointer == right.pointer && pos == right.pos);
+      return (ptr == right.ptr && pos == right.pos);
     }
 
     bool operator==(const const_iterator &right) const
     {
-      return (pointer == right.pointer && pos == right.pos);
+      return (ptr == right.ptr && pos == right.pos);
     }
 
     bool operator!=(const iterator &right) const
@@ -187,7 +199,7 @@ public:
       return (pos < right.pos);
     }
 
-    //operator returns true if pointer address of right is lower than this
+    //operator returns true if ptr address of right is lower than this
 
     bool operator>(const iterator &right) const
     {
@@ -199,7 +211,7 @@ public:
       return (pos > right.pos);
     }
 
-    //operator returns true if pointer address of right is higher or equal than this
+    //operator returns true if ptr address of right is higher or equal than this
 
     bool operator<=(const iterator &right) const
     {
@@ -211,7 +223,7 @@ public:
       return !(pos > right.pos);
     }
 
-    //operator returns true if pointer address of right is lower or equal than this
+    //operator returns true if ptr address of right is lower or equal than this
 
     bool operator>=(const iterator &right) const
     {
@@ -226,20 +238,20 @@ public:
     CC_DIAGNOSTIC_PUSH()
     DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
-    //operator adds n positions on pointer address, and returns its address value
+    //operator adds n positions on ptr address, and returns its address value
 
     iterator &operator+=(int n)
     {
-      pointer = pointer + sizeof(char) * n;
+      ptr = ptr + sizeof(char) * n;
       pos += n;
       return *this;
     }
 
-    //operator subtracts n positions on pointer address, and returns its address value
+    //operator subtracts n positions on ptr address, and returns its address value
 
     iterator operator-=(int n)
     {
-      pointer = pointer - sizeof(char) * n;
+      ptr = ptr - sizeof(char) * n;
       pos -= n;
       return *this;
     }
@@ -250,50 +262,56 @@ public:
   class const_iterator
   {
   public:
-    char *pointer;
+    typedef ::std::random_access_iterator_tag iterator_category;
+    typedef CharT value_type;
+    typedef ::std::ptrdiff_t difference_type;
+    typedef const CharT *pointer;
+    typedef const CharT &reference;
+
+    char *ptr;
     int pos;
 
     const_iterator(const iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
     }
 
     const_iterator(const const_iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
     }
 
     const_iterator()
     {
-      pointer = NULL;
+      ptr = NULL;
     }
 
     //This creates an iterator that points to the value pointed to by p_pointer.
     const_iterator(char *p_pointer)
     {
-      pointer = p_pointer;
+      ptr = p_pointer;
     }
 
     char *operator->()
-    { //operator returns memo address pointer
-      return pointer;
+    { //operator returns memo address ptr
+      return ptr;
     }
 
     char &operator*()
     {
-      return *pointer;
+      return *ptr;
     }
 
     CC_DIAGNOSTIC_PUSH()
     DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
-    //operator subtracts n positions on pointer address of this
+    //operator subtracts n positions on ptr address of this
     const_iterator operator-(int n) const
     {
       const_iterator buffer;
-      buffer.pointer = pointer - sizeof(char) * n;
+      buffer.ptr = ptr - sizeof(char) * n;
       buffer.pos = pos - n;
       return buffer;
     }
@@ -301,7 +319,7 @@ public:
     const_iterator operator+(int n) const
     {
       const_iterator buffer;
-      buffer.pointer = pointer + sizeof(char) * n;
+      buffer.ptr = ptr + sizeof(char) * n;
       buffer.pos = pos + n;
       return buffer;
     }
@@ -310,14 +328,14 @@ public:
 
     const_iterator &operator++()
     {
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return *this;
     }
     const_iterator operator++(int)
     {
       const_iterator buffer = *this;
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return buffer;
     }
@@ -327,85 +345,85 @@ public:
 
     bool operator==(const iterator &right) const
     {
-      return (pointer == right.pointer);
+      return (ptr == right.ptr);
     }
 
     bool operator==(const const_iterator &right) const
     {
-      return (pointer == right.pointer);
+      return (ptr == right.ptr);
     }
 
     //just the complement of "=="
 
     bool operator!=(const const_iterator &right) const
     {
-      return !(pointer == right.pointer);
+      return !(ptr == right.ptr);
     }
 
     bool operator!=(const iterator &right) const
     {
-      return !(pointer == right.pointer);
+      return !(ptr == right.ptr);
     }
 
     bool operator!=(iterator right)
     {
-      return !(pointer == right.pointer);
+      return !(ptr == right.ptr);
     }
 
-    //operator returns true if pointer address of right is higher than this
+    //operator returns true if ptr address of right is higher than this
 
     bool operator<(const iterator &right) const
     {
-      return (pointer < right.pointer);
+      return (ptr < right.ptr);
     }
 
     bool operator<(const const_iterator &right) const
     {
-      return (pointer < right.pointer);
+      return (ptr < right.ptr);
     }
 
-    //operator returns true if pointer address of right is lower than this
+    //operator returns true if ptr address of right is lower than this
 
     bool operator>(const iterator &right) const
     {
-      return (pointer > right.pointer);
+      return (ptr > right.ptr);
     }
 
     bool operator>(const const_iterator &right) const
     {
-      return (pointer > right.pointer);
+      return (ptr > right.ptr);
     }
 
-    //operator returns true if pointer address of right is higher or equal than this
+    //operator returns true if ptr address of right is higher or equal than this
 
     bool operator<=(const iterator &right) const
     {
-      return !(pointer > right.pointer);
+      return !(ptr > right.ptr);
     }
 
     bool operator<=(const const_iterator &right) const
     {
-      return !(pointer > right.pointer);
+      return !(ptr > right.ptr);
     }
 
-    //operator returns true if pointer address of right is lower or equal than this
+    //operator returns true if ptr address of right is lower or equal than this
 
     bool operator>=(const iterator &right) const
     {
-      return !(pointer < right.pointer);
+      return !(ptr < right.ptr);
     }
 
     bool operator>=(const const_iterator &right) const
     {
-      return !(pointer < right.pointer);
+      return !(ptr < right.ptr);
     }
     const_iterator(iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
     }
 
-    //operator adds n positions on pointer address, and returns its address value
+    //operator adds n positions on ptr address, and returns its address value
   };
 
   basic_string();
@@ -776,7 +794,7 @@ public:
   {
   __ESBMC_HIDE:
     int pos1 = it_one.pos;
-    char *s = it_two.pointer;
+    char *s = it_two.ptr;
     int n = it_three.pos;
     int len = this->length(), i, k;
     int lim = n;
@@ -1001,7 +1019,7 @@ public:
     size_t len = this->length();
     basic_string<CharT, Traits, Alloc>::iterator end(
       const_cast<char *>(this->str));
-    end.pointer = const_cast<char *>(this->str) + len;
+    end.ptr = const_cast<char *>(this->str) + len;
     end.pos = len;
     return end;
   }
