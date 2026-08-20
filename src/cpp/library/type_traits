@@ -459,6 +459,35 @@ struct is_function : integral_constant<bool, __is_function(T)>
 {
 };
 
+/* [meta.unary.cat]: a pointer to member is one or the other -- the pointee of a
+ * pointer to member function is a function type. Defined here rather than
+ * beside is_member_pointer because it needs is_function above. */
+namespace detail
+{
+template <class T>
+struct is_member_function_pointer_base : false_type
+{
+};
+template <class T, class U>
+struct is_member_function_pointer_base<T U::*> : is_function<T>
+{
+};
+} // namespace detail
+
+template <class T>
+struct is_member_function_pointer
+  : detail::is_member_function_pointer_base<typename remove_cv<T>::type>
+{
+};
+
+template <class T>
+struct is_member_object_pointer
+  : integral_constant<
+      bool,
+      is_member_pointer<T>::value && !is_member_function_pointer<T>::value>
+{
+};
+
 #if __cplusplus >= 201103L
 // alignment_of
 template <class T>
@@ -937,6 +966,12 @@ template <class T>
 inline constexpr bool is_volatile_v = is_volatile<T>::value;
 template <class T>
 inline constexpr bool is_member_pointer_v = is_member_pointer<T>::value;
+template <class T>
+inline constexpr bool is_member_function_pointer_v =
+  is_member_function_pointer<T>::value;
+template <class T>
+inline constexpr bool is_member_object_pointer_v =
+  is_member_object_pointer<T>::value;
 template <class Base, class Derived>
 inline constexpr bool is_base_of_v = is_base_of<Base, Derived>::value;
 template <class T>
