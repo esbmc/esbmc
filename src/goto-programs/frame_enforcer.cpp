@@ -219,8 +219,22 @@ static void emit_array_store_frame(
   const array_type2t &atype = to_array_type(var->type);
   expr2tc updated = snap;
   for (const expr2tc &assigned : assigned_indices)
-    updated = with2tc(
-      var->type, updated, assigned, index2tc(atype.subtype, var, assigned));
+  {
+    // An index outside the array excuses nothing, which is what comparing the
+    // index against each element gives for free. Fed to a store it would not:
+    // the solver's index domain is only as wide as the extent, so an index
+    // past the end wraps and spares some unrelated element instead.
+    expr2tc in_range = and2tc(
+      greaterthanequal2tc(assigned, gen_zero(assigned->type)),
+      lessthan2tc(assigned, typecast2tc(assigned->type, atype.array_size)));
+
+    updated = if2tc(
+      var->type,
+      in_range,
+      with2tc(
+        var->type, updated, assigned, index2tc(atype.subtype, var, assigned)),
+      updated);
+  }
 
   emit_frame_instruction(
     dest, loc, equality2tc(var, updated), mode, id2string(arr_name));
@@ -337,6 +351,25 @@ static bool emit_partial_frame(
          emit_array_elem_frame(dest, loc, mode, classified, var, snap);
 }
 
+// Whether the whole-object constraint must be withheld because the clause
+// named elements of \p var that no encoding above could express.
+//
+// Asserting the whole array is merely imprecise: it reports the write the
+// clause itself permits, a false positive. Assuming it is not. An assumption
+// the clause contradicts is a hypothesis stronger than the truth, and anything
+// proved under it may be false -- a loop writing an element it was granted
+// verified an assertion that element falsifies. Withholding the constraint
+// only weakens the hypothesis, which can cost a proof but cannot invent one.
+static bool withhold_whole_object_frame(
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var)
+{
+  return mode == frame_modet::ASSUME && is_symbol2t(var) &&
+         is_array_type(var->type) &&
+         classified.array_elem_targets.count(to_symbol2t(var).thename) != 0;
+}
+
 void frame_enforcert::enforce_frame_rule(
   const std::vector<expr2tc> &explicit_assigns,
   goto_programt &dest,
@@ -345,6 +378,16 @@ void frame_enforcert::enforce_frame_rule(
 {
   // Classify assigns targets for aliasing analysis
   classified_assignst classified = classify_assigns_targets(explicit_assigns);
+
+  // A clause names its targets in the pre-state: `__ESBMC_assigns(buf[head])`
+  // grants the element `head` denoted on entry. The array is snapshotted but
+  // the index used to be read back after the body, so a body that moved `head`
+  // -- itself in the clause, as the ring-buffer idiom needs -- chose after the
+  // fact which element it had been granted. An off-by-one write verified while
+  // the correct body was reported.
+  for (auto &[name, indices] : classified.array_elem_targets)
+    for (expr2tc &index : indices)
+      index = in_pre_state(index);
 
   for (const auto &entry : active_snapshots)
   {
@@ -367,6 +410,9 @@ void frame_enforcert::enforce_frame_rule(
       continue;
 
     if (emit_partial_frame(dest, loc, mode, classified, var, snap))
+      continue;
+
+    if (withhold_whole_object_frame(mode, classified, var))
       continue;
 
     // Build the base guard: var == snapshot (unchanged condition)
@@ -477,6 +523,36 @@ void frame_enforcert::patch_old_snapshot_assigns(goto_programt &prog) const
       break;
     }
   }
+}
+
+expr2tc frame_enforcert::in_pre_state(const expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return expr;
+
+  if (is_symbol2t(expr))
+  {
+    const irep_idt &name = to_symbol2t(expr).thename;
+    for (const auto &entry : active_snapshots)
+      if (
+        is_symbol2t(entry.original_expr) &&
+        to_symbol2t(entry.original_expr).thename == name)
+        return entry.snapshot_sym;
+    return expr;
+  }
+
+  expr2tc result = expr->clone();
+  bool modified = false;
+  result->Foreach_operand([this, &modified](expr2tc &op) {
+    expr2tc replaced = in_pre_state(op);
+    if (replaced != op)
+    {
+      op = replaced;
+      modified = true;
+    }
+  });
+
+  return modified ? result : expr;
 }
 
 expr2tc frame_enforcert::replace_old_with_snapshots(const expr2tc &expr) const

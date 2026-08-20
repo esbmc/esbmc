@@ -19,6 +19,62 @@ namespace std
 
 #if __cplusplus >= 201103L
 
+// [refwrap]: a CopyConstructible, CopyAssignable wrapper around a reference.
+// The rvalue overloads of ref/cref are deleted so that binding a temporary is a
+// diagnostic rather than a dangling wrapper.
+template <class T>
+class reference_wrapper
+{
+  T *ptr;
+
+public:
+  typedef T type;
+
+  reference_wrapper(T &t) noexcept : ptr(&t)
+  {
+  }
+
+  operator T &() const noexcept
+  {
+    return *ptr;
+  }
+
+  T &get() const noexcept
+  {
+    return *ptr;
+  }
+};
+
+template <class T>
+reference_wrapper<T> ref(T &t) noexcept
+{
+  return reference_wrapper<T>(t);
+}
+
+template <class T>
+reference_wrapper<T> ref(reference_wrapper<T> t) noexcept
+{
+  return t;
+}
+
+template <class T>
+void ref(const T &&) = delete;
+
+template <class T>
+reference_wrapper<const T> cref(const T &t) noexcept
+{
+  return reference_wrapper<const T>(t);
+}
+
+template <class T>
+reference_wrapper<const T> cref(reference_wrapper<T> t) noexcept
+{
+  return reference_wrapper<const T>(t.get());
+}
+
+template <class T>
+void cref(const T &&) = delete;
+
 // Base class for callable objects
 class callable_base
 {

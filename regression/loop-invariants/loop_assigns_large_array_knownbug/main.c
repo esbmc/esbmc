@@ -1,11 +1,13 @@
-/* The loop rule cannot use the store form: it runs in ASSUME mode, and
- * Bitwuzla -- the default solver -- rejects equality over constant arrays
- * ("not fully supported yet"), aborting the run rather than answering. So a
- * loop over a global past the element-wise cap keeps the whole-array
- * assumption and the solver fails outright.
+/* What withholding the frame hypothesis costs. Past the element-wise cap the
+ * loop rule has no sound way to say "every element but global[3] is
+ * unchanged", so it says nothing about the array at all, and this correct
+ * program can no longer be proved.
  *
- * Below the cap this shape works (loop_assigns_array_elem_pass), and the same
- * program answers under --z3. */
+ * That is the deliberate trade: the fallback it replaces was an assumption the
+ * clause contradicts, which proved assertions that were false
+ * (loop_assigns_large_array_no_false_proof). Below the cap this shape works
+ * (loop_assigns_array_elem_pass); lifting the cap needs the spared element as
+ * a quantifier rather than an assertion per element. */
 int global[512];
 
 int main()
