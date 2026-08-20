@@ -3865,7 +3865,11 @@ void python_converter::get_var_assign(
   // unannotated assignment branches above -- the annotator may inject an
   // annotation onto what the user wrote as a plain `a = ...`, routing it
   // through either one.
-  if (target.value("_type", "") == "Name" && lhs_symbol)
+  const bool is_self_assignment =
+    target.value("_type", "") == "Name" &&
+    ast_node["value"].value("_type", "") == "Name" &&
+    target.value("id", "") == ast_node["value"].value("id", "");
+  if (target.value("_type", "") == "Name" && lhs_symbol && !is_self_assignment)
     detach_numpy_pointer_views_of(
       lhs_symbol->id.as_string(), location_begin, target_block);
 

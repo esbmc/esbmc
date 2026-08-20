@@ -24,6 +24,7 @@
 #include <util/expr/string_constant.h>
 
 #include <optional>
+#include <sstream>
 
 using namespace json_utils;
 
@@ -379,14 +380,19 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
     arg["value"].value("_type", "") == "Name")
   {
     const nlohmann::json &slice = arg["slice"];
-    const bool literal_index =
-      (slice.value("_type", "") == "Constant" && slice.contains("value") &&
-       slice["value"].is_number_integer()) ||
-      (slice.value("_type", "") == "UnaryOp" && slice.contains("op") &&
-       slice["op"].value("_type", "") == "USub" && slice.contains("operand") &&
-       slice["operand"].value("_type", "") == "Constant" &&
-       slice["operand"].contains("value") &&
-       slice["operand"]["value"].is_number_integer());
+    std::optional<long long> literal_index;
+    if (
+      slice.value("_type", "") == "Constant" && slice.contains("value") &&
+      slice["value"].is_number_integer())
+      literal_index = slice["value"].get<long long>();
+    else if (
+      slice.value("_type", "") == "UnaryOp" && slice.contains("op") &&
+      slice["op"].value("_type", "") == "USub" && slice.contains("operand") &&
+      slice["operand"].value("_type", "") == "Constant" &&
+      slice["operand"].contains("value") &&
+      slice["operand"]["value"].is_number_integer())
+      literal_index = -slice["operand"]["value"].get<long long>();
+
     if (!literal_index)
       return std::nullopt;
 
@@ -403,6 +409,22 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
     typet source_type = ns.follow(source->get_type());
     if (!source_type.is_array())
       return std::nullopt;
+    const array_typet &array_type = to_array_type(source_type);
+    if (array_type.size().is_nil() || !array_type.size().is_constant())
+      return std::nullopt;
+    long long row_index = *literal_index;
+    const long long row_count =
+      binary2integer(array_type.size().value().c_str(), false).to_int64();
+    if (row_index < 0)
+      row_index += row_count;
+    if (row_index < 0 || row_index >= row_count)
+    {
+      std::ostringstream msg;
+      msg << "IndexError: index " << *literal_index
+          << " is out of bounds for axis 0 with size " << row_count;
+      throw std::runtime_error(msg.str());
+    }
+
     source_type = ns.follow(to_array_type(source_type).subtype());
     if (!source_type.is_array())
       return std::nullopt;
