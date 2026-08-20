@@ -1328,7 +1328,8 @@ exprt python_list::remove_function_calls_recursive(
   exprt &e,
   const nlohmann::json &node)
 {
-  // Bounds might generate intermediate calls, we need to add lhs to all of them.
+  // Bounds might generate intermediate calls, we need to add lhs to all of
+  // them.
   const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
     if (!foo.is_function_call())
       return foo;
@@ -1425,6 +1426,109 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
   return view_ptr;
 }
 
+std::optional<exprt> python_list::try_build_row_pointer_view(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !array.is_symbol() || !converter_.current_lhs ||
+    !converter_.current_lhs->is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(slice_node, literal_index))
+    return std::nullopt;
+
+  const namespacet ns(converter_.symbol_table());
+  const typet array_type = ns.follow(array.type());
+  if (!array_type.is_array())
+    return std::nullopt;
+
+  const array_typet &outer_array = to_array_type(array_type);
+  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+    return std::nullopt;
+
+  const typet row_type = ns.follow(outer_array.subtype());
+  if (!row_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_array = to_array_type(row_type);
+  if (row_array.size().is_nil() || !row_array.size().is_constant())
+    return std::nullopt;
+
+  const typet elem_type = ns.follow(row_array.subtype());
+  if (elem_type.is_array())
+    return std::nullopt;
+
+  const long long row_count =
+    binary2integer(outer_array.size().value().c_str(), false).to_int64();
+  const long long col_count =
+    binary2integer(row_array.size().value().c_str(), false).to_int64();
+  long long row_index = literal_index.to_int64();
+  if (row_index < 0)
+    row_index += row_count;
+  if (row_index < 0 || row_index >= row_count || col_count < 0)
+    return std::nullopt;
+
+  const typet view_ptr_type = pointer_typet(elem_type);
+  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt view_ptr = build_add(
+    base_ptr, from_integer(row_index * col_count, size_type()), view_ptr_type);
+
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
+                                           .as_string()] =
+    static_cast<std::size_t>(col_count);
+  return view_ptr;
+}
+
+std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
+  const exprt &array,
+  const typet &elem_type,
+  const nlohmann::json &slice_node,
+  long long step_val)
+{
+  if (!array.is_symbol())
+    return std::nullopt;
+
+  auto len_it =
+    converter_.numpy_pointer_view_lengths_.find(array.identifier().as_string());
+  if (len_it == converter_.numpy_pointer_view_lengths_.end())
+    return std::nullopt;
+
+  long long literal_start = 0;
+  std::optional<long long> static_slice_len = literal_slice_length(
+    slice_node,
+    static_cast<long long>(len_it->second),
+    step_val,
+    &literal_start);
+  if (!static_slice_len)
+    return std::nullopt;
+
+  array_typet result_type(
+    elem_type, from_integer(*static_slice_len, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    slice_node, "$array_slice$", result_type, exprt());
+
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(result_decl);
+
+  for (long long idx = 0; idx < *static_slice_len; ++idx)
+  {
+    const long long src_index = literal_start + (idx * step_val);
+    exprt src =
+      build_index(array, from_integer(src_index, size_type()), elem_type);
+    exprt dst = build_index(
+      build_symbol(result), from_integer(idx, size_type()), elem_type);
+    converter_.add_instruction(code_assignt(dst, src));
+  }
+
+  return build_symbol(result);
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1435,7 +1539,8 @@ exprt python_list::handle_range_slice(
   const typet resolved_list_type = ns.follow(list_type);
 
   // Handle regular array/string slicing (not list slicing)
-  // String parameters come as pointer-to-char, so handle both arrays and char pointers
+  // String parameters come as pointer-to-char, so handle both arrays and char
+  // pointers
   bool is_string_slice = (resolved_array_type != resolved_list_type &&
                           resolved_array_type.is_array()) ||
                          (resolved_array_type.is_pointer() &&
@@ -1477,6 +1582,16 @@ exprt python_list::handle_range_slice(
   }
   bool negative_step = (step_val < 0);
 
+  if (
+    resolved_array_type.is_pointer() &&
+    resolved_array_type.subtype() != char_type() && literal_step)
+  {
+    if (
+      std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
+        array, resolved_array_type.subtype(), slice_node, step_val))
+      return *slice_copy;
+  }
+
   if (is_string_slice)
   {
     locationt location = converter_.get_location_from_decl(slice_node);
@@ -1510,8 +1625,9 @@ exprt python_list::handle_range_slice(
         return build_typecast(e, signedbv_typet(64));
       };
 
-      // Defaults: for positive step start=0,end=MAX; for negative step start=MAX,end=MIN
-      // We use large sentinel values; __python_str_slice clamps them
+      // Defaults: for positive step start=0,end=MAX; for negative step
+      // start=MAX,end=MIN We use large sentinel values; __python_str_slice
+      // clamps them
       long long start_default = negative_step ? 999999 : 0;
       long long end_default = negative_step ? -999999 : 999999;
 
@@ -2668,7 +2784,8 @@ exprt python_list::handle_index_access(
           list_node, converter_.get_type_handler());
       }
 
-      // If still no elem_type, try to get it from the array variable's type annotation
+      // If still no elem_type, try to get it from the array variable's type
+      // annotation
       if (array.is_symbol() && elem_type == typet())
       {
         // Extract variable name from the symbol identifier
@@ -2679,7 +2796,8 @@ exprt python_list::handle_index_access(
         nlohmann::json list_var_decl = json_utils::find_var_decl(
           list_var_name, converter_.current_function_name(), converter_.ast());
 
-        // If the variable has a type annotation such as list[str], extract element type
+        // If the variable has a type annotation such as list[str], extract
+        // element type
         if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
         {
           elem_type = get_elem_type_from_annotation(
@@ -2739,7 +2857,8 @@ exprt python_list::handle_index_access(
             list_node["value"].contains("_type") &&
             list_node["value"]["_type"] == "Subscript")
           {
-            // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
+            // For ESBMC_iter_0 = d['a'], get element type from dict's actual
+            // value
             if (
               list_node["value"].contains("value") &&
               list_node["value"]["value"].is_object() &&
@@ -2807,8 +2926,9 @@ exprt python_list::handle_index_access(
             list_node["value"]["elts"].is_array() &&
             !list_node["value"]["elts"].empty())
           {
-            // Infer element type from the literal, accounting for the int->float
-            // promotion applied to mixed numeric literals at construction.
+            // Infer element type from the literal, accounting for the
+            // int->float promotion applied to mixed numeric literals at
+            // construction.
             elem_type = infer_literal_element_type(list_node["value"]);
           }
         }
@@ -2934,8 +3054,8 @@ exprt python_list::handle_index_access(
         }
 
         // If array is a constant placeholder (e.g., from a chained OOB access),
-        // we're in dead code after a prior IndexError. Emit IndexError and return
-        // a placeholder rather than crashing the frontend.
+        // we're in dead code after a prior IndexError. Emit IndexError and
+        // return a placeholder rather than crashing the frontend.
         if (!array.is_symbol() && array.is_constant())
         {
           exprt raise = converter_.get_exception_handler().gen_exception_raise(
@@ -3287,6 +3407,11 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static arrays
+  if (
+    std::optional<exprt> view_ptr =
+      try_build_row_pointer_view(array, slice_node))
+    return *view_ptr;
+
   return build_index(array, pos_expr, array.type().subtype());
 }
 
@@ -3297,9 +3422,10 @@ exprt python_list::extract_pyobject_value(
   bool string_safe)
 {
   // For float types, read __ESBMC_float_buf[item->float_idx].
-  // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
-  // (no sort mismatch in BV mode), and float_buf is a typed global double array
-  // (real-sorted in --ir mode), so the array read gives the correct real value.
+  // This avoids the void*→integer truncation in --ir mode: float_idx is a
+  // size_t (no sort mismatch in BV mode), and float_buf is a typed global
+  // double array (real-sorted in --ir mode), so the array read gives the
+  // correct real value.
   if (elem_type.is_floatbv())
   {
     // Helper: build (*pyobject_expr).field for a given field/type.
@@ -3307,7 +3433,8 @@ exprt python_list::extract_pyobject_value(
       return build_deref_member(pyobject_expr, field, ftype);
     };
 
-    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
+    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol
+    // table)
     const symbolt *fbuf_sym =
       converter_.symbol_table().find_symbol("c:list.c@__ESBMC_float_buf");
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
@@ -3403,13 +3530,14 @@ exprt python_list::extract_pyobject_value(
     return build_typecast(obj_value, pointer_typet(arr_type.subtype()));
   }
 
-  // For char* strings and None (_Bool*), the void* already contains the pointer value
-  // For all other types, the void* contains a pointer to the value
+  // For char* strings and None (_Bool*), the void* already contains the pointer
+  // value For all other types, the void* contains a pointer to the value
   if (
     elem_type.is_pointer() &&
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
   {
-    // String and None case: cast void* directly to the pointer type (no dereference needed)
+    // String and None case: cast void* directly to the pointer type (no
+    // dereference needed)
     return build_typecast(obj_value, elem_type);
   }
   else

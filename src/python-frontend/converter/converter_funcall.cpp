@@ -150,7 +150,8 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   return nil_exprt();
 }
 
-// Resolve function calls (both identity functions and constant-returning functions)
+// Resolve function calls (both identity functions and constant-returning
+// functions)
 exprt python_converter::resolve_function_call(
   const exprt &func_expr,
   const exprt &args_expr)
@@ -369,12 +370,56 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
     !element.contains("func") || !element["func"].is_object() ||
     element["func"].value("_type", "") != "Name" ||
     element["func"].value("id", "") != "len" || !element.contains("args") ||
-    !element["args"].is_array() || element["args"].size() != 1 ||
-    element["args"][0].value("_type", "") != "Name")
+    !element["args"].is_array() || element["args"].size() != 1)
+    return std::nullopt;
+
+  const nlohmann::json &arg = element["args"][0];
+  if (
+    arg.value("_type", "") == "Subscript" && arg.contains("value") &&
+    arg["value"].value("_type", "") == "Name")
+  {
+    const nlohmann::json &slice = arg["slice"];
+    const bool literal_index =
+      (slice.value("_type", "") == "Constant" && slice.contains("value") &&
+       slice["value"].is_number_integer()) ||
+      (slice.value("_type", "") == "UnaryOp" && slice.contains("op") &&
+       slice["op"].value("_type", "") == "USub" && slice.contains("operand") &&
+       slice["operand"].value("_type", "") == "Constant" &&
+       slice["operand"].contains("value") &&
+       slice["operand"]["value"].is_number_integer());
+    if (!literal_index)
+      return std::nullopt;
+
+    const std::string source_id =
+      resolve_name_symbol_id(arg["value"]["id"].get<std::string>());
+    if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+      return std::nullopt;
+
+    const symbolt *source = symbol_table_.find_symbol(source_id);
+    if (!source)
+      return std::nullopt;
+
+    const namespacet ns(symbol_table_);
+    typet source_type = ns.follow(source->get_type());
+    if (!source_type.is_array())
+      return std::nullopt;
+    source_type = ns.follow(to_array_type(source_type).subtype());
+    if (!source_type.is_array())
+      return std::nullopt;
+
+    const array_typet &row_type = to_array_type(source_type);
+    if (row_type.size().is_nil() || !row_type.size().is_constant())
+      return std::nullopt;
+    return from_integer(
+      binary2integer(row_type.size().value().c_str(), false),
+      long_long_int_type());
+  }
+
+  if (arg.value("_type", "") != "Name")
     return std::nullopt;
 
   const std::string arg_id =
-    resolve_name_symbol_id(element["args"][0]["id"].get<std::string>());
+    resolve_name_symbol_id(arg["id"].get<std::string>());
   if (arg_id.empty())
     return std::nullopt;
 
@@ -932,7 +977,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   }
 
   const std::string function = config.options.get_option("function");
-  // To verify a specific function, it is necessary to load the definitions of functions it calls.
+  // To verify a specific function, it is necessary to load the definitions of
+  // functions it calls.
   if (!function.empty() && !is_loading_models)
   {
     std::string func_name("");
@@ -1121,9 +1167,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
 
-  // Convert boolean-returning function calls to side-effect expressions when used
-  // in expression contexts (e.g., logical operations). This prevents GOTO generation
-  // failures where code statements appear in boolean expression operands.
+  // Convert boolean-returning function calls to side-effect expressions when
+  // used in expression contexts (e.g., logical operations). This prevents GOTO
+  // generation failures where code statements appear in boolean expression
+  // operands.
   if (
     call_expr.is_code() && call_expr.statement() == "function_call" &&
     is_converting_rhs)
@@ -1188,7 +1235,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (it == param_positions.end())
       {
         // For user-defined functions, unknown kwargs are a TypeError.
-        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently
+        // skip.
         if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
           throw std::runtime_error(
             "Unknown keyword argument: " + arg_name + " in function " +
@@ -1292,7 +1340,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       throw std::runtime_error(msg.str());
     }
 
-    // Fill empty arguments with proper Optional values or None for optional parameters
+    // Fill empty arguments with proper Optional values or None for optional
+    // parameters
     for (size_t i = 0; i < args.size(); ++i)
     {
       if (args[i].is_nil() || args[i].id().empty())
@@ -1358,10 +1407,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // so a struct is passed to a pointer parameter (#4558/#4564).
           if (arg_actual_type.id() == "symbol")
             arg_actual_type = ns.follow(arg_actual_type);
-          // Handle union types: if param is pointer and arg is struct (or symbol
-          // to struct), take address. This is the post-processing pass for
-          // general pointer-to-struct coercion.
-          // NOTE: function_call_expr.cpp also has an earlier coercion pass that
+          // Handle union types: if param is pointer and arg is struct (or
+          // symbol to struct), take address. This is the post-processing pass
+          // for general pointer-to-struct coercion. NOTE:
+          // function_call_expr.cpp also has an earlier coercion pass that
           // specifically handles char[0]* union parameters (str | T pattern).
           // These two mechanisms are complementary: the pass here handles the
           // general case; the earlier pass handles the specific char[0]* union

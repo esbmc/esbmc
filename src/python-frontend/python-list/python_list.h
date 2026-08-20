@@ -292,7 +292,8 @@ public:
   }
 
   /**
-   * @brief Record a single element-type entry for a list in the static type map.
+   * @brief Record a single element-type entry for a list in the static type
+   * map.
    *
    * @param list_symbol_id  Internal symbol identifier of the list.
    * @param elem_id         Symbol identifier of the element, or empty when the
@@ -333,8 +334,8 @@ public:
 
   /**
    * Get the element type for a list at a given index.
-   * If index is not specified or out of bounds, returns the first element's type.
-   * Returns empty typet() if type information is not available.
+   * If index is not specified or out of bounds, returns the first element's
+   * type. Returns empty typet() if type information is not available.
    */
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
@@ -367,14 +368,16 @@ public:
 
   /**
    * @brief Extract and dereference value from a PyObject* expression
-   * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
+   * @param pyobject_expr Expression representing PyObject* (from list_at or
+   * list_pop)
    * @param elem_type The expected element type
    * @param mixed_numeric When true and elem_type is float, the element may be
    *        either an int or a float at runtime (a dynamic index into a mixed
    *        int/float list). The float value is then read by dispatching on the
    *        stored type_id: float elements come from __ESBMC_float_buf, int
    *        elements are promoted from their payload to double.
-   * @return Dereferenced value expression (for floats: __ESBMC_float_buf[item->float_idx])
+   * @return Dereferenced value expression (for floats:
+   * __ESBMC_float_buf[item->float_idx])
    */
   exprt extract_pyobject_value(
     const exprt &pyobject_expr,
@@ -456,7 +459,8 @@ public:
   /**
    * @brief Create a list from a range() call
    * @param converter The python converter instance
-   * @param range_args The arguments to range() (1-3 arguments: stop, or start+stop, or start+stop+step)
+   * @param range_args The arguments to range() (1-3 arguments: stop, or
+   * start+stop, or start+stop+step)
    * @param element The AST node for location information
    * @return Expression representing the list [start, start+step, ..., stop-1]
    * @throws std::runtime_error if range parameters are invalid or too large
@@ -603,10 +607,12 @@ public:
   static void reverse_type_info(const std::string &list_id);
 
   /**
-   * @brief Unpack a list variable into multiple targets, supporting starred expressions.
+   * @brief Unpack a list variable into multiple targets, supporting starred
+   * expressions.
    *
    * Handles assignments like `a, *b, c = lst` where `lst` is a list variable.
-   * Uses __ESBMC_list_at for element access and builds a new list for the starred target.
+   * Uses __ESBMC_list_at for element access and builds a new list for the
+   * starred target.
    *
    * @param ast_node The assignment AST node (for location info and value["id"])
    * @param target   The tuple/list target node containing the target variables
@@ -660,6 +666,16 @@ private:
     long long literal_start,
     long long static_slice_len);
 
+  std::optional<exprt> try_build_row_pointer_view(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
+  std::optional<exprt> try_copy_numpy_pointer_view_slice(
+    const exprt &array,
+    const typet &elem_type,
+    const nlohmann::json &slice_node,
+    long long step_val);
+
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
@@ -697,7 +713,8 @@ private:
   /**
    * @brief Append every element of src onto dst at runtime.
    *
-   * Shared by list concatenation (a + b) and variable-list repetition (lst * n).
+   * Shared by list concatenation (a + b) and variable-list repetition (lst *
+   * n).
    *
    * @param src Source list expression (value or pointer)
    * @param dst Destination list symbol
