@@ -3132,43 +3132,127 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
   return json_utils::is_class(cls, *ast_json) ? cls : std::string();
 }
 
+symbolt *python_converter::mint_retyped_symbol(
+  const symbolt &orig,
+  const std::string &alias_key,
+  const typet &new_type,
+  const locationt &location,
+  const symbol_id &sid,
+  codet &target_block)
+{
+  std::string new_id;
+  unsigned gen = 1;
+  do
+  {
+    new_id = alias_key + "$ret" + std::to_string(gen++);
+  } while (symbol_table_.find_symbol(new_id) != nullptr);
+
+  symbolt new_symbol = create_symbol(
+    location.get_file().as_string(),
+    orig.name.as_string(),
+    new_id,
+    location,
+    new_type);
+  new_symbol.lvalue = true;
+  new_symbol.file_local = orig.file_local;
+  new_symbol.is_extern = false;
+
+  symbolt *new_symbol_ptr = symbol_table_.move_symbol_to_context(new_symbol);
+
+  // Locals need a declaration; module globals are not declared.
+  if (!current_func_name_.empty() && !is_global_variable(sid))
+  {
+    code_declt decl(symbol_expr(*new_symbol_ptr));
+    decl.location() = location;
+    target_block.copy_to_operands(decl);
+  }
+
+  retype_aliases_[alias_key] = new_id;
+  return new_symbol_ptr;
+}
+
+/// The Name a single-target Assign/AnnAssign binds, or a null json.
+static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
+{
+  const std::string stmt_type = ast_node.value("_type", "");
+  nlohmann::json target;
+  if (
+    stmt_type == "Assign" && ast_node.contains("targets") &&
+    ast_node["targets"].size() == 1)
+    target = ast_node["targets"][0];
+  else if (stmt_type == "AnnAssign" && ast_node.contains("target"))
+    target = ast_node["target"];
+
+  if (target.is_object() && target.value("_type", "") == "Name")
+    return target;
+  return nlohmann::json();
+}
+
+bool python_converter::try_tagged_var_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json tag_target = assign_name_target(ast_node);
+  if (tag_target.is_null())
+    return false;
+
+  const std::string name = tag_target["id"].get<std::string>();
+  symbol_id tag_sid = create_symbol_id();
+  tag_sid.set_object(name);
+  const std::string tag_key = tag_sid.to_string();
+
+  // A rebind that already retyped the name away from its tagged slot wins: the
+  // live value is in the retype target, so this is an ordinary assignment to
+  // that symbol (#7075).
+  if (retype_aliases_.count(tag_key) || !dynamic_type_handler_.is_tagged(name))
+    return false;
+
+  if (ast_node.contains("value") && !ast_node["value"].is_null())
+  {
+    const locationt location = get_location_from_decl(ast_node);
+    exprt rhs = get_expr(ast_node["value"]);
+    if (
+      type_handler_.is_numeric_scalar_type(rhs.type()) ||
+      type_handler_.is_string_type(rhs.type()))
+    {
+      dynamic_type_handler_.assign(rhs, location, name, target_block);
+      return true;
+    }
+
+    // The tagged slot's payload is a fixed-width scalar copy, so it cannot
+    // hold a container or an object. Python rebinds the name outright, so give
+    // the new value its own slot and redirect later loads to it, exactly as
+    // the numeric<->string retype does (#7075). Restricted to the
+    // unconditional spine: inside a conditional body retype_aliases_ is
+    // reverted at the join, which would leave later reads observing the stale
+    // tagged value instead of the container.
+    symbolt *tag_symbol =
+      symbol_table_.find_symbol(dynamic_type_handler_.tagged_symbol_id(name));
+    if (
+      tag_symbol && current_class_name_.empty() && loop_body_depth_ == 0 &&
+      block_nesting_ == function_body_depth_ + 1 && !rhs.type().is_empty() &&
+      !rhs.type().is_code())
+    {
+      symbolt *fresh = mint_retyped_symbol(
+        *tag_symbol, tag_key, rhs.type(), location, tag_sid, target_block);
+      code_assignt assign(symbol_expr(*fresh), rhs);
+      assign.location() = location;
+      target_block.copy_to_operands(assign);
+      return true;
+    }
+  }
+
+  throw std::runtime_error(
+    "assigning a value of this type to a dynamically-typed variable "
+    "is not yet supported");
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  {
-    const std::string stmt_type = ast_node.value("_type", "");
-    nlohmann::json tag_target;
-    if (
-      stmt_type == "Assign" && ast_node.contains("targets") &&
-      ast_node["targets"].size() == 1)
-      tag_target = ast_node["targets"][0];
-    else if (stmt_type == "AnnAssign" && ast_node.contains("target"))
-      tag_target = ast_node["target"];
-
-    if (tag_target.is_object() && tag_target.value("_type", "") == "Name")
-    {
-      const std::string name = tag_target["id"].get<std::string>();
-      if (dynamic_type_handler_.is_tagged(name))
-      {
-        if (ast_node.contains("value") && !ast_node["value"].is_null())
-        {
-          exprt rhs = get_expr(ast_node["value"]);
-          if (
-            type_handler_.is_numeric_scalar_type(rhs.type()) ||
-            type_handler_.is_string_type(rhs.type()))
-          {
-            dynamic_type_handler_.assign(
-              rhs, get_location_from_decl(ast_node), name, target_block);
-            return;
-          }
-        }
-        throw std::runtime_error(
-          "assigning a value of this type to a dynamically-typed variable "
-          "is not yet supported");
-      }
-    }
-  }
+  if (try_tagged_var_assign(ast_node, target_block))
+    return;
 
   // Extract type information
   auto [lhs_type, element_type] = extract_type_info(ast_node);
@@ -3956,37 +4040,9 @@ void python_converter::get_var_assign(
           type_handler_, lhs.type(), rhs.type()) ||
         tuple_to_nontuple_rebind)
       {
-        std::string new_id;
-        unsigned gen = 1;
-        do
-        {
-          new_id = orig_id + "$ret" + std::to_string(gen++);
-        } while (symbol_table_.find_symbol(new_id) != nullptr);
+        symbolt *new_symbol_ptr = mint_retyped_symbol(
+          *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);
 
-        const std::string module_name = location_begin.get_file().as_string();
-        symbolt new_symbol = create_symbol(
-          module_name,
-          lhs_symbol->name.as_string(),
-          new_id,
-          location_begin,
-          rhs.type());
-        new_symbol.lvalue = true;
-        new_symbol.file_local = lhs_symbol->file_local;
-        new_symbol.is_extern = false;
-
-        symbolt *new_symbol_ptr =
-          symbol_table_.move_symbol_to_context(new_symbol);
-
-        // Locals need a declaration; module globals are not declared (matching
-        // the symbol-creation path above).
-        if (!current_func_name_.empty() && !is_global_variable(sid))
-        {
-          code_declt decl(symbol_expr(*new_symbol_ptr));
-          decl.location() = location_begin;
-          target_block.copy_to_operands(decl);
-        }
-
-        retype_aliases_[orig_id] = new_id;
         lhs_symbol = new_symbol_ptr;
         lhs = symbol_expr(*new_symbol_ptr);
         current_lhs = &lhs;

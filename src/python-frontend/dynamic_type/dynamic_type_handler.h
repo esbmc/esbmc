@@ -44,6 +44,12 @@ public:
   bool is_tagged(const std::string &name) const;
 
   /**
+   * @brief The id of the symbol that currently holds `name`'s tagged object,
+   * following the alias created for a pre-existing variable
+   */
+  std::string tagged_symbol_id(const std::string &name) const;
+
+  /**
    * @brief Fills in the tagged-object fields for `name` from an
    * already-converted value
    */

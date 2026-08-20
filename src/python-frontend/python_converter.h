@@ -837,6 +837,23 @@ private:
     exprt &rhs,
     codet &target_block);
 
+  /// Handles an assignment whose target is a dynamically-typed (tagged)
+  /// variable, returning false when the target is not tagged and the caller
+  /// should fall through to the ordinary assignment path.
+  bool
+  try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
+  /// declares it in `target_block` when it is a local, and records the
+  /// redirection in retype_aliases_ under `alias_key`.
+  symbolt *mint_retyped_symbol(
+    const symbolt &orig,
+    const std::string &alias_key,
+    const typet &new_type,
+    const locationt &location,
+    const symbol_id &sid,
+    codet &target_block);
+
   void handle_list_literal_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
