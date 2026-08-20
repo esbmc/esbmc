@@ -4,6 +4,7 @@
 #define MAX 500
 
 #include "definitions.h"
+#include "memory" /* std::allocator, for the Allocator parameter */
 #include "utility"
 #include "iterator"
 #include "iostream"
@@ -17,7 +18,8 @@ namespace std
 {
 template <
   class Key,
-  class Compare = less<Key> /*,class Allocator = allocator<Key> */>
+  class Compare = less<Key>,
+  class Allocator = allocator<Key> >
 class multiset
 {
 public:
@@ -777,7 +779,10 @@ public:
   }
 };
 
-template <class Key, class Compare = less<Key> >
+template <
+  class Key,
+  class Compare = less<Key>,
+  class Allocator = allocator<Key> >
 class set
 {
 public:
