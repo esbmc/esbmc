@@ -1103,6 +1103,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           symbol = retyped;
       }
 
+      std::set<std::string> seen_aliases;
+      auto numpy_alias =
+        numpy_array_storage_aliases_.find(symbol->id.as_string());
+      while (numpy_alias != numpy_array_storage_aliases_.end() &&
+             seen_aliases.insert(numpy_alias->first).second)
+      {
+        if (symbolt *storage = symbol_table_.find_symbol(numpy_alias->second))
+          symbol = storage;
+        numpy_alias = numpy_array_storage_aliases_.find(symbol->id.as_string());
+      }
+
       // Also resolve reads through a permanent tagged-object alias, if a
       // branch join flagged this variable.
       dynamic_type_handler_.resolve_read(symbol);

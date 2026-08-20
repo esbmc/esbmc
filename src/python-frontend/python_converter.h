@@ -1475,6 +1475,7 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
+  std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
   // A pointer-backed numpy view's element count (ADR-NP-003 etapa 2, 1-D
   // slice views): __ESBMC_get_object_size on a pointer reports the base
   // object's remaining size from that offset, not the view's own logical

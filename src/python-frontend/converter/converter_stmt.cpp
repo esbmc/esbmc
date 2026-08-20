@@ -2004,13 +2004,29 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
+  auto clear_storage_aliases_for_lhs = [&]() {
+    numpy_array_storage_aliases_.erase(lhs_id);
+    for (auto it = numpy_array_storage_aliases_.begin();
+         it != numpy_array_storage_aliases_.end();)
+    {
+      if (it->second == lhs_id)
+        it = numpy_array_storage_aliases_.erase(it);
+      else
+        ++it;
+    }
+  };
+
   if (rhs_node.value("_type", "") == "Name" && rhs_node.contains("id"))
   {
     const std::string rhs_id =
       resolve_name_symbol_id(rhs_node["id"].get<std::string>());
+    if (rhs_id == lhs_id)
+      return;
+
     auto view_it = numpy_view_copy_sources_.find(rhs_id);
     if (view_it != numpy_view_copy_sources_.end())
     {
+      clear_storage_aliases_for_lhs();
       numpy_view_copy_sources_[lhs_id] = view_it->second;
       numpy_array_symbols_.insert(lhs_id);
       return;
@@ -2019,9 +2035,15 @@ void python_converter::update_numpy_array_binding(
     {
       clear_numpy_view_copy(lhs);
       numpy_array_symbols_.insert(lhs_id);
+      auto alias_it = numpy_array_storage_aliases_.find(rhs_id);
+      numpy_array_storage_aliases_[lhs_id] =
+        alias_it != numpy_array_storage_aliases_.end() ? alias_it->second
+                                                       : rhs_id;
       return;
     }
   }
+
+  clear_storage_aliases_for_lhs();
 
   if (rhs_node.value("_type", "") == "Call")
   {
