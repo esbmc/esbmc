@@ -223,6 +223,16 @@ bool dynamic_type_handler::is_tagged(const std::string &name) const
   return sym && type_handler_.is_tagged_scalar_type(sym->get_type());
 }
 
+std::string
+dynamic_type_handler::tagged_symbol_id(const std::string &name) const
+{
+  symbol_id sid = converter_.create_symbol_id();
+  sid.set_object(name);
+  const std::string tag_id = sid.to_string();
+  auto alias = aliases_.find(tag_id);
+  return alias != aliases_.end() ? alias->second : tag_id;
+}
+
 std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   symbolt &tag_symbol,
   const exprt &rhs,
@@ -290,13 +300,8 @@ void dynamic_type_handler::assign(
   const std::string &name,
   codet &target_block)
 {
-  symbol_id sid = converter_.create_symbol_id();
-  sid.set_object(name);
-  std::string tag_id = sid.to_string();
-  auto alias = aliases_.find(tag_id);
-  if (alias != aliases_.end())
-    tag_id = alias->second;
-  symbolt *tag_symbol = converter_.symbol_table().find_symbol(tag_id);
+  symbolt *tag_symbol =
+    converter_.symbol_table().find_symbol(tagged_symbol_id(name));
   assert(
     tag_symbol &&
     "tagged scalar symbol must already be declared before its branches are "
