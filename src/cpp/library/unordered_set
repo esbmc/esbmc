@@ -5,6 +5,7 @@
 #if __cplusplus >= 201103L
 
 #include <utility>
+#include <memory> /* std::allocator, for the Allocator parameter */
 
 namespace std {
 
@@ -410,13 +411,15 @@ public:
 // [unord.multiset]: same storage as unordered_set, but insert never rejects an
 // equivalent key, so find/count/equal_range have to scan for every match.
 template<typename Key, typename Hash = esbmc_hash<Key>,
-         typename KeyEqual = esbmc_equal_to<Key>>
+         typename KeyEqual = esbmc_equal_to<Key>,
+         typename Allocator = allocator<Key>>
 class unordered_multiset {
 public:
     typedef Key key_type;
     typedef Key value_type;
     typedef Hash hasher;
     typedef KeyEqual key_equal;
+    typedef Allocator allocator_type;
     typedef value_type& reference;
     typedef const value_type& const_reference;
     typedef value_type* pointer;
