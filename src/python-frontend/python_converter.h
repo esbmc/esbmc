@@ -812,6 +812,12 @@ private:
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
+  /// Types an unannotated (Any) parameter from its default value, when that
+  /// default carries a usable concrete type.
+  void upgrade_param_type_from_default(
+    code_typet::argumentt &param_arg,
+    const exprt &default_expr);
+
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
