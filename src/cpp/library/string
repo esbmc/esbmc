@@ -1073,6 +1073,21 @@ typedef basic_string<wchar_t> wstring;
 
 namespace std
 {
+/* strcpy scans to a NUL, which over a symbolic buffer never converges: copying
+ * one std::string into another did not terminate. The trip count here is the
+ * fixed buffer size, which a string can never exceed. */
+static void __esbmc_string_copy(char *dst, const char *src, size_t n)
+{
+__ESBMC_HIDE:
+  for (size_t i = 0; i < STRING_CAPACITY; i++)
+  {
+    if (i >= n)
+      break;
+    dst[i] = src[i];
+  }
+  dst[n] = '\0';
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>::basic_string()
 {
@@ -1510,7 +1525,7 @@ basic_string<CharT, Traits, Alloc>::operator=(
 {
 __ESBMC_HIDE:
   this->_size = str.length();
-  strcpy(this->str, str.str);
+  __esbmc_string_copy(this->str, str.str, this->_size);
   return *this;
 }
 
@@ -1523,7 +1538,7 @@ __ESBMC_HIDE:
   if (this == &str)
     return *this;
   this->_size = str.length();
-  strcpy(this->str, str.str);
+  __esbmc_string_copy(this->str, str.str, this->_size);
   return *this;
 }
 
@@ -1929,11 +1944,21 @@ static size_t __esbmc_string_find(
 __ESBMC_HIDE:
   if (pos > hlen || nlen > hlen - pos)
     return (size_t)-1;
-  for (size_t xpos = pos; xpos + nlen <= hlen; xpos++)
+  /* Both trip counts are the fixed buffer size, and both counters start at a
+   * concrete 0: a bound taken from hlen/nlen is symbolic, and a counter that
+   * starts at the symbolic pos can wrap, so neither loop would converge. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t xpos = pos + k;
+    if (xpos + nlen > hlen)
+      break;
     size_t i = 0;
-    while (i < nlen && hay[xpos + i] == needle[i])
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (i >= nlen || hay[xpos + i] != needle[i])
+        break;
       i++;
+    }
     if (i == nlen)
       return xpos;
   }
@@ -2493,10 +2518,21 @@ __ESBMC_HIDE:
   size_t slen = strlen(s);
   if (pos >= len || slen == 0)
     return npos;
-  for (size_t i = pos; i < len; i++)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2511,10 +2547,21 @@ __ESBMC_HIDE:
   size_t slen = s.length();
   if (pos >= len || slen == 0)
     return npos;
-  for (size_t i = pos; i < len; i++)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2526,9 +2573,16 @@ __ESBMC_HIDE:
   size_t len = this->length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip count from 0: len is symbolic and a counter starting
+   * at the symbolic pos can wrap. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     if (this->str[i] == c)
       return i;
+  }
   return npos;
 }
 
@@ -2543,15 +2597,24 @@ __ESBMC_HIDE:
   size_t slen = s.length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     bool found = false;
-    for (size_t j = 0; j < slen; j++)
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
       {
         found = true;
         break;
       }
+    }
     if (!found)
       return i;
   }
@@ -2569,15 +2632,24 @@ __ESBMC_HIDE:
   size_t slen = strlen(s);
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     bool found = false;
-    for (size_t j = 0; j < slen; j++)
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
       {
         found = true;
         break;
       }
+    }
     if (!found)
       return i;
   }
@@ -2592,9 +2664,16 @@ __ESBMC_HIDE:
   size_t len = this->length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip count from 0: len is symbolic and a counter starting
+   * at the symbolic pos can wrap. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     if (this->str[i] != c)
       return i;
+  }
   return npos;
 }
 
@@ -2610,10 +2689,21 @@ __ESBMC_HIDE:
   if (len == 0 || slen == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts: start and slen are symbolic, and a reverse
+   * counter from start can wrap below zero as a size_t. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2629,10 +2719,21 @@ __ESBMC_HIDE:
   if (len == 0 || slen == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts: start and slen are symbolic, and a reverse
+   * counter from start can wrap below zero as a size_t. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2651,9 +2752,15 @@ __ESBMC_HIDE:
   if (len == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
+  /* Concrete trip count; see the note on find_last_of above. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
     if (this->str[i] == c)
       return i;
+  }
   return npos;
 }
 
@@ -2661,12 +2768,23 @@ template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::rfind(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  int i;
-  int len = this->length();
-  for (i = len; i > 0; i--)
+  /* [string.rfind]: the highest position at or before pos holding c. The
+   * previous loop started at str[len] -- the terminator, one past the last
+   * character -- stopped before index 0, and ignored pos entirely, so
+   * rfind('a') on "abc" reported npos. */
+  size_t len = this->length();
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
     if (this->str[i] == c)
       return i;
-  return npos; // Return npos when the character is not found
+  }
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2803,20 +2921,26 @@ basic_string<CharT, Traits, Alloc> operator+(
   basic_string<CharT, Traits, Alloc> lhs,
   basic_string<CharT, Traits, Alloc> rhs)
 {
-  int totalLength = lhs.size();
-  totalLength += rhs.size();
-  int i, j, k;
+  /* Concrete trip counts: both lengths are symbolic, so the original
+   * loops never converged and `a + b` did not terminate. */
+  size_t llen = lhs.size();
+  size_t rlen = rhs.size();
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= llen)
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  for (j = i, k = 0; j < totalLength; j++, k++)
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[j] = rhs.str[k];
+    if (k >= rlen)
+      break;
+    result.str[n++] = rhs.str[k];
   }
-  result.str[j] = '\0';
-  result._size = totalLength;
+  result.str[n] = '\0';
+  result._size = n;
   return result;
 }
 
@@ -2824,20 +2948,26 @@ template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>
 operator+(basic_string<CharT, Traits, Alloc> lhs, char *rhs)
 {
-  int totalLength = lhs.size();
-  totalLength += strlen(rhs);
-  int i, j, k;
+  /* Concrete trip counts: both lengths are symbolic, so the original
+   * loops never converged and `a + b` did not terminate. */
+  size_t llen = lhs.size();
+  size_t rlen = strlen(rhs);
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= llen)
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  for (j = i, k = 0; j < totalLength; j++, k++)
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[j] = rhs[k];
+    if (k >= rlen)
+      break;
+    result.str[n++] = rhs[k];
   }
-  result.str[j] = '\0';
-  result._size = totalLength;
+  result.str[n] = '\0';
+  result._size = n;
   return result;
 }
 
@@ -2849,13 +2979,17 @@ operator+(basic_string<CharT, Traits, Alloc> lhs, char rhc)
   totalLength += 1;
   int i;
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  /* Concrete trip count; lhs.size() is symbolic. */
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= lhs.size())
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  result.str[i] = rhc;
-  result.str[i + 1] = '\0';
-  result._size = totalLength;
+  result.str[n] = rhc;
+  result.str[n + 1] = '\0';
+  result._size = n + 1;
   return result;
 }
 
