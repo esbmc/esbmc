@@ -497,7 +497,9 @@ struct is_reference : integral_constant<bool, is_lvalue_reference<T>::value ||
 // [meta.unary.comp]: an object type is any type that is not a function type,
 // not a reference type, and not cv void.
 /* [meta.unary.comp]: a scalar type is an arithmetic type, an enumeration, a
- * pointer, a pointer to member, or nullptr_t, possibly cv-qualified. */
+ * pointer, a pointer to member, or nullptr_t, possibly cv-qualified. Guarded
+ * because is_null_pointer -- and the trait itself -- are C++11. */
+#if __cplusplus >= 201103L
 template <class T>
 struct is_scalar
   : integral_constant<
@@ -506,6 +508,7 @@ struct is_scalar
         is_member_pointer<T>::value || is_null_pointer<T>::value>
 {
 };
+#endif
 
 template <class T>
 struct is_object
