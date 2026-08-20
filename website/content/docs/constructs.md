@@ -83,9 +83,21 @@ The same macro lets a source tree tell an ESBMC run from an ordinary compile:
 
 ```c
 #ifdef __ESBMC_execution
+#  include <esbmc.h>
+#endif
+
+int f(unsigned len) {
+#ifdef __ESBMC_execution
     ESBMC_assume(len < 16);   /* only under verification */
 #endif
+    return len;
+}
 ```
+
+The `#include` has to sit inside the guard as well: the header `#error`s when
+`__ESBMC_execution` is undefined, so an unguarded include would break exactly
+the ordinary compile the guard exists to protect. Code that is compiled only by
+ESBMC can use the `__ESBMC_`-prefixed intrinsics directly and skip the header.
 
 `__ESBMC_alloca` is the one entry in that table that is not an injected
 declaration: ESBMC passes `-D__ESBMC_alloca=__builtin_alloca` to clang, so it
@@ -250,8 +262,26 @@ competition needs no adaptation:
 | `__VERIFIER_nondet_X()` | `nondet_X()` |
 | `__VERIFIER_assume(int)` | `__ESBMC_assume` |
 | `__VERIFIER_atomic_begin()` / `__VERIFIER_atomic_end()` | `__ESBMC_atomic_begin` / `__ESBMC_atomic_end` |
-| `__VERIFIER_error()` | error sentinel under `--enable-unreachability-intrinsic` |
+| `__VERIFIER_error()` | Asserts false at the call (see below) |
 | `__VERIFIER_nondet_memory(p, n)` | (no ESBMC-prefixed spelling) |
+
+`__VERIFIER_error()` and `reach_error()` assert false at the call site on their
+own — no flag required. What `--enable-unreachability-intrinsic` adds is that a
+body the *program itself* supplies for either name is skipped, so the violation
+is reported at the call rather than inside that body. Without the flag, a
+program that defines its own `__VERIFIER_error` gets its definition called and
+no assertion:
+
+```c
+#include <stdio.h>
+void __VERIFIER_error(void) { printf("boom\n"); }   /* own body */
+int main() { int x = nondet_int(); if (x == 42) __VERIFIER_error(); return 0; }
+```
+
+```sh
+esbmc file.c                                     # VERIFICATION SUCCESSFUL (body runs)
+esbmc file.c --enable-unreachability-intrinsic   # VERIFICATION FAILED (sentinel)
+```
 
 ## The memory model
 
@@ -473,6 +503,20 @@ int main() {
 }
 ```
 
+{{< callout type="warning" >}} Two preconditions are checked by assertions
+inside ESBMC, so violating either **aborts the run** rather than producing a
+diagnostic or a counterexample:
+
+- **The two pointee types must have the same width.** `__ESBMC_bitcast(&u, &d)`
+  for a 4-byte `u` and an 8-byte `d` trips
+  `type->get_width() == from_->type->get_width()` in `bitcast2t`.
+- **Each argument must resolve to exactly one object.** A pointer that may
+  address either of two objects trips `internal_deref_items.size() == 1` in
+  `run_intrinsic`.
+
+Prefer `memcpy` when either condition is not statically guaranteed.
+{{< /callout >}}
+
 ## Concurrency
 
 ```c
@@ -536,6 +580,13 @@ The macro declares `__ESBMC_overflow_result` as a packed
 `struct { _Bool overflow; type result; }` together with
 `__ESBMC_overflow_result_plus`, `_minus`, `_mult`, `_shl` (all binary) and
 `_unary_minus`.
+
+{{< callout type="warning" >}} The typedef name is fixed, so **at most one
+`DEFINE_ESBMC_OVERFLOW_TYPE` per translation unit**. A second one is a
+`typedef redefinition with different types` error — including a second
+instantiation for the *same* type, since each expansion defines a fresh
+anonymous struct. To check more than one operand type, split the checks across
+translation units. {{< /callout >}}
 
 ## Floating point and endianness
 
