@@ -1933,11 +1933,21 @@ static size_t __esbmc_string_find(
 __ESBMC_HIDE:
   if (pos > hlen || nlen > hlen - pos)
     return (size_t)-1;
-  for (size_t xpos = pos; xpos + nlen <= hlen; xpos++)
+  /* Both trip counts are the fixed buffer size, and both counters start at a
+   * concrete 0: a bound taken from hlen/nlen is symbolic, and a counter that
+   * starts at the symbolic pos can wrap, so neither loop would converge. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t xpos = pos + k;
+    if (xpos + nlen > hlen)
+      break;
     size_t i = 0;
-    while (i < nlen && hay[xpos + i] == needle[i])
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (i >= nlen || hay[xpos + i] != needle[i])
+        break;
       i++;
+    }
     if (i == nlen)
       return xpos;
   }
