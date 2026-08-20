@@ -2507,10 +2507,21 @@ __ESBMC_HIDE:
   size_t slen = strlen(s);
   if (pos >= len || slen == 0)
     return npos;
-  for (size_t i = pos; i < len; i++)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2525,10 +2536,21 @@ __ESBMC_HIDE:
   size_t slen = s.length();
   if (pos >= len || slen == 0)
     return npos;
-  for (size_t i = pos; i < len; i++)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2540,9 +2562,16 @@ __ESBMC_HIDE:
   size_t len = this->length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip count from 0: len is symbolic and a counter starting
+   * at the symbolic pos can wrap. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     if (this->str[i] == c)
       return i;
+  }
   return npos;
 }
 
@@ -2557,15 +2586,24 @@ __ESBMC_HIDE:
   size_t slen = s.length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     bool found = false;
-    for (size_t j = 0; j < slen; j++)
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
       {
         found = true;
         break;
       }
+    }
     if (!found)
       return i;
   }
@@ -2583,15 +2621,24 @@ __ESBMC_HIDE:
   size_t slen = strlen(s);
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     bool found = false;
-    for (size_t j = 0; j < slen; j++)
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
       {
         found = true;
         break;
       }
+    }
     if (!found)
       return i;
   }
@@ -2606,9 +2653,16 @@ __ESBMC_HIDE:
   size_t len = this->length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip count from 0: len is symbolic and a counter starting
+   * at the symbolic pos can wrap. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     if (this->str[i] != c)
       return i;
+  }
   return npos;
 }
 
