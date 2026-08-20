@@ -419,14 +419,15 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
   const nlohmann::json &arg = element["args"][0];
   if (
     std::optional<exprt> subscript_len =
-      try_get_numpy_subscript_pointer_view_len(arg))
+      try_get_numpy_subscript_pointer_view_len(arg, element))
     return subscript_len;
 
   return try_get_numpy_named_pointer_view_len(arg);
 }
 
 std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
-  const nlohmann::json &arg) const
+  const nlohmann::json &arg,
+  const nlohmann::json &element) const
 {
   if (
     arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
@@ -461,6 +462,9 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
     std::ostringstream msg;
     msg << "IndexError: index " << *literal_index
         << " is out of bounds for axis 0 with size " << row_count;
+    const locationt location = get_location_from_decl(element);
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
     throw std::runtime_error(msg.str());
   }
 

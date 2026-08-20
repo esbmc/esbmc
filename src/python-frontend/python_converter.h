@@ -560,8 +560,9 @@ private:
   try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
   std::optional<exprt>
   try_get_numpy_named_pointer_view_len(const nlohmann::json &arg) const;
-  std::optional<exprt>
-  try_get_numpy_subscript_pointer_view_len(const nlohmann::json &arg) const;
+  std::optional<exprt> try_get_numpy_subscript_pointer_view_len(
+    const nlohmann::json &arg,
+    const nlohmann::json &element) const;
 
   // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
   // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
