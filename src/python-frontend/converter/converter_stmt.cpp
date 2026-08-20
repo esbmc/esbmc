@@ -93,6 +93,20 @@ bool ast_contains_call(const nlohmann::json &n)
   return false;
 }
 
+bool is_literal_int_node(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return true;
+
+  return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+         node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+         node["operand"].value("_type", "") == "Constant" &&
+         node["operand"].contains("value") &&
+         node["operand"]["value"].is_number_integer();
+}
+
 bool ast_imports_numpy_module(const nlohmann::json &ast)
 {
   if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
@@ -1902,15 +1916,8 @@ void python_converter::record_numpy_view_copy(
     return;
   }
 
-  std::string storage_id = source_id;
-  std::set<std::string> seen_aliases;
-  auto alias_it = numpy_array_storage_aliases_.find(storage_id);
-  while (alias_it != numpy_array_storage_aliases_.end() &&
-         seen_aliases.insert(alias_it->first).second)
-  {
-    storage_id = alias_it->second;
-    alias_it = numpy_array_storage_aliases_.find(storage_id);
-  }
+  const std::string storage_id =
+    resolve_numpy_array_storage_alias_id(source_id);
 
   if (numpy_array_symbols_.count(storage_id) == 0)
   {
@@ -1921,6 +1928,32 @@ void python_converter::record_numpy_view_copy(
   const std::string lhs_id = lhs.identifier().as_string();
   numpy_view_copy_sources_[lhs_id] = storage_id;
   numpy_array_symbols_.insert(lhs_id);
+}
+
+symbolt *
+python_converter::resolve_numpy_array_storage_alias(symbolt *symbol) const
+{
+  if (!symbol)
+    return symbol;
+
+  symbolt *storage = symbol_table_.find_symbol(
+    resolve_numpy_array_storage_alias_id(symbol->id.as_string()));
+  return storage ? storage : symbol;
+}
+
+std::string python_converter::resolve_numpy_array_storage_alias_id(
+  const std::string &symbol_id) const
+{
+  std::string storage_id = symbol_id;
+  std::set<std::string> seen_aliases;
+  auto alias_it = numpy_array_storage_aliases_.find(storage_id);
+  while (alias_it != numpy_array_storage_aliases_.end() &&
+         seen_aliases.insert(alias_it->first).second)
+  {
+    storage_id = alias_it->second;
+    alias_it = numpy_array_storage_aliases_.find(storage_id);
+  }
+  return storage_id;
 }
 
 void python_converter::clear_numpy_view_copy(const exprt &lhs)
@@ -2014,18 +2047,6 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
-  auto clear_storage_aliases_for_lhs = [&]() {
-    numpy_array_storage_aliases_.erase(lhs_id);
-    for (auto it = numpy_array_storage_aliases_.begin();
-         it != numpy_array_storage_aliases_.end();)
-    {
-      if (it->second == lhs_id)
-        it = numpy_array_storage_aliases_.erase(it);
-      else
-        ++it;
-    }
-  };
-
   if (rhs_node.value("_type", "") == "Name" && rhs_node.contains("id"))
   {
     const std::string rhs_id =
@@ -2036,7 +2057,7 @@ void python_converter::update_numpy_array_binding(
     auto view_it = numpy_view_copy_sources_.find(rhs_id);
     if (view_it != numpy_view_copy_sources_.end())
     {
-      clear_storage_aliases_for_lhs();
+      clear_numpy_array_storage_aliases_for(lhs_id);
       numpy_view_copy_sources_[lhs_id] = view_it->second;
       numpy_array_symbols_.insert(lhs_id);
       return;
@@ -2045,15 +2066,12 @@ void python_converter::update_numpy_array_binding(
     {
       clear_numpy_view_copy(lhs);
       numpy_array_symbols_.insert(lhs_id);
-      auto alias_it = numpy_array_storage_aliases_.find(rhs_id);
-      numpy_array_storage_aliases_[lhs_id] =
-        alias_it != numpy_array_storage_aliases_.end() ? alias_it->second
-                                                       : rhs_id;
+      bind_numpy_array_storage_alias(lhs_id, rhs_id);
       return;
     }
   }
 
-  clear_storage_aliases_for_lhs();
+  clear_numpy_array_storage_aliases_for(lhs_id);
 
   if (rhs_node.value("_type", "") == "Call")
   {
@@ -2087,6 +2105,68 @@ void python_converter::update_numpy_array_binding(
     numpy_array_symbols_.insert(lhs_id);
   else
     numpy_array_symbols_.erase(lhs_id);
+}
+
+void python_converter::clear_numpy_array_storage_aliases_for(
+  const std::string &symbol_id)
+{
+  numpy_array_storage_aliases_.erase(symbol_id);
+  for (auto it = numpy_array_storage_aliases_.begin();
+       it != numpy_array_storage_aliases_.end();)
+  {
+    if (it->second == symbol_id)
+      it = numpy_array_storage_aliases_.erase(it);
+    else
+      ++it;
+  }
+}
+
+void python_converter::bind_numpy_array_storage_alias(
+  const std::string &lhs_id,
+  const std::string &rhs_id)
+{
+  numpy_array_storage_aliases_[lhs_id] =
+    resolve_numpy_array_storage_alias_id(rhs_id);
+}
+
+bool python_converter::should_rebuild_cached_numpy_row_subscript_rhs(
+  const nlohmann::json &rhs_node) const
+{
+  if (
+    !has_cached_any_subscript_rhs_ ||
+    rhs_node.value("_type", "") != "Subscript")
+    return false;
+
+  if (
+    !rhs_node.contains("value") ||
+    rhs_node["value"].value("_type", "") != "Name" ||
+    !rhs_node.contains("slice") || !is_literal_int_node(rhs_node["slice"]))
+    return false;
+
+  const std::string source_id =
+    resolve_name_symbol_id(rhs_node["value"]["id"].get<std::string>());
+  return is_tracked_2d_numpy_array_symbol(source_id);
+}
+
+bool python_converter::is_tracked_2d_numpy_array_symbol(
+  const std::string &source_id) const
+{
+  if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+    return false;
+
+  const symbolt *source = symbol_table_.find_symbol(source_id);
+  if (!source)
+    return false;
+
+  const namespacet ns(symbol_table_);
+  typet source_type = ns.follow(source->get_type());
+  if (!source_type.is_array())
+    return false;
+  source_type = ns.follow(to_array_type(source_type).subtype());
+  if (!source_type.is_array())
+    return false;
+  source_type = ns.follow(to_array_type(source_type).subtype());
+  return !source_type.is_array();
 }
 
 std::string python_converter::infer_type_from_any_annotation(
@@ -3956,52 +4036,10 @@ void python_converter::get_var_assign(
   bool has_value = false;
   if (!effective_ast_node["value"].is_null())
   {
-    auto should_rebuild_cached_subscript_rhs = [&]() {
-      if (
-        !has_cached_any_subscript_rhs_ ||
-        effective_ast_node["value"].value("_type", "") != "Subscript")
-        return false;
-
-      const nlohmann::json &subscript = effective_ast_node["value"];
-      if (
-        !subscript.contains("value") ||
-        subscript["value"].value("_type", "") != "Name" ||
-        !subscript.contains("slice"))
-        return false;
-
-      const nlohmann::json &slice = subscript["slice"];
-      const bool literal_index =
-        (slice.value("_type", "") == "Constant" && slice.contains("value") &&
-         slice["value"].is_number_integer()) ||
-        (slice.value("_type", "") == "UnaryOp" && slice.contains("op") &&
-         slice["op"].value("_type", "") == "USub" &&
-         slice.contains("operand") &&
-         slice["operand"].value("_type", "") == "Constant" &&
-         slice["operand"].contains("value") &&
-         slice["operand"]["value"].is_number_integer());
-      if (!literal_index)
-        return false;
-
-      const std::string source_id =
-        resolve_name_symbol_id(subscript["value"]["id"].get<std::string>());
-      if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
-        return false;
-
-      const symbolt *source = symbol_table_.find_symbol(source_id);
-      if (!source)
-        return false;
-
-      typet source_type = ns.follow(source->get_type());
-      if (!source_type.is_array())
-        return false;
-      source_type = ns.follow(to_array_type(source_type).subtype());
-      if (!source_type.is_array())
-        return false;
-      source_type = ns.follow(to_array_type(source_type).subtype());
-      return !source_type.is_array();
-    };
-
-    if (has_cached_any_subscript_rhs_ && !should_rebuild_cached_subscript_rhs())
+    if (
+      has_cached_any_subscript_rhs_ &&
+      !should_rebuild_cached_numpy_row_subscript_rhs(
+        effective_ast_node["value"]))
     {
       // Already converted once by resolve_any_subscript_array_type's type
       // probe; reuse it rather than converting the same Subscript node (and

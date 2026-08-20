@@ -70,6 +70,48 @@ std::optional<std::size_t> get_keyword_literal_size(
   return std::nullopt;
 }
 
+std::optional<long long> get_literal_int_index(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return node["value"].get<long long>();
+
+  if (
+    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+    node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+    node["operand"].value("_type", "") == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<long long>();
+
+  return std::nullopt;
+}
+
+std::optional<std::pair<long long, long long>>
+get_fixed_2d_array_shape(const symbolt &source, const namespacet &ns)
+{
+  typet source_type = ns.follow(source.get_type());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &array_type = to_array_type(source_type);
+  if (array_type.size().is_nil() || !array_type.size().is_constant())
+    return std::nullopt;
+
+  source_type = ns.follow(array_type.subtype());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_type = to_array_type(source_type);
+  if (row_type.size().is_nil() || !row_type.size().is_constant())
+    return std::nullopt;
+
+  return std::make_pair(
+    binary2integer(array_type.size().value().c_str(), false).to_int64(),
+    binary2integer(row_type.size().value().c_str(), false).to_int64());
+}
+
 bool is_numpy_random_attr(const nlohmann::json &func, const std::string &name)
 {
   if (
@@ -376,67 +418,58 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
 
   const nlohmann::json &arg = element["args"][0];
   if (
-    arg.value("_type", "") == "Subscript" && arg.contains("value") &&
-    arg["value"].value("_type", "") == "Name")
+    std::optional<exprt> subscript_len =
+      try_get_numpy_subscript_pointer_view_len(arg))
+    return subscript_len;
+
+  return try_get_numpy_named_pointer_view_len(arg);
+}
+
+std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
+  const nlohmann::json &arg) const
+{
+  if (
+    arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
+    arg["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  std::optional<long long> literal_index = get_literal_int_index(arg["slice"]);
+  if (!literal_index)
+    return std::nullopt;
+
+  const std::string source_id =
+    resolve_name_symbol_id(arg["value"]["id"].get<std::string>());
+  if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+    return std::nullopt;
+
+  const symbolt *source = symbol_table_.find_symbol(source_id);
+  if (!source)
+    return std::nullopt;
+
+  const namespacet ns(symbol_table_);
+  std::optional<std::pair<long long, long long>> shape =
+    get_fixed_2d_array_shape(*source, ns);
+  if (!shape)
+    return std::nullopt;
+
+  long long row_index = *literal_index;
+  const long long row_count = shape->first;
+  if (row_index < 0)
+    row_index += row_count;
+  if (row_index < 0 || row_index >= row_count)
   {
-    const nlohmann::json &slice = arg["slice"];
-    std::optional<long long> literal_index;
-    if (
-      slice.value("_type", "") == "Constant" && slice.contains("value") &&
-      slice["value"].is_number_integer())
-      literal_index = slice["value"].get<long long>();
-    else if (
-      slice.value("_type", "") == "UnaryOp" && slice.contains("op") &&
-      slice["op"].value("_type", "") == "USub" && slice.contains("operand") &&
-      slice["operand"].value("_type", "") == "Constant" &&
-      slice["operand"].contains("value") &&
-      slice["operand"]["value"].is_number_integer())
-      literal_index = -slice["operand"]["value"].get<long long>();
-
-    if (!literal_index)
-      return std::nullopt;
-
-    const std::string source_id =
-      resolve_name_symbol_id(arg["value"]["id"].get<std::string>());
-    if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
-      return std::nullopt;
-
-    const symbolt *source = symbol_table_.find_symbol(source_id);
-    if (!source)
-      return std::nullopt;
-
-    const namespacet ns(symbol_table_);
-    typet source_type = ns.follow(source->get_type());
-    if (!source_type.is_array())
-      return std::nullopt;
-    const array_typet &array_type = to_array_type(source_type);
-    if (array_type.size().is_nil() || !array_type.size().is_constant())
-      return std::nullopt;
-    long long row_index = *literal_index;
-    const long long row_count =
-      binary2integer(array_type.size().value().c_str(), false).to_int64();
-    if (row_index < 0)
-      row_index += row_count;
-    if (row_index < 0 || row_index >= row_count)
-    {
-      std::ostringstream msg;
-      msg << "IndexError: index " << *literal_index
-          << " is out of bounds for axis 0 with size " << row_count;
-      throw std::runtime_error(msg.str());
-    }
-
-    source_type = ns.follow(to_array_type(source_type).subtype());
-    if (!source_type.is_array())
-      return std::nullopt;
-
-    const array_typet &row_type = to_array_type(source_type);
-    if (row_type.size().is_nil() || !row_type.size().is_constant())
-      return std::nullopt;
-    return from_integer(
-      binary2integer(row_type.size().value().c_str(), false),
-      long_long_int_type());
+    std::ostringstream msg;
+    msg << "IndexError: index " << *literal_index
+        << " is out of bounds for axis 0 with size " << row_count;
+    throw std::runtime_error(msg.str());
   }
 
+  return from_integer(shape->second, long_long_int_type());
+}
+
+std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
+  const nlohmann::json &arg) const
+{
   if (arg.value("_type", "") != "Name")
     return std::nullopt;
 

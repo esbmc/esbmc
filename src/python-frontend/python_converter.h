@@ -558,6 +558,10 @@ private:
   // converter_funcall.cpp for the full rationale.
   std::optional<exprt>
   try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
+  std::optional<exprt>
+  try_get_numpy_named_pointer_view_len(const nlohmann::json &arg) const;
+  std::optional<exprt>
+  try_get_numpy_subscript_pointer_view_len(const nlohmann::json &arg) const;
 
   // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
   // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
@@ -1003,6 +1007,17 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  void clear_numpy_array_storage_aliases_for(const std::string &symbol_id);
+
+  void bind_numpy_array_storage_alias(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  symbolt *resolve_numpy_array_storage_alias(symbolt *symbol) const;
+
+  std::string
+  resolve_numpy_array_storage_alias_id(const std::string &symbol_id) const;
+
   /// Detach every live pointer-backed view (ADR-NP-003 etapa 2) of
   /// @p rebound_id from its storage, right before a plain `Name = ...`
   /// assignment rebinds that symbol to a new value. Real NumPy rebind
@@ -1013,6 +1028,11 @@ private:
     const std::string &rebound_id,
     const locationt &location,
     codet &target_block);
+
+  bool should_rebuild_cached_numpy_row_subscript_rhs(
+    const nlohmann::json &rhs_node) const;
+
+  bool is_tracked_2d_numpy_array_symbol(const std::string &source_id) const;
 
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;

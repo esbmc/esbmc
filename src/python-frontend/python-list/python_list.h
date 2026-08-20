@@ -674,7 +674,12 @@ private:
     const exprt &array,
     const typet &elem_type,
     const nlohmann::json &slice_node,
-    long long step_val);
+    long long step_val,
+    bool literal_step);
+
+  void emit_slice_zero_step_raise(
+    const nlohmann::json &slice_node,
+    bool literal_zero_step);
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);

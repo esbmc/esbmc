@@ -757,6 +757,100 @@ void append_array_shape(const typet &type, std::vector<long long> &shape)
     binary2integer(array_type.size().value().c_str(), false).to_int64());
   append_array_shape(array_type.subtype(), shape);
 }
+
+struct row_pointer_view_info
+{
+  typet elem_type;
+  long long row_index;
+  long long col_count;
+};
+
+struct slice_step_info
+{
+  long long value;
+  bool literal_zero;
+  bool literal;
+};
+
+slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
+{
+  slice_step_info info{1, false, true};
+  if (!slice_node.contains("step") || slice_node["step"].is_null())
+    return info;
+
+  const auto &step_node = slice_node["step"];
+  BigInt literal_value;
+  if (!try_get_literal_int(step_node, literal_value))
+  {
+    info.literal = false;
+    return info;
+  }
+
+  info.value = literal_value.to_int64();
+  if (info.value == 0)
+  {
+    info.literal_zero = true;
+    info.value = 1;
+  }
+  return info;
+}
+
+bool can_build_row_pointer_view(
+  const exprt &array,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  return array.is_symbol() && current_lhs && current_lhs->is_symbol() &&
+         is_numpy_array;
+}
+
+std::optional<row_pointer_view_info> get_row_pointer_view_info(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const contextt &symbol_table,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  if (!can_build_row_pointer_view(array, current_lhs, is_numpy_array))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(slice_node, literal_index))
+    return std::nullopt;
+
+  const namespacet ns(symbol_table);
+  const typet array_type = ns.follow(array.type());
+  if (!array_type.is_array())
+    return std::nullopt;
+
+  const array_typet &outer_array = to_array_type(array_type);
+  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+    return std::nullopt;
+
+  const typet row_type = ns.follow(outer_array.subtype());
+  if (!row_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_array = to_array_type(row_type);
+  if (row_array.size().is_nil() || !row_array.size().is_constant())
+    return std::nullopt;
+
+  row_pointer_view_info info{ns.follow(row_array.subtype()), 0, 0};
+  if (info.elem_type.is_array())
+    return std::nullopt;
+
+  const long long row_count =
+    binary2integer(outer_array.size().value().c_str(), false).to_int64();
+  info.col_count =
+    binary2integer(row_array.size().value().c_str(), false).to_int64();
+  info.row_index = literal_index.to_int64();
+  if (info.row_index < 0)
+    info.row_index += row_count;
+  if (info.row_index < 0 || info.row_index >= row_count || info.col_count < 0)
+    return std::nullopt;
+
+  return info;
+}
 } // namespace
 
 exprt python_list::resolve_fixed_axis_index(
@@ -1430,57 +1524,27 @@ std::optional<exprt> python_list::try_build_row_pointer_view(
   const exprt &array,
   const nlohmann::json &slice_node)
 {
-  if (
-    !array.is_symbol() || !converter_.current_lhs ||
-    !converter_.current_lhs->is_symbol() ||
-    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+  std::optional<row_pointer_view_info> info = get_row_pointer_view_info(
+    array,
+    slice_node,
+    converter_.symbol_table(),
+    converter_.current_lhs,
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) != 0);
+  if (!info)
     return std::nullopt;
 
-  BigInt literal_index;
-  if (!try_get_literal_int(slice_node, literal_index))
-    return std::nullopt;
-
-  const namespacet ns(converter_.symbol_table());
-  const typet array_type = ns.follow(array.type());
-  if (!array_type.is_array())
-    return std::nullopt;
-
-  const array_typet &outer_array = to_array_type(array_type);
-  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
-    return std::nullopt;
-
-  const typet row_type = ns.follow(outer_array.subtype());
-  if (!row_type.is_array())
-    return std::nullopt;
-
-  const array_typet &row_array = to_array_type(row_type);
-  if (row_array.size().is_nil() || !row_array.size().is_constant())
-    return std::nullopt;
-
-  const typet elem_type = ns.follow(row_array.subtype());
-  if (elem_type.is_array())
-    return std::nullopt;
-
-  const long long row_count =
-    binary2integer(outer_array.size().value().c_str(), false).to_int64();
-  const long long col_count =
-    binary2integer(row_array.size().value().c_str(), false).to_int64();
-  long long row_index = literal_index.to_int64();
-  if (row_index < 0)
-    row_index += row_count;
-  if (row_index < 0 || row_index >= row_count || col_count < 0)
-    return std::nullopt;
-
-  const typet view_ptr_type = pointer_typet(elem_type);
+  const typet view_ptr_type = pointer_typet(info->elem_type);
   exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
   exprt view_ptr = build_add(
-    base_ptr, from_integer(row_index * col_count, size_type()), view_ptr_type);
+    base_ptr,
+    from_integer(info->row_index * info->col_count, size_type()),
+    view_ptr_type);
 
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
   converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
                                            .as_string()] =
-    static_cast<std::size_t>(col_count);
+    static_cast<std::size_t>(info->col_count);
   return view_ptr;
 }
 
@@ -1488,9 +1552,10 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   const exprt &array,
   const typet &elem_type,
   const nlohmann::json &slice_node,
-  long long step_val)
+  long long step_val,
+  bool literal_step)
 {
-  if (!array.is_symbol())
+  if (!literal_step || !array.is_symbol())
     return std::nullopt;
 
   auto len_it =
@@ -1529,6 +1594,21 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   return build_symbol(result);
 }
 
+void python_list::emit_slice_zero_step_raise(
+  const nlohmann::json &slice_node,
+  bool literal_zero_step)
+{
+  if (!literal_zero_step)
+    return;
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "slice step cannot be zero");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(throw_code);
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1547,50 +1627,23 @@ exprt python_list::handle_range_slice(
                           resolved_array_type.subtype() == char_type());
 
   // Determine step value (default 1).
-  bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
-  long long step_val = 1;
-  bool literal_zero_step = false;
-  bool literal_step = true;
-  if (has_step)
-  {
-    const auto &step_node = slice_node["step"];
-    BigInt literal_value;
-    if (try_get_literal_int(step_node, literal_value))
-    {
-      step_val = literal_value.to_int64();
-      if (step_val == 0)
-      {
-        literal_zero_step = true;
-        step_val = 1; // continue with valid value to keep IR consistent
-      }
-    }
-    else
-      literal_step = false;
-  }
+  const slice_step_info step_info = get_slice_step_info(slice_node);
+  const long long step_val = step_info.value;
   // Python raises ValueError on step==0. Raise it from the frontend (a
   // cpp-throw) so try/except ValueError can catch it — a code_assert would be
   // an uncatchable property violation. The raise diverts control, so the rest
   // of the slice IR (kept consistent with step_val==1) is a dead path.
-  if (literal_zero_step)
-  {
-    exprt raise = converter_.get_exception_handler().gen_exception_raise(
-      "ValueError", "slice step cannot be zero");
-    codet throw_code("expression");
-    throw_code.operands().push_back(raise);
-    throw_code.location() = converter_.get_location_from_decl(slice_node);
-    converter_.add_instruction(throw_code);
-  }
+  emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
   bool negative_step = (step_val < 0);
 
   if (
-    resolved_array_type.is_pointer() &&
-    resolved_array_type.subtype() != char_type() && literal_step)
-  {
-    if (
-      std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
-        array, resolved_array_type.subtype(), slice_node, step_val))
-      return *slice_copy;
-  }
+    std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
+      array,
+      resolved_array_type.subtype(),
+      slice_node,
+      step_val,
+      step_info.literal))
+    return *slice_copy;
 
   if (is_string_slice)
   {
@@ -1689,7 +1742,7 @@ exprt python_list::handle_range_slice(
                       : array_len;
     }
 
-    if (!literal_step && elem_type != char_type())
+    if (!step_info.literal && elem_type != char_type())
       throw std::runtime_error(
         "TypeError: numpy view slicing requires a literal stride");
 
@@ -1792,7 +1845,7 @@ exprt python_list::handle_range_slice(
     // over-count. Size the result accordingly.
     const bool needs_null_term = (elem_type == char_type());
     exprt result_size = slice_len;
-    if (literal_step)
+    if (step_info.literal)
     {
       const array_typet &src_type = to_array_type(resolved_array_type);
       if (!src_type.size().is_nil() && src_type.size().is_constant())
@@ -3407,12 +3460,8 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static arrays
-  if (
-    std::optional<exprt> view_ptr =
-      try_build_row_pointer_view(array, slice_node))
-    return *view_ptr;
-
-  return build_index(array, pos_expr, array.type().subtype());
+  return try_build_row_pointer_view(array, slice_node)
+    .value_or(build_index(array, pos_expr, array.type().subtype()));
 }
 
 exprt python_list::extract_pyobject_value(
