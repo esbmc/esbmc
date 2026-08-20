@@ -2280,6 +2280,31 @@ void python_list::handle_slice_assignment(
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
 
+/// A bare `list` annotation names no element type, so the read would carry
+/// none and neither arithmetic nor equality on it would behave. Recover what
+/// the call sites told us about this parameter, seeded when the function was
+/// converted (#7187). Returns `annotated` unchanged when this is not a
+/// bare-`list` parameter, or nothing was inferred for it.
+typet python_list::bare_list_param_elem_type(
+  const nlohmann::json &param_node,
+  const std::string &param_id,
+  const typet &annotated)
+{
+  if (
+    !param_node.contains("annotation") || !param_node["annotation"].is_object())
+    return annotated;
+
+  const nlohmann::json &annotation = param_node["annotation"];
+  const std::string ann_id = annotation.value("id", "");
+  if (
+    annotation.value("_type", "") != "Name" ||
+    (ann_id != "list" && ann_id != "List"))
+    return annotated;
+
+  const typet inferred = get_list_element_type(param_id, 0);
+  return inferred.is_empty() ? annotated : inferred;
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -2453,6 +2478,9 @@ exprt python_list::handle_index_access(
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
+
+      elem_type = bare_list_param_elem_type(
+        list_node, array.identifier().as_string(), elem_type);
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
