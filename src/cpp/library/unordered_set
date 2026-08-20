@@ -5,6 +5,7 @@
 #if __cplusplus >= 201103L
 
 #include <utility>
+#include <memory> /* std::allocator, for the Allocator parameter */
 
 namespace std {
 
@@ -29,8 +30,12 @@ struct esbmc_equal_to {
 };
 
 // Forward declaration
-template<typename Key, typename Hash = esbmc_hash<Key>, 
-         typename KeyEqual = esbmc_equal_to<Key>>
+// [unord.set.overview]: the Allocator parameter completes the signature. The
+// fixed array below does the allocating, so it is carried for the signature and
+// the allocator_type typedef only.
+template<typename Key, typename Hash = esbmc_hash<Key>,
+         typename KeyEqual = esbmc_equal_to<Key>,
+         typename Allocator = allocator<Key>>
 class unordered_set;
 
 // Simple array-based implementation - much simpler than hash table
@@ -91,7 +96,7 @@ public:
 };
 
 // Simple unordered_set implementation using fixed-size array
-template<typename Key, typename Hash, typename KeyEqual>
+template<typename Key, typename Hash, typename KeyEqual, typename Allocator>
 class unordered_set {
 public:
     // Type definitions
@@ -99,6 +104,7 @@ public:
     typedef Key value_type;
     typedef Hash hasher;
     typedef KeyEqual key_equal;
+    typedef Allocator allocator_type;
     typedef value_type& reference;
     typedef const value_type& const_reference;
     typedef value_type* pointer;
