@@ -2678,10 +2678,21 @@ __ESBMC_HIDE:
   if (len == 0 || slen == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts: start and slen are symbolic, and a reverse
+   * counter from start can wrap below zero as a size_t. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2697,10 +2708,21 @@ __ESBMC_HIDE:
   if (len == 0 || slen == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts: start and slen are symbolic, and a reverse
+   * counter from start can wrap below zero as a size_t. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2719,9 +2741,15 @@ __ESBMC_HIDE:
   if (len == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
+  /* Concrete trip count; see the note on find_last_of above. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
     if (this->str[i] == c)
       return i;
+  }
   return npos;
 }
 
@@ -2729,12 +2757,23 @@ template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::rfind(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  int i;
-  int len = this->length();
-  for (i = len; i > 0; i--)
+  /* [string.rfind]: the highest position at or before pos holding c. The
+   * previous loop started at str[len] -- the terminator, one past the last
+   * character -- stopped before index 0, and ignored pos entirely, so
+   * rfind('a') on "abc" reported npos. */
+  size_t len = this->length();
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
     if (this->str[i] == c)
       return i;
-  return npos; // Return npos when the character is not found
+  }
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
