@@ -556,7 +556,8 @@ exprt dynamic_type_handler::handle_arithmetic(
 
 exprt dynamic_type_handler::build_isinstance_check(
   const exprt &tagged,
-  const std::string &type_name) const
+  const std::string &type_name,
+  bool type_is_user_class) const
 {
   exprt tagged_type_id = build_member(tagged, "type_id", size_type());
 
@@ -568,6 +569,10 @@ exprt dynamic_type_handler::build_isinstance_check(
     return type_handler_.tagged_scalar_type_matches(
       tagged_type_id, long_long_int_type());
 
+  if (type_name == "float")
+    return build_equal(
+      tagged_type_id, type_handler_.tagged_scalar_type_id(double_type()));
+
   if (type_name == "str")
     return build_equal(
       tagged_type_id,
@@ -576,6 +581,23 @@ exprt dynamic_type_handler::build_isinstance_check(
   // object is Python's top type; every value is an instance of it.
   if (type_name == "object")
     return true_exprt();
+
+  // A tag only ever holds a bool, int, float or str -- get_var_assign refuses
+  // every other rvalue -- so no aggregate or user class can ever match (#7075).
+  static const std::unordered_set<std::string> unholdable = {
+    "NoneType",
+    "bytearray",
+    "bytes",
+    "complex",
+    "dict",
+    "frozenset",
+    "list",
+    "range",
+    "set",
+    "tuple",
+    "type"};
+  if (type_is_user_class || unholdable.count(type_name))
+    return false_exprt();
 
   throw std::runtime_error(
     "isinstance() against this type is not yet supported for a "

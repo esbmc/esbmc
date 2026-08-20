@@ -77,11 +77,14 @@ public:
     const locationt &location);
 
   /**
-   * @brief Builds isinstance(tagged, type_name)
+   * @brief Builds isinstance(tagged, type_name). `type_is_user_class` says
+   * whether `type_name` names a class defined in the program, which a tag can
+   * never hold
    */
   exprt build_isinstance_check(
     const exprt &tagged,
-    const std::string &type_name) const;
+    const std::string &type_name,
+    bool type_is_user_class) const;
 
   /**
    * @brief RAII: adds `dynamic_type_names` to the transient tagged-name set
