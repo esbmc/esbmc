@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "definitions.h"
+#include "memory" /* std::allocator, for the Allocator parameter */
 #include "type_traits"
 #if __cplusplus >= 201103L
 #  include <initializer_list>
@@ -53,11 +54,14 @@ struct __om_fwd_pool<node_t, false>
   }
 };
 
-template <class T>
+// [forward.list.overview] gives forward_list an Allocator parameter. The pool
+// below does the allocating, so it is carried for the signature only.
+template <class T, class Allocator = allocator<T>>
 class forward_list
 {
 public:
   typedef T value_type;
+  typedef Allocator allocator_type;
   typedef T &reference;
   typedef const T &const_reference;
   typedef T *pointer;
