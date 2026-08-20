@@ -136,6 +136,48 @@ BidirectionalIterator prev(BidirectionalIterator i, ptrdiff_t n = 1)
 }
 #endif
 
+#if __cplusplus >= 201703L
+/* [iterator.range]: the free range-access functions. size() on a raw array is
+ * the one that generic code cannot express any other way. */
+template <class C>
+constexpr auto size(const C &c) -> decltype(c.size())
+{
+  return c.size();
+}
+template <class T, size_t N>
+constexpr size_t size(const T (&)[N]) noexcept
+{
+  return N;
+}
+
+template <class C>
+constexpr auto empty(const C &c) -> decltype(c.empty())
+{
+  return c.empty();
+}
+template <class T, size_t N>
+constexpr bool empty(const T (&)[N]) noexcept
+{
+  return false;
+}
+
+template <class C>
+constexpr auto data(C &c) -> decltype(c.data())
+{
+  return c.data();
+}
+template <class C>
+constexpr auto data(const C &c) -> decltype(c.data())
+{
+  return c.data();
+}
+template <class T, size_t N>
+constexpr T *data(T (&array)[N]) noexcept
+{
+  return array;
+}
+#endif
+
 template <class Container>
 class back_insert_iterator
   : public iterator<output_iterator_tag, void, void, void, void>
