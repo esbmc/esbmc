@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-08-18.
+**Updated:** 2026-08-20.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -17,7 +17,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Feature | Status | Notes |
 |---|---|---|
 | General NumPy array returns from user functions | Missing | Only the narrow identity-return pattern is supported. Non-trivial returns such as `def f(a): return a[0]`, functions with multiple parameters, and functions with more than one statement still need a real fix in the assignment/type-inference pipeline. Previous attempts hit double conversion in `create_symbol_for_unannotated_assign` / `get_var_assign` and wrapper-type confusion before variable type selection. |
-| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases the narrowest case — a 1-D, unit-stride, literal-bound slice assigned to a bare name — via a pointer into the source array's own storage, with reads, writes, `len()`, `.shape`, and `.ndim` all observing the real aliasing. That aliasing is tracked by two frontend-only maps (`numpy_view_copy_sources_` in `converter_stmt.cpp`, pre-existing; `numpy_pointer_view_lengths_` in `python_converter.h`, new), not by `ndarray_descriptor`: its `buffer_id`/`offset`/`capacity` are populated with real values at the 1-D call site but nothing consults them yet, and its constructor computes `capacity` from the *view's own* shape, which is the wrong quantity for validating an offset into the larger source buffer. Making `ndarray_descriptor` itself the consulted structure (rather than the two maps) needs that capacity/shape coupling fixed first. Row/column views, transpose, reshape/ravel, `.flat`, step≠1 slices, symbolic bounds, and writable `nditer` are still copy-or-reject and remain to be wired to whichever model wins. |
+| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases 1-D, unit-stride, literal-bound slices and 2-D literal row views (`row = a[0]`, including negative literal row indices) via pointers into the source array's own storage, with reads, writes, `len()`, `.shape`, and `.ndim` observing the real aliasing. That aliasing is still tracked by frontend-only maps (`numpy_view_copy_sources_` in `converter_stmt.cpp`; `numpy_pointer_view_lengths_` in `python_converter.h`), not by `ndarray_descriptor`: its `buffer_id`/`offset`/`capacity` are populated in selected call sites but nothing consults them yet, and its constructor computes `capacity` from the *view's own* shape, which is the wrong quantity for validating an offset into the larger source buffer. Making `ndarray_descriptor` itself the consulted structure (rather than the maps) needs that capacity/shape coupling fixed first. Column views, transpose, reshape/ravel, `.flat`, step≠1 pointer views, symbolic bounds, 3-D+ view aliasing, and writable `nditer` are still copy-or-reject and remain to be wired to whichever model wins. |
 | Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
 | `a.sort()` / `a.argsort()` / `a.tolist()` method forms | Missing | These are not plain method-to-module rewrites. `a.sort()` is in-place while `np.sort(a)` returns a copy; `a.argsort()` needs `np.argsort()` to support variables first; `a.tolist()` needs new array-to-list conversion logic. |
 | `a.any()` / `a.all()` method forms | Missing, cause unclear | `a.any()` currently dispatches like Python builtin `any()` with no argument (`ERROR: any() expected at least 1 argument, got 0`). Root-cause before adding a rewrite, since it may indicate a broader method-dispatch issue. |
@@ -34,7 +34,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
 | Structured arrays | Record dtypes. |
-| Views / strides | Row/column and higher-rank view aliasing, transpose/reshape/ravel views, writable `.flat`/`nditer`, and non-literal-stride slices — the 1-D unit-stride literal-bound case now aliases via pointer (ADR-NP-003 etapa 2). |
+| Views / strides | Column and higher-rank view aliasing, transpose/reshape/ravel views, writable `.flat`/`nditer`, and non-literal-stride slices — 1-D unit-stride literal-bound slices and 2-D literal row views now alias via pointer (ADR-NP-003 etapa 2). |
 | Iteration | Writable `nditer`, advanced `op_flags`, multi-operand iteration, and mutation through `.flat`. |
 
 ---
@@ -48,11 +48,11 @@ Architectural decisions that gate specific pendencies here (referenced as
 3. **Scalability wall** (#5121): arrays are still represented as fully
    unrolled value lists. Large arrays can explode even when the operation is
    conceptually simple.
-4. **Most basic-indexing views still do not alias at runtime.** Only the
-   narrowest case — a 1-D, unit-stride, literal-bound slice assigned to a
-   bare name — aliases so far (ADR-NP-003 etapa 2). Other covered mutations
-   are still rejected conservatively pending the rest of the descriptor
-   model.
+4. **Most view-producing cases still do not alias at runtime.** The covered
+   pointer-backed cases are 1-D, unit-stride, literal-bound slices and 2-D
+   literal row views assigned to bare names (ADR-NP-003 etapa 2). Other
+   covered mutations are still rejected conservatively pending the rest of
+   the descriptor model.
 
 No known soundness bugs remain open (the numpy call-result chaining gap that
 used to be listed here — a `Name` argument whose declaration was itself a
@@ -90,8 +90,8 @@ backlog, in priority order:
 
 1. **Definitive view descriptor model (ADR-NP-003 etapa 2)** — the
    pointer-based aliasing technique is now validated for 1-D, unit-stride,
-   literal-bound slices; extend the same wiring to row/column views,
-   transpose, reshape/ravel, escape handling, `.flat`, and writable
+   literal-bound slices and 2-D literal row views; extend the same wiring to
+   column views, transpose, reshape/ravel, escape handling, `.flat`, and writable
    `nditer`. Before or alongside that: decide whether `ndarray_descriptor`
    should become the actually-consulted structure (its constructor
    currently computes `capacity` from the view's own shape, not the source
@@ -125,10 +125,11 @@ round; items below with multiple named consumers or distinct designs are
 sized accordingly instead of assumed to be one PR each.
 
 1. **Shared-buffer view descriptors (ADR-NP-003 etapa 2)** (~2 PRs
-   remaining) — indexing and assignment landed for the 1-D, unit-stride,
-   literal-bound slice case via pointer aliasing; `buffer_id`/`offset`/
-   `strides` still need to reach row/column views, transpose,
-   reshape/ravel, escape checks, `.flat`, and writable `nditer`.
+   remaining) — indexing and assignment landed for 1-D, unit-stride,
+   literal-bound slices and 2-D literal row views via pointer aliasing;
+   `buffer_id`/`offset`/`strides` still need to reach column views,
+   transpose, reshape/ravel, escape checks, `.flat`, writable `nditer`, and
+   broader symbolic/multi-axis view cases.
 2. **General array returns** (~2 PRs) — root-cause the shared
    assignment/type-selection issue (two prior attempts already hit it)
    before extending to broader return support.
