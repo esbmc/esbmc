@@ -211,23 +211,14 @@ public:
 
     bool operator==(const const_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -478,23 +469,14 @@ public:
 
     bool operator==(const const_reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -1424,23 +1406,14 @@ public:
 
     bool operator==(const const_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
@@ -1691,23 +1664,14 @@ public:
 
     bool operator==(const const_reverse_iterator &it) const
     {
-      if (this->it_pos == it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first == it.it_pair.first) &&
-        (this->it_pair.second == it.it_pair.second))
-        return true;
-      return false;
+      // Position, not the cached pair: comparing it_pair needs mapped_type
+      // to be equality-comparable, and end() fills it from an uninitialised
+      // slot. Matches the non-const twins (github #6354).
+      return this->it_pos == it.it_pos && this->it_key == it.it_key;
     }
     bool operator!=(const const_reverse_iterator &it) const
     {
-      if (this->it_pos != it.it_pos)
-        return true;
-      if (
-        (this->it_pair.first != it.it_pair.first) &&
-        (this->it_pair.second != it.it_pair.second))
-        return true;
-      return false;
+      return !(*this == it);
     }
   };
 
