@@ -2089,6 +2089,10 @@ class LoopMixin:
                 slice=ast.Name(id="Any", ctx=ast.Load()),
                 ctx=ast.Load(),
             )
+        # Any other annotation binds the constructor's __ESBMC_new_object
+        # result to a non-pointer lvalue (#7083).
+        elif annotation_id in getattr(self, "module_class_names", set()):
+            iter_annotation = ast.Name(id=annotation_id, ctx=ast.Load())
         else:
             # Use 'Any' instead of bare 'list' to avoid misinterpreting the
             # container type as the element type in the C++ converter,
