@@ -1177,7 +1177,10 @@ bool basic_string<CharT, Traits, Alloc>::operator>(
 {
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  return this->compare(a) > 0;
+  int i;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] > (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1190,7 +1193,10 @@ __ESBMC_HIDE:
     lhs.str != NULL, "The first parameter must be different than NULL");
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
-  return lhs.compare(rhs) > 0;
+  int i;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] > (unsigned char)rhs.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1203,7 +1209,10 @@ __ESBMC_HIDE:
     lhs.str != NULL, "The first parameter must be different than NULL");
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
-  return lhs.compare(rhs) < 0;
+  int i;
+  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
+    ;
+  return (unsigned char)lhs.str[i] < (unsigned char)rhs.str[i];
 }
 
 // [string.cmp]: all six comparisons are non-member and take const&. The <= and
@@ -1220,7 +1229,7 @@ __ESBMC_HIDE:
     lhs.str != NULL, "The first parameter must be different than NULL");
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
-  return lhs.compare(rhs) <= 0;
+  return strcmp(lhs.str, rhs.str) <= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1233,7 +1242,7 @@ __ESBMC_HIDE:
     lhs.str != NULL, "The first parameter must be different than NULL");
   __ESBMC_assert(
     rhs.str != NULL, "The second parameter must be different than NULL");
-  return lhs.compare(rhs) >= 0;
+  return strcmp(lhs.str, rhs.str) >= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1270,7 +1279,10 @@ bool basic_string<CharT, Traits, Alloc>::operator<(
 {
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  return this->compare(a) < 0;
+  int i;
+  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
+    ;
+  return (unsigned char)this->str[i] < (unsigned char)a.str[i];
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1307,7 +1319,15 @@ bool basic_string<CharT, Traits, Alloc>::operator>=(
 {
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  return this->compare(a) >= 0;
+  int tmp = strcmp(this->str, a.str);
+  if (tmp > 0 || tmp == 0)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1315,7 +1335,15 @@ bool basic_string<CharT, Traits, Alloc>::operator>=(const char *lhs) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert(lhs != NULL, "The parameter must be different than NULL");
-  return this->compare(lhs) >= 0;
+  int tmp = strcmp(this->str, lhs);
+  if (tmp > 0 || tmp == 0)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1324,7 +1352,15 @@ bool basic_string<CharT, Traits, Alloc>::operator<=(
 {
 __ESBMC_HIDE:
   __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  return this->compare(a) <= 0;
+  int tmp = strcmp(this->str, a.str);
+  if (tmp < 0 || tmp == 0)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1332,7 +1368,15 @@ bool basic_string<CharT, Traits, Alloc>::operator<=(const char *lhs) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert(lhs != NULL, "The parameter must be different than NULL");
-  return this->compare(lhs) <= 0;
+  int tmp = strcmp(this->str, lhs);
+  if (tmp < 0 || tmp == 0)
+  {
+    return true;
+  }
+  else
+  {
+    return false;
+  }
 }
 
 // Free const char*-on-the-left overloads, so "lit" >= s / "lit" <= s resolve
