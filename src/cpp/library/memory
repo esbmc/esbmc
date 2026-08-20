@@ -258,25 +258,19 @@ struct has_construct<
 template <class Alloc, class T, bool = has_construct<Alloc, T>::value>
 struct construct_with
 {
-  static void copy(Alloc &a, T *p, const T &v)
+  template <class... Args>
+  static void run(Alloc &a, T *p, Args &&...args)
   {
-    a.construct(p, v);
-  }
-  static void value(Alloc &a, T *p)
-  {
-    a.construct(p);
+    a.construct(p, std::forward<Args>(args)...);
   }
 };
 template <class Alloc, class T>
 struct construct_with<Alloc, T, false>
 {
-  static void copy(Alloc &, T *p, const T &v)
+  template <class... Args>
+  static void run(Alloc &, T *p, Args &&...args)
   {
-    ::new (static_cast<void *>(p)) T(v);
-  }
-  static void value(Alloc &, T *p)
-  {
-    ::new (static_cast<void *>(p)) T();
+    ::new (static_cast<void *>(p)) T(std::forward<Args>(args)...);
   }
 };
 
@@ -350,19 +344,21 @@ struct allocator_traits
     a.deallocate(p, n);
   }
 
-  static void construct(Alloc &a, pointer p, const value_type &v)
+  /* [allocator.traits.members]: construct and destroy are templates on the
+   * pointee, not on the allocator's own value_type. boost multi_index relies on
+   * that -- it destroys a symbolt through a traits instantiated on its node
+   * allocator, so a `pointer` parameter rejects the call. */
+  template <class T, class... Args>
+  static void construct(Alloc &a, T *p, Args &&...args)
   {
-    __alloc_detail::construct_with<Alloc, value_type>::copy(a, p, v);
+    __alloc_detail::construct_with<Alloc, T>::run(
+      a, p, std::forward<Args>(args)...);
   }
 
-  static void construct(Alloc &a, pointer p)
+  template <class T>
+  static void destroy(Alloc &a, T *p)
   {
-    __alloc_detail::construct_with<Alloc, value_type>::value(a, p);
-  }
-
-  static void destroy(Alloc &a, pointer p)
-  {
-    __alloc_detail::destroy_with<Alloc, value_type>::run(a, p);
+    __alloc_detail::destroy_with<Alloc, T>::run(a, p);
   }
 
   static size_type max_size(const Alloc &a)
