@@ -477,12 +477,15 @@ public:
   size_t length() const;
   int compare(const basic_string<CharT, Traits, Alloc> &s) const;
   int compare(const char *s) const;
-  int compare(int pos1, size_t n1, basic_string<CharT, Traits, Alloc> &s) const;
+  int compare(
+    int pos1,
+    size_t n1,
+    const basic_string<CharT, Traits, Alloc> &s) const;
   int compare(int pos1, size_t n1, const char *s) const;
   int compare(
     size_t pos1,
     size_t n1,
-    basic_string<CharT, Traits, Alloc> &s,
+    const basic_string<CharT, Traits, Alloc> &s,
     size_t pos2,
     size_t n2) const;
   size_t find_first_of(
@@ -2445,7 +2448,7 @@ template <typename CharT, typename Traits, typename Alloc>
 int basic_string<CharT, Traits, Alloc>::compare(
   int pos1,
   size_t n1,
-  basic_string<CharT, Traits, Alloc> &s) const
+  const basic_string<CharT, Traits, Alloc> &s) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert(
@@ -2458,7 +2461,7 @@ template <typename CharT, typename Traits, typename Alloc>
 int basic_string<CharT, Traits, Alloc>::compare(
   size_t pos1,
   size_t n1,
-  basic_string<CharT, Traits, Alloc> &s,
+  const basic_string<CharT, Traits, Alloc> &s,
   size_t pos2,
   size_t n2) const
 {
