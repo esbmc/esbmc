@@ -2910,20 +2910,26 @@ basic_string<CharT, Traits, Alloc> operator+(
   basic_string<CharT, Traits, Alloc> lhs,
   basic_string<CharT, Traits, Alloc> rhs)
 {
-  int totalLength = lhs.size();
-  totalLength += rhs.size();
-  int i, j, k;
+  /* Concrete trip counts: both lengths are symbolic, so the original
+   * loops never converged and `a + b` did not terminate. */
+  size_t llen = lhs.size();
+  size_t rlen = rhs.size();
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= llen)
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  for (j = i, k = 0; j < totalLength; j++, k++)
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[j] = rhs.str[k];
+    if (k >= rlen)
+      break;
+    result.str[n++] = rhs.str[k];
   }
-  result.str[j] = '\0';
-  result._size = totalLength;
+  result.str[n] = '\0';
+  result._size = n;
   return result;
 }
 
@@ -2931,20 +2937,26 @@ template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>
 operator+(basic_string<CharT, Traits, Alloc> lhs, char *rhs)
 {
-  int totalLength = lhs.size();
-  totalLength += strlen(rhs);
-  int i, j, k;
+  /* Concrete trip counts: both lengths are symbolic, so the original
+   * loops never converged and `a + b` did not terminate. */
+  size_t llen = lhs.size();
+  size_t rlen = strlen(rhs);
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= llen)
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  for (j = i, k = 0; j < totalLength; j++, k++)
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[j] = rhs[k];
+    if (k >= rlen)
+      break;
+    result.str[n++] = rhs[k];
   }
-  result.str[j] = '\0';
-  result._size = totalLength;
+  result.str[n] = '\0';
+  result._size = n;
   return result;
 }
 
@@ -2956,13 +2968,17 @@ operator+(basic_string<CharT, Traits, Alloc> lhs, char rhc)
   totalLength += 1;
   int i;
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  /* Concrete trip count; lhs.size() is symbolic. */
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= lhs.size())
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  result.str[i] = rhc;
-  result.str[i + 1] = '\0';
-  result._size = totalLength;
+  result.str[n] = rhc;
+  result.str[n + 1] = '\0';
+  result._size = n + 1;
   return result;
 }
 
