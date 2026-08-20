@@ -623,7 +623,7 @@ public:
   void resize(size_t n);
   size_t capacity() const;
   size_t max_size() const;
-  int size() const;
+  size_t size() const;
   size_t rfind(basic_string<CharT, Traits, Alloc> &s, size_t pos = npos) const;
   size_t rfind(const char *s, size_t pos = npos) const;
   size_t rfind(char *s) const;
@@ -1656,15 +1656,16 @@ size_t basic_string<CharT, Traits, Alloc>::capacity() const
   return STRING_CAPACITY - 1;
 }
 
+// [string.require] keeps size() <= max_size() invariant across every
+// operation, so an unconstrained value here is not a sound over-approximation.
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::max_size() const
 {
-  int nondet;
-  return nondet;
+  return STRING_CAPACITY - 1;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-int basic_string<CharT, Traits, Alloc>::size() const
+size_t basic_string<CharT, Traits, Alloc>::size() const
 {
   return this->_size;
 }
@@ -1673,34 +1674,25 @@ template <typename CharT, typename Traits, typename Alloc>
 void basic_string<CharT, Traits, Alloc>::resize(size_t n)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(n > 0, "The parameter must be greater than zero");
-  int num = this->_size, i;
-  char tmp[STRING_CAPACITY];
-  for (i = 0; i < n; i++)
-  {
-    tmp[i] = this->str[i];
-  }
-  tmp[i] = '\0';
-  this->_size = n;
-  for (i = 0; i < n; i++)
-    this->str[i] = tmp[i];
-  this->str[i] = '\0';
+  this->resize(n, CharT());
 }
 
+// [string.accessors]: c_str() is terminated at size(), so a shrink moves the
+// terminator down to n instead of leaving it at the old size.
 template <typename CharT, typename Traits, typename Alloc>
 void basic_string<CharT, Traits, Alloc>::resize(size_t n, char c)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(n > 0, "The parameter must be greater than zero");
-  int num, i;
-  num = this->length();
-  basic_string<CharT, Traits, Alloc> tmp(this->str);
+  __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
+  // Iterate from 0 rather than from _size: a size_t index starting at the
+  // symbolic old size wraps past the i < n test, so the loop never converges
+  // unless the caller bounds it with --unwind or --incremental-bmc.
+  size_t old_size = this->_size;
+  for (size_t i = 0; i < n; i++)
+    if (i >= old_size)
+      this->str[i] = c;
   this->_size = n;
-  for (i = 0; i < num; i++)
-    this->str[i] = tmp.str[i];
-  for (i = num; i < (this->_size); i++)
-    this->str[i] = c;
-  this->str[i] = '\0';
+  this->str[n] = '\0';
 }
 
 template <typename CharT, typename Traits, typename Alloc>

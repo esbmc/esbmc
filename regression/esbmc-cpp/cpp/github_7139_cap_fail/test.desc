@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--incremental-bmc
+^\s+file .* function resize$
+^\s+String capacity exceeded$
+^VERIFICATION FAILED$

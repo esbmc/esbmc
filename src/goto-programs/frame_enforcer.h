@@ -86,6 +86,13 @@ public:
   /// \return Expression with old() replaced by snapshot symbols
   expr2tc replace_old_with_snapshots(const expr2tc &expr) const;
 
+  /// \brief Rewrite \p expr to denote what it denoted before the havoc or call,
+  ///        by substituting each snapshotted symbol for its snapshot.
+  /// Unlike replace_old_with_snapshots this does not look for an old() marker:
+  /// it is for expressions that are implicitly pre-state, such as the index of
+  /// an assigns target.
+  expr2tc in_pre_state(const expr2tc &expr) const;
+
   /// \brief Patch old_snapshot side effects in a GOTO program to use frame snapshots.
   ///
   /// Scans all ASSIGN instructions in \p prog for the pattern:
