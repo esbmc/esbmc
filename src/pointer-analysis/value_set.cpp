@@ -846,8 +846,6 @@ void value_sett::get_value_set_rec(
             }
             const BigInt &val = to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
-            if (is_sub2t(expr))
-              total_offs.negate();
           }
           is_const = true;
         }
@@ -880,6 +878,12 @@ void value_sett::get_value_set_rec(
           abort();
         }
       }
+
+      // Both arms above compute a magnitude, so the direction is applied once
+      // here; applying it in the try block alone left void-pointer subtraction
+      // moving forwards (#7127).
+      if (is_const && is_sub2t(expr))
+        total_offs.negate();
 
       // For each object, update its offset data according to the integer
       // offset to this expr. Potential outcomes are keeping it nondet, making
