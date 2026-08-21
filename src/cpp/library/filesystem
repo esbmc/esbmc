@@ -76,6 +76,18 @@ public:
   {
     return __p_;
   }
+  /* [fs.path.native.obs]: u8string returns the path in UTF-8. This model
+   * stores a narrow string, so it is the same sequence as string(); the C++20
+   * std::u8string return type is not modelled. generic_string is the same
+   * again, since the generic and native formats coincide here. */
+  ::std::string u8string() const
+  {
+    return __p_;
+  }
+  ::std::string generic_string() const
+  {
+    return __p_;
+  }
   bool empty() const noexcept
   {
     return __p_.empty();
