@@ -1477,6 +1477,7 @@ class CoreVisitorsMixin:
         bound = set()
         declared = set()
         target_names = self._target_names
+        scope_nodes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 
         def walk(body):
             for stmt in body:
@@ -1492,9 +1493,7 @@ class CoreVisitorsMixin:
                     bound.add(stmt.name)
                     continue
                 for child in ast.iter_child_nodes(stmt):
-                    if isinstance(
-                            child,
-                        (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                    if isinstance(child, scope_nodes):
                         continue
                     walk([child])
 
