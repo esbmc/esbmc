@@ -107,6 +107,32 @@ bool is_literal_int_node(const nlohmann::json &node)
          node["operand"]["value"].is_number_integer();
 }
 
+bool has_non_null_value(const nlohmann::json &node)
+{
+  return node.contains("value") && !node["value"].is_null();
+}
+
+bool is_same_name_assignment(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node)
+{
+  if (target.value("_type", "") != "Name" || !has_non_null_value(ast_node))
+    return false;
+
+  const nlohmann::json &value = ast_node["value"];
+  return value.value("_type", "") == "Name" &&
+         target.value("id", "") == value.value("id", "");
+}
+
+bool should_detach_numpy_pointer_views_for_assignment(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node,
+  const symbolt *lhs_symbol)
+{
+  return target.value("_type", "") == "Name" && lhs_symbol &&
+         !is_same_name_assignment(target, ast_node);
+}
+
 bool ast_imports_numpy_module(const nlohmann::json &ast)
 {
   if (!ast.is_object() || !ast.contains("body") || !ast["body"].is_array())
@@ -1319,7 +1345,11 @@ std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
     return std::nullopt;
 
   if (supported_copy_method)
-    return method_base;
+  {
+    nlohmann::json copied = method_base;
+    copied["_numpy_copy_method"] = true;
+    return copied;
+  }
 
   if (!supported_dispatch_rewrite_method)
     return std::nullopt;
@@ -1873,6 +1903,24 @@ void python_converter::reject_unsafe_numpy_view_target(
         "supported");
 }
 
+void python_converter::reject_numpy_view_slice_assignment(
+  const nlohmann::json &target)
+{
+  const std::string root_name = root_name_from_subscript(target);
+  if (root_name.empty())
+    return;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return;
+
+  if (
+    numpy_pointer_view_lengths_.count(root_id) != 0 ||
+    numpy_view_copy_sources_.count(root_id) != 0)
+    throw std::runtime_error(
+      "TypeError: slice assignment through a numpy view is not supported");
+}
+
 void python_converter::record_numpy_view_copy(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -2054,6 +2102,14 @@ void python_converter::update_numpy_array_binding(
     if (rhs_id == lhs_id)
       return;
 
+    if (rhs_node.value("_numpy_copy_method", false))
+    {
+      clear_numpy_array_storage_aliases_for(lhs_id);
+      clear_numpy_view_copy(lhs);
+      numpy_array_symbols_.insert(lhs_id);
+      return;
+    }
+
     auto view_it = numpy_view_copy_sources_.find(rhs_id);
     if (view_it != numpy_view_copy_sources_.end())
     {
@@ -2073,22 +2129,8 @@ void python_converter::update_numpy_array_binding(
 
   clear_numpy_array_storage_aliases_for(lhs_id);
 
-  if (rhs_node.value("_type", "") == "Call")
-  {
-    std::optional<nlohmann::json> ret_val =
-      select_return_value_for_call(rhs_node);
-    if (ret_val && return_value_uses_call_argument(*ret_val, rhs_node))
-    {
-      nlohmann::json substituted =
-        substitute_call_arguments(*ret_val, rhs_node);
-      if (is_numpy_view_copy_expr(substituted))
-      {
-        record_numpy_view_copy(lhs, substituted);
-        if (numpy_view_copy_sources_.count(lhs_id) != 0)
-          return;
-      }
-    }
-  }
+  if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
+    return;
 
   if (is_numpy_view_copy_expr(rhs_node))
   {
@@ -2105,6 +2147,27 @@ void python_converter::update_numpy_array_binding(
     numpy_array_symbols_.insert(lhs_id);
   else
     numpy_array_symbols_.erase(lhs_id);
+}
+
+bool python_converter::record_numpy_view_copy_from_returned_argument(
+  const exprt &lhs,
+  const std::string &lhs_id,
+  const nlohmann::json &rhs_node)
+{
+  if (rhs_node.value("_type", "") != "Call")
+    return false;
+
+  std::optional<nlohmann::json> ret_val =
+    select_return_value_for_call(rhs_node);
+  if (!ret_val || !return_value_uses_call_argument(*ret_val, rhs_node))
+    return false;
+
+  nlohmann::json substituted = substitute_call_arguments(*ret_val, rhs_node);
+  if (!is_numpy_view_copy_expr(substituted))
+    return false;
+
+  record_numpy_view_copy(lhs, substituted);
+  return numpy_view_copy_sources_.count(lhs_id) != 0;
 }
 
 void python_converter::clear_numpy_array_storage_aliases_for(
@@ -3653,6 +3716,7 @@ void python_converter::get_var_assign(
         return;
       }
 
+      reject_numpy_view_slice_assignment(target);
       throw std::runtime_error(
         "Slice assignment is only supported on list targets");
     }
@@ -3965,7 +4029,9 @@ void python_converter::get_var_assign(
     !get_typechecker().should_skip_type_assertion(annotated_type))
     annotation_candidates.push_back(annotated_type);
 
-  bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
+  const bool has_value = has_non_null_value(ast_node);
+  bool is_ctor_call =
+    has_value && type_handler_.is_constructor_call(ast_node["value"]);
   current_lhs = &lhs;
   is_converting_lhs = false;
 
@@ -3977,11 +4043,8 @@ void python_converter::get_var_assign(
   // unannotated assignment branches above -- the annotator may inject an
   // annotation onto what the user wrote as a plain `a = ...`, routing it
   // through either one.
-  const bool is_self_assignment =
-    target.value("_type", "") == "Name" &&
-    ast_node["value"].value("_type", "") == "Name" &&
-    target.value("id", "") == ast_node["value"].value("id", "");
-  if (target.value("_type", "") == "Name" && lhs_symbol && !is_self_assignment)
+  if (should_detach_numpy_pointer_views_for_assignment(
+        target, ast_node, lhs_symbol))
     detach_numpy_pointer_views_of(
       lhs_symbol->id.as_string(), location_begin, target_block);
 
@@ -4033,7 +4096,7 @@ void python_converter::get_var_assign(
   }
 
   exprt rhs;
-  bool has_value = false;
+  bool converted_value = false;
   if (!effective_ast_node["value"].is_null())
   {
     if (
@@ -4061,13 +4124,13 @@ void python_converter::get_var_assign(
       is_converting_rhs = false;
     }
 
-    has_value = true;
+    converted_value = true;
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
   }
 
-  if (has_value && rhs != exprt("_init_undefined"))
+  if (converted_value && rhs != exprt("_init_undefined"))
   {
     auto try_follow_symbol_type = [this](const typet &type) -> typet {
       if (type.id() != "symbol")

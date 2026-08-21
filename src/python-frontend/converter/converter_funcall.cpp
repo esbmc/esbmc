@@ -406,8 +406,8 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 // shorter) logical length -- e.g. an empty view still points at a valid
 // position with nonzero remaining capacity. Returns the tracked literal
 // length directly instead of routing through the generic len() dispatch.
-std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
-  const nlohmann::json &element) const
+std::optional<exprt>
+python_converter::try_get_numpy_pointer_view_len(const nlohmann::json &element)
 {
   if (
     !element.contains("func") || !element["func"].is_object() ||
@@ -427,7 +427,7 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
 
 std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
   const nlohmann::json &arg,
-  const nlohmann::json &element) const
+  const nlohmann::json &element)
 {
   if (
     arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
@@ -455,20 +455,31 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
 
   long long row_index = *literal_index;
   const long long row_count = shape->first;
+  const long long col_count = shape->second;
+  if (row_count == 0)
+    return from_integer(0, long_long_int_type());
+
   if (row_index < 0)
     row_index += row_count;
   if (row_index < 0 || row_index >= row_count)
   {
     std::ostringstream msg;
-    msg << "IndexError: index " << *literal_index
+    msg << "index " << *literal_index
         << " is out of bounds for axis 0 with size " << row_count;
     const locationt location = get_location_from_decl(element);
     if (!location.is_nil())
       msg << " at " << location.get_file() << ":" << location.get_line();
-    throw std::runtime_error(msg.str());
+
+    exprt raise =
+      get_exception_handler().gen_exception_raise("IndexError", msg.str());
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = location;
+    add_instruction(throw_code);
+    return from_integer(0, long_long_int_type());
   }
 
-  return from_integer(shape->second, long_long_int_type());
+  return from_integer(col_count, long_long_int_type());
 }
 
 std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(

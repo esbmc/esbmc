@@ -557,12 +557,12 @@ private:
   // large function's own decision count from growing further; see
   // converter_funcall.cpp for the full rationale.
   std::optional<exprt>
-  try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
+  try_get_numpy_pointer_view_len(const nlohmann::json &element);
   std::optional<exprt>
   try_get_numpy_named_pointer_view_len(const nlohmann::json &arg) const;
   std::optional<exprt> try_get_numpy_subscript_pointer_view_len(
     const nlohmann::json &arg,
-    const nlohmann::json &element) const;
+    const nlohmann::json &element);
 
   // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
   // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
@@ -995,6 +995,8 @@ private:
 
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
 
+  void reject_numpy_view_slice_assignment(const nlohmann::json &target);
+
   /// Raise Python's TypeError for item assignment on an immutable container,
   /// reporting whether `container_type` is one.
   bool reject_immutable_item_assignment(
@@ -1007,6 +1009,11 @@ private:
 
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  bool record_numpy_view_copy_from_returned_argument(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node);
 
   void clear_numpy_array_storage_aliases_for(const std::string &symbol_id);
 
