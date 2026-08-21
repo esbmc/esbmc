@@ -4,6 +4,9 @@
 #include "ios"
 #include "definitions.h"
 #include "cstring"
+#if __cplusplus >= 201103L
+#  include "type_traits" /* enable_if, is_base_of, for [ostream.rvalue] */
+#endif
 
 /* Widest field a stream can hold. Matches STRING_CAPACITY in <string>, which
  * is what ostringstream::str() has to fit the result into. */
@@ -220,6 +223,26 @@ template <class charT>
 struct char_traits;
 template <class CharT, class Traits = char_traits<CharT>>
 using basic_ostream = ostream;
+
+/* [ostream.rvalue] as amended by LWG 1203: the return type is the *derived*
+ * stream, not basic_ostream, so `std::ostringstream{} << x` stays an
+ * ostringstream and .str() on the result compiles. ESBMC's own message.h
+ * builds its timestamp that way.
+ *
+ * Ostream&& is a forwarding reference, so both halves of the constraint carry
+ * weight: !is_lvalue_reference is what keeps this off lvalue streams, where it
+ * would otherwise outrank the concrete operator<< overloads on an exact match
+ * and change which one runs. */
+template <class Ostream, class T>
+inline typename enable_if<
+  !is_lvalue_reference<Ostream>::value &&
+    is_base_of<ostream, typename remove_reference<Ostream>::type>::value,
+  Ostream &&>::type
+operator<<(Ostream &&os, const T &x)
+{
+  static_cast<ostream &>(os) << x;
+  return static_cast<Ostream &&>(os);
+}
 #endif
 
 } // namespace std

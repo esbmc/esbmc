@@ -4,6 +4,7 @@
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
 #include <util/symtab/symbol.h>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -299,6 +300,12 @@ public:
    *                        a concrete element expression.
    * @param elem_type       ESBMC type of the element.
    */
+  /// Element type recovered for a bare `list` parameter, or a nil type.
+  static typet bare_list_param_elem_type(
+    const nlohmann::json &param_node,
+    const std::string &param_id,
+    const typet &annotated);
+
   static void add_type_info_entry(
     const std::string &list_symbol_id,
     const std::string &elem_id,
@@ -626,6 +633,22 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
+  // ADR-NP-003 etapa 2, first slice: builds a pointer into the base
+  // array's own storage for a 1-D, unit-stride, literal-bound slice
+  // assigned directly to a bare name, instead of handle_range_slice()'s
+  // usual independent copy. Split out to keep that already large
+  // function's own decision count from growing further; see
+  // list_access.cpp for the full rationale and the cases intentionally
+  // left out of this first slice (returns std::nullopt for those, and the
+  // caller falls through to the existing copy).
+  std::optional<exprt> try_build_1d_pointer_view(
+    const exprt &array,
+    const typet &elem_type,
+    long long step_val,
+    bool needs_null_term,
+    long long literal_start,
+    long long static_slice_len);
+
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
@@ -723,4 +746,11 @@ private:
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
+
+  /// Element type already handed out for one syntactic pop() site, keyed by
+  /// list symbol and source position. The assignment path converts its RHS
+  /// more than once, and build_pop_list_call consumes a list_type_map entry
+  /// per call, so without this the second conversion of a single pop() sees an
+  /// empty map and falls back to the list's annotation (#4780).
+  static std::unordered_map<std::string, typet> pop_elem_type_memo;
 };

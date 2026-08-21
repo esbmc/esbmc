@@ -1,7 +1,7 @@
-# An object popped from a deque comes back with an integer type, so comparing
-# it with the object by identity built an equality whose operands differ in
-# width -- every solver backend asserted on it. The construct is still
-# unsupported; it must report that rather than abort.
+# An object popped from a deque used to come back with an integer type, so
+# comparing it with the object by identity built an equality whose operands
+# differed in width; the frontend reported that rather than aborting. The
+# popped element now keeps its type, so the identity holds as CPython reports.
 from collections import deque as Queue
 
 

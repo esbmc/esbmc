@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
 #include <util/irep/migrate.h>
 #include <util/lang/c_typecast.h>
@@ -26,6 +27,15 @@ bool clang_c_adjust_irep2::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  // Types first, in a pass of their own: a value's initialiser is built from
+  // its type, so padding a type after a value that uses it leaves the value
+  // short a component. clang_c_adjust::adjust() splits the walk for the same
+  // reason ("so that symbolic-type resolution always receives fixed up types").
+  if (sole_adjuster)
+    for (symbolt *s : symbol_list)
+      if (s->is_type)
+        pad_type_symbol(*s);
+
   for (symbolt *s : symbol_list)
   {
     if (!s->is_type && s->get_value().is_not_nil())
@@ -43,6 +53,21 @@ bool clang_c_adjust_irep2::adjust()
 
   migrate_namespace_lookup = old_ns;
   return false;
+}
+
+/// add_padding on a complete struct or union, which is the half of
+/// clang_c_adjust::adjust_type that the corpus shows is load-bearing here. The
+/// function is shared (clang-c-frontend/padding.h) and idempotent --
+/// adjust_type asserts that re-padding is a no-op -- so this reuses it rather
+/// than reimplementing a layout algorithm over type2tc.
+void clang_c_adjust_irep2::pad_type_symbol(symbolt &symbol)
+{
+  typet t = symbol.get_type();
+  if ((!t.is_struct() && !t.is_union()) || t.incomplete())
+    return;
+
+  add_padding(t, ns);
+  symbol.set_type(std::move(t));
 }
 
 /// The operators C admits over a complex operand: `mod` and the bitwise ones
@@ -129,8 +154,14 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
 
+  /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
+   * block is not a statement-with-condition, so the loop's guard would never
+   * reach the conversion. */
   if (is_statement_with_condition(expr))
     adjust_statement_condition(expr);
+
+  if (is_code_for2t(expr))
+    hoist_for_init(expr);
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
@@ -346,6 +377,35 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
   expr = address_of2tc(elem, idx, a.implicit);
+}
+
+void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
+{
+  const code_for2t &f = to_code_for2t(expr);
+  if (is_nil_expr(f.init))
+    return;
+
+  locationt end_location;
+  if (!is_nil_expr(f.body) && is_code_block2t(f.body))
+    end_location = to_code_block2t(f.body).end_location;
+
+  const expr2tc bare =
+    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+
+  // Splice a block-shaped init rather than nesting it: an inner block would end
+  // the declaration's scope at its own closing brace, so the variable would be
+  // DEAD before the loop that reads it. clang_c_adjust moves the init operand
+  // itself, which is why the legacy hoist puts the declaration directly in the
+  // wrapper.
+  std::vector<expr2tc> ops;
+  if (is_code_block2t(f.init))
+    for (const expr2tc &op : to_code_block2t(f.init).operands)
+      ops.push_back(op);
+  else
+    ops.push_back(f.init);
+  ops.push_back(bare);
+
+  expr = code_block2tc(ops, f.location, end_location);
 }
 
 void clang_c_adjust_irep2::adjust_binary_arith_operands(expr2tc &expr)

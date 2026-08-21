@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 3
+^  assertion return_value\$___len__\$\d+ == 8$
+^VERIFICATION FAILED$

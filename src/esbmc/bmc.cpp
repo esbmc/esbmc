@@ -282,6 +282,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
+    pytest_gen.set_values_only(options.get_bool_option("pytest-values-only"));
     pytest_gen.generate_single(
       pytest_output_dir(options), pytest_filename, eq, smt_conv, ns);
   }
@@ -1489,6 +1490,7 @@ void report_coverage(
     std::string module_name = pytest_generator::extract_module_name(input_file);
     std::string pytest_filename =
       pytest_generator::generate_pytest_filename(module_name);
+    pytest_gen.set_values_only(options.get_bool_option("pytest-values-only"));
     pytest_gen.generate(pytest_output_dir(options), pytest_filename);
   }
 

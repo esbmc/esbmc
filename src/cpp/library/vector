@@ -2,6 +2,12 @@
 #define __STL_VECTOR
 
 #include <stdlib.h>
+/* Not required by [vector.syn], but the toolchains this model stands in for
+ * make errno visible through <vector>, and code relies on it: nlohmann's
+ * lexer sets errno around strtod having included only <vector> and <cstdlib>.
+ * Checked against the host compiler, where <vector> provides it and <cstdlib>
+ * does not. */
+#include <errno.h>
 #include <assert.h>
 #include <cstddef> // for size_t, ptrdiff_t
 #include <memory>
@@ -962,21 +968,17 @@ public:
   }
 
   // comparators:
-  bool operator==(const vector &rhv)
+  bool operator==(const vector &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
-    int i = 0;
-    while (i != this->size())
-    {
+    for (size_type i = 0; i < this->size(); i++)
       if (this->at(i) != rhv[i])
         return false;
-      i++;
-    }
     return true;
   }
 
-  bool operator!=(const vector &rhv)
+  bool operator!=(const vector &rhv) const
   {
     return (!(*this == rhv));
   }

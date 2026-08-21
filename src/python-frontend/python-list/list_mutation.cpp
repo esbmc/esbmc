@@ -1107,9 +1107,20 @@ exprt python_list::build_pop_list_call(
   const std::string &list_id = list.id.as_string();
   typet elem_type;
 
+  // One syntactic pop() consumes one list_type_map entry, but the assignment
+  // path converts its RHS more than once; replay the first answer rather than
+  // consuming a second entry (#4780).
+  const std::string site = list_id + ":" + location.get_line().as_string() +
+                           ":" + location.get_column().as_string();
+  auto memo_it = pop_elem_type_memo.find(site);
+  if (memo_it != pop_elem_type_memo.end())
+    elem_type = memo_it->second;
+
   // Try to get element type from list_type_map (use last element for default pop)
   auto type_map_it = list_type_map.find(list_id);
-  if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+  if (
+    elem_type == typet() && type_map_it != list_type_map.end() &&
+    !type_map_it->second.empty())
   {
     // Get the last element's type (since default pop() pops from the end)
     size_t last_idx = type_map_it->second.size() - 1;
@@ -1117,6 +1128,7 @@ exprt python_list::build_pop_list_call(
 
     // Remove the popped element from type map to maintain consistency
     type_map_it->second.pop_back();
+    pop_elem_type_memo[site] = elem_type;
   }
 
   // If type map lookup failed, try to infer from list declaration
