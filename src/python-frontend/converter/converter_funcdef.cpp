@@ -848,22 +848,6 @@ static bool list_literal_for_call_arg(
   return out.value("_type", "") == "List";
 }
 
-/// Element type a bare `list` parameter receives, taken from the call sites
-/// that can be resolved statically. `list` alone carries no element type, so
-/// a subscript of such a parameter otherwise reads as Any and neither
-/// arithmetic nor equality on the result behaves (#7187). Every resolvable
-/// call site must agree, so a second caller passing a different element type
-/// cannot silently inherit the first one's.
-/// Records the element type of a list-annotated parameter, so a subscript of
-/// it reads at the right type. `list[T]` states it; a bare `list` has it
-/// recovered from the call sites (#7187).
-/// Whether an unannotated parameter should be refined to the list model.
-/// Body usage (`len(x)`, `x[i]`, a list mutator) is enough on its own.
-/// Unpacking (`first, *rest = x`) shows the parameter is a sequence but not
-/// what it holds, so it counts only when the call sites agree on an element
-/// type -- without one the elements read back untyped, which turns the
-/// unpacking's clean refusal into a wrong verdict (quixbugs powerset).
-/// `elem_type` receives that agreed type, or stays nil.
 /// Refines one unannotated (Any) parameter to the list model when the body
 /// or the call sites show it holds a list, and records the element type when
 /// one is known.
@@ -894,6 +878,13 @@ void python_converter::refine_any_param_to_list(
     python_list::add_type_info_entry(param_id, "", elem_type);
 }
 
+/// Whether an unannotated parameter should be refined to the list model.
+/// Body usage (`len(x)`, `x[i]`, a list mutator) is enough on its own.
+/// Unpacking (`first, *rest = x`) shows the parameter is a sequence but not
+/// what it holds, so it counts only when the call sites agree on an element
+/// type -- without one the elements read back untyped, which turns the
+/// unpacking's clean refusal into a wrong verdict (quixbugs powerset).
+/// `elem_type` receives that agreed type, or stays nil.
 bool python_converter::param_is_list_like(
   const std::string &param_name,
   const nlohmann::json &body,
@@ -909,6 +900,9 @@ bool python_converter::param_is_list_like(
            func_name, param_index, elem_type);
 }
 
+/// Records the element type of a list-annotated parameter, so a subscript of
+/// it reads at the right type. `list[T]` states it; a bare `list` has it
+/// recovered from the call sites (#7187).
 void python_converter::seed_list_param_element_type(
   const nlohmann::json &element,
   const symbol_id &id,
