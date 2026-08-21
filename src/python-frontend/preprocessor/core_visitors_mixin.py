@@ -912,9 +912,6 @@ class CoreVisitorsMixin:
                 node.args.append(keywords[expected_args[i]])
                 continue
             default_val = self.functionDefaults[(function_name, expected_args[i])]
-            if isinstance(default_val, (ast.List, ast.Dict, ast.Set)):
-                node.args.append(ast.Constant(value=None))
-                continue
             if isinstance(default_val, ast.AST):
                 default_expr = copy.deepcopy(default_val)
                 if isinstance(default_expr, ast.Name):
@@ -1261,10 +1258,11 @@ class CoreVisitorsMixin:
             arg_name = node.args.args[-i].arg
             if isinstance(default_node, ast.Constant):
                 self.functionDefaults[(qualified_name, arg_name)] = default_node.value
-            elif isinstance(default_node, ast.Name):
+            elif isinstance(default_node, (ast.Name, ast.List, ast.Dict, ast.Set)):
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.args[-i], default_node)
                 self.functionDefaults[(qualified_name, arg_name)] = target_var
+                self.hoisted_default_names.add(target_var.id)
                 if is_method:
                     self._pending_method_default_inits.append(assignment_node)
                 else:
@@ -1277,10 +1275,11 @@ class CoreVisitorsMixin:
             kwarg_name = node.args.kwonlyargs[i].arg
             if isinstance(default, ast.Constant):
                 self.functionDefaults[(qualified_name, kwarg_name)] = default.value
-            elif isinstance(default, ast.Name):
+            elif isinstance(default, (ast.Name, ast.List, ast.Dict, ast.Set)):
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.kwonlyargs[i], default)
                 self.functionDefaults[(qualified_name, kwarg_name)] = target_var
+                self.hoisted_default_names.add(target_var.id)
                 if is_method:
                     self._pending_method_default_inits.append(assignment_node)
                 else:
