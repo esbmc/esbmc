@@ -41,3 +41,26 @@ into two directories:
 If you want to use other SMT solvers (e.g. MathSAT, Yices, CVC4), check out the
 ESBMC [source code](https://github.com/esbmc/esbmc) and follow the
 [Build Guide](/docs/development/building).
+
+### ARM64 builds
+
+`esbmc-linux-armv8.zip` is the Linux ARM64 (aarch64) build. It is static and
+self-contained like the x86_64 build, but a few features are unavailable on
+ARM64. Each is tracked by a GitHub issue; if the issue is closed, the limitation
+has been lifted and this page is simply out of date.
+
+| Limitation                                    | Tracked by |
+| --------------------------------------------- | ---------- |
+| `--32` fails: no 32-bit libc headers on ARM64 | [#5267]    |
+| Solidity unavailable: `_BitInt` caps at 128   | [#5267]    |
+| Interval analysis differs from x86_64         | [#5267]    |
+| CVC5 not built in                             | [#7230]    |
+| `--goto-contractor` not built in              | [#7230]    |
+
+Solidity needs `_BitInt(256)` for `uint256`, above what ARM64 Clang supports.
+
+The first three apply to macOS Apple Silicon too; the two solver gaps are
+specific to the Linux ARM64 build.
+
+[#5267]: https://github.com/esbmc/esbmc/issues/5267
+[#7230]: https://github.com/esbmc/esbmc/issues/7230
