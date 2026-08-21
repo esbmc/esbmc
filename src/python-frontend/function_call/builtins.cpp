@@ -364,7 +364,7 @@ exprt function_call_expr::handle_isinstance() const
     // check instead of the static-type comparisons below.
     if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
       return converter_.dynamic_type_handler_.build_isinstance_check(
-        obj_expr, type_name);
+        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
