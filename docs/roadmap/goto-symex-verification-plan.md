@@ -6245,8 +6245,8 @@ answer, and it is the one the rest of the model already gives.
 |---|---|---|
 | `regression/esbmc/ptr_rel_below_base` | `--unwind 10` | `SUCCESSFUL`; on the pre-patch control **all four** relational assertions fail independently (`!(below >= b)`, `below < b`, `!(below > b)`, `below <= b`), alongside the unwinding assertion and a bounds violation — so each operator is pinned on its own, not just `>=`. 21 of its 47 VCCs survive simplification, so the comparisons reach the solver rather than being folded |
 | `regression/esbmc/ptr_rel_below_base_fail` | default | `FAILED` on `below >= b` — the pre-fix reading, asserted directly |
-| `regression/esbmc/ptr_rel_huge_object` | default | `KNOWNBUG` — pins R37, the residual this fix accepts |
-| `-L esbmc/`, `-L esbmc-unix` | as recorded | 1842/1842 and 624/624 (`01_pthread60` passes alone at 95.4 s; its parallel failure is the documented load artefact) |
+| `regression/esbmc/ptr_rel_huge_object` | default | `KNOWNBUG` — pins R37, the residual this fix accepts. Weak by construction: `testing_tool.py` counts a timeout as satisfying a `KNOWNBUG`, and the expectation is only that `VERIFICATION SUCCESSFUL` is absent, so a future crash or timeout on the 8 EiB `malloc` would keep it green while R37 stopped being what is measured. It is exact today; it will not stay exact under drift |
+| `-L esbmc/`, `-L esbmc-unix` | as recorded | 1846/1846 and 624/624 (`01_pthread60` passes alone at 95.4 s; its parallel failure is the documented load artefact) |
 
 ---
 
