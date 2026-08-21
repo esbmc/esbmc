@@ -2751,6 +2751,16 @@ exprt function_call_expr::handle_numpy_astype() const
   return build_symbol(result_sym);
 }
 
+/// A function name used as a value decays to a function pointer, as it already
+/// does in call-argument position. Storing the code symbol itself aborts
+/// conversion with "got invalid code for function" (#6640).
+static exprt decay_function_to_pointer(const exprt &value)
+{
+  if (!value.type().is_code() || !value.is_symbol())
+    return value;
+  return python_expr::build_address_of(value);
+}
+
 exprt function_call_expr::handle_list_append() const
 {
   const auto &args = call_["args"];
@@ -2767,6 +2777,12 @@ exprt function_call_expr::handle_list_append() const
 
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
+
+  // A function name stored in a list decays to a function pointer, mirroring
+  // the implicit conversion the call-argument path already applies. Storing
+  // the code symbol itself aborts with "got invalid code for function"
+  // (#6640).
+  value_to_append = decay_function_to_pointer(value_to_append);
 
   // If value_to_append is a function call, materialize its return value
   bool is_func_call = (value_to_append.is_code() &&
