@@ -4,6 +4,7 @@
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
 #include <util/symtab/symbol.h>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -631,6 +632,22 @@ private:
 
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
+
+  // ADR-NP-003 etapa 2, first slice: builds a pointer into the base
+  // array's own storage for a 1-D, unit-stride, literal-bound slice
+  // assigned directly to a bare name, instead of handle_range_slice()'s
+  // usual independent copy. Split out to keep that already large
+  // function's own decision count from growing further; see
+  // list_access.cpp for the full rationale and the cases intentionally
+  // left out of this first slice (returns std::nullopt for those, and the
+  // caller falls through to the existing copy).
+  std::optional<exprt> try_build_1d_pointer_view(
+    const exprt &array,
+    const typet &elem_type,
+    long long step_val,
+    bool needs_null_term,
+    long long literal_start,
+    long long static_slice_len);
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);

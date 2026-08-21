@@ -4,6 +4,7 @@
 #include "definitions.h"
 #include "OM_compiler_defs.h" // OM_NOEXCEPT
 #include "char_traits.h"
+#include "iterator_tags.h"
 #include "cstring"
 #include "cstdio"
 #include "cassert"
@@ -43,41 +44,52 @@ public:
   class iterator
   {
   public:
-    char *pointer;
+    /* [iterator.traits] reads these five from the iterator itself, so without
+     * them iterator_traits<basic_string<char>::iterator>::difference_type does
+     * not resolve and a generic algorithm over a string iterator fails. The
+     * data member below was named `pointer` and had to move aside for the
+     * typedef the traits require. */
+    typedef ::std::random_access_iterator_tag iterator_category;
+    typedef CharT value_type;
+    typedef ::std::ptrdiff_t difference_type;
+    typedef CharT *pointer;
+    typedef CharT &reference;
+
+    char *ptr;
     char *it_str;
     int pos;
 
     iterator(const iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
       it_str = i.it_str;
     }
 
     iterator()
     {
-      pointer = NULL;
+      ptr = NULL;
       pos = 0;
       it_str = NULL;
     }
 
     iterator(char *p_pointer)
     {
-      pointer = p_pointer;
+      ptr = p_pointer;
       pos = 0;
       it_str = p_pointer;
     }
 
     iterator &operator=(const const_iterator &right)
     {
-      this->pointer = right.pointer;
+      this->ptr = right.ptr;
       this->pos = right.pos;
       return *this;
     }
 
     iterator &operator=(const iterator &right)
     {
-      this->pointer = right.pointer;
+      this->ptr = right.ptr;
       this->pos = right.pos;
       this->it_str = right.it_str;
       return *this;
@@ -85,12 +97,12 @@ public:
 
     char *operator->()
     {
-      return pointer;
+      return ptr;
     }
 
     char &operator*()
     {
-      return *pointer;
+      return *ptr;
     }
 
     CC_DIAGNOSTIC_PUSH()
@@ -99,7 +111,7 @@ public:
     iterator operator-(int n) const
     {
       iterator buffer;
-      buffer.pointer = pointer - sizeof(char) * n;
+      buffer.ptr = ptr - sizeof(char) * n;
       buffer.pos = pos - n;
       buffer.it_str = it_str;
       __ESBMC_assert(buffer.pos >= 0, "underflow");
@@ -109,47 +121,47 @@ public:
     iterator operator+(int n) const
     {
       iterator buffer;
-      buffer.pointer = pointer + sizeof(char) * n;
+      buffer.ptr = ptr + sizeof(char) * n;
       buffer.pos = pos + n;
       buffer.it_str = it_str;
       return buffer;
     }
 
-    //operator increases pointer address, but returns old value.
+    //operator increases ptr address, but returns old value.
     //It's like "++c"
     iterator &operator++()
     {
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return *this;
     }
 
-    //operator increases pointer address and returns new value
+    //operator increases ptr address and returns new value
     //It's like "c++"
     iterator operator++(int _b)
     {
       iterator buffer = *this;
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return buffer;
     }
-    //operator decreases pointer address, but returns old value.
+    //operator decreases ptr address, but returns old value.
     //It's like "--c"
     iterator &operator--()
     {
-      pointer = pointer - sizeof(char);
+      ptr = ptr - sizeof(char);
       pos--;
       return *this;
     }
 
     CC_DIAGNOSTIC_POP()
 
-    //operator decreases pointer address and returns new value
+    //operator decreases ptr address and returns new value
     //It's like "c--"
     iterator operator--(int _b)
     {
       iterator buffer = *this;
-      pointer = pointer - sizeof(char);
+      ptr = ptr - sizeof(char);
       pos--;
       return buffer;
     }
@@ -159,12 +171,12 @@ public:
 
     bool operator==(const iterator &right) const
     {
-      return (pointer == right.pointer && pos == right.pos);
+      return (ptr == right.ptr && pos == right.pos);
     }
 
     bool operator==(const const_iterator &right) const
     {
-      return (pointer == right.pointer && pos == right.pos);
+      return (ptr == right.ptr && pos == right.pos);
     }
 
     bool operator!=(const iterator &right) const
@@ -187,7 +199,7 @@ public:
       return (pos < right.pos);
     }
 
-    //operator returns true if pointer address of right is lower than this
+    //operator returns true if ptr address of right is lower than this
 
     bool operator>(const iterator &right) const
     {
@@ -199,7 +211,7 @@ public:
       return (pos > right.pos);
     }
 
-    //operator returns true if pointer address of right is higher or equal than this
+    //operator returns true if ptr address of right is higher or equal than this
 
     bool operator<=(const iterator &right) const
     {
@@ -211,7 +223,7 @@ public:
       return !(pos > right.pos);
     }
 
-    //operator returns true if pointer address of right is lower or equal than this
+    //operator returns true if ptr address of right is lower or equal than this
 
     bool operator>=(const iterator &right) const
     {
@@ -226,20 +238,20 @@ public:
     CC_DIAGNOSTIC_PUSH()
     DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
-    //operator adds n positions on pointer address, and returns its address value
+    //operator adds n positions on ptr address, and returns its address value
 
     iterator &operator+=(int n)
     {
-      pointer = pointer + sizeof(char) * n;
+      ptr = ptr + sizeof(char) * n;
       pos += n;
       return *this;
     }
 
-    //operator subtracts n positions on pointer address, and returns its address value
+    //operator subtracts n positions on ptr address, and returns its address value
 
     iterator operator-=(int n)
     {
-      pointer = pointer - sizeof(char) * n;
+      ptr = ptr - sizeof(char) * n;
       pos -= n;
       return *this;
     }
@@ -250,50 +262,56 @@ public:
   class const_iterator
   {
   public:
-    char *pointer;
+    typedef ::std::random_access_iterator_tag iterator_category;
+    typedef CharT value_type;
+    typedef ::std::ptrdiff_t difference_type;
+    typedef const CharT *pointer;
+    typedef const CharT &reference;
+
+    char *ptr;
     int pos;
 
     const_iterator(const iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
     }
 
     const_iterator(const const_iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
     }
 
     const_iterator()
     {
-      pointer = NULL;
+      ptr = NULL;
     }
 
     //This creates an iterator that points to the value pointed to by p_pointer.
     const_iterator(char *p_pointer)
     {
-      pointer = p_pointer;
+      ptr = p_pointer;
     }
 
     char *operator->()
-    { //operator returns memo address pointer
-      return pointer;
+    { //operator returns memo address ptr
+      return ptr;
     }
 
     char &operator*()
     {
-      return *pointer;
+      return *ptr;
     }
 
     CC_DIAGNOSTIC_PUSH()
     DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
-    //operator subtracts n positions on pointer address of this
+    //operator subtracts n positions on ptr address of this
     const_iterator operator-(int n) const
     {
       const_iterator buffer;
-      buffer.pointer = pointer - sizeof(char) * n;
+      buffer.ptr = ptr - sizeof(char) * n;
       buffer.pos = pos - n;
       return buffer;
     }
@@ -301,7 +319,7 @@ public:
     const_iterator operator+(int n) const
     {
       const_iterator buffer;
-      buffer.pointer = pointer + sizeof(char) * n;
+      buffer.ptr = ptr + sizeof(char) * n;
       buffer.pos = pos + n;
       return buffer;
     }
@@ -310,14 +328,14 @@ public:
 
     const_iterator &operator++()
     {
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return *this;
     }
     const_iterator operator++(int)
     {
       const_iterator buffer = *this;
-      pointer = pointer + sizeof(char);
+      ptr = ptr + sizeof(char);
       pos++;
       return buffer;
     }
@@ -327,85 +345,85 @@ public:
 
     bool operator==(const iterator &right) const
     {
-      return (pointer == right.pointer);
+      return (ptr == right.ptr);
     }
 
     bool operator==(const const_iterator &right) const
     {
-      return (pointer == right.pointer);
+      return (ptr == right.ptr);
     }
 
     //just the complement of "=="
 
     bool operator!=(const const_iterator &right) const
     {
-      return !(pointer == right.pointer);
+      return !(ptr == right.ptr);
     }
 
     bool operator!=(const iterator &right) const
     {
-      return !(pointer == right.pointer);
+      return !(ptr == right.ptr);
     }
 
     bool operator!=(iterator right)
     {
-      return !(pointer == right.pointer);
+      return !(ptr == right.ptr);
     }
 
-    //operator returns true if pointer address of right is higher than this
+    //operator returns true if ptr address of right is higher than this
 
     bool operator<(const iterator &right) const
     {
-      return (pointer < right.pointer);
+      return (ptr < right.ptr);
     }
 
     bool operator<(const const_iterator &right) const
     {
-      return (pointer < right.pointer);
+      return (ptr < right.ptr);
     }
 
-    //operator returns true if pointer address of right is lower than this
+    //operator returns true if ptr address of right is lower than this
 
     bool operator>(const iterator &right) const
     {
-      return (pointer > right.pointer);
+      return (ptr > right.ptr);
     }
 
     bool operator>(const const_iterator &right) const
     {
-      return (pointer > right.pointer);
+      return (ptr > right.ptr);
     }
 
-    //operator returns true if pointer address of right is higher or equal than this
+    //operator returns true if ptr address of right is higher or equal than this
 
     bool operator<=(const iterator &right) const
     {
-      return !(pointer > right.pointer);
+      return !(ptr > right.ptr);
     }
 
     bool operator<=(const const_iterator &right) const
     {
-      return !(pointer > right.pointer);
+      return !(ptr > right.ptr);
     }
 
-    //operator returns true if pointer address of right is lower or equal than this
+    //operator returns true if ptr address of right is lower or equal than this
 
     bool operator>=(const iterator &right) const
     {
-      return !(pointer < right.pointer);
+      return !(ptr < right.ptr);
     }
 
     bool operator>=(const const_iterator &right) const
     {
-      return !(pointer < right.pointer);
+      return !(ptr < right.ptr);
     }
     const_iterator(iterator &i)
     {
-      pointer = i.pointer;
+      ptr = i.ptr;
       pos = i.pos;
     }
 
-    //operator adds n positions on pointer address, and returns its address value
+    //operator adds n positions on ptr address, and returns its address value
   };
 
   basic_string();
@@ -776,7 +794,7 @@ public:
   {
   __ESBMC_HIDE:
     int pos1 = it_one.pos;
-    char *s = it_two.pointer;
+    char *s = it_two.ptr;
     int n = it_three.pos;
     int len = this->length(), i, k;
     int lim = n;
@@ -1001,7 +1019,7 @@ public:
     size_t len = this->length();
     basic_string<CharT, Traits, Alloc>::iterator end(
       const_cast<char *>(this->str));
-    end.pointer = const_cast<char *>(this->str) + len;
+    end.ptr = const_cast<char *>(this->str) + len;
     end.pos = len;
     return end;
   }
@@ -1073,6 +1091,21 @@ typedef basic_string<wchar_t> wstring;
 
 namespace std
 {
+/* strcpy scans to a NUL, which over a symbolic buffer never converges: copying
+ * one std::string into another did not terminate. The trip count here is the
+ * fixed buffer size, which a string can never exceed. */
+static void __esbmc_string_copy(char *dst, const char *src, size_t n)
+{
+__ESBMC_HIDE:
+  for (size_t i = 0; i < STRING_CAPACITY; i++)
+  {
+    if (i >= n)
+      break;
+    dst[i] = src[i];
+  }
+  dst[n] = '\0';
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>::basic_string()
 {
@@ -1086,9 +1119,21 @@ basic_string<CharT, Traits, Alloc>::basic_string(const CharT *s)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "basic_string<CharT, Traits, Alloc> invalid");
-  _size = strlen(s);
-
-  strcpy(str, s);
+  /* strlen and strcpy both scan to a NUL. That folds for a plain literal, but
+   * not once the source is a conditional -- `std::string(x ? x : "")`, which is
+   * how <filesystem>'s path is built -- and the constructor then never
+   * converged. Measuring the length while copying, bounded by the fixed buffer,
+   * removes both scans. */
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (s[k] == '\0')
+      break;
+    str[k] = s[k];
+    n++;
+  }
+  str[n] = '\0';
+  _size = n;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1510,7 +1555,7 @@ basic_string<CharT, Traits, Alloc>::operator=(
 {
 __ESBMC_HIDE:
   this->_size = str.length();
-  strcpy(this->str, str.str);
+  __esbmc_string_copy(this->str, str.str, this->_size);
   return *this;
 }
 
@@ -1523,7 +1568,7 @@ __ESBMC_HIDE:
   if (this == &str)
     return *this;
   this->_size = str.length();
-  strcpy(this->str, str.str);
+  __esbmc_string_copy(this->str, str.str, this->_size);
   return *this;
 }
 
@@ -1929,11 +1974,21 @@ static size_t __esbmc_string_find(
 __ESBMC_HIDE:
   if (pos > hlen || nlen > hlen - pos)
     return (size_t)-1;
-  for (size_t xpos = pos; xpos + nlen <= hlen; xpos++)
+  /* Both trip counts are the fixed buffer size, and both counters start at a
+   * concrete 0: a bound taken from hlen/nlen is symbolic, and a counter that
+   * starts at the symbolic pos can wrap, so neither loop would converge. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t xpos = pos + k;
+    if (xpos + nlen > hlen)
+      break;
     size_t i = 0;
-    while (i < nlen && hay[xpos + i] == needle[i])
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (i >= nlen || hay[xpos + i] != needle[i])
+        break;
       i++;
+    }
     if (i == nlen)
       return xpos;
   }
@@ -2407,8 +2462,15 @@ __esbmc_string_compare(const char *s1, size_t n1, const char *s2, size_t n2)
 {
 __ESBMC_HIDE:
   size_t rlen = n1 < n2 ? n1 : n2;
-  for (size_t i = 0; i < rlen; i++)
+  /* The trip count is spelled as the fixed buffer size rather than rlen, which
+   * is symbolic: ESBMC unwinds syntactically, so a loop bounded only by a
+   * symbolic length never converges and every comparison had to be run with an
+   * explicit --unwind. A string cannot be longer than its buffer, so the two
+   * bounds agree. */
+  for (size_t i = 0; i < STRING_CAPACITY; i++)
   {
+    if (i >= rlen)
+      break;
     unsigned char c1 = (unsigned char)s1[i];
     unsigned char c2 = (unsigned char)s2[i];
     if (c1 != c2)
@@ -2493,10 +2555,21 @@ __ESBMC_HIDE:
   size_t slen = strlen(s);
   if (pos >= len || slen == 0)
     return npos;
-  for (size_t i = pos; i < len; i++)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2511,10 +2584,21 @@ __ESBMC_HIDE:
   size_t slen = s.length();
   if (pos >= len || slen == 0)
     return npos;
-  for (size_t i = pos; i < len; i++)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2526,9 +2610,16 @@ __ESBMC_HIDE:
   size_t len = this->length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip count from 0: len is symbolic and a counter starting
+   * at the symbolic pos can wrap. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     if (this->str[i] == c)
       return i;
+  }
   return npos;
 }
 
@@ -2543,15 +2634,24 @@ __ESBMC_HIDE:
   size_t slen = s.length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     bool found = false;
-    for (size_t j = 0; j < slen; j++)
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
       {
         found = true;
         break;
       }
+    }
     if (!found)
       return i;
   }
@@ -2569,15 +2669,24 @@ __ESBMC_HIDE:
   size_t slen = strlen(s);
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip counts from 0: len/slen are symbolic and a counter
+   * starting at the symbolic pos can wrap, so neither loop converged. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     bool found = false;
-    for (size_t j = 0; j < slen; j++)
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
       {
         found = true;
         break;
       }
+    }
     if (!found)
       return i;
   }
@@ -2592,9 +2701,16 @@ __ESBMC_HIDE:
   size_t len = this->length();
   if (pos >= len)
     return npos;
-  for (size_t i = pos; i < len; i++)
+  /* Concrete trip count from 0: len is symbolic and a counter starting
+   * at the symbolic pos can wrap. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    size_t i = pos + k;
+    if (i >= len)
+      break;
     if (this->str[i] != c)
       return i;
+  }
   return npos;
 }
 
@@ -2610,10 +2726,21 @@ __ESBMC_HIDE:
   if (len == 0 || slen == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts: start and slen are symbolic, and a reverse
+   * counter from start can wrap below zero as a size_t. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s.str[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2629,10 +2756,21 @@ __ESBMC_HIDE:
   if (len == 0 || slen == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
-    for (size_t j = 0; j < slen; j++)
+  /* Concrete trip counts: start and slen are symbolic, and a reverse
+   * counter from start can wrap below zero as a size_t. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
       if (this->str[i] == s[j])
         return i;
+    }
+  }
   return npos;
 }
 
@@ -2651,9 +2789,15 @@ __ESBMC_HIDE:
   if (len == 0)
     return npos;
   size_t start = (pos >= len) ? len - 1 : pos;
-  for (size_t i = start + 1; i-- > 0;)
+  /* Concrete trip count; see the note on find_last_of above. */
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
     if (this->str[i] == c)
       return i;
+  }
   return npos;
 }
 
@@ -2661,12 +2805,23 @@ template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::rfind(char c, size_t pos) const
 {
 __ESBMC_HIDE:
-  int i;
-  int len = this->length();
-  for (i = len; i > 0; i--)
+  /* [string.rfind]: the highest position at or before pos holding c. The
+   * previous loop started at str[len] -- the terminator, one past the last
+   * character -- stopped before index 0, and ignored pos entirely, so
+   * rfind('a') on "abc" reported npos. */
+  size_t len = this->length();
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
     if (this->str[i] == c)
       return i;
-  return npos; // Return npos when the character is not found
+  }
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2803,20 +2958,26 @@ basic_string<CharT, Traits, Alloc> operator+(
   basic_string<CharT, Traits, Alloc> lhs,
   basic_string<CharT, Traits, Alloc> rhs)
 {
-  int totalLength = lhs.size();
-  totalLength += rhs.size();
-  int i, j, k;
+  /* Concrete trip counts: both lengths are symbolic, so the original
+   * loops never converged and `a + b` did not terminate. */
+  size_t llen = lhs.size();
+  size_t rlen = rhs.size();
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= llen)
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  for (j = i, k = 0; j < totalLength; j++, k++)
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[j] = rhs.str[k];
+    if (k >= rlen)
+      break;
+    result.str[n++] = rhs.str[k];
   }
-  result.str[j] = '\0';
-  result._size = totalLength;
+  result.str[n] = '\0';
+  result._size = n;
   return result;
 }
 
@@ -2824,20 +2985,26 @@ template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>
 operator+(basic_string<CharT, Traits, Alloc> lhs, char *rhs)
 {
-  int totalLength = lhs.size();
-  totalLength += strlen(rhs);
-  int i, j, k;
+  /* Concrete trip counts: both lengths are symbolic, so the original
+   * loops never converged and `a + b` did not terminate. */
+  size_t llen = lhs.size();
+  size_t rlen = strlen(rhs);
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= llen)
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  for (j = i, k = 0; j < totalLength; j++, k++)
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[j] = rhs[k];
+    if (k >= rlen)
+      break;
+    result.str[n++] = rhs[k];
   }
-  result.str[j] = '\0';
-  result._size = totalLength;
+  result.str[n] = '\0';
+  result._size = n;
   return result;
 }
 
@@ -2849,13 +3016,17 @@ operator+(basic_string<CharT, Traits, Alloc> lhs, char rhc)
   totalLength += 1;
   int i;
   basic_string<CharT, Traits, Alloc> result;
-  for (i = 0; i < lhs.size(); i++)
+  /* Concrete trip count; lhs.size() is symbolic. */
+  size_t n = 0;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
   {
-    result.str[i] = lhs.str[i];
+    if (k >= lhs.size())
+      break;
+    result.str[n++] = lhs.str[k];
   }
-  result.str[i] = rhc;
-  result.str[i + 1] = '\0';
-  result._size = totalLength;
+  result.str[n] = rhc;
+  result.str[n + 1] = '\0';
+  result._size = n + 1;
   return result;
 }
 
