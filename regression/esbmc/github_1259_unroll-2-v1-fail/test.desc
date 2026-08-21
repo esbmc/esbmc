@@ -1,5 +1,6 @@
 CORE
 unroll-2-v1.wvr.c
 --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --floatbv -D'__builtin_unreachable()' --no-vla-size-check --32 --memory-leak-check --no-assertions --no-unwinding-assertions --unwind 1
+REQUIRES arch32
 ^VERIFICATION FAILED$
 \bforgotten memory\b

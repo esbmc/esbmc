@@ -62,5 +62,23 @@ Solidity needs `_BitInt(256)` for `uint256`, above what ARM64 Clang supports.
 The first three apply to macOS Apple Silicon too; the two solver gaps are
 specific to the Linux ARM64 build.
 
+#### Why the ARM64 build uses LLVM 18
+
+The x86_64 build links a prebuilt LLVM 22 that the project hosts itself, trimmed
+to about 140MB. No equivalent exists for aarch64: LLVM stopped publishing the
+compact `clang+llvm-*-aarch64-linux-gnu` archive after 19.x, and the
+`LLVM-*-Linux-ARM64` archive that replaced it unpacks to 11GB, more than a
+public ARM CI runner's disk. The ARM64 build therefore links the distribution's
+own LLVM packages, and Ubuntu 24.04 ships LLVM 18.
+
+LLVM 18 is the minimum ESBMC supports, so this is a supported configuration
+rather than a downgrade, and the binary is still statically linked with no
+runtime dependency on LLVM. Verification results do not depend on the LLVM
+version: it supplies the C/C++ parser, not the solver.
+
+This resolves once a trimmed aarch64 LLVM 22 archive is hosted alongside the
+x86_64 one, tracked in [#7236].
+
 [#5267]: https://github.com/esbmc/esbmc/issues/5267
 [#7230]: https://github.com/esbmc/esbmc/issues/7230
+[#7236]: https://github.com/esbmc/esbmc/issues/7236

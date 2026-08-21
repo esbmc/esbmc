@@ -1,4 +1,5 @@
 CORE
 main.c
 --fixedbv --no-slice --bv --32
+REQUIRES arch32
 ^VERIFICATION FAILED$
