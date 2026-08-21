@@ -3677,10 +3677,24 @@ void code_contractst::emit_arr_elem_assertions(
       add2tc(snap.arr_add_type, snap.arr_ptr, snap.witness_idx);
     expr2tc arr_at_j_after = dereference2tc(snap.elem_type, arr_plus_j);
 
-    // Guard: (j == declared_idx) || (arr[j] == snap)
-    expr2tc eq_idx = equality2tc(snap.witness_idx, snap.declared_idx);
-    expr2tc eq_val = equality2tc(arr_at_j_after, snap.snapshot_sym);
-    expr2tc guard = or2tc(eq_idx, eq_val);
+    // Guard: (j == any index the clause named on this array) || (arr[j] ==
+    // snap). Excusing only this target's own index rejects a body that writes
+    // a different element of the same array the clause also granted, which is
+    // a write inside its frame (#7184). The global-array path already ORs over
+    // every named index; this is the same rule for a pointer parameter.
+    expr2tc guard = equality2tc(arr_at_j_after, snap.snapshot_sym);
+    for (const auto &other : snapshots)
+    {
+      if (
+        to_symbol2t(other.arr_ptr).thename != to_symbol2t(snap.arr_ptr).thename)
+        continue;
+
+      guard = or2tc(
+        guard,
+        equality2tc(
+          snap.witness_idx,
+          typecast2tc(snap.witness_idx->type, other.declared_idx)));
+    }
 
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = guard;

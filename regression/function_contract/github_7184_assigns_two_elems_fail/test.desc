@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract set_third --function set_third
+^VERIFICATION FAILED$
+^.*arr\[j\] not in assigns clause.*$
