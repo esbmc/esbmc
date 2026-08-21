@@ -304,7 +304,7 @@ public:
   // types:
   typedef T &reference;
   typedef const T &const_reference;
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
   typedef T value_type;
   typedef T *pointer;
