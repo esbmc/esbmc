@@ -1473,6 +1473,43 @@ class CoreVisitorsMixin:
         self.generic_visit(node)
         return node
 
+    def _locally_bound_names(self, node):
+        """Names this function scope binds, ignoring nested scopes and globals."""
+        bound = set()
+        declared = set()
+        target_names = self._target_names
+
+        def walk(body):
+            for stmt in body:
+                if isinstance(stmt, (ast.Global, ast.Nonlocal)):
+                    declared.update(stmt.names)
+                    continue
+                if isinstance(stmt, ast.Assign):
+                    for t in stmt.targets:
+                        bound.update(target_names(t))
+                elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign, ast.For)):
+                    bound.update(target_names(stmt.target))
+                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    bound.add(stmt.name)
+                    continue
+                for child in ast.iter_child_nodes(stmt):
+                    if isinstance(
+                            child,
+                        (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                        continue
+                    walk([child])
+
+        walk(node.body)
+        return bound - declared
+
+    def _restore_shadowed_literals(self, names, saved):
+        """Undo inner-scope rebindings of `names`, keeping other changes."""
+        for name in names:
+            if name in saved:
+                self.list_literal_values[name] = saved[name]
+            else:
+                self.list_literal_values.pop(name, None)
+
     def visit_FunctionDef(self, node):  # pylint: disable=too-many-branches,too-many-statements
         # dict-literal bindings are local to a scope: snapshot on entry and
         # restore on exit so a dict named `d` in one function does not make a
@@ -1486,6 +1523,12 @@ class CoreVisitorsMixin:
         # synthesized dict[K, V] for a parameter in one function must not leak
         # onto a same-named parameter elsewhere.
         saved_var_anns = dict(self.variable_annotations)
+        # A nested `c = [9]` binds a local and must not make the enclosing
+        # scope's `c[0]` fold to the inner literal. A nested `c[0] += 1`
+        # mutates the enclosing list, so its invalidation must survive --
+        # restore only the names this scope binds.
+        saved_list_literals = dict(self.list_literal_values)
+        shadowed_literals = self._locally_bound_names(node)
         # Per-function scope for call-origin tracking and the eq-only set.
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
@@ -1526,6 +1569,7 @@ class CoreVisitorsMixin:
             self.dict_literal_vars = saved_dict_vars
             self.known_variable_types = saved_known_types
             self.variable_annotations = saved_var_anns
+            self._restore_shadowed_literals(shadowed_literals, saved_list_literals)
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
             self._exit_vararg_scope(node, saved_vararg_defs)
