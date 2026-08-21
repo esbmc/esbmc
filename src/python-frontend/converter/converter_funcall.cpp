@@ -1,5 +1,6 @@
 #include <python-frontend/function_call/builder.h>
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
@@ -330,6 +331,60 @@ bool python_converter::is_identity_function(
 
   return false;
 }
+
+exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return nil_exprt();
+
+  const nlohmann::json &arg = element["args"][0];
+  if (has_dunder_method(arg, "__len__"))
+    return get_expr(
+      build_dunder_call(arg, "__len__", nlohmann::json::array(), element));
+
+  // Without a __len__ the builtin path measures the struct with strlen and
+  // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
+  const std::string cls = instance_class_name(arg);
+  if (!cls.empty() && is_class_instance(arg))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+
+  return nil_exprt();
+}
+
+// len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+// slice views): __ESBMC_get_object_size on the pointer would report the
+// base array's remaining size from that offset, not v's own (possibly
+// shorter) logical length -- e.g. an empty view still points at a valid
+// position with nonzero remaining capacity. Returns the tracked literal
+// length directly instead of routing through the generic len() dispatch.
+std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
+  const nlohmann::json &element) const
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1 ||
+    element["args"][0].value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string arg_id =
+    resolve_name_symbol_id(element["args"][0]["id"].get<std::string>());
+  if (arg_id.empty())
+    return std::nullopt;
+
+  const auto it = numpy_pointer_view_lengths_.find(arg_id);
+  if (it == numpy_pointer_view_lengths_.end())
+    return std::nullopt;
+
+  return from_integer(it->second, long_long_int_type());
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1056,20 +1111,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // len(obj) where obj's class defines __len__: dispatch to obj.__len__().
-  // The builtin len path only recognises the model container types (list,
-  // tuple, dict, str/bytes), so a user-defined __len__ is otherwise ignored
-  // and len falls through to strlen over the struct — a wrong length.
-  if (
-    element.contains("func") && element["func"].is_object() &&
-    element["func"].value("_type", "") == "Name" &&
-    element["func"].value("id", "") == "len" && element.contains("args") &&
-    element["args"].is_array() && element["args"].size() == 1 &&
-    has_dunder_method(element["args"][0], "__len__"))
-  {
-    return get_expr(build_dunder_call(
-      element["args"][0], "__len__", nlohmann::json::array(), element));
-  }
+  if (exprt len_expr = get_len_on_class_instance(element);
+      len_expr.is_not_nil())
+    return len_expr;
+
+  if (std::optional<exprt> view_len = try_get_numpy_pointer_view_len(element))
+    return *view_len;
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();

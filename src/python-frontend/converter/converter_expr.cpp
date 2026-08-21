@@ -519,6 +519,26 @@ static std::string undefined_variable_message(
   return error_msg.str();
 }
 
+// v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003 etapa
+// 2, 1-D slice views): its own logical length is tracked separately, since
+// unwrapping the pointer reaches only the scalar element type, not a shape.
+// Views are always rank 1 in this PR's scope.
+std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  const auto it = numpy_pointer_view_lengths_.find(symbol.id.as_string());
+  if (it == numpy_pointer_view_lengths_.end())
+    return std::nullopt;
+
+  if (attr_name == "shape")
+    return build_shape_tuple_expr(
+      *this, {from_integer(it->second, int_type())});
+  if (attr_name == "ndim")
+    return from_integer(1, int_type());
+  return std::nullopt;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1112,6 +1132,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       const std::string &attr_name = element["attr"].get<std::string>();
 
+      if (
+        std::optional<exprt> view_attr =
+          try_get_numpy_pointer_view_shape_attr(*symbol, attr_name))
+      {
+        expr = *view_attr;
+        break;
+      }
+
       if (attr_name == "shape")
       {
         typet sym_type = symbol->get_type();
@@ -1570,7 +1598,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::SUBSCRIPT:
   {
+    // current_lhs being set does not mean this Subscript IS the assignment's
+    // whole RHS -- for `x = a[1:3][0]` the outer Subscript's base is the
+    // inner `a[1:3]`, converted here with current_lhs still == &x. Left
+    // unguarded, the numpy 1-D pointer-view path (list_access.cpp's
+    // try_build_1d_pointer_view) would retype x to a pointer for an
+    // intermediate value that is never itself the bound name. Null
+    // current_lhs for this nested conversion, matching the same
+    // save/null/restore idiom used around other non-RHS sub-conversions
+    // (converter_binop.cpp, list_construction.cpp).
+    exprt *saved_lhs_for_base = current_lhs;
+    current_lhs = nullptr;
     exprt array = get_expr(element["value"]);
+    current_lhs = saved_lhs_for_base;
 
     // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
     // integer returns a cpp-throw side effect), propagate the exception rather

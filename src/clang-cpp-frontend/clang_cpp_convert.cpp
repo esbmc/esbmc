@@ -32,6 +32,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/lang/c_types.h>
 #include <util/lang/exception_specification.h>
 #include <util/expr/string_constant.h>
+#include <util/expr/symbolic_types.h>
 #include <util/symtab/base_subobject.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
@@ -2156,6 +2157,25 @@ bool clang_cpp_convertert::build_lambda_static_invoker(
   return false;
 }
 
+bool clang_cpp_convertert::get_member_initializer(
+  const clang::Expr &init,
+  const typet &member_type,
+  exprt &rhs)
+{
+  const auto *ctor_expr = llvm::dyn_cast<clang::CXXConstructExpr>(&init);
+  if (
+    ctor_expr && zero_initialises(init) && ctor_expr->getConstructor() &&
+    ctor_expr->getConstructor()->isTrivial())
+  {
+    // member_type may be a symbolic tag; resolve it so gen_zero walks the
+    // real struct/array.
+    rhs = gen_zero(get_complete_type(member_type, ns));
+    return false;
+  }
+
+  return get_expr(init, rhs);
+}
+
 bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
@@ -2345,7 +2365,13 @@ bool clang_cpp_convertert::get_function_body(
 
         exprt rhs;
         rhs.set("#member_init", 1);
-        if (get_expr(*init->getInit(), rhs))
+
+        /* `m()` in a mem-initializer value-initializes m. For a class type
+         * whose default ctor is trivial (thus not user-provided) this is
+         * exactly zero-initialization, [dcl.init.general]/8; and the implicit
+         * ctor has no GOTO body, so emitting the call would havoc m and leave
+         * it nondeterministic (#4243). */
+        if (get_member_initializer(*init->getInit(), member.type(), rhs))
           return true;
 
         /* We can't assign to arrays, dereference() will choke. */

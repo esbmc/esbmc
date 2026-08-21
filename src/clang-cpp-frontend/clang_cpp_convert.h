@@ -101,6 +101,10 @@ protected:
     const clang::FunctionDecl &fd,
     exprt &new_expr,
     const code_typet &ftype) override;
+  bool get_member_initializer(
+    const clang::Expr &init,
+    const typet &member_type,
+    exprt &rhs);
 
   /** Body for a lambda's static invoker: forward to the closure's
    *  operator(). Clang synthesises this in CodeGen, so the AST has none. */

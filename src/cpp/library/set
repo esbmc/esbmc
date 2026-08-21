@@ -4,6 +4,7 @@
 #define MAX 500
 
 #include "definitions.h"
+#include "memory" /* std::allocator, for the Allocator parameter */
 #include "utility"
 #include "iterator"
 #include "iostream"
@@ -17,7 +18,8 @@ namespace std
 {
 template <
   class Key,
-  class Compare = less<Key> /*,class Allocator = allocator<Key> */>
+  class Compare = less<Key>,
+  class Allocator = allocator<Key> >
 class multiset
 {
 public:
@@ -73,12 +75,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -165,12 +167,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -250,12 +252,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -334,12 +336,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -777,7 +779,10 @@ public:
   }
 };
 
-template <class Key, class Compare = less<Key> >
+template <
+  class Key,
+  class Compare = less<Key>,
+  class Allocator = allocator<Key> >
 class set
 {
 public:
@@ -829,12 +834,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -921,12 +926,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -1005,12 +1010,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -1089,12 +1094,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
