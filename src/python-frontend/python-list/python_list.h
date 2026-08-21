@@ -299,6 +299,17 @@ public:
    *                        a concrete element expression.
    * @param elem_type       ESBMC type of the element.
    */
+  /// The declaring literal's elements for a variable-held list, or empty when
+  /// the literal cannot be used.
+  std::vector<exprt> literal_elems_for_variable_list(
+    const nlohmann::json *source_node,
+    const exprt &source_list);
+
+  /// True when a list's declaring literal still describes its contents.
+  static bool literal_still_describes_list(
+    const exprt &source_list,
+    size_t literal_elem_count);
+
   static void add_type_info_entry(
     const std::string &list_symbol_id,
     const std::string &elem_id,
