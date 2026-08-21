@@ -6069,6 +6069,14 @@ pointer model disagrees with the check, proving offset `-4` and same-object.
 Registered as R35, unpinned — the fix has to choose between "out-of-bounds
 access" and "unrepresentable address" first.
 
+`check_data_obj_access` says of its single `offset + access_sz > data_sz`
+comparison that the "lower bound [is] not checked, instead we just treat
+everything as unsigned, which has the same effect". That reasoning is sound —
+`bitsize_type2()` is `get_uint_type(address_width + 3)`, so a negative offset
+would wrap high and trip the comparison — which means the offset never arrives
+there negative. A symbolic offset constrained to `-4` passes the claim too, so
+the loss is not constant folding. That is where the next probe starts.
+
 | Artefact | Invocation | Verdict |
 |---|---|---|
 | `regression/esbmc/github_7127` | default | `SUCCESSFUL`; `FAILED` on the pre-patch control |
