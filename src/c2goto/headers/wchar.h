@@ -6,6 +6,7 @@
 #define __need_wint_t
 #define __need_NULL
 #include <stddef.h>
+#include <stdarg.h> /* va_list, for vswprintf */
 
 // Conversion state for the multibyte routines. The models below never leave
 // the initial state -- they do not implement a shift encoding -- so a single
@@ -70,5 +71,13 @@ wchar_t *wmemmove(wchar_t *dst, const wchar_t *src, size_t n);
 wchar_t *wmemset(wchar_t *s, wchar_t c, size_t n);
 wchar_t *wmemchr(const wchar_t *s, wchar_t c, size_t n);
 int mbsinit(const mbstate_t *ps);
+
+/* C11 7.29.2.3/7.29.2.7. The format is not interpreted: ESBMC's printf
+ * modelling (goto_convertt::do_printf, printf_kindt) covers the narrow family
+ * only, so the models over-approximate by writing nondet wide characters. That
+ * keeps the destination written rather than stale, which is what the rule above
+ * is protecting; a caller needing exact contents wants the narrow snprintf. */
+int swprintf(wchar_t *ws, size_t len, const wchar_t *format, ...);
+int vswprintf(wchar_t *ws, size_t len, const wchar_t *format, va_list arg);
 
 #endif

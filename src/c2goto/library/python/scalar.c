@@ -49,13 +49,46 @@ __ESBMC_HIDE:;
 
 int __python_scalar_eq_num(
   const PyObject *tagged,
-  size_t type_id,
+  int type_matches,
   long long value)
 {
 __ESBMC_HIDE:;
-  if (!tagged || tagged->type_id != type_id)
+  if (!tagged || !type_matches)
     return 0;
   return *(const long long *)tagged->value == value;
+}
+
+// Tagged-vs-tagged equality. Dispatching on `type_id` before any byte compare
+// keeps the numeric arm at a fixed width, so only two tagged strings reach
+// the byte loop below, which the numeric case would otherwise pay for too.
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id)
+{
+__ESBMC_HIDE:;
+  // Python compares across types as unequal rather than coercing.
+  if (a->type_id != b->type_id)
+    return 0;
+  if (a->type_id == num_type_id)
+    return *(const long long *)a->value == *(const long long *)b->value;
+  if (a->size != b->size)
+    return 0;
+  // `.size` is only known at runtime, so memcmp's loop bound would be
+  // symbolic and never unwind to completion; a compile-time bound keeps this
+  // loop finite. Do not "simplify" it back to memcmp. `.size` counts the
+  // trailing NUL, so the limit here is 255 characters -- one below the length
+  // bound __python_strnlen_bounded applies.
+  __ESBMC_assert(
+    a->size <= ESBMC_PY_STRNLEN_BOUND, "tagged str exceeds the modelled bound");
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= a->size)
+      break;
+    if (((const uint8_t *)a->value)[i] != ((const uint8_t *)b->value)[i])
+      return 0;
+  }
+  return 1;
 }
 
 int __python_scalar_eq_str(
@@ -74,14 +107,15 @@ __ESBMC_HIDE:;
 // Models a runtime type mismatch (e.g. `x + 1` where `x` holds a str) as a
 // Python TypeError, the same way IndexError/KeyError are modeled elsewhere
 // in this library: an assert on the path that would have raised.
-long long
-__python_scalar_add_num(const PyObject *tagged, size_t type_id, long long value)
+long long __python_scalar_add_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && tagged->type_id == type_id,
-    "TypeError: unsupported operand type(s) for +");
-  if (!tagged || tagged->type_id != type_id)
+    tagged && type_matches, "TypeError: unsupported operand type(s) for +");
+  if (!tagged || !type_matches)
     return 0;
   return *(const long long *)tagged->value + value;
 }
@@ -124,15 +158,14 @@ __ESBMC_HIDE:;
 // subtraction order matters.
 long long __python_scalar_sub_num(
   const PyObject *tagged,
-  size_t type_id,
+  int type_matches,
   long long value,
   int tagged_is_left)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && tagged->type_id == type_id,
-    "TypeError: unsupported operand type(s) for -");
-  if (!tagged || tagged->type_id != type_id)
+    tagged && type_matches, "TypeError: unsupported operand type(s) for -");
+  if (!tagged || !type_matches)
     return 0;
   long long tagged_val = *(const long long *)tagged->value;
   return tagged_is_left ? tagged_val - value : value - tagged_val;
@@ -141,15 +174,14 @@ __ESBMC_HIDE:;
 // Python's / is always true division, even for two ints.
 double __python_scalar_div_num(
   const PyObject *tagged,
-  size_t type_id,
+  int type_matches,
   long long value,
   int tagged_is_left)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(
-    tagged && tagged->type_id == type_id,
-    "TypeError: unsupported operand type(s) for /");
-  if (!tagged || tagged->type_id != type_id)
+    tagged && type_matches, "TypeError: unsupported operand type(s) for /");
+  if (!tagged || !type_matches)
     return 0.0;
   long long tagged_val = *(const long long *)tagged->value;
   return tagged_is_left ? (double)tagged_val / (double)value

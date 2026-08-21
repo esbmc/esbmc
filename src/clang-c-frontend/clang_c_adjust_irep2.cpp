@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
 #include <util/irep/migrate.h>
 #include <util/lang/c_typecast.h>
@@ -26,6 +27,15 @@ bool clang_c_adjust_irep2::adjust()
   context.Foreach_operand_in_order(
     [&symbol_list](symbolt &s) { symbol_list.push_back(&s); });
 
+  // Types first, in a pass of their own: a value's initialiser is built from
+  // its type, so padding a type after a value that uses it leaves the value
+  // short a component. clang_c_adjust::adjust() splits the walk for the same
+  // reason ("so that symbolic-type resolution always receives fixed up types").
+  if (sole_adjuster)
+    for (symbolt *s : symbol_list)
+      if (s->is_type)
+        pad_type_symbol(*s);
+
   for (symbolt *s : symbol_list)
   {
     if (!s->is_type && s->get_value().is_not_nil())
@@ -45,6 +55,21 @@ bool clang_c_adjust_irep2::adjust()
   return false;
 }
 
+/// add_padding on a complete struct or union, which is the half of
+/// clang_c_adjust::adjust_type that the corpus shows is load-bearing here. The
+/// function is shared (clang-c-frontend/padding.h) and idempotent --
+/// adjust_type asserts that re-padding is a no-op -- so this reuses it rather
+/// than reimplementing a layout algorithm over type2tc.
+void clang_c_adjust_irep2::pad_type_symbol(symbolt &symbol)
+{
+  typet t = symbol.get_type();
+  if ((!t.is_struct() && !t.is_union()) || t.incomplete())
+    return;
+
+  add_padding(t, ns);
+  symbol.set_type(std::move(t));
+}
+
 /// The operators C admits over a complex operand: `mod` and the bitwise ones
 /// are not among them, and `clang_c_adjust` aborts rather than lowering those.
 static bool is_binary_arith(const expr2tc &expr)
@@ -57,6 +82,13 @@ static bool is_binary_arith(const expr2tc &expr)
 static bool is_complex_unary(const expr2tc &expr)
 {
   return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
+}
+
+/// The operators clang_c_adjust routes through adjust_expr_binary_arithmetic.
+static bool is_arith_or_bitwise(const expr2tc &expr)
+{
+  return is_binary_arith(expr) || is_modulus2t(expr) || is_bitand2t(expr) ||
+         is_bitor2t(expr) || is_bitxor2t(expr);
 }
 
 /// The statements whose controlling expression clang_c_adjust converts to bool
@@ -94,17 +126,27 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 
   if (sole_adjuster)
     adjust_sole_arms(expr);
+
+  if (sole_adjuster && is_address_of2t(expr))
+    adjust_address_of(expr);
 }
 
 /// The arms that only run when this pass is the sole adjuster, gathered behind
 /// one test so adjust_expr does not repeat it per arm.
 void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
+  // First: the sugar has to be in place before adjust_call_callee decides
+  // whether this call is direct, since that is what it reads.
+  adjust_function_designators(expr);
+
   if (is_and2t(expr) || is_or2t(expr) || is_not2t(expr))
     adjust_boolean_operands(expr);
 
   if (is_code_function_call2t(expr) || is_sideeffect2t(expr))
+  {
     adjust_call_callee(expr);
+    adjust_call_arguments(expr);
+  }
 
   if (is_if2t(expr))
     adjust_if_expr(expr);
@@ -112,8 +154,14 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_binary_arith(expr))
     adjust_complex_arith(expr);
 
+  /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
+   * block is not a statement-with-condition, so the loop's guard would never
+   * reach the conversion. */
   if (is_statement_with_condition(expr))
     adjust_statement_condition(expr);
+
+  if (is_code_for2t(expr))
+    hoist_for_init(expr);
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
@@ -123,6 +171,12 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_sideeffect2t(expr))
     adjust_special_functions(expr);
+
+  if (is_arith_or_bitwise(expr))
+    adjust_binary_arith_operands(expr);
+
+  if (is_sideeffect_assign2t(expr))
+    adjust_plain_assignment(expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:
@@ -176,6 +230,12 @@ fold_unary_builtin(const std::string &name, const expr2tc &arg, expr2tc &expr)
     expr = bswap2tc(expr->type, arg);
 }
 
+/// The lowerings `do_special_functions` selects by base name rather than by a
+/// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
+///
+/// `sqrt`'s legacy arm additionally skips a `py:`-prefixed callee; this pass is
+/// constructed only from `clang_c_languaget::typecheck`, so no Python symbol
+/// can reach it and the guard has nothing to test.
 /// The argument-less float constants. `handled` distinguishes "not one of
 /// these" from "one of these, but declined".
 static bool
@@ -296,6 +356,107 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
     fold_unary_builtin(name, args[0], expr);
 }
 
+/// IREP2 form of clang_c_adjust::adjust_address_of's array decay: `&a` on an
+/// array is `&a[0]`, and the pointer's subtype follows the element.
+///
+/// The conditional distribution the legacy arm also does -- `&(c ? a : b)` into
+/// `c ? &a : &b`, which #6291 needs for the pointer analysis to resolve either
+/// arm -- is not ported: no corpus input reaches it under this flag, and an arm
+/// no test executes is the trap §90.4 records.
+void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
+{
+  const address_of2t &a = to_address_of2t(expr);
+  if (is_nil_expr(a.ptr_obj))
+    return;
+
+  const type2tc obj_type = ns.follow(a.ptr_obj->type);
+  if (!is_array_type(obj_type))
+    return;
+
+  const type2tc &elem = to_array_type(obj_type).subtype;
+  const expr2tc idx =
+    index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
+  expr = address_of2tc(elem, idx, a.implicit);
+}
+
+void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
+{
+  const code_for2t &f = to_code_for2t(expr);
+  if (is_nil_expr(f.init))
+    return;
+
+  locationt end_location;
+  if (!is_nil_expr(f.body) && is_code_block2t(f.body))
+    end_location = to_code_block2t(f.body).end_location;
+
+  const expr2tc bare =
+    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+
+  // Splice a block-shaped init rather than nesting it: an inner block would end
+  // the declaration's scope at its own closing brace, so the variable would be
+  // DEAD before the loop that reads it. clang_c_adjust moves the init operand
+  // itself, which is why the legacy hoist puts the declaration directly in the
+  // wrapper.
+  std::vector<expr2tc> ops;
+  if (is_code_block2t(f.init))
+    for (const expr2tc &op : to_code_block2t(f.init).operands)
+      ops.push_back(op);
+  else
+    ops.push_back(f.init);
+  ops.push_back(bare);
+
+  expr = code_block2tc(ops, f.location, end_location);
+}
+
+void clang_c_adjust_irep2::adjust_binary_arith_operands(expr2tc &expr)
+{
+  expr2tc op0 = *expr->get_sub_expr(0);
+  expr2tc op1 = *expr->get_sub_expr(1);
+  if (is_nil_expr(op0) || is_nil_expr(op1))
+    return;
+
+  // A complex operand is adjust_complex_arith's, and it decomposes the node
+  // rather than converting it.
+  if (is_complex_type(op0->type) || is_complex_type(op1->type))
+    return;
+
+  const expr2tc before0 = op0, before1 = op1;
+  c_implicit_typecast_arithmetic(op0, op1, ns);
+
+  if (op0 != before0 || op1 != before1)
+  {
+    unsigned i = 0;
+    expr->Foreach_operand(
+      [&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  }
+
+  // adjust_expr_binary_arithmetic re-types the node once the operands agree.
+  // Not folded into the branch above: the operands can already agree with each
+  // other and still disagree with the node.
+  if (
+    op0->type == op1->type && is_number_type(op0->type) &&
+    expr->type != op0->type)
+    expr = expr->with_type(op0->type);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's "assign" case:
+/// the node takes the target's type and the source converts to it. The compound
+/// operators ("assign+", ...) are a larger arm carrying a complex lowering of
+/// their own, and are left where this mode already had them.
+void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
+{
+  const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+  if (a.op != "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+    return;
+
+  const type2tc target = a.lhs->type;
+  expr2tc rhs = a.rhs;
+  c_implicit_typecast(rhs, target, ns);
+
+  if (rhs != a.rhs || expr->type != target)
+    expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
+}
+
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
 /// adjust_while and adjust_for applies to its controlling expression.
 /// goto_convert's branch lowering rejects a non-boolean guard, so this is the
@@ -378,6 +539,22 @@ void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)
     expr = if2tc(expr->type, cond, tv, fv, i.location);
 }
 
+/// A function designator used as a value is sugar for `&f`
+/// (clang_c_adjust::adjust_symbol). Applied from the parent rather than at the
+/// symbol itself: `address_of2t` asserts its operand is not another address_of,
+/// so a user-written `&f` must not be wrapped again -- where the legacy pass
+/// builds `&(&f)` and collapses it in adjust_address_of, this never builds it.
+void clang_c_adjust_irep2::adjust_function_designators(expr2tc &expr)
+{
+  if (is_address_of2t(expr))
+    return;
+
+  expr->Foreach_operand([](expr2tc &op) {
+    if (!is_nil_expr(op) && is_symbol2t(op) && is_code_type(op->type))
+      op = address_of2tc(op->type, op, true);
+  });
+}
+
 void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
 {
   expr2tc callee;
@@ -391,7 +568,23 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
     callee = se.operand;
   }
 
-  if (is_nil_expr(callee) || !is_pointer_type(callee->type))
+  if (is_nil_expr(callee))
+    return;
+
+  // `f(x)` arrives as a call through the &f sugar adjust_symbol inserted; strip
+  // it back off so goto_convert sees a direct call. A user-written `(&f)(x)`
+  // carries the same shape and is told apart only by the implicit bit (§100).
+  if (is_address_of2t(callee) && to_address_of2t(callee).implicit)
+  {
+    const expr2tc target = to_address_of2t(callee).ptr_obj;
+    if (is_code_function_call2t(expr))
+      to_code_function_call2t(expr).function = target;
+    else
+      to_sideeffect2t(expr).operand = target;
+    return;
+  }
+
+  if (!is_pointer_type(callee->type))
     return;
 
   const expr2tc deref =
@@ -401,6 +594,58 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
     to_code_function_call2t(expr).function = deref;
   else
     to_sideeffect2t(expr).operand = deref;
+}
+
+void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
+{
+  expr2tc callee;
+  std::vector<expr2tc> *args;
+  if (is_code_function_call2t(expr))
+  {
+    code_function_call2t &call = to_code_function_call2t(expr);
+    callee = call.function;
+    args = &call.operands;
+  }
+  else
+  {
+    sideeffect2t &se = to_sideeffect2t(expr);
+    if (se.kind != sideeffect_allockind::function_call)
+      return;
+    callee = se.operand;
+    args = &se.arguments;
+  }
+
+  if (is_nil_expr(callee))
+    return;
+
+  type2tc ct = callee->type;
+  if (is_pointer_type(ct))
+    ct = to_pointer_type(ct).subtype;
+  if (!is_code_type(ct))
+    return;
+
+  const std::vector<type2tc> &params = to_code_type(ct).arguments;
+
+  for (std::size_t i = 0; i < args->size(); i++)
+  {
+    expr2tc &arg = (*args)[i];
+    if (is_nil_expr(arg))
+      continue;
+
+    if (i < params.size())
+    {
+      // Two function-pointer types differing only in argument_names denote the
+      // same type (C11 6.7.6.3p15); casting between them is a divergence, not a
+      // conversion (§100.1).
+      if (same_function_pointer_ignoring_argument_names(arg->type, params[i]))
+        continue;
+      c_implicit_typecast(arg, params[i], ns);
+    }
+    else if (is_array_type(ns.follow(arg->type)))
+      // A variadic argument has no parameter type to convert against; only the
+      // array decay is owed.
+      c_implicit_typecast(arg, pointer_type2tc(get_empty_type()), ns);
+  }
 }
 
 void clang_c_adjust_irep2::adjust_boolean_operands(expr2tc &expr)

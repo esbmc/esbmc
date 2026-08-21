@@ -59,12 +59,15 @@ symbolt *python_converter::find_dunder_method(
     return nullptr;
 
   symbol_id sid(file, class_name, dunder_name);
-  return find_symbol(sid.to_string());
+  if (symbolt *sym = find_symbol(sid.to_string()))
+    return sym;
+
+  return find_function_in_base_classes(
+    class_name, sid.to_string(), dunder_name, false);
 }
 
-bool python_converter::has_dunder_method(
-  const nlohmann::json &value_node,
-  const std::string &dunder_name)
+std::string
+python_converter::instance_class_name(const nlohmann::json &value_node)
 {
   std::string class_name = type_handler_.get_var_classname(value_node);
 
@@ -80,6 +83,15 @@ bool python_converter::has_dunder_method(
     if (func.is_object() && func.value("_type", "") == "Name")
       class_name = func.value("id", "");
   }
+
+  return class_name;
+}
+
+bool python_converter::has_dunder_method(
+  const nlohmann::json &value_node,
+  const std::string &dunder_name)
+{
+  const std::string class_name = instance_class_name(value_node);
 
   if (class_name.empty())
     return false;
@@ -214,6 +226,31 @@ bool python_converter::is_user_class_struct_type(const typet &t)
 bool python_converter::is_user_class_pointer(const typet &t)
 {
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
+}
+
+bool python_converter::is_class_instance(const nlohmann::json &value_node)
+{
+  const std::string node_type = value_node.value("_type", "");
+  if (node_type == "Call")
+    return type_handler_.is_constructor_call(value_node);
+
+  if (node_type != "Name")
+    return false;
+
+  // The bound type decides, not the annotation's name: `a: List[int]` resolves
+  // to a class named List, but its struct is a model container that owns its
+  // own operator and length paths (#7085).
+  symbol_id sid(python_file(), current_classname(), current_function_name());
+  sid.set_object(value_node.value("id", ""));
+
+  symbolt *sym = find_symbol(sid.to_string());
+  if (!sym)
+    sym = find_symbol(sid.global_to_string());
+  if (!sym)
+    return false;
+
+  const typet &t = sym->get_type();
+  return is_user_class_pointer(t) || is_user_class_struct_type(t);
 }
 
 // move_symbol_to_context() only overwrites an existing symbol's type when

@@ -44,6 +44,12 @@ public:
   bool is_tagged(const std::string &name) const;
 
   /**
+   * @brief The id of the symbol that currently holds `name`'s tagged object,
+   * following the alias created for a pre-existing variable
+   */
+  std::string tagged_symbol_id(const std::string &name) const;
+
+  /**
    * @brief Fills in the tagged-object fields for `name` from an
    * already-converted value
    */
@@ -75,6 +81,16 @@ public:
     const exprt &lhs,
     const exprt &rhs,
     const locationt &location);
+
+  /**
+   * @brief Builds isinstance(tagged, type_name). `type_is_user_class` says
+   * whether `type_name` names a class defined in the program, which a tag can
+   * never hold
+   */
+  exprt build_isinstance_check(
+    const exprt &tagged,
+    const std::string &type_name,
+    bool type_is_user_class) const;
 
   /**
    * @brief RAII: adds `dynamic_type_names` to the transient tagged-name set
