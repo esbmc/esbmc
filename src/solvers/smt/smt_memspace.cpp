@@ -52,15 +52,20 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
    * antisymmetry of <=) still hold; comparing only the offsets would let
    * p<=q and q<=p be satisfied simultaneously for distinct objects.
    *
-   * The offsets are typecast to unsigned for the comparison because objects
-   * could be larger than half the address space, in which case offsets could
-   * flip sign. */
+   * The offsets are compared signed, as the rest of the model reads them:
+   * __ESBMC_POINTER_OFFSET, the bounds checks and the counterexample printer
+   * all treat a pointer below its object's base as a negative offset. Reading
+   * them unsigned here made p >= b hold for p = b - 1, so a reverse iteration
+   * never terminated (R36). The alternative it guarded against — an object
+   * larger than half the address space, whose upper offsets would flip sign —
+   * is already unrepresentable in the signed pointer_offset2t those other
+   * consumers read. */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
   expr2tc o1 = pointer_object2tc(type, side1);
   expr2tc o2 = pointer_object2tc(type, side2);
-  expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc s1 = pointer_offset2tc(stype, side1);
+  expr2tc s2 = pointer_offset2tc(stype, side2);
   expr2tc same_obj = equality2tc(o1, o2);
 
   // Lexicographic step: the object ids decide the order; on a tie the offsets
