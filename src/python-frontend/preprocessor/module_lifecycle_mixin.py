@@ -3,6 +3,30 @@ import ast
 
 class ModuleLifecycleMixin:
 
+    def adopt_module_signatures(self, other, imported_names):
+        """Learn an imported module's call signatures and defaults.
+
+        Each module gets its own Preprocessor, so a call to an imported
+        function is otherwise converted without the arguments its signature
+        defaults would supply.
+
+        Only plain module-level functions named in `imported_names` are taken.
+        The tables are keyed by bare name, so adopting wholesale would let
+        another module's `__init__` answer arity checks for a local class; and
+        a class model may deliberately simplify its constructor, so checking
+        calls against it here would reject ones the converter handles (#4665).
+        Own definitions win: a locally defined name keeps its own signature.
+        """
+        for table, source in (
+            (self.functionParams, other.functionParams),
+            (self.functionKwonlyParams, other.functionKwonlyParams),
+            (self.functionDefaults, other.functionDefaults),
+        ):
+            for key, value in source.items():
+                name = key[0] if isinstance(key, tuple) else key
+                if "." not in name and name in imported_names:
+                    table.setdefault(key, value)
+
     def finalize_module(self, node):
         """Run generic_visit and inject helper nodes requested during traversal."""
         # Per-module scope for the eq-only set and call-origin map.

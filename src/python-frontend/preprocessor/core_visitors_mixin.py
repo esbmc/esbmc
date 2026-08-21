@@ -1262,6 +1262,7 @@ class CoreVisitorsMixin:
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.args[-i], default_node)
                 self.functionDefaults[(qualified_name, arg_name)] = target_var
+                self.hoisted_default_names.add(target_var.id)
                 if is_method:
                     self._pending_method_default_inits.append(assignment_node)
                 else:
@@ -1278,6 +1279,7 @@ class CoreVisitorsMixin:
                 assignment_node, target_var = self.generate_variable_copy(
                     qualified_name, node.args.kwonlyargs[i], default)
                 self.functionDefaults[(qualified_name, kwarg_name)] = target_var
+                self.hoisted_default_names.add(target_var.id)
                 if is_method:
                     self._pending_method_default_inits.append(assignment_node)
                 else:

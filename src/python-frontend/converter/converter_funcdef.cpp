@@ -1093,28 +1093,8 @@ void python_converter::process_function_arguments(
         {
           exprt default_expr = get_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
-
-          // If the default is a function pointer and the parameter was
-          // annotated as Any (void*), upgrade the parameter type to match.
-          // This enables indirect-call resolution for function-alias defaults
-          // like def h(op=g) where g = f (a named function).
-          if (
-            default_expr.type().is_pointer() &&
-            default_expr.type().subtype().is_code())
-          {
-            auto &param_arg = type.arguments()[positional_index];
-            if (param_arg.type() == any_type())
-            {
-              param_arg.type() = default_expr.type();
-              std::string param_id = param_arg.cmt_identifier().as_string();
-              if (!param_id.empty())
-              {
-                symbolt *param_sym = symbol_table_.find_symbol(param_id);
-                if (param_sym)
-                  param_sym->set_type(default_expr.type());
-              }
-            }
-          }
+          upgrade_param_type_from_default(
+            type.arguments()[positional_index], default_expr);
         }
       }
     }
@@ -1131,6 +1111,8 @@ void python_converter::process_function_arguments(
       {
         exprt default_expr = get_expr(kw_defaults[i]);
         type.arguments()[kwonly_indices[i]].default_value() = default_expr;
+        upgrade_param_type_from_default(
+          type.arguments()[kwonly_indices[i]], default_expr);
       }
     }
   }
@@ -1366,6 +1348,31 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
   }
 
   return empty_typet();
+}
+
+/// A default value is direct evidence of an unannotated parameter's type. A
+/// function-pointer default enables indirect-call resolution (`def h(op=g)`);
+/// a container default keeps len()/subscript off the string path, and unlike
+/// the body-usage refinement below it holds inside an imported module too.
+void python_converter::upgrade_param_type_from_default(
+  code_typet::argumentt &param_arg,
+  const exprt &default_expr)
+{
+  if (param_arg.type() != any_type())
+    return;
+
+  const typet &default_type = default_expr.type();
+  const bool is_function_pointer =
+    default_type.is_pointer() && default_type.subtype().is_code();
+  if (!is_function_pointer && default_type != type_handler_.get_list_type())
+    return;
+
+  param_arg.type() = default_type;
+  const std::string param_id = param_arg.cmt_identifier().as_string();
+  if (param_id.empty())
+    return;
+  if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
+    param_sym->set_type(default_type);
 }
 
 void python_converter::get_function_definition(
