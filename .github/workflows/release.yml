@@ -19,6 +19,9 @@ jobs:
         include:
           - os: ubuntu-24.04
             flags: '-b RelWithDebInfo -e OFF'
+          - os: ubuntu-24.04
+            arch: armv8
+            flags: '-b RelWithDebInfo -e OFF'
           - os: windows-latest
             flags: '-b RelWithDebInfo -e OFF'
           - os: macos-latest
@@ -26,10 +29,14 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
+      architecture: ${{ matrix.arch || 'x86_64' }}
       build-flags: ${{ matrix.flags }}
       testing: false
       canon-names: true
 
+  # Distinct from the armv8 release leg above, which builds against noble's
+  # LLVM 18: this covers the LLVM 22 that Homebrew ships, and noble has no
+  # llvm-22 package for build.sh to install.
   build-linux-arm64:
     name: Homebrew compatibility check (Linux ARM64, LLVM 22)
     runs-on: ubuntu-24.04-arm
@@ -58,6 +65,11 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: esbmc-linux
+          path: .
+      - name: Download Linux ARMv8 Build
+        uses: actions/download-artifact@v8
+        with:
+          name: esbmc-linux-armv8
           path: .
       - name: Download Windows Build
         uses: actions/download-artifact@v8
@@ -93,6 +105,7 @@ jobs:
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: |
             esbmc-linux.zip
+            esbmc-linux-armv8.zip
             esbmc-windows.zip
             esbmc-macos.zip
             esbmc.info

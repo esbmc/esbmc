@@ -91,9 +91,10 @@ git push --tags
 > [Release](https://github.com/esbmc/esbmc/actions/workflows/release.yml)
 > workflow ("Upload Release Asset"). It builds every platform and creates a
 > **draft** GitHub release named after the tag (e.g. `ESBMC v8.1`), with the
-> canonical `esbmc-linux.zip`, `esbmc-windows.zip`, `esbmc-macos.zip` and
-> `esbmc.info` assets already attached. You do **not** need to run the workflow
-> manually, create the release by hand, or upload any artifacts yourself.
+> canonical `esbmc-linux.zip`, `esbmc-linux-armv8.zip`, `esbmc-windows.zip`,
+> `esbmc-macos.zip` and `esbmc.info` assets already attached. You do **not**
+> need to run the workflow manually, create the release by hand, or upload any
+> artifacts yourself.
 
 ### Publish the Draft Release
 
@@ -102,7 +103,8 @@ Wait for the Release workflow to finish, then open the repository’s
 release the workflow created for your tag.
 
 1. Confirm the attached assets are present: `esbmc-linux.zip`,
-   `esbmc-windows.zip`, `esbmc-macos.zip` and `esbmc.info`.
+   `esbmc-linux-armv8.zip`, `esbmc-windows.zip`, `esbmc-macos.zip` and
+   `esbmc.info`.
 2. Adjust the title if needed — the draft is created as `ESBMC v8.1`; past
    releases use "Release 8.1" (note the missing v).
 3. Replace the placeholder description with a markdown version of the content
