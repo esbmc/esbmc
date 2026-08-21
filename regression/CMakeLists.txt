@@ -32,6 +32,17 @@ set(ESBMC_REGRESS_TIMEOUT_GRACE 30 CACHE STRING
 set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
     "Per-test virtual memory limit")
 
+# cov-regression: the minimal coverage suite. One test name per line;
+# together with the unit tests it covers exactly the lines the full
+# regression suite covers (100% parity, line-level verified).
+set(ESBMC_COV_TESTS "")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS" cov_manifest)
+    list(FILTER cov_manifest EXCLUDE REGEX "^#")
+    list(FILTER cov_manifest EXCLUDE REGEX "^[ \t]*$")
+    set(ESBMC_COV_TESTS "${cov_manifest}")
+endif()
+
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
@@ -137,6 +148,9 @@ function(add_esbmc_regression_test folder modes test)
     endif()
     if("${folder}/${test}" IN_LIST ESBMC_PLATFORM_SENSITIVE_TESTS)
         string(APPEND extra_labels ";platform-sensitive")
+    endif()
+    if("${test_name}" IN_LIST ESBMC_COV_TESTS)
+        string(APPEND extra_labels ";cov-regression")
     endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
