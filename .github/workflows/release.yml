@@ -19,9 +19,6 @@ jobs:
         include:
           - os: ubuntu-24.04
             flags: '-b RelWithDebInfo -e OFF'
-          - os: ubuntu-24.04
-            arch: armv8
-            flags: '-b RelWithDebInfo -e OFF'
           - os: windows-latest
             flags: '-b RelWithDebInfo -e OFF'
           - os: macos-latest
@@ -29,15 +26,28 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
-      architecture: ${{ matrix.arch || 'x86_64' }}
       build-flags: ${{ matrix.flags }}
       testing: false
       canon-names: true
 
-  # Distinct from the armv8 release leg above, which builds against noble's
-  # LLVM 18: this covers the LLVM 22 that Homebrew ships, and noble has no
-  # llvm-22 package for build.sh to install.
+  # Separate from the matrix above so create-release can wait for it without
+  # being gated on it -- see the `if` there.
+  build-linux-armv8:
+    uses: ./.github/workflows/build.yml
+    with:
+      operating-system: ubuntu-24.04
+      architecture: armv8
+      build-flags: '-b RelWithDebInfo -e OFF'
+      testing: false
+      canon-names: true
+
+  # build-linux-armv8 above covers ARM64 with the bundled LLVM; this covers the
+  # distinct axis Homebrew actually uses -- a system-installed, shared LLVM 22.
+  # That is a slow drift check against Homebrew's LLVM bumps (#5252), not a
+  # release gate, so it runs on the weekly cron only and not on v* tags or
+  # manual dispatches.
   build-linux-arm64:
+    if: ${{ github.event_name == 'schedule' }}
     name: Homebrew compatibility check (Linux ARM64, LLVM 22)
     runs-on: ubuntu-24.04-arm
     steps:
@@ -57,7 +67,10 @@ jobs:
   create-release:
     name: Upload Release Asset
     runs-on: ubuntu-24.04
-    needs: [build, build-info]
+    needs: [build, build-linux-armv8, build-info]
+    # Wait for the armv8 leg so its asset is ready, but never let it hold up the
+    # release: the other platforms publish even when the ARM build fails.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build-info.result == 'success' }}
     steps:
       # The build jobs run with canon-names: true, so each platform already
       # uploaded its canonical esbmc-<platform>.zip; just fetch and attach them.
@@ -67,6 +80,7 @@ jobs:
           name: esbmc-linux
           path: .
       - name: Download Linux ARMv8 Build
+        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: esbmc-linux-armv8

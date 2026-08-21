@@ -9,7 +9,7 @@ on:
             required: true
             type: string
         architecture:
-            description: "Target architecture. armv8 selects the ubuntu-<version>-arm runner; it has no effect on macOS (already arm64) or Windows."
+            description: "Target architecture. armv8 is Linux only and selects the ubuntu-<version>-arm runner."
             required: false
             default: x86_64
             type: choice
@@ -55,16 +55,31 @@ on:
             type: boolean
 
 jobs:
+  # armv8 has a Linux runner image only: macOS runners are already arm64 and
+  # build.ps1 fetches an x86_64 toolchain, so either combination would quietly
+  # produce an x86_64 build labelled armv8.
+  validate-platform:
+    name: Validate platform
+    runs-on: ubuntu-slim
+    steps:
+    - name: Reject non-Linux armv8
+      if: ${{ inputs.architecture == 'armv8' && !startsWith(inputs.operating-system, 'ubuntu-') }}
+      run: |
+        echo "::error::armv8 builds are Linux only; got operating-system '${{ inputs.operating-system }}'."
+        exit 1
+
   build-unix:
+    needs: validate-platform
     if: ${{ !startsWith(inputs.operating-system, 'windows-') }}
     uses: ./.github/workflows/build-unix.yml
     with:
-      operating-system: ${{ (inputs.architecture == 'armv8' && startsWith(inputs.operating-system, 'ubuntu-')) && format('{0}-arm', inputs.operating-system) || inputs.operating-system }}
+      operating-system: ${{ inputs.architecture == 'armv8' && format('{0}-arm', inputs.operating-system) || inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
       canon-names: ${{ inputs.canon-names }}
 
   build-windows:
+    needs: validate-platform
     if: ${{ startsWith(inputs.operating-system, 'windows-') }}
     uses: ./.github/workflows/build-windows.yml
     with:
