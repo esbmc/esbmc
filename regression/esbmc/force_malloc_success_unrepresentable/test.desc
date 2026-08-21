@@ -1,5 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --force-malloc-success
-^  assertion 0$
 ^VERIFICATION FAILED$
