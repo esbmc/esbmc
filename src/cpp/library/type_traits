@@ -1203,6 +1203,19 @@ struct add_const
   typedef const T type;
 };
 
+// [meta.trans.cv]: the other two of the trio.
+template <class T>
+struct add_volatile
+{
+  typedef volatile T type;
+};
+
+template <class T>
+struct add_cv
+{
+  typedef const volatile T type;
+};
+
 // common_type: enough of [meta.trans.other] for the two-type case TMP-heavy
 // headers use; the variadic form folds left as the standard specifies.
 template <class... T>
