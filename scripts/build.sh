@@ -277,6 +277,8 @@ collect_ubuntu_packages() {
       "llvm-$CLANG_VERSION-dev"
       "libclang-$CLANG_VERSION-dev"
       "libclang-cpp${CLANG_VERSION}-dev"
+      # Ships /usr/lib/cmake/clang-N (ClangConfig.cmake); no -dev package has it.
+      "clang-$CLANG_VERSION"
     )
   fi
 
