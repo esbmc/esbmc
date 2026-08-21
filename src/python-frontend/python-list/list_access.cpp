@@ -1609,6 +1609,66 @@ void python_list::emit_slice_zero_step_raise(
   converter_.add_instruction(throw_code);
 }
 
+exprt python_list::guard_numpy_pointer_view_index(
+  const exprt &array,
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  if (!array.is_symbol() || !array.type().is_pointer())
+    return index;
+
+  const std::string view_id = array.identifier().as_string();
+  auto len_it = converter_.numpy_pointer_view_lengths_.find(view_id);
+  if (len_it == converter_.numpy_pointer_view_lengths_.end())
+    return index;
+
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(slice_node);
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    slice_node, "$numpy_view_idx$", ll_type, gen_zero(ll_type));
+  code_declt idx_decl(build_symbol(idx_sym));
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+
+  code_assignt idx_init(build_symbol(idx_sym), build_typecast(index, ll_type));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  exprt view_len = from_integer(len_it->second, ll_type);
+  exprt idx_lt_zero =
+    build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
+  code_assignt normalize(
+    build_symbol(idx_sym), build_add(build_symbol(idx_sym), view_len, ll_type));
+  normalize.location() = loc;
+
+  code_ifthenelset normalize_guard;
+  normalize_guard.cond() = idx_lt_zero;
+  normalize_guard.then_case() = normalize;
+  normalize_guard.location() = loc;
+  converter_.add_instruction(normalize_guard);
+
+  const type2tc ll_type2 = migrate_type(ll_type);
+  expr2tc idx2, len2;
+  migrate_expr(build_symbol(idx_sym), idx2);
+  migrate_expr(view_len, len2);
+  expr2tc still_negative = lessthan2tc(idx2, gen_zero(ll_type2));
+  expr2tc past_end = greaterthanequal2tc(idx2, len2);
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "index is out of bounds for numpy view");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = loc;
+
+  code_ifthenelset oob_guard;
+  oob_guard.cond() = migrate_expr_back(or2tc(still_negative, past_end));
+  oob_guard.then_case() = throw_code;
+  oob_guard.location() = loc;
+  converter_.add_instruction(oob_guard);
+
+  return build_typecast(build_symbol(idx_sym), size_type());
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -3460,8 +3520,10 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static arrays
+  exprt guarded_pos =
+    guard_numpy_pointer_view_index(array, pos_expr, slice_node);
   return try_build_row_pointer_view(array, slice_node)
-    .value_or(build_index(array, pos_expr, array.type().subtype()));
+    .value_or(build_index(array, guarded_pos, array.type().subtype()));
 }
 
 exprt python_list::extract_pyobject_value(

@@ -681,6 +681,11 @@ private:
     const nlohmann::json &slice_node,
     bool literal_zero_step);
 
+  exprt guard_numpy_pointer_view_index(
+    const exprt &array,
+    const exprt &index,
+    const nlohmann::json &slice_node);
+
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
