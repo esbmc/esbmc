@@ -1,4 +1,5 @@
 THOROUGH
 gh-1352.c
 --unwind 1 --no-unwinding-assertion --force-malloc-success --32
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

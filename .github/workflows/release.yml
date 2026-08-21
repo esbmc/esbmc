@@ -102,6 +102,13 @@ jobs:
           path: .
       - name: Get files
         run: ls
+      # The armv8 leg is deliberately not a gate (see this job's `if`), so a
+      # failed ARM build reaches here as a silently absent asset while the
+      # download page keeps linking it. Make that loud in the run summary.
+      - name: Warn on missing ARMv8 asset
+        if: ${{ needs.build-linux-armv8.result != 'success' }}
+        run: |
+          echo "::warning::esbmc-linux-armv8.zip is missing (build-linux-armv8: ${{ needs.build-linux-armv8.result }}). The release publishes without it and the ARMv8 download link will 404 until the next successful run."
       - name: Do the release
         uses: softprops/action-gh-release@v3
         with:
