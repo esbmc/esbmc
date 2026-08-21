@@ -2707,16 +2707,19 @@ void dereferencet::check_data_obj_access(
 
   BigInt data_sz = type_byte_size_bits(value->type);
   BigInt access_sz = type_byte_size_bits(type);
-  expr2tc data_sz_e = gen_long(offset->type, data_sz);
-  expr2tc access_sz_e = gen_long(offset->type, access_sz);
 
   // Only erroneous thing we check for right now is that the offset is out of
   // bounds, misaligned access happens elsewhere. The highest byte read is at
-  // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
-  // Lower bound not checked, instead we just treat everything as unsigned,
-  // which has the same effect.
-  expr2tc add = add2tc(access_sz_e->type, offset, access_sz_e);
-  expr2tc gt = greaterthan2tc(add, data_sz_e);
+  // offset+access_sz-1, so the access fails if offset+access_sz > data_sz.
+  // The lower bound is not checked separately: an offset below the object
+  // arrives here as a huge unsigned value. That relies on the sum not
+  // wrapping, so it is rearranged into offset > data_sz-access_sz, which is
+  // equivalent over the integers and cannot overflow. Adding instead let every
+  // offset in [-access_sz, 0) wrap back into range (R35).
+  expr2tc gt =
+    access_sz > data_sz
+      ? gen_true_expr()
+      : greaterthan2tc(offset, gen_long(offset->type, data_sz - access_sz));
 
   if (!options.get_bool_option("no-bounds-check"))
   {
