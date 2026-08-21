@@ -675,19 +675,16 @@ expr2tc goto_symext::symex_mem(
       const BigInt lim = max_object_size();
       fits = lessthanequal2tc(size, constant_int2tc(size->type, lim));
 
-      if (options.get_bool_option("force-malloc-success"))
-      {
-        // Branching to NULL here would reintroduce exactly the case split this
-        // flag exists to remove, at a cost measured in minutes on
-        // allocation-heavy inputs. State the bound as an assumption instead:
-        // the same executions are excluded as before, but visibly.
-        assume(fits);
-        fits = expr2tc();
-      }
-      else
-        // Give the object size zero on the failing branch so it is always
-        // representable, and hand back NULL for it below.
-        size = if2tc(size->type, fits, size, gen_zero(size->type));
+      // Give the object size zero on the failing branch so it is always
+      // representable, and hand back NULL for it below. --force-malloc-success
+      // gets the same treatment rather than assuming the bound: the assumption
+      // silently prunes every execution that asks for more, so tightening the
+      // bound to PTRDIFF_MAX turned malloc((size_t)negative) into an
+      // unsatisfiable path and proved the program vacuously
+      // (github_1631_nondet_compact). The constant-size arm above already
+      // returns NULL under this flag "matching real OS behaviour"; this is the
+      // same rule for a size the solver has to reason about.
+      size = if2tc(size->type, fits, size, gen_zero(size->type));
     }
   }
 
