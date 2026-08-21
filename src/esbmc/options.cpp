@@ -409,6 +409,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"pytest-output-dir",
      boost::program_options::value<std::string>()->value_name("<dir>"),
      "Directory for --generate-pytest-testcase output (default: esbmc-pytest)"},
+    {"pytest-values-only",
+     NULL,
+     "Record the counterexample as a `witness` list instead of a runnable "
+     "test: importing the program would re-run it under CPython, where the "
+     "nondet intrinsics do not exist"},
     {"generate-ctest-testcase",
      NULL,
      "If a solution is found, generates CTest testcases for C programs"},
