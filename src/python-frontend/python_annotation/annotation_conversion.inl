@@ -1182,6 +1182,24 @@ std::string python_annotation<Json>::get_function_return_type(
   // Guard against infinite recursion
   if (functions_in_analysis_.count(func_name) > 0)
   {
+    // Re-entering this branch means the self-reference is indirect, as in
+    // `r = f(n - 1); return r`, where the returned name's binding calls f.
+    // expr_calls_function only scans the return expression, so it does not
+    // skip that return, and re-running inference here would not terminate.
+    // The base-case returns supply the type.
+    if (functions_reentered_.count(func_name) > 0)
+      return "";
+    struct reentry_scope
+    {
+      std::set<std::string> &set;
+      const std::string &name;
+      ~reentry_scope()
+      {
+        set.erase(name);
+      }
+    } scope{functions_reentered_, func_name};
+    functions_reentered_.insert(func_name);
+
     // Function is calling itself: try to infer from non-recursive return statements
     for (const Json &elem : ast["body"])
     {
