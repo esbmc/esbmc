@@ -662,6 +662,11 @@ public:
     size_t pos = 0) const;
   size_t find_first_not_of(const char *s, size_t pos = 0) const;
   size_t find_first_not_of(char c, size_t pos = 0) const;
+  size_t find_last_not_of(
+    const basic_string<CharT, Traits, Alloc> &s,
+    size_t pos = npos) const;
+  size_t find_last_not_of(const char *s, size_t pos = npos) const;
+  size_t find_last_not_of(char c, size_t pos = npos) const;
   basic_string<CharT, Traits, Alloc> &erase(size_t pos = 0, size_t n = npos);
   basic_string<CharT, Traits, Alloc> &erase(size_t pos, size_t n, char *tmp);
   basic_string<CharT, Traits, Alloc> &erase(iterator it)
@@ -2618,6 +2623,98 @@ __ESBMC_HIDE:
     if (i >= len)
       break;
     if (this->str[i] == c)
+      return i;
+  }
+  return npos;
+}
+
+/* [string.find.last.not.of]: the highest position at or before pos holding a
+ * character that is not in s. The trip counts are the fixed buffer size for the
+ * reason the neighbouring searches record: a bound taken from the length is
+ * symbolic, and a reverse counter from a symbolic start wraps below zero. */
+template <typename CharT, typename Traits, typename Alloc>
+size_t basic_string<CharT, Traits, Alloc>::find_last_not_of(
+  const basic_string<CharT, Traits, Alloc> &s,
+  size_t pos) const
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
+  size_t len = this->length();
+  size_t slen = s.length();
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    bool found = false;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
+      if (this->str[i] == s.str[j])
+      {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      return i;
+  }
+  return npos;
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+size_t basic_string<CharT, Traits, Alloc>::find_last_not_of(
+  const char *s,
+  size_t pos) const
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
+  size_t len = this->length();
+  size_t slen = strlen(s);
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    bool found = false;
+    for (size_t j = 0; j < STRING_CAPACITY; j++)
+    {
+      if (j >= slen)
+        break;
+      if (this->str[i] == s[j])
+      {
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+      return i;
+  }
+  return npos;
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+size_t
+basic_string<CharT, Traits, Alloc>::find_last_not_of(char c, size_t pos) const
+{
+__ESBMC_HIDE:
+  size_t len = this->length();
+  if (len == 0)
+    return npos;
+  size_t start = (pos >= len) ? len - 1 : pos;
+  for (size_t k = 0; k < STRING_CAPACITY; k++)
+  {
+    if (k > start)
+      break;
+    size_t i = start - k;
+    if (this->str[i] != c)
       return i;
   }
   return npos;
