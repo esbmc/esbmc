@@ -6,6 +6,7 @@ class PreprocessorStateMixin:
     def _init_preprocessor_state(self, module_name):  # pylint: disable=too-many-statements
         self.target_name = ""
         self.functionDefaults = {}
+        self.hoisted_default_names = set()
         self.functionParams = {}
         self.module_name = module_name
         self.is_range_loop = False
