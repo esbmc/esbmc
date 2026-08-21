@@ -356,6 +356,10 @@ private:
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
 
+  /// Stand the static bounds check down for a list rebound by `xs += [...]`,
+  /// whose declaring literal no longer describes it.
+  void mark_augassign_list_escaped(const exprt &lhs, const exprt &rhs);
+
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 

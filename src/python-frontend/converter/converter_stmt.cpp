@@ -4258,6 +4258,18 @@ typet python_converter::resolve_variable_type(
   }
 }
 
+// `xs += [...]` rebinds the list without growing its element records, so the
+// declaring literal no longer describes it and its recorded length is stale.
+void python_converter::mark_augassign_list_escaped(
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    lhs.is_symbol() && rhs.type() == lhs.type() &&
+    lhs.type() == type_handler_.get_list_type())
+    mark_list_call_escaped(lhs.identifier().as_string());
+}
+
 void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -4410,6 +4422,8 @@ void python_converter::get_compound_assign(
   {
     rhs = promote_to_complex(rhs);
   }
+
+  mark_augassign_list_escaped(lhs, rhs);
 
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
