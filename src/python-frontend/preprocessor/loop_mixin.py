@@ -1044,6 +1044,13 @@ class LoopMixin:
         self.ensure_all_locations(subscript, node)
 
         element_type = self._get_element_type_from_container(annotation_id, iterable_node)
+        # A container annotation yields only the element's head name, so
+        # `List[Tuple[int, int]]` gives a component-less `Tuple`. Annotating the
+        # loop value with that types it as an opaque pointer and a later
+        # `a, b = v` cannot unpack it -- strictly worse than `Any`, which the
+        # unannotated path uses and which recovers the real type.
+        if element_type in ("Tuple", "tuple"):
+            element_type = "Any"
         ann_node = self.create_name_node(element_type, ast.Load(), node)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info["value_var"], ast.Store(), node),
