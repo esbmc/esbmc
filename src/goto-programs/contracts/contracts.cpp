@@ -1519,6 +1519,31 @@ static expr2tc byte_malloc(const expr2tc &size_bytes)
     sideeffect2t::allockind::malloc);
 }
 
+/// The Clang temporaries that carry an __ESBMC_old() value all have
+/// "___ESBMC_old" in their name; that name is the only handle on them, which is
+/// why replace_old_in_expr matches on it too.
+static bool is_old_temp_symbol(const expr2tc &expr)
+{
+  return is_symbol2t(expr) &&
+         id2string(to_symbol2t(expr).thename).find("___ESBMC_old") !=
+           std::string::npos;
+}
+
+static bool reads_old(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (is_old_temp_symbol(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([&found](const expr2tc &op) {
+    if (!found)
+      found = reads_old(op);
+  });
+  return found;
+}
+
 goto_programt code_contractst::generate_checking_wrapper(
   const symbolt &original_func,
   const expr2tc &requires_clause,
@@ -1803,9 +1828,6 @@ goto_programt code_contractst::generate_checking_wrapper(
       location,
       fmt::join(is_fresh_struct_ptrs, ", "));
 
-  materialize_old_snapshots_at_wrapper(
-    old_snapshots, wrapper, id2string(original_func.name), location);
-
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
   auto add_contract_clause = [&wrapper, &location](
@@ -1821,15 +1843,25 @@ goto_programt code_contractst::generate_checking_wrapper(
     t->location.comment(comment);
   };
 
-  // 3. Assume requires clause (after memory allocation for is_fresh)
-  // Also replace __ESBMC_old() references in the requires clause — old snapshots
-  // have already been materialized above (step 2), so replacement is safe here.
-  {
-    expr2tc req = requires_clause;
-    if (!old_snapshots.empty() && !is_nil_expr(req))
-      req = replace_old_in_expr(req, old_snapshots);
-    add_contract_clause(req, ASSUME, "contract requires");
-  }
+  // 3. Assume requires clause (after memory allocation for is_fresh), then
+  // materialize the __ESBMC_old() snapshots under it: __ESBMC_old(arr[i])
+  // dereferences at a symbolic index, and snapshotting it before the
+  // precondition is assumed reads out of bounds for free (#7184). A requires
+  // that reads __ESBMC_old itself cannot precede its own snapshots, so that
+  // case keeps the original order.
+  const bool requires_reads_old = reads_old(requires_clause);
+
+  if (!requires_reads_old)
+    add_contract_clause(requires_clause, ASSUME, "contract requires");
+
+  materialize_old_snapshots_at_wrapper(
+    old_snapshots, wrapper, id2string(original_func.name), location);
+
+  if (requires_reads_old)
+    add_contract_clause(
+      replace_old_in_expr(requires_clause, old_snapshots),
+      ASSUME,
+      "contract requires");
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call).
@@ -2737,12 +2769,11 @@ expr2tc code_contractst::replace_old_in_expr(
   if (is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
-    std::string sym_name = id2string(sym.thename);
 
-    // Only process symbols that are related to __ESBMC_old
-    // These temp variables have names containing "___ESBMC_old"
-    // This prevents accidentally replacing __ESBMC_return_value or other symbols
-    if (sym_name.find("___ESBMC_old") != std::string::npos)
+    // Only process symbols that are related to __ESBMC_old.
+    // This prevents accidentally replacing __ESBMC_return_value or other
+    // symbols
+    if (is_old_temp_symbol(expr))
     {
       for (const auto &snapshot : snapshots)
       {
