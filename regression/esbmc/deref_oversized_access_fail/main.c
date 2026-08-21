@@ -6,7 +6,7 @@
 int main(void)
 {
   int x = 7;
-  long v = *(long *)((char *)&x + 0);
+  long long v = *(long long *)((char *)&x + 0);
   assert(v == 7);
   return 0;
 }

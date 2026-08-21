@@ -7,7 +7,7 @@ struct c
 {
   char a;
   int b;
-  long d;
+  long long d;
 };
 
 int main(void)
@@ -21,7 +21,7 @@ int main(void)
 
   assert(*(char *)(p + 0) == 1);
   assert(*(int *)(p + 4) == 2);
-  assert(*(long *)(p + 8) == 3);
+  assert(*(long long *)(p + 8) == 3);
   assert(*(char *)(p + 15) == *((char *)&s.d + 7));
 
   return 0;
