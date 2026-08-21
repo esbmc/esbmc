@@ -755,6 +755,127 @@ static bool param_used_in_variable_index_subscript(
   return false;
 }
 
+/// Element type a bare `list` parameter receives, taken from the call sites
+/// that can be resolved statically. `list` alone carries no element type, so
+/// a subscript of such a parameter otherwise reads as Any and neither
+/// arithmetic nor equality on the result behaves (#7187). Every resolvable
+/// call site must agree, so a second caller passing a different element type
+/// cannot silently inherit the first one's.
+/// The list literal a call argument denotes, directly or through the binding
+/// of a Name. Returns false when the argument is not a statically resolvable
+/// list.
+static bool list_literal_for_call_arg(
+  const nlohmann::json &arg,
+  const std::string &enclosing_function,
+  const nlohmann::json &ast,
+  nlohmann::json &out)
+{
+  if (!arg.is_object())
+    return false;
+
+  out = arg;
+  if (arg.value("_type", "") == "Name" && arg.contains("id"))
+  {
+    const nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"].get<std::string>(), enclosing_function, ast);
+    if (
+      !decl.is_object() || !decl.contains("value") ||
+      !decl["value"].is_object())
+      return false;
+    out = decl["value"];
+  }
+
+  return out.value("_type", "") == "List";
+}
+
+/// Element type a bare `list` parameter receives, taken from the call sites
+/// that can be resolved statically. `list` alone carries no element type, so
+/// a subscript of such a parameter otherwise reads as Any and neither
+/// arithmetic nor equality on the result behaves (#7187). Every resolvable
+/// call site must agree, so a second caller passing a different element type
+/// cannot silently inherit the first one's.
+/// Records the element type of a list-annotated parameter, so a subscript of
+/// it reads at the right type. `list[T]` states it; a bare `list` has it
+/// recovered from the call sites (#7187).
+void python_converter::seed_list_param_element_type(
+  const nlohmann::json &element,
+  const symbol_id &id,
+  const std::string &arg_id,
+  size_t param_index)
+{
+  const nlohmann::json &annotation = element["annotation"];
+  const std::string kind = annotation.value("_type", "");
+
+  if (
+    kind == "Subscript" && annotation.contains("value") &&
+    annotation["value"].contains("id"))
+  {
+    const std::string container = annotation["value"]["id"].get<std::string>();
+    if (container != "List" && container != "list")
+      return;
+    const typet elem_type = type_handler_.get_list_type(element).subtype();
+    if (!elem_type.is_empty())
+      python_list::add_type_info_entry(arg_id, "", elem_type);
+    return;
+  }
+
+  const std::string ann_id = annotation.value("id", "");
+  if (
+    kind != "Name" || (ann_id != "list" && ann_id != "List") ||
+    !current_class_name_.empty())
+    return;
+
+  typet elem_type;
+  if (infer_list_elem_type_from_call_sites(
+        id.get_function(), param_index, elem_type))
+    python_list::add_type_info_entry(arg_id, "", elem_type);
+}
+
+bool python_converter::infer_list_elem_type_from_call_sites(
+  const std::string &func_name,
+  size_t param_index,
+  typet &out) const
+{
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  bool found = false;
+  typet resolved;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      !call.contains("func") || !call["func"].is_object() ||
+      call["func"].value("_type", "") != "Name" ||
+      call["func"].value("id", "") != func_name || !call.contains("args") ||
+      call["args"].size() <= param_index)
+      continue;
+
+    nlohmann::json literal;
+    if (!list_literal_for_call_arg(
+          call["args"][param_index],
+          site.enclosing_function,
+          *ast_json,
+          literal))
+      continue;
+
+    python_list list_helper(const_cast<python_converter &>(*this), literal);
+    const typet candidate = list_helper.infer_literal_element_type(literal);
+    if (candidate == typet() || candidate.is_empty())
+      continue;
+
+    // Disagreeing call sites leave the parameter untyped rather than pick one.
+    if (found && resolved != candidate)
+      return false;
+    resolved = candidate;
+    found = true;
+  }
+
+  if (found)
+    out = resolved;
+  return found;
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -998,21 +1119,7 @@ size_t python_converter::register_function_argument(
     get_typechecker().cache_annotation_types(
       *stored_param, element["annotation"]);
 
-    if (
-      element["annotation"].contains("_type") &&
-      element["annotation"]["_type"] == "Subscript" &&
-      element["annotation"].contains("value") &&
-      element["annotation"]["value"].contains("id"))
-    {
-      const std::string container_name =
-        element["annotation"]["value"]["id"].get<std::string>();
-      if (container_name == "List" || container_name == "list")
-      {
-        typet elem_type = type_handler_.get_list_type(element).subtype();
-        if (!elem_type.is_empty())
-          python_list::add_type_info_entry(arg_id, "", elem_type);
-      }
-    }
+    seed_list_param_element_type(element, id, arg_id, inserted_index);
   }
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
