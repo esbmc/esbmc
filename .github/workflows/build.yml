@@ -55,18 +55,29 @@ on:
             type: boolean
 
 jobs:
-  # armv8 has a Linux runner image only: macOS runners are already arm64 and
-  # build.ps1 fetches an x86_64 toolchain, so either combination would quietly
-  # produce an x86_64 build labelled armv8.
   validate-platform:
     name: Validate platform
     runs-on: ubuntu-slim
     steps:
-    - name: Reject non-Linux armv8
-      if: ${{ inputs.architecture == 'armv8' && !startsWith(inputs.operating-system, 'ubuntu-') }}
+    - name: Check architecture and runner image
+      env:
+        OS: ${{ inputs.operating-system }}
+        ARCH: ${{ inputs.architecture }}
       run: |
-        echo "::error::armv8 builds are Linux only; got operating-system '${{ inputs.operating-system }}'."
-        exit 1
+        case "$ARCH" in
+          x86_64) exit 0 ;;
+          armv8)  ;;
+          *) echo "::error::unsupported architecture '$ARCH' (expected x86_64 or armv8)"; exit 1 ;;
+        esac
+        # armv8 has a Linux runner image only: macOS runners are already arm64
+        # and build.ps1 fetches an x86_64 toolchain, so either would quietly
+        # produce an x86_64 build labelled armv8. GitHub publishes -arm images
+        # for versioned Ubuntu releases only, so ubuntu-latest has none and
+        # would queue forever against a label that does not exist.
+        case "$OS" in
+          ubuntu-24.04|ubuntu-22.04) ;;
+          *) echo "::error::armv8 requires ubuntu-24.04 or ubuntu-22.04; got '$OS'"; exit 1 ;;
+        esac
 
   build-unix:
     needs: validate-platform
