@@ -3554,7 +3554,8 @@ void python_converter::get_var_assign(
     // Normal assignment handling
     std::string name = extract_target_name(target);
     sid.set_object(name);
-    lhs_symbol = symbol_table_.find_symbol(sid.to_string());
+    lhs_symbol = resolve_subscript_base_symbol(
+      target, name, symbol_table_.find_symbol(sid.to_string()));
 
     bool is_global = is_global_variable(sid);
 
@@ -4268,6 +4269,36 @@ void python_converter::mark_augassign_list_escaped(
     lhs.is_symbol() && rhs.type() == lhs.type() &&
     lhs.type() == type_handler_.get_list_type())
     mark_list_call_escaped(lhs.identifier().as_string());
+}
+
+// `c[0] = v` mutates c, it does not bind it, so a nested function's subscript
+// target resolves against the enclosing scope. Minting a local here typed it
+// from the RHS and refused the base as not subscriptable.
+symbolt *python_converter::resolve_subscript_base_symbol(
+  const nlohmann::json &target,
+  const std::string &name,
+  symbolt *found)
+{
+  if (found || target.value("_type", "") != "Subscript")
+    return found;
+  return find_symbol_in_enclosing_scopes(name);
+}
+
+symbolt *
+python_converter::find_symbol_in_enclosing_scopes(const std::string &name)
+{
+  std::string scope = current_func_name_;
+  for (size_t sep = scope.rfind("@F@"); sep != std::string::npos;
+       sep = scope.rfind("@F@"))
+  {
+    scope.erase(sep);
+    symbol_id sid = create_symbol_id();
+    sid.set_function(scope);
+    sid.set_object(name);
+    if (symbolt *found = symbol_table_.find_symbol(sid.to_string()))
+      return found;
+  }
+  return nullptr;
 }
 
 void python_converter::get_compound_assign(

@@ -356,6 +356,16 @@ private:
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
 
+  /// The symbol for @p name in an enclosing function's scope, or null. Python
+  /// resolves a name a nested function only reads or mutates against the
+  /// enclosing scope; only a bare-name assignment binds a new local.
+  symbolt *find_symbol_in_enclosing_scopes(const std::string &name);
+
+  symbolt *resolve_subscript_base_symbol(
+    const nlohmann::json &target,
+    const std::string &name,
+    symbolt *found);
+
   /// Stand the static bounds check down for a list rebound by `xs += [...]`,
   /// whose declaring literal no longer describes it.
   void mark_augassign_list_escaped(const exprt &lhs, const exprt &rhs);
