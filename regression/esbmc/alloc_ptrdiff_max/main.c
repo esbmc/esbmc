@@ -1,19 +1,15 @@
-/* An allocation above PTRDIFF_MAX must fail, as glibc >= 2.30 does: a larger
-   object makes pointer subtraction overflow, and its offsets would collide
-   with the negative-offset encoding. The byte below the cap must still
-   succeed, so the boundary is pinned from both sides. --force-malloc-success
-   removes the ordinary may-fail outcome, leaving only the cap. */
+/* The byte at the cap must still allocate: PTRDIFF_MAX is the largest request
+   that succeeds, not the first that fails. --force-malloc-success removes the
+   ordinary may-fail outcome, leaving only the cap. Kept to a single allocation
+   -- pairing it with the above-cap case exhausts the address space, and the
+   layout constraints then go UNSAT and prove both halves vacuously. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>
 
 int main(void)
 {
-  char *over = malloc((size_t)PTRDIFF_MAX + 1);
-  assert(over == NULL);
-
   char *at = malloc((size_t)PTRDIFF_MAX);
   assert(at != NULL);
-
   return 0;
 }
