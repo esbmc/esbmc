@@ -4133,11 +4133,20 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
   if (!fast_path_ok)
     return std::nullopt;
 
-  exprt list_arg = converter_.get_expr(call_["args"][0]);
-  if (!list_arg.is_symbol())
-    return std::nullopt;
+  // `sorted(d)` lowers to `sorted(d.keys())`, whose argument is a call rather
+  // than a named list, so resolve the dict's internal keys list directly.
+  // Without it the fold declines and the generic path retypes tuple keys as
+  // int, which a later `u, v = key` cannot unpack.
+  std::string list_id = dict_keys_list_id_for_call(call_["args"][0]);
 
-  const std::string list_id = list_arg.identifier().as_string();
+  if (list_id.empty())
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    if (!list_arg.is_symbol())
+      return std::nullopt;
+    list_id = list_arg.identifier().as_string();
+  }
+
   const size_t map_size = python_list::get_list_type_map_size(list_id);
   if (map_size == 0 || map_size > 32)
     return std::nullopt;
@@ -4148,6 +4157,27 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
     auto r = fold_sorted_constant_tuples(list_id, map_size, fast_path_reverse))
     return r;
   return fold_sorted_symbolic_tuples(list_id, map_size, fast_path_reverse);
+}
+
+/// The internal keys-list symbol of the dict `<name>.keys()` reads, or empty
+/// when the argument is not that shape or the dict has no literal keys list.
+std::string
+function_call_expr::dict_keys_list_id_for_call(const nlohmann::json &arg) const
+{
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Call" ||
+    !arg.contains("func") || !arg["func"].is_object() ||
+    arg["func"].value("_type", "") != "Attribute" ||
+    arg["func"].value("attr", "") != "keys" || !arg["func"].contains("value") ||
+    arg["func"]["value"].value("_type", "") != "Name")
+    return {};
+
+  const std::string dict_id = converter_.resolve_name_symbol_id(
+    arg["func"]["value"]["id"].get<std::string>());
+  if (dict_id.empty())
+    return {};
+
+  return python_dict_handler::get_internal_list_id(dict_id, true);
 }
 
 std::optional<exprt> function_call_expr::fold_sorted_int_list(
