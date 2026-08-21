@@ -15,6 +15,26 @@
 #include <vector>
 #include <algorithm>
 
+// Largest request an allocation may succeed for, in bytes.
+//
+// PTRDIFF_MAX, matching glibc >= 2.30, which fails malloc above it because a
+// larger object makes pointer subtraction overflow -- undefined by C23 6.5.6p9,
+// which says only that the behaviour is undefined, not that the difference must
+// be representable. The model needs the same bound for a second reason: an
+// object's offset is stored in ptraddr_type2() but read *signed* by the bounds
+// checks, pointer subtraction and the relational comparator, so an offset at or
+// above 2^63 would be indistinguishable from a pointer below the object's base
+// and would sort below it (R37). Capping here makes the signed reading exact
+// for every defined offset instead of leaving the encoding ambiguous.
+//
+// This is below smt_memspace.cpp's own limit -- it lays each object out as
+// [start, start + size] over ptraddr_type2 and asserts the sum does not wrap --
+// so that constraint stays satisfied a fortiori.
+static BigInt max_object_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
+}
+
 // Collect the byte offset and class type of every (transitively) nested base
 // subobject of `t`, relative to the start of `t`.
 static void collect_base_subobject_offsets(
@@ -625,13 +645,7 @@ expr2tc goto_symext::symex_mem(
     if (is_malloc && is_constant_int2t(folded))
     {
       const BigInt &val = to_constant_int2t(folded).value;
-      // smt_memspace.cpp lays each object out as [start, start + size] over
-      // ptraddr_type2, with start past the NULL object and aligned to
-      // max_alignment(), and asserts that the sum does not wrap. A larger
-      // request cannot be laid out at all, so it must fail here; real
-      // allocators return NULL for it too.
-      const BigInt max_size = BigInt::power2m1(ptraddr_type2()->get_width()) -
-                              config.ansi_c.max_alignment();
+      const BigInt max_size = max_object_size();
       if (is_negative_size || val.is_negative() || val > max_size)
       {
         // Return NULL even under --force-malloc-success, matching real OS
@@ -658,8 +672,7 @@ expr2tc goto_symext::symex_mem(
       // constraints are asserted unconditionally, so leaving it unbounded makes
       // the formula UNSAT — silently pruning the executions the program asked
       // about instead of failing the allocation.
-      const BigInt lim = BigInt::power2m1(ptraddr_type2()->get_width()) -
-                         config.ansi_c.max_alignment();
+      const BigInt lim = max_object_size();
       fits = lessthanequal2tc(size, constant_int2tc(size->type, lim));
 
       if (options.get_bool_option("force-malloc-success"))
