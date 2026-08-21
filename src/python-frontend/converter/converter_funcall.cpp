@@ -356,6 +356,35 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
   return nil_exprt();
 }
 
+// len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+// slice views): __ESBMC_get_object_size on the pointer would report the
+// base array's remaining size from that offset, not v's own (possibly
+// shorter) logical length -- e.g. an empty view still points at a valid
+// position with nonzero remaining capacity. Returns the tracked literal
+// length directly instead of routing through the generic len() dispatch.
+std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
+  const nlohmann::json &element) const
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1 ||
+    element["args"][0].value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string arg_id =
+    resolve_name_symbol_id(element["args"][0]["id"].get<std::string>());
+  if (arg_id.empty())
+    return std::nullopt;
+
+  const auto it = numpy_pointer_view_lengths_.find(arg_id);
+  if (it == numpy_pointer_view_lengths_.end())
+    return std::nullopt;
+
+  return from_integer(it->second, long_long_int_type());
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1085,6 +1114,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (exprt len_expr = get_len_on_class_instance(element);
       len_expr.is_not_nil())
     return len_expr;
+
+  if (std::optional<exprt> view_len = try_get_numpy_pointer_view_len(element))
+    return *view_len;
 
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
