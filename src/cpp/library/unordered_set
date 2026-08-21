@@ -118,7 +118,11 @@ public:
 private:
     // TODO: Implement a hash table if needed.
     // Simple fixed-size array storage
-    static const size_t MAX_SIZE = 1024; // Small size for verification
+    /* 64, matching <unordered_map> and unordered_multiset below, for the
+     * reason <unordered_map> records: with std::string's inline buffer, 1024
+     * slots made one container ~140KB and solver encodings timed out. At 1024
+     * an unordered_set<std::string> could not be executed at all. */
+    static const size_t MAX_SIZE = 64;
     Key data_[MAX_SIZE];
     size_type size_;
     hasher hash_function_;
