@@ -552,6 +552,25 @@ private:
   /// Returns nil when @p element is not such a call.
   exprt get_len_on_class_instance(const nlohmann::json &element);
 
+  // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+  // slice views). Split out of get_function_call() to keep that already
+  // large function's own decision count from growing further; see
+  // converter_funcall.cpp for the full rationale.
+  std::optional<exprt>
+  try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
+
+  // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
+  // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
+  // scalar element type, not a shape, so the view's own tracked logical
+  // length is used instead. Split out of get_expr() to keep that already
+  // large function's own decision count from growing further; see
+  // converter_expr.cpp for the full rationale. Returns std::nullopt for
+  // any other attribute or an untracked symbol, so the caller falls
+  // through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_pointer_view_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -812,6 +831,12 @@ private:
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
+  /// Types an unannotated (Any) parameter from its default value, when that
+  /// default carries a usable concrete type.
+  void upgrade_param_type_from_default(
+    code_typet::argumentt &param_arg,
+    const exprt &default_expr);
+
   /// Refines one unannotated parameter to the list model where warranted.
   void refine_any_param_to_list(
     code_typet::argumentt &param_arg,
@@ -844,6 +869,23 @@ private:
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
     exprt &rhs,
+    codet &target_block);
+
+  /// Handles an assignment whose target is a dynamically-typed (tagged)
+  /// variable, returning false when the target is not tagged and the caller
+  /// should fall through to the ordinary assignment path.
+  bool
+  try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
+  /// declares it in `target_block` when it is a local, and records the
+  /// redirection in retype_aliases_ under `alias_key`.
+  symbolt *mint_retyped_symbol(
+    const symbolt &orig,
+    const std::string &alias_key,
+    const typet &new_type,
+    const locationt &location,
+    const symbol_id &sid,
     codet &target_block);
 
   void handle_list_literal_unpacking(
@@ -975,6 +1017,17 @@ private:
 
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  /// Detach every live pointer-backed view (ADR-NP-003 etapa 2) of
+  /// @p rebound_id from its storage, right before a plain `Name = ...`
+  /// assignment rebinds that symbol to a new value. Real NumPy rebind
+  /// semantics leave the old array object -- and anything still viewing it
+  /// -- untouched; without this, a view's raw pointer would keep aliasing
+  /// the same storage and silently start observing the new value instead.
+  void detach_numpy_pointer_views_of(
+    const std::string &rebound_id,
+    const locationt &location,
+    codet &target_block);
 
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
@@ -1437,6 +1490,14 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
+  // A pointer-backed numpy view's element count (ADR-NP-003 etapa 2, 1-D
+  // slice views): __ESBMC_get_object_size on a pointer reports the base
+  // object's remaining size from that offset, not the view's own logical
+  // length (which may be shorter, e.g. an empty view still points at a
+  // valid position), so len() looks the value up here instead for a
+  // tracked view symbol -- see list_access.cpp's handle_range_slice and
+  // converter_funcall.cpp's len() dispatch.
+  std::unordered_map<std::string, std::size_t> numpy_pointer_view_lengths_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
