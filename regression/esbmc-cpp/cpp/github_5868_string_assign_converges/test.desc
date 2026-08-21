@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std gnu++17
+^VERIFICATION SUCCESSFUL$
