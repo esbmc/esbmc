@@ -59,7 +59,6 @@ option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (def
 # PRE-BUILT DEPENDENCIES
 #############################
 
-# these URLs are all for an x86_64 target
 if(WIN32)
   set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang+llvm-22.1.4-x86_64-pc-windows-msvc.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-22.1.4-x86_64-pc-windows-msvc")
@@ -69,6 +68,15 @@ if(WIN32)
 
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
   set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  # LLVM stopped publishing the compact clang+llvm-*-aarch64-linux-gnu tarball
+  # after 19.x, so this is the full install tree: ~1.8GB compressed against
+  # ~140MB for the trimmed x86_64 build ESBMC hosts itself.
+  set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.6/LLVM-22.1.6-Linux-ARM64.tar.xz")
+  set(DEFAULT_LLVM_NAME "LLVM-22.1.6-Linux-ARM64")
+
+  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-arm64-glibc-2.34.zip")
+  set(DEFAULT_Z3_NAME z3-4.13.3-arm64-glibc-2.34)
 else()
   set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v8.3/clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04")
