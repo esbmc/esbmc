@@ -837,6 +837,19 @@ private:
     code_typet::argumentt &param_arg,
     const exprt &default_expr);
 
+  /// Records a list-annotated parameter's element type for subscript reads.
+  void seed_list_param_element_type(
+    const nlohmann::json &element,
+    const symbol_id &id,
+    const std::string &arg_id,
+    size_t param_index);
+
+  /// Recovers a bare `list` parameter's element type from its call sites.
+  bool infer_list_elem_type_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    typet &out) const;
+
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
