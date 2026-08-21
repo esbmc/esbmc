@@ -253,6 +253,20 @@ SCENARIO(
     }
   }
 
+  GIVEN("a mismatch under a node other than a relation")
+  {
+    // operands_must_share_sort collapses twelve kinds onto one arm; drive an
+    // arithmetic/bitwise one too, so narrowing the list cannot pass unnoticed.
+    THEN("it is declined")
+    {
+      const expr2tc masked = bitand2tc(get_int32_type(), x, zero64);
+      REQUIRE(
+        check_simplification_equivalence(
+          equality2tc(masked, x), gen_true_expr(), ns, options) ==
+        simplification_equivalencet::skipped);
+    }
+  }
+
   GIVEN("an if2t whose branches disagree")
   {
     // mk_ite asserts on the branch pair exactly as mk_eq does on its operands,
