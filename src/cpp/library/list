@@ -265,6 +265,17 @@ public:
     reverse_iterator(const reverse_iterator &x) : owner(x.owner), idx(x.idx)
     {
     }
+
+    /* [reverse.iter.conv]: base() is the underlying iterator, one step forward
+     * of what this one denotes -- &*rit == &*(rit.base() - 1). At rend the
+     * index is the sentinel, whose _next_idx is the sentinel again, so begin()
+     * has to be named directly. */
+    iterator base() const
+    {
+      if (idx == SENTINEL)
+        return iterator(owner, owner->_sentinel_next);
+      return iterator(owner, owner->_next_idx(idx));
+    }
     reverse_iterator &operator=(const reverse_iterator &x)
     {
       owner = x.owner;
