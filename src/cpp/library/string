@@ -5,6 +5,7 @@
 #include "OM_compiler_defs.h" // OM_NOEXCEPT
 #include "char_traits.h"
 #include "iterator_tags.h"
+#include "string_view"
 #include "cstring"
 #include "cstdio"
 #include "cassert"
@@ -429,6 +430,15 @@ public:
   basic_string();
   basic_string(const CharT *);
   basic_string(const CharT *s, size_t n);
+#if __cplusplus >= 201103L
+  /* [string.cons]: the string_view constructor is explicit. Delegates to the
+   * (pointer, count) form above, so the bound comes from sv.size() and the
+   * copy stays within STRING_CAPACITY. */
+  explicit basic_string(basic_string_view<CharT, Traits> sv)
+    : basic_string(sv.data(), sv.size())
+  {
+  }
+#endif
   basic_string(
     const basic_string<CharT, Traits, Alloc> &str,
     size_t pos,
