@@ -300,6 +300,12 @@ public:
    *                        a concrete element expression.
    * @param elem_type       ESBMC type of the element.
    */
+  /// Element type recovered for a bare `list` parameter, or a nil type.
+  static typet bare_list_param_elem_type(
+    const nlohmann::json &param_node,
+    const std::string &param_id,
+    const typet &annotated);
+
   static void add_type_info_entry(
     const std::string &list_symbol_id,
     const std::string &elem_id,
