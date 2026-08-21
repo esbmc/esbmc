@@ -165,14 +165,16 @@ public:
   };
 
   /// \brief Snapshot for array element assigns compliance (Phase 2B).
-  /// For __ESBMC_assigns(arr[declared_idx]), use a nondet witness index j
-  /// to check that no other element arr[j] (j != declared_idx) was modified.
+  /// For __ESBMC_assigns(arr[i], arr[k]), use one nondet witness index j to
+  /// check that no element arr[j] outside the declared indices was modified.
   struct arr_elem_snapshot_t
   {
     expr2tc arr_ptr;      ///< Array pointer symbol (e.g. symbol2tc for "arr")
     type2tc arr_add_type; ///< Result type of (arr + j) pointer-arithmetic
     type2tc elem_type;    ///< Element type (pointee of arr_ptr)
-    expr2tc declared_idx; ///< Declared index expression (from assigns clause)
+    /// Every index the clause names on this array: the witness assertion must
+    /// excuse all of them, not just one (#7184).
+    std::vector<expr2tc> declared_indices;
     expr2tc witness_idx;  ///< Nondet witness index symbol j
     expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
   };
@@ -495,12 +497,13 @@ private:
 
   // ========== Phase 2B: array element assigns compliance ==========
 
-  /// \brief Materialize nondet witness snapshots for array element assigns compliance.
-  /// For each dereference(add(arr, declared_idx)) in classified.pointer_targets:
-  ///   - Creates a nondet witness index j (same type as declared_idx)
+  /// \brief Materialize nondet witness snapshots for array element assigns.
+  /// Groups the add(arr, idx) entries of classified.pointer_targets by array
+  /// symbol, and for each array:
+  ///   - Creates a nondet witness index j (typed after the first index)
   ///   - Snapshots arr[j] before the function call
   /// \param classified Classified assigns targets (provides pointer_targets)
-  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
+  /// \param assigns_targets Full assigns target list (non-empty enables check)
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
@@ -519,7 +522,8 @@ private:
     const std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
-  /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
+  /// For each snapshot: asserts (arr[j] == snapshot) unless j is one of the
+  /// declared indices.
   /// \param snapshots Snapshots produced by materialize_arr_elem_snapshots
   /// \param wrapper GOTO program to append assertions to
   /// \param location Source location
