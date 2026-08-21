@@ -170,7 +170,13 @@ prepare_platform_config() {
   case "$OS" in
     Linux)
       if [[ -z "$STATIC" ]]; then
-        STATIC=ON
+        # The prebuilt LLVM a static build downloads (ESBMC_LLVM_URL in
+        # scripts/cmake/Options.cmake) is published for x86_64 only.
+        if [[ "$ARCH" == "aarch64" ]]; then
+          STATIC=OFF
+        else
+          STATIC=ON
+        fi
       fi
 
       if [[ "$STATIC" == "OFF" ]]; then

@@ -8,6 +8,14 @@ on:
             description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
             required: true
             type: string
+        architecture:
+            description: "Target architecture. armv8 selects the ubuntu-<version>-arm runner; it has no effect on macOS (already arm64) or Windows."
+            required: false
+            default: x86_64
+            type: choice
+            options:
+              - x86_64
+              - armv8
         build-flags:
             description: "Flags to be passed to build.sh script"
             required: true
@@ -26,6 +34,11 @@ on:
         operating-system:
             description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
             required: true
+            type: string
+        architecture:
+            description: "Target architecture (x86_64 or armv8)"
+            required: false
+            default: x86_64
             type: string
         build-flags:
             description: "Flags to be passed to build.sh script"
@@ -46,7 +59,7 @@ jobs:
     if: ${{ !startsWith(inputs.operating-system, 'windows-') }}
     uses: ./.github/workflows/build-unix.yml
     with:
-      operating-system: ${{ inputs.operating-system }}
+      operating-system: ${{ (inputs.architecture == 'armv8' && startsWith(inputs.operating-system, 'ubuntu-')) && format('{0}-arm', inputs.operating-system) || inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
       canon-names: ${{ inputs.canon-names }}
