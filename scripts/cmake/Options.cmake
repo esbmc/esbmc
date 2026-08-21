@@ -69,11 +69,11 @@ if(WIN32)
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
   set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
-  # LLVM stopped publishing the compact clang+llvm-*-aarch64-linux-gnu tarball
-  # after 19.x, so this is the full install tree: ~1.8GB compressed against
-  # ~140MB for the trimmed x86_64 build ESBMC hosts itself.
-  set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.6/LLVM-22.1.6-Linux-ARM64.tar.xz")
-  set(DEFAULT_LLVM_NAME "LLVM-22.1.6-Linux-ARM64")
+  # 19.1.7 is the last aarch64 release packaged the same way as the x86_64
+  # tarball above. The LLVM-*-Linux-ARM64 archives that replaced it are built
+  # with ThinLTO, so their static archives hold bitcode a GCC link cannot use.
+  set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/clang+llvm-19.1.7-aarch64-linux-gnu.tar.xz")
+  set(DEFAULT_LLVM_NAME "clang+llvm-19.1.7-aarch64-linux-gnu")
 
   set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-arm64-glibc-2.34.zip")
   set(DEFAULT_Z3_NAME z3-4.13.3-arm64-glibc-2.34)
