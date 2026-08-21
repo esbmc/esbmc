@@ -590,6 +590,53 @@ void pytest_generator::write_test_data(
   file << "])\n";
 }
 
+void pytest_generator::write_witness(
+  std::ofstream &file,
+  const std::vector<std::string> &param_names,
+  const std::vector<std::vector<std::string>> &test_data) const
+{
+  file << "# Counterexample values recorded by ESBMC.\n";
+  file << "# Importing the program would re-run it, and its nondet\n";
+  file << "# intrinsics do not exist under CPython, so this file records the\n";
+  file << "# witness instead of calling back into the program.\n\n";
+  file << "witness = [\n";
+
+  for (const auto &test_case : test_data)
+  {
+    file << "    {";
+    const size_t count = std::min(test_case.size(), param_names.size());
+    for (size_t i = 0; i < count; ++i)
+    {
+      if (i > 0)
+        file << ", ";
+      file << "\"" << param_names[i] << "\": " << test_case[i];
+    }
+    file << "},\n";
+  }
+
+  file << "]\n";
+}
+
+/// Writes the body of a generated file: either the counterexample values on
+/// their own, or the importing test that calls back into the program.
+void pytest_generator::write_test_body(
+  std::ofstream &file,
+  const std::string &module_name,
+  const std::string &func_name,
+  const std::vector<std::string> &param_names,
+  const std::vector<std::vector<std::string>> &test_data) const
+{
+  if (values_only)
+  {
+    write_witness(file, param_names, test_data);
+    return;
+  }
+
+  write_imports(file, module_name);
+  write_test_data(file, param_names, test_data);
+  write_test_function(file, func_name, param_names);
+}
+
 void pytest_generator::write_test_function(
   std::ofstream &file,
   const std::string &func_name,
@@ -1109,13 +1156,10 @@ void pytest_generator::generate(
 
   // Write file components
   write_file_header(pytest_file, input_file);
-  write_imports(pytest_file, module_name);
-  write_test_data(pytest_file, param_names, unique_cases);
-
-  // Generate test function
   std::string test_func_name =
     function_name.empty() ? "coverage" : function_name;
-  write_test_function(pytest_file, test_func_name, param_names);
+  write_test_body(
+    pytest_file, module_name, test_func_name, param_names, unique_cases);
 
   pytest_file.close();
   log_status("Wrote generated files to {}", output_dir);
@@ -1505,12 +1549,10 @@ void pytest_generator::generate_single(
 
   // Write file components
   write_file_header(pytest_file, original_file);
-  write_imports(pytest_file, module_name);
 
-  // Convert single test case to format expected by write_test_data
   std::vector<std::vector<std::string>> test_data = {current_params};
-  write_test_data(pytest_file, current_param_names, test_data);
-  write_test_function(pytest_file, func_name, current_param_names);
+  write_test_body(
+    pytest_file, module_name, func_name, current_param_names, test_data);
 
   pytest_file.close();
   log_status("Wrote generated files to {}", output_dir);

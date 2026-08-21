@@ -1071,6 +1071,77 @@ public:
 };
 #endif
 
+#if __cplusplus >= 201103L
+/* [uninitialized.construct]: construct the destination range in place from the
+ * source, rather than assigning over objects that do not exist yet.
+ * uninitialized_move is C++17; the other two are older but were missing too. */
+template <class InputIterator, class ForwardIterator>
+ForwardIterator uninitialized_copy(
+  InputIterator first,
+  InputIterator last,
+  ForwardIterator result)
+{
+  for (; first != last; ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(*first);
+  return result;
+}
+
+template <class InputIterator, class ForwardIterator>
+ForwardIterator uninitialized_move(
+  InputIterator first,
+  InputIterator last,
+  ForwardIterator result)
+{
+  for (; first != last; ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(::std::move(*first));
+  return result;
+}
+
+template <class ForwardIterator, class T>
+void uninitialized_fill(
+  ForwardIterator first,
+  ForwardIterator last,
+  const T &value)
+{
+  for (; first != last; ++first)
+    ::new (static_cast<void *>(&*first))
+      typename iterator_traits<ForwardIterator>::value_type(value);
+}
+
+/* The _n forms, which take a count rather than an end iterator. */
+template <class InputIterator, class Size, class ForwardIterator>
+ForwardIterator
+uninitialized_copy_n(InputIterator first, Size n, ForwardIterator result)
+{
+  for (Size i = 0; i < n; ++i, ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(*first);
+  return result;
+}
+
+template <class InputIterator, class Size, class ForwardIterator>
+ForwardIterator
+uninitialized_move_n(InputIterator first, Size n, ForwardIterator result)
+{
+  for (Size i = 0; i < n; ++i, ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(::std::move(*first));
+  return result;
+}
+
+template <class ForwardIterator, class Size, class T>
+ForwardIterator
+uninitialized_fill_n(ForwardIterator first, Size n, const T &value)
+{
+  for (Size i = 0; i < n; ++i, ++first)
+    ::new (static_cast<void *>(&*first))
+      typename iterator_traits<ForwardIterator>::value_type(value);
+  return first;
+}
+#endif
+
 } // namespace std
 
 #endif
