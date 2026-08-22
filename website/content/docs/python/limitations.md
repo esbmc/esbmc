@@ -10,7 +10,7 @@ weight: 4
 - `for` loops support direct iteration over `range()`, lists, strings (including the result of a `str(...)` call, e.g. `for digit in str(n)`), tuples, and generators (functions using `yield` and generator expressions).
 - `for ... else` and `while ... else` are supported: the `else` clause is lowered into a did-not-break flag, so it runs only when the loop completes without `break` (a `break` inside a nested loop stays bound to that inner loop).
 - List, set, dictionary, and generator comprehensions are supported. Dictionary comprehensions populate a real dict (see [Supported Features — Dictionaries](./supported-features#dictionaries)); the iterable must be a `range(...)`, a list of tuples, or a `d.items()` view (with an optional `if` filter). Comprehensions over other iterables (e.g. another dict comprehension or an arbitrary generator) may not be handled.
-- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys works for **local dict literals** and for **unannotated parameter dicts** with scalar or integer-tuple keys (recovered from the call sites). String-tuple-keyed parameter dicts are still not handled ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
+- Iteration over dictionaries via `d.keys()`, `d.values()`, and `d.items()` is supported inside `for` loops (see [Supported Features — Dictionaries](./supported-features#dictionaries)). The destructuring form `for u, v in d:` over a dict with tuple keys works for **local dict literals** and for **unannotated parameter dicts** with scalar or integer-tuple keys (recovered from the call sites); so do the deferred form `for edge in d:` followed by `u, v = edge`, and iteration over `sorted(d)`. Passing a custom `key=` to `sorted` disables that path, and string-tuple-keyed parameter dicts are still not handled ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
 
 ## Lists
 
@@ -61,6 +61,17 @@ weight: 4
 - Most `str.*()` methods now degrade to a sound nondeterministic over-approximation when the receiver is not a compile-time constant (see [Supported Features — Strings](./supported-features#strings)). A growing set have precise runtime operational models: the case transforms `swapcase`, `upper`, `lower`, `capitalize`, `title` (which cap the receiver at ~255 characters, asserting on longer input — `upper` truncates instead); the predicates `isupper`, `islower`, `isalpha`, `isdigit`, `isalnum`, `isspace`; `count`; and `find`/`rfind`. `str.join` likewise has a precise model (bounded to a 511-character result) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter), but falls back to a nondet `char *` when the iterable is a non-foldable expression such as `sorted(...)`, a comprehension, or a function-call result. Other methods (`casefold`, `isnumeric`, `isidentifier`, `removeprefix`, `removesuffix`, `center`, `ljust`, `rjust`, `zfill`, `expandtabs`, `partition`, `format`, `format_map`, `splitlines`, etc.) return a nondet value of the appropriate shape, so assertions on their specific functional result will report `VERIFICATION FAILED` on symbolic input.
 - `partition()` on a non-constant receiver returns `("", "", "")` — the same shape Python uses when the separator is not found.
 - `splitlines()` on a non-constant receiver returns an empty list.
+
+## Dynamic Typing
+
+A variable whose type diverges across an `if`/`else` is carried as a tagged
+value (see [Supported Features — Dynamic Typing](./supported-features#dynamic-typing)),
+within these bounds:
+
+- A tag holds one of `bool`, `int`, `float` or `str`. `isinstance` against an aggregate or a user class is therefore answered `False`, not consulted.
+- Arithmetic (`+`, `-`, `*`, `/`) is supported against a **literal** operand; `+` additionally concatenates strings.
+- `x is None` is folded only against a literal `None`. A computed operand is not folded, since that would drop its side effects.
+- Rebinding a tagged variable to a list, tuple or class instance is refused inside a loop or a conditional body, where the join of the retyped aliases is not modelled.
 
 ## Union and Any Types
 
@@ -118,13 +129,15 @@ weight: 4
 - Element-wise `np.add`/`np.subtract`/`np.multiply`/`np.divide`/`np.power` support literal list-backed 1D/2D inputs with NumPy-style broadcasting. Runtime-constructed inputs and higher-dimensional inputs are rejected with deterministic frontend errors rather than falling through to the SMT backend.
 - Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
 - The reductions (`sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax`), comparison/logical ufuncs (`greater`/`less`/`equal`/`logical_*`/`where`), and constructors (`arange`/`full`/`eye`/`identity`/`linspace`) are constant-folded over list-backed (1D/2D) inputs and constant shapes; runtime-constructed inputs and higher-rank shapes are rejected with deterministic frontend errors.
+- `np.arange()` materialises its result at conversion time, so its arguments must be constant — a name bound to a literal is resolved first, but a function parameter is rejected with `TypeError: numpy.arange() currently supports constant numeric inputs only` rather than routed through the operational model's while loop, which did not terminate in practice. A range past 10000 elements is declined for the same reason, and `step=0` raises `ValueError`.
+- Only a 1-D, unit-stride slice with literal bounds, assigned to a bare name, becomes a real view onto the base array. A symbolic bound, a non-unit stride, or a higher-rank slice still produces an independent copy, so a write through one is not observed by the other.
 - `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.arccos` rejects runtime 2D arrays; `np.fmod` rejects `np.array(...)`-wrapped operands (`Unsupported operation: numpy.fmod on array operands`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
 - `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
 
 ## Exception Handling
 
 - Core built-in exception types are supported, but not all Python standard library exceptions; custom exception hierarchies with complex inheritance patterns may not be fully handled.
-- `try`/`finally` is supported (including bare `try`/`finally`), but two shapes are refused at parse time rather than lowered unsoundly: a non-empty `else` clause on the `try` (a pre-existing gap — `orelse` is silently dropped today), and a `return`/`break`/`continue` that escapes the `try`, an `except` handler, or the `finally` body (it would bypass the appended `finally`).
+- `try`/`finally` is supported (including bare `try`/`finally`), and a `return`/`break`/`continue` escaping the `try`, a handler, or the `finally` runs the `finally` first. Three shapes are still refused at parse time rather than lowered unsoundly: a non-empty `else` clause on the `try` (a pre-existing gap — `orelse` is silently dropped today), a `finally` that itself escapes, and an escape nested under another `try` or `with`, where the two cleanups would have to run innermost-first.
 
 ## Methods Without an Operational Model
 
