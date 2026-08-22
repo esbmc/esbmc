@@ -278,6 +278,10 @@ private:
   bool annotating_function_entry_point_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  // Functions whose recursive-branch inference is itself running. A second
+  // re-entry means the self-reference is indirect (the returned name's binding
+  // calls the function), which the return-expression scan cannot see.
+  std::set<std::string> functions_reentered_;
   std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
