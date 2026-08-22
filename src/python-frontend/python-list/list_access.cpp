@@ -1972,15 +1972,31 @@ exprt python_list::handle_range_slice(
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
       {
         exprt abs_value = to_size_expr(converter_.get_expr(bound["operand"]));
-        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow).
+        // process_bound is only ever called for "upper" when !negative_step
+        // (see the call sites below), so a negative_step here always means
+        // this is the "lower" bound of a reverse slice. When abs_value
+        // exceeds logical_len, e.g. a[-10:1:-1] on a 3-element array, the
+        // clamp must match literal_slice_length's own -1 "before the
+        // start" sentinel (there is nothing left to reverse-iterate from),
+        // not 0 (the first element) -- 0 would be wrong here since it
+        // makes the length computation below (lower_expr + 1) count one
+        // spurious element instead of zero. Represented as the unsigned
+        // size_type()'s two's-complement -1 (its max value) specifically
+        // so that + 1 wraps to exactly 0, matching a genuinely empty
+        // slice, the same way pointer-offset arithmetic elsewhere in this
+        // file relies on wraparound being well-defined for unsigned types.
         // (V.3: built in IREP2.)
         const type2tc size_t2 = migrate_type(size_type());
         expr2tc abs2, len2, converted2;
         migrate_expr(abs_value, abs2);
         migrate_expr(logical_len, len2);
         migrate_expr(size_sub(logical_len, abs_value), converted2);
-        return migrate_expr_back(if2tc(
-          size_t2, greaterthan2tc(abs2, len2), gen_zero(size_t2), converted2));
+        exprt clamped =
+          negative_step ? from_integer(-1, size_type()) : gen_zero(size_type());
+        expr2tc clamped2;
+        migrate_expr(clamped, clamped2);
+        return migrate_expr_back(
+          if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
       }
 
       exprt e = converter_.get_expr(bound);
