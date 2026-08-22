@@ -6,6 +6,8 @@ int main(void)
   char a[9];
   char *q = a;
   char *p = a + 1;
-  long d = a - q;
+  /* Not `long`: it is 32-bit on LLP64, and the narrowing would put a
+     cast in the goto text this test matches on. */
+  __PTRDIFF_TYPE__ d = a - q;
   return (int)(p[0] + d);
 }
