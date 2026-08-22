@@ -239,6 +239,19 @@ public:
     const nlohmann::json &value_node);
 
   /**
+   * @brief np.ravel(a)/a.ravel(): a writable, contiguous strided pointer
+   * view into a's own buffer (ADR-NP-003 etapa 2), for a fixed-shape 1-D or
+   * 2-D array. Public for the same reason as try_build_diagonal_pointer_view.
+   * Declines (returns std::nullopt) for a non-symbol/non-numpy-tracked
+   * source, a source that isn't fixed-shape 1-D/2-D (including 3-D+), or an
+   * unassigned RHS (current_lhs unset) outside the discardable
+   * type-inference pre-pass -- same current_lhs/in_rhs_type_probe_ handling
+   * as try_build_diagonal_pointer_view, for the same reason.
+   * @param array Source 1-D or 2-D array expression.
+   */
+  std::optional<exprt> try_build_ravel_pointer_view(const exprt &array);
+
+  /**
    * @brief Lower an N-D mixed slice/index tuple subscript with one or more
    * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
    * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved

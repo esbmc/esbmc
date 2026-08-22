@@ -978,6 +978,51 @@ std::optional<diagonal_pointer_view_info> get_diagonal_pointer_view_info(
   return diagonal_pointer_view_info{
     shape->elem_type, offset, length, shape->col_count + 1};
 }
+
+struct flat_array_shape_info
+{
+  typet elem_type;
+  long long total_length;
+};
+
+// Resolves array's compile-time-known total element count for a fixed-shape
+// 1-D or 2-D array, or nullopt for anything else (including 3-D+, which
+// np.ravel()'s pointer-view aliasing does not cover -- it keeps using the
+// existing copy path there).
+std::optional<flat_array_shape_info>
+get_flat_1d_or_2d_shape_info(const exprt &array, const contextt &symbol_table)
+{
+  const namespacet ns(symbol_table);
+  const typet outer_type = ns.follow(array.type());
+  if (!outer_type.is_array())
+    return std::nullopt;
+
+  const array_typet &outer_array = to_array_type(outer_type);
+  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+    return std::nullopt;
+  const long long outer_count =
+    binary2integer(outer_array.size().value().c_str(), false).to_int64();
+  if (outer_count < 0)
+    return std::nullopt;
+
+  const typet inner_type = ns.follow(outer_array.subtype());
+  if (!inner_type.is_array())
+    return flat_array_shape_info{inner_type, outer_count};
+
+  const array_typet &inner_array = to_array_type(inner_type);
+  if (inner_array.size().is_nil() || !inner_array.size().is_constant())
+    return std::nullopt;
+  const long long inner_count =
+    binary2integer(inner_array.size().value().c_str(), false).to_int64();
+  if (inner_count < 0)
+    return std::nullopt;
+
+  const typet elem_type = ns.follow(inner_array.subtype());
+  if (elem_type.is_array())
+    return std::nullopt;
+
+  return flat_array_shape_info{elem_type, outer_count * inner_count};
+}
 } // namespace
 
 exprt python_list::resolve_fixed_axis_index(
@@ -1930,6 +1975,41 @@ bool python_list::try_build_fill_diagonal_mutation(
     converter_.add_instruction(code_assignt(elem_lhs, value_expr));
   }
   return true;
+}
+
+// np.ravel(a)/a.ravel(): a writable, contiguous pointer view into a's own
+// buffer ({offset=0, length=total elements, stride=1}) for a fixed-shape
+// 1-D or 2-D array. 3-D+ declines (returns std::nullopt) and falls back to
+// the pre-existing copy path (see the shared ravel/flatten/nditer handling
+// in numpy_call_expr.cpp, tried only after this declines) -- flatten()
+// itself is a distinct dispatch and always stays a copy.
+std::optional<exprt>
+python_list::try_build_ravel_pointer_view(const exprt &array)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<flat_array_shape_info> shape =
+    get_flat_1d_or_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  if (converter_.in_rhs_type_probe_)
+    return build_typecast(
+      build_address_of(array), pointer_typet(shape->elem_type));
+
+  if (!converter_.current_lhs || !converter_.current_lhs->is_symbol())
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    shape->elem_type,
+    /*offset=*/0,
+    static_cast<std::size_t>(shape->total_length),
+    /*stride=*/1,
+    /*readonly=*/false);
 }
 
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(

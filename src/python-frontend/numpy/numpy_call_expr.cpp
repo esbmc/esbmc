@@ -6969,6 +6969,16 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
+  if (function == "ravel" && !call_["args"].empty())
+  {
+    exprt array_expr = converter_.get_expr(call_["args"][0]);
+    python_list ravel_view_list(converter_, call_);
+    if (
+      std::optional<exprt> view =
+        ravel_view_list.try_build_ravel_pointer_view(array_expr))
+      return *view;
+  }
+
   if (function == "ravel" || function == "flatten" || function == "nditer")
   {
     if (call_["args"].empty())
