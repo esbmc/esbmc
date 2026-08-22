@@ -1,8 +1,6 @@
 import numpy as np
 
 a = np.array([[1, 2], [3, 4]])
-row = a[0]
+n = len(a[5])
 
-a[0][0] = 99
-
-assert row[0] == 99
+assert n == 2

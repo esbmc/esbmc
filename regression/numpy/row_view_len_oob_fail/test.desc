@@ -3,4 +3,4 @@ main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
 ^Violated property:$
-^  dereference failure: array bounds violated$
+^  uncaught exception: IndexError$
