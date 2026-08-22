@@ -49,6 +49,8 @@
 #include <util/symtab/show_symbol_table.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
+#include <util/ssa/fingerprint.h>
+#include <util/ssa/vcc_cache.h>
 #include <atomic>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -2450,6 +2452,152 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   return ltl_res_good;
 }
 
+/// A cached proof is only sound where the claim's sliced cone is everything its
+/// verdict depends on. The k-induction phases and --incremental-bmc qualify:
+/// each sets its phase flags and unwind on this optionst before running, so
+/// both are already part of a claim's key.
+static bool vcc_cache_usable(
+  const optionst &options,
+  const std::string &dir,
+  bool is_cov_run,
+  bool is_dead_code,
+  const BigInt &interleaving_number)
+{
+  if (dir.empty() || is_cov_run || is_dead_code || interleaving_number > 1)
+    return false;
+
+  static const char *const excluded[] = {"ltl", "smt-during-symex"};
+  for (const char *opt : excluded)
+    if (options.get_bool_option(opt))
+      return false;
+  return true;
+}
+
+/// Look the claim's cone up in the cache. Returns true when the stored proof
+/// stands in for solving; `cone_key` and `hit` are set for the store step.
+static bool vcc_cache_hit(
+  vcc_cachet *cache,
+  bool verify,
+  const symex_target_equationt::SSA_stepst &steps,
+  std::string &cone_key,
+  bool &hit)
+{
+  if (cache == nullptr)
+    return false;
+  cone_key = ssa_cone_key_string(steps, fingerprint_modet::srcloc);
+  hit = cache->proved(cone_key);
+  return hit && !verify;
+}
+
+/// Store a fresh proof, or report a stored one the solver just contradicted.
+/// Returns true when the run must fail: under --vcc-cache-verify a hit that
+/// does not re-prove means the cache is wrong about this claim.
+static void vcc_cache_store(
+  vcc_cachet *cache,
+  const std::string &cone_key,
+  bool hit,
+  smt_resultt solver_result,
+  bool is_vacuous,
+  const std::string &claim,
+  smt_resultt &final_result,
+  std::mutex &result_mutex)
+{
+  if (cache == nullptr)
+    return;
+  // A vacuous discharge reports Unknown, not Passed, so it is not a proof and
+  // must not be stored.
+  if (solver_result == P_UNSATISFIABLE && !is_vacuous)
+  {
+    cache->record(cone_key);
+    return;
+  }
+  if (!hit)
+    return;
+
+  log_error(
+    "VCC cache: stored proof of '{}' contradicted by the solver", claim);
+  std::lock_guard lock(result_mutex);
+  final_result = P_ERROR;
+}
+
+/// A dead-code probe is advisory and a non-probe claim in a coverage run is
+/// not being reported, so neither prints a per-claim solve (issue #4495).
+static bool
+coverage_silences_claim(bool goto_cov, bool dead_code, const std::string &prop)
+{
+  return goto_cov && (dead_code || prop != "instrumented assertion");
+}
+
+/// A coverage probe: SAT means "this location is reachable". It is not a
+/// property, so it must not be reported as one (issue #6387).
+static bool is_coverage_goal(bool cov_run, const std::string &prop)
+{
+  return cov_run && prop == "instrumented assertion";
+}
+
+/// Build the cache only where a stored proof would be sound; nullptr disables
+/// every cache interaction downstream.
+static std::unique_ptr<vcc_cachet> make_vcc_cache(
+  const optionst &options,
+  const std::string &dir,
+  bool is_cov_run,
+  bool is_dead_code,
+  const BigInt &interleaving_number)
+{
+  if (!vcc_cache_usable(
+        options, dir, is_cov_run, is_dead_code, interleaving_number))
+    return nullptr;
+  return std::make_unique<vcc_cachet>(dir, options);
+}
+
+/// A warm run solves nothing, so without this the report shows no solver
+/// activity at all and gives no sign of where the verdicts came from.
+static void log_vcc_cache_summary(const vcc_cachet *cache)
+{
+  if (cache == nullptr)
+    return;
+  log_status(
+    "VCC cache: {} claim(s) reused, {} solved", cache->hits(), cache->misses());
+}
+
+/// One line per solved claim, digesting its cone under each normalisation:
+/// the instrument for measuring what --vcc-cache can reuse.
+/// No-op when --vcc-fingerprint-dump was not given.
+static void dump_claim_fingerprint(
+  const std::string &path,
+  const symex_target_equationt::SSA_stepst &cone,
+  smt_resultt result,
+  const std::string &loc,
+  const std::string &msg)
+{
+  if (path.empty())
+    return;
+
+  const char *verdict = result == P_UNSATISFIABLE ? "UNSAT"
+                        : result == P_SATISFIABLE ? "SAT"
+                                                  : "OTHER";
+
+  std::string line = fmt::format(
+    "{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\t{}",
+    ssa_cone_digest(cone, fingerprint_modet::raw),
+    ssa_cone_digest(cone, fingerprint_modet::srcloc),
+    ssa_cone_digest(cone, fingerprint_modet::full),
+    ssa_cone_size(cone),
+    verdict,
+    loc,
+    msg);
+
+  static std::mutex dump_mutex;
+  std::lock_guard<std::mutex> lock(dump_mutex);
+  if (path == "-")
+  {
+    log_status("VCC-FP {}", line);
+    return;
+  }
+  std::ofstream out(path, std::ios::app);
+  out << line << "\n";
+}
+
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
@@ -2528,6 +2676,15 @@ smt_resultt bmct::multi_property_check(
 
   // For incr/kind in multi-property
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
+  const std::string fingerprint_dump =
+    options.get_option("vcc-fingerprint-dump");
+
+  // Only where a claim's sliced cone is all its verdict depends on -- the
+  // exclusions the in-run assertion_cache makes, plus the coverage probes.
+  const std::string vcc_cache_dir = options.get_option("vcc-cache");
+  const bool vcc_cache_verify = options.get_bool_option("vcc-cache-verify");
+  std::unique_ptr<vcc_cachet> vcc_cache = make_vcc_cache(
+    options, vcc_cache_dir, is_cov_run, is_dead_code, interleaving_number);
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -2577,6 +2734,9 @@ smt_resultt bmct::multi_property_check(
                        &is_dead_code,
                        &is_cov_run,
                        &is_keep_verified,
+                       &fingerprint_dump,
+                       &vcc_cache,
+                       &vcc_cache_verify,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt,
@@ -2672,6 +2832,20 @@ smt_resultt bmct::multi_property_check(
       features.run(local_eq.SSA_steps);
     }
 
+    std::string cone_key;
+    bool cached_proof = false;
+    if (vcc_cache_hit(
+          vcc_cache.get(),
+          vcc_cache_verify,
+          local_eq.SSA_steps,
+          cone_key,
+          cached_proof))
+    {
+      goto_functionst::property_verdicts.record(
+        claim.claim_cstr, property_verdictt::Passed, claim_ploc, "");
+      return;
+    }
+
     // Initialize a solver
     smt_convt *solver_ptr = &runtime_solver;
     std::unique_ptr<smt_convt> new_solver;
@@ -2709,13 +2883,8 @@ smt_resultt bmct::multi_property_check(
     // detection is advisory: silence every per-claim solve/trace so only the
     // final [Dead code] summary is shown (issue #4495).
     bool is_cov_silent =
-      is_goto_cov &&
-      (is_dead_code || claim.claim_property != "instrumented assertion");
-    // A coverage probe: SAT means "this location is reachable". It is not a
-    // property, so it must not be reported as one (issue #6387). Keyed off
-    // is_cov_run so a --dead-code-check probe keeps its own handling.
-    const bool is_cov_goal =
-      is_cov_run && claim.claim_property == "instrumented assertion";
+      coverage_silences_claim(is_goto_cov, is_dead_code, claim.claim_property);
+    const bool is_cov_goal = is_coverage_goal(is_cov_run, claim.claim_property);
 
     if (!is_cov_silent)
       log_status(
@@ -2727,6 +2896,13 @@ smt_resultt bmct::multi_property_check(
     fine_timet solve_start = current_time();
     smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
+
+    dump_claim_fingerprint(
+      fingerprint_dump,
+      local_eq.SSA_steps,
+      solver_result,
+      claim.claim_loc,
+      claim.claim_msg);
 
     // After UNSAT, probe whether the path to the kept claim is reachable.
     // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
@@ -2740,6 +2916,16 @@ smt_resultt bmct::multi_property_check(
       if (is_vacuous)
         vacuity_detected = true;
     }
+
+    vcc_cache_store(
+      vcc_cache.get(),
+      cone_key,
+      cached_proof,
+      solver_result,
+      is_vacuous,
+      claim.claim_cstr,
+      final_result,
+      result_mutex);
 
     // A claim is re-checked in every thread interleaving, and can be
     // discharged in one schedule while being violated in another. Record the
@@ -3098,6 +3284,10 @@ smt_resultt bmct::multi_property_check(
   // SEQUENTIAL
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
+
+  // A warm run solves nothing, so without this the report shows no solver
+  // activity at all and gives no sign of where the verdicts came from.
+  log_vcc_cache_summary(vcc_cache.get());
 
   // For coverage with fixed bound unwinding
   if (

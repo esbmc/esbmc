@@ -388,6 +388,22 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"output-goto",
      boost::program_options::value<std::string>(),
      "Export generated goto program"},
+    {"vcc-cache",
+     boost::program_options::value<std::string>(),
+     "Reuse claims already proved unsatisfiable in an earlier run, keyed on "
+     "the claim's sliced SSA cone, this ESBMC build, every option in effect "
+     "and the data model. Only proofs are stored. Ignored under --ltl, "
+     "--smt-during-symex, coverage modes and past the first thread "
+     "interleaving"},
+    {"vcc-cache-verify",
+     NULL,
+     "Consult --vcc-cache but solve every claim anyway, reporting an error if "
+     "a stored proof disagrees with the solver"},
+    {"vcc-fingerprint-dump",
+     boost::program_options::value<std::string>(),
+     "Append one line per solved claim (digest of its sliced cone under each "
+     "SSA-name normalisation, cone size, verdict, location) to this file; "
+     "'-' writes to stdout prefixed with VCC-FP"},
     {"cex-output",
      boost::program_options::value<std::string>(),
      "Save the counterexample into a file or, "
