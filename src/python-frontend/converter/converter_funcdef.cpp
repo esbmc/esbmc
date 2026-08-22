@@ -556,6 +556,66 @@ static void collect_self_attr_stores_of_param(
   }
 }
 
+/// True for `a, b = x` / `first, *rest = x`, which iterates `x`. Unpacking is
+/// evidence that a parameter is a sequence, but on its own it says nothing
+/// about the element type, so it is used only where the call sites agree on
+/// one (see seed_unpacked_param_type).
+static bool
+node_unpacks_param(const std::string &param_name, const nlohmann::json &node)
+{
+  if (node.value("_type", "") != "Assign" || !node.contains("value"))
+    return false;
+
+  const nlohmann::json &value = node["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Name" ||
+    value.value("id", "") != param_name)
+    return false;
+
+  if (!node.contains("targets") || !node["targets"].is_array())
+    return false;
+
+  for (const auto &target : node["targets"])
+  {
+    const std::string kind =
+      target.is_object() ? target.value("_type", "") : "";
+    if (kind == "Tuple" || kind == "List")
+      return true;
+  }
+  return false;
+}
+
+/// True if `node` anywhere within it unpacks `param_name`; the unpacking is
+/// commonly guarded (`if xs: first, *rest = xs`), so this has to look inside
+/// nested statements rather than only at the top level of the body.
+static bool
+body_unpacks_param(const std::string &param_name, const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      if (body_unpacks_param(param_name, child))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (node_unpacks_param(param_name, node))
+    return true;
+
+  // A nested function rebinds the name, so its body is not evidence here.
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "Lambda")
+    return false;
+
+  for (const char *key : {"body", "orelse", "finalbody"})
+    if (node.contains(key) && body_unpacks_param(param_name, node[key]))
+      return true;
+  return false;
+}
+
 static bool node_uses_param_as_list_like(
   const std::string &param_name,
   const nlohmann::json &node)
@@ -788,12 +848,58 @@ static bool list_literal_for_call_arg(
   return out.value("_type", "") == "List";
 }
 
-/// Element type a bare `list` parameter receives, taken from the call sites
-/// that can be resolved statically. `list` alone carries no element type, so
-/// a subscript of such a parameter otherwise reads as Any and neither
-/// arithmetic nor equality on the result behaves (#7187). Every resolvable
-/// call site must agree, so a second caller passing a different element type
-/// cannot silently inherit the first one's.
+/// Refines one unannotated (Any) parameter to the list model when the body
+/// or the call sites show it holds a list, and records the element type when
+/// one is known.
+void python_converter::refine_any_param_to_list(
+  code_typet::argumentt &param_arg,
+  const nlohmann::json &body,
+  const std::string &func_name,
+  size_t param_index)
+{
+  const std::string param_name = param_arg.get_base_name().as_string();
+  if (param_name == "self" || param_name == "cls" || param_name.empty())
+    return;
+  if (param_arg.type() != any_type())
+    return;
+
+  typet elem_type;
+  if (!param_is_list_like(param_name, body, func_name, param_index, elem_type))
+    return;
+
+  param_arg.type() = type_handler_.get_list_type();
+
+  const std::string param_id = param_arg.cmt_identifier().as_string();
+  if (param_id.empty())
+    return;
+  if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
+    param_sym->set_type(param_arg.type());
+  if (elem_type != typet())
+    python_list::add_type_info_entry(param_id, "", elem_type);
+}
+
+/// Whether an unannotated parameter should be refined to the list model.
+/// Body usage (`len(x)`, `x[i]`, a list mutator) is enough on its own.
+/// Unpacking (`first, *rest = x`) shows the parameter is a sequence but not
+/// what it holds, so it counts only when the call sites agree on an element
+/// type -- without one the elements read back untyped, which turns the
+/// unpacking's clean refusal into a wrong verdict (quixbugs powerset).
+/// `elem_type` receives that agreed type, or stays nil.
+bool python_converter::param_is_list_like(
+  const std::string &param_name,
+  const nlohmann::json &body,
+  const std::string &func_name,
+  size_t param_index,
+  typet &elem_type) const
+{
+  if (param_is_list_like_in_body(param_name, body))
+    return true;
+
+  return body_unpacks_param(param_name, body) &&
+         infer_list_elem_type_from_call_sites(
+           func_name, param_index, elem_type);
+}
+
 /// Records the element type of a list-annotated parameter, so a subscript of
 /// it reads at the right type. `list[T]` states it; a bare `list` has it
 /// recovered from the call sites (#7187).
@@ -1241,28 +1347,11 @@ void python_converter::process_function_arguments(
   if (!is_model_file(function_node))
   {
     for (auto &param_arg : type.arguments())
-    {
-      const std::string param_name = param_arg.get_base_name().as_string();
-      if (param_name == "self" || param_name == "cls" || param_name.empty())
-        continue;
-
-      if (param_arg.type() != any_type())
-        continue;
-
-      if (!param_is_list_like_in_body(param_name, body))
-        continue;
-
-      typet list_t = type_handler_.get_list_type();
-      param_arg.type() = list_t;
-
-      const std::string param_id = param_arg.cmt_identifier().as_string();
-      if (!param_id.empty())
-      {
-        symbolt *param_sym = symbol_table_.find_symbol(param_id);
-        if (param_sym)
-          param_sym->set_type(list_t);
-      }
-    }
+      refine_any_param_to_list(
+        param_arg,
+        body,
+        id.get_function(),
+        &param_arg - type.arguments().data());
   }
 
   for (auto &param_arg : type.arguments())

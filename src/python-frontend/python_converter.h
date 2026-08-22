@@ -837,6 +837,21 @@ private:
     code_typet::argumentt &param_arg,
     const exprt &default_expr);
 
+  /// Refines one unannotated parameter to the list model where warranted.
+  void refine_any_param_to_list(
+    code_typet::argumentt &param_arg,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index);
+
+  /// Whether an unannotated parameter should be refined to the list model.
+  bool param_is_list_like(
+    const std::string &param_name,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index,
+    typet &elem_type) const;
+
   /// Records a list-annotated parameter's element type for subscript reads.
   void seed_list_param_element_type(
     const nlohmann::json &element,
