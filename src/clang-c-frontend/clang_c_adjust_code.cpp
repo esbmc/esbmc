@@ -7,15 +7,16 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 
-// A base-destructor `this` is the one argument here that still needs
-// expression adjustment: it carries the derived->base displacement marker,
-// which only clang_c_adjust::adjust_expr resolves. gen_typecast leaves it
-// under the cast to the base pointer type. See #7025.
-static bool carries_derived_to_base(const exprt &arg)
+// A base-subobject `this` -- a base destructor's, or a thunk's -- is the one
+// argument here that still needs expression adjustment: it carries a
+// base-adjustment marker, which only clang_c_adjust::adjust_expr resolves.
+// gen_typecast leaves it under the cast to the target pointer type.
+// See #7025, #3894.
+static bool carries_base_adjustment(const exprt &arg)
 {
   for (const exprt *e = &arg;; e = &e->op0())
   {
-    if (!e->get("#derived_to_base").empty())
+    if (!e->get("#derived_to_base").empty() || e->get_bool("#base_to_derived"))
       return true;
     if (e->id() != "typecast" || e->operands().size() != 1)
       return false;
@@ -26,7 +27,7 @@ void clang_c_adjust::adjust_call_argument(exprt &arg)
 {
   if (arg.is_index())
     adjust_index(to_index_expr(arg));
-  else if (carries_derived_to_base(arg))
+  else if (carries_base_adjustment(arg))
     adjust_expr(arg);
 }
 

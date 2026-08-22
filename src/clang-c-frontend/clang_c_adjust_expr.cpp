@@ -294,6 +294,21 @@ static bool base_subobject_offset(
   return false;
 }
 
+// get_base_components_methods copies a base's components into the derived
+// struct -- and stamps each with its declaring class -- only for the flattened
+// layout it falls back to when the hierarchy contains a virtual base.
+static bool uses_flattened_layout(const namespacet &ns, const typet &derived)
+{
+  const typet &d = ns.follow(derived);
+  if (!d.is_struct())
+    return false;
+
+  for (const auto &c : to_struct_type(d).components())
+    if (!c.get("#base_owner").empty())
+      return true;
+  return false;
+}
+
 // How far `c`, a component of the base, has moved in the derived struct.
 // Nothing if the derived has no such member: matching is on type and on which
 // class declared the member, not just on the name, because
@@ -399,8 +414,18 @@ void clang_c_adjust::adjust_derived_to_base(
   const bool ptr_mode = expr.type().is_pointer();
   const typet derived = ptr_mode ? expr.type().subtype() : expr.type();
 
+  // Pick the oracle by layout, never by whichever answers first: a flattened
+  // struct also carries the "@base@" components it copied out of a
+  // nested-layout base, and walking those lands on storage duplicated at
+  // displacement zero (the <ios> models depend on that aliasing). Both oracles
+  // read ESBMC's own layout, which is the only one the base-offset paths may
+  // use.
   BigInt offset = 0;
-  if (!flattened_base_offset(ns, derived, base_id, offset) || offset == 0)
+  const bool flat = uses_flattened_layout(ns, derived);
+  if (!(flat ? flattened_base_offset(ns, derived, base_id, offset)
+             : base_subobject_offset(ns, derived, base_id, offset)))
+    return;
+  if (offset == 0)
     return;
 
   // The null guard below names the operand twice, and side effects are not
