@@ -122,8 +122,11 @@ everything else its verdict is contingent on: the ESBMC build, every option in
 effect, and the data model. Two claims share an entry only when all of that
 agrees.
 
-The cone is compared in full before an entry is used, so a hash collision costs
-a re-solve rather than producing a wrong answer.
+An entry is an empty file whose name *is* the key: 32 hex digits of cone digest
+prefixed by 16 of context digest. Nothing else is stored, so the digests are all
+that a hit is decided on — the cone itself is never re-compared. The cone half
+is 128 bits wide for that reason; the context half is 64, which is the narrower
+of the two and the one to widen first if this ever needs strengthening.
 
 ## Only proofs are stored
 
