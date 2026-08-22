@@ -4788,6 +4788,65 @@ tail padding.
 it reads 8 on both paths and a verdict test built on it passes against the
 control. The first draft of this test did exactly that and proved nothing.
 
+## 111. The two aborts §110.4 named, and what fixed one of them (2026-08-22)
+
+§110.4 put the two tests where the hop-off emits no symbol table at all ahead of
+the remaining spelling differences: a hard stop is not a divergence you can
+measure. Neither is the by-name union tag the class comment on
+`clang_c_adjust_irep2` documents — that attribution in §110.4 is wrong, and the
+two tests fail for two unrelated reasons.
+
+### 111.1 `builtin_memcpy`: an array operand of pointer arithmetic
+
+```
+Assertion failed: (p2 || (is_bv_type(t) == is_bv_type(v1->type) &&
+  t->get_width() == v1->type->get_width())), assert_arith_2ops_consistency
+```
+
+Reduced to `char a[9]; char *p = a + 1;` — nothing to do with `memcpy`.
+`clang_c_convert` drops the decay cast on purpose
+(`case clang::CK_ArrayToPointerDecay: break;`) and leaves `clang_c_adjust` to
+insert the `&a[0]`. Under the flag that pass does not run, so `migrate_expr`
+builds `add2t` with a pointer result and an *array* operand, and `add2t`'s
+invariant is a post-adjust one.
+
+The adjuster cannot fix it: the node has to be constructed before any pass can
+walk it. So the decay goes where the node is built —
+`decay_array_operand` in `migrate.cpp`, applied to both operands of the `plus`
+and `minus` arms. On the legacy path the operands are already `&a[0]`, so it is
+a no-op there; the C++, C and 400-test Python slices are unchanged.
+
+Only `+` and `-` assert on an array operand. `a > q`, `a == q` and `a[1]` all
+migrate today — measured, not assumed.
+
+The `-` case needed the guard widened. Keying the decay on a pointer *result*
+type fixes `a + 1` and not `a - q`, whose result is `ptrdiff_t`: C11 6.3.2.1p3
+decays an array operand in either position regardless of what the operator
+returns, and C has no array arithmetic for the unconditional form to catch.
+
+`--goto-functions-only` on the new test is byte-identical between the two paths,
+which is the §1.3 gate. The *symbol table* still prints `a + 1` where legacy
+prints `&a[0] + 1`, and that is not this defect: the pass writes a value back
+only when it changed it (`value != before`), and `before` is now already
+decayed, so nothing is written and the unadjusted legacy value survives in the
+table. Closing that means comparing the write-back against the legacy value
+rather than the migrated one — a change to the pass's write-back policy, not
+another arm.
+
+| mutant | killed by |
+|---|---|
+| decay absent (master) | `irep2_only_array_arith_decay`, `..._memcpy` |
+
+### 111.2 `cwe_uninit_array_vla` is still open, and it is a segfault
+
+`int a[n];` with a runtime `n` segfaults under the flag with no diagnostic —
+`int main(int argc, char **argv){ int n = argc; int a[n]; return 0; }` is
+enough, and the array need not be read. It survives this patch, so it is a
+second cause and not a second symptom. §80 records that the VLA `sizeof`
+operand is computed in migration; that is the place to look first.
+
+That is the next target: it is the only remaining input in the censused C
+corpus on which the pass produces nothing at all.
 ## 110. The census re-run after the sixteen PRs landed (2026-08-22)
 
 §104 closed the census with "every measured divergence is owned by an open PR".
