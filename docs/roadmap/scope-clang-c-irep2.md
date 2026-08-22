@@ -4894,6 +4894,13 @@ Stride-8 sample over `regression/esbmc`, symbol tables, blank lines ignored:
 |---|---:|---:|
 | master `595f52b025` | 90 | 138 |
 | §112 alone, on master | 97 | 132 |
+| §111.1 + §112 stacked | 100 | 129 |
+
+**These two figures are inflated and §113.2 corrects them to 94/134 for the
+stacked pair.** The sample is a stride over the sorted test list, so adding
+regression test directories -- which these patches do, and which are
+byte-identical by construction -- changes *which* tests are sampled. Compare
+across branches only on a test list pinned to one commit.
 | §111.1 + §112 stacked | **100** | **129** |
 
 `cwe_uninit_array_vla`'s symbol table is byte-identical once it runs, and so is
@@ -4916,6 +4923,95 @@ The remaining causes are all spelling differences again, and §110.1's table
 still ranks them. The two that are not printer artefacts are the
 function-pointer cast at a call argument and the coupled arith-assign
 (`scope-coupled-arith-assign-conversion.md`).
+
+## 113. The compound assignment, and a census that was measuring itself
+## (2026-08-22)
+
+§112.3 left two non-printer causes. This closes the second and disqualifies the
+first.
+
+### 113.1 The compound assignment was a third abort, not a spelling difference
+
+`compound_assign_narrow_overflow` appears in §110.1's untagged residue as
+`(signed int)b += a;` versus `b += a;` — a text difference. It is not: with
+`--goto-functions-only` the hop-off *aborts*, on the same
+`assert_arith_2ops_consistency` §111.1 met. The symbol-table census could not
+see it because the abort happens in `goto_convert`, two stages after the pass
+whose output that census reads. **A symbol-table census under-reports by
+construction; a differing text there may be a crash further on.**
+
+`adjust_plain_assignment` ports only the `"assign"` case of
+`clang_c_adjust::adjust_side_effect_assignment`, and its comment says the
+compound spellings were "left where this mode already had them". Where they
+were was: unconverted. C11 6.5.16.2p3 makes `b op= a` equivalent to
+`b = b op (a)`, so a `char` target promotes to `int` before the operation, and
+without that promotion `goto_convert`'s lowering builds `add2t` on a `char` and
+an `int`.
+
+Measured across all ten spellings on `char b; int a; b op= a;`:
+
+| spelling | before |
+|---|---|
+| `+= -= *= /= %=` | **abort** |
+| `&= \|= ^=` | diverge, no abort |
+| `<<= >>=` | already byte-identical |
+
+So the port is the tail of the legacy arm — the arithmetic conversion on *both*
+operands — and not its shift branch, which returns early after promoting only
+the right operand and which the corpus shows is already the migrated shape.
+All ten are byte-identical afterwards, in the symbol table and in the goto
+program.
+
+### 113.2 The census had started measuring its own tests
+
+§112's table reported the stacked pair at 100 same / 129 differing. On a test
+list pinned to `595f52b025` it is **94 / 134**. The difference is not drift: the
+sample is `awk 'NR%8==0'` over the sorted `test.desc` list, and every patch in
+this sequence adds regression directories which are byte-identical by
+construction. Adding them both inserts guaranteed-same entries and shifts which
+other tests land on a stride position.
+
+Corrected, on the pinned list (230 tests):
+
+| branch | same | differing |
+|---|---:|---:|
+| master `595f52b025` | 90 | 138 |
+| + §111.1 + §112 | 94 | 134 |
+| + §113.1 | **95** | **133** |
+
+§113.1 gains one test on this sample, which is the honest number: the sample
+holds few narrow-target compound assignments. Its value is the three abort
+classes it removes, not the sample delta.
+
+### 113.3 The function-pointer cast is a "do not mirror", not a gap
+
+§110.4's other non-printer cause: `atexit((void (*)())(&free_g2))` versus
+`atexit(&free_g2)`, and unlike §110.2's `(void)0` this one *does* reach the
+goto program. It is still not work.
+
+Instrumented at the conversion site, `arg->type == params[i]` is **true**: the
+argument is `void (*)(void)` and the parameter `void (*)()`, and `migrate_type`
+maps both to the same `code_type2t` — same empty argument vector, same return
+type, same ellipsis flag. The legacy pass emits a cast because the *legacy*
+types differ; in IREP2 the cast is the identity, and no pass reading IREP2 can
+know it is owed.
+
+Confirmed twice over: disabling `same_function_pointer_ignoring_argument_names`
+at that site does not restore the cast, so the §100.1 guard is not suppressing
+it; and `atexit-1` returns the same verdict on both paths under its own flags.
+
+Emitting an identity typecast to match the legacy printer is §110.2's mistake
+with a different node. Closing it for real means `code_type2t` carrying the
+prototyped/unprototyped distinction, which is a representation change and needs
+its own justification.
+
+### 113.4 Next
+
+Every cause §110.1 names is now either closed or argued not to be work, except
+the printer-only set (`+1` vs `1`, the float literal suffix, block indentation)
+and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
+sample wants a fresh cause census before another arm is written — the old one
+is stale, and §113.1 shows it was reading the wrong stage.
 second cause and not a second symptom. §80 records that the VLA `sizeof`
 operand is computed in migration; that is the place to look first.
 
