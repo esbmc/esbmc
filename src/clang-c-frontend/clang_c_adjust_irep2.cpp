@@ -182,7 +182,10 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
     adjust_binary_arith_operands(expr);
 
   if (is_sideeffect_assign2t(expr))
+  {
     adjust_plain_assignment(expr);
+    adjust_compound_assignment(expr);
+  }
 }
 
 /// One of a family of spellings differing only by the argument's width:
@@ -461,6 +464,35 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
 
   if (rhs != a.rhs || expr->type != target)
     expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
+}
+
+/// The shift spellings clang_c_adjust returns early on: it promotes only the
+/// right operand there, which the corpus shows is already the migrated shape.
+static bool is_shift_assignment(const irep_idt &op)
+{
+  return op == "assign_shl" || op == "assign_shr" || op == "assign_lshr" ||
+         op == "assign_ashr";
+}
+
+void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
+{
+  const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+  if (a.op == "assign" || is_shift_assignment(a.op))
+    return;
+  if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+    return;
+
+  // A complex operand is lower_complex_compound_assignment's, and that arm
+  // rewrites the node rather than converting it.
+  if (is_complex_type(a.lhs->type) || is_complex_type(a.rhs->type))
+    return;
+
+  const type2tc target = a.lhs->type;
+  expr2tc lhs = a.lhs, rhs = a.rhs;
+  c_implicit_typecast_arithmetic(lhs, rhs, ns);
+
+  if (lhs != a.lhs || rhs != a.rhs || expr->type != target)
+    expr = sideeffect_assign2tc(target, a.op, lhs, rhs, a.location);
 }
 
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
