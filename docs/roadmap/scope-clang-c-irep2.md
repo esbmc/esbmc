@@ -5012,6 +5012,81 @@ the printer-only set (`+1` vs `1`, the float literal suffix, block indentation)
 and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
+
+## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
+## (2026-08-22)
+
+Every census in this scope so far has read one stage. §113.1 showed why that is
+not enough: a symbol-table difference can be a `goto_convert` crash, and a
+symbol-table difference can equally be nothing at all. Re-run reading both, on
+the test list pinned to `595f52b025` (230 tests, stride 8), at the tip of
+§111.1 + §112 + §113.1:
+
+| symbol table | goto program | tests |
+|---|---|---:|
+| same | same | 95 |
+| **diff** | same | **109** |
+| diff | diff | **24** |
+| — | crash | **0** |
+
+Three things follow.
+
+**The abort classes are gone.** Zero crashes in the sample, against three
+distinct ones at the start of the day (§111.1, §112, §113.1). That is the whole
+value of those three patches; the same-count moved by 5.
+
+**109 of the 133 differences do not reach the goto program.** They are the class
+§110.2 established with `(void)0`: the adjuster writes a value back only when it
+changed it, and the un-written-back legacy value is what the symbol-table
+printer shows, while `goto_convert` re-migrates from the same legacy value and
+lands in the same place. Chasing them is chasing a printer.
+
+**The residue that matters is 24.** Causes, read rather than tallied:
+
+| cause | tests | note |
+|---|---:|---|
+| `DEAD` location: `no location` vs blank | **14** | §114.1 |
+| integer promotion missing at a comparison | 3 | |
+| array decay rendered as a cast, not `&a[0]` | 3 | |
+| temporary numbering (`tmp$3` vs `tmp$4`) | 2 | |
+| function-pointer identity cast | 1 | not work, §113.3 |
+| untagged | 3 | |
+
+(Tags overlap; four tests carry two.)
+
+### 114.1 The dominant cause is the for-init hoist, and it is one line of provenance
+
+```c
+int main(void) { int s = 0; for (int i = 0; i < 3; i++) s = s + i; return s; }
+```
+
+```
+<         // 48 no location
+>         // 48
+```
+
+The `DEAD` for the loop-scoped `i`. Legacy leaves its location nil, which
+`goto_programt::output` renders `no location`; the hop-off gives it an
+empty-but-not-nil one, which renders blank. `goto_convert_functions.cpp`'s
+`emitted_location` already documents this exact asymmetry — in the other
+direction, where reproducing *blank* was the correct choice.
+
+The mechanism is §105's `hoist_for_init`. Rewriting `code_for2t` into a block
+moves the loop from `convert_for` to `convert_block`, and `convert_block` stamps
+the block's `end_location` on every destructor it unwinds
+(`unwind_destructor_stack`, goto_convert.cpp:2215) whereas `convert_for` leaves
+it nil. `migrate_expr_back` is not the culprit — it already guards
+`if (ref2.end_location.is_not_nil())`.
+
+Reproduced with `--no-irep2-native-body` on both sides, so this is the legacy
+converter's own asymmetry and not the W1 dispatcher's.
+
+### 114.2 Next
+
+`hoist_for_init`'s destructor-location provenance, which is 14 of the 24. The
+other live causes — the promotion at a comparison, and the decay rendered as a
+cast — are three tests each and worth a census of their own once the dominant
+one is out of the way.
 second cause and not a second symptom. §80 records that the VLA `sizeof`
 operand is computed in migration; that is the place to look first.
 
