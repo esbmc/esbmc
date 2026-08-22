@@ -2728,6 +2728,30 @@ expr2tc code_contractst::create_snapshot_variable(
     expr->type);
 }
 
+/// The snapshot whose original_expr symbol matches \p thename and whose
+/// is_ptr_region equals \p want_region, nil if none. Filtering by
+/// is_ptr_region matters both ways: a region snapshot's snapshot_var is
+/// array-typed and only safe to return when the caller supplies its own
+/// index (want_region=true, try_replace_ptr_region_old); every other
+/// caller wants a scalar/pointer value returned bare, which a region
+/// snapshot's array-typed snapshot_var is not (want_region=false) (#7057).
+expr2tc code_contractst::find_snapshot_by_symbol(
+  const irep_idt &thename,
+  const std::vector<code_contractst::old_snapshot_t> &snapshots,
+  bool want_region)
+{
+  for (const auto &snapshot : snapshots)
+  {
+    if (snapshot.is_ptr_region != want_region)
+      continue;
+    if (
+      is_symbol2t(snapshot.original_expr) &&
+      to_symbol2t(snapshot.original_expr).thename == thename)
+      return snapshot.snapshot_var;
+  }
+  return expr2tc();
+}
+
 /// __ESBMC_old(ptr[j]), ptr a pointer parameter: goto_sideeffects.cpp's lift
 /// produces dereference(add(typecast(old-temp-symbol), j)) rather than the
 /// named-array case's dereference(typecast(old-temp-symbol)) wrapped in an
@@ -2756,21 +2780,16 @@ expr2tc code_contractst::try_replace_ptr_region_old(
   if (!is_symbol2t(base) || !is_old_temp_symbol(base))
     return expr2tc();
 
-  const symbol2t &sym = to_symbol2t(base);
-  for (const auto &snapshot : snapshots)
-  {
-    // A hand-written *(__ESBMC_old(p) + i) outside a quantifier shares this
-    // exact shape (see the comment on find_ptr_region_use) but was
-    // correctly left unclassified there; only actually index snapshot_var
-    // when it was classified as a region -- otherwise it is scalar/pointer
-    // typed, not array typed, and index2tc on it produces malformed IR
-    // (#7057).
-    if (
-      snapshot.is_ptr_region && is_symbol2t(snapshot.original_expr) &&
-      to_symbol2t(snapshot.original_expr).thename == sym.thename)
-      return index2tc(result_type, snapshot.snapshot_var, add.side_2);
-  }
-  return expr2tc();
+  // A hand-written *(__ESBMC_old(p) + i) outside a quantifier shares this
+  // exact shape (see the comment on find_ptr_region_use) but was correctly
+  // left unclassified there; only actually index snapshot_var when it was
+  // classified as a region -- otherwise it is scalar/pointer typed, not
+  // array typed, and index2tc on it produces malformed IR (#7057).
+  expr2tc snapshot_var =
+    find_snapshot_by_symbol(to_symbol2t(base).thename, snapshots, true);
+  if (!snapshot_var)
+    return expr2tc();
+  return index2tc(result_type, snapshot_var, add.side_2);
 }
 
 expr2tc code_contractst::replace_old_in_expr(
@@ -2798,55 +2817,24 @@ expr2tc code_contractst::replace_old_in_expr(
         try_replace_ptr_region_old(expr->type, ptr_expr, snapshots))
       return region_replacement;
 
-    if (is_symbol2t(ptr_expr))
+    if (is_old_temp_symbol(ptr_expr))
     {
-      const symbol2t &sym = to_symbol2t(ptr_expr);
-      std::string sym_name = id2string(sym.thename);
-
-      if (sym_name.find("___ESBMC_old") != std::string::npos)
-      {
-        for (const auto &snapshot : snapshots)
-        {
-          if (is_symbol2t(snapshot.original_expr))
-          {
-            const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
-            if (sym.thename == snap_sym.thename)
-              return snapshot.snapshot_var;
-          }
-        }
-      }
+      if (
+        expr2tc snapshot_var = find_snapshot_by_symbol(
+          to_symbol2t(ptr_expr).thename, snapshots, false))
+        return snapshot_var;
     }
   }
 
-  // Check if this is a symbol that matches one of the old temp variables
-  // (Legacy path for any direct symbol reference to the old temp var)
-  if (is_symbol2t(expr))
+  // Legacy path for any direct symbol reference to the old temp var, not
+  // under a dereference. Only process symbols related to __ESBMC_old, to
+  // avoid accidentally replacing __ESBMC_return_value or other symbols.
+  if (is_old_temp_symbol(expr))
   {
-    const symbol2t &sym = to_symbol2t(expr);
-
-    // Only process symbols that are related to __ESBMC_old.
-    // This prevents accidentally replacing __ESBMC_return_value or other
-    // symbols
-    if (is_old_temp_symbol(expr))
-    {
-      for (const auto &snapshot : snapshots)
-      {
-        // A region snapshot's snapshot_var is array-typed and must only be
-        // consumed through the index-shaped dereference(add(...)) match
-        // above, which supplies the index; returned bare here it would be
-        // an array where a scalar is expected (#7057).
-        if (snapshot.is_ptr_region)
-          continue;
-        if (is_symbol2t(snapshot.original_expr))
-        {
-          const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
-          if (sym.thename == snap_sym.thename)
-          {
-            return snapshot.snapshot_var;
-          }
-        }
-      }
-    }
+    if (
+      expr2tc snapshot_var =
+        find_snapshot_by_symbol(to_symbol2t(expr).thename, snapshots, false))
+      return snapshot_var;
   }
 
   // Check if this is an old_snapshot sideeffect (for compatibility)

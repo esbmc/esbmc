@@ -416,6 +416,13 @@ private:
     const std::string &func_name,
     size_t index) const;
 
+  /// \brief The snapshot whose original_expr symbol matches \p thename and
+  /// whose is_ptr_region equals \p want_region, nil if none. #7057.
+  static expr2tc find_snapshot_by_symbol(
+    const irep_idt &thename,
+    const std::vector<old_snapshot_t> &snapshots,
+    bool want_region);
+
   /// \brief __ESBMC_old(ptr[j]), ptr a pointer parameter: try the
   /// dereference(add(typecast(old-temp-symbol), j)) shape
   /// goto_sideeffects.cpp's lift produces for this case. Returns nil if \p
