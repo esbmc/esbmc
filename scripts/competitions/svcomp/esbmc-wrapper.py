@@ -118,6 +118,42 @@ def violated_property_text(the_output):
         violated.append(line)
   return "\n".join(violated)
 
+MEMORY_LEAK = "dereference failure: forgotten memory"
+UNREACHABILITY_INTRINSIC = "reachability: unreachable code reached"
+
+# Ordered: the first comment found in the violated properties decides the
+# category, so a task violating several keeps the answer the pre-#7250 chain
+# gave. The trailing bare "dereference failure" is the catch-all for comments
+# not spelled out above -- "Data object accessed with code type" and memcpy's
+# write-side message, for two -- which an always-true operand in that chain
+# used to catch by accident, at the price of making the free() checks dead.
+MEMORY_VIOLATIONS = (
+  (MEMORY_LEAK, Result.fail_memtrack),
+  ("dereference failure: invalid pointer freed", Result.fail_free),
+  ("dereference failure: invalidated dynamic object freed", Result.fail_free),
+  ("dereference failure: accessed expired variable pointer", Result.fail_deref),
+  ("dereference failure: invalid pointer", Result.fail_deref),
+  ("dereference failure: NULL pointer", Result.fail_deref),
+  ("dereference failure: free() of non-dynamic memory", Result.fail_free),
+  ("dereference failure: Access to object out of bounds", Result.fail_deref),
+  ("dereference failure: memset of memory segment of size", Result.fail_deref),
+  ("dereference failure on memcpy: reading memory segment", Result.fail_deref),
+  ("dereference failure: invalidated dynamic object", Result.fail_deref),
+  ("array bounds violated", Result.fail_deref),
+  ("Operand of free must have zero pointer offset", Result.fail_free),
+  (" Verifier error called", Result.success),
+  ("dereference failure", Result.fail_deref),
+)
+
+
+def classify_memory_violation(violated):
+  """Map violated-property text to a memsafety sub-property, or None."""
+  for comment, result in MEMORY_VIOLATIONS:
+    if comment in violated:
+      return result
+  return None
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -135,22 +171,8 @@ def parse_result(the_output, prop):
   if "Chosen solver doesn\'t support floating-point numbers" in the_output:
     return Result.force_fp_mode
 
-  # Error messages:
-  memory_leak = "dereference failure: forgotten memory"
-  invalid_pointer = "dereference failure: invalid pointer"
-  memset_access_oob = "dereference failure: memset of memory segment of size"
-  memcpy_access_oob = "dereference failure on memcpy: reading memory segment"
-  access_out = "dereference failure: Access to object out of bounds"
-  dereference_null = "dereference failure: NULL pointer"
-  expired_variable = "dereference failure: accessed expired variable pointer"
-  invalid_object = "dereference failure: invalidated dynamic object"
-  invalid_object_free = "dereference failure: invalidated dynamic object freed"
-  invalid_pointer_free = "dereference failure: invalid pointer freed"
-  free_error = "dereference failure: free() of non-dynamic memory"
-  bounds_violated = "array bounds violated"
-  free_offset = "Operand of free must have zero pointer offset"
-  data_race = "/W data race on"
-  unreachability_intrinsic = "reachability: unreachable code reached"
+  memory_leak = MEMORY_LEAK
+  unreachability_intrinsic = UNREACHABILITY_INTRINSIC
 
   if "VERIFICATION FAILED" in the_output:
     violated = violated_property_text(the_output)
@@ -166,49 +188,9 @@ def parse_result(the_output, prop):
       return Result.fail_termination
 
     if prop == Property.memory:
-      if memory_leak in violated:
-        return Result.fail_memtrack
-
-      if invalid_pointer_free in violated:
-        return Result.fail_free
-
-      if invalid_object_free in violated:
-        return Result.fail_free
-
-      if expired_variable in violated:
-        return Result.fail_deref
-
-      if invalid_pointer in violated:
-        return Result.fail_deref
-
-      if dereference_null in violated:
-        return Result.fail_deref
-
-      if free_error in violated:
-        return Result.fail_free
-
-      if (access_out in violated or memset_access_oob in violated or
-          memcpy_access_oob in violated):
-        return Result.fail_deref
-
-      if invalid_object in violated:
-        return Result.fail_deref
-
-      if bounds_violated in violated:
-        return Result.fail_deref
-
-      if free_offset in violated:
-        return Result.fail_free
-
-      if " Verifier error called" in violated:
-        return Result.success
-
-      # The comment list above is not exhaustive -- "Data object accessed with
-      # code type" and memcpy's write-side message, for two -- and until this
-      # commit an always-true operand a few lines up caught those by accident,
-      # at the price of making the free() checks between here and there dead.
-      if "dereference failure" in violated:
-        return Result.fail_deref
+      memory_result = classify_memory_violation(violated)
+      if memory_result is not None:
+        return memory_result
 
     if prop == Property.overflow:
       return Result.fail_overflow
