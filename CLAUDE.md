@@ -73,7 +73,7 @@ Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOR
 **Before committing:**
 
 - Always run the project's test suite. If tests fail, fix the failures before committing — never commit broken or untested code.
-- **Regression suite cap.** When running the full regression suite, cap the run at **5 minutes** (300000 ms) — pass the timeout to the `Bash` tool's `timeout` parameter, or wrap the invocation with `timeout 5m …`. If the suite cannot complete in 5 minutes, narrow the scope (e.g. run only the affected subset) or ask the user before extending the limit.
+- **Regression suite cap.** When running the full regression suite, cap the run at **10 minutes** (600000 ms) — pass the timeout to the `Bash` tool's `timeout` parameter, or wrap the invocation with `timeout 10m …`. If the suite cannot complete in 10 minutes, narrow the scope (e.g. run only the affected subset) or ask the user before extending the limit.
 - **Lint and typecheck.** Run lint and typecheckers and fix any errors. For Python code, use `pylint`. For C++ code, ensure clang-format compliance (CI enforces this).
 - **Cyclomatic complexity.** `python3 scripts/complexity/ccn_report.py --gate` reports what the branch adds against its merge base, the same check the Complexity workflow runs on the PR (needs `pip install lizard==1.23.0`). It is advisory while the thresholds are being calibrated.
 
@@ -146,6 +146,52 @@ If sanitizers do not reproduce the bug (e.g. timing-dependent races, allocator-d
 
 When a C/C++ change concerns standard-defined semantics — undefined behaviour, implicit conversions, object lifetime, name lookup, overload resolution, constant evaluation, or similar — consult the relevant standard draft (e.g. the latest C or C++ working draft on open-std.org, or cppreference for a digestible summary) before implementing. Cite the section in the commit message or code comment when it clarifies a non-obvious choice. Skip for routine edits that do not depend on standard semantics.
 
+**Use the standard and the compiler together — they answer different
+questions.** When a change to an operational model under `src/cpp/library/` or
+`src/c2goto/library/` adds or moves a version gate (`#if __cplusplus >= …`, a
+`constexpr`/`noexcept` qualifier, a conditionally-declared member), consult
+both:
+
+- **The standard** says what the rule is, when it changed, and why — the
+  semantics, the paper number, the wording worth citing. Read it first; it is
+  what goes in the commit message.
+- **The compiler and its C++ library** (`clang++` with libc++ here, libstdc++
+  on the Linux CI runners) say what is actually available in a given `-std` mode
+  on this target. That is what a user sees when they compile a regression test
+  by hand, and what the OM has to reproduce.
+
+They usually agree. Where they do not:
+
+- The implementation offers **more** than the standard requires — libc++ exposes
+  `<string_view>` in C++11 — follow the implementation. Code built with that
+  toolchain compiles, so rejecting it would be a false `PARSING ERROR` on valid
+  input. ESBMC's C++11 `<string_view>` gate is exactly this call (#3387).
+- The implementation is **non-conforming** — follow the standard, and leave a
+  one-line comment naming the divergence.
+
+Establish the boundary by measurement, never by recall:
+
+1. Write one small probe per behaviour in question.
+2. Run each probe through `clang++ -std=<mode> -fsyntax-only` for every mode the
+   gate spans — the real library, not the OM.
+3. Run the same probes through `esbmc --std <mode>` and diff accept/reject.
+   Any cell where they disagree is the defect.
+4. When changing an OM header, A/B the header trees directly
+   (`clang++ -I <tree>`) — it is seconds, against a full OM rebuild.
+
+Mirror the host library's *shape*, not just its version number: libc++ spells
+these `_LIBCPP_CONSTEXPR_SINCE_CXX17`, `_LIBCPP_STD_VER >= N`, and where it
+declares a member unconditionally `constexpr` and gates only its callee, do the
+same — the accept/reject behaviour and the diagnostic both depend on it. Cite
+the paper (e.g. P0426R1) in the commit message; take the boundary from the
+implementation.
+
+**Pin the mode in every test that depends on it.** A `test.desc` with a blank
+flags line inherits whatever LLVM ESBMC was built against — `gnu++17` for
+ESBMC's bundled clang, `gnu++14` for Apple clang. A test relying on that is not
+pinning anything. Give it `--std c++NN` and mutation-check the pin: change it to
+an older mode and confirm the test *fails*.
+
 ## Incremental Patch Testing
 
 When a fix involves multiple patches (e.g. N1, N2), apply and test them one at a time:
@@ -215,6 +261,20 @@ Look for the `python_user_main` function to see how Python source maps to GOTO i
 
 **5. Hypothesis tests** — Property-based tests in `unit/python-frontend/` test ESBMC's models against CPython. Run with: `uv run python -m pytest unit/python-frontend/ -v`
 
+## SV-COMP Benchmarking
+
+The `Run Benchexec` workflow is the only measurement of ESBMC's competition score. A number from it is easy to read as a verdict on the PR in front of you when it is nothing of the sort.
+
+**Label the PR.** When a change can move SV-COMP verdicts — anything under `goto-symex/`, `solvers/`, `pointer-analysis/`, `goto-programs/`, a frontend's semantics, an operational model, or `scripts/competitions/svcomp/` — add `needs-svcomp-run` alongside the area label, so it is not merged on the regression suite alone. Add `SV-COMP` when the competition setup itself is what changed.
+
+**Check the provenance of both runs before attributing a score move.** `gh run list --workflow "Run Benchexec"` prints each run's `headBranch`: runs described as "master" are routinely another PR's branch. The timeout and `ESBMC_OPTS` are `workflow_dispatch` inputs, recorded together with the CPU and RAM in the `<result …>` element of every `*.results.*.xml.bz2` in the `esbmc-result` artifact — a 30s run and a 900s run are not comparable, and neither are two different strategies. Master moves daily, so a baseline more than a few days older than the PR run measures master's drift rather than the PR.
+
+**Attribute per task, not per total.** Download both `esbmc-result` artifacts, parse the per-task `status` and `category` out of the XML, and diff the task sets. If the tasks a PR appears to lose are the same ones another branch's run already lost, the PR is not the cause; a third run from the same week on an unrelated branch settles it.
+
+**Read a per-task log before concluding the verifier regressed.** `*.logfiles.zip` in the artifact holds ESBMC's full stdout per task. `VERIFICATION FAILED` followed by `Unknown` is `esbmc-wrapper.py` failing to classify the output, not ESBMC failing to find the bug.
+
+**Changing what ESBMC prints is an interface change.** `parse_result()` in `scripts/competitions/svcomp/esbmc-wrapper.py` classifies each task by matching substrings of ESBMC's output, so a PR that adds, renames, or reformats a verdict line, a property comment, or a summary block must be checked against it — `python3 scripts/competitions/svcomp/test_esbmc_wrapper.py` covers the parsing — and carries `needs-svcomp-run`. PR #7064 added a per-property table listing every property including the unchecked ones; the wrapper read those rows and turned ~2600 correct-false verdicts into `Unknown` (#7250).
+
 ## Commit Conventions
 
 Prefix commits with a category tag in brackets, e.g., `[python]`, `[build]`, `[solver]`, `[om]` (operational model). Title: one line, imperative mood, <72 chars. Description: 2–4 lines explaining what changed and why. Reference the relevant issue/PR with `Fixes #N` when applicable.
@@ -230,5 +290,7 @@ Prefix commits with a category tag in brackets, e.g., `[python]`, `[build]`, `[s
 ## Issue and PR Labels
 
 Always apply at least one label when creating an issue or PR. Pick the label that matches the affected area — e.g. `python`, `clang-c-frontend`, `solver`, `build`, `docs`. Use `gh label list --repo esbmc/esbmc` to see the available labels, then `gh issue edit <N> --add-label <label>` or `gh pr edit <N> --add-label <label>`. If no existing label fits, ask the user rather than creating a new one.
+
+Add `needs-svcomp-run` on top of the area label whenever the change can move competition verdicts — see *SV-COMP Benchmarking* for what qualifies.
 
 For module-specific instructions, subdirectory CLAUDE.md files can be added (they load automatically when working in those directories).
