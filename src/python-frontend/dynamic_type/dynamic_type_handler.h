@@ -21,8 +21,8 @@ public:
   dynamic_type_handler(python_converter &converter, type_handler &type_handler);
 
   /**
-   * @brief Names of variables whose two branches assign
-   * genuinely incompatible literal types
+   * @brief Names assigned genuinely incompatible literal types across an
+   * if/elif/.../else chain, where every branch assigns the name
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;

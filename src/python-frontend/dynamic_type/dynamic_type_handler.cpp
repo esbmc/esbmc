@@ -76,6 +76,44 @@ classify_branch_literal_assigns(const nlohmann::json &block)
   return types;
 }
 
+// Recursively collects, per name, the literal kinds an elif chain's leaves
+// assign it. Returns false for a dangling elif with no final else.
+bool collect_orelse_literal_kinds(
+  const nlohmann::json &orelse,
+  std::unordered_map<std::string, std::unordered_set<std::string>> &kinds,
+  std::unordered_map<std::string, int> &leaf_count,
+  int &leaf_total)
+{
+  if (
+    orelse.is_array() && orelse.size() == 1 && orelse[0].is_object() &&
+    orelse[0].value("_type", "") == "If")
+  {
+    const auto &elif = orelse[0];
+    if (!elif.contains("orelse") || elif["orelse"].empty())
+      return false;
+
+    leaf_total++;
+    if (elif.contains("body"))
+      for (const auto &[name, kind] :
+           classify_branch_literal_assigns(elif["body"]))
+      {
+        kinds[name].insert(kind);
+        leaf_count[name]++;
+      }
+
+    return collect_orelse_literal_kinds(
+      elif["orelse"], kinds, leaf_count, leaf_total);
+  }
+
+  leaf_total++;
+  for (const auto &[name, kind] : classify_branch_literal_assigns(orelse))
+  {
+    kinds[name].insert(kind);
+    leaf_count[name]++;
+  }
+  return true;
+}
+
 // Classifies a single `return <literal>` statement: "num", "str", or "" if
 // it isn't a literal return.
 std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
@@ -144,12 +182,23 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
 
   if (!if_node.contains("orelse") || if_node["orelse"].empty())
     return dynamic_type_names;
-  auto else_types = classify_branch_literal_assigns(if_node["orelse"]);
 
-  for (const auto &[name, then_kind] : then_types)
+  std::unordered_map<std::string, std::unordered_set<std::string>> kinds;
+  std::unordered_map<std::string, int> leaf_count;
+  int leaf_total = 1; // the "then" branch is the first leaf
+  for (const auto &[name, kind] : then_types)
   {
-    auto it = else_types.find(name);
-    if (it == else_types.end() || it->second == then_kind)
+    kinds[name].insert(kind);
+    leaf_count[name]++;
+  }
+
+  if (!collect_orelse_literal_kinds(
+        if_node["orelse"], kinds, leaf_count, leaf_total))
+    return dynamic_type_names;
+
+  for (const auto &[name, kind_set] : kinds)
+  {
+    if (leaf_count[name] != leaf_total || kind_set.size() < 2)
       continue;
 
     symbol_id sid = converter_.create_symbol_id();
