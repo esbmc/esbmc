@@ -918,6 +918,65 @@ std::optional<column_pointer_view_info> get_column_pointer_view_info(
 
   return info;
 }
+
+struct diagonal_pointer_view_info
+{
+  typet elem_type;
+  long long offset;
+  long long length;
+  long long stride;
+};
+
+// np.diagonal(a[, offset=k]): the main diagonal (k=0) or a parallel one.
+// k >= 0 starts at a[0][k] (flat offset k); k < 0 starts at a[-k][0] (flat
+// offset (-k)*num_cols); either way the diagonal steps num_cols+1 flat
+// elements per logical index, and its length is clamped to whichever axis
+// runs out first (0 when the offset itself is already past every row or
+// column, e.g. k >= num_cols). Structural eligibility only (fixed 2-D
+// shape) -- deliberately independent of current_lhs, unlike
+// get_row_pointer_view_info/get_column_pointer_view_info, because a Call
+// RHS (unlike a Subscript) gets a genuine second, current_lhs-correct
+// conversion pass with no cached-reuse trap to work around; see
+// try_build_diagonal_pointer_view for why current_lhs is checked there
+// instead.
+std::optional<diagonal_pointer_view_info> get_diagonal_pointer_view_info(
+  const exprt &array,
+  long long k,
+  const contextt &symbol_table)
+{
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, symbol_table);
+  if (!shape)
+    return std::nullopt;
+
+  long long offset;
+  long long length;
+  if (k >= 0)
+  {
+    offset = k;
+    length = std::min(shape->row_count, shape->col_count - k);
+  }
+  else
+  {
+    offset = (-k) * shape->col_count;
+    length = std::min(shape->row_count + k, shape->col_count);
+  }
+  if (length <= 0)
+  {
+    // An out-of-range offset (e.g. k <= -row_count or k >= col_count) still
+    // computes a flat offset above, but with no elements to index through
+    // it, that offset can run arbitrarily far past the buffer (k=-100 on a
+    // 3x3 array gives offset=300). Forming that pointer at all -- even
+    // though never dereferenced, since length is 0 -- is undefined behaviour
+    // past one-past-the-end (C 6.5.6p8), so clamp it to the buffer's own
+    // one-past-the-end instead.
+    length = 0;
+    offset = shape->row_count * shape->col_count;
+  }
+
+  return diagonal_pointer_view_info{
+    shape->elem_type, offset, length, shape->col_count + 1};
+}
 } // namespace
 
 exprt python_list::resolve_fixed_axis_index(
@@ -1687,6 +1746,58 @@ std::optional<exprt> python_list::try_build_column_pointer_view(
     static_cast<std::size_t>(info->num_rows),
     info->num_cols,
     false);
+}
+
+// np.diagonal(a[, offset=k])/a.diagonal([k]): a read-only strided pointer
+// into a's own buffer (see get_diagonal_pointer_view_info for the
+// offset/length/stride math). Read-only because NumPy's own diagonal() is
+// -- callers needing a mutable diagonal are expected to use
+// np.fill_diagonal() instead, which mutates the source array directly.
+std::optional<exprt>
+python_list::try_build_diagonal_pointer_view(const exprt &array, long long k)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<diagonal_pointer_view_info> info =
+    get_diagonal_pointer_view_info(array, k, converter_.symbol_table());
+  if (!info)
+    return std::nullopt;
+
+  if (converter_.in_rhs_type_probe_)
+  {
+    // create_symbol_for_unannotated_assign's type-inference pre-pass
+    // converts a fresh `d = np.diagonal(a)`'s RHS once, before the real
+    // `d` symbol (and current_lhs) exist, purely to learn its type -- the
+    // exprt itself is discarded right after (only .type() is read), and a
+    // real, current_lhs-correct second pass follows unconditionally for a
+    // Call RHS (no cached-reuse trap the way a Subscript RHS has). Return
+    // a same-typed placeholder rather than the actual view so that pass
+    // succeeds instead of throwing "not assigned to a variable" for a
+    // case that no longer applies by the second pass. Gated on the probe
+    // flag specifically (not just current_lhs being unset), because a
+    // genuinely nested use such as `np.diagonal(a)[i]` also has current_lhs
+    // unset (Subscript nulls it while converting its base) but is never
+    // re-converted with a valid target -- there the placeholder's raw,
+    // unoffset pointer would silently stand in as the final value instead
+    // of the correct strided one, so that case must fall through and
+    // decline below instead.
+    return build_typecast(
+      build_address_of(array), pointer_typet(info->elem_type));
+  }
+
+  if (!converter_.current_lhs || !converter_.current_lhs->is_symbol())
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    info->elem_type,
+    info->offset,
+    static_cast<std::size_t>(info->length),
+    info->stride,
+    /*readonly=*/true);
 }
 
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(

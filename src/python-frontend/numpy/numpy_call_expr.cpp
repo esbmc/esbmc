@@ -7031,6 +7031,59 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
+  if (function == "diagonal")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.diagonal() requires an array argument");
+
+    auto find_keyword = [&](const std::string &name) -> const nlohmann::json * {
+      if (!call_.contains("keywords"))
+        return nullptr;
+      for (const auto &kw : call_["keywords"])
+        if (
+          kw["_type"] == "keyword" && !kw["arg"].is_null() && kw["arg"] == name)
+          return &kw["value"];
+      return nullptr;
+    };
+
+    // NumPy's diagonal(a, offset=0, axis1=0, axis2=1) supports arbitrary
+    // axis1/axis2 for arrays with more than 2 dimensions; this ADR is
+    // 2-D-only, so anything other than the default pair is out of scope.
+    // axis1/axis2 are the 3rd/4th positional parameters, so a caller can
+    // pass them positionally instead of by keyword.
+    if (
+      call_["args"].size() > 2 || find_keyword("axis1") ||
+      find_keyword("axis2"))
+      throw std::runtime_error(
+        "TypeError: numpy diagonal only supports the default axis1/axis2");
+
+    long long offset = 0;
+    const nlohmann::json *offset_node =
+      call_["args"].size() > 1 ? &call_["args"][1] : find_keyword("offset");
+    if (offset_node)
+    {
+      numeric_value offset_value;
+      if (
+        !try_extract_numeric_constant(*offset_node, offset_value) ||
+        !offset_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy diagonal requires a literal offset");
+      offset = offset_value.int_value;
+    }
+
+    exprt array_expr = converter_.get_expr(call_["args"][0]);
+    python_list list(converter_, call_);
+    if (
+      std::optional<exprt> view =
+        list.try_build_diagonal_pointer_view(array_expr, offset))
+      return *view;
+
+    throw std::runtime_error(
+      "TypeError: numpy.diagonal() is only supported when assigned "
+      "directly to a variable");
+  }
+
   if (function == "expand_dims")
   {
     if (call_["args"].size() < 2)

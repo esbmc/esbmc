@@ -1317,7 +1317,8 @@ python_converter::classify_numpy_method_call(
     "max",
     "prod",
     "std",
-    "var"};
+    "var",
+    "diagonal"};
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
   const bool supported_copy_method =
@@ -1420,7 +1421,7 @@ bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
     return false;
 
   static const std::set<std::string> view_functions = {
-    "transpose", "reshape", "ravel"};
+    "transpose", "reshape", "ravel", "diagonal"};
   const std::string attr = node["func"].value("attr", "");
   if (view_functions.count(attr) == 0)
     return false;
@@ -1452,7 +1453,8 @@ std::string python_converter::root_name_from_numpy_view_copy_expr(
     node["func"].value("_type", "") == "Attribute" &&
     (node["func"].value("attr", "") == "transpose" ||
      node["func"].value("attr", "") == "reshape" ||
-     node["func"].value("attr", "") == "ravel"))
+     node["func"].value("attr", "") == "ravel" ||
+     node["func"].value("attr", "") == "diagonal"))
   {
     if (
       node.contains("args") && node["args"].is_array() && !node["args"].empty())
@@ -1920,6 +1922,20 @@ void python_converter::reject_unsafe_numpy_view_target(
   if (root_id.empty())
     return;
 
+  // A read-only pointer-backed view (the main-diagonal view) rejects a
+  // direct write through it with NumPy's own diagnostic, independent of
+  // the copy-divergence checks below: unlike those, this has nothing to
+  // do with whether the view safely aliases its source (it does) -- a
+  // source write is still observed by a live diagonal view exactly like a
+  // writable one (diagonal_view_source_write_success), only writing
+  // *through* the view itself is refused.
+  {
+    auto it = numpy_pointer_view_info_.find(root_id);
+    if (it != numpy_pointer_view_info_.end() && it->second.readonly)
+      throw std::runtime_error(
+        "ValueError: assignment destination is read-only");
+  }
+
   // A view symbol this PR's 1-D slice aliasing retyped to a pointer (see
   // list_access.cpp's handle_range_slice, which populates
   // numpy_pointer_view_info_ exactly for that case) genuinely aliases
@@ -1928,14 +1944,8 @@ void python_converter::reject_unsafe_numpy_view_target(
   // guard otherwise exists to reject. Checking membership in that map
   // (rather than just "is this symbol's type a pointer") avoids misreading
   // some other, unrelated pointer-typed symbol as one of these views.
-  // A read-only pointer-backed view (the main-diagonal view, Commit 7) is
-  // NOT "safe to write through" the way a writable one is -- fall through
-  // to the copy-divergence rejection below by default until a dedicated,
-  // more specific diagnostic (e.g. NumPy's own "assignment destination is
-  // read-only") lands with that view kind.
   auto is_pointer_backed = [this](const std::string &id) {
-    auto it = numpy_pointer_view_info_.find(id);
-    return it != numpy_pointer_view_info_.end() && !it->second.readonly;
+    return numpy_pointer_view_info_.count(id) != 0;
   };
 
   if (numpy_view_copy_sources_.count(root_id) != 0)
@@ -2813,7 +2823,9 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     else
     {
       is_converting_rhs = true;
+      in_rhs_type_probe_ = true;
       exprt rhs_expr = get_expr(ast_node["value"]);
+      in_rhs_type_probe_ = false;
       is_converting_rhs = false;
       inferred_type = rhs_expr.type();
       if (inferred_type.is_empty())
@@ -2830,7 +2842,9 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
     // attribute — get_expr will raise the correct, precise error at the
     // point of access rather than the misleading "Type undefined" later.
     is_converting_rhs = true;
+    in_rhs_type_probe_ = true;
     exprt rhs_expr = get_expr(ast_node["value"]);
+    in_rhs_type_probe_ = false;
     is_converting_rhs = false;
 
     inferred_type = rhs_expr.type();

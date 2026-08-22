@@ -193,6 +193,24 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief np.diagonal(a[, offset=k])/a.diagonal([k]): a read-only strided
+   * pointer view into a's own buffer (ADR-NP-003 etapa 2). Public so
+   * numpy_call_expr.cpp's Call dispatch (where the offset/axis1/axis2
+   * argument parsing lives) can build it directly. Declines (returns
+   * std::nullopt) for a non-symbol/non-numpy-tracked source or a source
+   * that isn't a fixed-shape 2-D array (including 3-D+). When current_lhs
+   * is unset (the type-inference pre-pass that runs before the real `d`
+   * symbol exists), returns a same-typed placeholder pointer instead of
+   * declining, so that pass can read a type and complete -- the real,
+   * current_lhs-correct view is built on the unconditional second pass
+   * that follows for a Call RHS.
+   * @param array Source 2-D array expression.
+   * @param k     Literal diagonal offset (0 = main diagonal).
+   */
+  std::optional<exprt>
+  try_build_diagonal_pointer_view(const exprt &array, long long k);
+
+  /**
    * @brief Lower an N-D mixed slice/index tuple subscript with one or more
    * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
    * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved
