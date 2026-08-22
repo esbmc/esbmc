@@ -112,6 +112,17 @@ bool has_non_null_value(const nlohmann::json &node)
   return node.contains("value") && !node["value"].is_null();
 }
 
+void set_dict_literal_element_type(
+  const nlohmann::json &ast_node,
+  python_dict_handler &dict_handler,
+  typet &element_type)
+{
+  if (
+    has_non_null_value(ast_node) &&
+    dict_handler.is_dict_literal(ast_node["value"]))
+    element_type = dict_handler.get_dict_struct_type();
+}
+
 bool is_same_name_assignment(
   const nlohmann::json &target,
   const nlohmann::json &ast_node)
@@ -3460,12 +3471,7 @@ void python_converter::get_var_assign(
   auto [lhs_type, element_type] = extract_type_info(ast_node);
 
   // Check if the RHS is a dictionary literal - set the element type
-  if (
-    ast_node.contains("value") && !ast_node["value"].is_null() &&
-    dict_handler_->is_dict_literal(ast_node["value"]))
-  {
-    element_type = dict_handler_->get_dict_struct_type();
-  }
+  set_dict_literal_element_type(ast_node, *dict_handler_, element_type);
 
   current_element_type = element_type;
   any_subscript_array_needs_copy_ = false;
