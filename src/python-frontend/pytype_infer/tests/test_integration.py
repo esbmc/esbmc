@@ -1,5 +1,6 @@
 import ast, os
 from pytype_infer import annotate_tree
+
 p = os.path.join(os.path.dirname(__file__), 'example_src.py')
 src = open(p).read()
 tree = ast.parse(src)

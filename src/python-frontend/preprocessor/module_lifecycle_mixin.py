@@ -8,17 +8,16 @@ class ModuleLifecycleMixin:
         """Run generic_visit and inject helper nodes requested during traversal."""
         # Per-module scope for the eq-only set and call-origin map.
         saved_eq_only = set(self._eq_only_items_view_targets)
-        self._eq_only_items_view_targets = (
-            self._scan_eq_only_items_view_targets(node.body))
+        self._eq_only_items_view_targets = (self._scan_eq_only_items_view_targets(node.body))
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
         try:
             node = self.generic_visit(node)
-                   # try:
+            # try:
             ast.fix_missing_locations(node)
             print("Before pytype module annotations:")
             print(ast.unparse(node))
-            node =  pytype_infer.annotate_tree(node)
+            node = pytype_infer.annotate_tree(node)
             print("After pytype annotation module:")
             print(ast.unparse(node))
 
