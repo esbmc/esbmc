@@ -1589,6 +1589,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return nondet_comparison(
         "unsupported comparison with unresolved operand type");
 
+    // Both operands carry the Any representation (void*), so nothing here
+    // knows whether they box numbers, strings or object references. Ordering
+    // them as pointers asserts SAME-OBJECT on two boxed values and compares
+    // offsets rather than the values (GitHub #7254); ordering them as
+    // integers would silently truncate a boxed float. Neither is justified,
+    // so over-approximate. Equality is excluded: it compares the handles,
+    // which is already correct for boxed values.
+    auto is_erased = [](const exprt &e) {
+      return e.type().is_pointer() && e.type().subtype().id() == "empty";
+    };
+    if (
+      type_utils::is_ordered_comparison(op) && is_erased(lhs) && is_erased(rhs))
+      return nondet_comparison("ordered comparison between type-erased values");
+
     const bool lhs_ptr = lhs.type().is_pointer();
     const bool rhs_ptr = rhs.type().is_pointer();
     if (lhs_ptr != rhs_ptr)
