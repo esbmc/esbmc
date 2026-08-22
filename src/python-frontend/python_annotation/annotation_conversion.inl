@@ -3681,6 +3681,65 @@ std::string python_annotation<Json>::infer_parameter_type_from_calls(
   return inferred_type;
 }
 
+/// True when `stmt` aliases `name` to a function defined in `body`.
+template <class Json>
+static bool
+aliases_function(const Json &stmt, const std::string &name, const Json &body)
+{
+  if (stmt.value("_type", "") != "Assign" || !stmt.contains("targets"))
+    return false;
+  const auto &targets = stmt["targets"];
+  if (targets.empty() || targets[0].value("id", "") != name)
+    return false;
+  if (!stmt.contains("value") || stmt["value"].value("_type", "") != "Name")
+    return false;
+  return !json_utils::try_find_function(body, stmt["value"].value("id", ""))
+            .empty();
+}
+
+/// The type a parameter's default value implies, or empty. A container
+/// literal names its own type; a function reference or alias is "Any". An
+/// imported class has no local call site to infer from, so without this its
+/// unannotated `xs=[]` parameter stays untyped and `len(obj.xs)` lowers to
+/// strlen (quixbugs breadth_first_search).
+template <class Json>
+std::string python_annotation<Json>::infer_type_from_parameter_default(
+  const Json &function_element,
+  size_t param_index,
+  size_t param_count)
+{
+  const auto &args_node = function_element["args"];
+  if (!args_node.contains("defaults"))
+    return "";
+
+  const auto &defaults = args_node["defaults"];
+  const size_t defaults_start = param_count - defaults.size();
+  if (param_index < defaults_start)
+    return "";
+
+  const Json &def_node = defaults[param_index - defaults_start];
+  const std::string def_type = def_node.value("_type", "");
+
+  // Only a list literal is mapped: a bare `dict`/`set` annotation does not
+  // reach the container model here (len() still lowers to strlen), and a
+  // `tuple` one aborts the converter, so those stay untyped as before.
+  if (def_type == "List")
+    return "list";
+
+  if (def_type != "Name" || !def_node.contains("id"))
+    return "";
+
+  const std::string def_name = def_node.value("id", "");
+  const nlohmann::json &const_body = ast_["body"];
+  if (!json_utils::try_find_function(const_body, def_name).empty())
+    return "Any";
+
+  for (const auto &stmt : ast_["body"])
+    if (aliases_function(stmt, def_name, const_body))
+      return "Any";
+  return "";
+}
+
 template <class Json>
 void python_annotation<Json>::infer_parameter_types(Json &function_element)
 {
@@ -3820,54 +3879,9 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
       }
 
       // If still no type, try to infer from the parameter's default value.
-      // This handles cases like def h(op=g) where g is a function alias.
       if (inferred_type.empty() && !has_partial_annotation)
-      {
-        const auto &args_node = function_element["args"];
-        if (args_node.contains("defaults"))
-        {
-          const auto &defaults = args_node["defaults"];
-          size_t defaults_start = params.size() - defaults.size();
-          if (i >= defaults_start)
-          {
-            const Json &def_node = defaults[i - defaults_start];
-            if (
-              def_node.contains("_type") && def_node["_type"] == "Name" &&
-              def_node.contains("id"))
-            {
-              const std::string &def_name =
-                def_node["id"].template get<std::string>();
-              const nlohmann::json &const_body = ast_["body"];
-              // Direct function reference (op=f)?
-              if (!json_utils::try_find_function(const_body, def_name).empty())
-                inferred_type = "Any";
-              // Function alias (op=g where g=f)?
-              else
-              {
-                for (const auto &stmt : ast_["body"])
-                {
-                  if (
-                    stmt.contains("_type") && stmt["_type"] == "Assign" &&
-                    stmt.contains("targets") && !stmt["targets"].empty() &&
-                    stmt["targets"][0].contains("id") &&
-                    stmt["targets"][0]["id"] == def_name &&
-                    stmt.contains("value") && stmt["value"].contains("_type") &&
-                    stmt["value"]["_type"] == "Name" &&
-                    stmt["value"].contains("id") &&
-                    !json_utils::try_find_function(
-                       const_body,
-                       stmt["value"]["id"].template get<std::string>())
-                       .empty())
-                  {
-                    inferred_type = "Any";
-                    break;
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
+        inferred_type =
+          infer_type_from_parameter_default(function_element, i, params.size());
 
       // For __getitem__/__setitem__ key parameters, infer a
       // `tuple[slice, slice, ...]` annotation from multi-axis subscript
