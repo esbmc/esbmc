@@ -196,8 +196,8 @@ public:
   /// this instead of \p justified alone (#7057).
   struct param_extentt
   {
-    expr2tc bytes;             ///< Byte-extent expression of the allocation
-    bool justified;            ///< True when the backing may be dereferenced
+    expr2tc bytes;              ///< Byte-extent expression of the allocation
+    bool justified;             ///< True when the backing may be dereferenced
     bool from_is_fresh = false; ///< True only when bytes is from is_fresh
   };
 

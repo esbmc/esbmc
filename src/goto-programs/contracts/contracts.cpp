@@ -4028,8 +4028,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
         // #6483 one-element struct stack backing, which is real memory but
         // not an extent the contract itself stated (#7057).
         if (
-          extent_it == param_extents.end() ||
-          !extent_it->second.justified || !extent_it->second.from_is_fresh)
+          extent_it == param_extents.end() || !extent_it->second.justified ||
+          !extent_it->second.from_is_fresh)
         {
           log_error(
             "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
