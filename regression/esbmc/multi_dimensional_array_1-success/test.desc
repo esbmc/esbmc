@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 --32 --boolector
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

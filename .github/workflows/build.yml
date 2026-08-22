@@ -8,6 +8,14 @@ on:
             description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
             required: true
             type: string
+        architecture:
+            description: "Target architecture. armv8 is Linux only and selects the ubuntu-<version>-arm runner."
+            required: false
+            default: x86_64
+            type: choice
+            options:
+              - x86_64
+              - armv8
         build-flags:
             description: "Flags to be passed to build.sh script"
             required: true
@@ -27,6 +35,11 @@ on:
             description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
             required: true
             type: string
+        architecture:
+            description: "Target architecture (x86_64 or armv8)"
+            required: false
+            default: x86_64
+            type: string
         build-flags:
             description: "Flags to be passed to build.sh script"
             required: true
@@ -42,16 +55,42 @@ on:
             type: boolean
 
 jobs:
+  validate-platform:
+    name: Validate platform
+    runs-on: ubuntu-slim
+    steps:
+    - name: Check architecture and runner image
+      env:
+        OS: ${{ inputs.operating-system }}
+        ARCH: ${{ inputs.architecture }}
+      run: |
+        case "$ARCH" in
+          x86_64) exit 0 ;;
+          armv8)  ;;
+          *) echo "::error::unsupported architecture '$ARCH' (expected x86_64 or armv8)"; exit 1 ;;
+        esac
+        # armv8 has a Linux runner image only: macOS runners are already arm64
+        # and build.ps1 fetches an x86_64 toolchain, so either would quietly
+        # produce an x86_64 build labelled armv8. GitHub publishes -arm images
+        # for versioned Ubuntu releases only, so ubuntu-latest has none and
+        # would queue forever against a label that does not exist.
+        case "$OS" in
+          ubuntu-24.04|ubuntu-22.04) ;;
+          *) echo "::error::armv8 requires ubuntu-24.04 or ubuntu-22.04; got '$OS'"; exit 1 ;;
+        esac
+
   build-unix:
+    needs: validate-platform
     if: ${{ !startsWith(inputs.operating-system, 'windows-') }}
     uses: ./.github/workflows/build-unix.yml
     with:
-      operating-system: ${{ inputs.operating-system }}
+      operating-system: ${{ inputs.architecture == 'armv8' && format('{0}-arm', inputs.operating-system) || inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
       testing: ${{ inputs.testing }}
       canon-names: ${{ inputs.canon-names }}
 
   build-windows:
+    needs: validate-platform
     if: ${{ startsWith(inputs.operating-system, 'windows-') }}
     uses: ./.github/workflows/build-windows.yml
     with:

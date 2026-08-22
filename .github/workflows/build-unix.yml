@@ -45,9 +45,10 @@ jobs:
       if: ${{ inputs.canon-names }}
       run: |
         case "${{ inputs.operating-system }}" in
-          ubuntu*) platform=linux ;;
-          macos*)  platform=macos ;;
-          *)       platform="${{ inputs.operating-system }}" ;;
+          ubuntu*-arm) platform=linux-armv8 ;;
+          ubuntu*)     platform=linux ;;
+          macos*)      platform=macos ;;
+          *)           platform="${{ inputs.operating-system }}" ;;
         esac
         echo "PLATFORM=$platform" >> "$GITHUB_ENV"
         zip -r "esbmc-$platform.zip" ./release

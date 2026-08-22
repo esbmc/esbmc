@@ -31,6 +31,17 @@ jobs:
       build-flags: '-b DebugOpt -e ON'
       testing: true
 
+  # Goes through build.yml rather than build-unix.yml so the architecture input
+  # and its runner-label mapping are covered too, not just the ARM build.
+  build-ubuntu-armv8:
+    uses: ./.github/workflows/build.yml
+    name: static armv8 DebugOpt
+    with:
+      operating-system: ubuntu-24.04
+      architecture: armv8
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+
   build-macos-arm:
     uses: ./.github/workflows/build-unix.yml
     name: arm64 darwin build

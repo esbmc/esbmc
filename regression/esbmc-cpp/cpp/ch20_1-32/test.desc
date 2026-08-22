@@ -1,4 +1,5 @@
 CORE
 main.cpp
 --32 --unwind 10 --no-unwinding-assertions --timeout 900
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

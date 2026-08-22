@@ -1,4 +1,5 @@
 CORE
 main.c
 --termination --32 --goto-functions-only
+REQUIRES arch32
 ASSERT 0 // termination per-loop marker\n.*\n.*RETURN: 0
