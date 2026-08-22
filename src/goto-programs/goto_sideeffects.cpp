@@ -92,8 +92,10 @@ static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
 /// cannot be hoisted. Snapshot the array instead — `__ESBMC_old(base)[j]` —
 /// leaving an operand the bound variable does not reach, so the ordinary
 /// hoisting applies and the contract layer materialises one array snapshot in
-/// place of one per index (#4219). Only a base of array type is rewritten: a
-/// pointer with a symbolic extent has no whole object to snapshot.
+/// place of one per index (#4219). A pointer parameter base is also
+/// rewritten, snapshotting the pointer's value and deferring the actual
+/// region copy to the contracts pass, which is the only place the pointer's
+/// __ESBMC_is_fresh extent is known (#7057).
 /// The `__ESBMC_old_raw` call under \p deref, which the `__ESBMC_old` macro
 /// wraps as `*(T*)__ESBMC_old_raw(&x)`, or nullptr if this is not one.
 static exprt *old_raw_call_under(exprt &deref)
@@ -125,9 +127,8 @@ static exprt *old_raw_call_under(exprt &deref)
 
 /// &(base[j]) is address_of(index_exprt(base, j)) when base has real array
 /// type -- the target's own type is already the element type.
-static const exprt *bound_array_index(
-  const exprt &target,
-  const std::set<irep_idt> &bound_vars)
+static const exprt *
+bound_array_index(const exprt &target, const std::set<irep_idt> &bound_vars)
 {
   if (target.id() != exprt::index || target.operands().size() != 2)
     return nullptr;

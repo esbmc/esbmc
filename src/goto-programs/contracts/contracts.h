@@ -186,10 +186,19 @@ public:
   /// the #6483 carve-out. It is false for a nondet heap extent, which nothing
   /// may dereference. An absent map entry is a third state: the harness never
   /// allocated, so the pointer is the real caller's.
+  ///
+  /// \p from_is_fresh is narrower: true only when \p bytes came from the
+  /// contract's own __ESBMC_is_fresh(ptr, bytes) clause. The #6483 carve-out
+  /// entry is \p justified (real stack storage genuinely backs one element)
+  /// but NOT \p from_is_fresh (the contract never stated that extent) --
+  /// consumers that need the extent to match what the contract actually
+  /// claims, not just "some real memory happens to be there", must check
+  /// this instead of \p justified alone (#7057).
   struct param_extentt
   {
-    expr2tc bytes;  ///< Byte-extent expression of the allocation
-    bool justified; ///< True when the backing may be dereferenced
+    expr2tc bytes;             ///< Byte-extent expression of the allocation
+    bool justified;            ///< True when the backing may be dereferenced
+    bool from_is_fresh = false; ///< True only when bytes is from is_fresh
   };
 
   /// \brief Check if a function is compiler-generated and should be skipped.
@@ -384,11 +393,12 @@ private:
     /// True for __ESBMC_old(ptr[j]) where ptr is a pointer parameter (not a
     /// named array): original_expr is the pointer itself, snapshot_var
     /// becomes an array-typed copy of its is_fresh'd extent (materialized by
-    /// a copy loop, not a single whole-value ASSIGN), and region_index/
-    /// region_elem_type describe the element access. #7057.
+    /// a copy loop, not a single whole-value ASSIGN), and region_elem_type
+    /// is the element type. The index itself isn't stored here -- both
+    /// consumers (the copy loop, replace_old_in_expr) each already have
+    /// their own index expression in hand and never need this one. #7057.
     bool is_ptr_region = false;
-    expr2tc region_index;     ///< nil unless is_ptr_region: the index expr
-    type2tc region_elem_type; ///< nil unless is_ptr_region: element type
+    type2tc region_elem_type = type2tc(); ///< nil unless is_ptr_region
   };
 
   /// \brief Check if expression is an __ESBMC_old() call
@@ -407,9 +417,9 @@ private:
     size_t index) const;
 
   /// \brief __ESBMC_old(ptr[j]), ptr a pointer parameter: try the
-  /// dereference(add(typecast(old-temp-symbol), j)) shape goto_sideeffects.cpp's
-  /// lift produces for this case. Returns nil if \p ptr_expr isn't this shape.
-  /// #7057.
+  /// dereference(add(typecast(old-temp-symbol), j)) shape
+  /// goto_sideeffects.cpp's lift produces for this case. Returns nil if \p
+  /// ptr_expr isn't this shape. #7057.
   static expr2tc try_replace_ptr_region_old(
     const type2tc &result_type,
     const expr2tc &ptr_expr,
@@ -564,13 +574,13 @@ private:
     goto_programt &wrapper,
     const locationt &location);
 
-  /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
-  /// Creates DECL and ASSIGN instructions for snapshot variables before function call.
-  /// A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer parameter) instead
-  /// gets a DECL for a new array-typed temp plus a hand-built copy loop
-  /// sized by param_extents, since there is no array rvalue to read through
-  /// the pointer in one ASSIGN (#7057).
-  /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
+  /// \brief Materialize old snapshots in wrapper function (enforce-contract
+  /// mode) Creates DECL and ASSIGN instructions for snapshot variables before
+  /// function call. A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer
+  /// parameter) instead gets a DECL for a new array-typed temp plus a
+  /// hand-built copy loop sized by param_extents, since there is no array
+  /// rvalue to read through the pointer in one ASSIGN (#7057). \param
+  /// old_snapshots Vector of snapshots to materialize (modified in-place)
   /// \param wrapper GOTO program to add snapshot instructions to
   /// \param func_name Function name for unique variable naming
   /// \param location Source location for generated instructions

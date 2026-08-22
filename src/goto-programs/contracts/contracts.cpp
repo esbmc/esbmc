@@ -1660,7 +1660,7 @@ goto_programt code_contractst::generate_checking_wrapper(
       if (is_symbol2t(ptr_var) && is_pointer_type(ptr_var->type))
       {
         // The contract asked for this allocation, so its extent is justified.
-        param_extents[to_symbol2t(ptr_var).thename] = {size_expr, true};
+        param_extents[to_symbol2t(ptr_var).thename] = {size_expr, true, true};
 
         // A struct/union pointee bypasses the stack-backing carve-out and gets
         // the heap object #6483 makes unsound. Only an __ESBMC_old over that
@@ -2759,8 +2759,14 @@ expr2tc code_contractst::try_replace_ptr_region_old(
   const symbol2t &sym = to_symbol2t(base);
   for (const auto &snapshot : snapshots)
   {
+    // A hand-written *(__ESBMC_old(p) + i) outside a quantifier shares this
+    // exact shape (see the comment on find_ptr_region_use) but was
+    // correctly left unclassified there; only actually index snapshot_var
+    // when it was classified as a region -- otherwise it is scalar/pointer
+    // typed, not array typed, and index2tc on it produces malformed IR
+    // (#7057).
     if (
-      is_symbol2t(snapshot.original_expr) &&
+      snapshot.is_ptr_region && is_symbol2t(snapshot.original_expr) &&
       to_symbol2t(snapshot.original_expr).thename == sym.thename)
       return index2tc(result_type, snapshot.snapshot_var, add.side_2);
   }
@@ -2787,8 +2793,9 @@ expr2tc code_contractst::replace_old_in_expr(
     while (is_typecast2t(ptr_expr))
       ptr_expr = to_typecast2t(ptr_expr).from;
 
-    if (expr2tc region_replacement =
-          try_replace_ptr_region_old(expr->type, ptr_expr, snapshots))
+    if (
+      expr2tc region_replacement =
+        try_replace_ptr_region_old(expr->type, ptr_expr, snapshots))
       return region_replacement;
 
     if (is_symbol2t(ptr_expr))
@@ -2824,6 +2831,12 @@ expr2tc code_contractst::replace_old_in_expr(
     {
       for (const auto &snapshot : snapshots)
       {
+        // A region snapshot's snapshot_var is array-typed and must only be
+        // consumed through the index-shaped dereference(add(...)) match
+        // above, which supplies the index; returned bare here it would be
+        // an array where a scalar is expected (#7057).
+        if (snapshot.is_ptr_region)
+          continue;
         if (is_symbol2t(snapshot.original_expr))
         {
           const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
@@ -2874,16 +2887,24 @@ expr2tc code_contractst::replace_old_in_expr(
 /// index2t(dereference2t(typecast2t(old-temp-symbol)), j). Find such a use
 /// of old_temp_thename anywhere under expr, recording its index expression
 /// and element type. #7057.
+/// A user can hand-write *(__ESBMC_old(p) + i) outside any quantifier and
+/// get the identical dereference(add(dereference(typecast(old-temp)), i))
+/// shape the pointer-region lift produces for __ESBMC_old(p[j]) -- the
+/// __ESBMC_old(x) macro's own *(T*)old_raw(&x) already contributes the
+/// inner dereference, so the two are structurally indistinguishable. The
+/// lift can only ever fire inside a quantifier's body (it is only invoked
+/// from convert_quantifier_calls), so \p inside_quantifier restricts
+/// matches to there, excluding a hand-written use outside one. #7057.
 static bool find_ptr_region_use(
   const expr2tc &expr,
   const irep_idt &old_temp_thename,
-  expr2tc &out_index,
-  type2tc &out_elem_type)
+  type2tc &out_elem_type,
+  bool inside_quantifier = false)
 {
   if (is_nil_expr(expr))
     return false;
 
-  if (is_dereference2t(expr))
+  if (inside_quantifier && is_dereference2t(expr))
   {
     const dereference2t &deref = to_dereference2t(expr);
     expr2tc ptr_expr = deref.value;
@@ -2904,17 +2925,20 @@ static bool find_ptr_region_use(
         base = to_typecast2t(base).from;
       if (is_symbol2t(base) && to_symbol2t(base).thename == old_temp_thename)
       {
-        out_index = to_add2t(ptr_expr).side_2;
         out_elem_type = deref.type;
         return true;
       }
     }
   }
 
+  const bool inside_for_children =
+    inside_quantifier || is_forall2t(expr) || is_exists2t(expr);
+
   bool found = false;
   expr->foreach_operand([&](const expr2tc &op) {
     if (!found)
-      found = find_ptr_region_use(op, old_temp_thename, out_index, out_elem_type);
+      found = find_ptr_region_use(
+        op, old_temp_thename, out_elem_type, inside_for_children);
   });
   return found;
 }
@@ -2937,15 +2961,13 @@ void code_contractst::classify_ptr_region_snapshots(
       continue;
     const irep_idt &temp_thename = to_symbol2t(snapshot.snapshot_var).thename;
 
-    expr2tc found_index;
     type2tc found_elem_type;
     bool found = false;
     forall_goto_program_instructions (it, function_body)
     {
       if (
-        find_ptr_region_use(it->code, temp_thename, found_index, found_elem_type) ||
-        find_ptr_region_use(
-          it->guard, temp_thename, found_index, found_elem_type))
+        find_ptr_region_use(it->code, temp_thename, found_elem_type) ||
+        find_ptr_region_use(it->guard, temp_thename, found_elem_type))
       {
         found = true;
         break;
@@ -2955,7 +2977,6 @@ void code_contractst::classify_ptr_region_snapshots(
     if (found)
     {
       snapshot.is_ptr_region = true;
-      snapshot.region_index = found_index;
       snapshot.region_elem_type = found_elem_type;
     }
   }
@@ -4003,7 +4024,12 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
         }
         const irep_idt &ptr_thename = to_symbol2t(original_expr).thename;
         auto extent_it = param_extents.find(ptr_thename);
-        if (extent_it == param_extents.end() || !extent_it->second.justified)
+        // from_is_fresh, not just justified: justified is also true for the
+        // #6483 one-element struct stack backing, which is real memory but
+        // not an extent the contract itself stated (#7057).
+        if (
+          extent_it == param_extents.end() ||
+          !extent_it->second.justified || !extent_it->second.from_is_fresh)
         {
           log_error(
             "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
@@ -4019,6 +4045,15 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
         type2tc idx_type = size_type2();
 
         BigInt elem_sz = type_byte_size(elem_type, &ns);
+        if (elem_sz <= 0)
+        {
+          log_error(
+            "{}: __ESBMC_old({}[...]) has a zero-size element type, so no "
+            "element count can be derived from its byte extent (#7057)",
+            func_name,
+            id2string(ptr_thename));
+          abort();
+        }
         const expr2tc &bytes = extent_it->second.bytes;
         expr2tc n_elems = typecast2tc(
           idx_type,
@@ -4140,6 +4175,24 @@ code_contractst::materialize_old_snapshots_at_callsite(
   //   - Remember mapping from the original temp variable to the snapshot
   for (size_t i = 0; i < old_snapshots.size(); ++i)
   {
+    // A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer parameter) needs
+    // the copy loop generate_checking_wrapper builds from param_extents,
+    // which this call-site path has no equivalent of -- there is no
+    // allocation to read an extent from at a replaced call site, only a
+    // valid_object assertion (lower_is_fresh_in_requires). Silently
+    // proceeding would create a pointer-typed snapshot_var that
+    // replace_old_in_expr's region match then tries to index. Reject
+    // cleanly instead; --replace-call-with-contract support is a follow-up
+    // (#7057).
+    if (old_snapshots[i].is_ptr_region)
+    {
+      log_error(
+        "{}: __ESBMC_old(...[...]) on a pointer parameter is not yet "
+        "supported under --replace-call-with-contract (#7057)",
+        id2string(function_symbol.name));
+      abort();
+    }
+
     expr2tc original_expr = old_snapshots[i].original_expr;
     expr2tc temp_var = old_snapshots[i].snapshot_var; // temp var from body
 
@@ -5744,14 +5797,16 @@ void code_contractst::add_pointer_validity_assumptions(
       // Real stack storage, so one element is genuinely dereferenceable even
       // though the contract never asked for it.
       param_extents[param.get_identifier()] = {
-        type_byte_size_expr(pointee, &ns), true};
+        type_byte_size_expr(pointee, &ns), true, false};
       assumed_one_element.push_back(name);
       aliasable_params.emplace_back(p, name);
       continue;
     }
 
     param_extents[param.get_identifier()] = {
-      emit_pointer_param_malloc(wrapper, p, name, func, location), false};
+      emit_pointer_param_malloc(wrapper, p, name, func, location),
+      false,
+      false};
 
     allocated_ptrs.push_back(
       retain_allocation_for_free(wrapper, p, name, func, location));
