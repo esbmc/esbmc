@@ -19,13 +19,13 @@
 #  define OM_NULLPTR 0
 #endif
 
-// Relaxed constexpr: a function body with loops or multiple statements is
-// only constexpr from C++14. char_traits::length loops, so OM_CONSTEXPR
-// (which starts at C++11) would be ill-formed there.
-#if __cplusplus >= 201402L
-#  define OM_CONSTEXPR14 constexpr
+// char_traits members became constexpr in C++17 (P0426R1); libc++ gates them
+// the same way, as _LIBCPP_CONSTEXPR_SINCE_CXX17. Starting earlier would let a
+// constexpr string_view built from a literal compile here but not under clang.
+#if __cplusplus >= 201703L
+#  define OM_CONSTEXPR17 constexpr
 #else
-#  define OM_CONSTEXPR14
+#  define OM_CONSTEXPR17
 #endif
 
 // A static data member with an in-class initialiser. OM_CONSTEXPR alone is not
