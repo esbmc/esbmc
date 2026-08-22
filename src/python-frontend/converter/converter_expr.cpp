@@ -1103,6 +1103,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           symbol = retyped;
       }
 
+      symbol = resolve_numpy_array_storage_alias(symbol);
+
       // Also resolve reads through a permanent tagged-object alias, if a
       // branch join flagged this variable.
       dynamic_type_handler_.resolve_read(symbol);

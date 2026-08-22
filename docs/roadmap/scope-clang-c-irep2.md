@@ -4901,6 +4901,7 @@ stacked pair.** The sample is a stride over the sorted test list, so adding
 regression test directories -- which these patches do, and which are
 byte-identical by construction -- changes *which* tests are sampled. Compare
 across branches only on a test list pinned to one commit.
+| §111.1 + §112 stacked | **100** | **129** |
 
 `cwe_uninit_array_vla`'s symbol table is byte-identical once it runs, and so is
 the reduction's; the three-argument `envp` form is byte-identical too.
@@ -5086,3 +5087,108 @@ converter's own asymmetry and not the W1 dispatcher's.
 other live causes — the promotion at a comparison, and the decay rendered as a
 cast — are three tests each and worth a census of their own once the dominant
 one is out of the way.
+second cause and not a second symptom. §80 records that the VLA `sizeof`
+operand is computed in migration; that is the place to look first.
+
+That is the next target: it is the only remaining input in the censused C
+corpus on which the pass produces nothing at all.
+## 110. The census re-run after the sixteen PRs landed (2026-08-22)
+
+§104 closed the census with "every measured divergence is owned by an open PR".
+Those PRs are merged, so the question is what the symbol-table gap looks like
+now. Re-measured on master at `595f52b025` over `regression/esbmc`,
+`--clang-c-irep2-adjust-only` versus the legacy pass, blank-line differences
+ignored:
+
+| | tests |
+|---|---:|
+| whole suite | **693 same, 1147 differing, 1 skipped** |
+| stride-8 sample | 90 same, 138 differing |
+
+The suite figure is the first one taken; §101's 78-of-120 was a prefix of the
+same suite before any of the sixteen landed, so the two are not comparable and
+neither is offered as a delta. The stride sample is what the causes below are
+counted on.
+
+### 110.1 The dominant cause does not reach the goto program
+
+| cause | tests | note |
+|---|---:|---|
+| `(void)0` vs `0` in a conditional arm | 89 | §110.2 |
+| untagged residue | 22 | §110.4 |
+| implicit callee has no location | 13 | §110.3, fixed here |
+| indentation only | 11 | printer, from the §105 for-init hoist |
+| `migrate_expr` renaming warning | 4 | |
+| `volatile` dropped from a DECL statement | 1 | symbol keeps it; the statement does not |
+| padding | 1 | |
+
+### 110.2 `(void)0` is a legacy artefact, and mirroring it would be wrong
+
+Reduced:
+
+```c
+void f(void);
+int main() { int x = 1; x ? f() : (void)0; return 0; }
+```
+
+Legacy prints `(_Bool)x ? f() : 0;`, the hop-off `(_Bool)x ? f() : (void)0;`.
+The source says `(void)0`, so the hop-off is the faithful one. `adjust_if`
+compares whole `typet` ireps and casts *both* arms when *either* differs, so an
+attribute-only difference between the conditional's type and an arm's is enough
+to fire it; `do_typecast` then folds the cast into the constant. `adjust_if_expr`
+compares interned `type2tc`, which are equal, and leaves the arm alone.
+
+`--goto-functions-only` on the reduction is byte-identical between the two
+paths: `goto_convert` drops the void arm either way. So this is §39.1's "a
+caller downstream re-does the work" row of the parent document — 64 % of the
+remaining symbol-table gap is a difference that no consumer sees, and the arm
+that would close it does not get written.
+
+### 110.3 The implicit callee's location, which is a real loss
+
+`declare_implicit_callee` synthesises the symbol for a callee with no visible
+declaration. It read the location off `code_function_call2t::location`, and
+took none at all in the other branch: `sideeffect2t` has no location field, so
+a bare `assert(x == 1);` — which is a `sideeffect2t` of kind `function_call`
+under a `code_expression2t`, not a `code_function_call2t` — produced a symbol
+with an empty `Location`. 13 of the 138 differing tests are only this.
+
+The statement's location is the call's **only when the call is the whole
+statement**, so that is the one position it is taken from: `adjust_expr`
+declares the callee from `code_expression2t` before recursing, passing the
+statement's location, and the generic arm keeps declaring the rest unlocated.
+The narrower shapes — `a = f();`, `if (f())`, `return f();` — keep the call's
+own column in the legacy pass and are left as they were rather than given the
+statement's column, which would be the right line and the wrong one. Closing
+those needs a `locationt` on `sideeffect2t`, on the pattern the `code_*2t`
+kinds already use; that is a separate change and is not made here.
+
+Result on the stride sample: **106 same, 123 differing**, and no test acquires a
+divergence it did not have.
+
+| mutant | killed by |
+|---|---|
+| location not passed (master) | `..._implicit_callee_location` |
+| location not passed, nested statement | `..._implicit_callee_location_stmt` |
+
+Both tests were run against the unpatched arm and fail there. The second one
+exists because the first would also pass if the location were taken from the
+enclosing function rather than the statement.
+
+### 110.4 The untagged residue names four more causes
+
+Read rather than tallied, per §104.2:
+
+- **A cast lost at a call argument** — `atexit((void (*)())(&free_g2))` legacy
+  versus `atexit(&free_g2)`. The conversion #7091 ported does not cover a
+  function-pointer parameter.
+- **The hop-off aborts outright** on `builtin_memcpy` and `cwe_uninit_array_vla`
+  — the whole symbol table is missing. This is the by-name union tag the header
+  comment on `clang_c_adjust_irep2` already documents.
+- **`(signed int)b += a` versus `b += a`** — the coupled arith-assign
+  conversion, `scope-coupled-arith-assign-conversion.md`.
+- **Printer-only**: `+1` versus `1`, and the float literal suffix
+  (`1.175494e-38f` versus `1.175494e-38`).
+
+The abort is the one worth taking next: it is not a spelling difference but a
+hard stop, and it puts two tests beyond measurement rather than merely differing.
