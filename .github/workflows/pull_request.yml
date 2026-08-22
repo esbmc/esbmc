@@ -300,15 +300,111 @@ jobs:
       - name: Run tests
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
-        run: mkdir -p build/coverage && cd build/ && ctest -j32 --progress . || true
-      - name: Merge coverage data
-        run: llvm-profdata merge -sparse --failure-mode=warn /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
-      - name: Generate lcov coverage report
+        # Minimal coverage suite (cov-regression) + all non-regression tests
+        # (unit + other). Together they cover exactly the lines the full
+        # regression suite covers (100% parity, line-level verified).
         run: |
-          llvm-cov export -format=lcov \
-            -instr-profile=build/merged.profdata \
-            build/src/esbmc/esbmc \
-            > coverage.info
+          mkdir -p build/coverage && cd build/ && \
+          { ctest -j32 --progress -LE regression || true; } && \
+          { ctest -j32 --progress -L cov-regression || true; }
+      - name: Map coverage files to instrumented binaries
+        # Raw files are named coverage-<sig>_<n>_<pid>.profraw: %m gives the
+        # binary's signature, %p one file per process. Re-run each
+        # instrumented executable once with a hash-revealing template so the
+        # signature can be matched back to its binary for per-binary export
+        # (unit-test binaries count toward the total, fixing the old
+        # esbmc-only counting gap).
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/esbmc-coverage/hashmap
+          bins="build/src/esbmc/esbmc"
+          bins+=" $(find build/unit -type f -executable -not -name '*.so*' -not -name '*.a' | tr '\n' ' ')"
+          for b in $bins; do
+            name=$(echo "$b" | tr '/' '~')
+            ( cd "$(dirname "$b")" && \
+              LLVM_PROFILE_FILE="/tmp/esbmc-coverage/hashmap/${name}-%m.profraw" \
+              timeout 15 "./$(basename "$b")" --cov-hash-probe >/dev/null 2>&1 || true )
+          done
+      - name: Merge per-binary coverage data
+        # Group the per-process raws by binary signature and merge each
+        # group in a single hop: re-merging an already-merged profile from
+        # raws drops counters. --failure-mode=warn keeps one corrupt input
+        # (a forked test child SIGKILLed mid-flush) from aborting its whole
+        # group, which is the failure that voided the run in #7136.
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/esbmc-coverage/groups
+          for raw in /tmp/esbmc-coverage/coverage-*.profraw; do
+            [ -e "$raw" ] || continue
+            h=$(basename "$raw" .profraw)
+            h=${h#coverage-}
+            h=${h%_*} # drop the %p suffix, leaving the %m signature
+            ls /tmp/esbmc-coverage/hashmap/*"-${h}"*.profraw >/dev/null 2>&1 || continue
+            echo "$raw" >> "/tmp/esbmc-coverage/groups/${h}.list"
+          done
+          ok=0; empty=0
+          for list in /tmp/esbmc-coverage/groups/*.list; do
+            h=$(basename "$list" .list)
+            pd="/tmp/esbmc-coverage/${h}.profdata"
+            llvm-profdata merge -sparse --failure-mode=warn \
+              --input-files="$list" -o "$pd" || { rm -f "$pd"; continue; }
+            # Every input corrupt still exits 0, with an empty profile.
+            if llvm-profdata show "$pd" 2>/dev/null |
+                 grep -q '^Total functions: [1-9]'; then
+              echo "$h: $(wc -l < "$list") raws"
+              ok=$((ok+1))
+            else
+              echo "$h: no usable profile from $(wc -l < "$list") raws"
+              rm -f "$pd"
+              empty=$((empty+1))
+            fi
+          done
+          echo "merged $ok binaries, $empty with no usable profile"
+          [ "$ok" -gt 0 ]
+      - name: Generate lcov coverage report
+        # One llvm-cov export per binary (unit-test binaries included, fixing
+        # the old esbmc-only counting gap), then a union of the DA records.
+        # The union is plain text, not `lcov -a`: lcov sums counts in
+        # doubles and mangles hot counters (>= 2^53) into exponential
+        # notation, which Codecov rejects.
+        run: |
+          set -uo pipefail
+          for pd in /tmp/esbmc-coverage/*.profdata; do
+            h=$(basename "$pd" .profdata)
+            m=$(ls /tmp/esbmc-coverage/hashmap/*"-${h}"*.profraw 2>/dev/null | head -1) || continue
+            binpath=$(basename "$m" | sed "s/-${h}.*\.profraw//")
+            binpath=$(echo "$binpath" | tr '~' '/')
+            [ -x "$binpath" ] || { echo "binary missing: $binpath"; continue; }
+            llvm-cov export -format=lcov -instr-profile="$pd" "$binpath" \
+              > "/tmp/esbmc-coverage/${h}.lcov"
+          done
+          python3 - /tmp/esbmc-coverage/*.lcov > coverage.info <<'PYEOF'
+          import sys
+          covered = {}
+          for path in sys.argv[1:]:
+              sf = None
+              for ln in open(path):
+                  if ln.startswith("SF:"):
+                      sf = ln[3:].strip()
+                  elif ln.startswith("DA:") and sf:
+                      line, _, count = ln[3:].strip().partition(",")
+                      try:
+                          hit = int(count) > 0
+                      except ValueError:
+                          hit = float(count) > 0
+                      covered[(sf, line)] = covered.get((sf, line), False) or hit
+          cur = None
+          for (sf, line), hit in sorted(covered.items(),
+                                         key=lambda kv: (kv[0][0], int(kv[0][1]))):
+              if sf != cur:
+                  if cur is not None:
+                      print("end_of_record")
+                  print(f"SF:{sf}")
+                  cur = sf
+              print(f"DA:{line},{1 if hit else 0}")
+          if cur is not None:
+              print("end_of_record")
+          PYEOF
       - name: Filter out uninteresting paths
         run: |
           lcov --ignore-errors inconsistent --ignore-errors corrupt \
