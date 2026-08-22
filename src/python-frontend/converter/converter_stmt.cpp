@@ -2110,6 +2110,17 @@ std::string python_converter::infer_type_from_any_annotation(
       return ""; // Clear to avoid further "Any" processing
     }
 
+    // If the callee's real return type is tagged, adopt it straight from
+    // the symbol table rather than relying on the (skipped, see below)
+    // probe build of this same call.
+    if (
+      ast_node.value("_inferred_annotation", false) &&
+      type_handler_.is_tagged_scalar_type(ret_type))
+    {
+      current_element_type = ret_type;
+      return lhs_type;
+    }
+
     // Python type annotations are hints only and do not enforce runtime types.
     // When a function explicitly returns str (char*) but the variable is
     // annotated with a scalar type (e.g. y: int = f() where f() -> str),
@@ -3211,6 +3222,12 @@ bool python_converter::try_tagged_var_assign(
   {
     const locationt location = get_location_from_decl(ast_node);
     exprt rhs = get_expr(ast_node["value"]);
+    if (type_handler_.is_tagged_scalar_type(rhs.type()))
+    {
+      dynamic_type_handler_.assign_tagged_object(
+        rhs, location, name, target_block);
+      return true;
+    }
     if (
       type_handler_.is_numeric_scalar_type(rhs.type()) ||
       type_handler_.is_string_type(rhs.type()))
@@ -3547,11 +3564,15 @@ void python_converter::get_var_assign(
     // Infer type from function return if annotation is "Any"
     lhs_type = infer_type_from_any_annotation(ast_node, lhs_type);
 
-    // Process RHS before LHS if in function scope
+    // Process RHS before LHS if in function scope, or for a global that
+    // infer_type_from_any_annotation above already resolved to a tagged
+    // return type (needs checking against the actual RHS type).
     exprt rhs;
     if (
-      sid.to_string().find("@F") != std::string::npos &&
-      sid.to_string().find("@C") == std::string::npos)
+      (sid.to_string().find("@F") != std::string::npos &&
+       sid.to_string().find("@C") == std::string::npos) ||
+      (type_handler_.is_tagged_scalar_type(current_element_type) &&
+       current_func_name_.empty()))
     {
       is_right = true;
       if (!ast_node["value"].is_null())
@@ -3563,7 +3584,9 @@ void python_converter::get_var_assign(
         // construction a second time as dead code. Dict literals were already
         // skipped (handled specially later); list literals and comprehensions
         // matter most — eliding their dead duplicate roughly halves
-        // list-construction cost on construction-heavy programs (#5121).
+        // list-construction cost on construction-heavy programs (#5121). Calls
+        // are skipped too, to avoid re-running their side effects (e.g. a
+        // second list.pop()).
         const std::string rhs_kind =
           ast_node["value"].value("_type", std::string());
         const bool rhs_kind_skips_type_probe =
@@ -3571,7 +3594,7 @@ void python_converter::get_var_assign(
           rhs_kind == "List" || rhs_kind == "ListComp";
         if (!rhs_kind_skips_type_probe)
         {
-          if (ast_node["_type"] != "Call")
+          if (rhs_kind != "Call")
           {
             // Discarded probe: suppress the ZeroDivisionError guard so a
             // division here is not emitted (and its divisor not evaluated) an
@@ -3601,8 +3624,11 @@ void python_converter::get_var_assign(
       current_element_type = rhs.type();
     }
 
+    // An inferred annotation is just a guess; adopt the tagged type if the
+    // RHS turns out tagged, same as an Any-annotated target below.
     if (
-      current_element_type == any_type() &&
+      (current_element_type == any_type() ||
+       ast_node.value("_inferred_annotation", false)) &&
       type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       current_element_type = rhs.type();
@@ -5432,6 +5458,11 @@ void python_converter::get_return_statements(
     code_returnt return_code;
     return_code.location() = location;
 
+    if (type_handler_.is_tagged_scalar_type(current_func_return_type_))
+      throw std::runtime_error(
+        "returning a value of this type from a dynamically-typed function "
+        "is not yet supported");
+
     // If the function returns Optional, wrap None in Optional struct
     if (current_func_return_type_.is_struct())
     {
@@ -5513,6 +5544,24 @@ void python_converter::get_return_statements(
 
   exprt return_value = get_expr(ast_node["value"]);
   locationt location = get_location_from_decl(ast_node);
+
+  // Coerces `val` to a tagged-object value when the function's return type
+  // is tagged. No-op when `val` is already tagged.
+  auto coerce_to_tagged_return = [&](exprt &val) {
+    if (
+      !type_handler_.is_tagged_scalar_type(current_func_return_type_) ||
+      type_handler_.is_tagged_scalar_type(val.type()))
+      return;
+    if (
+      type_handler_.is_numeric_scalar_type(val.type()) ||
+      type_handler_.is_string_type(val.type()))
+      val = dynamic_type_handler_.build_tagged_return_value(
+        val, location, target_block);
+    else
+      throw std::runtime_error(
+        "returning a value of this type from a dynamically-typed function "
+        "is not yet supported");
+  };
 
   // Check if return value is a function call
   // get_function_call() returns code_function_callt (code statement), not side_effect_expr_function_callt
@@ -5620,6 +5669,8 @@ void python_converter::get_return_statements(
         ret_expr = wrap_in_optional(ret_expr, current_func_return_type_);
     }
 
+    coerce_to_tagged_return(ret_expr);
+
     // Return the temporary variable
     code_returnt return_code;
     return_code.return_value() = ret_expr;
@@ -5705,6 +5756,8 @@ void python_converter::get_return_statements(
         return_value =
           wrap_in_optional(return_value, current_func_return_type_);
     }
+
+    coerce_to_tagged_return(return_value);
 
     code_returnt return_code;
     return_code.return_value() = return_value;

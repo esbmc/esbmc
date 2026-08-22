@@ -15,6 +15,7 @@
 #include "OM_compiler_defs.h" // OM_NULLPTR
 
 #include <utility> /* std::move */
+#include "type_traits" /* enable_if, is_integral */
 #include <new>     /* placement-new */
 #if __cplusplus >= 201103L
 #  include <initializer_list>
@@ -309,7 +310,7 @@ public:
   // types:
   typedef T &reference;
   typedef const T &const_reference;
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
   typedef T value_type;
   typedef T *pointer;
@@ -386,8 +387,17 @@ public:
     _capacity = n;
   }
 
+  /* [sequence.reqmts]: this constructor must not participate in overload
+   * resolution unless InputIt qualifies as an input iterator. Unconstrained,
+   * vector<T> v(3, 0) deduced InputIt = int and instantiated *t++ on an int.
+   * Only vector<int> escaped, because size_type is int here and the
+   * (size_type, const T&) overload then tied and won as the non-template. */
   template <typename InputIt>
-  vector(InputIt t, InputIt addr, const Allocator &alloc = Allocator())
+  vector(
+    InputIt t,
+    InputIt addr,
+    const Allocator &alloc = Allocator(),
+    typename enable_if<!is_integral<InputIt>::value>::type * = OM_NULLPTR)
     : _size(0), _capacity(1)
   {
     int count = 0;

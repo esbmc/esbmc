@@ -6,6 +6,10 @@
 
 #include "cstring"
 #include "string"
+/* [filesystem.syn] declares an error_code& overload of nearly every
+ * operation, so <filesystem> is where code expects std::error_code to
+ * become visible. */
+#include "system_error"
 
 // Minimal C++17 <filesystem> operational model.
 //

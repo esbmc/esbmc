@@ -3080,7 +3080,7 @@ basic_string<CharT, Traits, Alloc> operator+(
 
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>
-operator+(basic_string<CharT, Traits, Alloc> lhs, char *rhs)
+operator+(basic_string<CharT, Traits, Alloc> lhs, const CharT *rhs)
 {
   /* Concrete trip counts: both lengths are symbolic, so the original
    * loops never converged and `a + b` did not terminate. */
@@ -3129,7 +3129,7 @@ operator+(basic_string<CharT, Traits, Alloc> lhs, char rhc)
 
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc>
-operator+(char *lhs, basic_string<CharT, Traits, Alloc> rhs)
+operator+(const CharT *lhs, basic_string<CharT, Traits, Alloc> rhs)
 {
   int lhsLen = strlen(lhs);
   int totalLength = lhsLen;

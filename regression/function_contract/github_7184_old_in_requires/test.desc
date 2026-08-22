@@ -1,0 +1,4 @@
+CORE
+main.c
+--function bump --enforce-contract bump
+^VERIFICATION SUCCESSFUL$

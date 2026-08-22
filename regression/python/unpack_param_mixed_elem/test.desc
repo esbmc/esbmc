@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5
+^ERROR: Cannot unpack pointer - only tuples and arrays can be unpacked$
