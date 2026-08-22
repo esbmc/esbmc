@@ -389,8 +389,9 @@ SCENARIO(
 
   std::rewind(captured);
   std::string text;
-  for (int c = std::fgetc(captured); c != EOF; c = std::fgetc(captured))
-    text += static_cast<char>(c);
+  char buf[256];
+  for (size_t n; (n = std::fread(buf, 1, sizeof(buf), captured)) > 0;)
+    text.append(buf, n);
   std::fclose(captured);
 
   simplification_check_stats::proved = saved_proved;

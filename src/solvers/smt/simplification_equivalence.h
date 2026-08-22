@@ -53,6 +53,14 @@ public:
     std::string *witness = nullptr);
 
 private:
+  /** Format the live model's valuation of `before`/`after`'s free symbols into
+   *  @p witness. Only callable while the frame that produced the model is
+   *  still pushed. */
+  void record_witness(
+    const expr2tc &before,
+    const expr2tc &after,
+    std::string &witness);
+
   namespacet ns;
   optionst options;
   std::unique_ptr<smt_convt> ctx;

@@ -203,6 +203,27 @@ simplification_equivalencet decline()
 }
 } // namespace
 
+void simplification_equivalence_checkert::record_witness(
+  const expr2tc &before,
+  const expr2tc &after,
+  std::string &witness)
+{
+  std::set<expr2tc> symbols;
+  collect_symbols(before, symbols);
+  collect_symbols(after, symbols);
+
+  witness.clear();
+  for (const expr2tc &sym : symbols)
+  {
+    const expr2tc value = ctx->get(sym);
+    if (is_nil_expr(value))
+      continue;
+    if (!witness.empty())
+      witness += ", ";
+    witness += fmt::format("{} = {}", *sym, *value);
+  }
+}
+
 simplification_equivalencet simplification_equivalence_checkert::check(
   const expr2tc &before,
   const expr2tc &after,
@@ -242,22 +263,7 @@ simplification_equivalencet simplification_equivalence_checkert::check(
 
     // The model is only readable while the frame that produced it is live.
     if (result == P_SATISFIABLE && witness)
-    {
-      std::set<expr2tc> symbols;
-      collect_symbols(before, symbols);
-      collect_symbols(after, symbols);
-
-      witness->clear();
-      for (const expr2tc &sym : symbols)
-      {
-        const expr2tc value = ctx->get(sym);
-        if (is_nil_expr(value))
-          continue;
-        if (!witness->empty())
-          *witness += ", ";
-        *witness += fmt::format("{} = {}", *sym, *value);
-      }
-    }
+      record_witness(before, after, *witness);
 
     ctx->pop_ctx();
 
