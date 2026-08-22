@@ -63,6 +63,8 @@ protected:
    */
   void adjust_expr(exprt &expr);
   void adjust_base_to_derived(exprt &expr);
+  void adjust_derived_to_base(exprt &expr, const irep_idt &base_id);
+  void adjust_call_argument(exprt &arg);
   void adjust_struct(exprt &expr);
   void adjust_ptr_mem(exprt &expr);
   void adjust_side_effect_assignment(exprt &expr);
