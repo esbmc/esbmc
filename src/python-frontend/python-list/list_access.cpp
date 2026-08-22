@@ -1550,29 +1550,15 @@ const symbolt &python_list::get_str_slice_sym()
   return *sym;
 }
 
-// ADR-NP-003 etapa 2, first slice: a 1-D, unit-stride, literal-bound slice
-// assigned directly to a bare name (current_lhs set) becomes a pointer into
-// the base array's own storage instead of an independent copy. Reads/
-// writes through either the view or the base then observe each other
-// automatically via ordinary pointer semantics -- no manual synchronization
-// needed. Declines (returns std::nullopt) for: step != 1, char/string
-// slices (own null-terminator semantics), a source element type that is
-// itself an array (row/column views -- future PRs), a non-symbol base, any
-// slice not the direct RHS of a plain assignment (current_lhs unset), and a
-// source that is not a tracked numpy array -- `handle_range_slice` is
-// shared by numpy arrays, plain Python lists, and bytes/str, and this ADR
-// is numpy-scoped: a `bytes`/list slice must keep the existing copy
-// semantics (github PR review, bytes_slice_len regression) -- the caller
-// falls through to the existing copy for all of these.
 // Shared core of every ADR-NP-003 scalar pointer view producer (1-D slice,
-// row, column, and -- planned -- stepped slice, diagonal, ravel/.flat):
-// builds a pointer_typet(elem_type) into array's own flat buffer at
-// element offset `offset`, retypes current_lhs to it (its DECL has not
-// been emitted yet at this point -- see try_build_1d_pointer_view's
-// original comment), and tracks {length, stride, readonly} for later
-// consultation (len()/.shape/.ndim, indexed reads/writes,
-// detach_numpy_pointer_views_of on source rebind). Callers have already
-// validated eligibility; this function only assembles the result.
+// row, column, and -- planned -- diagonal, ravel/.flat): builds a
+// pointer_typet(elem_type) into array's own flat buffer at element offset
+// `offset`, retypes current_lhs to it (its DECL has not been emitted yet
+// at this point -- see try_build_1d_pointer_view's comment below), and
+// tracks {length, stride, readonly} for later consultation
+// (len()/.shape/.ndim, indexed reads/writes, detach_numpy_pointer_views_of
+// on source rebind). Callers have already validated eligibility; this
+// function only assembles the result.
 exprt python_list::build_scalar_pointer_view(
   const exprt &array,
   const typet &elem_type,
@@ -1599,6 +1585,24 @@ exprt python_list::build_scalar_pointer_view(
   return view_ptr;
 }
 
+// ADR-NP-003 etapa 2: a literal-bound, literal-step 1-D slice assigned
+// directly to a bare name (current_lhs set) becomes a strided pointer into
+// the base array's own storage instead of an independent copy -- unit
+// stride (v = a[1:3]), a larger step (v = a[::2]), or a negative step
+// (v = a[::-1]), in which case literal_start (from literal_slice_length)
+// is already the first element the slice visits, so stride is simply
+// step_val, positive or negative. Reads/writes through either the view or
+// the base then observe each other automatically via ordinary pointer
+// semantics -- no manual synchronization needed. Declines (returns
+// std::nullopt) for: step == 0 (a ValueError, not a view), char/string
+// slices (own null-terminator semantics), a source element type that is
+// itself an array (row/column views), a non-symbol base, any slice not
+// the direct RHS of a plain assignment (current_lhs unset), and a source
+// that is not a tracked numpy array -- `handle_range_slice` is shared by
+// numpy arrays, plain Python lists, and bytes/str, and this ADR is
+// numpy-scoped: a `bytes`/list slice must keep the existing copy
+// semantics (github PR review, bytes_slice_len regression) -- the caller
+// falls through to the existing copy for all of these.
 std::optional<exprt> python_list::try_build_1d_pointer_view(
   const exprt &array,
   const typet &elem_type,
@@ -1609,10 +1613,19 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
 {
   const namespacet ns(converter_.symbol_table());
   if (
-    step_val != 1 || needs_null_term || ns.follow(elem_type).is_array() ||
+    step_val == 0 || needs_null_term || ns.follow(elem_type).is_array() ||
     !array.is_symbol() || !converter_.current_lhs ||
     !converter_.current_lhs->is_symbol() ||
-    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) ==
+      0 ||
+    // literal_start < 0 only happens for an out-of-range negative-step
+    // slice that resolves to zero elements (e.g. a[-10:1:-1]):
+    // literal_slice_length clamps start to -1 as its "no elements" sentinel
+    // for that case. Unlike one-past-the-end (legal to form, C 6.5.6p8),
+    // &array[-1] forms a pointer *before* the object, which has no such
+    // exemption -- always undefined behaviour, dereferenced or not. Fall
+    // through to the existing copy path for this rather than form it.
+    literal_start < 0)
     return std::nullopt;
 
   return build_scalar_pointer_view(
@@ -1620,7 +1633,7 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
     elem_type,
     literal_start,
     static_cast<std::size_t>(static_slice_len),
-    1,
+    step_val,
     false);
 }
 
