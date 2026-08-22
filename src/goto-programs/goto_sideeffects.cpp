@@ -123,9 +123,52 @@ static exprt *old_raw_call_under(exprt &deref)
   return call->op1().operands().size() == 1 ? call : nullptr;
 }
 
+/// &(base[j]) is address_of(index_exprt(base, j)) when base has real array
+/// type -- the target's own type is already the element type.
+static const exprt *bound_array_index(
+  const exprt &target,
+  const std::set<irep_idt> &bound_vars)
+{
+  if (target.id() != exprt::index || target.operands().size() != 2)
+    return nullptr;
+  if (
+    !mentions_symbol(target.op1(), bound_vars) ||
+    !target.op0().type().is_array())
+    return nullptr;
+  return &target;
+}
+
+/// A decayed pointer's p[j] desugars at the frontend to *(p + j), so
+/// &(p[j]) is address_of(dereference(+(p, j))), not
+/// address_of(index_exprt(...)). No named object to snapshot here, only N
+/// bytes reachable through p, with N known only once the contracts pass
+/// resolves __ESBMC_is_fresh (#7057). Restrict to a bare symbol base so
+/// contracts.cpp can look it up in param_extents by identifier; an lvalue
+/// reached through a pointer (e.g. a struct field) is deferred (documented
+/// follow-up). Return the "+" node itself: like bound_array_index's
+/// index_exprt, it already has op0()=base, op1()=index -- but unlike the
+/// array case, its own type is the *pointer* type, not the element type
+/// (the caller must go through ->type().subtype() instead).
+static const exprt *bound_ptr_param_offset(
+  const exprt &target,
+  const std::set<irep_idt> &bound_vars)
+{
+  if (target.id() != exprt::deref || target.operands().size() != 1)
+    return nullptr;
+  const exprt &offset = target.op0();
+  if (offset.id() != "+" || offset.operands().size() != 2)
+    return nullptr;
+  if (
+    !mentions_symbol(offset.op1(), bound_vars) ||
+    offset.op0().type().id() != "pointer" || offset.op0().id() != "symbol")
+    return nullptr;
+  return &offset;
+}
+
 /// The array element \p addr addresses, when its index reaches \p bound_vars
-/// and its base is an array. A pointer with a symbolic extent has no whole
-/// object to snapshot, so it is left alone.
+/// and its base is an array or a pointer parameter. A pointer with a
+/// symbolic extent has no whole object to snapshot; bound_ptr_param_offset
+/// defers that to contracts.cpp once the extent is known.
 static const exprt *
 bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
 {
@@ -136,42 +179,9 @@ bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
     return nullptr;
 
   const exprt &target = e->op0();
-
-  // Array case: &(base[j]) is address_of(index_exprt(base, j)) when base has
-  // real array type -- the target's own type is already the element type.
-  if (target.id() == exprt::index && target.operands().size() == 2)
-  {
-    if (
-      !mentions_symbol(target.op1(), bound_vars) ||
-      !target.op0().type().is_array())
-      return nullptr;
-    return &target;
-  }
-
-  // Pointer-parameter case: a decayed pointer's p[j] desugars at the
-  // frontend to *(p + j), so &(p[j]) is address_of(dereference(+(p, j))),
-  // not address_of(index_exprt(...)). No named object to snapshot here,
-  // only N bytes reachable through p, with N known only once the contracts
-  // pass resolves __ESBMC_is_fresh (#7057). Restrict to a bare symbol base
-  // so contracts.cpp can look it up in param_extents by identifier; an
-  // lvalue reached through a pointer (e.g. a struct field) is deferred
-  // (documented follow-up). Return the "+" node itself: like the array
-  // case's index_exprt, it already has op0()=base, op1()=index -- but
-  // unlike the array case, its own type is the *pointer* type, not the
-  // element type (the caller must go through ->type().subtype() instead).
-  if (target.id() == exprt::deref && target.operands().size() == 1)
-  {
-    const exprt &offset = target.op0();
-    if (offset.id() != "+" || offset.operands().size() != 2)
-      return nullptr;
-    if (
-      !mentions_symbol(offset.op1(), bound_vars) ||
-      offset.op0().type().id() != "pointer" || offset.op0().id() != "symbol")
-      return nullptr;
-    return &offset;
-  }
-
-  return nullptr;
+  if (const exprt *array_elem = bound_array_index(target, bound_vars))
+    return array_elem;
+  return bound_ptr_param_offset(target, bound_vars);
 }
 
 static void

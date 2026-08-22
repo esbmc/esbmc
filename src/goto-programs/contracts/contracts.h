@@ -406,6 +406,15 @@ private:
     const std::string &func_name,
     size_t index) const;
 
+  /// \brief __ESBMC_old(ptr[j]), ptr a pointer parameter: try the
+  /// dereference(add(typecast(old-temp-symbol), j)) shape goto_sideeffects.cpp's
+  /// lift produces for this case. Returns nil if \p ptr_expr isn't this shape.
+  /// #7057.
+  static expr2tc try_replace_ptr_region_old(
+    const type2tc &result_type,
+    const expr2tc &ptr_expr,
+    const std::vector<old_snapshot_t> &snapshots);
+
   /// \brief Replace __ESBMC_old() calls with snapshot variables
   /// \param expr Expression containing old() calls
   /// \param snapshots Vector of snapshot information
@@ -413,6 +422,20 @@ private:
   expr2tc replace_old_in_expr(
     const expr2tc &expr,
     const std::vector<old_snapshot_t> &snapshots) const;
+
+  /// \brief Does this old-temp's hoisted symbol appear under a
+  /// pointer-region dereference shape somewhere in the body? Sets
+  /// is_ptr_region/region_index/region_elem_type on each entry that does.
+  /// #7057.
+  static void classify_ptr_region_snapshots(
+    std::vector<old_snapshot_t> &old_snapshots,
+    const goto_programt &function_body);
+
+  /// \brief Reject a pointer used both as a bare __ESBMC_old(ptr) and a
+  /// region __ESBMC_old(ptr[j]) in the same contract -- ambiguous to
+  /// materialize. #7057.
+  static void check_old_snapshot_pointer_ambiguity(
+    const std::vector<old_snapshot_t> &old_snapshots);
 
   /// \brief Collect old_snapshot assignments from function body
   /// \param function_body GOTO program to scan for old_snapshot sideeffects

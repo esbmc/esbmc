@@ -2728,6 +2728,45 @@ expr2tc code_contractst::create_snapshot_variable(
     expr->type);
 }
 
+/// __ESBMC_old(ptr[j]), ptr a pointer parameter: goto_sideeffects.cpp's lift
+/// produces dereference(add(typecast(old-temp-symbol), j)) rather than the
+/// named-array case's dereference(typecast(old-temp-symbol)) wrapped in an
+/// outer index -- there is no array rvalue to dereference into, only a
+/// pointer, so the offset has to be folded in here instead of left for an
+/// outer index expression. Returns nil if \p ptr_expr isn't this shape.
+/// #7057.
+expr2tc code_contractst::try_replace_ptr_region_old(
+  const type2tc &result_type,
+  const expr2tc &ptr_expr,
+  const std::vector<code_contractst::old_snapshot_t> &snapshots)
+{
+  if (!is_add2t(ptr_expr))
+    return expr2tc();
+
+  // The lift recovers the snapshotted pointer value with one dereference
+  // before doing arithmetic, so there is a dereference2t to strip here too
+  // (see the matching comment in find_ptr_region_use).
+  const add2t &add = to_add2t(ptr_expr);
+  expr2tc base = add.side_1;
+  if (is_dereference2t(base))
+    base = to_dereference2t(base).value;
+  while (is_typecast2t(base))
+    base = to_typecast2t(base).from;
+
+  if (!is_symbol2t(base) || !is_old_temp_symbol(base))
+    return expr2tc();
+
+  const symbol2t &sym = to_symbol2t(base);
+  for (const auto &snapshot : snapshots)
+  {
+    if (
+      is_symbol2t(snapshot.original_expr) &&
+      to_symbol2t(snapshot.original_expr).thename == sym.thename)
+      return index2tc(result_type, snapshot.snapshot_var, add.side_2);
+  }
+  return expr2tc();
+}
+
 expr2tc code_contractst::replace_old_in_expr(
   const expr2tc &expr,
   const std::vector<old_snapshot_t> &snapshots) const
@@ -2748,38 +2787,9 @@ expr2tc code_contractst::replace_old_in_expr(
     while (is_typecast2t(ptr_expr))
       ptr_expr = to_typecast2t(ptr_expr).from;
 
-    // __ESBMC_old(ptr[j]), ptr a pointer parameter: goto_sideeffects.cpp's
-    // lift produces dereference(add(typecast(old-temp-symbol), j)) rather
-    // than the named-array case's dereference(typecast(old-temp-symbol))
-    // wrapped in an outer index -- there is no array rvalue to dereference
-    // into, only a pointer, so the offset has to be folded in here instead
-    // of left for an outer index expression. #7057.
-    if (is_add2t(ptr_expr))
-    {
-      // See the matching comment in find_ptr_region_use: the lift recovers
-      // the snapshotted pointer value with one dereference before doing
-      // arithmetic, so there is a dereference2t to strip here too.
-      const add2t &add = to_add2t(ptr_expr);
-      expr2tc base = add.side_1;
-      if (is_dereference2t(base))
-        base = to_dereference2t(base).value;
-      while (is_typecast2t(base))
-        base = to_typecast2t(base).from;
-
-      if (is_symbol2t(base) && is_old_temp_symbol(base))
-      {
-        const symbol2t &sym = to_symbol2t(base);
-        for (const auto &snapshot : snapshots)
-        {
-          if (is_symbol2t(snapshot.original_expr))
-          {
-            const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
-            if (sym.thename == snap_sym.thename)
-              return index2tc(expr->type, snapshot.snapshot_var, add.side_2);
-          }
-        }
-      }
-    }
+    if (expr2tc region_replacement =
+          try_replace_ptr_region_old(expr->type, ptr_expr, snapshots))
+      return region_replacement;
 
     if (is_symbol2t(ptr_expr))
     {
@@ -2909,6 +2919,82 @@ static bool find_ptr_region_use(
   return found;
 }
 
+/// Classify: does this old-temp's hoisted symbol appear under a
+/// pointer-region dereference shape somewhere in the body -- i.e. was this
+/// __ESBMC_old(ptr[j]) with ptr a pointer parameter, not a named array or a
+/// scalar? #7057.
+void code_contractst::classify_ptr_region_snapshots(
+  std::vector<code_contractst::old_snapshot_t> &old_snapshots,
+  const goto_programt &function_body)
+{
+  for (auto &snapshot : old_snapshots)
+  {
+    // At this point, before materialize_old_snapshots_at_wrapper runs,
+    // snapshot_var still holds the Clang-hoisted temp from the function
+    // body (see the comment at its use in
+    // materialize_old_snapshots_at_wrapper).
+    if (!is_symbol2t(snapshot.snapshot_var))
+      continue;
+    const irep_idt &temp_thename = to_symbol2t(snapshot.snapshot_var).thename;
+
+    expr2tc found_index;
+    type2tc found_elem_type;
+    bool found = false;
+    forall_goto_program_instructions (it, function_body)
+    {
+      if (
+        find_ptr_region_use(it->code, temp_thename, found_index, found_elem_type) ||
+        find_ptr_region_use(
+          it->guard, temp_thename, found_index, found_elem_type))
+      {
+        found = true;
+        break;
+      }
+    }
+
+    if (found)
+    {
+      snapshot.is_ptr_region = true;
+      snapshot.region_index = found_index;
+      snapshot.region_elem_type = found_elem_type;
+    }
+  }
+}
+
+/// A pointer symbol used both as a bare __ESBMC_old(ptr) (pointer-value
+/// snapshot) and as a region __ESBMC_old(ptr[j]) within the same contract is
+/// ambiguous to materialize (one shared temp, two incompatible treatments)
+/// -- reject rather than silently pick one. Not known to occur in practice;
+/// flagged so a real case surfaces as a clear diagnostic rather than a
+/// miscompile. #7057.
+void code_contractst::check_old_snapshot_pointer_ambiguity(
+  const std::vector<code_contractst::old_snapshot_t> &old_snapshots)
+{
+  std::map<irep_idt, bool> region_by_expr;
+  for (const auto &snapshot : old_snapshots)
+  {
+    if (!is_symbol2t(snapshot.original_expr))
+      continue;
+    const irep_idt &thename = to_symbol2t(snapshot.original_expr).thename;
+    auto it = region_by_expr.find(thename);
+    if (it == region_by_expr.end())
+    {
+      region_by_expr.emplace(thename, snapshot.is_ptr_region);
+      continue;
+    }
+    if (it->second == snapshot.is_ptr_region)
+      continue;
+
+    log_error(
+      "__ESBMC_old({}) is used both as a whole-pointer snapshot and as "
+      "a per-element __ESBMC_old({}[i]) snapshot in the same contract; "
+      "this is not supported (#7057)",
+      id2string(thename),
+      id2string(thename));
+    abort();
+  }
+}
+
 std::vector<code_contractst::old_snapshot_t>
 code_contractst::collect_old_snapshots_from_body(
   const goto_programt &function_body) const
@@ -2971,7 +3057,10 @@ code_contractst::collect_old_snapshots_from_body(
     // They all have the same original_expr, so they'll all get mapped to the same wrapper snapshot
     for (const auto &temp_var : info.temp_vars)
     {
-      old_snapshots.push_back({info.original_expr, temp_var});
+      old_snapshot_t entry;
+      entry.original_expr = info.original_expr;
+      entry.snapshot_var = temp_var;
+      old_snapshots.push_back(entry);
     }
 
     // Log if there are multiple temp vars for the same expression
@@ -2985,72 +3074,8 @@ code_contractst::collect_old_snapshots_from_body(
     }
   }
 
-  // Classify: does this old-temp's hoisted symbol appear under a
-  // pointer-region dereference shape somewhere in the body -- i.e. was this
-  // __ESBMC_old(ptr[j]) with ptr a pointer parameter, not a named array or a
-  // scalar? #7057.
-  for (auto &snapshot : old_snapshots)
-  {
-    // At this point, before materialize_old_snapshots_at_wrapper runs,
-    // snapshot_var still holds the Clang-hoisted temp from the function
-    // body (see the comment at its use in materialize_old_snapshots_at_wrapper).
-    if (!is_symbol2t(snapshot.snapshot_var))
-      continue;
-    const irep_idt &temp_thename = to_symbol2t(snapshot.snapshot_var).thename;
-
-    expr2tc found_index;
-    type2tc found_elem_type;
-    bool found = false;
-    forall_goto_program_instructions (it, function_body)
-    {
-      if (find_ptr_region_use(it->code, temp_thename, found_index, found_elem_type))
-      {
-        found = true;
-        break;
-      }
-      if (find_ptr_region_use(it->guard, temp_thename, found_index, found_elem_type))
-      {
-        found = true;
-        break;
-      }
-    }
-
-    if (found)
-    {
-      snapshot.is_ptr_region = true;
-      snapshot.region_index = found_index;
-      snapshot.region_elem_type = found_elem_type;
-    }
-  }
-
-  // A pointer symbol used both as a bare __ESBMC_old(ptr) (pointer-value
-  // snapshot) and as a region __ESBMC_old(ptr[j]) within the same contract
-  // is ambiguous to materialize (one shared temp, two incompatible
-  // treatments) -- reject rather than silently pick one. Not known to occur
-  // in practice; flagged so a real case surfaces as a clear diagnostic
-  // rather than a miscompile. #7057.
-  {
-    std::map<irep_idt, bool> region_by_expr;
-    for (const auto &snapshot : old_snapshots)
-    {
-      if (!is_symbol2t(snapshot.original_expr))
-        continue;
-      const irep_idt &thename = to_symbol2t(snapshot.original_expr).thename;
-      auto it = region_by_expr.find(thename);
-      if (it == region_by_expr.end())
-        region_by_expr.emplace(thename, snapshot.is_ptr_region);
-      else if (it->second != snapshot.is_ptr_region)
-      {
-        log_error(
-          "__ESBMC_old({}) is used both as a whole-pointer snapshot and as "
-          "a per-element __ESBMC_old({}[i]) snapshot in the same contract; "
-          "this is not supported (#7057)",
-          id2string(thename),
-          id2string(thename));
-        abort();
-      }
-    }
-  }
+  classify_ptr_region_snapshots(old_snapshots, function_body);
+  check_old_snapshot_pointer_ambiguity(old_snapshots);
 
   return old_snapshots;
 }
