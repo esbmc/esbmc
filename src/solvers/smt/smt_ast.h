@@ -41,6 +41,13 @@ public:
   smt_ast(smt_solver_baset *ctx, smt_sortt s);
   virtual ~smt_ast() = default;
 
+  /** The same solver term under a different sort. The default rewrites this
+   *  node's sort in place, which is what the bit-vector-only backends have
+   *  always relied on -- there both sorts are the same solver sort. A backend
+   *  where they are genuinely different solver sorts must return a fresh node,
+   *  or the rewrite corrupts every other holder of this shared ast. */
+  virtual smt_astt with_sort(smt_solver_baset *ctx, smt_sortt s) const;
+
   // "this" is the true operand.
   virtual smt_astt
   ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const;
