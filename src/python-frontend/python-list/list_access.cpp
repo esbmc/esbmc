@@ -795,7 +795,7 @@ slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
   return info;
 }
 
-bool can_build_row_pointer_view(
+bool can_build_scalar_pointer_view(
   const exprt &array,
   exprt *current_lhs,
   bool is_numpy_array)
@@ -804,20 +804,21 @@ bool can_build_row_pointer_view(
          is_numpy_array;
 }
 
-std::optional<row_pointer_view_info> get_row_pointer_view_info(
-  const exprt &array,
-  const nlohmann::json &slice_node,
-  const contextt &symbol_table,
-  exprt *current_lhs,
-  bool is_numpy_array)
+struct fixed_2d_shape_info
 {
-  if (!can_build_row_pointer_view(array, current_lhs, is_numpy_array))
-    return std::nullopt;
+  typet elem_type;
+  long long row_count;
+  long long col_count;
+};
 
-  BigInt literal_index;
-  if (!try_get_literal_int(slice_node, literal_index))
-    return std::nullopt;
-
+// Resolves array's compile-time-known 2-D shape (row_count x col_count) and
+// scalar element type, or nullopt when array is not a fixed-shape 2-D
+// array (including 3-D+, where elem_type itself would still be an array).
+// Shared by every producer that addresses a row or column of a 2-D numpy
+// array (try_build_row_pointer_view, try_build_column_pointer_view).
+std::optional<fixed_2d_shape_info>
+get_fixed_2d_shape_info(const exprt &array, const contextt &symbol_table)
+{
   const namespacet ns(symbol_table);
   const typet array_type = ns.follow(array.type());
   if (!array_type.is_array())
@@ -835,18 +836,84 @@ std::optional<row_pointer_view_info> get_row_pointer_view_info(
   if (row_array.size().is_nil() || !row_array.size().is_constant())
     return std::nullopt;
 
-  row_pointer_view_info info{ns.follow(row_array.subtype()), 0, 0};
-  if (info.elem_type.is_array())
+  const typet elem_type = ns.follow(row_array.subtype());
+  if (elem_type.is_array())
     return std::nullopt;
 
   const long long row_count =
     binary2integer(outer_array.size().value().c_str(), false).to_int64();
-  info.col_count =
+  const long long col_count =
     binary2integer(row_array.size().value().c_str(), false).to_int64();
-  info.row_index = literal_index.to_int64();
+  if (row_count < 0 || col_count < 0)
+    return std::nullopt;
+
+  return fixed_2d_shape_info{elem_type, row_count, col_count};
+}
+
+std::optional<row_pointer_view_info> get_row_pointer_view_info(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const contextt &symbol_table,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  if (!can_build_scalar_pointer_view(array, current_lhs, is_numpy_array))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(slice_node, literal_index))
+    return std::nullopt;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, symbol_table);
+  if (!shape)
+    return std::nullopt;
+
+  row_pointer_view_info info{
+    shape->elem_type, literal_index.to_int64(), shape->col_count};
   if (info.row_index < 0)
-    info.row_index += row_count;
-  if (info.row_index < 0 || info.row_index >= row_count || info.col_count < 0)
+    info.row_index += shape->row_count;
+  if (info.row_index < 0 || info.row_index >= shape->row_count)
+    return std::nullopt;
+
+  return info;
+}
+
+struct column_pointer_view_info
+{
+  typet elem_type;
+  long long col_index;
+  long long num_cols;
+  long long num_rows;
+};
+
+std::optional<column_pointer_view_info> get_column_pointer_view_info(
+  const exprt &array,
+  const nlohmann::json &col_index_node,
+  const contextt &symbol_table,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  if (!can_build_scalar_pointer_view(array, current_lhs, is_numpy_array))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(col_index_node, literal_index))
+    return std::nullopt;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, symbol_table);
+  if (!shape)
+    return std::nullopt;
+
+  column_pointer_view_info info{
+    shape->elem_type,
+    literal_index.to_int64(),
+    shape->col_count,
+    shape->row_count};
+  if (info.col_index < 0)
+    info.col_index += shape->col_count;
+  if (info.col_index < 0 || info.col_index >= shape->col_count)
     return std::nullopt;
 
   return info;
@@ -927,6 +994,17 @@ exprt python_list::build_column_select(
   const nlohmann::json &col_index_node,
   const nlohmann::json &element)
 {
+  // ADR-NP-003 etapa 2: a literal, in-range column of a fixed 2-D numpy
+  // array assigned directly to a bare name aliases the source's buffer via
+  // a strided pointer instead of the element-by-element copy below.
+  // Declines for every case this function's own validation below still
+  // needs to run (non-2-D, 3-D+, out-of-range column, symbolic column,
+  // non-numpy source, ...), so those diagnostics are unaffected.
+  if (
+    std::optional<exprt> view =
+      try_build_column_pointer_view(array, col_index_node))
+    return *view;
+
   const namespacet ns(converter_.symbol_table());
   const typet resolved_array_type = ns.follow(array.type());
   const locationt location = converter_.get_location_from_decl(element);
@@ -1486,6 +1564,41 @@ const symbolt &python_list::get_str_slice_sym()
 // is numpy-scoped: a `bytes`/list slice must keep the existing copy
 // semantics (github PR review, bytes_slice_len regression) -- the caller
 // falls through to the existing copy for all of these.
+// Shared core of every ADR-NP-003 scalar pointer view producer (1-D slice,
+// row, column, and -- planned -- stepped slice, diagonal, ravel/.flat):
+// builds a pointer_typet(elem_type) into array's own flat buffer at
+// element offset `offset`, retypes current_lhs to it (its DECL has not
+// been emitted yet at this point -- see try_build_1d_pointer_view's
+// original comment), and tracks {length, stride, readonly} for later
+// consultation (len()/.shape/.ndim, indexed reads/writes,
+// detach_numpy_pointer_views_of on source rebind). Callers have already
+// validated eligibility; this function only assembles the result.
+exprt python_list::build_scalar_pointer_view(
+  const exprt &array,
+  const typet &elem_type,
+  long long offset,
+  std::size_t length,
+  long long stride,
+  bool readonly)
+{
+  const typet view_ptr_type = pointer_typet(elem_type);
+  // Pointer arithmetic, not build_index(array, offset, elem_type): an
+  // empty view whose offset lands exactly at the source's element count
+  // computes a one-past-the-end address, legal to form but not to
+  // dereference (C 6.5.6p8). index2tc would route it through the array
+  // bounds checker as an out-of-bounds subscript; add2tc over the decayed
+  // pointer is checked under pointer, not array-index, rules.
+  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt view_ptr =
+    build_add(base_ptr, from_integer(offset, size_type()), view_ptr_type);
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_pointer_view_info_[converter_.current_lhs->identifier()
+                                        .as_string()] = {
+    length, stride, readonly};
+  return view_ptr;
+}
+
 std::optional<exprt> python_list::try_build_1d_pointer_view(
   const exprt &array,
   const typet &elem_type,
@@ -1502,22 +1615,13 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
     converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
     return std::nullopt;
 
-  // Pointer arithmetic, not build_index(array, literal_start, elem_type):
-  // an empty slice at the very end of the source (literal_start ==
-  // source_len) computes a one-past-the-end address, legal to form but not
-  // to dereference (C 6.5.6p8). index2tc would route it through the array
-  // bounds checker as an out-of-bounds subscript; add2tc over the decayed
-  // pointer is checked under pointer, not array-index, rules.
-  const typet view_ptr_type = pointer_typet(elem_type);
-  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
-  exprt view_ptr = build_add(
-    base_ptr, from_integer(literal_start, size_type()), view_ptr_type);
-  converter_.current_lhs->type() = view_ptr_type;
-  converter_.update_symbol(*converter_.current_lhs);
-  converter_.numpy_pointer_view_info_[converter_.current_lhs->identifier()
-                                        .as_string()] = {
-    static_cast<std::size_t>(static_slice_len), 1, false};
-  return view_ptr;
+  return build_scalar_pointer_view(
+    array,
+    elem_type,
+    literal_start,
+    static_cast<std::size_t>(static_slice_len),
+    1,
+    false);
 }
 
 std::optional<exprt> python_list::try_build_row_pointer_view(
@@ -1533,19 +1637,43 @@ std::optional<exprt> python_list::try_build_row_pointer_view(
   if (!info)
     return std::nullopt;
 
-  const typet view_ptr_type = pointer_typet(info->elem_type);
-  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
-  exprt view_ptr = build_add(
-    base_ptr,
-    from_integer(info->row_index * info->col_count, size_type()),
-    view_ptr_type);
+  return build_scalar_pointer_view(
+    array,
+    info->elem_type,
+    info->row_index * info->col_count,
+    static_cast<std::size_t>(info->col_count),
+    1,
+    false);
+}
 
-  converter_.current_lhs->type() = view_ptr_type;
-  converter_.update_symbol(*converter_.current_lhs);
-  converter_.numpy_pointer_view_info_[converter_.current_lhs->identifier()
-                                        .as_string()] = {
-    static_cast<std::size_t>(info->col_count), 1, false};
-  return view_ptr;
+// `col = a[:, j]` (single literal column of a fixed 2-D array): a pointer
+// into a's own buffer starting at element j, with stride num_cols so
+// col[i] lands on a[i][j]. Declines (returns std::nullopt, falls through
+// to build_column_select's existing element-by-element copy) for a
+// non-literal or out-of-range column index, a non-symbol/non-numpy-tracked
+// base, or when current_lhs is unset -- build_column_select's own
+// resolve_fixed_axis_index call still raises the correct IndexError for
+// the out-of-range case, so this function does not duplicate that check.
+std::optional<exprt> python_list::try_build_column_pointer_view(
+  const exprt &array,
+  const nlohmann::json &col_index_node)
+{
+  std::optional<column_pointer_view_info> info = get_column_pointer_view_info(
+    array,
+    col_index_node,
+    converter_.symbol_table(),
+    converter_.current_lhs,
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) != 0);
+  if (!info)
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    info->elem_type,
+    info->col_index,
+    static_cast<std::size_t>(info->num_rows),
+    info->num_cols,
+    false);
 }
 
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(

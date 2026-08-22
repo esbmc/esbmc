@@ -107,6 +107,39 @@ bool is_literal_int_node(const nlohmann::json &node)
          node["operand"]["value"].is_number_integer();
 }
 
+// A bare `:` slice axis (no lower/upper/step), matching
+// converter_expr.cpp's own is_full_slice_node used to recognise the
+// column-select shape `a[:, j]`.
+bool is_full_slice_axis_node(const nlohmann::json &node)
+{
+  if (node.value("_type", "") != "Slice")
+    return false;
+  auto absent = [&](const char *key) {
+    return !node.contains(key) || node[key].is_null();
+  };
+  return absent("lower") && absent("upper") && absent("step");
+}
+
+// `a[:, j]` column-select shape specifically: axis 0 a full slice, axis 1
+// a literal int. converter_expr.cpp's SUBSCRIPT/Tuple dispatch only calls
+// build_column_select when is_full_slice_node(idx_nodes[0]) holds -- the
+// reverse order, `a[j, :]`, is a row-select-then-chained-slice instead
+// (list.index(array, idx_nodes[0]) followed by list.index(current,
+// idx_nodes[1])), a different shape this function must not also match, or
+// should_rebuild_cached_numpy_row_subscript_rhs forces a fresh conversion
+// for it too and current_lhs ends up retyped to a pointer mid-chain by
+// try_build_row_pointer_view before the outer `[:]` is ever applied.
+bool is_column_select_slice_node(const nlohmann::json &slice)
+{
+  if (
+    slice.value("_type", "") != "Tuple" || !slice.contains("elts") ||
+    slice["elts"].size() != 2)
+    return false;
+
+  return is_full_slice_axis_node(slice["elts"][0]) &&
+         is_literal_int_node(slice["elts"][1]);
+}
+
 bool has_non_null_value(const nlohmann::json &node)
 {
   return node.contains("value") && !node["value"].is_null();
@@ -2235,7 +2268,16 @@ bool python_converter::should_rebuild_cached_numpy_row_subscript_rhs(
   if (
     !rhs_node.contains("value") ||
     rhs_node["value"].value("_type", "") != "Name" ||
-    !rhs_node.contains("slice") || !is_literal_int_node(rhs_node["slice"]))
+    !rhs_node.contains("slice"))
+    return false;
+
+  // Row view: a[i]. Column view: a[:, j]. Both hit
+  // resolve_any_subscript_array_type's type-inference probe (current_lhs
+  // unset there) before the real assignment ever runs, so the cached probe
+  // result -- an array-typed copy, not the pointer view this rebuild
+  // forces -- must not be reused for either shape.
+  const nlohmann::json &slice = rhs_node["slice"];
+  if (!is_literal_int_node(slice) && !is_column_select_slice_node(slice))
     return false;
 
   const std::string source_id =

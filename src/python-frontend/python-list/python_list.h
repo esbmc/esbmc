@@ -650,6 +650,16 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
+  // Shared core of every ADR-NP-003 scalar pointer view producer; see
+  // list_access.cpp for the full rationale.
+  exprt build_scalar_pointer_view(
+    const exprt &array,
+    const typet &elem_type,
+    long long offset,
+    std::size_t length,
+    long long stride,
+    bool readonly);
+
   // ADR-NP-003 etapa 2, first slice: builds a pointer into the base
   // array's own storage for a 1-D, unit-stride, literal-bound slice
   // assigned directly to a bare name, instead of handle_range_slice()'s
@@ -669,6 +679,10 @@ private:
   std::optional<exprt> try_build_row_pointer_view(
     const exprt &array,
     const nlohmann::json &slice_node);
+
+  std::optional<exprt> try_build_column_pointer_view(
+    const exprt &array,
+    const nlohmann::json &col_index_node);
 
   std::optional<exprt> try_copy_numpy_pointer_view_slice(
     const exprt &array,
