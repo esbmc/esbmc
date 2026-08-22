@@ -486,8 +486,7 @@ protected:
    */
   void add_thunk_method_body(
     symbolt &thunk_func_symb,
-    const struct_typet::componentt &component,
-    uint64_t base_offset);
+    const struct_typet::componentt &component);
   /*
    * Add thunk body that contains return value
    * Params:
