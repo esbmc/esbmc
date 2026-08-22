@@ -593,10 +593,18 @@ exprt dynamic_type_handler::handle_arithmetic(
   // Equality can settle a type_id mismatch without knowing either type;
   // arithmetic cannot, since it needs the concrete type to pick an operation.
   if (lhs_tagged && rhs_tagged)
+  {
+    // '+' could be str concatenation, which needs a runtime size on both
+    // sides -- left unsupported. '-'/'/' never apply to str in Python.
+    if (op == "Sub")
+      return build_sub_tagged(lhs, rhs);
+    if (op == "Div")
+      return build_div_tagged(lhs, rhs, location);
     throw std::runtime_error(
       "'" + op +
       "' between two dynamically-typed variables directly is "
       "not yet supported");
+  }
 
   if (op == "Add")
     return lhs_tagged ? build_add_literal(lhs, rhs, /*tagged_is_left=*/true)
@@ -609,6 +617,72 @@ exprt dynamic_type_handler::handle_arithmetic(
   assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
   return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
                     : build_div_literal(rhs, lhs, false, location);
+}
+
+exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)
+{
+  const symbolt *sub_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_sub_num_dyn");
+  assert(sub_func && "__python_scalar_sub_num_dyn not found in symbol table");
+
+  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
+  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
+  exprt lhs_is_num = build_typecast(
+    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type()),
+    int_type());
+  exprt rhs_is_num = build_typecast(
+    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type()),
+    int_type());
+
+  return build_call_expr(
+    *sub_func,
+    signedbv_typet(config.ansi_c.long_long_int_width),
+    {build_address_of(lhs), lhs_is_num, build_address_of(rhs), rhs_is_num});
+}
+
+exprt dynamic_type_handler::build_div_tagged(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  const symbolt *div_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_div_num_dyn");
+  assert(div_func && "__python_scalar_div_num_dyn not found in symbol table");
+
+  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
+  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
+  exprt lhs_is_num =
+    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type());
+  exprt rhs_is_num =
+    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
+
+  // A catchable raise, not an assert, so it's guarded only when both
+  // operands are numeric.
+  exprt rhs_numeric_value = build_dereference(
+    build_typecast(
+      build_member(rhs, "value", pointer_typet(empty_typet())),
+      pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
+    signedbv_typet(config.ansi_c.long_long_int_width));
+  exprt is_zero = build_equal(
+    rhs_numeric_value, from_integer(BigInt(0), rhs_numeric_value.type()));
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ZeroDivisionError", "division by zero");
+  code_expressiont throw_code(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = build_and(build_and(lhs_is_num, rhs_is_num), is_zero);
+  guard.then_case() = throw_code;
+  guard.location() = location;
+  converter_.add_instruction(guard);
+
+  return build_call_expr(
+    *div_func,
+    double_type(),
+    {build_address_of(lhs),
+     build_typecast(lhs_is_num, int_type()),
+     build_address_of(rhs),
+     build_typecast(rhs_is_num, int_type())});
 }
 
 exprt dynamic_type_handler::build_isinstance_check(

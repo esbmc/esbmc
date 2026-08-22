@@ -170,6 +170,11 @@ private:
     const exprt &literal,
     bool tagged_is_left,
     const locationt &location);
+  exprt build_sub_tagged(const exprt &lhs, const exprt &rhs);
+  exprt build_div_tagged(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
 
   python_converter &converter_;
   type_handler &type_handler_;
