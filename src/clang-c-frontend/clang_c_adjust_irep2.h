@@ -64,7 +64,9 @@ private:
   /// symbol in the context; clang_c_adjust::adjust_side_effect_function_call
   /// declares one. That is a symbol-table side effect rather than an expression
   /// rewrite, so it ports independently of the rest of that arm (§70).
-  void declare_implicit_callee(const expr2tc &expr);
+  void declare_implicit_callee(
+    const expr2tc &expr,
+    const locationt &stmt_location = locationt());
 
   /// IREP2 form of clang_c_adjust::adjust_expr_{unary,binary}_boolean's live
   /// half. Their type write is dead for C (§58.1); the operand conversion is

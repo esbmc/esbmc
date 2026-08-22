@@ -91,6 +91,30 @@ class GeneratorMixin:
                 best_idx = i
         return best_idx
 
+    def _hoist_shadowed_iter(self, gen_iter, bound_names, node):
+        """Evaluate a leftmost iterable that the comprehension itself shadows.
+
+        Python evaluates the leftmost iterable in the enclosing scope, before
+        the comprehension binds its target. Leaving it in the generated `for`
+        evaluated it after, so `[node for node in node.xs]` read `node.xs` off
+        an element instead of the outer object.
+        """
+        used = {n.id for n in ast.walk(gen_iter) if isinstance(n, ast.Name)}
+        if not (used & bound_names):
+            return [], gen_iter
+
+        tmp_name = f"ESBMC_compiter_{self.listcomp_counter}"
+        self.listcomp_counter += 1
+        hoist = ast.Assign(
+            targets=[self.create_name_node(tmp_name, ast.Store(), node)],
+            value=gen_iter,
+        )
+        self.ensure_all_locations(hoist, node)
+        ast.fix_missing_locations(hoist)
+        replacement = self.create_name_node(tmp_name, ast.Load(), node)
+        self.ensure_all_locations(replacement, node)
+        return [hoist], replacement
+
     def _lower_listcomp(self, node):
         """Lower a list comprehension into prefix statements and result expression.
 
@@ -128,6 +152,11 @@ class GeneratorMixin:
         self.ensure_all_locations(append_expr, node.elt)
 
         # Step 3: build nested for-loops from innermost generator outward.
+        bound_names = set()
+        for generator in node.generators:
+            bound_names.update(self._target_names(generator.target))
+        outermost = node.generators[0]
+
         loop_body = [append_expr]
         for generator in reversed(node.generators):
             if generator.ifs:
@@ -148,6 +177,9 @@ class GeneratorMixin:
             else:
                 iter_prefix = []
                 gen_iter = self.visit(gen_iter)
+            if generator is outermost:
+                hoist_prefix, gen_iter = self._hoist_shadowed_iter(gen_iter, bound_names, node)
+                iter_prefix = iter_prefix + hoist_prefix
             for_stmt = ast.For(
                 target=generator.target,
                 iter=gen_iter,
