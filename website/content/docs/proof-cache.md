@@ -196,19 +196,25 @@ Comparing the dumps from two runs shows which claims changed identity.
 
 Keying a claim means hashing its sliced cone, which is work a run without the
 cache does not do, and it is paid per claim on every run — a miss costs it, and
-so does a hit. The median claim takes roughly 0.2 ms to key, with a long tail
-on claims whose cones are large.
+so does a hit. On a typical file that is about 0.07 ms per claim, but the spread
+is wide: 0.5 ms at the third quartile and 1.6 ms at the 95th, tracking how large
+the cones are.
 
 What that buys back is capped by the solver's share of the run, so the quantity
 that decides whether the cache pays is **solver time per claim**, not program
-size. Few expensive claims win: on a module spending 97% of its time in the
-solver, a warm run drops from 6.7s to 0.3s. Many cheap claims lose — every one
-is keyed, and none was costing anything to solve.
+size. Few expensive claims win: on a 43-property module spending 97% of its time
+in the solver, a warm run drops from 6.0s to 0.27s. Many cheap claims lose —
+every one is keyed, and none was costing anything to solve.
 
 ESBMC's own regression suite is the second kind. Its median file spends under
-1% of its run in the solver, and only 42 of 670 spend more than half, so the
+1% of its run in the solver, and only 43 of 671 spend more than half, so the
 suite is a poor advertisement for the cache and a good illustration of its
 limit.
+
+Between those poles sits the case the cache is for. Re-verifying a three-module
+project across six commits, each editing one function, took 71.9s without the
+cache and 23.3s with it — 3.1x overall, with the first pass paying 1% for a
+cache it could not yet hit and later passes running up to 15x faster.
 
 That makes it the wrong tool for one-shot verification -- a competition run, or
 a CI job that verifies each file exactly once with no persistent directory. It
