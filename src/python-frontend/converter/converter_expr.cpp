@@ -527,13 +527,13 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
 {
-  const auto it = numpy_pointer_view_lengths_.find(symbol.id.as_string());
-  if (it == numpy_pointer_view_lengths_.end())
+  const auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
+  if (it == numpy_pointer_view_info_.end())
     return std::nullopt;
 
   if (attr_name == "shape")
     return build_shape_tuple_expr(
-      *this, {from_integer(it->second, int_type())});
+      *this, {from_integer(it->second.length, int_type())});
   if (attr_name == "ndim")
     return from_integer(1, int_type());
   return std::nullopt;

@@ -1889,14 +1889,20 @@ void python_converter::reject_unsafe_numpy_view_target(
 
   // A view symbol this PR's 1-D slice aliasing retyped to a pointer (see
   // list_access.cpp's handle_range_slice, which populates
-  // numpy_pointer_view_lengths_ exactly for that case) genuinely aliases
+  // numpy_pointer_view_info_ exactly for that case) genuinely aliases
   // its source's storage: writing through it, or through the source while
   // it is live, is sound pointer semantics, not the copy-divergence this
   // guard otherwise exists to reject. Checking membership in that map
   // (rather than just "is this symbol's type a pointer") avoids misreading
   // some other, unrelated pointer-typed symbol as one of these views.
+  // A read-only pointer-backed view (the main-diagonal view, Commit 7) is
+  // NOT "safe to write through" the way a writable one is -- fall through
+  // to the copy-divergence rejection below by default until a dedicated,
+  // more specific diagnostic (e.g. NumPy's own "assignment destination is
+  // read-only") lands with that view kind.
   auto is_pointer_backed = [this](const std::string &id) {
-    return numpy_pointer_view_lengths_.count(id) != 0;
+    auto it = numpy_pointer_view_info_.find(id);
+    return it != numpy_pointer_view_info_.end() && !it->second.readonly;
   };
 
   if (numpy_view_copy_sources_.count(root_id) != 0)
@@ -1926,7 +1932,7 @@ void python_converter::reject_numpy_view_slice_assignment(
     return;
 
   if (
-    numpy_pointer_view_lengths_.count(root_id) != 0 ||
+    numpy_pointer_view_info_.count(root_id) != 0 ||
     numpy_view_copy_sources_.count(root_id) != 0)
     throw std::runtime_error(
       "TypeError: slice assignment through a numpy view is not supported");
@@ -2026,7 +2032,7 @@ void python_converter::clear_numpy_view_copy(const exprt &lhs)
   // reused symbol id against the old view's tracked length.
   const std::string lhs_id = lhs.identifier().as_string();
   numpy_view_copy_sources_.erase(lhs_id);
-  numpy_pointer_view_lengths_.erase(lhs_id);
+  numpy_pointer_view_info_.erase(lhs_id);
 }
 
 void python_converter::detach_numpy_pointer_views_of(
@@ -2045,8 +2051,8 @@ void python_converter::detach_numpy_pointer_views_of(
 
   for (const std::string &view_id : view_ids)
   {
-    auto len_it = numpy_pointer_view_lengths_.find(view_id);
-    if (len_it == numpy_pointer_view_lengths_.end())
+    auto info_it = numpy_pointer_view_info_.find(view_id);
+    if (info_it == numpy_pointer_view_info_.end())
       continue; // a plain copied view (etapa 1); already independent
 
     symbolt *view_symbol = symbol_table_.find_symbol(view_id);
@@ -2060,7 +2066,8 @@ void python_converter::detach_numpy_pointer_views_of(
     const exprt old_ptr = symbol_expr(*view_symbol);
     const typet ptr_type = old_ptr.type();
     const typet elem_type = ns.follow(view_symbol->get_type()).subtype();
-    const std::size_t length = len_it->second;
+    const std::size_t length = info_it->second.length;
+    const long long stride = info_it->second.stride;
 
     array_typet snapshot_type(elem_type, from_integer(length, size_type()));
     symbolt &snapshot =
@@ -2070,13 +2077,21 @@ void python_converter::detach_numpy_pointer_views_of(
     target_block.copy_to_operands(snap_decl);
 
     // Copy what the view currently sees (still the pre-rebind source
-    // storage at this point in program order) into the snapshot.
+    // storage at this point in program order) into the snapshot. The
+    // source read is scaled by the view's own stride (1 for a unit-stride
+    // slice/row view, but e.g. num_cols for a column view); the snapshot
+    // itself is always densely packed, so the destination index is not.
     for (std::size_t i = 0; i < length; ++i)
     {
-      exprt idx = from_integer(i, size_type());
-      exprt src = python_expr::build_index(old_ptr, idx, elem_type);
+      // Commit 2 only ever sees stride >= 1 (unit-stride slices, row
+      // views); a negative stride (reverse slices) is Commit 5's concern
+      // and will need signed offsets here too.
+      exprt src_idx =
+        from_integer(static_cast<long long>(i) * stride, size_type());
+      exprt dst_idx = from_integer(i, size_type());
+      exprt src = python_expr::build_index(old_ptr, src_idx, elem_type);
       exprt dst =
-        python_expr::build_index(symbol_expr(snapshot), idx, elem_type);
+        python_expr::build_index(symbol_expr(snapshot), dst_idx, elem_type);
       code_assignt elem_assign(dst, src);
       elem_assign.location() = location;
       target_block.copy_to_operands(elem_assign);
@@ -2090,6 +2105,12 @@ void python_converter::detach_numpy_pointer_views_of(
     code_assignt repoint(old_ptr, new_ptr);
     repoint.location() = location;
     target_block.copy_to_operands(repoint);
+
+    // The detached view's own storage is a fresh, densely-packed snapshot,
+    // so it is unit-stride from here regardless of what stride it had into
+    // rebound_id's buffer; length and read-only-ness (a diagonal view) are
+    // unchanged by detaching.
+    info_it->second.stride = 1;
 
     // The view no longer aliases rebound_id's storage; drop the source
     // link so a later write to the (new) rebound_id array is not held

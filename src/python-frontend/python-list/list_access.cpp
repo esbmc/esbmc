@@ -1514,9 +1514,9 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
     base_ptr, from_integer(literal_start, size_type()), view_ptr_type);
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
-  converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
-                                           .as_string()] =
-    static_cast<std::size_t>(static_slice_len);
+  converter_.numpy_pointer_view_info_[converter_.current_lhs->identifier()
+                                        .as_string()] = {
+    static_cast<std::size_t>(static_slice_len), 1, false};
   return view_ptr;
 }
 
@@ -1542,9 +1542,9 @@ std::optional<exprt> python_list::try_build_row_pointer_view(
 
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
-  converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
-                                           .as_string()] =
-    static_cast<std::size_t>(info->col_count);
+  converter_.numpy_pointer_view_info_[converter_.current_lhs->identifier()
+                                        .as_string()] = {
+    static_cast<std::size_t>(info->col_count), 1, false};
   return view_ptr;
 }
 
@@ -1558,15 +1558,20 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   if (!literal_step || !array.is_symbol())
     return std::nullopt;
 
-  auto len_it =
-    converter_.numpy_pointer_view_lengths_.find(array.identifier().as_string());
-  if (len_it == converter_.numpy_pointer_view_lengths_.end())
+  auto info_it =
+    converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
+  if (info_it == converter_.numpy_pointer_view_info_.end())
+    return std::nullopt;
+  // Slicing a non-unit-stride view (column, stepped, diagonal) is outside
+  // this PR's scope: src_index below assumes the source's own logical
+  // indices map 1:1 onto pointer offsets, true only for stride 1.
+  if (info_it->second.stride != 1)
     return std::nullopt;
 
   long long literal_start = 0;
   std::optional<long long> static_slice_len = literal_slice_length(
     slice_node,
-    static_cast<long long>(len_it->second),
+    static_cast<long long>(info_it->second.length),
     step_val,
     &literal_start);
   if (!static_slice_len)
@@ -1618,9 +1623,10 @@ exprt python_list::guard_numpy_pointer_view_index(
     return index;
 
   const std::string view_id = array.identifier().as_string();
-  auto len_it = converter_.numpy_pointer_view_lengths_.find(view_id);
-  if (len_it == converter_.numpy_pointer_view_lengths_.end())
+  auto info_it = converter_.numpy_pointer_view_info_.find(view_id);
+  if (info_it == converter_.numpy_pointer_view_info_.end())
     return index;
+  const long long stride = info_it->second.stride;
 
   const typet ll_type = signedbv_typet(64);
   const locationt loc = converter_.get_location_from_decl(slice_node);
@@ -1634,7 +1640,7 @@ exprt python_list::guard_numpy_pointer_view_index(
   idx_init.location() = loc;
   converter_.add_instruction(idx_init);
 
-  exprt view_len = from_integer(len_it->second, ll_type);
+  exprt view_len = from_integer(info_it->second.length, ll_type);
   exprt idx_lt_zero =
     build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
   code_assignt normalize(
@@ -1666,7 +1672,17 @@ exprt python_list::guard_numpy_pointer_view_index(
   oob_guard.location() = loc;
   converter_.add_instruction(oob_guard);
 
-  return build_typecast(build_symbol(idx_sym), size_type());
+  // The view's own indices are logical (0..length); the pointer this index
+  // ultimately offsets is into the *source's* flat buffer, so a
+  // non-unit-stride view (column, stepped, diagonal) must scale the
+  // bounds-checked logical index by its stride before it reaches
+  // build_index's pointer arithmetic.
+  exprt scaled =
+    stride == 1
+      ? build_symbol(idx_sym)
+      : build_mul(
+          build_symbol(idx_sym), from_integer(stride, ll_type), ll_type);
+  return build_typecast(scaled, size_type());
 }
 
 exprt python_list::handle_range_slice(
@@ -1775,10 +1791,7 @@ exprt python_list::handle_range_slice(
       return build_sub(lhs, rhs, size_type());
     };
     auto size_mul = [](const exprt &lhs, const exprt &rhs) -> exprt {
-      expr2tc l, r;
-      migrate_expr(lhs, l);
-      migrate_expr(rhs, r);
-      return migrate_expr_back(mul2tc(migrate_type(size_type()), l, r));
+      return build_mul(lhs, rhs, size_type());
     };
     auto size_div = [](const exprt &lhs, const exprt &rhs) -> exprt {
       expr2tc l, r;

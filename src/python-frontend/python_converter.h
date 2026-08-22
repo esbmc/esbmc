@@ -1533,14 +1533,28 @@ private:
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
   std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
-  // A pointer-backed numpy view's element count (ADR-NP-003 etapa 2, 1-D
-  // slice views): __ESBMC_get_object_size on a pointer reports the base
-  // object's remaining size from that offset, not the view's own logical
-  // length (which may be shorter, e.g. an empty view still points at a
-  // valid position), so len() looks the value up here instead for a
-  // tracked view symbol -- see list_access.cpp's handle_range_slice and
+  // A pointer-backed numpy view's logical shape (ADR-NP-003 etapa 2 scalar
+  // strided views: 1-D unit-stride slices, 2-D row views, column views,
+  // stepped/reversed 1-D slices, diagonal views, ravel/.flat). `length` is
+  // the number of logical elements: __ESBMC_get_object_size on the pointer
+  // reports the base object's remaining size from that offset, not this
+  // (which may be shorter -- e.g. an empty view still points at a valid
+  // position), so len() looks the value up here instead for a tracked view
+  // symbol. `stride` is the step, in elements, between consecutive logical
+  // indices (1 for unit-stride slices and row views, num_cols for column
+  // views, num_cols+1 for the main diagonal, an explicit step for a
+  // stepped slice). `readonly` rejects writing through the view (the
+  // diagonal view NumPy itself treats as read-only); false for every other
+  // kind. See list_access.cpp's handle_range_slice/handle_index_access and
   // converter_funcall.cpp's len() dispatch.
-  std::unordered_map<std::string, std::size_t> numpy_pointer_view_lengths_;
+  struct numpy_scalar_pointer_view_infot
+  {
+    std::size_t length;
+    long long stride;
+    bool readonly;
+  };
+  std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
+    numpy_pointer_view_info_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
