@@ -1855,7 +1855,11 @@ goto_programt code_contractst::generate_checking_wrapper(
     add_contract_clause(requires_clause, ASSUME, "contract requires");
 
   materialize_old_snapshots_at_wrapper(
-    old_snapshots, wrapper, id2string(original_func.name), location);
+    old_snapshots,
+    wrapper,
+    id2string(original_func.name),
+    location,
+    param_extents);
 
   if (requires_reads_old)
     add_contract_clause(
@@ -2744,6 +2748,39 @@ expr2tc code_contractst::replace_old_in_expr(
     while (is_typecast2t(ptr_expr))
       ptr_expr = to_typecast2t(ptr_expr).from;
 
+    // __ESBMC_old(ptr[j]), ptr a pointer parameter: goto_sideeffects.cpp's
+    // lift produces dereference(add(typecast(old-temp-symbol), j)) rather
+    // than the named-array case's dereference(typecast(old-temp-symbol))
+    // wrapped in an outer index -- there is no array rvalue to dereference
+    // into, only a pointer, so the offset has to be folded in here instead
+    // of left for an outer index expression. #7057.
+    if (is_add2t(ptr_expr))
+    {
+      // See the matching comment in find_ptr_region_use: the lift recovers
+      // the snapshotted pointer value with one dereference before doing
+      // arithmetic, so there is a dereference2t to strip here too.
+      const add2t &add = to_add2t(ptr_expr);
+      expr2tc base = add.side_1;
+      if (is_dereference2t(base))
+        base = to_dereference2t(base).value;
+      while (is_typecast2t(base))
+        base = to_typecast2t(base).from;
+
+      if (is_symbol2t(base) && is_old_temp_symbol(base))
+      {
+        const symbol2t &sym = to_symbol2t(base);
+        for (const auto &snapshot : snapshots)
+        {
+          if (is_symbol2t(snapshot.original_expr))
+          {
+            const symbol2t &snap_sym = to_symbol2t(snapshot.original_expr);
+            if (sym.thename == snap_sym.thename)
+              return index2tc(expr->type, snapshot.snapshot_var, add.side_2);
+          }
+        }
+      }
+    }
+
     if (is_symbol2t(ptr_expr))
     {
       const symbol2t &sym = to_symbol2t(ptr_expr);
@@ -2820,6 +2857,58 @@ expr2tc code_contractst::replace_old_in_expr(
 
 // ========== Old snapshot collection and materialization helpers ==========
 
+/// After the goto_sideeffects.cpp pointer-parameter lift,
+/// __ESBMC_old(ptr[j]) reaches this pass as
+/// dereference2t(add2t(typecast2t(old-temp-symbol), j)) -- the
+/// pointer-region counterpart of the array case's already-working
+/// index2t(dereference2t(typecast2t(old-temp-symbol)), j). Find such a use
+/// of old_temp_thename anywhere under expr, recording its index expression
+/// and element type. #7057.
+static bool find_ptr_region_use(
+  const expr2tc &expr,
+  const irep_idt &old_temp_thename,
+  expr2tc &out_index,
+  type2tc &out_elem_type)
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (is_dereference2t(expr))
+  {
+    const dereference2t &deref = to_dereference2t(expr);
+    expr2tc ptr_expr = deref.value;
+    while (is_typecast2t(ptr_expr))
+      ptr_expr = to_typecast2t(ptr_expr).from;
+
+    if (is_add2t(ptr_expr))
+    {
+      // The pointer-region lift (goto_sideeffects.cpp) recovers the
+      // snapshotted pointer VALUE with one dereference before doing
+      // arithmetic on it (T**  -> deref -> T*), so the add's first operand
+      // is dereference2t(typecast2t(old-temp-symbol)), not just
+      // typecast2t(old-temp-symbol).
+      expr2tc base = to_add2t(ptr_expr).side_1;
+      if (is_dereference2t(base))
+        base = to_dereference2t(base).value;
+      while (is_typecast2t(base))
+        base = to_typecast2t(base).from;
+      if (is_symbol2t(base) && to_symbol2t(base).thename == old_temp_thename)
+      {
+        out_index = to_add2t(ptr_expr).side_2;
+        out_elem_type = deref.type;
+        return true;
+      }
+    }
+  }
+
+  bool found = false;
+  expr->foreach_operand([&](const expr2tc &op) {
+    if (!found)
+      found = find_ptr_region_use(op, old_temp_thename, out_index, out_elem_type);
+  });
+  return found;
+}
+
 std::vector<code_contractst::old_snapshot_t>
 code_contractst::collect_old_snapshots_from_body(
   const goto_programt &function_body) const
@@ -2893,6 +2982,73 @@ code_contractst::collect_old_snapshots_from_body(
         "Found {} temp variables for the same __ESBMC_old expression - all "
         "will map to one snapshot",
         info.temp_vars.size());
+    }
+  }
+
+  // Classify: does this old-temp's hoisted symbol appear under a
+  // pointer-region dereference shape somewhere in the body -- i.e. was this
+  // __ESBMC_old(ptr[j]) with ptr a pointer parameter, not a named array or a
+  // scalar? #7057.
+  for (auto &snapshot : old_snapshots)
+  {
+    // At this point, before materialize_old_snapshots_at_wrapper runs,
+    // snapshot_var still holds the Clang-hoisted temp from the function
+    // body (see the comment at its use in materialize_old_snapshots_at_wrapper).
+    if (!is_symbol2t(snapshot.snapshot_var))
+      continue;
+    const irep_idt &temp_thename = to_symbol2t(snapshot.snapshot_var).thename;
+
+    expr2tc found_index;
+    type2tc found_elem_type;
+    bool found = false;
+    forall_goto_program_instructions (it, function_body)
+    {
+      if (find_ptr_region_use(it->code, temp_thename, found_index, found_elem_type))
+      {
+        found = true;
+        break;
+      }
+      if (find_ptr_region_use(it->guard, temp_thename, found_index, found_elem_type))
+      {
+        found = true;
+        break;
+      }
+    }
+
+    if (found)
+    {
+      snapshot.is_ptr_region = true;
+      snapshot.region_index = found_index;
+      snapshot.region_elem_type = found_elem_type;
+    }
+  }
+
+  // A pointer symbol used both as a bare __ESBMC_old(ptr) (pointer-value
+  // snapshot) and as a region __ESBMC_old(ptr[j]) within the same contract
+  // is ambiguous to materialize (one shared temp, two incompatible
+  // treatments) -- reject rather than silently pick one. Not known to occur
+  // in practice; flagged so a real case surfaces as a clear diagnostic
+  // rather than a miscompile. #7057.
+  {
+    std::map<irep_idt, bool> region_by_expr;
+    for (const auto &snapshot : old_snapshots)
+    {
+      if (!is_symbol2t(snapshot.original_expr))
+        continue;
+      const irep_idt &thename = to_symbol2t(snapshot.original_expr).thename;
+      auto it = region_by_expr.find(thename);
+      if (it == region_by_expr.end())
+        region_by_expr.emplace(thename, snapshot.is_ptr_region);
+      else if (it->second != snapshot.is_ptr_region)
+      {
+        log_error(
+          "__ESBMC_old({}) is used both as a whole-pointer snapshot and as "
+          "a per-element __ESBMC_old({}[i]) snapshot in the same contract; "
+          "this is not supported (#7057)",
+          id2string(thename),
+          id2string(thename));
+        abort();
+      }
     }
   }
 
@@ -3768,7 +3924,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
   std::vector<code_contractst::old_snapshot_t> &old_snapshots,
   goto_programt &wrapper,
   const std::string &func_name,
-  const locationt &location) const
+  const locationt &location,
+  const std::map<irep_idt, param_extentt> &param_extents) const
 {
   // Generate snapshot assignments in the wrapper BEFORE calling the original function
   // We'll update old_snapshots to contain new wrapper snapshot variables
@@ -3801,22 +3958,134 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
     }
     else
     {
-      // Create a NEW snapshot variable for the wrapper
-      new_snapshot_var = create_snapshot_variable(
-        original_expr, func_name + "_wrapper", unique_snapshot_count++);
+      const size_t snap_idx = unique_snapshot_count++;
 
-      // Generate snapshot declaration
-      goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
-      decl_inst->code = code_decl2tc(
-        original_expr->type, to_symbol2t(new_snapshot_var).thename);
-      decl_inst->location = location;
-      decl_inst->location.comment("__ESBMC_old snapshot declaration");
+      if (old_snapshots[i].is_ptr_region)
+      {
+        // __ESBMC_old(ptr[j]): no named object to snapshot -- only N bytes
+        // reachable through ptr, N given by ptr's __ESBMC_is_fresh extent.
+        // Materialize a real array-typed temp and fill it with an explicit
+        // element-wise copy loop; there is no array rvalue to read through
+        // a pointer in one whole-value ASSIGN the way the named-array case
+        // above can. #7057.
+        if (!is_symbol2t(original_expr))
+        {
+          log_error(
+            "{}: __ESBMC_old(...[...]) region snapshot expected a bare "
+            "pointer parameter symbol (#7057)",
+            func_name);
+          abort();
+        }
+        const irep_idt &ptr_thename = to_symbol2t(original_expr).thename;
+        auto extent_it = param_extents.find(ptr_thename);
+        if (extent_it == param_extents.end() || !extent_it->second.justified)
+        {
+          log_error(
+            "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
+            "stated by an unconditional, direct __ESBMC_is_fresh({}, N); "
+            "none found (#7057)",
+            func_name,
+            id2string(ptr_thename),
+            id2string(ptr_thename));
+          abort();
+        }
 
-      // Generate snapshot assignment: new_snapshot_var = original_expr
-      goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
-      assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
-      assign_inst->location = location;
-      assign_inst->location.comment("__ESBMC_old snapshot assignment");
+        const type2tc &elem_type = old_snapshots[i].region_elem_type;
+        type2tc idx_type = size_type2();
+
+        BigInt elem_sz = type_byte_size(elem_type, &ns);
+        const expr2tc &bytes = extent_it->second.bytes;
+        expr2tc n_elems = typecast2tc(
+          idx_type,
+          div2tc(bytes->type, bytes, constant_int2tc(bytes->type, elem_sz)));
+        simplify(n_elems);
+
+        type2tc arr_type = array_type2tc(elem_type, n_elems, false);
+        new_snapshot_var = declare_local_symbol(
+          "__ESBMC_old_region_snapshot_" + func_name + "_" +
+            std::to_string(snap_idx),
+          arr_type);
+
+        goto_programt::targett arr_decl = wrapper.add_instruction(DECL);
+        arr_decl->code =
+          code_decl2tc(arr_type, to_symbol2t(new_snapshot_var).thename);
+        arr_decl->location = location;
+        arr_decl->location.comment("__ESBMC_old region snapshot declaration");
+
+        expr2tc i_sym = declare_local_symbol(
+          "__ESBMC_old_region_i_" + func_name + "_" + std::to_string(snap_idx),
+          idx_type);
+
+        goto_programt::targett i_decl = wrapper.add_instruction(DECL);
+        i_decl->code = code_decl2tc(idx_type, to_symbol2t(i_sym).thename);
+        i_decl->location = location;
+
+        goto_programt::targett i_init = wrapper.add_instruction(ASSIGN);
+        i_init->code = code_assign2tc(i_sym, gen_zero(idx_type));
+        i_init->location = location;
+
+        // i = 0; while (i < n_elems) { snap[i] = *(ptr + i); i = i + 1; }
+        // Built as separate fragments with their own stable targets before
+        // being appended, following goto_convertt::convert_for's pattern
+        // for a forward goto whose target doesn't exist yet.
+        goto_programt tmp_exit;
+        goto_programt::targett loop_exit = tmp_exit.add_instruction(SKIP);
+        loop_exit->location = location;
+        loop_exit->location.comment("__ESBMC_old region snapshot: loop exit");
+
+        goto_programt tmp_head;
+        goto_programt::targett loop_head = tmp_head.add_instruction(SKIP);
+        loop_head->location = location;
+
+        goto_programt tmp_body;
+        goto_programt::targett cond_goto = tmp_body.add_instruction();
+        cond_goto->make_goto(loop_exit);
+        cond_goto->guard = not2tc(lessthan2tc(i_sym, n_elems));
+        cond_goto->location = location;
+
+        expr2tc elem_addr = add2tc(original_expr->type, original_expr, i_sym);
+        expr2tc elem_val = dereference2tc(elem_type, elem_addr);
+        expr2tc dest_elem = index2tc(elem_type, new_snapshot_var, i_sym);
+
+        goto_programt::targett copy_inst = tmp_body.add_instruction(ASSIGN);
+        copy_inst->code = code_assign2tc(dest_elem, elem_val);
+        copy_inst->location = location;
+        copy_inst->location.comment(
+          "__ESBMC_old region snapshot: capture element");
+
+        goto_programt::targett incr_inst = tmp_body.add_instruction(ASSIGN);
+        incr_inst->code = code_assign2tc(
+          i_sym, add2tc(idx_type, i_sym, constant_int2tc(idx_type, BigInt(1))));
+        incr_inst->location = location;
+
+        goto_programt::targett back_goto = tmp_body.add_instruction();
+        back_goto->make_goto(loop_head);
+        back_goto->guard = gen_true_expr();
+        back_goto->location = location;
+
+        wrapper.destructive_append(tmp_head);
+        wrapper.destructive_append(tmp_body);
+        wrapper.destructive_append(tmp_exit);
+      }
+      else
+      {
+        // Create a NEW snapshot variable for the wrapper
+        new_snapshot_var = create_snapshot_variable(
+          original_expr, func_name + "_wrapper", snap_idx);
+
+        // Generate snapshot declaration
+        goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
+        decl_inst->code = code_decl2tc(
+          original_expr->type, to_symbol2t(new_snapshot_var).thename);
+        decl_inst->location = location;
+        decl_inst->location.comment("__ESBMC_old snapshot declaration");
+
+        // Generate snapshot assignment: new_snapshot_var = original_expr
+        goto_programt::targett assign_inst = wrapper.add_instruction(ASSIGN);
+        assign_inst->code = code_assign2tc(new_snapshot_var, original_expr);
+        assign_inst->location = location;
+        assign_inst->location.comment("__ESBMC_old snapshot assignment");
+      }
 
       // Remember this mapping
       expr_to_wrapper_snapshot[original_expr] = new_snapshot_var;
