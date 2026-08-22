@@ -114,6 +114,14 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
+  // Before the recursion, so the located spelling wins over the unlocated one
+  // the walk would otherwise reach first.
+  if (sole_adjuster && is_code_expression2t(expr))
+  {
+    const code_expression2t &stmt = to_code_expression2t(expr);
+    declare_implicit_callee(stmt.operand, stmt.location);
+  }
+
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
 
   if (is_index2t(expr))
@@ -777,7 +785,9 @@ void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
 }
 
-void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
+void clang_c_adjust_irep2::declare_implicit_callee(
+  const expr2tc &expr,
+  const locationt &stmt_location)
 {
   // A bare `f(x);` statement is a sideeffect2t of kind function_call, not a
   // code_function_call2t; both spellings reach here.
@@ -789,13 +799,19 @@ void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
     callee = call.function;
     loc = call.location;
   }
-  else
+  else if (is_sideeffect2t(expr))
   {
     const sideeffect2t &se = to_sideeffect2t(expr);
     if (se.kind != sideeffect_allockind::function_call)
       return;
     callee = se.operand;
+    // sideeffect2t has no location of its own. The enclosing statement's is
+    // the call's only when the call is the whole statement, which is the one
+    // position this is passed from.
+    loc = stmt_location;
   }
+  else
+    return;
 
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;

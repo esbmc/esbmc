@@ -19,6 +19,15 @@
 #  define OM_NULLPTR 0
 #endif
 
+// Relaxed constexpr: a function body with loops or multiple statements is
+// only constexpr from C++14. char_traits::length loops, so OM_CONSTEXPR
+// (which starts at C++11) would be ill-formed there.
+#if __cplusplus >= 201402L
+#  define OM_CONSTEXPR14 constexpr
+#else
+#  define OM_CONSTEXPR14
+#endif
+
 // A static data member with an in-class initialiser. OM_CONSTEXPR alone is not
 // enough: eliding `constexpr` would leave a non-const member, which C++03 does
 // not let you initialise in-class. Only valid for integral and enum types.
