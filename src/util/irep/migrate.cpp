@@ -610,6 +610,20 @@ static void promote_complex_operand(const type2tc &t, expr2tc &op)
   op = constant_struct2tc(t, std::vector<expr2tc>{op, gen_zero(et)});
 }
 
+/// C11 6.3.2.1p3. clang_c_convert drops CK_ArrayToPointerDecay and leaves
+/// clang_c_adjust to insert the `&a[0]`, so an expression migrated before that
+/// pass -- which --clang-c-irep2-adjust-only does -- still carries the array,
+/// and add2t/sub2t assert on it (esbmc/esbmc#4715).
+static void decay_array_operand(expr2tc &op)
+{
+  if (is_nil_expr(op) || !is_array_type(op->type))
+    return;
+
+  const type2tc &elem = to_array_type(op->type).subtype;
+  op = address_of2tc(
+    elem, index2tc(elem, op, gen_zero(migrate_type(index_type()))));
+}
+
 static void
 convert_operand_pair(const exprt &expr, expr2tc &arg1, expr2tc &arg2)
 {
@@ -1428,6 +1442,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     convert_operand_pair(expr, side1, side2);
+    decay_array_operand(side1);
+    decay_array_operand(side2);
 
     new_expr_ref = add2tc(type, side1, side2);
     return;
@@ -1445,6 +1461,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
+    decay_array_operand(side1);
+    decay_array_operand(side2);
 
     new_expr_ref = sub2tc(type, side1, side2);
     return;
