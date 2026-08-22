@@ -380,6 +380,15 @@ private:
   {
     expr2tc original_expr; ///< Expression inside __ESBMC_old()
     expr2tc snapshot_var;  ///< Snapshot variable symbol
+
+    /// True for __ESBMC_old(ptr[j]) where ptr is a pointer parameter (not a
+    /// named array): original_expr is the pointer itself, snapshot_var
+    /// becomes an array-typed copy of its is_fresh'd extent (materialized by
+    /// a copy loop, not a single whole-value ASSIGN), and region_index/
+    /// region_elem_type describe the element access. #7057.
+    bool is_ptr_region = false;
+    expr2tc region_index;     ///< nil unless is_ptr_region: the index expr
+    type2tc region_elem_type; ///< nil unless is_ptr_region: element type
   };
 
   /// \brief Check if expression is an __ESBMC_old() call
@@ -533,16 +542,23 @@ private:
     const locationt &location);
 
   /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
-  /// Creates DECL and ASSIGN instructions for snapshot variables before function call
+  /// Creates DECL and ASSIGN instructions for snapshot variables before function call.
+  /// A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer parameter) instead
+  /// gets a DECL for a new array-typed temp plus a hand-built copy loop
+  /// sized by param_extents, since there is no array rvalue to read through
+  /// the pointer in one ASSIGN (#7057).
   /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
   /// \param wrapper GOTO program to add snapshot instructions to
   /// \param func_name Function name for unique variable naming
   /// \param location Source location for generated instructions
+  /// \param param_extents Byte extent of each is_fresh'd pointer parameter,
+  ///   needed only for region snapshots
   void materialize_old_snapshots_at_wrapper(
     std::vector<old_snapshot_t> &old_snapshots,
     goto_programt &wrapper,
     const std::string &func_name,
-    const locationt &location) const;
+    const locationt &location,
+    const std::map<irep_idt, param_extentt> &param_extents) const;
 
   /// \brief Materialize old snapshots at call site (replace-call mode)
   /// Creates DECL and ASSIGN instructions for snapshot variables at call location
