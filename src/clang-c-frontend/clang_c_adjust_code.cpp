@@ -22,6 +22,14 @@ static bool carries_derived_to_base(const exprt &arg)
   }
 }
 
+void clang_c_adjust::adjust_call_argument(exprt &arg)
+{
+  if (arg.is_index())
+    adjust_index(to_index_expr(arg));
+  else if (carries_derived_to_base(arg))
+    adjust_expr(arg);
+}
+
 void clang_c_adjust::adjust_code(codet &code)
 {
   const irep_idt &statement = code.statement();
@@ -57,15 +65,8 @@ void clang_c_adjust::adjust_code(codet &code)
       if (op.is_index())
         adjust_index(to_index_expr(op));
       else if (op.id() == "arguments")
-      {
         for (auto &arg : op.operands())
-        {
-          if (arg.is_index())
-            adjust_index(to_index_expr(arg));
-          else if (carries_derived_to_base(arg))
-            adjust_expr(arg);
-        }
-      }
+          adjust_call_argument(arg);
     }
   }
   else if (statement == "decl-block")

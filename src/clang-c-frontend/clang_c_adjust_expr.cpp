@@ -199,15 +199,11 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_ptr_mem(expr);
   }
-  else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
-  {
-    adjust_operands(expr);
-    adjust_base_to_derived(expr);
-  }
   else
   {
     // Just check operands of everything else
     adjust_operands(expr);
+    adjust_base_to_derived(expr);
   }
 }
 
@@ -298,6 +294,30 @@ static bool base_subobject_offset(
   return false;
 }
 
+// How far `c`, a component of the base, has moved in the derived struct.
+// Nothing if the derived has no such member: matching is on type and on which
+// class declared the member, not just on the name, because
+// is_duplicate_component merges by name alone -- two bases with a same-named
+// member share one slot, and a name-only match would confidently land in the
+// other base's storage. A member the base itself declares is owned by it.
+static std::optional<BigInt> member_delta(
+  const namespacet &ns,
+  const struct_typet &ds,
+  const type2tc &d2,
+  const type2tc &b2,
+  const struct_typet::componentt &c,
+  const irep_idt &base_id)
+{
+  const struct_typet::componentt &dc = ds.get_component(c.get_name());
+  const irep_idt owner =
+    c.get("#base_owner").empty() ? base_id : c.get("#base_owner");
+  if (dc.is_nil() || dc.type() != c.type() || dc.get("#base_owner") != owner)
+    return std::nullopt;
+
+  return member_offset(d2, c.get_name(), &ns) -
+         member_offset(b2, c.get_name(), &ns);
+}
+
 // Displacement of `base_id`'s members inside the flattened `derived` layout,
 // which get_base_components_methods produces for any hierarchy containing a
 // virtual base. Every member of the base must appear in the derived struct at
@@ -340,26 +360,14 @@ static bool flattened_base_offset(
   {
     if (c.get_is_padding() || c.get_is_unnamed_bitfield())
       continue;
-    // Match on type and on which class declared the member, not just on the
-    // name: is_duplicate_component merges by name alone, so two bases with a
-    // same-named member share one slot, and a name-only match would
-    // confidently land in the other base's storage. A member the base itself
-    // declares is owned by the base.
-    const struct_typet::componentt &dc = ds.get_component(c.get_name());
-    const irep_idt owner =
-      c.get("#base_owner").empty() ? base_id : c.get("#base_owner");
-    if (dc.is_nil() || dc.type() != c.type() || dc.get("#base_owner") != owner)
-      return false;
 
-    const BigInt d_off = member_offset(d2, c.get_name(), &ns);
-    const BigInt b_off = member_offset(b2, c.get_name(), &ns);
-    if (!seen)
-    {
-      delta = d_off - b_off;
-      seen = true;
-    }
-    else if (d_off - b_off != delta)
+    const std::optional<BigInt> d = member_delta(ns, ds, d2, b2, c, base_id);
+    if (!d)
       return false;
+    if (seen && *d != delta)
+      return false;
+    delta = *d;
+    seen = true;
   }
 
   if (!seen || delta < 0)
@@ -440,6 +448,8 @@ void clang_c_adjust::adjust_derived_to_base(
 
 void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 {
+  if (!expr.get_bool("#base_to_derived"))
+    return;
   expr.remove("#base_to_derived");
 
   if (expr.operands().size() != 1)
