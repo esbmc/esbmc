@@ -809,6 +809,7 @@ struct fixed_2d_shape_info
   typet elem_type;
   long long row_count;
   long long col_count;
+  typet row_type;
 };
 
 // Resolves array's compile-time-known 2-D shape (row_count x col_count) and
@@ -847,7 +848,7 @@ get_fixed_2d_shape_info(const exprt &array, const contextt &symbol_table)
   if (row_count < 0 || col_count < 0)
     return std::nullopt;
 
-  return fixed_2d_shape_info{elem_type, row_count, col_count};
+  return fixed_2d_shape_info{elem_type, row_count, col_count, row_type};
 }
 
 std::optional<row_pointer_view_info> get_row_pointer_view_info(
@@ -1798,6 +1799,137 @@ python_list::try_build_diagonal_pointer_view(const exprt &array, long long k)
     static_cast<std::size_t>(info->length),
     info->stride,
     /*readonly=*/true);
+}
+
+// np.trace(a, offset=k): sum of the same elements np.diagonal(a, k) would
+// view, without building a view -- a scalar reduction, not aliasing.
+std::optional<exprt>
+python_list::build_trace_reduction(const exprt &array, long long k)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  std::optional<diagonal_pointer_view_info> info =
+    get_diagonal_pointer_view_info(array, k, converter_.symbol_table());
+  if (!info)
+    return std::nullopt;
+
+  if (info->length <= 0)
+    return from_integer(0, shape->elem_type);
+
+  long long row = k >= 0 ? 0 : -k;
+  long long col = k >= 0 ? k : 0;
+
+  exprt sum;
+  for (long long i = 0; i < info->length; ++i, ++row, ++col)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(row, size_type()), shape->row_type);
+    exprt elem_expr =
+      build_index(row_expr, from_integer(col, size_type()), shape->elem_type);
+    sum = i == 0 ? elem_expr : build_add(sum, elem_expr, shape->elem_type);
+  }
+  return sum;
+}
+
+namespace
+{
+// fill_diagonal accepts a scalar or a 1-D literal of scalars; an array/
+// pointer-typed value (e.g. another ndarray passed by name) would otherwise
+// be silently reinterpreted as an integer by code_assignt.
+void reject_non_scalar_fill_diagonal_value(const typet &value_type)
+{
+  if (value_type.is_array() || value_type.is_pointer())
+    throw std::runtime_error(
+      "TypeError: numpy fill_diagonal value must be a scalar or 1-D "
+      "literal");
+}
+} // namespace
+
+// Evaluates value_node once and snapshots it into a fresh temporary, rather
+// than letting the caller re-embed the same expression at multiple write
+// sites: if it reads the array being mutated (e.g. a[0][0] + a[1][1]),
+// re-evaluating it after earlier positions are already overwritten would
+// observe partially-mutated state instead of the single, pre-mutation value
+// NumPy computes once. Throws if the value isn't scalar-typed.
+exprt python_list::snapshot_scalar_value(const nlohmann::json &value_node)
+{
+  exprt raw_value = converter_.get_expr(value_node);
+  reject_non_scalar_fill_diagonal_value(raw_value.type());
+
+  symbolt &tmp = converter_.create_tmp_symbol(
+    value_node, "$fill_diagonal_value$", raw_value.type(), exprt());
+  locationt location = converter_.get_location_from_decl(value_node);
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt init(build_symbol(tmp), raw_value);
+  init.location() = location;
+  converter_.add_instruction(init);
+  return build_symbol(tmp);
+}
+
+// np.fill_diagonal(a, value): mutates a's main diagonal in place, using the
+// same offset/stride math as np.diagonal(a)/np.trace(a) with k=0. `value` is
+// either a single scalar (snapshotted once and reused for every position) or
+// a List literal whose length must match the diagonal's exactly, matching
+// NumPy's own broadcasting rule for a 1-D val (a length mismatch raises
+// ValueError there too, rather than repeating or truncating).
+bool python_list::try_build_fill_diagonal_mutation(
+  const exprt &array,
+  const nlohmann::json &value_node)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return false;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return false;
+
+  std::optional<diagonal_pointer_view_info> info =
+    get_diagonal_pointer_view_info(array, /*k=*/0, converter_.symbol_table());
+  if (!info || info->length <= 0)
+    return true;
+
+  const bool value_is_list_literal = value_node.value("_type", "") == "List";
+  const nlohmann::json *elts =
+    value_is_list_literal && value_node.contains("elts") ? &value_node["elts"]
+                                                         : nullptr;
+  if (
+    value_is_list_literal &&
+    (!elts || static_cast<long long>(elts->size()) != info->length))
+    throw std::runtime_error(
+      "ValueError: could not broadcast fill_diagonal value into the "
+      "diagonal's shape");
+
+  const exprt scalar_value =
+    value_is_list_literal ? exprt() : snapshot_scalar_value(value_node);
+
+  for (long long i = 0; i < info->length; ++i)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(i, size_type()), shape->row_type);
+    exprt elem_lhs =
+      build_index(row_expr, from_integer(i, size_type()), shape->elem_type);
+    exprt value_expr = scalar_value;
+    if (value_is_list_literal)
+    {
+      value_expr = converter_.get_expr((*elts)[i]);
+      reject_non_scalar_fill_diagonal_value(value_expr.type());
+    }
+    converter_.add_instruction(code_assignt(elem_lhs, value_expr));
+  }
+  return true;
 }
 
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(

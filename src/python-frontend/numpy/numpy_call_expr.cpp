@@ -2783,6 +2783,17 @@ numpy_call_expr::~numpy_call_expr()
   converter_.build_static_lists = false;
 }
 
+const nlohmann::json *
+numpy_call_expr::find_keyword_arg(const std::string &name) const
+{
+  if (!call_.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call_["keywords"])
+    if (kw["_type"] == "keyword" && !kw["arg"].is_null() && kw["arg"] == name)
+      return &kw["value"];
+  return nullptr;
+}
+
 template <typename T>
 static auto create_list(int size, T default_value)
 {
@@ -7037,30 +7048,20 @@ exprt numpy_call_expr::get()
       throw std::runtime_error(
         "TypeError: numpy.diagonal() requires an array argument");
 
-    auto find_keyword = [&](const std::string &name) -> const nlohmann::json * {
-      if (!call_.contains("keywords"))
-        return nullptr;
-      for (const auto &kw : call_["keywords"])
-        if (
-          kw["_type"] == "keyword" && !kw["arg"].is_null() && kw["arg"] == name)
-          return &kw["value"];
-      return nullptr;
-    };
-
     // NumPy's diagonal(a, offset=0, axis1=0, axis2=1) supports arbitrary
     // axis1/axis2 for arrays with more than 2 dimensions; this ADR is
     // 2-D-only, so anything other than the default pair is out of scope.
     // axis1/axis2 are the 3rd/4th positional parameters, so a caller can
     // pass them positionally instead of by keyword.
     if (
-      call_["args"].size() > 2 || find_keyword("axis1") ||
-      find_keyword("axis2"))
+      call_["args"].size() > 2 || find_keyword_arg("axis1") ||
+      find_keyword_arg("axis2"))
       throw std::runtime_error(
         "TypeError: numpy diagonal only supports the default axis1/axis2");
 
     long long offset = 0;
     const nlohmann::json *offset_node =
-      call_["args"].size() > 1 ? &call_["args"][1] : find_keyword("offset");
+      call_["args"].size() > 1 ? &call_["args"][1] : find_keyword_arg("offset");
     if (offset_node)
     {
       numeric_value offset_value;
@@ -7082,6 +7083,72 @@ exprt numpy_call_expr::get()
     throw std::runtime_error(
       "TypeError: numpy.diagonal() is only supported when assigned "
       "directly to a variable");
+  }
+
+  if (function == "trace")
+  {
+    if (call_["args"].empty())
+      throw std::runtime_error(
+        "TypeError: numpy.trace() requires an array argument");
+
+    // Same 2-D-only scope as np.diagonal: axis1/axis2 are trace's 3rd/4th
+    // positional parameters (trace(a, offset=0, axis1=0, axis2=1, dtype=None,
+    // out=None)), so passing axis1 alone already means a 3rd positional arg
+    // (size() > 2), one before dtype/out's own threshold below.
+    if (
+      call_["args"].size() > 2 || find_keyword_arg("axis1") ||
+      find_keyword_arg("axis2"))
+      throw std::runtime_error(
+        "TypeError: numpy trace only supports the default axis1/axis2");
+
+    // Any positional dtype/out is already excluded by the axis1/axis2 check
+    // above (dtype/out sit two positions further out), so only their keyword
+    // forms need checking here.
+    if (find_keyword_arg("dtype") || find_keyword_arg("out"))
+      throw std::runtime_error(
+        "TypeError: numpy trace does not support out/dtype");
+
+    long long offset = 0;
+    const nlohmann::json *offset_node =
+      call_["args"].size() > 1 ? &call_["args"][1] : find_keyword_arg("offset");
+    if (offset_node)
+    {
+      numeric_value offset_value;
+      if (
+        !try_extract_numeric_constant(*offset_node, offset_value) ||
+        !offset_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy trace requires a literal offset");
+      offset = offset_value.int_value;
+    }
+
+    exprt array_expr = converter_.get_expr(call_["args"][0]);
+    python_list list(converter_, call_);
+    if (
+      std::optional<exprt> sum = list.build_trace_reduction(array_expr, offset))
+      return *sum;
+
+    throw std::runtime_error("TypeError: numpy.trace() requires a 2-D array");
+  }
+
+  if (function == "fill_diagonal")
+  {
+    if (call_["args"].size() < 2)
+      throw std::runtime_error(
+        "TypeError: numpy.fill_diagonal() requires an array and a value "
+        "argument");
+
+    if (call_["args"].size() > 2 || find_keyword_arg("wrap"))
+      throw std::runtime_error(
+        "TypeError: numpy fill_diagonal does not support wrap");
+
+    exprt array_expr = converter_.get_expr(call_["args"][0]);
+    python_list list(converter_, call_);
+    if (!list.try_build_fill_diagonal_mutation(array_expr, call_["args"][1]))
+      throw std::runtime_error(
+        "TypeError: numpy fill_diagonal requires a 2-D array");
+
+    return exprt();
   }
 
   if (function == "expand_dims")

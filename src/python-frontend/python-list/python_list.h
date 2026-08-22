@@ -211,6 +211,34 @@ public:
   try_build_diagonal_pointer_view(const exprt &array, long long k);
 
   /**
+   * @brief np.trace(a, offset=k): sum of the elements np.diagonal(a, k)
+   * would view, computed directly as a scalar reduction (no view is built).
+   * Public for the same reason as try_build_diagonal_pointer_view. Declines
+   * for a non-symbol/non-numpy-tracked source or a source that isn't a
+   * fixed-shape 2-D array.
+   * @param array Source 2-D array expression.
+   * @param k     Literal diagonal offset (0 = main diagonal).
+   */
+  std::optional<exprt> build_trace_reduction(const exprt &array, long long k);
+
+  /**
+   * @brief np.fill_diagonal(a, value): mutates a's main diagonal in place
+   * via converter_.add_instruction, using the same offset/stride math as
+   * try_build_diagonal_pointer_view/build_trace_reduction with k=0. `value`
+   * is either a scalar expression or a List literal whose length must equal
+   * the diagonal's exactly (throws ValueError otherwise, matching NumPy's
+   * own broadcasting rule for a 1-D val). Public for the same reason as
+   * try_build_diagonal_pointer_view. Declines (returns false) for a
+   * non-symbol/non-numpy-tracked source or a source that isn't a
+   * fixed-shape 2-D array.
+   * @param array      Source 2-D array expression.
+   * @param value_node Raw AST node for the value argument.
+   */
+  bool try_build_fill_diagonal_mutation(
+    const exprt &array,
+    const nlohmann::json &value_node);
+
+  /**
    * @brief Lower an N-D mixed slice/index tuple subscript with one or more
    * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
    * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved
@@ -645,6 +673,12 @@ public:
 
 private:
   friend class python_dict_handler;
+
+  // Evaluates value_node once and snapshots it into a fresh temporary, so a
+  // multi-write caller (try_build_fill_diagonal_mutation) can reuse the
+  // snapshot instead of re-embedding (and re-evaluating) the same expression
+  // at each write site. Throws if the value isn't scalar-typed.
+  exprt snapshot_scalar_value(const nlohmann::json &value_node);
 
   // Repeat the elements in `list_elems` `count` times at runtime (`count` may
   // be any integer expression: a constant, a symbol like `n`, or a compound

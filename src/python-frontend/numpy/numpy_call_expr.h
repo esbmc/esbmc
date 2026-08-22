@@ -36,4 +36,10 @@ private:
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
   size_t get_dtype_size() const;
+
+  // Looks up a keyword argument by name in the call's "keywords" array (e.g.
+  // offset=/axis1=/dtype=), or nullptr if absent. Shared by every 2-D-only
+  // view/reduction dispatch (diagonal/trace/fill_diagonal) that rejects
+  // out-of-scope keyword arguments.
+  const nlohmann::json *find_keyword_arg(const std::string &name) const;
 };
