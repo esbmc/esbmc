@@ -91,6 +91,41 @@ class GeneratorMixin:
                 best_idx = i
         return best_idx
 
+    def _rename_shadowing_targets(self, node):
+        """Rename a comprehension target that shadows a known outer variable.
+
+        Python 3 scopes a comprehension's target to the comprehension, so the
+        rename is semantically free. Without it the outer and inner bindings
+        share one symbol, and an outer object rebound to elements aborts the
+        converter in member2t.
+        """
+        for generator in node.generators:
+            if not isinstance(generator.target, ast.Name):
+                continue
+            old = generator.target.id
+            if old not in self.known_variable_types:
+                continue
+
+            new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
+            self.listcomp_counter += 1
+            index = node.generators.index(generator)
+            scopes = [node.elt] + list(generator.ifs)
+            for later in node.generators[index + 1:]:
+                scopes.append(later.iter)
+                scopes.extend(later.ifs)
+            for scope in scopes:
+                for name in ast.walk(scope):
+                    if isinstance(name, ast.Name) and name.id == old:
+                        name.id = new
+            generator.target.id = new
+        return node
+
+    def visit_GeneratorExp(self, node):
+        """A generator expression reaches the converter unlowered, so rename its
+        shadowing target here rather than in the comprehension lowering."""
+        node = self._rename_shadowing_targets(node)
+        return self.generic_visit(node)
+
     def _hoist_shadowed_iter(self, gen_iter, bound_names, node):
         """Evaluate a leftmost iterable that the comprehension itself shadows.
 
@@ -125,6 +160,8 @@ class GeneratorMixin:
         for generator in node.generators:
             if getattr(generator, "is_async", False):
                 raise NotImplementedError("Async list comprehensions are not supported")
+
+        node = self._rename_shadowing_targets(node)
 
         # Create a unique temporary list that will collect results.
         tmp_name = f"ESBMC_listcomp_{self.listcomp_counter}"
