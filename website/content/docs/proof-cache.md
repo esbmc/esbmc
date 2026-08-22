@@ -110,9 +110,10 @@ on, so the blast radius follows the code, not the line numbers:
 - Adding or removing a function, or anything that changes the program's set of
   objects, can invalidate claims that touch memory even in untouched functions.
 
-Measured across `regression/esbmc`, inserting a statement into one function left
-**90.9%** of a file's claims (350 of 385) reusable, with every verdict
-unchanged.
+Measured over 671 regression files, inserting a statement into one function
+left **84.9%** of a file's claims reusable, and a re-run with no edit at all
+reused **93.6%** — the shortfall being claims the solver refuted, which are
+never stored. Every verdict was unchanged.
 
 ## What a claim is keyed on
 
@@ -194,11 +195,20 @@ Comparing the dumps from two runs shows which claims changed identity.
 ## Cost
 
 Keying a claim means hashing its sliced cone, which is work a run without the
-cache does not do. On a solver-heavy task that cost is around 30% of the run,
-so a **first** run is slower, and a run that can never hit is slower for
-nothing. The cache pays from the second run onwards, and only where the solver
-is a real share of the time: on a small program, parsing and symbolic execution
-dominate and no proof cache can help.
+cache does not do, and it is paid per claim on every run — a miss costs it, and
+so does a hit. The median claim takes roughly 0.2 ms to key, with a long tail
+on claims whose cones are large.
+
+What that buys back is capped by the solver's share of the run, so the quantity
+that decides whether the cache pays is **solver time per claim**, not program
+size. Few expensive claims win: on a module spending 97% of its time in the
+solver, a warm run drops from 6.7s to 0.3s. Many cheap claims lose — every one
+is keyed, and none was costing anything to solve.
+
+ESBMC's own regression suite is the second kind. Its median file spends under
+1% of its run in the solver, and only 42 of 670 spend more than half, so the
+suite is a poor advertisement for the cache and a good illustration of its
+limit.
 
 That makes it the wrong tool for one-shot verification -- a competition run, or
 a CI job that verifies each file exactly once with no persistent directory. It
