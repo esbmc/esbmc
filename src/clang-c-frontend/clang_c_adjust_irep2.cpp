@@ -1,3 +1,4 @@
+#include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
@@ -38,6 +39,11 @@ bool clang_c_adjust_irep2::adjust()
 
   for (symbolt *s : symbol_list)
   {
+    if (
+      sole_adjuster && s->get_type().is_code() &&
+      has_prefix(s->id.as_string(), "c:@F@main"))
+      declare_argc_argv(context, *s);
+
     if (!s->is_type && s->get_value().is_not_nil())
     {
       const expr2tc before = s->get_value2();

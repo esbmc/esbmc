@@ -4842,8 +4842,77 @@ another arm.
 `int a[n];` with a runtime `n` segfaults under the flag with no diagnostic —
 `int main(int argc, char **argv){ int n = argc; int a[n]; return 0; }` is
 enough, and the array need not be read. It survives this patch, so it is a
-second cause and not a second symptom. §80 records that the VLA `sizeof`
-operand is computed in migration; that is the place to look first.
+second cause and not a second symptom.
 
-That is the next target: it is the only remaining input in the censused C
-corpus on which the pass produces nothing at all.
+**§112 corrects this: the VLA is not the trigger.** The reduction kept the VLA
+because it stopped as soon as the crash reproduced, and the crash reproduces on
+`int main(int argc, char **argv){ return 0; }` with no array at all. Reduce past
+the construct you came in for.
+
+## 112. `argc'`/`argv'` — a symbol-table side effect the sole adjuster owed
+## (2026-08-22)
+
+§111.2 named the VLA as the second abort's cause. It is not. Reduced past the
+construct the test was named for:
+
+```c
+int main(int argc, char **argv) { return 0; }
+```
+
+segfaults under `--clang-c-irep2-adjust-only`. No array, no VLA, no body. The
+same program on the default path is fine.
+
+`clang_c_main` looks the symbols up without a null check
+(`const symbolt &argc_symbol = *ns.lookup("argc'");`, clang_c_main.cpp:157), and
+they are created by `clang_c_adjust::adjust_argc_argv`. Under the flag the
+legacy pass does not run, so the lookup dereferences null.
+
+That is the same class as `declare_implicit_callee` (§70): a **symbol-table side
+effect** rather than an expression rewrite, so it belongs to whichever pass is
+in charge rather than to the dispatcher. Extracted as a free
+`declare_argc_argv(contextt &, const symbolt &)` and called from both, so there
+is one definition rather than a port to keep in step.
+
+### 112.1 What this says about the census
+
+The two "aborts" §110.4 ranked ahead of the spelling causes were:
+
+| test | actual cause | closed by |
+|---|---|---|
+| `builtin_memcpy` | undecayed array operand of `+` | §111.1 |
+| `cwe_uninit_array_vla` | missing `argc'`/`argv'` | this section |
+
+Neither was the by-name union tag §110.4 attributed them to, and neither had
+anything to do with the construct its test is named for. Both attributions came
+from reading the test name and the class comment instead of reducing. The rule
+that follows is the one §104.2 already states for tags and applies equally to
+crashes: read the residue, do not infer it.
+
+Stride-8 sample over `regression/esbmc`, symbol tables, blank lines ignored:
+
+| branch | same | differing |
+|---|---:|---:|
+| master `595f52b025` | 90 | 138 |
+| §112 alone, on master | 97 | 132 |
+| §111.1 + §112 stacked | **100** | **129** |
+
+`cwe_uninit_array_vla`'s symbol table is byte-identical once it runs, and so is
+the reduction's; the three-argument `envp` form is byte-identical too.
+
+| mutant | killed by |
+|---|---|
+| side effect absent (master) | `irep2_only_argc_argv`, `..._argc_argv_envp` |
+
+### 112.2 A pre-existing abort found alongside, and not fixed here
+
+`int main(int argc) { return 0; }` -- one argument -- aborts on
+`assert(false)` at clang_c_main.cpp:399 on **both** paths. It is not a hop-off
+defect and it is not in this scope; recorded so the next reduction does not
+mistake it for one.
+
+### 112.3 Next
+
+The remaining causes are all spelling differences again, and §110.1's table
+still ranks them. The two that are not printer artefacts are the
+function-pointer cast at a call argument and the coupled arith-assign
+(`scope-coupled-arith-assign-conversion.md`).
