@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --clang-c-irep2-adjust-only
+^VERIFICATION FAILED$

@@ -50,7 +50,6 @@ protected:
   shadows_user_definition(const irep_idt &identifier, const exprt &f_op) const;
 
   virtual void adjust_symbol(symbolt &symbol);
-  void adjust_argc_argv(const symbolt &main_symbol);
 
   /**
    * methods for type (typet) adjustment
@@ -131,5 +130,10 @@ protected:
 
   virtual void adjust_reference(exprt &expr);
 };
+
+/// The `argc'`/`argv'`/`envp'` symbols `clang_c_main` looks up unconditionally
+/// when main takes arguments. A symbol-table side effect rather than an
+/// expression rewrite, so whichever adjust pass is in charge has to make it.
+void declare_argc_argv(contextt &context, const symbolt &main_symbol);
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */
