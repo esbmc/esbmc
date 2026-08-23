@@ -35,11 +35,21 @@ static size_t __ESBMC_float_buf_idx = 0;
 // (C23 6.3.2.3p7), and reading through it is undefined again unless the
 // lvalue type matches the object's effective type, which character types are
 // exempt from (C23 6.5.1p7).
+// Combined branch-free: short-circuiting the eight compares costs symex a
+// guard per byte, which is a 4.6x slowdown on list-equality tests.
 static inline bool
 __ESBMC_bytes_equal_8(const unsigned char *a, const unsigned char *b)
 {
-  return a[0] == b[0] && a[1] == b[1] && a[2] == b[2] && a[3] == b[3] &&
-         a[4] == b[4] && a[5] == b[5] && a[6] == b[6] && a[7] == b[7];
+  unsigned char diff = 0;
+  diff |= (unsigned char)(a[0] ^ b[0]);
+  diff |= (unsigned char)(a[1] ^ b[1]);
+  diff |= (unsigned char)(a[2] ^ b[2]);
+  diff |= (unsigned char)(a[3] ^ b[3]);
+  diff |= (unsigned char)(a[4] ^ b[4]);
+  diff |= (unsigned char)(a[5] ^ b[5]);
+  diff |= (unsigned char)(a[6] ^ b[6]);
+  diff |= (unsigned char)(a[7] ^ b[7]);
+  return diff == 0;
 }
 
 // Optimized value comparison - avoids memcmp loop unrolling for common sizes
