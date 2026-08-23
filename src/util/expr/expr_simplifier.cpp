@@ -1,4 +1,5 @@
 #include <limits>
+#include <type_traits>
 
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -4082,6 +4083,18 @@ expr2tc notequal2t::do_simplify() const
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
 
+/// A bool constant is never negative, and GCC rejects `bool < 0` outright
+/// (-Wbool-compare), so the sign shortcut below has to be skipped for the
+/// bool instantiation rather than merely evaluate to false.
+template <class T>
+static bool is_negative_constant(const T &v)
+{
+  if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>)
+    return false;
+  else
+    return v < 0;
+}
+
 template <class constant_type>
 struct Lessthantor
 {
@@ -4095,7 +4108,7 @@ struct Lessthantor
     if (is_constant(op1))
     {
       expr2tc c1 = op1;
-      if ((get_value(c1) < 0) && is_unsignedbv_type(op2))
+      if (is_negative_constant(get_value(c1)) && is_unsignedbv_type(op2))
         return gen_true_expr();
     }
 
@@ -4169,7 +4182,7 @@ struct Greaterthantor
     if (is_constant(op2))
     {
       expr2tc c2 = op2;
-      if ((get_value(c2) < 0) && is_unsignedbv_type(op1))
+      if (is_negative_constant(get_value(c2)) && is_unsignedbv_type(op1))
         return gen_true_expr();
     }
 
