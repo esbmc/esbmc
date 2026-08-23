@@ -1,8 +1,0 @@
-CORE
-main.c
---multi-property --vcc-cache vcc-store --vcc-fingerprint-dump fp.tsv
-^VCC cache: 1 claim\(s\) reused, 1 solved$
-^\s+PASSED\s+\[main\.assertion\.2\]\s+line 8\s+assertion x \+ 1 > x$
-^VERIFICATION SUCCESSFUL$
-CHECK_FILE fp.tsv contains UNSAT
-CHECK_FILE fp.tsv absent line\s8

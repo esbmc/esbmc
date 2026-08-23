@@ -10,12 +10,13 @@ re-run only pays for what actually changed.
 
 ## Getting started
 
-Point `--vcc-cache` at a directory. It is created if it does not exist, and the
-run needs `--multi-property`, which is what splits verification into per-claim
-proofs:
+Point `--proof-cache` at a directory. It is created if it does not exist, and
+the run needs `--multi-property`, which is what splits verification into
+per-claim proofs. ESBMC refuses the flag without it rather than accepting it
+and reusing nothing:
 
 ```bash
-esbmc example.c --multi-property --vcc-cache .esbmc-cache
+esbmc example.c --multi-property --proof-cache .esbmc-cache
 ```
 
 Nothing else changes: the same properties are checked and the same verdict is
@@ -57,8 +58,8 @@ int main(void)
 The first run has an empty cache and solves everything:
 
 ```
-$ esbmc example.c --multi-property --vcc-cache .esbmc-cache
-VCC cache: 2 claim(s) reused, 5 solved
+$ esbmc example.c --multi-property --proof-cache .esbmc-cache
+Proof cache: 2 claim(s) reused, 5 solved
 ** 0 of 7 properties failed, 7 passed
 VERIFICATION SUCCESSFUL
 ```
@@ -72,9 +73,9 @@ that claim is re-proved; the array bounds checks and `scale`'s assertion come
 straight from the cache:
 
 ```
-$ esbmc example.c --multi-property --vcc-cache .esbmc-cache
+$ esbmc example.c --multi-property --proof-cache .esbmc-cache
 Solving claim 'assertion v < hi + 1 at file example.c line 14 column 3 function clamp'
-VCC cache: 6 claim(s) reused, 1 solved
+Proof cache: 6 claim(s) reused, 1 solved
 VERIFICATION SUCCESSFUL
 ```
 
@@ -90,7 +91,7 @@ a small change. Persist the directory between jobs — with GitHub Actions:
     key: esbmc-cache-${{ github.sha }}
     restore-keys: esbmc-cache-
 
-- run: esbmc src/example.c --multi-property --vcc-cache .esbmc-cache
+- run: esbmc src/example.c --multi-property --proof-cache .esbmc-cache
 ```
 
 `restore-keys` matters: it lets a job start from the previous commit's cache
@@ -129,6 +130,27 @@ that a hit is decided on — the cone itself is never re-compared. The cone half
 is 128 bits wide for that reason; the context half is 64, which is the narrower
 of the two and the one to widen first if this ever needs strengthening.
 
+### Which ESBMC proved it
+
+A proof must not outlive the build that produced it: change how ESBMC encodes
+or checks something and the old verdict may no longer be the right one. The
+build is named by the ID stamped into the binary on every build — the commit it
+was built from, and whether that tree was dirty — so a rebuild from a different
+commit starts a fresh set of entries.
+
+A dirty tree, or a build from no git checkout at all, names a *class* of builds
+rather than one, and two of them would otherwise share keys. ESBMC hashes its
+own executable in that case, which identifies the build exactly at the price of
+one read of the binary per run. So if you build ESBMC itself, expect that read;
+a release build does not pay it.
+
+The set of SMT backends the build enabled is in the key too, because which
+solver a run uses is only in the option set when it was named on the command
+line — otherwise it is whatever this build compiled in. What remains outside
+the key is a second build of the same commit, with the same backends, from a
+different toolchain: run it once under `--proof-cache-verify` if that is your
+situation.
+
 ## Only proofs are stored
 
 A claim ESBMC *disproves* is never cached. Reporting a counterexample requires
@@ -142,11 +164,11 @@ passing one, and that the cache can never turn a failure into a success.
 
 ## Checking the cache against the solver
 
-`--vcc-cache-verify` reads the cache but solves every claim anyway, reporting an
-error if a stored proof disagrees with the solver:
+`--proof-cache-verify` reads the cache but solves every claim anyway,
+reporting an error if a stored proof disagrees with the solver:
 
 ```bash
-esbmc example.c --multi-property --vcc-cache .esbmc-cache --vcc-cache-verify
+esbmc example.c --multi-property --proof-cache .esbmc-cache --proof-cache-verify
 ```
 
 This gives up the speed-up, so it is meant for validating the cache — for
@@ -170,6 +192,24 @@ Naming a cache directory is ignored, and every claim solved normally, under:
 - thread interleavings after the first, where a claim carries a schedule its
   cone does not name
 
+Each of these prints one line saying so, because a run that reuses nothing
+otherwise looks exactly like a run whose cache is working:
+
+```
+WARNING: Proof cache: inactive (--dead-code-check); every claim will be solved and none stored
+```
+
+The two ways of naming the feature and getting nothing at all are refused
+outright instead: `--proof-cache` without `--multi-property`, and
+`--proof-cache-verify` with no cache to check. Both are judged on the flags
+alone, so a run that would not have solved anything anyway — `--skip-bmc`, or
+one of the print-and-stop modes — is refused too rather than accepting a
+combination that could never have worked.
+
+A run that reports no cache line at all solved no claims: everything the
+program asserts was discharged by the simplifier before the solver was reached.
+That is not a cache failure.
+
 ## Invalidation and housekeeping
 
 Every option is folded into the key, including ones that only affect
@@ -177,17 +217,25 @@ scheduling, so changing any flag starts a fresh set of entries rather than
 reusing existing ones. This is deliberately conservative: an option wrongly
 judged irrelevant would silently reuse a proof that no longer holds.
 
+The exceptions are the options that reach nothing but the report —
+`--verbosity`, `--quiet`, `--log-message`, `--color`, `--ascii-report`,
+`--file-output` and `--cex-output`, alongside the cache's own flags and the
+path of the file being verified. `--color` and `--ascii-report` are the reason
+the list exists at all: both are auto-detected, from the terminal and the
+locale, so leaving them in made an interactive run and the same run in a
+pipeline disagree on every key while agreeing on every verdict.
+
 Entries are plain files named by their digest and are never evicted. The
 directory is safe to delete at any time — the next run simply repopulates it.
 
 ## Diagnosing a cache that does not hit
 
-`--vcc-fingerprint-dump` writes one line per solved claim giving the digest of
-its cone under each normalisation, its size, the verdict and its location:
+`--claim-fingerprint-dump` writes one line per solved claim giving the digest
+of its cone under each normalisation, its size, the verdict and its location:
 
 ```bash
-esbmc example.c --multi-property --vcc-fingerprint-dump fp.tsv
-esbmc example.c --multi-property --vcc-fingerprint-dump -   # to the log
+esbmc example.c --multi-property --claim-fingerprint-dump fp.tsv
+esbmc example.c --multi-property --claim-fingerprint-dump -   # to the log
 ```
 
 Comparing the dumps from two runs shows which claims changed identity.
@@ -199,6 +247,11 @@ cache does not do, and it is paid per claim on every run — a miss costs it, an
 so does a hit. On a typical file that is about 0.07 ms per claim, but the spread
 is wide: 0.5 ms at the third quartile and 1.6 ms at the 95th, tracking how large
 the cones are.
+
+A run also pays once for naming the ESBMC that is proving, and that is free
+unless the binary was built from a tree git could not name, in which case it is
+one read of the executable — a tenth of a second or so on a 100 MB binary. See
+*Which ESBMC proved it*.
 
 What that buys back is capped by the solver's share of the run, so the quantity
 that decides whether the cache pays is **solver time per claim**, not program

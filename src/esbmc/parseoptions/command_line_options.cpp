@@ -18,6 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#include <esbmc/globals.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
@@ -92,14 +93,6 @@ extern "C"
 #endif
 
 #define BT_BUF_SIZE 256
-
-extern "C" const char buildidstring_buf[];
-extern "C" const unsigned int buildidstring_buf_size;
-
-static std::string_view esbmc_version_string()
-{
-  return {buildidstring_buf, buildidstring_buf_size};
-}
 
 #ifndef _WIN32
 // Writes a preformatted constant, retrying short writes. write(2) is
@@ -360,7 +353,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("git-hash"))
   {
-    log_result("{}", esbmc_version_string());
+    log_result("{}", esbmc_build_id());
     exit(0);
   }
 

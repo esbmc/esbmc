@@ -50,7 +50,8 @@
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
 #include <util/ssa/fingerprint.h>
-#include <util/ssa/vcc_cache.h>
+#include <util/ssa/proof_cache.h>
+#include <esbmc/globals.h>
 #include <atomic>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -2452,31 +2453,10 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   return ltl_res_good;
 }
 
-/// A cached proof is only sound where the claim's sliced cone is everything its
-/// verdict depends on. The k-induction phases and --incremental-bmc qualify:
-/// each sets its phase flags and unwind on this optionst before running, so
-/// both are already part of a claim's key.
-static bool vcc_cache_usable(
-  const optionst &options,
-  const std::string &dir,
-  bool is_cov_run,
-  bool is_dead_code,
-  const BigInt &interleaving_number)
-{
-  if (dir.empty() || is_cov_run || is_dead_code || interleaving_number > 1)
-    return false;
-
-  static const char *const excluded[] = {"ltl", "smt-during-symex"};
-  for (const char *opt : excluded)
-    if (options.get_bool_option(opt))
-      return false;
-  return true;
-}
-
 /// Look the claim's cone up in the cache. Returns true when the stored proof
 /// stands in for solving; `cone_key` and `hit` are set for the store step.
-static bool vcc_cache_hit(
-  vcc_cachet *cache,
+static bool proof_cache_hit(
+  proof_cachet *cache,
   bool verify,
   const symex_target_equationt::SSA_stepst &steps,
   std::string &cone_key,
@@ -2489,11 +2469,11 @@ static bool vcc_cache_hit(
   return hit && !verify;
 }
 
-/// Store a fresh proof, or report a stored one the solver just contradicted.
-/// Returns true when the run must fail: under --vcc-cache-verify a hit that
-/// does not re-prove means the cache is wrong about this claim.
-static void vcc_cache_store(
-  vcc_cachet *cache,
+/// Store a fresh proof, or fail the run over a stored one the solver has just
+/// refuted. `hit` can only be set here under --proof-cache-verify: a hit
+/// short-circuits the solve otherwise.
+static void proof_cache_store(
+  proof_cachet *cache,
   const std::string &cone_key,
   bool hit,
   smt_resultt solver_result,
@@ -2511,13 +2491,21 @@ static void vcc_cache_store(
     cache->record(cone_key);
     return;
   }
-  if (!hit)
-    return;
 
-  log_error(
-    "VCC cache: stored proof of '{}' contradicted by the solver", claim);
-  std::lock_guard lock(result_mutex);
-  final_result = P_ERROR;
+  if (proof_cache_contradicted(hit, solver_result == P_SATISFIABLE))
+  {
+    log_error(
+      "Proof cache: stored proof of '{}' contradicted by the solver", claim);
+    std::lock_guard lock(result_mutex);
+    final_result = P_ERROR;
+    return;
+  }
+
+  // Neither re-proved nor refuted, so --proof-cache-verify checked nothing
+  // here and must not be read as having done so.
+  if (hit)
+    log_warning(
+      "Proof cache: stored proof of '{}' could not be re-checked", claim);
 }
 
 /// A dead-code probe is advisory and a non-probe claim in a coverage run is
@@ -2535,34 +2523,68 @@ static bool is_coverage_goal(bool cov_run, const std::string &prop)
   return cov_run && prop == "instrumented assertion";
 }
 
+/// Which ESBMC this is. Hashing the executable is the fallback when the build
+/// ID does not name one build, so it is computed once and held.
+static const std::string &proof_cache_identity()
+{
+  static const std::string identity =
+    proof_cache_build_identity(esbmc_build_id());
+  return identity;
+}
+
 /// Build the cache only where a stored proof would be sound; nullptr disables
-/// every cache interaction downstream.
-static std::unique_ptr<vcc_cachet> make_vcc_cache(
+/// every cache interaction downstream. A cached proof is only sound where the
+/// claim's sliced cone is everything its verdict depends on. The k-induction
+/// phases and --incremental-bmc qualify: each sets its phase flags and unwind
+/// on this optionst before running, so both are already part of a claim's key.
+static std::unique_ptr<proof_cachet> make_proof_cache(
   const optionst &options,
   const std::string &dir,
-  bool is_cov_run,
-  bool is_dead_code,
   const BigInt &interleaving_number)
 {
-  if (!vcc_cache_usable(
-        options, dir, is_cov_run, is_dead_code, interleaving_number))
+  if (dir.empty())
     return nullptr;
-  return std::make_unique<vcc_cachet>(dir, options);
+
+  // Reasons the option set alone decides were reported before any solving, by
+  // proof_cache_flags_usable in parseoptions/driver.cpp.
+  if (!proof_cache_inactive_reason(options).empty())
+    return nullptr;
+
+  if (interleaving_number > 1)
+  {
+    report_proof_cache_inactive(
+      "thread interleavings after the first, where a claim carries a schedule "
+      "its cone does not name");
+    return nullptr;
+  }
+
+  // A proof must not outlive the build that produced it, so a key that cannot
+  // name the verifier is no key at all.
+  if (proof_cache_identity().empty())
+  {
+    report_proof_cache_inactive(
+      "the running esbmc binary could not be identified");
+    return nullptr;
+  }
+
+  return std::make_unique<proof_cachet>(dir, options, proof_cache_identity());
 }
 
 /// A warm run solves nothing, so without this the report shows no solver
 /// activity at all and gives no sign of where the verdicts came from.
-static void log_vcc_cache_summary(const vcc_cachet *cache)
+static void log_proof_cache_summary(const proof_cachet *cache)
 {
   if (cache == nullptr)
     return;
   log_status(
-    "VCC cache: {} claim(s) reused, {} solved", cache->hits(), cache->misses());
+    "Proof cache: {} claim(s) reused, {} solved",
+    cache->hits(),
+    cache->misses());
 }
 
 /// One line per solved claim, digesting its cone under each normalisation:
-/// the instrument for measuring what --vcc-cache can reuse.
-/// No-op when --vcc-fingerprint-dump was not given.
+/// the instrument for measuring what --proof-cache can reuse.
+/// No-op when --claim-fingerprint-dump was not given.
 static void dump_claim_fingerprint(
   const std::string &path,
   const symex_target_equationt::SSA_stepst &cone,
@@ -2591,7 +2613,7 @@ static void dump_claim_fingerprint(
   std::lock_guard<std::mutex> lock(dump_mutex);
   if (path == "-")
   {
-    log_status("VCC-FP {}", line);
+    log_status("CLAIM-FP {}", line);
     return;
   }
   std::ofstream out(path, std::ios::app);
@@ -2677,14 +2699,14 @@ smt_resultt bmct::multi_property_check(
   // For incr/kind in multi-property
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
   const std::string fingerprint_dump =
-    options.get_option("vcc-fingerprint-dump");
+    options.get_option("claim-fingerprint-dump");
 
   // Only where a claim's sliced cone is all its verdict depends on -- the
   // exclusions the in-run assertion_cache makes, plus the coverage probes.
-  const std::string vcc_cache_dir = options.get_option("vcc-cache");
-  const bool vcc_cache_verify = options.get_bool_option("vcc-cache-verify");
-  std::unique_ptr<vcc_cachet> vcc_cache = make_vcc_cache(
-    options, vcc_cache_dir, is_cov_run, is_dead_code, interleaving_number);
+  const std::string proof_cache_dir = options.get_option("proof-cache");
+  const bool proof_cache_verify = options.get_bool_option("proof-cache-verify");
+  std::unique_ptr<proof_cachet> proof_cache =
+    make_proof_cache(options, proof_cache_dir, interleaving_number);
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -2735,8 +2757,8 @@ smt_resultt bmct::multi_property_check(
                        &is_cov_run,
                        &is_keep_verified,
                        &fingerprint_dump,
-                       &vcc_cache,
-                       &vcc_cache_verify,
+                       &proof_cache,
+                       &proof_cache_verify,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt,
@@ -2834,9 +2856,9 @@ smt_resultt bmct::multi_property_check(
 
     std::string cone_key;
     bool cached_proof = false;
-    if (vcc_cache_hit(
-          vcc_cache.get(),
-          vcc_cache_verify,
+    if (proof_cache_hit(
+          proof_cache.get(),
+          proof_cache_verify,
           local_eq.SSA_steps,
           cone_key,
           cached_proof))
@@ -2917,8 +2939,8 @@ smt_resultt bmct::multi_property_check(
         vacuity_detected = true;
     }
 
-    vcc_cache_store(
-      vcc_cache.get(),
+    proof_cache_store(
+      proof_cache.get(),
       cone_key,
       cached_proof,
       solver_result,
@@ -3287,7 +3309,7 @@ smt_resultt bmct::multi_property_check(
 
   // A warm run solves nothing, so without this the report shows no solver
   // activity at all and gives no sign of where the verdicts came from.
-  log_vcc_cache_summary(vcc_cache.get());
+  log_proof_cache_summary(proof_cache.get());
 
   // For coverage with fixed bound unwinding
   if (

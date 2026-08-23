@@ -1,6 +1,0 @@
-CORE
-main.c
---multi-property --k-induction --max-k-step 2 --vcc-cache vcc-store --vcc-fingerprint-dump fp.tsv
-^VCC cache: 1 claim\(s\) reused, 1 solved$
-^VERIFICATION SUCCESSFUL$
-CHECK_FILE fp.tsv contains UNSAT
