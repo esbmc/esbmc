@@ -189,6 +189,14 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
       expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
   }
 
+  adjust_sole_arms_tail(expr);
+}
+
+/// The tail of adjust_sole_arms. Split only to keep either half under
+/// the complexity gate; the two run back to back and the arms below are
+/// order-independent of the ones above.
+void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
+{
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
 
