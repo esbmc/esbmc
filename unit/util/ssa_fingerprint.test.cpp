@@ -85,6 +85,37 @@ void add_typed_step(
   s.guard = gen_true_expr();
   s.cond = cond;
 }
+
+/// `s.<member> > 0`, asserted over a struct with two members whose names
+/// differ only after an `_at_`.
+void add_member_claim(
+  symex_target_equationt::SSA_stepst &steps,
+  const std::string &member)
+{
+  const type2tc two_members = struct_type2tc(
+    std::vector<type2tc>{get_int32_type(), get_int32_type()},
+    std::vector<irep_idt>{"val_at_a", "val_at_b"},
+    std::vector<irep_idt>{"val_at_a", "val_at_b"},
+    irep_idt("tag-struct S"),
+    false);
+
+  const expr2tc s = symbol2tc(
+    two_members,
+    "c:t.c@100@F@main@s",
+    symbol_renaming_level::level2,
+    0,
+    1,
+    0,
+    0);
+
+  add_typed_step(
+    steps,
+    goto_trace_stept::ASSERT,
+    greaterthan2tc(
+      member2tc(get_int32_type(), s, irep_idt(member)),
+      constant_int2tc(get_int32_type(), BigInt(0))));
+}
+
 } // namespace
 
 TEST_CASE(
@@ -188,10 +219,11 @@ TEST_CASE(
   "an anonymous type's location does not change the digest",
   "[fingerprint]")
 {
+  // The shape clang_c_convert.cpp:4893 emits, `__anon_` marker and all.
   symex_target_equationt::SSA_stepst before, after;
-  add_typed_step(before, "anon_struct_at_t.c_3_9");
+  add_typed_step(before, "tag-struct __anon_struct_at_t.c_main_3_9");
   // The same type after an edit inserted a line above its declaration.
-  add_typed_step(after, "anon_struct_at_t.c_5_9");
+  add_typed_step(after, "tag-struct __anon_struct_at_t.c_main_5_9");
 
   REQUIRE(
     ssa_cone_digest(before, fingerprint_modet::srcloc) ==
@@ -199,6 +231,34 @@ TEST_CASE(
   REQUIRE(
     ssa_cone_digest(before, fingerprint_modet::raw) !=
     ssa_cone_digest(after, fingerprint_modet::raw));
+}
+
+TEST_CASE("a tag containing _at_ is not truncated", "[fingerprint]")
+{
+  // Only an anonymous type's position may be cut. A user type whose name
+  // happens to contain `_at_` carries no `__anon_` marker, and cutting there
+  // would leave two distinct types digesting alike.
+  symex_target_equationt::SSA_stepst one, other;
+  add_typed_step(one, "tag-struct s_at_a");
+  add_typed_step(other, "tag-struct s_at_b");
+
+  REQUIRE(
+    ssa_cone_digest(one, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(other, fingerprint_modet::srcloc));
+}
+
+TEST_CASE("members differing only after _at_ are not merged", "[fingerprint]")
+{
+  // Reading `val_at_a` where `val_at_b` was written is a different claim, and
+  // an unanchored `_at_` strip digested the two alike: a proof stored for one
+  // file discharged another file's violated claim (esbmc/esbmc#7143).
+  symex_target_equationt::SSA_stepst reads_a, reads_b;
+  add_member_claim(reads_a, "val_at_a");
+  add_member_claim(reads_b, "val_at_b");
+
+  REQUIRE(
+    ssa_cone_digest(reads_a, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(reads_b, fingerprint_modet::srcloc));
 }
 
 TEST_CASE("the key is 32 hex digits and matches the digest", "[fingerprint]")

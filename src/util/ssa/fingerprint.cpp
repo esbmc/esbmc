@@ -54,12 +54,23 @@ unsigned offset_of(const std::string &name)
   return value;
 }
 
-/// Anonymous types are named `..._at_<file>_<line>_<col>`, which moves with any
-/// edit above the declaration. The position is cut; the type's fields still
-/// distinguish it.
+/// Anonymous aggregates and variables are named
+/// `... __anon_<what>_at_<file>_<function>_<line>_<column>`
+/// (clang_c_convert.cpp:4893, 4935, 4966), and the position moves with any
+/// edit above the declaration, so it is cut. The `__anon_` marker anchors the
+/// cut: names reaching here are not re-disambiguated the way symbols are, so
+/// an unanchored `_at_` search truncates ordinary user identifiers and merges
+/// two cones that a claim can tell apart -- `s.val_at_a` and `s.val_at_b`
+/// digested alike, and one file's proof discharged the other file's violated
+/// claim (esbmc/esbmc#7143). Two anonymous types that still collide once their
+/// positions are gone have the same members, so they encode alike anyway.
 std::string strip_type_location(const std::string &name)
 {
-  const size_t at = name.find("_at_");
+  const size_t anon = name.find("__anon_");
+  if (anon == std::string::npos)
+    return name;
+
+  const size_t at = name.find("_at_", anon);
   return at == std::string::npos ? name : name.substr(0, at);
 }
 
@@ -160,9 +171,10 @@ public:
   }
 
   /// The form of a name reached outside a symbol node -- a type tag, a struct
-  /// component, or the symbol named by symbol_type2t/code_decl2t. The last has
-  /// no identity to canonicalise against here, so it is only stripped, which
-  /// costs hits rather than merging anything.
+  /// component, or the symbol named by symbol_type2t/code_decl2t. There is no
+  /// per-cone identity to canonicalise these against, so each strip must be
+  /// injective on its own: whatever it cuts has to be something no two names
+  /// can differ by alone.
   std::string rename(const irep_idt &id) const
   {
     if (mode == fingerprint_modet::raw)
