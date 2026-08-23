@@ -2865,6 +2865,16 @@ smt_resultt bmct::multi_property_check(
     {
       goto_functionst::property_verdicts.record(
         claim.claim_cstr, property_verdictt::Passed, claim_ploc, "");
+
+      // A reused proof has to leave the run in the state a fresh one would,
+      // or a warm k-induction / --incremental-bmc run keeps re-symexing the
+      // claims a cold one had already dropped -- the opposite of the point
+      // (esbmc/esbmc#7143). Same guard as the P_UNSATISFIABLE arm below.
+      if (!is_keep_verified && !bs)
+      {
+        clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+        clear_verified_claims_in_goto(claim, is_goto_cov);
+      }
       return;
     }
 
