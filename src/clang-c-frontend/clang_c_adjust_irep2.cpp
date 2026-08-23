@@ -9,6 +9,7 @@
 #include <util/config/config.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/pretty.h>
+#include <util/symtab/cprover_prefix.h>
 #include <utility>
 
 bool clang_c_adjust_irep2::adjust()
@@ -247,6 +248,45 @@ fold_unary_builtin(const std::string &name, const expr2tc &arg, expr2tc &expr)
     expr = bswap2tc(expr->type, arg);
 }
 
+/// The three pointer intrinsics `do_special_functions` matches by their
+/// `__ESBMC_` name rather than a `__builtin_` prefix. Each lowers to a node the
+/// backend evaluates in place; left as a call the symbol is bodyless and
+/// `goto_check`'s "non-intrinsic prefixed with __ESBMC" rejects the program.
+/// Returns true when \p expr was rewritten.
+static bool fold_pointer_intrinsic(
+  const std::string &name,
+  const std::vector<expr2tc> &args,
+  expr2tc &expr)
+{
+  if (name == CPROVER_PREFIX "same_object" && args.size() == 2)
+  {
+    expr = same_object2tc(args[0], args[1]);
+    return true;
+  }
+
+  if (args.size() != 1)
+    return false;
+
+  if (name == CPROVER_PREFIX "POINTER_OBJECT")
+  {
+    expr = pointer_object2tc(expr->type, args[0]);
+    return true;
+  }
+
+  // pointer_offset2t admits only an address-width signedbv. The declared
+  // return type is __PTRDIFF_TYPE__, which is exactly that on every supported
+  // target; decline rather than assert if a target ever disagrees.
+  if (
+    name == CPROVER_PREFIX "POINTER_OFFSET" && is_signedbv_type(expr->type) &&
+    expr->type->get_width() == config.ansi_c.address_width)
+  {
+    expr = pointer_offset2tc(expr->type, args[0]);
+    return true;
+  }
+
+  return false;
+}
+
 /// The lowerings `do_special_functions` selects by base name rather than by a
 /// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
 ///
@@ -361,6 +401,9 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   // Before the arity check: inf/huge_val/nan take no argument at all.
   if (adjust_float_builtin(expr, s->name, args))
+    return;
+
+  if (fold_pointer_intrinsic(name, args, expr))
     return;
 
   if (args.size() == 2)
