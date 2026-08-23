@@ -4788,6 +4788,310 @@ tail padding.
 it reads 8 on both paths and a verdict test built on it passes against the
 control. The first draft of this test did exactly that and proved nothing.
 
+## 111. The two aborts §110.4 named, and what fixed one of them (2026-08-22)
+
+§110.4 put the two tests where the hop-off emits no symbol table at all ahead of
+the remaining spelling differences: a hard stop is not a divergence you can
+measure. Neither is the by-name union tag the class comment on
+`clang_c_adjust_irep2` documents — that attribution in §110.4 is wrong, and the
+two tests fail for two unrelated reasons.
+
+### 111.1 `builtin_memcpy`: an array operand of pointer arithmetic
+
+```
+Assertion failed: (p2 || (is_bv_type(t) == is_bv_type(v1->type) &&
+  t->get_width() == v1->type->get_width())), assert_arith_2ops_consistency
+```
+
+Reduced to `char a[9]; char *p = a + 1;` — nothing to do with `memcpy`.
+`clang_c_convert` drops the decay cast on purpose
+(`case clang::CK_ArrayToPointerDecay: break;`) and leaves `clang_c_adjust` to
+insert the `&a[0]`. Under the flag that pass does not run, so `migrate_expr`
+builds `add2t` with a pointer result and an *array* operand, and `add2t`'s
+invariant is a post-adjust one.
+
+The adjuster cannot fix it: the node has to be constructed before any pass can
+walk it. So the decay goes where the node is built —
+`decay_array_operand` in `migrate.cpp`, applied to both operands of the `plus`
+and `minus` arms. On the legacy path the operands are already `&a[0]`, so it is
+a no-op there; the C++, C and 400-test Python slices are unchanged.
+
+Only `+` and `-` assert on an array operand. `a > q`, `a == q` and `a[1]` all
+migrate today — measured, not assumed.
+
+The `-` case needed the guard widened. Keying the decay on a pointer *result*
+type fixes `a + 1` and not `a - q`, whose result is `ptrdiff_t`: C11 6.3.2.1p3
+decays an array operand in either position regardless of what the operator
+returns, and C has no array arithmetic for the unconditional form to catch.
+
+`--goto-functions-only` on the new test is byte-identical between the two paths,
+which is the §1.3 gate. The *symbol table* still prints `a + 1` where legacy
+prints `&a[0] + 1`, and that is not this defect: the pass writes a value back
+only when it changed it (`value != before`), and `before` is now already
+decayed, so nothing is written and the unadjusted legacy value survives in the
+table. Closing that means comparing the write-back against the legacy value
+rather than the migrated one — a change to the pass's write-back policy, not
+another arm.
+
+| mutant | killed by |
+|---|---|
+| decay absent (master) | `irep2_only_array_arith_decay`, `..._memcpy` |
+
+### 111.2 `cwe_uninit_array_vla` is still open, and it is a segfault
+
+`int a[n];` with a runtime `n` segfaults under the flag with no diagnostic —
+`int main(int argc, char **argv){ int n = argc; int a[n]; return 0; }` is
+enough, and the array need not be read. It survives this patch, so it is a
+second cause and not a second symptom.
+
+**§112 corrects this: the VLA is not the trigger.** The reduction kept the VLA
+because it stopped as soon as the crash reproduced, and the crash reproduces on
+`int main(int argc, char **argv){ return 0; }` with no array at all. Reduce past
+the construct you came in for.
+
+## 112. `argc'`/`argv'` — a symbol-table side effect the sole adjuster owed
+## (2026-08-22)
+
+§111.2 named the VLA as the second abort's cause. It is not. Reduced past the
+construct the test was named for:
+
+```c
+int main(int argc, char **argv) { return 0; }
+```
+
+segfaults under `--clang-c-irep2-adjust-only`. No array, no VLA, no body. The
+same program on the default path is fine.
+
+`clang_c_main` looks the symbols up without a null check
+(`const symbolt &argc_symbol = *ns.lookup("argc'");`, clang_c_main.cpp:157), and
+they are created by `clang_c_adjust::adjust_argc_argv`. Under the flag the
+legacy pass does not run, so the lookup dereferences null.
+
+That is the same class as `declare_implicit_callee` (§70): a **symbol-table side
+effect** rather than an expression rewrite, so it belongs to whichever pass is
+in charge rather than to the dispatcher. Extracted as a free
+`declare_argc_argv(contextt &, const symbolt &)` and called from both, so there
+is one definition rather than a port to keep in step.
+
+### 112.1 What this says about the census
+
+The two "aborts" §110.4 ranked ahead of the spelling causes were:
+
+| test | actual cause | closed by |
+|---|---|---|
+| `builtin_memcpy` | undecayed array operand of `+` | §111.1 |
+| `cwe_uninit_array_vla` | missing `argc'`/`argv'` | this section |
+
+Neither was the by-name union tag §110.4 attributed them to, and neither had
+anything to do with the construct its test is named for. Both attributions came
+from reading the test name and the class comment instead of reducing. The rule
+that follows is the one §104.2 already states for tags and applies equally to
+crashes: read the residue, do not infer it.
+
+Stride-8 sample over `regression/esbmc`, symbol tables, blank lines ignored:
+
+| branch | same | differing |
+|---|---:|---:|
+| master `595f52b025` | 90 | 138 |
+| §112 alone, on master | 97 | 132 |
+| §111.1 + §112 stacked | 100 | 129 |
+
+**These two figures are inflated and §113.2 corrects them to 94/134 for the
+stacked pair.** The sample is a stride over the sorted test list, so adding
+regression test directories -- which these patches do, and which are
+byte-identical by construction -- changes *which* tests are sampled. Compare
+across branches only on a test list pinned to one commit.
+| §111.1 + §112 stacked | **100** | **129** |
+
+`cwe_uninit_array_vla`'s symbol table is byte-identical once it runs, and so is
+the reduction's; the three-argument `envp` form is byte-identical too.
+
+| mutant | killed by |
+|---|---|
+| side effect absent (master) | `irep2_only_argc_argv`, `..._argc_argv_envp` |
+
+### 112.2 A pre-existing abort found alongside, and not fixed here
+
+`int main(int argc) { return 0; }` -- one argument -- aborts on
+`assert(false)` at clang_c_main.cpp:399 on **both** paths. It is not a hop-off
+defect and it is not in this scope; recorded so the next reduction does not
+mistake it for one.
+
+### 112.3 Next
+
+The remaining causes are all spelling differences again, and §110.1's table
+still ranks them. The two that are not printer artefacts are the
+function-pointer cast at a call argument and the coupled arith-assign
+(`scope-coupled-arith-assign-conversion.md`).
+
+## 113. The compound assignment, and a census that was measuring itself
+## (2026-08-22)
+
+§112.3 left two non-printer causes. This closes the second and disqualifies the
+first.
+
+### 113.1 The compound assignment was a third abort, not a spelling difference
+
+`compound_assign_narrow_overflow` appears in §110.1's untagged residue as
+`(signed int)b += a;` versus `b += a;` — a text difference. It is not: with
+`--goto-functions-only` the hop-off *aborts*, on the same
+`assert_arith_2ops_consistency` §111.1 met. The symbol-table census could not
+see it because the abort happens in `goto_convert`, two stages after the pass
+whose output that census reads. **A symbol-table census under-reports by
+construction; a differing text there may be a crash further on.**
+
+`adjust_plain_assignment` ports only the `"assign"` case of
+`clang_c_adjust::adjust_side_effect_assignment`, and its comment says the
+compound spellings were "left where this mode already had them". Where they
+were was: unconverted. C11 6.5.16.2p3 makes `b op= a` equivalent to
+`b = b op (a)`, so a `char` target promotes to `int` before the operation, and
+without that promotion `goto_convert`'s lowering builds `add2t` on a `char` and
+an `int`.
+
+Measured across all ten spellings on `char b; int a; b op= a;`:
+
+| spelling | before |
+|---|---|
+| `+= -= *= /= %=` | **abort** |
+| `&= \|= ^=` | diverge, no abort |
+| `<<= >>=` | already byte-identical |
+
+So the port is the tail of the legacy arm — the arithmetic conversion on *both*
+operands — and not its shift branch, which returns early after promoting only
+the right operand and which the corpus shows is already the migrated shape.
+All ten are byte-identical afterwards, in the symbol table and in the goto
+program.
+
+### 113.2 The census had started measuring its own tests
+
+§112's table reported the stacked pair at 100 same / 129 differing. On a test
+list pinned to `595f52b025` it is **94 / 134**. The difference is not drift: the
+sample is `awk 'NR%8==0'` over the sorted `test.desc` list, and every patch in
+this sequence adds regression directories which are byte-identical by
+construction. Adding them both inserts guaranteed-same entries and shifts which
+other tests land on a stride position.
+
+Corrected, on the pinned list (230 tests):
+
+| branch | same | differing |
+|---|---:|---:|
+| master `595f52b025` | 90 | 138 |
+| + §111.1 + §112 | 94 | 134 |
+| + §113.1 | **95** | **133** |
+
+§113.1 gains one test on this sample, which is the honest number: the sample
+holds few narrow-target compound assignments. Its value is the three abort
+classes it removes, not the sample delta.
+
+### 113.3 The function-pointer cast is a "do not mirror", not a gap
+
+§110.4's other non-printer cause: `atexit((void (*)())(&free_g2))` versus
+`atexit(&free_g2)`, and unlike §110.2's `(void)0` this one *does* reach the
+goto program. It is still not work.
+
+Instrumented at the conversion site, `arg->type == params[i]` is **true**: the
+argument is `void (*)(void)` and the parameter `void (*)()`, and `migrate_type`
+maps both to the same `code_type2t` — same empty argument vector, same return
+type, same ellipsis flag. The legacy pass emits a cast because the *legacy*
+types differ; in IREP2 the cast is the identity, and no pass reading IREP2 can
+know it is owed.
+
+Confirmed twice over: disabling `same_function_pointer_ignoring_argument_names`
+at that site does not restore the cast, so the §100.1 guard is not suppressing
+it; and `atexit-1` returns the same verdict on both paths under its own flags.
+
+Emitting an identity typecast to match the legacy printer is §110.2's mistake
+with a different node. Closing it for real means `code_type2t` carrying the
+prototyped/unprototyped distinction, which is a representation change and needs
+its own justification.
+
+### 113.4 Next
+
+Every cause §110.1 names is now either closed or argued not to be work, except
+the printer-only set (`+1` vs `1`, the float literal suffix, block indentation)
+and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
+sample wants a fresh cause census before another arm is written — the old one
+is stale, and §113.1 shows it was reading the wrong stage.
+
+## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
+## (2026-08-22)
+
+Every census in this scope so far has read one stage. §113.1 showed why that is
+not enough: a symbol-table difference can be a `goto_convert` crash, and a
+symbol-table difference can equally be nothing at all. Re-run reading both, on
+the test list pinned to `595f52b025` (230 tests, stride 8), at the tip of
+§111.1 + §112 + §113.1:
+
+| symbol table | goto program | tests |
+|---|---|---:|
+| same | same | 95 |
+| **diff** | same | **109** |
+| diff | diff | **24** |
+| — | crash | **0** |
+
+Three things follow.
+
+**The abort classes are gone.** Zero crashes in the sample, against three
+distinct ones at the start of the day (§111.1, §112, §113.1). That is the whole
+value of those three patches; the same-count moved by 5.
+
+**109 of the 133 differences do not reach the goto program.** They are the class
+§110.2 established with `(void)0`: the adjuster writes a value back only when it
+changed it, and the un-written-back legacy value is what the symbol-table
+printer shows, while `goto_convert` re-migrates from the same legacy value and
+lands in the same place. Chasing them is chasing a printer.
+
+**The residue that matters is 24.** Causes, read rather than tallied:
+
+| cause | tests | note |
+|---|---:|---|
+| `DEAD` location: `no location` vs blank | **14** | §114.1 |
+| integer promotion missing at a comparison | 3 | |
+| array decay rendered as a cast, not `&a[0]` | 3 | |
+| temporary numbering (`tmp$3` vs `tmp$4`) | 2 | |
+| function-pointer identity cast | 1 | not work, §113.3 |
+| untagged | 3 | |
+
+(Tags overlap; four tests carry two.)
+
+### 114.1 The dominant cause is the for-init hoist, and it is one line of provenance
+
+```c
+int main(void) { int s = 0; for (int i = 0; i < 3; i++) s = s + i; return s; }
+```
+
+```
+<         // 48 no location
+>         // 48
+```
+
+The `DEAD` for the loop-scoped `i`. Legacy leaves its location nil, which
+`goto_programt::output` renders `no location`; the hop-off gives it an
+empty-but-not-nil one, which renders blank. `goto_convert_functions.cpp`'s
+`emitted_location` already documents this exact asymmetry — in the other
+direction, where reproducing *blank* was the correct choice.
+
+The mechanism is §105's `hoist_for_init`. Rewriting `code_for2t` into a block
+moves the loop from `convert_for` to `convert_block`, and `convert_block` stamps
+the block's `end_location` on every destructor it unwinds
+(`unwind_destructor_stack`, goto_convert.cpp:2215) whereas `convert_for` leaves
+it nil. `migrate_expr_back` is not the culprit — it already guards
+`if (ref2.end_location.is_not_nil())`.
+
+Reproduced with `--no-irep2-native-body` on both sides, so this is the legacy
+converter's own asymmetry and not the W1 dispatcher's.
+
+### 114.2 Next
+
+`hoist_for_init`'s destructor-location provenance, which is 14 of the 24. The
+other live causes — the promotion at a comparison, and the decay rendered as a
+cast — are three tests each and worth a census of their own once the dominant
+one is out of the way.
+second cause and not a second symptom. §80 records that the VLA `sizeof`
+operand is computed in migration; that is the place to look first.
+
+That is the next target: it is the only remaining input in the censused C
+corpus on which the pass produces nothing at all.
 ## 110. The census re-run after the sixteen PRs landed (2026-08-22)
 
 §104 closed the census with "every measured divergence is owned by an open PR".

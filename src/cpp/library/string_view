@@ -52,7 +52,7 @@ public:
   // [string.view.cons]: the default constructor leaves data() null, not
   // indeterminate.
   OM_CONSTEXPR basic_string_view() : str(nullptr), len(0) {}
-  OM_CONSTEXPR14 basic_string_view(const CharT *str)
+  OM_CONSTEXPR basic_string_view(const CharT *str)
     : str(str), len(Traits::length(str))
   {
   }
