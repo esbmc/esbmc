@@ -5013,14 +5013,14 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
-## 115. §114.2's two three-test causes: one is a crash, one is not work
+## 116. §114.2's two three-test causes: one is a crash, one is not work
 ## (2026-08-23)
 
 §114.2 deferred "the promotion at a comparison, and the decay rendered as a
 cast", three tests each, on the reading that both were spelling-level. Reduced,
 neither is what its census tag said.
 
-### 115.1 The comparison cast is §113.3's class, not a missing promotion
+### 116.1 The comparison cast is §113.3's class, not a missing promotion
 
 ```c
 __attribute__((aligned)) int g = 42;
@@ -5042,7 +5042,7 @@ verbatim, reached from a different node.
 **Do not mirror.** Three of the 24 close as non-work, on the same footing as
 `atexit`'s function-pointer cast.
 
-### 115.2 The array decay is not a spelling difference at all
+### 116.2 The array decay is not a spelling difference at all
 
 The other cause reduces to six lines:
 
@@ -5087,7 +5087,7 @@ The fix gives that pair its C conversion (C11 6.3.2.1p3) rather than a cast —
 pair on both of its copies — and falls through to the typecast for every other
 divergent pair, so the `assert` idiom the arm was written for is untouched.
 
-### 115.3 Result
+### 116.3 Result
 
 `regression/esbmc/irep2_only_ternary_array_decay{,_fail}` pin the verdict rather
 than the printer: both abort with `Unexpected type in int/ptr typecast` before
@@ -5116,7 +5116,7 @@ same 226 C sources, `--goto-functions-only` with no `-only` flag is
 `ch9_7` takes 2 m 04 s on master against 2 m 01 s here, so neither is this
 patch.
 
-### 115.4 Next
+### 116.4 Next
 
 The residue is 22, and the named causes left are the temporary numbering
 (`tmp$3` vs `tmp$4`, 2 tests), struct padding in an aggregate initialiser
