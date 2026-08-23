@@ -7,6 +7,29 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 
+// A base-destructor `this` is the one argument here that still needs
+// expression adjustment: it carries the derived->base displacement marker,
+// which only clang_c_adjust::adjust_expr resolves. gen_typecast leaves it
+// under the cast to the base pointer type. See #7025.
+static bool carries_derived_to_base(const exprt &arg)
+{
+  for (const exprt *e = &arg;; e = &e->op0())
+  {
+    if (!e->get("#derived_to_base").empty())
+      return true;
+    if (e->id() != "typecast" || e->operands().size() != 1)
+      return false;
+  }
+}
+
+void clang_c_adjust::adjust_call_argument(exprt &arg)
+{
+  if (arg.is_index())
+    adjust_index(to_index_expr(arg));
+  else if (carries_derived_to_base(arg))
+    adjust_expr(arg);
+}
+
 void clang_c_adjust::adjust_code(codet &code)
 {
   const irep_idt &statement = code.statement();
@@ -42,13 +65,8 @@ void clang_c_adjust::adjust_code(codet &code)
       if (op.is_index())
         adjust_index(to_index_expr(op));
       else if (op.id() == "arguments")
-      {
         for (auto &arg : op.operands())
-        {
-          if (arg.is_index())
-            adjust_index(to_index_expr(arg));
-        }
-      }
+          adjust_call_argument(arg);
     }
   }
   else if (statement == "decl-block")
