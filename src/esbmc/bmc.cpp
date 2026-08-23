@@ -3131,9 +3131,6 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
 
 bool bmct::reports_final_verdict(smt_resultt res) const
 {
-  if (options.get_bool_option("k-induction-parallel"))
-    return false;
-
   const bool fc = options.get_bool_option("forward-condition");
   const bool is = options.get_bool_option("inductive-step");
 
