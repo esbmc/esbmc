@@ -2,6 +2,7 @@
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
 #include <pointer-analysis/value_sets.h>
+#include <optional>
 #include <set>
 #include <irep2/irep2.h>
 #include <util/arith/mp_arith.h>
@@ -629,6 +630,23 @@ public:
     bool under_deref = true) const;
 
 protected:
+  /** The byte offset a constant operand of pointer arithmetic contributes,
+   *  already signed by @p subtracting; nullopt when the operand is not a
+   *  compile-time constant or its element size is not statically known. */
+  std::optional<BigInt> constant_pointer_arith_offset(
+    const expr2tc &non_ptr_op,
+    const type2tc &subtype,
+    bool subtracting) const;
+
+  /** Fold @p total_offs into every object of @p pointer_expr_set, tracking
+   *  alignment where the offset or the object's own offset is nondet, and
+   *  store the results into @p dest. */
+  void offset_pointer_arith_objects(
+    const object_mapt &pointer_expr_set,
+    const expr2tc &ptr_op,
+    const std::optional<BigInt> &total_offs,
+    object_mapt &dest) const;
+
   /** The constant cases of get_value_set_rec: what a value reaches this code as
    *  once constant propagation has substituted it. */
   void get_constant_value_set(
