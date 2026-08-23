@@ -151,6 +151,11 @@ private:
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name);
+  // The type a parameter's default value implies, or empty.
+  std::string infer_type_from_parameter_default(
+    const Json &function_element,
+    size_t param_index,
+    size_t param_count);
   // Return type of a FunctionDef @p member: its declared `-> T` (or `-> T[...]`)
   // annotation, else the type inferred from its return statements, else "Any".
   std::string
@@ -278,6 +283,10 @@ private:
   bool annotating_function_entry_point_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  // Functions whose recursive-branch inference is itself running. A second
+  // re-entry means the self-reference is indirect (the returned name's binding
+  // calls the function), which the return-expression scan cannot see.
+  std::set<std::string> functions_reentered_;
   std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;
