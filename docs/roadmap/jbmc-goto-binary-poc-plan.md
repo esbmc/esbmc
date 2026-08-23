@@ -911,6 +911,10 @@ self-referential than C's. That is the first place to look.
 > `main` symbol — the entry is `__CPROVER__start` — and naming a function that
 > does not exist crashes rather than reporting it. That is an ESBMC robustness
 > bug independent of this PoC and reachable from any `--binary` input.
+> **Fixed:** the entry point is now checked before `__ESBMC_main` is retargeted,
+> so an unknown `--function` exits with `entry point '<name>' not found in the
+> goto binary` instead of aborting in the inliner
+> (`regression/goto-transcoder/cbmc_missing_entry_point/`).
 
 #### 4.1.7 First end-to-end Java verdicts (Run 9)
 
