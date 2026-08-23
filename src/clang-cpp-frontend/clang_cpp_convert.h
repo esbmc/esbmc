@@ -186,8 +186,7 @@ protected:
     const clang::CXXRecordDecl &base,
     const exprt &deref,
     const irep_idt &this_id,
-    const typet &this_ptr_type,
-    uint64_t offset);
+    const typet &this_ptr_type);
 
   /*
    * Add additional annotations for class/struct/union fields
@@ -306,9 +305,11 @@ protected:
   /*
    * Methods to pull bases in
    */
-  // Bases are collected in declaration (ABI) order, not alphabetical, so the
-  // flattened component layout agrees with clang's getBaseClassOffset used by
-  // the base-offset paths (dtor/cast/thunk). See #1866, #3894 and
+  // Bases are collected in declaration order, ancestors first, not
+  // alphabetical. That order defines the flattened component layout, which is
+  // the only offset oracle the base-offset paths (dtor/cast/thunk) may use:
+  // clang's getBaseClassOffset disagrees with it once a virtual base makes the
+  // primary-base rule apply (#7025). See #1866, #3894 and
   // docs/design/cpp-multiple-inheritance-subobjects.md.
   using base_map =
     std::vector<std::pair<std::string, const clang::CXXRecordDecl *>>;
