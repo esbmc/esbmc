@@ -113,6 +113,10 @@ registers `ansi_c`, `statement_list`, `cpp` and `json_symtab`, but not `java_byt
 (`src/cbmc/cbmc_languages.cpp:21-27`), so symbols carrying `mode == "java"` have no
 registered language handler (`src/langapi/mode.cpp:51`). **Format-compatible is not the
 same as interchangeable**, and ESBMC will need its own answer to the same `mode` question.
+ESBMC's answer, for the printing half of it, is to fall back to C syntax: an unknown mode
+used to build a null `languaget` and abort on any `from_expr`/`from_type`, which made
+`--goto-functions-only` unusable on exactly the binaries this PoC debugs
+(`regression/goto-transcoder/cbmc_java_mode_print/`).
 
 **Both `--no-lazy-methods` and an explicit models classpath are load-bearing**, and the
 classpath matters more. JBMC loads classes on demand — lazy is the default,
