@@ -5013,6 +5013,96 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 122. The largest cluster was one line, and it is not a frontend bug
+## (2026-08-23)
+
+(§122: PRs #7266, #7271, #7274, #7275, #7278, #7280 and #7282 are in flight
+against this file and claim §115-§121.)
+
+§121.4 named the seven-test `to_struct_type() called on type whose type_id is
+union` cluster as the next target, on the reasoning that its signature named the
+defect precisely and that a `union_bitfield` and a `struct_bitfields` test
+sitting together pointed at the bitfield lowering. The signature was right; the
+guess about *where* was wrong.
+
+### 122.1 The site is `value_sett::assign`, not the frontend
+
+```
+#3  to_struct_type (t=...) at type_kinds.inc:23
+#4  is_subclass_of (subclass=..., superclass=..., ns=...) at base_type.cpp:445
+#5  value_sett::assign (...) at pointer-analysis/value_set.cpp:1299
+```
+
+`value_sett::assign` opens its aggregate branch with
+`if (is_struct_type(lhs_type) || is_union_type(lhs_type))` — unions included —
+and then, for a concrete rhs whose type is not `base_type_eq` to the lhs, asks
+`is_subclass_of(lhs_type, rhs->type, ns)`. That helper is struct-only: it opens
+by casting *both* operands with `to_struct_type`. Handed a union it throws, and
+nothing catches it.
+
+Inheritance has no union analogue, so a union pair that is not `base_type_eq` is
+simply incompatible — exactly the case the branch already drops two lines above
+for a mismatched `type_id`. Guarding the `is_subclass_of` call on both types
+being structs closes all seven:
+
+| test | before | after |
+|---|---|---|
+| `github_162`, `github_162_fail` | abort | SUCCESSFUL, both paths |
+| `github_571_{1,2,3}` | abort | SUCCESSFUL, both paths |
+| `struct_bitfields_16` | abort | SUCCESSFUL, both paths |
+| `union_bitfield_0` | abort | SUCCESSFUL, both paths |
+
+Reduced, the trigger is two lines:
+
+```c
+union a { int : 5; };
+int main(void) { union a x = {}; return 0; }
+```
+
+### 122.2 Why the printers could not see it
+
+The symbol table **and** the goto program are byte-identical between the two
+paths for that reducer, and the flag still aborts while the default path
+verifies. Whatever makes the two union types structurally unequal is a property
+`--show-symbol-table` and `--goto-functions-only` both elide. This is the
+sharpest instance yet of §121's lesson: neither printer is an oracle for
+behaviour, and a census that reads one is measuring the printer.
+
+### 122.3 A note on scope
+
+The defect is in `pointer-analysis`, shared by every frontend, and the fix is
+not flag-gated. Several probes for a default-path reproducer — mismatched union
+tags through a cast, a union returned from an uninterpreted function, a
+self-assignment through a `char *` round trip — did **not** find one, so the only
+known trigger remains `--clang-c-irep2-adjust-only`. Recorded as such rather
+than claimed as a user-facing fix: the call is wrong on its own terms
+(a struct-only helper reached with a union), and the guard is the same
+incompatibility test the branch already applies.
+
+`value_set.cpp` is shared, so the wider suites were run: `esbmc` 1857/1857,
+`cstd` 142/142, `floats` 106/106, `function_contract` 414/414, `esbmc-unix`
+435/438 — the three are `03_boundedBuffer`, `github_595` and
+`github_6480_deepening`, all exceeding the harness's 120 s cap locally and all
+returning identical verdicts on master and here. Default path byte-identical on
+226 C sources.
+
+### 122.4 Next
+
+Whole-suite verdict residue **24 → 17**. The clusters left, largest first:
+
+| tests | signature |
+|---:|---|
+| 6 | SIGSEGV in complex arithmetic (`complex_25`, `github_382_6`, `github_6713_complex_*`) |
+| 4 | false alarm SUCCESSFUL → FAILED (`builtin_arith_overflow`, `github_2174`, two `pragma_unroll`) |
+| 4 | SIGABRT on vectors / unary bool |
+| 3 | unclustered (`32_floppy`, `github_301`, `github_1934-1`) |
+
+The complex-arithmetic six is next by size, and `github_6713` names an issue
+whose own fix (#6713, the compound-assignment lowering) is already in the tree —
+so the reproducers are pinned and the divergence is in how this pass carries
+that lowering.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
