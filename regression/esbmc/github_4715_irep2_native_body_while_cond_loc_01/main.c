@@ -3,7 +3,7 @@
 // the location for each instruction it emits off the operand being lowered
 // rather than off the statement. IREP2 value expressions carry no location, so
 // the back-migrated condition arrived unlocated and those instructions came out
-// with no location at all under --irep2-native-body, while the legacy path had
+// with no location at all under native conversion, while the legacy path had
 // them stamped by restore_value_locations. countdown() below is deliberately
 // free of assignment statements so that it converts natively end to end on the
 // current supported-kind set -- adding one would make the whole function fall

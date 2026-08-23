@@ -1033,11 +1033,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
      "bypass and the --no-irep2-bodies escape hatch have been removed."},
-    {"irep2-native-body",
-     NULL,
-     "Deprecated no-op (accepted for backward compatibility). Function bodies "
-     "are routed to the IREP2-native goto_convert by default since the W1-loc "
-     "keystone concluded; --no-irep2-native-body opts out."},
     {"no-irep2-native-body",
      NULL,
      "Convert function bodies through the whole-body legacy round-trip "
