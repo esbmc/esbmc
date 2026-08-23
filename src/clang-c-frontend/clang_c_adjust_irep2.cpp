@@ -177,6 +177,9 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
+  if (is_constant_struct2t(expr))
+    adjust_struct(expr);
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
 
@@ -394,6 +397,44 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
   expr = address_of2tc(elem, idx, a.implicit);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_struct's insertion loop. A struct
+/// literal reaches this pass with an operand per *declared* member, while
+/// add_padding has given the type its synthetic ones; unpadded, the value is
+/// short a component and a downstream member read resolves by position onto the
+/// wrong field. pad_struct_operands is the shared helper the Python adjuster
+/// already uses for the same job (irep2/irep2_utils.h).
+void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
+{
+  // The literal's own type is an inline copy the converter recorded before
+  // add_padding ran, so ns.follow leaves it short the synthetic members. The
+  // padded layout lives on the tag symbol; resolve by name to reach it. Legacy
+  // adjust_struct needs no such step -- there the value's type is a
+  // symbol_typet, which follow resolves for it.
+  const type2tc t = ns.follow(expr->type);
+  if (!is_struct_type(t))
+    return;
+
+  const symbolt *tag =
+    context.find_symbol("tag-" + to_struct_type(t).name.as_string());
+  if (tag == nullptr || !tag->is_type)
+    return;
+
+  const type2tc padded = migrate_type(tag->get_type());
+  if (!is_struct_type(padded))
+    return;
+
+  const struct_type2t &st = to_struct_type(padded);
+  std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
+  if (ops.size() == st.members.size())
+    return;
+
+  ops = pad_struct_operands(st, ops);
+  // A residual mismatch is not this pass's to guess at: leave the literal as
+  // it stands rather than build one the type cannot describe.
+  if (ops.size() == st.members.size())
+    expr = constant_struct2tc(padded, ops);
 }
 
 void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
