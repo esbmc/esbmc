@@ -5087,6 +5087,114 @@ locally and return their expected verdicts on master and here alike.
 `github_3487` — `ERROR: uncaught exception [St19bad_optional_access]` under the
 flag, SUCCESSFUL without. The last row of §118.1's three, and the only one that
 is a crash in ESBMC's own code rather than a modelling gap.
+## 115. §114.2's dominant cause closed — the hoist's wrapper block had no close
+## (2026-08-23)
+
+§114.1 diagnosed the 14-test `DEAD` divergence as `hoist_for_init`'s
+provenance and named `convert_block`'s `unwind_destructor_stack` as the site
+that reads it. The mechanism is one step earlier than that, and it is not a
+provenance choice at all.
+
+### 115.1 A default-constructed `locationt` is not nil
+
+`hoist_for_init` builds the wrapper block's close location as
+
+```cpp
+locationt end_location;
+if (!is_nil_expr(f.body) && is_code_block2t(f.body))
+  end_location = to_code_block2t(f.body).end_location;
+```
+
+and hands it to `code_block2tc`. When the loop body is not a block the variable
+is left default-constructed — and `irept::is_nil()` is `id() == "nil"`, so a
+default-constructed `locationt` (id `""`) is *empty but not nil*.
+`migrate_expr_back` guards only on nil:
+
+```cpp
+if (ref2.end_location.is_not_nil())
+  block.end_location(ref2.end_location);
+```
+
+so it wrote an empty `#end_location` onto the legacy block. `convert_block`
+then stamped that empty location on every destructor it unwound, and
+`goto_programt::output` renders an empty location as blank where it renders a
+nil one as `no location`. The legacy hoist never calls `end_location(...)` at
+all on this shape, which is why the two disagreed.
+
+`goto_convert_functions.cpp:1834-1839` already spells the correct idiom for the
+same question about the same field, with the same `else end_location.make_nil()`
+arm. Mirroring it is the whole patch.
+
+### 115.2 Result
+
+Reproducer (§114.1's, unchanged), `--no-irep2-native-body` on both sides:
+
+```
+<         // 48 no location
+>         // 48
+```
+
+is byte-identical after the patch, and a block-bodied control
+(`for (...) { s = s + i; }`) was byte-identical before and after — the shape
+the legacy hoist does set the close location on.
+
+Two-stage census re-run on a stride-8 list of `regression/esbmc` (233 entries,
+226 with a `.c` source), `--clang-c-irep2-adjust-only` against the legacy pass,
+blank lines and timing lines ignored:
+
+| goto program | before | after |
+|---|---:|---:|
+| same | 202 | **210** |
+| diff | **24** | **16** |
+| crash | 0 | 0 |
+
+Eight tests converge; none diverges that did not before. The 24 matches §114's
+count on the same suite, so the samples are comparable. Ten of those 24 carried
+a `no location` line in their diff; the eight that converged are the ones where
+it was the *only* cause, and the two that remain
+(`00_aiob_4_true-unreach-call`, `github_2572_2`) show it only as instruction
+renumbering downstream of a different divergence, not as a location mismatch of
+their own.
+
+The residue of 16 is the §114 tail, unmoved and untouched by this patch:
+integer promotion missing at a comparison, array decay rendered as a cast
+rather than `&a[0]`, the function-pointer identity cast §113.3 rules a
+"do not mirror", struct padding in an aggregate initialiser, and
+`POINTER_OFFSET` spelling.
+
+### 115.3 The gate, and what pins it
+
+`regression/esbmc/irep2_only_for_hoist_dead_location` asserts the `no location`
+line adjacent to the loop variable's `DEAD` under
+`--goto-functions-only --clang-c-irep2-adjust-only`. It is a positive regex, so
+it is mutation-checked the only way that means anything here: run it against
+the pre-patch binary, where the line reads `// 48` and the regex does not
+match. §39.1's fifth failure mode does not apply — the mutation is the absence
+of the patch, and the printer is exactly what the test reads.
+
+### 115.4 Next
+
+The two three-test causes §114.2 deferred. The first reduces to two lines, and
+the trigger is not the comparison:
+
+```c
+__attribute__((aligned)) int g = 42;
+int main(void) { int p = 1; if (g == 42) p = 2; return p; }
+```
+
+```
+<         IF !((signed int)g == 42) THEN GOTO 1
+>         IF !(g == 42) THEN GOTO 1
+```
+
+Dropping the attribute makes the pair byte-identical, so what legacy emits is
+an *identity* cast: the alignment attribute leaves `g`'s type unequal to plain
+`signed int` in ESBMC's type model, and `gen_typecast_arithmetic` casts on that
+inequality. That puts it in §113.3's class rather than the promotion class it
+was tagged as — decide whether to mirror it before writing a slice.
+
+The array decay rendered as a cast rather than `&a[0]` (`github_6966_fail`,
+`memset-const-2`) has not been reduced yet.
 
 
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
