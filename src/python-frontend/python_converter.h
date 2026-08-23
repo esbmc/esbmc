@@ -548,6 +548,8 @@ private:
 
   bool is_coverage_mode() const;
 
+  bool is_assert_fold_disabled() const;
+
   bool is_pytest_generation_mode() const;
 
   bool is_model_file(const nlohmann::json &node) const;
