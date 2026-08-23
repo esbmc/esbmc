@@ -35,7 +35,7 @@ public:
   typedef Compare key_compare;
   typedef Compare value_compare;
 
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
 
   class iterator
@@ -798,7 +798,7 @@ public:
   typedef Compare key_compare;
   typedef Compare value_compare;
 
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
 
   class iterator

@@ -234,6 +234,10 @@ STATIC_CAPABILITIES = {
     # The bundled musl libm is reached rather than shadowed by the host's own
     # <math.h>. Not so on Windows, where the UCRT declares cosf/pow itself.
     "bundled_libm",
+    # The host's `unsigned long` is 64 bits. Value-set descriptor offsets are
+    # materialised through it, so a negative offset is a different constant --
+    # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
+    "lp64_host",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:

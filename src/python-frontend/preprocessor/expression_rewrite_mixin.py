@@ -5,6 +5,27 @@ import copy
 
 class ExpressionRewriteMixin:
 
+    @staticmethod
+    def replace_filtered_genexp_arg(node):
+        """Swap a filtered generator argument for the equivalent list comp.
+
+        An eager consumer of a generator drops the generator's `if` clauses on
+        the C++ side, so `sum(x for x in xs if x > 2)` silently summed every
+        element. The comprehension lowering keeps the filter, so hand it the
+        list comprehension instead, as the str.join rewrite already does.
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id in ("sum", "min", "max", "sorted")
+                and node.args and isinstance(node.args[0], ast.GeneratorExp)
+                and any(gen.ifs for gen in node.args[0].generators)):
+            return
+
+        gen = node.args[0]
+        listcomp = ast.ListComp(elt=copy.deepcopy(gen.elt),
+                                generators=copy.deepcopy(gen.generators))
+        ast.copy_location(listcomp, gen)
+        ast.fix_missing_locations(listcomp)
+        node.args[0] = listcomp
+
     class _ListCompExpressionLowerer(ast.NodeTransformer):
         """Utility transformer that lowers list comprehensions, any(genexpr), and all(genexpr) inside an expression."""
 
@@ -68,6 +89,8 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(new_call)
 
                 return self.visit(new_call)
+
+            self.preprocessor.replace_filtered_genexp_arg(node)
 
             if (isinstance(node.func, ast.Name) and node.func.id == "any" and len(node.args) == 1
                     and not node.keywords and isinstance(node.args[0], ast.GeneratorExp)):

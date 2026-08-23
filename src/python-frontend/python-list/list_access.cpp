@@ -757,6 +757,100 @@ void append_array_shape(const typet &type, std::vector<long long> &shape)
     binary2integer(array_type.size().value().c_str(), false).to_int64());
   append_array_shape(array_type.subtype(), shape);
 }
+
+struct row_pointer_view_info
+{
+  typet elem_type;
+  long long row_index;
+  long long col_count;
+};
+
+struct slice_step_info
+{
+  long long value;
+  bool literal_zero;
+  bool literal;
+};
+
+slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
+{
+  slice_step_info info{1, false, true};
+  if (!slice_node.contains("step") || slice_node["step"].is_null())
+    return info;
+
+  const auto &step_node = slice_node["step"];
+  BigInt literal_value;
+  if (!try_get_literal_int(step_node, literal_value))
+  {
+    info.literal = false;
+    return info;
+  }
+
+  info.value = literal_value.to_int64();
+  if (info.value == 0)
+  {
+    info.literal_zero = true;
+    info.value = 1;
+  }
+  return info;
+}
+
+bool can_build_row_pointer_view(
+  const exprt &array,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  return array.is_symbol() && current_lhs && current_lhs->is_symbol() &&
+         is_numpy_array;
+}
+
+std::optional<row_pointer_view_info> get_row_pointer_view_info(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const contextt &symbol_table,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  if (!can_build_row_pointer_view(array, current_lhs, is_numpy_array))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(slice_node, literal_index))
+    return std::nullopt;
+
+  const namespacet ns(symbol_table);
+  const typet array_type = ns.follow(array.type());
+  if (!array_type.is_array())
+    return std::nullopt;
+
+  const array_typet &outer_array = to_array_type(array_type);
+  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+    return std::nullopt;
+
+  const typet row_type = ns.follow(outer_array.subtype());
+  if (!row_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_array = to_array_type(row_type);
+  if (row_array.size().is_nil() || !row_array.size().is_constant())
+    return std::nullopt;
+
+  row_pointer_view_info info{ns.follow(row_array.subtype()), 0, 0};
+  if (info.elem_type.is_array())
+    return std::nullopt;
+
+  const long long row_count =
+    binary2integer(outer_array.size().value().c_str(), false).to_int64();
+  info.col_count =
+    binary2integer(row_array.size().value().c_str(), false).to_int64();
+  info.row_index = literal_index.to_int64();
+  if (info.row_index < 0)
+    info.row_index += row_count;
+  if (info.row_index < 0 || info.row_index >= row_count || info.col_count < 0)
+    return std::nullopt;
+
+  return info;
+}
 } // namespace
 
 exprt python_list::resolve_fixed_axis_index(
@@ -1328,7 +1422,8 @@ exprt python_list::remove_function_calls_recursive(
   exprt &e,
   const nlohmann::json &node)
 {
-  // Bounds might generate intermediate calls, we need to add lhs to all of them.
+  // Bounds might generate intermediate calls, we need to add lhs to all of
+  // them.
   const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
     if (!foo.is_function_call())
       return foo;
@@ -1425,6 +1520,155 @@ std::optional<exprt> python_list::try_build_1d_pointer_view(
   return view_ptr;
 }
 
+std::optional<exprt> python_list::try_build_row_pointer_view(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  std::optional<row_pointer_view_info> info = get_row_pointer_view_info(
+    array,
+    slice_node,
+    converter_.symbol_table(),
+    converter_.current_lhs,
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) != 0);
+  if (!info)
+    return std::nullopt;
+
+  const typet view_ptr_type = pointer_typet(info->elem_type);
+  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt view_ptr = build_add(
+    base_ptr,
+    from_integer(info->row_index * info->col_count, size_type()),
+    view_ptr_type);
+
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_pointer_view_lengths_[converter_.current_lhs->identifier()
+                                           .as_string()] =
+    static_cast<std::size_t>(info->col_count);
+  return view_ptr;
+}
+
+std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
+  const exprt &array,
+  const typet &elem_type,
+  const nlohmann::json &slice_node,
+  long long step_val,
+  bool literal_step)
+{
+  if (!literal_step || !array.is_symbol())
+    return std::nullopt;
+
+  auto len_it =
+    converter_.numpy_pointer_view_lengths_.find(array.identifier().as_string());
+  if (len_it == converter_.numpy_pointer_view_lengths_.end())
+    return std::nullopt;
+
+  long long literal_start = 0;
+  std::optional<long long> static_slice_len = literal_slice_length(
+    slice_node,
+    static_cast<long long>(len_it->second),
+    step_val,
+    &literal_start);
+  if (!static_slice_len)
+    return std::nullopt;
+
+  array_typet result_type(
+    elem_type, from_integer(*static_slice_len, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    slice_node, "$array_slice$", result_type, exprt());
+
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(result_decl);
+
+  for (long long idx = 0; idx < *static_slice_len; ++idx)
+  {
+    const long long src_index = literal_start + (idx * step_val);
+    exprt src =
+      build_index(array, from_integer(src_index, size_type()), elem_type);
+    exprt dst = build_index(
+      build_symbol(result), from_integer(idx, size_type()), elem_type);
+    converter_.add_instruction(code_assignt(dst, src));
+  }
+
+  return build_symbol(result);
+}
+
+void python_list::emit_slice_zero_step_raise(
+  const nlohmann::json &slice_node,
+  bool literal_zero_step)
+{
+  if (!literal_zero_step)
+    return;
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "slice step cannot be zero");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(throw_code);
+}
+
+exprt python_list::guard_numpy_pointer_view_index(
+  const exprt &array,
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  if (!array.is_symbol() || !array.type().is_pointer())
+    return index;
+
+  const std::string view_id = array.identifier().as_string();
+  auto len_it = converter_.numpy_pointer_view_lengths_.find(view_id);
+  if (len_it == converter_.numpy_pointer_view_lengths_.end())
+    return index;
+
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(slice_node);
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    slice_node, "$numpy_view_idx$", ll_type, gen_zero(ll_type));
+  code_declt idx_decl(build_symbol(idx_sym));
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+
+  code_assignt idx_init(build_symbol(idx_sym), build_typecast(index, ll_type));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  exprt view_len = from_integer(len_it->second, ll_type);
+  exprt idx_lt_zero =
+    build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
+  code_assignt normalize(
+    build_symbol(idx_sym), build_add(build_symbol(idx_sym), view_len, ll_type));
+  normalize.location() = loc;
+
+  code_ifthenelset normalize_guard;
+  normalize_guard.cond() = idx_lt_zero;
+  normalize_guard.then_case() = normalize;
+  normalize_guard.location() = loc;
+  converter_.add_instruction(normalize_guard);
+
+  const type2tc ll_type2 = migrate_type(ll_type);
+  expr2tc idx2, len2;
+  migrate_expr(build_symbol(idx_sym), idx2);
+  migrate_expr(view_len, len2);
+  expr2tc still_negative = lessthan2tc(idx2, gen_zero(ll_type2));
+  expr2tc past_end = greaterthanequal2tc(idx2, len2);
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "index is out of bounds for numpy view");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = loc;
+
+  code_ifthenelset oob_guard;
+  oob_guard.cond() = migrate_expr_back(or2tc(still_negative, past_end));
+  oob_guard.then_case() = throw_code;
+  oob_guard.location() = loc;
+  converter_.add_instruction(oob_guard);
+
+  return build_typecast(build_symbol(idx_sym), size_type());
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1435,47 +1679,31 @@ exprt python_list::handle_range_slice(
   const typet resolved_list_type = ns.follow(list_type);
 
   // Handle regular array/string slicing (not list slicing)
-  // String parameters come as pointer-to-char, so handle both arrays and char pointers
+  // String parameters come as pointer-to-char, so handle both arrays and char
+  // pointers
   bool is_string_slice = (resolved_array_type != resolved_list_type &&
                           resolved_array_type.is_array()) ||
                          (resolved_array_type.is_pointer() &&
                           resolved_array_type.subtype() == char_type());
 
   // Determine step value (default 1).
-  bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
-  long long step_val = 1;
-  bool literal_zero_step = false;
-  bool literal_step = true;
-  if (has_step)
-  {
-    const auto &step_node = slice_node["step"];
-    BigInt literal_value;
-    if (try_get_literal_int(step_node, literal_value))
-    {
-      step_val = literal_value.to_int64();
-      if (step_val == 0)
-      {
-        literal_zero_step = true;
-        step_val = 1; // continue with valid value to keep IR consistent
-      }
-    }
-    else
-      literal_step = false;
-  }
+  const slice_step_info step_info = get_slice_step_info(slice_node);
+  const long long step_val = step_info.value;
   // Python raises ValueError on step==0. Raise it from the frontend (a
   // cpp-throw) so try/except ValueError can catch it — a code_assert would be
   // an uncatchable property violation. The raise diverts control, so the rest
   // of the slice IR (kept consistent with step_val==1) is a dead path.
-  if (literal_zero_step)
-  {
-    exprt raise = converter_.get_exception_handler().gen_exception_raise(
-      "ValueError", "slice step cannot be zero");
-    codet throw_code("expression");
-    throw_code.operands().push_back(raise);
-    throw_code.location() = converter_.get_location_from_decl(slice_node);
-    converter_.add_instruction(throw_code);
-  }
+  emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
   bool negative_step = (step_val < 0);
+
+  if (
+    std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
+      array,
+      resolved_array_type.subtype(),
+      slice_node,
+      step_val,
+      step_info.literal))
+    return *slice_copy;
 
   if (is_string_slice)
   {
@@ -1510,8 +1738,9 @@ exprt python_list::handle_range_slice(
         return build_typecast(e, signedbv_typet(64));
       };
 
-      // Defaults: for positive step start=0,end=MAX; for negative step start=MAX,end=MIN
-      // We use large sentinel values; __python_str_slice clamps them
+      // Defaults: for positive step start=0,end=MAX; for negative step
+      // start=MAX,end=MIN We use large sentinel values; __python_str_slice
+      // clamps them
       long long start_default = negative_step ? 999999 : 0;
       long long end_default = negative_step ? -999999 : 999999;
 
@@ -1573,7 +1802,7 @@ exprt python_list::handle_range_slice(
                       : array_len;
     }
 
-    if (!literal_step && elem_type != char_type())
+    if (!step_info.literal && elem_type != char_type())
       throw std::runtime_error(
         "TypeError: numpy view slicing requires a literal stride");
 
@@ -1676,7 +1905,7 @@ exprt python_list::handle_range_slice(
     // over-count. Size the result accordingly.
     const bool needs_null_term = (elem_type == char_type());
     exprt result_size = slice_len;
-    if (literal_step)
+    if (step_info.literal)
     {
       const array_typet &src_type = to_array_type(resolved_array_type);
       if (!src_type.size().is_nil() && src_type.size().is_constant())
@@ -2380,6 +2609,31 @@ void python_list::handle_slice_assignment(
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
 
+/// A bare `list` annotation names no element type, so the read would carry
+/// none and neither arithmetic nor equality on it would behave. Recover what
+/// the call sites told us about this parameter, seeded when the function was
+/// converted (#7187). Returns `annotated` unchanged when this is not a
+/// bare-`list` parameter, or nothing was inferred for it.
+typet python_list::bare_list_param_elem_type(
+  const nlohmann::json &param_node,
+  const std::string &param_id,
+  const typet &annotated)
+{
+  if (
+    !param_node.contains("annotation") || !param_node["annotation"].is_object())
+    return annotated;
+
+  const nlohmann::json &annotation = param_node["annotation"];
+  const std::string ann_id = annotation.value("id", "");
+  if (
+    annotation.value("_type", "") != "Name" ||
+    (ann_id != "list" && ann_id != "List"))
+    return annotated;
+
+  const typet inferred = get_list_element_type(param_id, 0);
+  return inferred.is_empty() ? annotated : inferred;
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -2553,6 +2807,9 @@ exprt python_list::handle_index_access(
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
+
+      elem_type = bare_list_param_elem_type(
+        list_node, array.identifier().as_string(), elem_type);
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
@@ -2640,7 +2897,8 @@ exprt python_list::handle_index_access(
           list_node, converter_.get_type_handler());
       }
 
-      // If still no elem_type, try to get it from the array variable's type annotation
+      // If still no elem_type, try to get it from the array variable's type
+      // annotation
       if (array.is_symbol() && elem_type == typet())
       {
         // Extract variable name from the symbol identifier
@@ -2651,7 +2909,8 @@ exprt python_list::handle_index_access(
         nlohmann::json list_var_decl = json_utils::find_var_decl(
           list_var_name, converter_.current_function_name(), converter_.ast());
 
-        // If the variable has a type annotation such as list[str], extract element type
+        // If the variable has a type annotation such as list[str], extract
+        // element type
         if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
         {
           elem_type = get_elem_type_from_annotation(
@@ -2711,7 +2970,8 @@ exprt python_list::handle_index_access(
             list_node["value"].contains("_type") &&
             list_node["value"]["_type"] == "Subscript")
           {
-            // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
+            // For ESBMC_iter_0 = d['a'], get element type from dict's actual
+            // value
             if (
               list_node["value"].contains("value") &&
               list_node["value"]["value"].is_object() &&
@@ -2779,8 +3039,9 @@ exprt python_list::handle_index_access(
             list_node["value"]["elts"].is_array() &&
             !list_node["value"]["elts"].empty())
           {
-            // Infer element type from the literal, accounting for the int->float
-            // promotion applied to mixed numeric literals at construction.
+            // Infer element type from the literal, accounting for the
+            // int->float promotion applied to mixed numeric literals at
+            // construction.
             elem_type = infer_literal_element_type(list_node["value"]);
           }
         }
@@ -2906,8 +3167,8 @@ exprt python_list::handle_index_access(
         }
 
         // If array is a constant placeholder (e.g., from a chained OOB access),
-        // we're in dead code after a prior IndexError. Emit IndexError and return
-        // a placeholder rather than crashing the frontend.
+        // we're in dead code after a prior IndexError. Emit IndexError and
+        // return a placeholder rather than crashing the frontend.
         if (!array.is_symbol() && array.is_constant())
         {
           exprt raise = converter_.get_exception_handler().gen_exception_raise(
@@ -3259,7 +3520,10 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static arrays
-  return build_index(array, pos_expr, array.type().subtype());
+  exprt guarded_pos =
+    guard_numpy_pointer_view_index(array, pos_expr, slice_node);
+  return try_build_row_pointer_view(array, slice_node)
+    .value_or(build_index(array, guarded_pos, array.type().subtype()));
 }
 
 exprt python_list::extract_pyobject_value(
@@ -3269,9 +3533,10 @@ exprt python_list::extract_pyobject_value(
   bool string_safe)
 {
   // For float types, read __ESBMC_float_buf[item->float_idx].
-  // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
-  // (no sort mismatch in BV mode), and float_buf is a typed global double array
-  // (real-sorted in --ir mode), so the array read gives the correct real value.
+  // This avoids the void*→integer truncation in --ir mode: float_idx is a
+  // size_t (no sort mismatch in BV mode), and float_buf is a typed global
+  // double array (real-sorted in --ir mode), so the array read gives the
+  // correct real value.
   if (elem_type.is_floatbv())
   {
     // Helper: build (*pyobject_expr).field for a given field/type.
@@ -3279,7 +3544,8 @@ exprt python_list::extract_pyobject_value(
       return build_deref_member(pyobject_expr, field, ftype);
     };
 
-    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
+    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol
+    // table)
     const symbolt *fbuf_sym =
       converter_.symbol_table().find_symbol("c:list.c@__ESBMC_float_buf");
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
@@ -3375,13 +3641,14 @@ exprt python_list::extract_pyobject_value(
     return build_typecast(obj_value, pointer_typet(arr_type.subtype()));
   }
 
-  // For char* strings and None (_Bool*), the void* already contains the pointer value
-  // For all other types, the void* contains a pointer to the value
+  // For char* strings and None (_Bool*), the void* already contains the pointer
+  // value. For all other types, the void* contains a pointer to the value.
   if (
     elem_type.is_pointer() &&
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
   {
-    // String and None case: cast void* directly to the pointer type (no dereference needed)
+    // String and None case: cast void* directly to the pointer type (no
+    // dereference needed)
     return build_typecast(obj_value, elem_type);
   }
   else

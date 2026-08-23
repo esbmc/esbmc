@@ -356,6 +356,20 @@ private:
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
 
+  /// The symbol for @p name in an enclosing function's scope, or null. Python
+  /// resolves a name a nested function only reads or mutates against the
+  /// enclosing scope; only a bare-name assignment binds a new local.
+  symbolt *find_symbol_in_enclosing_scopes(const std::string &name);
+
+  symbolt *resolve_subscript_base_symbol(
+    const nlohmann::json &target,
+    const std::string &name,
+    symbolt *found);
+
+  /// Stand the static bounds check down for a list rebound by `xs += [...]`,
+  /// whose declaring literal no longer describes it.
+  void mark_augassign_list_escaped(const exprt &lhs, const exprt &rhs);
+
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
@@ -557,7 +571,12 @@ private:
   // large function's own decision count from growing further; see
   // converter_funcall.cpp for the full rationale.
   std::optional<exprt>
-  try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
+  try_get_numpy_pointer_view_len(const nlohmann::json &element);
+  std::optional<exprt>
+  try_get_numpy_named_pointer_view_len(const nlohmann::json &arg) const;
+  std::optional<exprt> try_get_numpy_subscript_pointer_view_len(
+    const nlohmann::json &arg,
+    const nlohmann::json &element);
 
   // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
   // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
@@ -837,6 +856,34 @@ private:
     code_typet::argumentt &param_arg,
     const exprt &default_expr);
 
+  /// Refines one unannotated parameter to the list model where warranted.
+  void refine_any_param_to_list(
+    code_typet::argumentt &param_arg,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index);
+
+  /// Whether an unannotated parameter should be refined to the list model.
+  bool param_is_list_like(
+    const std::string &param_name,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index,
+    typet &elem_type) const;
+
+  /// Records a list-annotated parameter's element type for subscript reads.
+  void seed_list_param_element_type(
+    const nlohmann::json &element,
+    const symbol_id &id,
+    const std::string &arg_id,
+    size_t param_index);
+
+  /// Recovers a bare `list` parameter's element type from its call sites.
+  bool infer_list_elem_type_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    typet &out) const;
+
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
@@ -977,6 +1024,8 @@ private:
 
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
 
+  void reject_numpy_view_slice_assignment(const nlohmann::json &target);
+
   /// Raise Python's TypeError for item assignment on an immutable container,
   /// reporting whether `container_type` is one.
   bool reject_immutable_item_assignment(
@@ -990,6 +1039,22 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  bool record_numpy_view_copy_from_returned_argument(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node);
+
+  void clear_numpy_array_storage_aliases_for(const std::string &symbol_id);
+
+  void bind_numpy_array_storage_alias(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  symbolt *resolve_numpy_array_storage_alias(symbolt *symbol) const;
+
+  std::string
+  resolve_numpy_array_storage_alias_id(const std::string &symbol_id) const;
+
   /// Detach every live pointer-backed view (ADR-NP-003 etapa 2) of
   /// @p rebound_id from its storage, right before a plain `Name = ...`
   /// assignment rebinds that symbol to a new value. Real NumPy rebind
@@ -1000,6 +1065,11 @@ private:
     const std::string &rebound_id,
     const locationt &location,
     codet &target_block);
+
+  bool should_rebuild_cached_numpy_row_subscript_rhs(
+    const nlohmann::json &rhs_node) const;
+
+  bool is_tracked_2d_numpy_array_symbol(const std::string &source_id) const;
 
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
@@ -1462,6 +1532,7 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
+  std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
   // A pointer-backed numpy view's element count (ADR-NP-003 etapa 2, 1-D
   // slice views): __ESBMC_get_object_size on a pointer reports the base
   // object's remaining size from that offset, not the view's own logical
