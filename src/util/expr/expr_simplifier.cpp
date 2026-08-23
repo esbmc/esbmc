@@ -3484,6 +3484,92 @@ expr2tc address_of2t::do_simplify() const
   return expr2tc();
 }
 
+/// Fold a relation between two constants. The constant kind and the comparison
+/// itself are per-domain, so this dispatches on the operand type; C compares
+/// two booleans only after widening them to int, but a Java goto binary
+/// compares them directly. Split out of simplify_relations, whose own decision
+/// count is already over the complexity gate's threshold.
+template <template <typename> class TFunctor>
+static expr2tc simplify_constant_relation(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  expr2tc simpl_res;
+
+  if (is_bv_type(side_1) || is_bv_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
+
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
+
+    simpl_res =
+      TFunctor<BigInt &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
+
+    std::function<fixedbvt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
+
+    simpl_res =
+      TFunctor<fixedbvt &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
+
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
+
+    simpl_res =
+      TFunctor<ieee_floatt &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_bool_type(side_1) || is_bool_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_bool2t;
+
+    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
+      return to_constant_bool2t(c).value;
+    };
+
+    simpl_res =
+      TFunctor<bool &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_pointer_type(side_1) || is_pointer_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      [&](const expr2tc &t) -> bool {
+      if (is_pointer_type(t) && is_symbol2t(t))
+      {
+        symbol2t s = to_symbol2t(t);
+        if (s.thename == "NULL")
+          return true;
+      }
+      return false;
+    };
+
+    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int {
+      return 0xbadbeef;
+    };
+
+    simpl_res = TFunctor<int>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else
+    return expr2tc();
+
+  return typecast_check_return(type, simpl_res);
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_relations(
   const type2tc &type,
@@ -3559,71 +3645,8 @@ static expr2tc simplify_relations(
     return expr2tc();
   }
 
-  expr2tc simpl_res;
-
-  if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt &>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res = TFunctor<fixedbvt &>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_floatbv_type(simplified_side_1) || is_floatbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-    std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
-
-    simpl_res = TFunctor<ieee_floatt &>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_pointer_type(simplified_side_1) || is_pointer_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      [&](const expr2tc &t) -> bool {
-      if (is_pointer_type(t) && is_symbol2t(t))
-      {
-        symbol2t s = to_symbol2t(t);
-        if (s.thename == "NULL")
-          return true;
-      }
-      return false;
-    };
-
-    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int {
-      return 0xbadbeef;
-    };
-
-    simpl_res = TFunctor<int>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else
-    return expr2tc();
-
-  return typecast_check_return(type, simpl_res);
+  return simplify_constant_relation<TFunctor>(
+    type, simplified_side_1, simplified_side_2);
 }
 
 template <template <typename> class TFunctor, typename constructor>
