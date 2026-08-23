@@ -5013,6 +5013,118 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 115. §114.2's two three-test causes: one is a crash, one is not work
+## (2026-08-23)
+
+§114.2 deferred "the promotion at a comparison, and the decay rendered as a
+cast", three tests each, on the reading that both were spelling-level. Reduced,
+neither is what its census tag said.
+
+### 115.1 The comparison cast is §113.3's class, not a missing promotion
+
+```c
+__attribute__((aligned)) int g = 42;
+int main(void) { int p = 1; if (g == 42) p = 2; return p; }
+```
+
+Legacy emits `(signed int)g == 42`; the hop-off emits `g == 42`. Dropping the
+attribute makes the pair byte-identical, so the operand needs no promotion —
+`g` is already `int`. What legacy emits is an identity cast, and it emits it
+because the *legacy* types differ on an alignment attribute.
+
+`signedbv_type2t` has exactly one field, `width`
+(`src/irep2/irep2_type.h:209-221`). `__attribute__((aligned)) int` and plain
+`int` are therefore not merely observed-equal after `migrate_type`, they are the
+same node by construction, and the symbol tables are byte-identical on both
+paths. No pass reading IREP2 can know the cast is owed — §113.3's argument
+verbatim, reached from a different node.
+
+**Do not mirror.** Three of the 24 close as non-work, on the same footing as
+`atexit`'s function-pointer cast.
+
+### 115.2 The array decay is not a spelling difference at all
+
+The other cause reduces to six lines:
+
+```c
+char a[4];
+char b[4];
+int main(int argc, char **argv) { char *c = argc == 1 ? a : b; return c[0]; }
+```
+
+```
+<         ASSIGN c=argc == 1 ? &a[0] : &b[0];
+>         ASSIGN c=argc == 1 ? (signed char *)a : (signed char *)b;
+```
+
+The same conversion through an `if` statement (`if (argc == 1) c = a; else c =
+b;`) and through a plain initialiser is byte-identical, so it is the ternary
+that is special — and the site is not in the adjuster.
+
+`migrate_expr`'s `if` arm coerces any branch whose `type_id` differs from the
+node's, by construction a typecast (`migrate.cpp:1186`). It was added for the C
+`assert` idiom `cond ? 0 : __assert_fail()`, whose branches diverge from a void
+result, and its comment claims "well-typed ternaries already have matching
+branch types". That premise is false: a well-typed conditional yielding a
+pointer from array operands has branch `type_id` `array` against a node
+`pointer`, so the coercion fires on the common path and wins the race against
+the adjuster, which never sees an array to decay.
+
+The consequence is worse than a spelling. `typecast(array, pointer)` is not a
+form the SMT backend accepts:
+
+```
+$ esbmc v.c --clang-c-irep2-adjust-only
+ERROR: Unexpected type in int/ptr typecast
+```
+
+on a nine-line program that verifies on the default path. The census could not
+see it: `--goto-functions-only` stops before the encoder, so the row read
+`diff`, not `crash`.
+
+The fix gives that pair its C conversion (C11 6.3.2.1p3) rather than a cast —
+`&a[0]`, exactly what `c_typecastt::do_typecast` already spells for the same
+pair on both of its copies — and falls through to the typecast for every other
+divergent pair, so the `assert` idiom the arm was written for is untouched.
+
+### 115.3 Result
+
+`regression/esbmc/irep2_only_ternary_array_decay{,_fail}` pin the verdict rather
+than the printer: both abort with `Unexpected type in int/ptr typecast` before
+the patch, and return SUCCESSFUL / FAILED-with-`array bounds violated` after.
+That is the strongest mutant this scope has had — the pre-patch binary does not
+merely print differently, it produces no verdict at all.
+
+Census on a stride-8 list of `regression/esbmc` pinned to a file before the A/B
+(233 entries, 226 with a `.c` source), against the same base:
+
+| goto program | before | after |
+|---|---:|---:|
+| same | 202 | **204** |
+| diff | **24** | **22** |
+
+`github_6966_fail` and `memset-const-2` converge; none diverges that did not
+before. §114 tagged this cause at three tests — the third carries a second
+cause and stays.
+
+`migrate_expr` is shared, so the default path was measured separately: over the
+same 226 C sources, `--goto-functions-only` with no `-only` flag is
+**byte-identical on all 226** between master and the patch. Suites:
+`esbmc` 1857/1857, `cstd` 142/142, `floats` 106/106, `function_contract`
+414/414, `goto-coverage` 144/144, `python/list` 294/294, `esbmc-cpp/cpp`
+931/933 — `ch9_7` and `ch13_10` exceed the harness's 120 s cap locally and
+`ch9_7` takes 2 m 04 s on master against 2 m 01 s here, so neither is this
+patch.
+
+### 115.4 Next
+
+The residue is 22, and the named causes left are the temporary numbering
+(`tmp$3` vs `tmp$4`, 2 tests), struct padding in an aggregate initialiser
+(`github_578_success3`), and `POINTER_OFFSET` spelling in an `offsetof`
+lowering (`github_2512_8`, `github_426_2`, `github_2512_12`) — the largest
+remaining group and the one to reduce first. Three tests are untagged.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
