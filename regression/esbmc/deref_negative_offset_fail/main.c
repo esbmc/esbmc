@@ -1,5 +1,6 @@
-/* R35: a write below an object's base is neither performed nor flagged.
-   The symmetric overflow, *(int *)(base + 16), is caught. */
+/* A write one element below an object's base must be reported. The check was
+   written as offset + access_sz > data_sz, which wraps back into range for
+   every offset in [-access_sz, 0), so exactly the p[-1] shape went unreported. */
 #include <assert.h>
 
 struct c
