@@ -162,6 +162,7 @@ public:
       member_type; ///< Array-field member type (for indexing); nil otherwise
     expr2tc alias_exemption; ///< Nil, or a guard under which this location is
                              ///< an assigns target reached by another name
+    expr2tc readable; ///< Nil, or the condition both reads are taken under
   };
 
   /// \brief Snapshot for array element assigns compliance (Phase 2B).
@@ -181,11 +182,12 @@ public:
 
   /// \brief Byte extent of a harness-allocated pointer parameter.
   ///
-  /// \p justified says whether the harness backing is real enough to read
-  /// through: an __ESBMC_is_fresh size, or the one element C++ guarantees the
-  /// receiver addresses. It is false for a nondet heap extent, which nothing
-  /// may dereference. An absent map entry is a third state: the harness never
-  /// allocated, so the pointer is the real caller's.
+  /// \p justified says whether the backing is unconditionally readable: an
+  /// __ESBMC_is_fresh size, or the one element C++ guarantees the receiver and
+  /// reference parameters address. A nondet heap extent is false, and is
+  /// readable only where \p bytes covers the pointee. An absent map entry is a
+  /// third state: the harness never allocated, so the pointer is the real
+  /// caller's.
   struct param_extentt
   {
     expr2tc bytes;  ///< Byte-extent expression of the allocation
@@ -451,11 +453,8 @@ private:
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
-  /// \param param_extents Byte extent of each harness allocation. Params whose
-  ///        backing is not justified are skipped: the snapshot dereferences
-  ///        the pointer, and against a nondet extent that harness-invented
-  ///        read fails its own bounds check, reporting a violation in a
-  ///        parameter the contract never mentions.
+  /// \param param_extents Byte extent of each harness allocation, used to
+  ///        decide the condition each snapshot is read under.
   /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
   std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -473,6 +472,7 @@ private:
   /// Appends to \p result unless the field is one this check skips (a VLA, a
   /// non-scalar element type, or a zero-length array, which has no element).
   /// \param deref_expr The *p expression the field is read from
+  /// \param readable Nil, or the condition the read is taken under
   void materialize_ptr_deref_array_field(
     const irep_idt &param_id,
     const irep_idt &field,
@@ -480,6 +480,7 @@ private:
     const type2tc &pointee,
     const expr2tc &ptr_sym,
     const expr2tc &deref_expr,
+    const expr2tc &readable,
     goto_programt &wrapper,
     const locationt &location,
     const std::string &func_name,
@@ -655,8 +656,8 @@ private:
   /// only dereferenceable as far as the contract itself justifies via
   /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
   /// contract does not state and mask out-of-bounds accesses in the body
-  /// (GitHub issue #6212). The implicit C++ receiver is the one exception,
-  /// see emit_receiver_stack_backing.
+  /// (GitHub issue #6212). The implicit C++ receiver and reference parameters
+  /// are the exceptions, see emit_whole_object_stack_backing.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
@@ -751,14 +752,14 @@ private:
     const locationt &location,
     const std::vector<std::pair<expr2tc, std::string>> &params);
 
-  /// \brief Back the implicit C++ receiver with one stack-allocated element.
+  /// \brief Back a parameter the language guarantees with one stack element.
   ///
-  /// Only `this` is backed this way. C++ guarantees it addresses one complete
-  /// object of the class, so the extent is the language's promise rather than
-  /// one the contract left unstated (#6212). Stack storage also gives symex
-  /// initial SSA versions of every field, which conditional field writes need
-  /// to form phi-nodes.
-  void emit_receiver_stack_backing(
+  /// Only the implicit C++ receiver and reference parameters are backed this
+  /// way. C++ guarantees each addresses one complete object, so the extent is
+  /// the language's promise rather than one the contract left unstated
+  /// (#6212). Stack storage also gives symex initial SSA versions of every
+  /// field, which conditional field writes need to form phi-nodes.
+  void emit_whole_object_stack_backing(
     goto_programt &wrapper,
     const expr2tc &p,
     const std::string &param_name,

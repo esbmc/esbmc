@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--function f --enforce-contract f
+^VERIFICATION SUCCESSFUL$
