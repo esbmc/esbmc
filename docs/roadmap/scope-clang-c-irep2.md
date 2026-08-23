@@ -5013,6 +5013,66 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 125. The unary promotion the complex arm displaced (2026-08-23)
+
+(§125: PRs #7266-#7285 are in flight against this file and claim §115-§124.)
+
+§124.4 guessed that `github_4078_unary_bool` was an unported arm and said it
+was cheap to check first. It was, and it was.
+
+### 125.1 One `if`, two obligations
+
+`clang_c_adjust` handles `unary-` and `bitnot` in a single arm that does two
+things: recurse into the operands, and promote a boolean operand to the node's
+type (`clang_c_adjust_expr.cpp:150-160`, added for #4078). This pass ported the
+*complex* half of the unary story — `adjust_complex_unary`, guarded by
+`is_complex_unary`, which requires `is_complex_type(expr->type)` — and nothing
+covers the ordinary case. A `~(a || b)` therefore kept a boolean operand, and
+the solver was handed a boolean where it wanted a bitvector:
+
+```
+$ esbmc main.c --unwind 2 --clang-c-irep2-adjust-only
+ERROR: Bitwuzla error encountered
+```
+
+The port is the same shape as the legacy arm, expressed with
+`c_implicit_typecast`, and hangs off the existing `is_complex_unary` branch as
+its `else`.
+
+### 125.2 Result
+
+Closes `github_4078_unary_bool` and `github_4078_unary_bool_fail`. The
+`gcc_vector_float_{arith,scalar_mul}` pair that §124.4 grouped with them is a
+different cause — both still abort in bitwuzla after this patch — so the
+"SIGABRT on vectors / unary bool" row was two causes, as its name half-admitted.
+That is the second time a cluster named by *symptom* has split on inspection
+(§123.2 was the first); the census groups by signal, and a signal is not a
+cause.
+
+Whole-suite verdict residue **11 → 9**. Both new tests abort in bitwuzla on the
+pre-patch binary and return SUCCESSFUL / FAILED after; a mutant swapping `neg`
+for `bitnot` moves both, the `_fail` one inverting.
+
+Default path byte-identical on 226 C sources. Suites: `esbmc` 1857/1857,
+`cstd` 142/142, `floats` 106/106, `cbmc` 307/307, `goto-coverage` 144/144.
+
+### 125.3 Next
+
+| tests | signature |
+|---:|---|
+| 4 | unclustered (`32_floppy`, `github_301`, `github_1934-1`, `github_382_6`) |
+| 2 | vector float arithmetic (`gcc_vector_float_{arith,scalar_mul}`) |
+| 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
+| 1 | `complex_25`, the §88.2 binding |
+
+The vector pair is the next coherent cause: `adjust_complex_arith` declines a
+vector operand deliberately (`§88` records that the legacy pass "returns before
+attaching a rounding mode for them"), and §123.1's finding applies — a decline
+that hands the backend an unencodable node is a crash, not a no-op. Check
+whether the same reasoning that closed the complex compound assignment closes
+these.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
