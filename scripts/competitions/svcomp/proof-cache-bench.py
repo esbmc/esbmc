@@ -18,10 +18,18 @@ Every task must reach the same verdict all three ways. A disagreement is a
 soundness alarm, reported as MISMATCH and counted separately; it is not a
 performance result.
 
+Each task gets its own cache directory by default, which compares a task only
+against itself. --shared-cache puts every task in one directory instead, the
+way a persisted CI cache works, so a key two *different* tasks collide on shows
+up as a MISMATCH. Only that mode can find a collision at all; a per-task cache
+cannot (esbmc/esbmc#7143).
+
   ./proof-cache-bench.py -p reach.prp -a 64 -s kinduction task1.c task2.c ...
+  ./proof-cache-bench.py -p reach.prp --shared-cache task1.c task2.c ...
 """
 
 import argparse
+import contextlib
 import os
 import re
 import shlex
@@ -84,8 +92,12 @@ def median_run(cmd, timeout, repeats):
             "solved": runs[0]["solved"]}
 
 
-def measure(task, args):
-    """Time one task three ways. Returns a row, or None when it cannot run."""
+def measure(task, args, shared=None):
+    """Time one task three ways. Returns a row, or None when it cannot run.
+
+    `shared` is a cache directory carried across tasks; without it the task
+    gets a private one that is discarded afterwards.
+    """
     cmd = resolve_binary(
         competition_command(task, args.propertyfile, args.arch, args.strategy),
         args.esbmc)
@@ -99,7 +111,8 @@ def measure(task, args):
     if "--multi-property" not in cmd:
         cmd = cmd + ["--multi-property"]
 
-    with tempfile.TemporaryDirectory() as cache:
+    with contextlib.ExitStack() as stack:
+        cache = shared or stack.enter_context(tempfile.TemporaryDirectory())
         runs = {
             "base": median_run(cmd, args.timeout, args.repeats),
             "cold": median_run(cmd + ["--proof-cache", cache], args.timeout, 1),
@@ -172,10 +185,17 @@ def main():
     ap.add_argument("--esbmc", default=shutil.which("esbmc"),
                     help="binary to test (default: esbmc on PATH); the "
                          "wrapper itself always names ./esbmc")
+    ap.add_argument("--shared-cache", action="store_true",
+                    help="one cache directory for every task, so a key two "
+                         "different tasks collide on shows up as a MISMATCH")
     ap.add_argument("tasks", nargs="+")
     args = ap.parse_args()
 
-    rows = [row for row in (measure(t, args) for t in args.tasks) if row]
+    with contextlib.ExitStack() as stack:
+        shared = (stack.enter_context(tempfile.TemporaryDirectory())
+                  if args.shared_cache else None)
+        rows = [row for row in (measure(t, args, shared) for t in args.tasks)
+                if row]
     skipped = len(args.tasks) - len(rows)
     if skipped:
         print(f"(skipped {skipped} task(s) that timed out or would not run)")
