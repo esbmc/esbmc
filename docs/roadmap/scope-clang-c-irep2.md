@@ -5013,6 +5013,82 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 119. §118.6's unsound row closed — the literal's type is a pre-padding copy
+## (2026-08-23)
+
+(§119: PRs #7266, #7271, #7274 and #7275 are in flight against this file and
+claim §115-§118.)
+
+§118.3 named `github_2335_4` — FAILED by default, SUCCESSFUL under the flag —
+as the highest-value row left, being the only one unsound rather than merely
+wrong. It is `clang_c_adjust::adjust_struct`, which this pass never had.
+
+### 119.1 The missing arm, and why the obvious port does not work
+
+The legacy arm inserts a zero operand at each synthetic padding member so a
+literal's operand list matches its padded type
+(`clang_c_adjust_expr.cpp:202-226`). Ported directly it does nothing: the
+literal's own type reports two members where the tag reports three.
+
+The reason is that the value's type is an **inline copy the converter recorded
+before `add_padding` ran**. `pad_type_symbol` pads the *type symbols*, and the
+legacy arm needs no more than that because there the value's type is a
+`symbol_typet` — `ns.follow` resolves it to the padded one. Under this flag the
+value has come through `migrate_expr`, which resolved that symbol type to a
+concrete `struct_type2t` snapshot, and `ns.follow` on a concrete type is the
+identity. The padded layout has to be read off the tag symbol by name.
+
+`pad_struct_operands` already existed for exactly this job, file-local in
+`python_adjust.cpp` (§V.3's Optional/union literals). It moves to
+`irep2_utils`, so the two frontends share one definition rather than the second
+copy §39.2 of `frontends-to-irep2.md` warns about.
+
+### 119.2 The first pair of tests did not reproduce, and why
+
+The obvious test — read a trailing member out of a padded literal — passes on
+the *pre-patch* binary. Trailing padding shifts nothing before it, so every
+declared member still resolves at its own index. §39.1's first failure mode:
+the corpus was thin, and a green mutant meant the test, not the code.
+
+What `github_2335_4` actually exercises is a dispatch through a function-pointer
+member of an array element, where the short literal changes the flow rather
+than a single read. Reduced to 21 lines:
+
+```c
+struct command { char *name; void (*function)(void); char state_needed; };
+const struct command commands[] = {{"c1", c1, 0}, {"c2", c2, 1}};
+/* parse() dispatches through commands[i].function; c1() leaks on the second call */
+```
+
+```
+$ esbmc v2.c --memory-leak-check ...                              VERIFICATION FAILED
+$ esbmc v2.c --memory-leak-check ... --clang-c-irep2-adjust-only  VERIFICATION SUCCESSFUL
+```
+
+That is the shipped `_fail` test, and it is the strongest kind available here:
+the pre-patch binary does not merely print differently, it **misses a real
+leak**. Corrupting the arm (skip the insert) returns both tests to SUCCESSFUL.
+
+### 119.3 Result
+
+Census on the pinned stride-8 list, same base: **24 → 22**, with
+`github_2335_4` and `github_578_success3` converging and nothing new. The two
+were one cause with two symptoms, as §118.3 predicted. The verdict census's
+three-row residue is now one (`github_3487`, §118.4).
+
+`irep2_utils` is shared, so the default path was measured: byte-identical on all
+226 C sources. Suites: `esbmc` 1857/1857, `cstd` 142/142, `function_contract`
+414/414, `python/list` 294/294, `python` class/struct/optional/union 110/110,
+`esbmc-cpp/cpp` 931/933 — `ch9_7` and `ch13_10` exceed the harness's 120 s cap
+locally and return their expected verdicts on master and here alike.
+
+### 119.4 Next
+
+`github_3487` — `ERROR: uncaught exception [St19bad_optional_access]` under the
+flag, SUCCESSFUL without. The last row of §118.1's three, and the only one that
+is a crash in ESBMC's own code rather than a modelling gap.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
