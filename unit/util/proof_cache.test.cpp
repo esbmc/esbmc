@@ -269,6 +269,27 @@ TEST_CASE("only a counterexample contradicts a stored proof", "[proof_cache]")
   REQUIRE_FALSE(proof_cache_contradicted(false, false));
 }
 
+TEST_CASE(
+  "every value of a repeatable option is part of the key",
+  "[proof_cache]")
+{
+  const std::string dir = scratch_dir("repeatable");
+  const std::string cone = "step 1\nrepeatable\n";
+
+  // set_option overwrites, so `-DA=1 -DB=1` and `-DB=1` leave the same entry
+  // in option_map. They are different verifications and must key apart.
+  optionst both = with_option("D", "B=1");
+  both.option_values["D"] = {"A=1", "B=1"};
+  optionst last = with_option("D", "B=1");
+  last.option_values["D"] = {"B=1"};
+
+  proof_cachet(dir, both, build).record(cone);
+  REQUIRE(proof_cachet(dir, both, build).proved(cone));
+  REQUIRE_FALSE(proof_cachet(dir, last, build).proved(cone));
+
+  std::filesystem::remove_all(dir);
+}
+
 TEST_CASE("a proof does not carry across solver sets", "[proof_cache]")
 {
   // ESBMC_AVAILABLE_SOLVERS is compiled in, so this cannot be varied from a

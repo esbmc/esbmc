@@ -168,8 +168,21 @@ proof_cache_context(const optionst &options, const std::string &build_identity)
     "quiet",
     "verbosity"};
   for (const auto &[name, value] : options.option_map)
-    if (!not_semantic.count(name))
-      ctx << "opt " << name << '=' << value << '\n';
+  {
+    if (not_semantic.count(name))
+      continue;
+    ctx << "opt " << name << '=' << value << '\n';
+
+    // set_option overwrites, so a repeatable option leaves only its last value
+    // in option_map and `-DA -DB` would key the same as `-DB`. The earlier
+    // values are folded in on top rather than in place: an option the run
+    // rewrites afterwards -- k-induction's per-step `unwind` -- must still key
+    // on what it currently holds.
+    const auto given = options.option_values.find(name);
+    if (given != options.option_values.end() && given->second.size() > 1)
+      for (const std::string &v : given->second)
+        ctx << "optv " << name << '=' << v << '\n';
+  }
 
   const auto &c = config.ansi_c;
   ctx << "lang " << static_cast<int>(config.language.lid) << '\n';

@@ -213,9 +213,10 @@ That is not a cache failure.
 ## Invalidation and housekeeping
 
 Every option is folded into the key, including ones that only affect
-scheduling, so changing any flag starts a fresh set of entries rather than
-reusing existing ones. This is deliberately conservative: an option wrongly
-judged irrelevant would silently reuse a proof that no longer holds.
+scheduling and every value of a repeatable one, so changing any flag starts a
+fresh set of entries rather than reusing existing ones. This is deliberately
+conservative: an option wrongly judged irrelevant would silently reuse a proof
+that no longer holds.
 
 The exceptions are the options that reach nothing but the report —
 `--verbosity`, `--quiet`, `--log-message`, `--color`, `--ascii-report`,
