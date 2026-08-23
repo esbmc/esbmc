@@ -2,3 +2,4 @@ CORE
 main.c
 --enforce-contract init_buf --function init_buf
 ^VERIFICATION FAILED$
+^.*contract ensures.*$

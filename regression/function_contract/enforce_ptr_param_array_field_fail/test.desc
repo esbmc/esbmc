@@ -2,3 +2,4 @@ CORE
 main.c
 --enforce-contract add --function add --unwind 9
 ^VERIFICATION FAILED$
+assigns compliance: .*b->coeffs\[k\]

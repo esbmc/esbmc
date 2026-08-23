@@ -8,6 +8,9 @@
 typedef struct { int16_t coeffs[N]; } poly;
 void add(poly *r, poly *b)
 {
+  /* Guarded, as in the pass twin. */
+  __ESBMC_requires(r == NULL || __ESBMC_is_fresh(r, sizeof(poly)));
+  __ESBMC_requires(b == NULL || __ESBMC_is_fresh(b, sizeof(poly)));
   __ESBMC_requires(r != NULL && b != NULL);
   __ESBMC_assigns(r->coeffs);
   __ESBMC_ensures(1);
