@@ -1183,10 +1183,29 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // ternaries already have matching branch types, so no cast is added on the
     // common path. Matching on type_id (not full structural type) keeps this to
     // exactly the cases the if2t invariant rejects.
-    if (true_val->type->type_id != type->type_id)
-      true_val = typecast2tc(type, true_val);
-    if (false_val->type->type_id != type->type_id)
-      false_val = typecast2tc(type, false_val);
+    auto coerce_branch = [&type](expr2tc &branch) {
+      if (branch->type->type_id == type->type_id)
+        return;
+
+      // C11 6.3.2.1p3: an array operand converts to a pointer to its first
+      // element. That is not a cast of the array object, and the frontend's own
+      // conversion (c_typecastt::do_typecast) spells it &a[0]; coerced as a
+      // plain typecast the node reaches the encoder as typecast(array, pointer)
+      // and aborts it.
+      if (is_array_type(branch->type) && is_pointer_type(type))
+      {
+        const array_type2t &arr = to_array_type(branch->type);
+        expr2tc first = index2tc(arr.subtype, branch, gen_zero(index_type2()));
+        branch = address_of2tc(arr.subtype, first);
+        if (branch->type == type)
+          return;
+      }
+
+      branch = typecast2tc(type, branch);
+    };
+
+    coerce_branch(true_val);
+    coerce_branch(false_val);
 
     new_expr_ref = if2tc(type, cond, true_val, false_val, expr.location());
     return;
