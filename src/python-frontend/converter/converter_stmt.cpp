@@ -6073,10 +6073,16 @@ exprt python_converter::get_block(
       // only a constant True short-circuits — False/unknown fall through so
       // the solver still detects genuine violations. Disabled under any
       // coverage mode, where the original assert/branches must be instrumented.
+      // --dead-code-check is deliberately not part of is_coverage_mode()
+      // (#6387: it keeps a verdict, so the coverage reporting rules must not
+      // apply to it), but it does need the call left in place: folding the
+      // assert drops the call, and everything reachable only through it is
+      // then never symexed and reported as CWE-561 (#7268).
       const bool coverage_active =
         is_coverage_mode() ||
         config.options.get_bool_option("assertion-coverage") ||
-        config.options.get_bool_option("assertion-coverage-claims");
+        config.options.get_bool_option("assertion-coverage-claims") ||
+        config.options.get_bool_option("dead-code-check");
       if (
         !coverage_active && element.contains("test") &&
         ast_contains_call(element["test"]))
