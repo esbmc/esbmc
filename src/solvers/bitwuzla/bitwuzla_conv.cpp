@@ -3,6 +3,14 @@
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
+/* An fp sort and a bv sort are different Bitwuzla sorts, so the in-place
+ * rewrite the base class performs would corrupt every other holder of this
+ * ast. Hand back a fresh node over the same term instead. */
+smt_astt bitw_smt_ast::with_sort(smt_solver_baset *ctx, smt_sortt s) const
+{
+  return ctx->new_solver_ast<bitw_smt_ast>(a, s);
+}
+
 void bitwuzla_error_handler(const char *msg)
 {
   log_error("Bitwuzla error encountered\n{}", msg);
@@ -18,6 +26,8 @@ smt_solver_baset *create_new_bitwuzla_solver(
 {
   bitwuzla_convt *conv = new bitwuzla_convt(ns, options);
   *array_api = static_cast<array_iface *>(conv);
+  /* --fp2bv opts back out to ESBMC's own bit-vector encoding, which is what
+   * fp.rem-heavy programs and the sign of a NaN (#7021) still need. */
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
 }
@@ -571,6 +581,8 @@ bitwuzla_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_FIXEDBV:
   case SMT_SORT_BVFP:
   case SMT_SORT_BVFP_RM:
+  case SMT_SORT_FPBV:
+  case SMT_SORT_FPBV_RM:
   case SMT_SORT_BOOL:
   case SMT_SORT_ARRAY:
     node = bitwuzla_mk_const(
@@ -684,6 +696,16 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 {
   assert(cond->sort->id == SMT_SORT_BOOL);
   assert(t->sort->get_data_width() == f->sort->get_data_width());
+
+  // A float reaches here in either representation now: a native fp term where
+  // the FP API produced it, a bit-vector where the bit-level paths did -- a
+  // failed-dereference symbol merged against a byte-wise read, say. The widths
+  // agree, and the bit-vector holds that format's IEEE encoding, so reinterpret
+  // it rather than hand Bitwuzla an ite over two sorts, which it rejects.
+  if (t->sort->id == SMT_SORT_FPBV && f->sort->id != SMT_SORT_FPBV)
+    f = mk_from_bv_to_fp(f, t->sort);
+  else if (f->sort->id == SMT_SORT_FPBV && t->sort->id != SMT_SORT_FPBV)
+    t = mk_from_bv_to_fp(t, f->sort);
 
   return new_ast(
     bitwuzla_mk_term3(
@@ -970,6 +992,401 @@ smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw_term_manager, 3), 3);
+}
+
+smt_sortt bitwuzla_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  // sw excludes the hidden bit, which Bitwuzla's significand width includes.
+  return new solver_smt_sort<BitwuzlaSort>(
+    SMT_SORT_FPBV,
+    bitwuzla_mk_fp_sort(bitw_term_manager, ew, sw + 1),
+    ew + sw + 1,
+    sw + 1);
+}
+
+smt_sortt bitwuzla_convt::mk_fpbv_rm_sort()
+{
+  return new solver_smt_sort<BitwuzlaSort>(
+    SMT_SORT_FPBV_RM, bitwuzla_mk_rm_sort(bitw_term_manager), 3);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv(const ieee_floatt &thereal)
+{
+  smt_sortt s = mk_fpbv_sort(thereal.spec.e, thereal.spec.f);
+  smt_astt bv =
+    mk_smt_bv(thereal.pack(), mk_bvfp_sort(thereal.spec.e, thereal.spec.f));
+  return mk_from_bv_to_fp(bv, s);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
+{
+  // SMT-LIB has a single NaN with no sign bit, so sgn cannot be honoured
+  // here; observing the sign of a NaN is esbmc/esbmc#7021.
+  (void)sgn;
+  smt_sortt s = mk_fpbv_sort(ew, sw - 1);
+  return new_ast(
+    bitwuzla_mk_fp_nan(
+      bitw_term_manager, to_solver_smt_sort<BitwuzlaSort>(s)->s),
+    s);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  smt_sortt s = mk_fpbv_sort(ew, sw - 1);
+  BitwuzlaSort bs = to_solver_smt_sort<BitwuzlaSort>(s)->s;
+  return new_ast(
+    sgn ? bitwuzla_mk_fp_neg_inf(bitw_term_manager, bs)
+        : bitwuzla_mk_fp_pos_inf(bitw_term_manager, bs),
+    s);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
+{
+  BitwuzlaRoundingMode brm;
+  switch (rm)
+  {
+  case ieee_floatt::ROUND_TO_EVEN:
+    brm = BITWUZLA_RM_RNE;
+    break;
+  case ieee_floatt::ROUND_TO_AWAY:
+    brm = BITWUZLA_RM_RNA;
+    break;
+  case ieee_floatt::ROUND_TO_PLUS_INF:
+    brm = BITWUZLA_RM_RTP;
+    break;
+  case ieee_floatt::ROUND_TO_MINUS_INF:
+    brm = BITWUZLA_RM_RTN;
+    break;
+  case ieee_floatt::ROUND_TO_ZERO:
+    brm = BITWUZLA_RM_RTZ;
+    break;
+  default:
+    log_error("Unexpected rounding mode reached Bitwuzla");
+    abort();
+  }
+
+  return new_ast(
+    bitwuzla_mk_rm_value(bitw_term_manager, brm), mk_fpbv_rm_sort());
+}
+
+smt_astt bitwuzla_convt::mk_fp_arith(
+  BitwuzlaKind kind,
+  smt_astt lhs,
+  smt_astt rhs,
+  smt_astt rm)
+{
+  return new_ast(
+    bitwuzla_mk_term3(
+      bitw_term_manager,
+      kind,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(lhs)->a,
+      to_solver_smt_ast<bitw_smt_ast>(rhs)->a),
+    lhs->sort);
+}
+
+smt_astt
+bitwuzla_convt::mk_smt_fpbv_add(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return mk_fp_arith(BITWUZLA_KIND_FP_ADD, lhs, rhs, rm);
+}
+
+smt_astt
+bitwuzla_convt::mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return mk_fp_arith(BITWUZLA_KIND_FP_SUB, lhs, rhs, rm);
+}
+
+smt_astt
+bitwuzla_convt::mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return mk_fp_arith(BITWUZLA_KIND_FP_MUL, lhs, rhs, rm);
+}
+
+smt_astt
+bitwuzla_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
+{
+  return mk_fp_arith(BITWUZLA_KIND_FP_DIV, lhs, rhs, rm);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  /* Bitwuzla has fp.rem, but it solves the remainder/fmod bound proofs one to
+   * two orders of magnitude slower than ESBMC's own lowering, so round-trip to
+   * bit-vectors and use that instead, as the mathsat backend does. A separate
+   * fp_convt is needed rather than fp_convt::mk_smt_fpbv_rem: the lowering
+   * calls back into the interface, and through *this* those calls would reach
+   * the native overrides and hand FP terms to bit-vector operations. */
+  fp_convt software(this);
+  smt_astt rem =
+    software.mk_smt_fpbv_rem(mk_from_fp_to_bv(lhs), mk_from_fp_to_bv(rhs));
+  return mk_from_bv_to_fp(rem, lhs->sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_fma(
+  smt_astt v1,
+  smt_astt v2,
+  smt_astt v3,
+  smt_astt rm)
+{
+  BitwuzlaTerm args[4] = {
+    to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+    to_solver_smt_ast<bitw_smt_ast>(v1)->a,
+    to_solver_smt_ast<bitw_smt_ast>(v2)->a,
+    to_solver_smt_ast<bitw_smt_ast>(v3)->a};
+  return new_ast(
+    bitwuzla_mk_term(bitw_term_manager, BITWUZLA_KIND_FP_FMA, 4, args),
+    v1->sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm)
+{
+  return new_ast(
+    bitwuzla_mk_term2(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_SQRT,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(rd)->a),
+    rd->sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
+{
+  return new_ast(
+    bitwuzla_mk_term2(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_RTI,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(from)->a),
+    from->sort);
+}
+
+smt_astt
+bitwuzla_convt::mk_fp_pred(BitwuzlaKind kind, smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    bitwuzla_mk_term2(
+      bitw_term_manager,
+      kind,
+      to_solver_smt_ast<bitw_smt_ast>(lhs)->a,
+      to_solver_smt_ast<bitw_smt_ast>(rhs)->a),
+    boolean_sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
+{
+  return mk_fp_pred(BITWUZLA_KIND_FP_EQUAL, lhs, rhs);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_gt(smt_astt lhs, smt_astt rhs)
+{
+  return mk_fp_pred(BITWUZLA_KIND_FP_GT, lhs, rhs);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_lt(smt_astt lhs, smt_astt rhs)
+{
+  return mk_fp_pred(BITWUZLA_KIND_FP_LT, lhs, rhs);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_gte(smt_astt lhs, smt_astt rhs)
+{
+  return mk_fp_pred(BITWUZLA_KIND_FP_GEQ, lhs, rhs);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_lte(smt_astt lhs, smt_astt rhs)
+{
+  return mk_fp_pred(BITWUZLA_KIND_FP_LEQ, lhs, rhs);
+}
+
+smt_astt bitwuzla_convt::mk_fp_class(BitwuzlaKind kind, smt_astt op)
+{
+  return new_ast(
+    bitwuzla_mk_term1(
+      bitw_term_manager, kind, to_solver_smt_ast<bitw_smt_ast>(op)->a),
+    boolean_sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_is_nan(smt_astt op)
+{
+  return mk_fp_class(BITWUZLA_KIND_FP_IS_NAN, op);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_is_inf(smt_astt op)
+{
+  return mk_fp_class(BITWUZLA_KIND_FP_IS_INF, op);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_is_normal(smt_astt op)
+{
+  return mk_fp_class(BITWUZLA_KIND_FP_IS_NORMAL, op);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_is_zero(smt_astt op)
+{
+  return mk_fp_class(BITWUZLA_KIND_FP_IS_ZERO, op);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_is_negative(smt_astt op)
+{
+  return mk_fp_class(BITWUZLA_KIND_FP_IS_NEG, op);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_is_positive(smt_astt op)
+{
+  return mk_fp_class(BITWUZLA_KIND_FP_IS_POS, op);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_abs(smt_astt op)
+{
+  return new_ast(
+    bitwuzla_mk_term1(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_ABS,
+      to_solver_smt_ast<bitw_smt_ast>(op)->a),
+    op->sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_fpbv_neg(smt_astt op)
+{
+  return new_ast(
+    bitwuzla_mk_term1(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_NEG,
+      to_solver_smt_ast<bitw_smt_ast>(op)->a),
+    op->sort);
+}
+
+smt_astt bitwuzla_convt::mk_smt_typecast_from_fpbv_to_ubv(
+  smt_astt from,
+  std::size_t width)
+{
+  // C truncates towards zero when converting a float to an integer.
+  smt_astt rm = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+  return new_ast(
+    bitwuzla_mk_term2_indexed1(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_TO_UBV,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(from)->a,
+      width),
+    mk_bv_sort(width));
+}
+
+smt_astt bitwuzla_convt::mk_smt_typecast_from_fpbv_to_sbv(
+  smt_astt from,
+  std::size_t width)
+{
+  smt_astt rm = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
+  return new_ast(
+    bitwuzla_mk_term2_indexed1(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_TO_SBV,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(from)->a,
+      width),
+    mk_bv_sort(width));
+}
+
+smt_astt bitwuzla_convt::mk_smt_typecast_from_fpbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return new_ast(
+    bitwuzla_mk_term2_indexed2(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_TO_FP_FROM_FP,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(from)->a,
+      to->get_exponent_width(),
+      to->get_significand_width()),
+    to);
+}
+
+smt_astt bitwuzla_convt::mk_smt_typecast_ubv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return new_ast(
+    bitwuzla_mk_term2_indexed2(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_TO_FP_FROM_UBV,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(from)->a,
+      to->get_exponent_width(),
+      to->get_significand_width()),
+    to);
+}
+
+smt_astt bitwuzla_convt::mk_smt_typecast_sbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
+{
+  return new_ast(
+    bitwuzla_mk_term2_indexed2(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_TO_FP_FROM_SBV,
+      to_solver_smt_ast<bitw_smt_ast>(rm)->a,
+      to_solver_smt_ast<bitw_smt_ast>(from)->a,
+      to->get_exponent_width(),
+      to->get_significand_width()),
+    to);
+}
+
+smt_astt bitwuzla_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
+{
+  return new_ast(
+    bitwuzla_mk_term1_indexed2(
+      bitw_term_manager,
+      BITWUZLA_KIND_FP_TO_FP_FROM_BV,
+      to_solver_smt_ast<bitw_smt_ast>(op)->a,
+      to->get_exponent_width(),
+      to->get_significand_width()),
+    to);
+}
+
+smt_astt bitwuzla_convt::mk_from_fp_to_bv(smt_astt op)
+{
+  /* Bitwuzla has no fp.to_ieee_bv. Mint a bit-vector symbol b and pin it with
+   * op = ((_ to_fp e s) b), which the bv -> fp direction can express. The map
+   * is injective away from NaN, so b is the bit pattern; for a NaN the
+   * constraint holds for every NaN encoding, leaving the payload and sign
+   * free (esbmc/esbmc#7021). A single shared name keeps all NaN conversions
+   * agreeing with one another, as the cvc4/cvc5 backends do. */
+  smt_sortt to = mk_bvfp_sort(
+    op->sort->get_exponent_width(), op->sort->get_significand_width() - 1);
+
+  const bool is_nan =
+    bitwuzla_term_is_fp_value_nan(to_solver_smt_ast<bitw_smt_ast>(op)->a);
+  const std::string name =
+    is_nan ? "__ESBMC_NaN"
+           : "__ESBMC_to_ieeebv" + std::to_string(to_bv_counter++);
+
+  smt_astt bv = mk_smt_symbol(name, to);
+  assert_ast(mk_eq(op, mk_from_bv_to_fp(bv, op->sort)));
+  return bv;
+}
+
+ieee_floatt bitwuzla_convt::get_fpbv(smt_astt a)
+{
+  const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
+
+  const char *sign;
+  const char *exponent;
+  const char *significand;
+  bitwuzla_term_value_get_fp_ieee(
+    bitwuzla_get_value(bitw, ast->a), &sign, &exponent, &significand, 2);
+
+  const unsigned ew = a->sort->get_exponent_width();
+  const unsigned sw = a->sort->get_significand_width() - 1;
+
+  ieee_floatt number(ieee_float_spect(sw, ew));
+  number.unpack(binary2integer(
+    std::string(sign) + std::string(exponent) + std::string(significand),
+    false));
+  return number;
 }
 
 smt_astt bitwuzla_convt::mk_quantifier(

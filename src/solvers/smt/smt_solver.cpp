@@ -3878,6 +3878,12 @@ smt_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->mk_ite(cond, this, falseop);
 }
 
+smt_astt smt_ast::with_sort(smt_solver_baset *, smt_sortt s) const
+{
+  const_cast<smt_ast *>(this)->sort = s;
+  return this;
+}
+
 smt_astt smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.

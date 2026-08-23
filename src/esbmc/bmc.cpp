@@ -538,19 +538,15 @@ void bmct::report_trace(smt_resultt &res, const symex_target_equationt &eq)
     // read, so there is no trace to build and dereferencing it would crash.
     if (!runtime_solver)
       break;
-    if (!bs && show_cex)
-    {
-      // --show-cex on an inductive-step or forward-condition SAT: that model
-      // starts from a havoc'd state, so it witnesses no violation of the
-      // program and must not reach a verdict (multi_property_check draws the
-      // same line at its `is ? Unknown : Failed`).
-      error_trace(*runtime_solver, eq);
-    }
-    else if (!is && !fc)
-    {
+    // An inductive-step or forward-condition model starts from a havoc'd
+    // state, so it witnesses no violation of the program and must not reach a
+    // verdict (multi_property_check draws the same line at its
+    // `is ? Unknown : Failed`). Printing that trace under --show-cex is a
+    // separate decision from recording it, so the two conditions are separate.
+    if (!is && !fc)
       record_violated_properties(*runtime_solver, eq);
+    if ((!bs && show_cex) || (!is && !fc))
       error_trace(*runtime_solver, eq);
-    }
     break;
 
   default:
