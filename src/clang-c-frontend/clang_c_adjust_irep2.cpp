@@ -177,6 +177,9 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
+  if (is_code_decl2t(expr))
+    adjust_decl_init(expr);
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
 
@@ -394,6 +397,25 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
   expr = address_of2tc(elem, idx, a.implicit);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_decl's trailing `gen_typecast`: a
+/// declaration's initialiser converts to the declared type. Distinct from
+/// adjust_plain_assignment, which handles the *expression* form
+/// (`sideeffect_assign2t`). Without it a narrower declared type keeps the
+/// promoted operand type -- `_ExtInt(10) z = x + y` initialises from an `int`
+/// -- and the solver is handed mismatching sorts.
+void clang_c_adjust_irep2::adjust_decl_init(expr2tc &expr)
+{
+  const code_decl2t &d = to_code_decl2t(expr);
+  if (is_nil_expr(d.init))
+    return;
+
+  expr2tc init = d.init;
+  c_implicit_typecast(init, expr->type, ns);
+
+  if (init != d.init)
+    expr = code_decl2tc(expr->type, d.value, init, d.location);
 }
 
 void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
