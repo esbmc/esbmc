@@ -244,7 +244,7 @@ TEST_CASE("a build ID that names one build is the identity", "[proof_cache]")
 
   // A dirty tree, or a build with no commit to name, describes a class of
   // builds; the identity must then say more than the ID does.
-  for (const std::string id :
+  for (const std::string &id :
        {clean + " (dirty tree)",
         std::string("ESBMC built from no-hash by a@b")})
   {
