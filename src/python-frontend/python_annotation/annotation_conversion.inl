@@ -4087,7 +4087,7 @@ void python_annotation<Json>::preprocess_method_calls(const Json &node)
 /// inside `def main(): ... f(local_var)` would fail to type-infer
 /// `local_var`, since `find_var_decl` searches by function name.
 template <class Json>
-void python_annotation<Json>::preprocess_function_calls(Json &root)
+bool python_annotation<Json>::preprocess_function_calls(Json &root)
 {
   // First pass: gather inferred argument types for every top-level
   // function call. Recurse into FunctionDef bodies so scope-dependent
@@ -4108,6 +4108,7 @@ void python_annotation<Json>::preprocess_function_calls(Json &root)
 
   // Second pass: for each top-level FunctionDef, if all observed call
   // sites agreed on a single type for a parameter, write the annotation.
+  bool annotated = false;
   for (Json &top_node : ast_["body"])
   {
     if (
@@ -4123,11 +4124,15 @@ void python_annotation<Json>::preprocess_function_calls(Json &root)
       if (param.contains("annotation") && !param["annotation"].is_null())
         continue;
       auto it = param_types.find({fname, i});
-      if (it == param_types.end() || it->second.size() != 1)
+      if (
+        it == param_types.end() || it->second.size() != 1 ||
+        *it->second.begin() == unresolved_arg_type())
         continue;
       add_parameter_annotation(param, *it->second.begin());
+      annotated = true;
     }
   }
+  return annotated;
 }
 
 template <class Json>
@@ -4160,12 +4165,15 @@ void python_annotation<Json>::collect_function_call_arg_types(
         for (size_t i = 0; i < call_args.size(); ++i)
         {
           std::string arg_type = get_argument_type(call_args[i]);
-          // Skip ambiguous / under-specified types: NoneType is `bool*`
-          // in the operational model (issue #3796) and Any leaves the
-          // type uninformative; both would lock in a misleading
-          // annotation for callers that pass a real value.
+          // Ambiguous / under-specified types: NoneType is `bool*` in the
+          // operational model (issue #3796) and Any leaves the type
+          // uninformative; both would lock in a misleading annotation for
+          // callers that pass a real value. Recorded rather than dropped so
+          // a parameter is annotated only once *every* call site resolves —
+          // an iterating pass must not commit to a type a later round
+          // contradicts (GitHub #7254).
           if (arg_type.empty() || arg_type == "NoneType" || arg_type == "Any")
-            continue;
+            arg_type = unresolved_arg_type();
           param_types[{func_name, i}].insert(arg_type);
         }
       }
@@ -4217,7 +4225,13 @@ void python_annotation<Json>::add_type_annotation()
   // inferred return type. Without this, attribute-chain lookups on
   // unannotated parameters (e.g. `resource.mutex.acquire()`) fail with a
   // cryptic "Variable mutex not found" — GitHub #4570.
-  preprocess_function_calls(ast_);
+  // Iterated: each round resolves the arguments the previous round annotated,
+  // carrying types one call-graph edge further — a callee whose caller's own
+  // parameters this pass types stays Any after a single round (GitHub #7254).
+  // Terminates because a round returns true only after annotating a parameter
+  // that had none, and annotated parameters are never revisited.
+  while (preprocess_function_calls(ast_))
+    ;
 
   // Second pass: add type annotations to global scope variables
   annotate_global_scope();
