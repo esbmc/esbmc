@@ -5100,9 +5100,27 @@ of the patch, and the printer is exactly what the test reads.
 
 ### 115.4 Next
 
-The two three-test causes §114.2 deferred: the integer promotion missing at a
-comparison, and the array decay rendered as a cast rather than `&a[0]`. Both
-are spelling-level and neither has been reduced yet.
+The two three-test causes §114.2 deferred. The first reduces to two lines, and
+the trigger is not the comparison:
+
+```c
+__attribute__((aligned)) int g = 42;
+int main(void) { int p = 1; if (g == 42) p = 2; return p; }
+```
+
+```
+<         IF !((signed int)g == 42) THEN GOTO 1
+>         IF !(g == 42) THEN GOTO 1
+```
+
+Dropping the attribute makes the pair byte-identical, so what legacy emits is
+an *identity* cast: the alignment attribute leaves `g`'s type unequal to plain
+`signed int` in ESBMC's type model, and `gen_typecast_arithmetic` casts on that
+inequality. That puts it in §113.3's class rather than the promotion class it
+was tagged as — decide whether to mirror it before writing a slice.
+
+The array decay rendered as a cast rather than `&a[0]` (`github_6966_fail`,
+`memset-const-2`) has not been reduced yet.
 
 
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
