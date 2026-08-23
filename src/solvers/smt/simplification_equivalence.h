@@ -15,6 +15,9 @@ enum class simplification_equivalencet
   equivalent,
   /** The solver found a valuation where they differ: a simplifier bug. */
   differs,
+  /** `after` has operands whose sorts disagree: also a simplifier bug, and one
+   *  that would abort any backend rather than yield a wrong answer. */
+  malformed,
   /** Not decided -- a shape the check declines, or a solver failure. */
   skipped
 };
@@ -31,7 +34,9 @@ class smt_convt;
  *  Free symbols stay free, so `equivalent` means equivalence under every
  *  valuation, not merely on some model. Declines (returns `skipped`) rather
  *  than guessing for shapes whose equality is not a plain SMT question --
- *  pointers, side effects, code, and anything the conversion rejects. */
+ *  pointers, side effects, code, and terms conversion cannot be asked to
+ *  build -- the last of which has to be screened up front, see sorts_agree()
+ *  in the implementation (esbmc/esbmc#7220). */
 class simplification_equivalence_checkert
 {
 public:
@@ -48,6 +53,14 @@ public:
     std::string *witness = nullptr);
 
 private:
+  /** Format the live model's valuation of `before`/`after`'s free symbols into
+   *  @p witness. Only callable while the frame that produced the model is
+   *  still pushed. */
+  void record_witness(
+    const expr2tc &before,
+    const expr2tc &after,
+    std::string &witness);
+
   namespacet ns;
   optionst options;
   std::unique_ptr<smt_convt> ctx;
@@ -67,13 +80,17 @@ void install_simplification_equivalence_check(
   const namespacet &ns,
   const optionst &options);
 
-/** How much the installed checker actually decided. Without this a run that
- *  declined every rewrite is indistinguishable from one that proved them all,
- *  which is the failure mode that would make the whole check worthless. */
+/** How much check() actually decided, over every caller. Without this a run
+ *  that declined every rewrite is indistinguishable from one that proved them
+ *  all, which is the failure mode that would make the whole check worthless. */
 namespace simplification_check_stats
 {
 extern std::atomic<unsigned long> proved;
 extern std::atomic<unsigned long> declined;
+/** Of the declines, those whose `before` was already ill-sorted -- a defect
+ *  elsewhere in ESBMC rather than a limit of the check, so a nonzero count is
+ *  something to go and look at. */
+extern std::atomic<unsigned long> ill_sorted;
 
 void report();
 } // namespace simplification_check_stats

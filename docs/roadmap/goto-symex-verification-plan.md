@@ -720,6 +720,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R31** | **High (false SUCCESSFUL, default configuration)** — found by extending the H-A6 census immediately after R29's fix closed it at 21/21, §15 M9 (H-A6 re-census) | **An `address_of` in front of the aggregate step defeats MPOR's access resolution.** `int **pp = &s.p; **pp = 1;` against a concurrent `g = 2` reports **SUCCESSFUL** by default and **FAILED** under `--no-por`, both under Bitwuzla and Z3. This is **not** punning: `&s.p` is a well-defined `int **`, so the false SUCCESSFUL is on ordinary C. The boundary is syntactic in R29's way — copying the pointer to a local first (`int *lp = *pp;`) restores detection — which places the gate in the resolution, not the value set. `record_aggregate_held_target` *is* entered (the inner `dereference2t` is not a `symbol2t`), so the loss is further down. `--show-symex-value-sets` pins it exactly: `c:@pp = { <s, 0, 8, struct S { signed int * p; }> }` names the **struct symbol**, with the suffix erased into a byte offset, while the entry that holds the answer — `c:@s.p = { <g, 0, 1, signed int> }` — is present and correct. Resolving `**pp` therefore needs the descriptor's constant offset mapped back to `.p` before the second lookup can find it. The information is not missing, only unaddressable. **The component this row first named was wrong**, and instructively: it read the local-copy boundary as placing the gate "in the resolution, not the value set" and pointed at `mpor_lock_array_key` as the precedent. The local copy works because symex's dereference pass has already rewritten `*pp` into the `member2t` `s.p` by the time `value_sett::assign` records `lp`, so the member arm keys `c:@s.p` directly; MPOR hands the value set a *synthetic* `dereference2t` it built itself, which never passed through that rewrite and so lands in the dereference arm, where the member survives only as a byte offset. The boundary separates *rewritten by symex* from *raw*, not MPOR from the value set, and the fault was in the value set on both sides. A struct-to-struct punning shape (`((struct B *)&a)->q`) prunes identically but is strict-aliasing UB and carries no soundness claim | `regression/esbmc-unix/mpor_aggregate_ptr_race_addrof` (KNOWNBUG → **CORE**) with `..._addrof_local` (CORE control), the pairing R29 was filed under, joined by `..._addrof_offset`, `..._addrof_nested`, `..._addrof_union`, `..._array_decay` and `..._addrof_merged`, one per arm of the descent and each pinned by its own mutant, plus `..._addrof_locked` (CORE, the passing direction) and `mpor_aggregate_ptr_zero_size_element` (CORE, pinning the `esize > 0` guard against a `BigInt` abort), both added when the coverage gate blocked the first cut | H-A6 | **Fixed**, §15 M9 (R31 fix): `get_value_set_rec`'s dereference arm now walks the descriptor's constant byte offset back into a field path and asks again under it, accumulating in bits as `member_offset_bits` does so the walk inverts the one that built the descriptor. The unrefined lookup stays, so the change only ever adds objects to a value set. The cheap alternative the first diagnosis suggested — a `simplify()` in `resolve_pointer_target` — was built and measured, and fixes **none** of the six shapes in either placement: there is no constant to fold, because the member was erased before the pointer's value set was ever written |
 | **R32** | **High (false SUCCESSFUL, default configuration)** — found by probing the one gap R31's fix section had just declared witnessless, §15 M9 (R32) | **A symbolic offset erases the aggregate step exactly as a constant one did, and R31's walk has nothing to spell back out.** `int *a[2] = {&g, &g}; ap = &a[i];` with `i` nondeterministic and assumed in bounds, then `**ap = 1` against a concurrent `g = 2`, reports **SUCCESSFUL** by default under both Bitwuzla and Z3 and **FAILED** under `--no-por`. Replacing `a[i]` with `a[1]` reports FAILED, so the symbolic index is the whole discriminator. Well-defined C — the index is assumed in range — so unlike the punning shape this carries a full soundness claim. `--show-symex-value-sets`: `c:@ap = { <a, *, 8, signed int * [2]> }`, the `*` being the unset offset, against `c:@a[] = { <g, 0, 1, signed int> }` which holds the answer. R31's `offset_paths` requires `offset_is_set` and skips, so the unrefined lookup of `c:@a` misses `c:@a[]` and returns empty — read by every consumer as "points at nothing" | `regression/esbmc-unix/mpor_aggregate_ptr_race_symbolic_offset` and `..._symbolic_struct_member` (CORE, one per arm of the unknown route), `..._symbolic_offset_locked` (CORE, the passing direction) and `..._array_decay` the constant-index control | H-A6 | **Fixed**, §15 M9 (R32 fix): a second walk, `collect_typed_paths`, takes every path of the dereferenced type instead of the one an offset selects, and `offset_paths` dispatches on whether the descriptor carries an offset. No size is consulted there, there being no offset to place -- which incidentally keeps a target inside a variable-length element reachable, where the offset walk has to drop it. Monotone for the same reason R31's walk is, and measured at +1.1% worst case on a verdict-matched comparison. The array arm alone did not pin it: a mutant descending into member 0 only left all 21 tests passing |
 | **R33** | **High (false SUCCESSFUL, default configuration)** — found by code review of R31's fix, not by the census, §15 M9 (R33) | **A constant member offset and a constant element offset would not compose, so the descriptor arrived with no offset at all.** `struct S { long pad; int *v[2]; }; int **pp = &s.v[1];` then `**pp = 1` against `g = 2` reported **SUCCESSFUL** by default, **FAILED** under `--no-por`. Each half works alone — `&s.v[0]` (base 8, index 0) and a member at a nonzero offset both detect the race — and only the composition failed, which is what makes it a distinct defect from R31 rather than another shape of it. The index arm of `get_reference_set_rec` added a constant element offset only when the base offset was **zero**, and otherwise fell to the unknown-offset branch and cleared `offset_is_set`; R31's walk then had nothing to spell back out. Reaching byte offset 16 by two members instead (`&s.v.b`) detects the race, which pins the route rather than the offset as the discriminator. The member arm one screen below already composed with `o.offset += offset_in_bytes` | `regression/esbmc-unix/mpor_aggregate_ptr_race_member_index` (CORE), with `..._addrof_offset` and `..._array_decay` the two halves that always worked | code review of R31 | **Fixed**: the index arm composes when the base offset is set (`o.offset += index_offset`) instead of requiring it to be zero. Identical on the old domain — `offset_is_zero()` already implied `offset_is_set`, and adding to a zero offset is assignment — so only the previously-abandoned case changes. Increases precision rather than widening: the descriptor gains a definite offset where it used to carry none |
+| **R34** | **High (missed bug, default configuration)** — found by #7126's attempt to remove `offsetof`'s expansion, §15 M9 (R34) | **Subtracting a constant from a `void *` moved the value set *forwards*.** `void *p = &s.f2; *(int *)(p - 8) = 42;` wrote at offset 16, not 0, so `s.f0 == 0` held and `s.f4 == 0` failed. The pointer model was right the whole time — ESBMC proves `__ESBMC_POINTER_OFFSET(p - 8) == 0` for the same expression — and only the dereference address was wrong, which is why the GOTO is byte-identical to the working `char *` spelling. `get_value_set_rec`'s add/sub arm applies the sign inside its `try` block, but a `void *` never reaches that line: an empty subtype throws `symbolic_type_excp` at the element-size step, and the handler that recovers the byte offset assigned the magnitude and stopped. Where the flipped address stays inside the object the store is silently misdirected; where it leaves, it surfaces as a spurious out-of-bounds instead | `value_sett::get_value_set_rec`'s add/sub arm, `src/pointer-analysis/value_set.cpp`; issue #7127 | `regression/esbmc/github_7127{,_fail}` | **Fixed**: the sign is applied once, after the handlers, so both arms share it. The issue's "base is a member address" clause is **withdrawn** — `void *p = (char *)&s + 8` fails identically; a member base only keeps the wrong address in bounds |
+| **R35** | **High (missed bug, default configuration)** — found by R34's controls, §15 M9 (R34) | **A write below an object's base is neither performed nor flagged.** `char *base = (char *)&s; *(int *)(base - 4) = 42;` on a 24-byte stack struct reports `VERIFICATION SUCCESSFUL`: the `object-out-of-bounds` claim **passes**, the struct is unchanged, and a neighbouring local is unchanged — the store lands nowhere. The symmetric overflow `*(int *)(base + 16) = 42` **is** caught, so the bound is checked on one side only. Independent of R34: it reproduces through `char *`, which never had the sign defect, and the pointer model again disagrees with the check — `__ESBMC_POINTER_OFFSET` is `-4` and `__ESBMC_same_object` holds | the sign is discarded by `value_sett::to_expr`'s `gen_ulong`, but the wrapped constant is not flagged either; probes in the §15 M9 (R34) entry | `regression/esbmc/deref_negative_offset_fail` (KNOWNBUG, `REQUIRES lp64_host`) | Open: decide whether a negative offset is an out-of-bounds access or an unrepresentable address, then make the check and the dereference agree. **The symptom is host-ABI-dependent**, which is why the pin is scoped: `to_expr` routes the offset through the host's `unsigned long`, so `-4` becomes `2^64-4` on LP64 and `2^32-4` on LLP64. Only the first wraps `offset + access_sz` back under `data_sz`, so Windows CI reports the out-of-bounds and every other leg misses it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -6007,6 +6009,107 @@ comparable and this one must be re-measured on Linux before being cited there.
 | `regression/esbmc/stddef_reinclude_wint_t{,_fail}` | default | `SUCCESSFUL` / `FAILED`; both `PARSING ERROR` on the control |
 | `regression/esbmc-cpp/cpp/offsetof_constant_expression{,_fail}` | default | `SUCCESSFUL` / `FAILED`; both `PARSING ERROR` on the control |
 | `regression/esbmc-cpp/cpp/offsetof_layout_parity{,_fail}` | default | `SUCCESSFUL` / `FAILED` on **both** binaries — a parity guard, not a discriminating test. It pins that switching C++ to clang's lowering changed no offset, over packed, over-aligned, nested, union and array-indexed members |
+
+
+### M9 (R34) — 2026-08-21, the sign that was applied on one arm only
+
+#7127 — the wrong-address store that blocked removing `offsetof`'s C expansion —
+is fixed, and it is one line in the place the issue said it could not be.
+
+**The defect.** `get_value_set_rec`'s add/sub arm computes a byte offset for
+pointer arithmetic and folds it into each object descriptor. It applies the
+direction inside its `try` block, immediately after multiplying by the element
+size. A `void *` never reaches that line: `is_empty_type(subtype)` throws
+`symbolic_type_excp` at the element-size step, and the handler that recovers the
+byte offset — "treat the multiplier of the addition as being one" — assigns the
+magnitude and stops. So `p - 8` on a `void *` accumulated `+8`.
+
+**Why the issue's localisation pointed downstream.** The GOTO is byte-identical
+between the failing and working spellings, and the pointer model proves
+`__ESBMC_POINTER_OFFSET(p - 8) == 0` on the same expression — so the divergence
+looked like a dereference of a `void`-subtyped pointer. It is neither the GOTO
+nor `dereferencet`: the value set is a third participant, computed before the
+dereference and consumed by it, and it was the one carrying the wrong number.
+This is the same shape as R31/R32/R33 — two components agreeing on a convention
+that no shared code enforces — one level further out.
+
+**The fix is a hoist, not a second negation.** Duplicating
+`if (is_sub2t(expr)) total_offs.negate();` into the handler would work and would
+leave the next arm free to forget it again. The sign now runs once, after the
+handlers; every arm produces a magnitude and none decides direction. On the
+pre-existing domain this is behaviour-identical — the zero case negates zero,
+and the arms that produce no constant do not reach it. The offset computation
+and the per-object fold moved out of `get_value_set_rec` into
+`constant_pointer_arith_offset` and `offset_pointer_arith_objects`, which is
+what makes "once" a property of the code rather than of a comment: the
+direction is now applied at the single exit of a function returning
+`std::optional<BigInt>`, where no arm can bypass it.
+
+**Two corrections to #7127's characterisation, both measured.**
+
+- **"The trigger is backwards arithmetic on a `void *` whose base is a member
+  address" — the member clause is withdrawn.** `void *p = (char *)&s + 8;` then
+  `*(int *)(p - 8) = 42` fails identically. A member base is not part of the
+  trigger; it only keeps the flipped address inside the object, where a
+  misdirected store is silent rather than an out-of-bounds report.
+- **The issue's table row calling that variant "correct" was wrong**, which is
+  what a control run catches and reading does not.
+
+**R35, found by the controls.** Writing *below* an object's base is neither
+performed nor flagged:
+
+```c
+struct c { int f0, f1, f2, f3; };
+struct c s = {0,0,0,0}; int guard = 7;
+char *base = (char *)&s;
+*(int *)(base - 4) = 42;         /* SUCCESSFUL: nothing is written, nothing reported */
+```
+
+`object-out-of-bounds` **passes**, all four fields stay 0 and `guard` stays 7 —
+the store lands nowhere. The symmetric `*(int *)(base + 16) = 42` **is** caught,
+so the bound is enforced on one side only. It reproduces through `char *`, which
+never had R34's sign defect, so the two are independent; and as in R34 the
+pointer model disagrees with the check, proving offset `-4` and same-object.
+Registered as R35 and pinned KNOWNBUG as
+`regression/esbmc/deref_negative_offset_fail` — the fix has to choose between
+"out-of-bounds access" and "unrepresentable address" first. Note that
+`github_7127_fail` does **not** witness R35: `member - 8` resolves to offset
+**0**, so its passing out-of-bounds claim is correct.
+
+**R35 is host-ABI-dependent, and the pin is scoped accordingly.** `to_expr`
+materialises the offset as `gen_ulong(offset.to_int64())`, which binds the
+`unsigned long` overload — 64 bits on LP64, **32 on LLP64**. So the same
+descriptor reaches `check_data_obj_access` as `2^64-4` on Linux/macOS and as
+`2^32-4` on Windows. Only the first carries `offset + access_sz` back around to
+`0`; `2^32-4 + 4` stays far above a 16-byte `data_sz`, so **Windows reports the
+out-of-bounds and every other leg misses it**. Confirmed by narrowing that one
+expression to 32 bits locally, which reproduces the Windows verdict exactly.
+The test therefore carries `REQUIRES lp64_host` — a KNOWNBUG asserts that ESBMC
+*has* the bug, and on LLP64 it does not. Two consequences for the eventual fix:
+the wrap width is part of the defect, not incidental to it, and whichever
+semantics is chosen has to be stated in target terms so the verdict stops
+depending on the machine ESBMC was built on.
+
+**Where the sign goes, and what that still does not explain.**
+`value_sett::to_expr` materialises a descriptor offset as
+`gen_ulong(it->second.offset.to_int64())`, so on an LP64 host `-4` reaches
+`object_descriptor2t` as `2^64 - 4`. `check_data_obj_access` argues that not
+checking the lower bound is safe because "we just treat everything as unsigned,
+which has the same effect", and its type really is unsigned
+(`bitsize_type2()` = `get_uint_type(address_width + 3)`) — so on that reading
+`offset + access_sz > data_sz` should hold and the claim should fail. It does
+not. Writing the wrapped constant out by hand,
+`*(int *)((char *)&s + 0xFFFFFFFFFFFFFFFCUL) = 42`, passes the same claim, which
+confirms the two spellings collapse to one descriptor and moves the open
+question downstream of `to_expr`: a constant offset this far out of range is
+neither performed nor flagged. A symbolic offset constrained to `-4` behaves
+identically, so constant folding is not the route either.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/github_7127` | default | `SUCCESSFUL`; `FAILED` on the pre-patch control |
+| `regression/esbmc/github_7127_fail` | default | `FAILED` on `s.f0 == 0`; `SUCCESSFUL` on the pre-patch control — the missed-bug direction |
+| `regression/esbmc/github_2512_*` and the 246-test pointer/dereference subset | as recorded | unchanged, 246/246 |
 
 ---
 

@@ -4,7 +4,11 @@ name: Simplifier equivalence
 # of the CORE regression suite under it (esbmc/esbmc#4625). Every simplify()
 # rewrite is proved equivalent by an SMT solver; a rewrite that changes meaning
 # logs both expressions plus a witness and exits non-zero, so a failure here is
-# a simplifier soundness bug, not a verdict change.
+# a simplifier soundness bug, not a verdict change. A rewrite whose operand
+# sorts stop agreeing is reported the same way -- it would abort any backend's
+# mk_eq, so it is a defect whichever way it goes (esbmc/esbmc#7220). Shapes the
+# check cannot state are declined, and counted in the "N declined (M
+# ill-sorted)" line the run prints.
 #
 # The check is compiled out of every other build, so without this job the
 # enabled path is never built and would bit-rot. It runs on a schedule and on
