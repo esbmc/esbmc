@@ -111,6 +111,7 @@ private:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  void adjust_dereference(expr2tc &expr);
   void hoist_for_init(expr2tc &expr);
 
   /// Pad a complete struct or union type symbol to its ABI layout (§96).

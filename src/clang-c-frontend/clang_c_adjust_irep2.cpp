@@ -177,6 +177,9 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
+  if (is_dereference2t(expr))
+    adjust_dereference(expr);
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
 
@@ -713,6 +716,23 @@ static bool contains_sideeffect(const expr2tc &expr)
   expr->foreach_operand(
     [&found](const expr2tc &op) { found = found || contains_sideeffect(op); });
   return found;
+}
+
+/// Dereferencing a pointer to a function yields a function designator, which
+/// converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`, and
+/// `******f` too. clang_c_adjust::adjust_dereference re-takes the address for
+/// exactly this case; left bare, the code-typed dereference reaches a consumer
+/// that wants a pointer.
+///
+/// Only that arm is ported: the array and pointer-subtype arms above it
+/// retype a node the migration already builds with the right type, so no
+/// corpus input distinguishes them.
+void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
+{
+  if (!is_code_type(expr->type))
+    return;
+
+  expr = address_of2tc(expr->type, expr, true);
 }
 
 void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
