@@ -87,6 +87,16 @@ if(NOT WIN32)
     list(APPEND ESBMC_TEST_CAPABILITIES bundled_libm)
 endif()
 
+# value_sett::to_expr materialises a descriptor's offset through the host's
+# `unsigned long` (gen_ulong), so a negative offset wraps at 32 bits on LLP64
+# and at 64 bits elsewhere. The two constants get opposite out-of-bounds
+# verdicts, so a test pinning either one holds on LP64 hosts only.
+include(CheckTypeSize)
+check_type_size("long" ESBMC_SIZEOF_LONG)
+if(ESBMC_SIZEOF_LONG EQUAL 8)
+    list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 

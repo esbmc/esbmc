@@ -1044,6 +1044,13 @@ class LoopMixin:
         self.ensure_all_locations(subscript, node)
 
         element_type = self._get_element_type_from_container(annotation_id, iterable_node)
+        # A container annotation yields only the element's head name, so
+        # `List[Tuple[int, int]]` gives a component-less `Tuple`. Annotating the
+        # loop value with that types it as an opaque pointer and a later
+        # `a, b = v` cannot unpack it -- strictly worse than `Any`, which the
+        # unannotated path uses and which recovers the real type.
+        if element_type in ("Tuple", "tuple"):
+            element_type = "Any"
         ann_node = self.create_name_node(element_type, ast.Load(), node)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info["value_var"], ast.Store(), node),
@@ -1267,6 +1274,25 @@ class LoopMixin:
 
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
+
+    @staticmethod
+    def _body_destructures_name(body, name):
+        """True if `body` assigns `name` to a tuple/list target (`u, v = name`).
+
+        Only a direct statement counts: a nested loop or branch may rebind the
+        name first, and this only decides whether to keep the key's concrete
+        type, so a missed case just falls back to the existing handling.
+        """
+        if not name:
+            return False
+        for stmt in body:
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if not (isinstance(stmt.value, ast.Name) and stmt.value.id == name):
+                continue
+            if any(isinstance(t, (ast.Tuple, ast.List)) for t in stmt.targets):
+                return True
+        return False
 
     def _transform_items_for(self, node):  # pylint: disable=too-many-locals,too-many-statements
         """
@@ -2038,7 +2064,14 @@ class LoopMixin:
         # crashing on the unpack (#5444). Scoped to dicts whose key annotation
         # is concrete; a bare/unknown key type falls through to the existing
         # scalar-key handling below.
-        if (annotation_id in ["dict", "Dict"] and isinstance(node.target, (ast.Tuple, ast.List))
+        # A single-name target whose body destructures it (`for edge in d:` then
+        # `u, v = edge`) needs the concrete key type just as much as unpacking
+        # at the target does: without it the key reads as Any and the later
+        # unpack is handed a generic pointer it cannot destructure.
+        target_destructured = (isinstance(node.target, (ast.Tuple, ast.List))
+                               or self._body_destructures_name(node.body,
+                                                               self._name_id_or_none(node.target)))
+        if (annotation_id in ["dict", "Dict"] and target_destructured
                 and isinstance(node.iter, ast.Name)):
             key_ann, _ = self._get_dict_kv_types(node.iter.id)
             if self._get_base_type_name(key_ann) not in ("Any", None):

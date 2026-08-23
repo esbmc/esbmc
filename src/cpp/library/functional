@@ -2,6 +2,7 @@
 #define STL_FUNCTIONAL
 
 #include <cstddef>
+#include "utility" /* std::forward */
 #include "OM_compiler_defs.h" // OM_CONSTEXPR
 
 #if __cplusplus >= 201103L
@@ -43,6 +44,18 @@ public:
   {
     return *ptr;
   }
+
+#if __cplusplus >= 201103L
+  /* [refwrap.invoke]: a reference_wrapper around a callable is itself
+   * callable. This forwards to the wrapped object rather than implementing
+   * the full INVOKE protocol, so pointers to members are not covered. */
+  template <class... ArgTypes>
+  auto operator()(ArgTypes &&...args) const
+    -> decltype(::std::declval<T &>()(::std::forward<ArgTypes>(args)...))
+  {
+    return (*ptr)(::std::forward<ArgTypes>(args)...);
+  }
+#endif
 };
 
 template <class T>
