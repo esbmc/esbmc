@@ -184,12 +184,27 @@ proof_cache_context(const optionst &options, const std::string &build_identity)
         ctx << "optv " << name << '=' << v << '\n';
   }
 
+  // The data model is not in the option set: absent a --32 or --i386-linux
+  // style flag, configt::this_architecture() and this_operating_system() take
+  // it from the machine ESBMC was built on. Two hosts sharing one cache
+  // directory -- what the docs suggest for CI -- would otherwise agree on
+  // every key while disagreeing on type widths, libc models and predefined
+  // macros.
   const auto &c = config.ansi_c;
-  ctx << "lang " << static_cast<int>(config.language.lid) << '\n';
-  ctx << "model " << c.word_size << ' ' << c.int_width << ' '
-      << c.long_int_width << ' ' << c.short_int_width << ' '
-      << c.long_long_int_width << ' ' << c.char_is_unsigned << ' '
-      << static_cast<int>(c.endianess) << '\n';
+  ctx << "lang " << static_cast<int>(config.language.lid) << ' '
+      << config.language.std << ' ' << static_cast<int>(config.language.c_std)
+      << ' ' << static_cast<int>(config.language.cpp_std) << '\n';
+  ctx << "target " << c.target.to_string() << '\n';
+  ctx << "model " << c.word_size << ' ' << c.bool_width << ' ' << c.char_width
+      << ' ' << c.short_int_width << ' ' << c.int_width << ' '
+      << c.long_int_width << ' ' << c.long_long_int_width << ' '
+      << c.int_128_width << ' ' << c.address_width << ' ' << c.pointer_width()
+      << ' ' << c.pointer_diff_width << ' ' << c.single_width << ' '
+      << c.double_width << ' ' << c.long_double_width << ' ' << c.wchar_t_width
+      << ' ' << c.char_is_unsigned << ' ' << c.use_fixed_for_float << ' '
+      << static_cast<int>(c.cheri) << ' ' << c.cheri_concentrate << ' '
+      << static_cast<int>(c.endianess) << ' ' << static_cast<int>(c.lib) << ' '
+      << c.locale_name << '\n';
 
   return ctx.str();
 }

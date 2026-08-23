@@ -98,6 +98,12 @@ a small change. Persist the directory between jobs — with GitHub Actions:
 rather than an empty one. The source path is deliberately not part of a claim's
 identity, so a cache restored into a different workspace directory still hits.
 
+Sharing one directory between runners of different kinds is safe but pointless:
+the target triple and the data model are part of the key, and with no `--32` or
+`--i386-linux` style flag ESBMC takes both from the machine it is running on. A
+Linux runner and a macOS runner therefore populate disjoint sets of entries
+rather than reusing each other's.
+
 Add the directory to `.gitignore` — it is build output, not source.
 
 ### What invalidates what
@@ -121,8 +127,9 @@ never stored. Every verdict was unchanged.
 A claim is identified by the *sliced SSA cone* that ESBMC solves for it — the
 minimal set of constraints that claim depends on, after slicing — combined with
 everything else its verdict is contingent on: the ESBMC build, every option in
-effect, and the data model. Two claims share an entry only when all of that
-agrees.
+effect, and the data model — the target triple, every type width, signedness,
+endianness and the C or C++ dialect in force. Two claims share an entry only
+when all of that agrees.
 
 An entry is an empty file whose name *is* the key: 32 hex digits of cone digest
 prefixed by 16 of context digest. Nothing else is stored, so the digests are all

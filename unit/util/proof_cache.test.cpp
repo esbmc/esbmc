@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
+#include <util/config/config.h>
 #include <util/ssa/proof_cache.h>
 
 #include <filesystem>
@@ -288,6 +289,37 @@ TEST_CASE(
   REQUIRE_FALSE(proof_cachet(dir, last, build).proved(cone));
 
   std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("the target and the data model are part of the key", "[proof_cache]")
+{
+  // Neither is in the option set: absent a --32 or --i386-linux style flag
+  // ESBMC takes both from the machine it is running on, so two hosts sharing
+  // a cache directory would otherwise agree on every key.
+  const std::string base = proof_cache_context(optionst(), build);
+  const configt saved = config;
+
+  config.ansi_c.target.arch = "riscv64";
+  REQUIRE(proof_cache_context(optionst(), build) != base);
+  config = saved;
+
+  config.ansi_c.target.os = "macos";
+  REQUIRE(proof_cache_context(optionst(), build) != base);
+  config = saved;
+
+  config.ansi_c.long_double_width = 64;
+  REQUIRE(proof_cache_context(optionst(), build) != base);
+  config = saved;
+
+  config.ansi_c.wchar_t_width = 16;
+  REQUIRE(proof_cache_context(optionst(), build) != base);
+  config = saved;
+
+  config.language.cpp_std = cxx_stdt::cpp20;
+  REQUIRE(proof_cache_context(optionst(), build) != base);
+  config = saved;
+
+  REQUIRE(proof_cache_context(optionst(), build) == base);
 }
 
 TEST_CASE("a proof does not carry across solver sets", "[proof_cache]")
