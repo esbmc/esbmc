@@ -65,7 +65,15 @@ public:
   // Entry points exercised by callers outside python_annotation.h.
   void preprocess_constructor_calls(const Json &node);
   void preprocess_method_calls(const Json &node);
-  void preprocess_function_calls(Json &root);
+  /// Sentinel recorded for a call-site argument this pass cannot type; never
+  /// a valid Python type name, so it can only block, never be annotated.
+  static const std::string &unresolved_arg_type()
+  {
+    static const std::string s = "<unresolved>";
+    return s;
+  }
+  /// @return true if this pass wrote at least one parameter annotation.
+  bool preprocess_function_calls(Json &root);
   void collect_function_call_arg_types(
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>
