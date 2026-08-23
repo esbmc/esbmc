@@ -211,6 +211,31 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
   return false;
 }
 
+// Bridge the synthesised __ESBMC_main, which wraps the boilerplate c:@F@main,
+// onto the program's real entry. An explicit --function wins; otherwise a CBMC
+// binary dispatches into __CPROVER__start (it runs __CPROVER_initialize and
+// calls the program's main/harness). Without this, a CBMC binary verifies the
+// empty boilerplate main and may report a spurious SUCCESSFUL. Returns true if
+// the run cannot continue.
+static bool bridge_binary_entry_point(
+  const cmdlinet &cmdline,
+  goto_functionst &goto_functions,
+  bool cbmc_additions)
+{
+  if (cmdline.isset("function"))
+    return retarget_esbmc_main(goto_functions, cmdline.getval("function"));
+
+  if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
+    retarget_esbmc_main(goto_functions, "__CPROVER__start");
+  else if (cbmc_additions)
+    log_warning(
+      "CBMC goto-binary support is experimental: no entry point to bridge "
+      "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
+      "boilerplate main and the verdict may be unsound.");
+
+  return false;
+}
+
 // This method creates a GOTO program from the source specified by the
 // command line options. A GOTO program can be created:
 //
@@ -271,25 +296,8 @@ bool esbmc_parseoptionst::create_goto_program(
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
-      // Bridge the synthesised __ESBMC_main, which wraps the boilerplate
-      // c:@F@main, onto the program's real entry. An explicit --function wins;
-      // otherwise a CBMC binary dispatches into __CPROVER__start (it runs
-      // __CPROVER_initialize and calls the program's main/harness). Without
-      // this, a CBMC binary verifies the empty boilerplate main and may report
-      // a spurious SUCCESSFUL.
-      if (cmdline.isset("function"))
-      {
-        if (retarget_esbmc_main(goto_functions, cmdline.getval("function")))
-          return true;
-      }
-      else if (
-        cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
-        retarget_esbmc_main(goto_functions, "__CPROVER__start");
-      else if (cbmc_additions)
-        log_warning(
-          "CBMC goto-binary support is experimental: no entry point to bridge "
-          "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
-          "boilerplate main and the verdict may be unsound.");
+      if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
+        return true;
 
       goto_functions.update();
     }
