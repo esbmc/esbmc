@@ -1310,9 +1310,13 @@ void value_sett::assign(
     if (lhs_type->type_id != rhs->type->type_id)
       return;
     const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
-    if (
-      rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
-      !is_subclass_of(lhs_type, rhs->type, ns))
+    // is_subclass_of is struct-only -- it casts both operands with
+    // to_struct_type -- and inheritance has no union analogue, so a union pair
+    // that is not base_type_eq is simply incompatible.
+    const bool related = is_struct_type(lhs_type) &&
+                         is_struct_type(rhs->type) &&
+                         is_subclass_of(lhs_type, rhs->type, ns);
+    if (rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) && !related)
       return;
 
     // Assign the values of all members of the rhs thing to the lhs. It's
