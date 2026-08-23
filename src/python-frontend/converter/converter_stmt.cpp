@@ -2136,9 +2136,13 @@ void python_converter::detach_numpy_pointer_views_of(
     // itself is always densely packed, so the destination index is not.
     for (std::size_t i = 0; i < length; ++i)
     {
-      // Commit 2 only ever sees stride >= 1 (unit-stride slices, row
-      // views); a negative stride (reverse slices) is Commit 5's concern
-      // and will need signed offsets here too.
+      // stride is signed (row/column/unit-stride views are positive; a
+      // reversed slice is negative) but src_idx is unsigned size_type():
+      // i*stride's two's-complement bit pattern for a negative product is
+      // exactly SIZE_MAX-derived, and the pointer add below (as well as
+      // ESBMC's own SMT-level bounds reasoning over it) treats that
+      // correctly as a backward offset -- confirmed by a rebind-detach
+      // regression over a[::-1] (view_strided_reverse_rebind_source_edge).
       exprt src_idx =
         from_integer(static_cast<long long>(i) * stride, size_type());
       exprt dst_idx = from_integer(i, size_type());
@@ -3161,11 +3165,28 @@ namespace
 // function's main target never carries an order argument itself (`.flat`
 // always iterates C-order), so this only ever declines a genuine
 // explicit-order ravel call.
-bool ravel_call_has_order_arg(const nlohmann::json &value_node)
+//
+// This checks the raw, unrewritten Call node -- unlike
+// numpy_call_expr::handle_ravel_pointer_view_attempt(), which only ever
+// sees a call already normalised to module form by
+// build_numpy_method_rewrite_node (receiver spliced in as args[0]) --
+// so a directly-written method call still has order at args[0], not
+// args[1]: is_module_form must be checked before picking the threshold.
+bool ravel_call_has_order_arg(
+  const nlohmann::json &ast,
+  const nlohmann::json &value_node)
 {
+  const bool is_module_form =
+    value_node.contains("func") && value_node["func"].contains("value") &&
+    value_node["func"]["value"].is_object() &&
+    value_node["func"]["value"].value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(
+      ast, value_node["func"]["value"].value("id", ""));
+  const std::size_t order_index = is_module_form ? 1 : 0;
+
   if (
     value_node.contains("args") && value_node["args"].is_array() &&
-    value_node["args"].size() > 1)
+    value_node["args"].size() > order_index)
     return true;
 
   return value_node.contains("keywords") && value_node["keywords"].is_array() &&
@@ -3198,7 +3219,7 @@ nlohmann::json python_converter::flat_subscript_receiver_node(
     value_node["func"].value("_type", "") != "Attribute" ||
     value_node["func"].value("attr", "") != "ravel" ||
     !is_numpy_ravel_receiver(value_node) ||
-    ravel_call_has_order_arg(value_node))
+    ravel_call_has_order_arg(*ast_json, value_node))
     return nlohmann::json();
 
   return get_ravel_receiver_node(value_node);

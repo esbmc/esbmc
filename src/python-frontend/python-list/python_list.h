@@ -743,8 +743,8 @@ private:
     bool negative_step);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
-  // list_access.cpp for the full rationale.
-  exprt build_scalar_pointer_view(
+  // list_access.cpp for the full rationale, including when this declines.
+  std::optional<exprt> build_scalar_pointer_view(
     const exprt &array,
     const typet &elem_type,
     long long offset,

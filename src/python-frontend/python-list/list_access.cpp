@@ -1656,15 +1656,27 @@ const symbolt &python_list::get_str_slice_sym()
 }
 
 // Shared core of every ADR-NP-003 scalar pointer view producer (1-D slice,
-// row, column, and -- planned -- diagonal, ravel/.flat): builds a
-// pointer_typet(elem_type) into array's own flat buffer at element offset
-// `offset`, retypes current_lhs to it (its DECL has not been emitted yet
-// at this point -- see try_build_1d_pointer_view's comment below), and
-// tracks {length, stride, readonly} for later consultation
-// (len()/.shape/.ndim, indexed reads/writes, detach_numpy_pointer_views_of
-// on source rebind). Callers have already validated eligibility; this
-// function only assembles the result.
-exprt python_list::build_scalar_pointer_view(
+// row, column, diagonal, ravel/.flat): builds a pointer_typet(elem_type)
+// into array's own flat buffer at element offset `offset`, retypes
+// current_lhs to it (its DECL has not been emitted yet at this point --
+// see try_build_1d_pointer_view's comment below), and tracks
+// {length, stride, readonly} for later consultation (len()/.shape/.ndim,
+// indexed reads/writes, detach_numpy_pointer_views_of on source rebind).
+// Callers have already validated eligibility; this function only
+// assembles the result.
+//
+// Declines (returns std::nullopt, falling back to whichever copy path the
+// caller's own caller uses) if current_lhs's symbol id is *already*
+// registered: the map is a single, frontend-only table with no per-branch
+// state, so `if c: b = np.ravel(a)` else `b = np.ravel(x)` would otherwise
+// have the textually-later branch's {length, stride} silently overwrite
+// the other's and apply to both control-flow paths regardless of which one
+// actually ran. This is conservative even for a plain, unconditional
+// re-assignment of the same name to a second pointer-view-eligible RHS
+// (which is unambiguous at runtime and could in principle re-register
+// safely) -- there is no cheap way here to distinguish that case from the
+// unsafe branch-merge one, so both fall back to an independent copy.
+std::optional<exprt> python_list::build_scalar_pointer_view(
   const exprt &array,
   const typet &elem_type,
   long long offset,
@@ -1672,6 +1684,10 @@ exprt python_list::build_scalar_pointer_view(
   long long stride,
   bool readonly)
 {
+  const std::string lhs_id = converter_.current_lhs->identifier().as_string();
+  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
+    return std::nullopt;
+
   const typet view_ptr_type = pointer_typet(elem_type);
   // Pointer arithmetic, not build_index(array, offset, elem_type): an
   // empty view whose offset lands exactly at the source's element count
@@ -1684,9 +1700,7 @@ exprt python_list::build_scalar_pointer_view(
     build_add(base_ptr, from_integer(offset, size_type()), view_ptr_type);
   converter_.current_lhs->type() = view_ptr_type;
   converter_.update_symbol(*converter_.current_lhs);
-  converter_.numpy_pointer_view_info_[converter_.current_lhs->identifier()
-                                        .as_string()] = {
-    length, stride, readonly};
+  converter_.numpy_pointer_view_info_[lhs_id] = {length, stride, readonly};
   return view_ptr;
 }
 
