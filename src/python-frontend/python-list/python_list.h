@@ -252,6 +252,23 @@ public:
   std::optional<exprt> try_build_ravel_pointer_view(const exprt &array);
 
   /**
+   * @brief a.flat[i] = x: builds a dereferenced-pointer lvalue into a's own
+   * buffer at flat index i (bounds-checked and negative-index-normalized
+   * the same way a registered pointer view's index is), for a fixed-shape
+   * 1-D or 2-D array -- the same eligibility and offset/stride=1 math as
+   * try_build_ravel_pointer_view, but built inline for an assignment target
+   * that has no intermediate bare-name view symbol to register into
+   * numpy_pointer_view_info_. Declines (returns std::nullopt) for a
+   * non-symbol/non-numpy-tracked source or a source that isn't fixed-shape
+   * 1-D/2-D (including 3-D+).
+   * @param array      Source 1-D or 2-D array expression.
+   * @param index_node Raw AST node for the flat index expression.
+   */
+  std::optional<exprt> try_build_flat_index_assignment_target(
+    const exprt &array,
+    const nlohmann::json &index_node);
+
+  /**
    * @brief Lower an N-D mixed slice/index tuple subscript with one or more
    * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
    * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved
@@ -759,6 +776,12 @@ private:
   void emit_slice_zero_step_raise(
     const nlohmann::json &slice_node,
     bool literal_zero_step);
+
+  exprt normalize_and_scale_index(
+    const exprt &index,
+    long long length,
+    long long stride,
+    const nlohmann::json &slice_node);
 
   exprt guard_numpy_pointer_view_index(
     const exprt &array,

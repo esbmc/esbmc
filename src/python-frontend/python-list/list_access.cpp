@@ -2078,20 +2078,20 @@ void python_list::emit_slice_zero_step_raise(
   converter_.add_instruction(throw_code);
 }
 
-exprt python_list::guard_numpy_pointer_view_index(
-  const exprt &array,
+// Normalizes a logical (possibly negative) numpy-view index against
+// `length`, raises IndexError if still out of bounds after normalizing, and
+// scales the result by `stride` (a view's indices are logical (0..length),
+// but a non-unit-stride view's pointer offsets into the *source's* flat
+// buffer). Shared by guard_numpy_pointer_view_index (a registered view
+// symbol's own length/stride) and try_build_flat_index_assignment_target
+// (a.flat[i]'s length/stride computed on the fly, with no registered view
+// symbol involved).
+exprt python_list::normalize_and_scale_index(
   const exprt &index,
+  long long length,
+  long long stride,
   const nlohmann::json &slice_node)
 {
-  if (!array.is_symbol() || !array.type().is_pointer())
-    return index;
-
-  const std::string view_id = array.identifier().as_string();
-  auto info_it = converter_.numpy_pointer_view_info_.find(view_id);
-  if (info_it == converter_.numpy_pointer_view_info_.end())
-    return index;
-  const long long stride = info_it->second.stride;
-
   const typet ll_type = signedbv_typet(64);
   const locationt loc = converter_.get_location_from_decl(slice_node);
   symbolt &idx_sym = converter_.create_tmp_symbol(
@@ -2104,7 +2104,7 @@ exprt python_list::guard_numpy_pointer_view_index(
   idx_init.location() = loc;
   converter_.add_instruction(idx_init);
 
-  exprt view_len = from_integer(info_it->second.length, ll_type);
+  exprt view_len = from_integer(length, ll_type);
   exprt idx_lt_zero =
     build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
   code_assignt normalize(
@@ -2136,17 +2136,53 @@ exprt python_list::guard_numpy_pointer_view_index(
   oob_guard.location() = loc;
   converter_.add_instruction(oob_guard);
 
-  // The view's own indices are logical (0..length); the pointer this index
-  // ultimately offsets is into the *source's* flat buffer, so a
-  // non-unit-stride view (column, stepped, diagonal) must scale the
-  // bounds-checked logical index by its stride before it reaches
-  // build_index's pointer arithmetic.
   exprt scaled =
     stride == 1
       ? build_symbol(idx_sym)
       : build_mul(
           build_symbol(idx_sym), from_integer(stride, ll_type), ll_type);
   return build_typecast(scaled, size_type());
+}
+
+exprt python_list::guard_numpy_pointer_view_index(
+  const exprt &array,
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  if (!array.is_symbol() || !array.type().is_pointer())
+    return index;
+
+  const std::string view_id = array.identifier().as_string();
+  auto info_it = converter_.numpy_pointer_view_info_.find(view_id);
+  if (info_it == converter_.numpy_pointer_view_info_.end())
+    return index;
+
+  return normalize_and_scale_index(
+    index, info_it->second.length, info_it->second.stride, slice_node);
+}
+
+std::optional<exprt> python_list::try_build_flat_index_assignment_target(
+  const exprt &array,
+  const nlohmann::json &index_node)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<flat_array_shape_info> shape =
+    get_flat_1d_or_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  exprt index = converter_.get_expr(index_node);
+  exprt normalized_idx = normalize_and_scale_index(
+    index, shape->total_length, /*stride=*/1, index_node);
+
+  const typet ptr_type = pointer_typet(shape->elem_type);
+  exprt base_ptr = build_typecast(build_address_of(array), ptr_type);
+  exprt elem_ptr = build_add(base_ptr, normalized_idx, ptr_type);
+  return build_dereference(elem_ptr, shape->elem_type);
 }
 
 exprt python_list::handle_range_slice(

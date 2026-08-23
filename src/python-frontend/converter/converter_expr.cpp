@@ -1600,6 +1600,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::SUBSCRIPT:
   {
+    // a.flat[i] (read): see try_build_flat_index_read's own comment for why
+    // this needs to be special-cased ahead of the generic Subscript path.
+    if (std::optional<exprt> flat_value = try_build_flat_index_read(element))
+    {
+      expr = *flat_value;
+      break;
+    }
+
     // current_lhs being set does not mean this Subscript IS the assignment's
     // whole RHS -- for `x = a[1:3][0]` the outer Subscript's base is the
     // inner `a[1:3]`, converted here with current_lhs still == &x. Left

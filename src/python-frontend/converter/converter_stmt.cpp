@@ -3101,31 +3101,35 @@ bool python_converter::is_global_variable(const symbol_id &sid) const
   return false;
 }
 
-bool python_converter::is_numpy_ravel_receiver(
+// np.ravel(a): the array is the call's first argument (this is the shape
+// the preprocessor's .flat rewrite always produces). a.ravel(): the array
+// is the Attribute's own receiver. Empty if unresolvable.
+nlohmann::json python_converter::get_ravel_receiver_node(
   const nlohmann::json &ravel_call) const
 {
   if (!ravel_call["func"].contains("value"))
-    return false;
+    return nlohmann::json();
 
   const nlohmann::json &func_value = ravel_call["func"]["value"];
   const bool is_module_form =
     func_value.is_object() && func_value.value("_type", "") == "Name" &&
     is_imported_numpy_module_alias(*ast_json, func_value.value("id", ""));
 
-  // np.ravel(a): the array is the call's first argument (this is the shape
-  // the preprocessor's .flat rewrite always produces). a.ravel(): the array
-  // is the Attribute's own receiver.
-  nlohmann::json receiver;
-  if (is_module_form)
-  {
-    if (
-      ravel_call.contains("args") && ravel_call["args"].is_array() &&
-      !ravel_call["args"].empty())
-      receiver = ravel_call["args"][0];
-  }
-  else
-    receiver = func_value;
+  if (!is_module_form)
+    return func_value;
 
+  if (
+    ravel_call.contains("args") && ravel_call["args"].is_array() &&
+    !ravel_call["args"].empty())
+    return ravel_call["args"][0];
+
+  return nlohmann::json();
+}
+
+bool python_converter::is_numpy_ravel_receiver(
+  const nlohmann::json &ravel_call) const
+{
+  const nlohmann::json receiver = get_ravel_receiver_node(ravel_call);
   const std::string receiver_name = root_name_from_subscript(receiver);
   if (receiver_name.empty())
     return false;
@@ -3134,6 +3138,95 @@ bool python_converter::is_numpy_ravel_receiver(
   return !receiver_id.empty() &&
          (numpy_array_symbols_.count(receiver_id) != 0 ||
           numpy_view_copy_sources_.count(receiver_id) != 0);
+}
+
+// Detects Subscript(value=Call(ravel(a)), slice=i) -- the shape every
+// .flat access (read or assignment target) is rewritten to -- and returns
+// a's receiver node, or a null json if the shape doesn't match or a isn't a
+// tracked numpy array/view. Shared by try_handle_flat_index_assignment and
+// try_build_flat_index_read.
+nlohmann::json python_converter::flat_subscript_receiver_node(
+  const nlohmann::json &subscript_node) const
+{
+  if (
+    subscript_node.value("_type", "") != "Subscript" ||
+    !subscript_node.contains("value") || !subscript_node.contains("slice"))
+    return nlohmann::json();
+
+  const nlohmann::json &value_node = subscript_node["value"];
+  if (
+    value_node.value("_type", "") != "Call" || !value_node.contains("func") ||
+    value_node["func"].value("_type", "") != "Attribute" ||
+    value_node["func"].value("attr", "") != "ravel" ||
+    !is_numpy_ravel_receiver(value_node))
+    return nlohmann::json();
+
+  return get_ravel_receiver_node(value_node);
+}
+
+// a.flat[i] = x: target here is really Subscript(value=Call(ravel(a)),
+// slice=i) -- see extract_target_name's comment for why that shape has no
+// symbol id to extract the normal way. Handled as a special case ahead of
+// the generic Subscript-target path: builds a's flat pointer view inline
+// (try_build_flat_index_assignment_target, same eligibility/math as
+// np.ravel(a) itself) and emits the write directly, bypassing the
+// symbol-based lhs machinery entirely. Returns false (handles nothing) for
+// any shape flat_subscript_receiver_node doesn't recognise (including a
+// non-numpy-tracked receiver), leaving those to extract_target_name's
+// existing "not supported" diagnostic.
+bool python_converter::try_handle_flat_index_assignment(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  codet &target_block)
+{
+  const nlohmann::json receiver = flat_subscript_receiver_node(target);
+  if (receiver.is_null())
+    return false;
+
+  exprt array_expr = get_expr(receiver);
+  python_list list(*this, ast_node);
+  std::optional<exprt> lhs =
+    list.try_build_flat_index_assignment_target(array_expr, target["slice"]);
+  if (!lhs)
+    throw std::runtime_error(
+      "TypeError: mutation through .flat is not supported");
+
+  is_converting_rhs = true;
+  exprt rhs = get_expr(ast_node["value"]);
+  is_converting_rhs = false;
+
+  code_assignt assign(*lhs, rhs);
+  assign.location() = get_location_from_decl(ast_node);
+  target_block.copy_to_operands(assign);
+  return true;
+}
+
+// a.flat[i] (read): the generic Subscript path nulls current_lhs before
+// converting the base, which correctly makes np.ravel(a) decline its own
+// pointer-view path and fall back to an independent copy for a genuinely
+// nested use -- but that copy is reconstructed from a's *literal*
+// declaration, stale against any runtime mutation of a since
+// (flat_mutation_source_write_success). Reading through the same pointer
+// math the assignment-target path uses
+// (try_build_flat_index_assignment_target, used here as an rvalue) keeps
+// this observing a's live buffer like every other pointer view. Returns
+// nullopt for any shape flat_subscript_receiver_node doesn't recognise, and
+// the generic Subscript path handles it unchanged.
+std::optional<exprt>
+python_converter::try_build_flat_index_read(const nlohmann::json &element)
+{
+  const nlohmann::json receiver = flat_subscript_receiver_node(element);
+  if (receiver.is_null())
+    return std::nullopt;
+
+  exprt *saved_lhs = current_lhs;
+  current_lhs = nullptr;
+  exprt array_expr = get_expr(receiver);
+  current_lhs = saved_lhs;
+
+  python_list list(*this, element);
+  return list.try_build_flat_index_assignment_target(
+    array_expr, element["slice"]);
 }
 
 std::string
@@ -3148,23 +3241,15 @@ python_converter::extract_target_name(const nlohmann::json &target) const
   else if (target_type == "Subscript")
     // Recurse through nested Subscripts (e.g. board[0][0] = x) to reach the
     // root container's Name/Attribute, which carries the symbol id.
+    //
+    // a.flat[i] = x and np.ravel(a)[i] = x hit this recursion too (the
+    // preprocessor rewrites every .flat access to np.ravel(a)): the value
+    // here is a Call, with no symbol id to extract the normal way. That
+    // shape is fully handled earlier, by try_handle_flat_index_assignment
+    // (called ahead of extract_target_name in the Assign dispatch), which
+    // either builds the write directly or throws its own diagnostic --
+    // this recursion is never reached for it.
     return extract_target_name(target["value"]);
-  else if (
-    target_type == "Call" && target.contains("func") &&
-    target["func"].is_object() &&
-    target["func"].value("_type", "") == "Attribute" &&
-    target["func"].value("attr", "") == "ravel" &&
-    is_numpy_ravel_receiver(target))
-    // a.flat[i] = x: the preprocessor rewrites every .flat read, including
-    // the one implicit in this assignment's target, to np.ravel(a) — so the
-    // target here is really Subscript(value=Call(ravel(a))), which has no
-    // symbol id to extract. np.ravel(a)[i] = x written directly hits the
-    // same shape and is equally unsupported for the same reason (ravel's
-    // result is a copy, not a writable view of a). Gated on the receiver
-    // actually being a tracked numpy array/view so an unrelated class with
-    // its own ravel() method does not get this numpy-specific diagnostic.
-    throw std::runtime_error(
-      "TypeError: mutation through .flat is not supported");
 
   throw std::runtime_error(
     "Unsupported assignment target type: " + target_type.get<std::string>());
@@ -4022,6 +4107,10 @@ void python_converter::get_var_assign(
 
     // Handle tuple/list unpacking
     if (handle_unpacking_assignment(ast_node, target, target_block))
+      return;
+
+    // a.flat[i] = x
+    if (try_handle_flat_index_assignment(ast_node, target, target_block))
       return;
 
     // Normal assignment handling

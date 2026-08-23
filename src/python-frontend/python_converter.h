@@ -1009,7 +1009,16 @@ private:
     const nlohmann::json &ast_node,
     const std::set<std::string> &container_types);
 
+  nlohmann::json
+  get_ravel_receiver_node(const nlohmann::json &ravel_call) const;
   bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
+  nlohmann::json
+  flat_subscript_receiver_node(const nlohmann::json &subscript_node) const;
+  bool try_handle_flat_index_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+  std::optional<exprt> try_build_flat_index_read(const nlohmann::json &element);
 
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
