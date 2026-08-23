@@ -5013,6 +5013,91 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 124. A field excluded from equality, dropped by four rebuilds (2026-08-23)
+
+(§124: PRs #7266, #7271, #7274, #7275, #7278, #7280, #7282, #7283 and #7284 are
+in flight against this file and claim §115-§123.)
+
+§123.5 named the four false-alarm rows as next, on the grounds that they were
+the only ones left producing a wrong *answer* rather than no answer, and that
+two naming `pragma_unroll` were probably one cause. They were.
+
+### 124.1 The mechanism, which the test's own comment predicted
+
+`github_4715_irep2_bodies_pragma_unroll_01` documents its failure mode in
+advance:
+
+> If the count were dropped on the round-trip the loop would run to its natural
+> bound of 8, writing a[3..7] out of the 3-element array: a spurious
+> array-bounds violation seen only under the flag.
+
+Which is exactly what happens — though not on the round-trip. `migrate_expr`
+carries `#pragma_unroll` onto the IREP2 loop and `migrate_expr_back` writes it
+out again; both halves are correct. What drops it is this pass. Four sites
+rebuild a loop node, and every one of them omitted the count:
+
+| site | node |
+|---|---|
+| `adjust_statement_condition` | `code_while2tc(cond, body, loc)` |
+| `adjust_statement_condition` | `code_dowhile2tc(cond, body, loc)` |
+| `adjust_statement_condition` | `code_for2tc(init, cond, iter, body, loc)` |
+| `hoist_for_init` | `code_for2tc(nil, cond, iter, body, loc)` |
+
+The constructor's last parameter defaults to `0`, and `0` means "no pragma".
+
+### 124.2 Why nothing caught it
+
+`pragma_unroll_count` is deliberately **excluded** from the loop kinds' `fields`
+tuple (`irep2_expr.h:2258-2264`, alongside `location`), so it takes no part in
+`operator==`. This pass writes a symbol's value back only when it changed —
+
+```cpp
+if (value != before)
+  s->set_value(value);
+```
+
+— and a rebuilt loop that dropped the count compares **equal** to the original
+that had it. The guard cannot see the loss, the A/B census cannot see it
+(`--goto-functions-only` prints the unrolled program, not the annotation), and
+only a verdict differs.
+
+That is a general hazard, not a one-off: any excluded-from-`fields` member is
+invisible to both the change guard and structural equality, so every rebuild has
+to carry it by hand. `location` is the other one, and §115 was the same bug in
+that field.
+
+### 124.3 Result
+
+Closes `github_4715_irep2_bodies_pragma_unroll_01` and
+`pragma_unroll_nested_dowhile_true`; the other two false alarms
+(`builtin_arith_overflow`, `github_2174`) are unaffected and are a different
+cause. Whole-suite verdict residue **13 → 11**.
+
+The `_fail` test earns its place with an under-unroll mutant rather than the
+absent patch: forcing the carried count to `1` truncates the loop before the
+out-of-bounds write and turns FAILED into SUCCESSFUL. The positive test moves
+against the unfixed binary directly (FAILED → SUCCESSFUL). Both loop shapes are
+covered — a `while` for the condition-rebuild sites and a `for` for the hoist.
+
+Default path byte-identical on 226 C sources. Suites: `esbmc` 1857/1857,
+`cstd` 142/142, `goto-coverage` 144/144, `k-induction` 122/122,
+`loop-invariants` 81/81.
+
+### 124.4 Next
+
+| tests | signature |
+|---:|---|
+| 4 | SIGABRT on vectors / unary bool (`gcc_vector_float_{arith,scalar_mul}`, `github_4078_unary_bool{,_fail}`) |
+| 4 | unclustered (`32_floppy`, `github_301`, `github_1934-1`, `github_382_6`) |
+| 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
+| 1 | `complex_25`, the §88.2 binding |
+
+The vector/unary-bool four are next by size. `github_4078_unary_bool` names an
+issue whose fix is the integer promotion of a boolean operand under `unary-`
+(`clang_c_adjust_expr.cpp:150-160`) — an arm this pass may not have ported, and
+a cheap thing to check first.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
