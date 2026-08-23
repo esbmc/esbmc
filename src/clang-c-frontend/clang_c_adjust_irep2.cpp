@@ -402,9 +402,14 @@ void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
   if (is_nil_expr(f.init))
     return;
 
+  // A default-constructed locationt is empty but not nil, and migrate_expr_back
+  // guards only on nil: left default it reaches convert_block, which stamps it
+  // on every destructor it unwinds. Same idiom as goto_convert_functions.cpp.
   locationt end_location;
   if (!is_nil_expr(f.body) && is_code_block2t(f.body))
     end_location = to_code_block2t(f.body).end_location;
+  else
+    end_location.make_nil();
 
   const expr2tc bare =
     code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
