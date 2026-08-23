@@ -5013,6 +5013,78 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 126. Vector float arithmetic — the half clang does not lower itself
+## (2026-08-23)
+
+(§126: PRs #7266-#7286 are in flight against this file and claim §115-§125.)
+
+§125.3 named the `gcc_vector_float_{arith,scalar_mul}` pair and predicted the
+cause would be §123.1's again — a deliberate decline that hands the backend an
+unencodable node. It is a *missing* arm rather than a decline, but the shape of
+the consequence is identical.
+
+### 126.1 Why the scalar case never showed this
+
+Under the flag a scalar `float a + b` is byte-identical between the two paths:
+
+```
+ASSIGN s=IEEE_ADD(a, b);
+```
+
+on both. Nothing in this pass promotes it — **clang emits `ieee_add` itself**
+for scalar float arithmetic, and `migrate_ieee_arith_2op` carries it across. So
+the pass never needed a float-promotion arm and the gap was invisible.
+
+For a vector of float clang hands over the plain operator, and
+`clang_c_adjust::adjust_float_arith` promotes it
+(`clang_c_adjust_expr.cpp:796-817`, the `t.is_vector()` widening). That pass
+does not run under this flag:
+
+```
+<         ASSIGN s=IEEE_ADD(a, b);
+>         ASSIGN s=a + b;
+```
+
+and the backend aborts on a bitvector operator over a floating-point vector.
+
+### 126.2 The rounding mode the legacy arm does not attach
+
+`adjust_float_arith` returns *before* setting `rounding_mode` when the type is a
+vector, with the comment "BUG: setting rounding_mode breaks migration". The
+attribute-less legacy node then reaches `migrate_rounding_mode`, which
+synthesises the default `c:@__ESBMC_rounding_mode` symbol for it. So the node
+the default path actually produces carries that symbol, and the arm here builds
+the same one — the goto dumps are byte-identical after the patch, which is what
+confirms the reasoning rather than an argument from the comment.
+
+### 126.3 Result
+
+Closes both. Whole-suite verdict residue **9 → 7**. Default path byte-identical
+on 226 C sources. Suites: `esbmc` 1857/1857, `floats` 106/106,
+`floats-regression` 65/65, `cstd` 142/142, `cbmc` 307/307, `extensions`
+201/201.
+
+A note on the test rather than the code: the first version of the positive test
+carried `+/-/*//` in its block comment, and the `*/` inside it closed the
+comment early — `PARSING ERROR` on *all three* binaries, including the default
+path. A test that fails identically everywhere is not measuring anything, and
+the three-way comparison is what caught it.
+
+### 126.4 Next
+
+| tests | signature |
+|---:|---|
+| 4 | unclustered (`32_floppy`, `github_301`, `github_1934-1`, `github_382_6`) |
+| 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
+| 1 | `complex_25`, the §88.2 binding |
+
+No cluster larger than the unclustered four, and "unclustered" now means only
+that nobody has read them — they were grouped by signal number and §123.2/§125.2
+both show that is not a grouping. The next step is to read those four
+individually, starting with `github_382_6` (`global_var3 = *main`, a function
+dereference), which is the smallest input of the seven.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
