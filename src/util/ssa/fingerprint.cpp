@@ -189,6 +189,31 @@ private:
   size_t name_count = 0;
 };
 
+/// The expressions convert_internal_step feeds the solver for \p step, in the
+/// order it feeds them. `guard` and `cond` account for an assume, assert,
+/// branching or assignment step -- for an assignment `cond` is the `lhs == rhs`
+/// equality. A renumber carries the symbol and its new object size in
+/// `lhs`/`rhs` and leaves `cond` nil, and an output's arguments live in its
+/// payload; neither is reachable through `cond`, so neither may be left out of
+/// the key (esbmc/esbmc#7143).
+template <class visitort>
+void for_each_encoded_expr(
+  const symex_target_equationt::SSA_stept &step,
+  const visitort &visit)
+{
+  visit(step.guard);
+  visit(step.cond);
+
+  if (step.is_renumber())
+  {
+    visit(step.lhs);
+    visit(step.rhs);
+  }
+  else if (step.is_output() && step.output_data)
+    for (const expr2tc &arg : step.output_data->output_args)
+      visit(arg);
+}
+
 } // namespace
 
 uint64_t fingerprint_hash(const std::string &s)
@@ -211,8 +236,7 @@ ssa_cone_keyt ssa_cone_key(
   {
     if (step.ignore)
       continue;
-    n.collect(step.guard);
-    n.collect(step.cond);
+    for_each_encoded_expr(step, [&n](const expr2tc &e) { n.collect(e); });
   }
   n.assign_names();
 
@@ -234,8 +258,9 @@ ssa_cone_keyt ssa_cone_key(
 
     key.lo ^= static_cast<uint64_t>(step.type);
     key.lo *= 0x100000001b3ULL;
-    irep2_content_hash(step.guard, rename, rename_symbol, key.lo, key.hi);
-    irep2_content_hash(step.cond, rename, rename_symbol, key.lo, key.hi);
+    for_each_encoded_expr(step, [&](const expr2tc &e) {
+      irep2_content_hash(e, rename, rename_symbol, key.lo, key.hi);
+    });
   }
   return key;
 }

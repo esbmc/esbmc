@@ -26,9 +26,10 @@ enum class fingerprint_modet
 /**
  * @brief Digest the surviving steps of a per-claim sliced equation.
  *
- * Only the (type, guard, cond) triple of each non-ignored step is fed in;
- * for an assignment `cond` is the `lhs == rhs` equality, so that triple is a
- * complete account of what the step contributes to the formula.
+ * Each non-ignored step contributes its type and every expression
+ * convert_internal_step hands the solver for it: `guard` and `cond` for an
+ * assume, assert, branching or assignment, plus `lhs`/`rhs` for a renumber and
+ * the arguments for an output, neither of which is reachable through `cond`.
  *
  * Symbols reachable only through a type (a symbolic array size) are not
  * normalised, which can only cost hits, never manufacture them.

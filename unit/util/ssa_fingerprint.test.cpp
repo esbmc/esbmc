@@ -116,6 +116,30 @@ void add_member_claim(
       constant_int2tc(get_int32_type(), BigInt(0))));
 }
 
+void add_renumber_step(
+  symex_target_equationt::SSA_stepst &steps,
+  int object_size)
+{
+  steps.emplace_back();
+  auto &s = steps.back();
+  s.type = goto_trace_stept::RENUMBER;
+  s.guard = gen_true_expr();
+  s.lhs = local("p", 100, 0);
+  s.rhs = constant_int2tc(get_int32_type(), BigInt(object_size));
+}
+
+void add_output_step(
+  symex_target_equationt::SSA_stepst &steps,
+  const expr2tc &arg)
+{
+  steps.emplace_back();
+  auto &s = steps.back();
+  s.type = goto_trace_stept::OUTPUT;
+  s.guard = gen_true_expr();
+  auto &od = s.output_payload();
+  od.format_string = "%d";
+  od.output_args.push_back(arg);
+}
 } // namespace
 
 TEST_CASE(
@@ -259,6 +283,34 @@ TEST_CASE("members differing only after _at_ are not merged", "[fingerprint]")
   REQUIRE(
     ssa_cone_digest(reads_a, fingerprint_modet::srcloc) !=
     ssa_cone_digest(reads_b, fingerprint_modet::srcloc));
+}
+
+TEST_CASE("a renumbered object's size reaches the digest", "[fingerprint]")
+{
+  // A RENUMBER step leaves `cond` nil and carries the symbol and its new
+  // object size in `lhs`/`rhs`, which convert_internal_step passes to
+  // renumber_symbol_address. Two cones differing only there are different
+  // proof obligations.
+  symex_target_equationt::SSA_stepst small, large;
+  add_renumber_step(small, 8);
+  add_renumber_step(large, 16);
+
+  REQUIRE(
+    ssa_cone_digest(small, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(large, fingerprint_modet::srcloc));
+}
+
+TEST_CASE("an output step's arguments reach the digest", "[fingerprint]")
+{
+  // OUTPUT arguments are converted into the formula but live in the step's
+  // payload rather than in `cond`.
+  symex_target_equationt::SSA_stepst prints_x, prints_y;
+  add_output_step(prints_x, local("x", 100, 0));
+  add_output_step(prints_y, local("y", 200, 0));
+
+  REQUIRE(
+    ssa_cone_digest(prints_x, fingerprint_modet::srcloc) !=
+    ssa_cone_digest(prints_y, fingerprint_modet::srcloc));
 }
 
 TEST_CASE("the key is 32 hex digits and matches the digest", "[fingerprint]")
