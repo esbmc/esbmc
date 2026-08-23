@@ -5013,6 +5013,84 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 127. The "unclustered four" were four causes (2026-08-23)
+
+(§127: PRs #7266-#7287 are in flight against this file and claim §115-§126.)
+
+§126.4 said "unclustered" meant only that nobody had read them. Read, the four
+are four distinct causes — no two share a signature:
+
+| test | `-only` outcome |
+|---|---|
+| `github_382_6` | `ERROR: Unexpected type in int/ptr typecast` — fixed here |
+| `github_301` | `ERROR: Bitwuzla error encountered` |
+| `github_1934-1` | `ERROR: Can't construct rvalue reference to array type during dereference` |
+| `32_floppy` | no verdict (SIGSEGV) |
+
+That closes the question §123.2 opened: grouping by signal number produced one
+four-test "cluster" containing four unrelated defects, and the two earlier
+splits were not bad luck.
+
+### 127.1 `*main`, and a missing arm rather than a wrong one
+
+```c
+int main(void) { global_var3 = *main; assert(global_var3 == *main); return 0; }
+```
+
+```
+<         ASSIGN global_var3=(unsigned int)(&(*(&main)));
+>         ASSIGN global_var3=*(&main);
+```
+
+C11 6.3.2.1p4: dereferencing a pointer to a function yields a function
+designator, which converts straight back to a pointer — `*f` is `f`, and
+`******f` too. `clang_c_adjust::adjust_dereference` re-takes the address for
+exactly this case (`clang_c_adjust_expr.cpp:918-927`, its comment says
+"allowing ******...*p"). This pass had **no dereference arm at all**, so the
+code-typed dereference reached a consumer wanting a pointer.
+
+Only that arm is ported. The array (`*a` → `a[0]`) and pointer-subtype arms
+above it retype a node migration already builds with the right type, and no
+corpus input distinguishes them — porting them would be §94.1's guard again, an
+arm nothing executes.
+
+### 127.2 A mutant that was an alternative implementation
+
+Replacing `address_of2tc(type, expr, true)` with `to_dereference2t(expr).value`
+— strip the dereference instead of re-addressing it — left both tests passing.
+That is not §39.1's "unreachable by construction": `*(&f)` and `&f` denote the
+same pointer, so the mutation is a *semantically equivalent rewrite*, and no
+test can distinguish them because there is nothing to distinguish. It is a
+sixth way for a mutant to sit still, and the useful response is to note the
+arm has an equally valid alternative form rather than to hunt for a test.
+
+The discriminating mutant is the absent patch, which the base binary supplies:
+both tests abort there and return SUCCESSFUL / FAILED here. The `_fail` test
+needed `***f` rather than `*f` to reach that state — with a single dereference
+it failed identically on both binaries and measured nothing.
+
+### 127.3 Result
+
+Whole-suite verdict residue **7 → 6**. Default path byte-identical on 226 C
+sources. Suites: `esbmc` 1857/1857, `cstd` 142/142, `cbmc` 307/307, `floats`
+106/106, `extensions` 201/201.
+
+### 127.4 Next
+
+| test | signature |
+|---|---|
+| `github_301` | bitwuzla error |
+| `github_1934-1` | rvalue reference to array during dereference |
+| `32_floppy` | SIGSEGV |
+| `builtin_arith_overflow`, `github_2174` | false alarm SUCCESSFUL → FAILED |
+| `complex_25` | §88.2 binding |
+
+Six rows, six causes, and no grouping left to exploit — each is now its own
+investigation. `github_1934-1`'s message names a specific construction site
+(`dereference` on an array-typed rvalue reference) and is the most precisely
+signposted, so it is next.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
