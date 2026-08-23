@@ -1,3 +1,4 @@
+#include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
@@ -38,6 +39,11 @@ bool clang_c_adjust_irep2::adjust()
 
   for (symbolt *s : symbol_list)
   {
+    if (
+      sole_adjuster && s->get_type().is_code() &&
+      has_prefix(s->id.as_string(), "c:@F@main"))
+      declare_argc_argv(context, *s);
+
     if (!s->is_type && s->get_value().is_not_nil())
     {
       const expr2tc before = s->get_value2();
@@ -114,6 +120,14 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
+  // Before the recursion, so the located spelling wins over the unlocated one
+  // the walk would otherwise reach first.
+  if (sole_adjuster && is_code_expression2t(expr))
+  {
+    const code_expression2t &stmt = to_code_expression2t(expr);
+    declare_implicit_callee(stmt.operand, stmt.location);
+  }
+
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
 
   if (is_index2t(expr))
@@ -176,7 +190,10 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
     adjust_binary_arith_operands(expr);
 
   if (is_sideeffect_assign2t(expr))
+  {
     adjust_plain_assignment(expr);
+    adjust_compound_assignment(expr);
+  }
 }
 
 /// One of a family of spellings differing only by the argument's width:
@@ -455,6 +472,35 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
 
   if (rhs != a.rhs || expr->type != target)
     expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
+}
+
+/// The shift spellings clang_c_adjust returns early on: it promotes only the
+/// right operand there, which the corpus shows is already the migrated shape.
+static bool is_shift_assignment(const irep_idt &op)
+{
+  return op == "assign_shl" || op == "assign_shr" || op == "assign_lshr" ||
+         op == "assign_ashr";
+}
+
+void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
+{
+  const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+  if (a.op == "assign" || is_shift_assignment(a.op))
+    return;
+  if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+    return;
+
+  // A complex operand is lower_complex_compound_assignment's, and that arm
+  // rewrites the node rather than converting it.
+  if (is_complex_type(a.lhs->type) || is_complex_type(a.rhs->type))
+    return;
+
+  const type2tc target = a.lhs->type;
+  expr2tc lhs = a.lhs, rhs = a.rhs;
+  c_implicit_typecast_arithmetic(lhs, rhs, ns);
+
+  if (lhs != a.lhs || rhs != a.rhs || expr->type != target)
+    expr = sideeffect_assign2tc(target, a.op, lhs, rhs, a.location);
 }
 
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
@@ -777,7 +823,9 @@ void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
 }
 
-void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
+void clang_c_adjust_irep2::declare_implicit_callee(
+  const expr2tc &expr,
+  const locationt &stmt_location)
 {
   // A bare `f(x);` statement is a sideeffect2t of kind function_call, not a
   // code_function_call2t; both spellings reach here.
@@ -789,13 +837,19 @@ void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
     callee = call.function;
     loc = call.location;
   }
-  else
+  else if (is_sideeffect2t(expr))
   {
     const sideeffect2t &se = to_sideeffect2t(expr);
     if (se.kind != sideeffect_allockind::function_call)
       return;
     callee = se.operand;
+    // sideeffect2t has no location of its own. The enclosing statement's is
+    // the call's only when the call is the whole statement, which is the one
+    // position this is passed from.
+    loc = stmt_location;
   }
+  else
+    return;
 
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;

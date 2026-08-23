@@ -61,7 +61,7 @@ struct char_traits
     return 0;
   }
 
-  static std::size_t length(const char_type *s)
+  static OM_CONSTEXPR17 std::size_t length(const char_type *s)
   {
     std::size_t i = 0;
     while (!eq(s[i], char_type(0)))
