@@ -2,3 +2,4 @@ CORE
 main.c
 --enforce-contract set_entity --function set_entity
 ^VERIFICATION FAILED$
+^.*contract ensures.*$

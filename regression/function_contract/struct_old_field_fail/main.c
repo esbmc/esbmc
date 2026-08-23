@@ -14,6 +14,7 @@ typedef struct
 
 void increment(Counter *c)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(c, sizeof(Counter)));
   __ESBMC_requires(c != NULL);
   __ESBMC_ensures(c->val == __ESBMC_old(c->val) + 1);
   __ESBMC_ensures(c->count == __ESBMC_old(c->count) + 1);

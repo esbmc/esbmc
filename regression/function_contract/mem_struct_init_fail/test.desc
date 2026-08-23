@@ -2,3 +2,4 @@ CORE
 main.c
 --enforce-contract vec3_init --function vec3_init
 ^VERIFICATION FAILED$
+^.*contract ensures.*$

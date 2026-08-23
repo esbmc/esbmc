@@ -2,3 +2,4 @@ CORE
 main.c
 --enforce-contract increment --function increment
 ^VERIFICATION FAILED$
+^.*contract ensures.*$

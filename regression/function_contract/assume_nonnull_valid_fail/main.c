@@ -20,6 +20,7 @@ typedef struct
 
 void f(S *p)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(S)));
   __ESBMC_requires(p != NULL);
   __ESBMC_ensures(p->x == 10);
   p->x = 9999; /* WRONG: ensures requires x == 10 */
