@@ -1866,8 +1866,20 @@ python_list::build_trace_reduction(const exprt &array, long long k)
   if (!info)
     return std::nullopt;
 
+  // NumPy promotes a bool or narrower-than-default-int element type to the
+  // default int accumulator for trace (confirmed against NumPy 2.5.2:
+  // trace() of a bool or int8 matrix returns int64, summing without
+  // wrapping/truncating), while a float or already-default-width-or-wider
+  // int element type keeps its own type.
+  typet accumulator_type = shape->elem_type;
+  if (
+    accumulator_type.is_bool() ||
+    ((accumulator_type.is_signedbv() || accumulator_type.is_unsignedbv()) &&
+     bv_width(accumulator_type) < bv_width(long_long_int_type())))
+    accumulator_type = long_long_int_type();
+
   if (info->length <= 0)
-    return from_integer(0, shape->elem_type);
+    return from_integer(0, accumulator_type);
 
   long long row = k >= 0 ? 0 : -k;
   long long col = k >= 0 ? k : 0;
@@ -1879,7 +1891,9 @@ python_list::build_trace_reduction(const exprt &array, long long k)
       build_index(array, from_integer(row, size_type()), shape->row_type);
     exprt elem_expr =
       build_index(row_expr, from_integer(col, size_type()), shape->elem_type);
-    sum = i == 0 ? elem_expr : build_add(sum, elem_expr, shape->elem_type);
+    if (elem_expr.type() != accumulator_type)
+      elem_expr = build_typecast(elem_expr, accumulator_type);
+    sum = i == 0 ? elem_expr : build_add(sum, elem_expr, accumulator_type);
   }
   return sum;
 }
@@ -1924,9 +1938,15 @@ exprt python_list::snapshot_scalar_value(const nlohmann::json &value_node)
 // np.fill_diagonal(a, value): mutates a's main diagonal in place, using the
 // same offset/stride math as np.diagonal(a)/np.trace(a) with k=0. `value` is
 // either a single scalar (snapshotted once and reused for every position) or
-// a List literal whose length must match the diagonal's exactly, matching
-// NumPy's own broadcasting rule for a 1-D val (a length mismatch raises
-// ValueError there too, rather than repeating or truncating).
+// a List literal, repeated (shorter than the diagonal) or truncated (longer)
+// to fill it -- confirmed against NumPy 2.5.2: fill_diagonal(a, [10, 20]) on
+// a 3-long diagonal writes [10, 20, 10], never raising for a length
+// mismatch. Every literal element is still evaluated exactly once (Python
+// itself evaluates the whole list literal up front to construct it, whether
+// or not every element ends up used) and snapshotted before any position is
+// written, both to honour that once-each evaluation and, for elements that
+// do repeat, to avoid re-reading an element expression that depends on `a`
+// against already-mutated state.
 bool python_list::try_build_fill_diagonal_mutation(
   const exprt &array,
   const nlohmann::json &value_node)
@@ -1950,15 +1970,18 @@ bool python_list::try_build_fill_diagonal_mutation(
   const nlohmann::json *elts =
     value_is_list_literal && value_node.contains("elts") ? &value_node["elts"]
                                                          : nullptr;
-  if (
-    value_is_list_literal &&
-    (!elts || static_cast<long long>(elts->size()) != info->length))
-    throw std::runtime_error(
-      "ValueError: could not broadcast fill_diagonal value into the "
-      "diagonal's shape");
+  if (value_is_list_literal && (!elts || elts->empty()))
+    return true;
 
-  const exprt scalar_value =
-    value_is_list_literal ? exprt() : snapshot_scalar_value(value_node);
+  std::vector<exprt> element_values;
+  if (value_is_list_literal)
+  {
+    element_values.reserve(elts->size());
+    for (const auto &elt_node : *elts)
+      element_values.push_back(snapshot_scalar_value(elt_node));
+  }
+  else
+    element_values.push_back(snapshot_scalar_value(value_node));
 
   for (long long i = 0; i < info->length; ++i)
   {
@@ -1966,12 +1989,8 @@ bool python_list::try_build_fill_diagonal_mutation(
       build_index(array, from_integer(i, size_type()), shape->row_type);
     exprt elem_lhs =
       build_index(row_expr, from_integer(i, size_type()), shape->elem_type);
-    exprt value_expr = scalar_value;
-    if (value_is_list_literal)
-    {
-      value_expr = converter_.get_expr((*elts)[i]);
-      reject_non_scalar_fill_diagonal_value(value_expr.type());
-    }
+    const exprt &value_expr =
+      element_values[static_cast<std::size_t>(i) % element_values.size()];
     converter_.add_instruction(code_assignt(elem_lhs, value_expr));
   }
   return true;
@@ -2028,9 +2047,13 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
     return std::nullopt;
   // Slicing a non-unit-stride view (column, stepped, diagonal) is outside
   // this PR's scope: src_index below assumes the source's own logical
-  // indices map 1:1 onto pointer offsets, true only for stride 1.
+  // indices map 1:1 onto pointer offsets, true only for stride 1. Declining
+  // here (instead of rejecting) would fall through to the generic
+  // array/list slicing path below, which does not recognise a pointer-typed
+  // operand and mishandles it as a runtime list, so reject explicitly.
   if (info_it->second.stride != 1)
-    return std::nullopt;
+    throw std::runtime_error(
+      "TypeError: slicing a strided numpy view is not supported");
 
   long long literal_start = 0;
   std::optional<long long> static_slice_len = literal_slice_length(
@@ -2185,6 +2208,40 @@ std::optional<exprt> python_list::try_build_flat_index_assignment_target(
   return build_dereference(elem_ptr, shape->elem_type);
 }
 
+exprt python_list::normalize_negative_slice_bound(
+  const nlohmann::json &operand_node,
+  const exprt &logical_len,
+  bool negative_step)
+{
+  exprt abs_value = converter_.get_expr(operand_node);
+  if (abs_value.type() != size_type())
+    abs_value = build_typecast(abs_value, size_type());
+  // Called only for "upper" when !negative_step (see handle_range_slice's
+  // call sites), so a negative_step here always means this is the "lower"
+  // bound of a reverse slice. When abs_value exceeds logical_len, e.g.
+  // a[-10:1:-1] on a 3-element array, the clamp must match
+  // literal_slice_length's own -1 "before the start" sentinel (there is
+  // nothing left to reverse-iterate from), not 0 (the first element) -- 0
+  // would be wrong here since it makes the length computation below
+  // (lower_expr + 1) count one spurious element instead of zero.
+  // Represented as the unsigned size_type()'s two's-complement -1 (its max
+  // value) specifically so that + 1 wraps to exactly 0, matching a
+  // genuinely empty slice, the same way pointer-offset arithmetic
+  // elsewhere in this file relies on wraparound being well-defined for
+  // unsigned types. (V.3: built in IREP2.)
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc abs2, len2, converted2;
+  migrate_expr(abs_value, abs2);
+  migrate_expr(logical_len, len2);
+  migrate_expr(build_sub(logical_len, abs_value, size_type()), converted2);
+  exprt clamped =
+    negative_step ? from_integer(-1, size_type()) : gen_zero(size_type());
+  expr2tc clamped2;
+  migrate_expr(clamped, clamped2);
+  return migrate_expr_back(
+    if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -2329,34 +2386,8 @@ exprt python_list::handle_range_slice(
 
       // Check if negative index
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
-      {
-        exprt abs_value = to_size_expr(converter_.get_expr(bound["operand"]));
-        // process_bound is only ever called for "upper" when !negative_step
-        // (see the call sites below), so a negative_step here always means
-        // this is the "lower" bound of a reverse slice. When abs_value
-        // exceeds logical_len, e.g. a[-10:1:-1] on a 3-element array, the
-        // clamp must match literal_slice_length's own -1 "before the
-        // start" sentinel (there is nothing left to reverse-iterate from),
-        // not 0 (the first element) -- 0 would be wrong here since it
-        // makes the length computation below (lower_expr + 1) count one
-        // spurious element instead of zero. Represented as the unsigned
-        // size_type()'s two's-complement -1 (its max value) specifically
-        // so that + 1 wraps to exactly 0, matching a genuinely empty
-        // slice, the same way pointer-offset arithmetic elsewhere in this
-        // file relies on wraparound being well-defined for unsigned types.
-        // (V.3: built in IREP2.)
-        const type2tc size_t2 = migrate_type(size_type());
-        expr2tc abs2, len2, converted2;
-        migrate_expr(abs_value, abs2);
-        migrate_expr(logical_len, len2);
-        migrate_expr(size_sub(logical_len, abs_value), converted2);
-        exprt clamped =
-          negative_step ? from_integer(-1, size_type()) : gen_zero(size_type());
-        expr2tc clamped2;
-        migrate_expr(clamped, clamped2);
-        return migrate_expr_back(
-          if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
-      }
+        return normalize_negative_slice_bound(
+          bound["operand"], logical_len, negative_step);
 
       exprt e = converter_.get_expr(bound);
       return to_size_expr(remove_function_calls_recursive(e, slice_node));

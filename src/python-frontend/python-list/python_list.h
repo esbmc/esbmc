@@ -732,6 +732,16 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
+  // handle_range_slice's process_bound: normalizes a literal negative bound
+  // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
+  // site's own comment for why the clamp differs by step direction. Split
+  // out to keep handle_range_slice's own decision count from growing
+  // further.
+  exprt normalize_negative_slice_bound(
+    const nlohmann::json &operand_node,
+    const exprt &logical_len,
+    bool negative_step);
+
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale.
   exprt build_scalar_pointer_view(
