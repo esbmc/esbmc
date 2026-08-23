@@ -5013,6 +5013,98 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 118. The census re-run through verdicts, not goto dumps — and what it saw
+## (2026-08-23)
+
+(§118: PRs #7266, #7271 and #7274 are in flight against this file and claim
+§115-§117.)
+
+§117.4 asked for this: two of the previous three causes had been mis-tagged as
+spellings when they were programs the flag cannot verify, because
+`--goto-functions-only` stops before the encoder. Re-run reading each test's
+**verdict** under its own `test.desc` flags, default path against
+`--clang-c-irep2-adjust-only`, on the same pinned stride-8 list, at a build with
+those three PRs merged locally.
+
+For reference the goto census at that same build is **9 differing, 217 same** —
+down from 24, better than any of the three alone, because several tests carried
+more than one cause.
+
+### 118.1 What the verdict census found
+
+| | tests |
+|---|---:|
+| same verdict | **217** |
+| differing verdict | **3** |
+| skipped (`test.desc` already carries the flag) | 6 |
+
+Three, and none of them is a spelling:
+
+| test | default | `-only` | |
+|---|---|---|---|
+| `github_2572_2` | SUCCESSFUL | **FAILED** | §118.2, fixed here |
+| `github_2335_4` | FAILED | **SUCCESSFUL** | §118.3, the unsound direction |
+| `github_3487` | SUCCESSFUL | **uncaught `bad_optional_access`** | §118.4 |
+
+The goto census ranked the second of these as "struct padding in an aggregate
+initialiser" and did not see the third at all. That is the whole argument for
+this instrument: a `diff` row says the printers disagree, and says nothing about
+whether the verifier still works.
+
+### 118.2 `__builtin_isinf_sign` — the one fixed here
+
+`do_special_functions` spells it exactly, and deliberately: the neighbouring
+`isinf` arm matches a *base* name a program may reuse (`is_name_matched_builtin`,
+#6904), whereas `__builtin_isinf_sign` is reserved. This pass mirrored the base-
+name arm and not the exact one, so the call survived — and the symbol is
+bodyless, which makes the result nondet rather than differently shaped:
+
+```c
+assert(__builtin_isinf_sign(1.0) == 0);   /* SUCCESSFUL by default, FAILED under the flag */
+```
+
+Ported as the same nested conditional the legacy arm builds,
+`isinf ? (signbit ? -1 : 1) : 0`. `github_2572_2` agrees on both paths after it,
+and both new tests move under a sign-swap mutant — the `_fail` one inverts,
+which is the stronger signal of the pair.
+
+### 118.3 `github_2335_4` is the unsound direction, and it is next
+
+A test that FAILS by default SUCCEEDS under the flag. The goto diff is a missing
+`anon_pad#3` in an aggregate initialiser for an array of structs, so the
+initialiser is being built without the padding member the layout carries. A
+frame that verifies because a member vanished is exactly the shape §110.2 warns
+about read in the opposite direction, and it is the highest-value row left.
+
+`github_578_success3` shows the same missing-padding spelling
+(`anon_bit_field_pad#1`, `anon_pad#2`) without a verdict change, so the two are
+one cause with two symptoms and should be taken together.
+
+### 118.4 `github_3487` aborts in an optional
+
+`ERROR: uncaught exception [St19bad_optional_access]: bad optional access` under
+the flag, SUCCESSFUL without. Not diagnosed here beyond the reproduction; an
+unhandled `std::optional` access is a defect wherever it is, and it is the only
+row of the three that is a crash in ESBMC's own code rather than a modelling
+gap.
+
+### 118.5 A harness note worth keeping
+
+Running a test with its own `test.desc` flags from its source directory writes
+that test's output artefacts into the *source tree* —
+`cwe_dead_code_dead_store_sarif` takes `--sarif-output out.sarif`, and the stale
+file a census run left behind then failed the real `ctest` run of that test on a
+later invocation. The census must either run in a copy or clean up after itself;
+a suite failure immediately following a census run should be checked against
+`git status` before it is believed.
+
+### 118.6 Next
+
+`github_2335_4` / `github_578_success3` — the missing padding member in an
+aggregate initialiser, the one row in the residue that is unsound rather than
+merely wrong.
+
+
 ## 114. The two-stage census §113.4 asked for — the residue is 24, not 133
 ## (2026-08-22)
 
