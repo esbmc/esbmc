@@ -1,0 +1,6 @@
+THOROUGH
+main.c
+--k-induction-parallel
+^  FAILED +\[main\.null-pointer-dereference\.1\]  line 7  dereference failure: NULL pointer$
+^\*\* 1 of 2 properties failed, 1 passed$
+^VERIFICATION FAILED$
