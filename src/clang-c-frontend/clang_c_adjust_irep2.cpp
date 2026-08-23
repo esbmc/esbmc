@@ -177,6 +177,18 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
+  // A comma expression takes its right operand's type (C11 6.5.17p2). Clang
+  // hands it the *decayed* type when the right operand is an array, so leaving
+  // it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
+  // the named array-bounds check for the generic dereference one. Same rewrite
+  // as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
+  if (is_code_comma2t(expr))
+  {
+    const code_comma2t &c = to_code_comma2t(expr);
+    if (expr->type != c.side_2->type)
+      expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
+  }
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
 
