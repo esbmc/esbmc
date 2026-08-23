@@ -4,6 +4,7 @@
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
 #include <util/symtab/symbol.h>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -291,7 +292,8 @@ public:
   }
 
   /**
-   * @brief Record a single element-type entry for a list in the static type map.
+   * @brief Record a single element-type entry for a list in the static type
+   * map.
    *
    * @param list_symbol_id  Internal symbol identifier of the list.
    * @param elem_id         Symbol identifier of the element, or empty when the
@@ -299,6 +301,23 @@ public:
    *                        a concrete element expression.
    * @param elem_type       ESBMC type of the element.
    */
+  /// The declaring literal's elements for a variable-held list, or empty when
+  /// the literal cannot be used.
+  std::vector<exprt> literal_elems_for_variable_list(
+    const nlohmann::json *source_node,
+    const exprt &source_list);
+
+  /// True when a list's declaring literal still describes its contents.
+  static bool literal_still_describes_list(
+    const exprt &source_list,
+    size_t literal_elem_count);
+
+  /// Element type recovered for a bare `list` parameter, or a nil type.
+  static typet bare_list_param_elem_type(
+    const nlohmann::json &param_node,
+    const std::string &param_id,
+    const typet &annotated);
+
   static void add_type_info_entry(
     const std::string &list_symbol_id,
     const std::string &elem_id,
@@ -315,8 +334,8 @@ public:
 
   /**
    * Get the element type for a list at a given index.
-   * If index is not specified or out of bounds, returns the first element's type.
-   * Returns empty typet() if type information is not available.
+   * If index is not specified or out of bounds, returns the first element's
+   * type. Returns empty typet() if type information is not available.
    */
   static typet
   get_list_element_type(const std::string &list_id, size_t index = 0);
@@ -349,14 +368,16 @@ public:
 
   /**
    * @brief Extract and dereference value from a PyObject* expression
-   * @param pyobject_expr Expression representing PyObject* (from list_at or list_pop)
+   * @param pyobject_expr Expression representing PyObject* (from list_at or
+   * list_pop)
    * @param elem_type The expected element type
    * @param mixed_numeric When true and elem_type is float, the element may be
    *        either an int or a float at runtime (a dynamic index into a mixed
    *        int/float list). The float value is then read by dispatching on the
    *        stored type_id: float elements come from __ESBMC_float_buf, int
    *        elements are promoted from their payload to double.
-   * @return Dereferenced value expression (for floats: __ESBMC_float_buf[item->float_idx])
+   * @return Dereferenced value expression (for floats:
+   * __ESBMC_float_buf[item->float_idx])
    */
   exprt extract_pyobject_value(
     const exprt &pyobject_expr,
@@ -438,7 +459,8 @@ public:
   /**
    * @brief Create a list from a range() call
    * @param converter The python converter instance
-   * @param range_args The arguments to range() (1-3 arguments: stop, or start+stop, or start+stop+step)
+   * @param range_args The arguments to range() (1-3 arguments: stop, or
+   * start+stop, or start+stop+step)
    * @param element The AST node for location information
    * @return Expression representing the list [start, start+step, ..., stop-1]
    * @throws std::runtime_error if range parameters are invalid or too large
@@ -585,10 +607,12 @@ public:
   static void reverse_type_info(const std::string &list_id);
 
   /**
-   * @brief Unpack a list variable into multiple targets, supporting starred expressions.
+   * @brief Unpack a list variable into multiple targets, supporting starred
+   * expressions.
    *
    * Handles assignments like `a, *b, c = lst` where `lst` is a list variable.
-   * Uses __ESBMC_list_at for element access and builds a new list for the starred target.
+   * Uses __ESBMC_list_at for element access and builds a new list for the
+   * starred target.
    *
    * @param ast_node The assignment AST node (for location info and value["id"])
    * @param target   The tuple/list target node containing the target variables
@@ -625,6 +649,42 @@ private:
 
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
+
+  // ADR-NP-003 etapa 2, first slice: builds a pointer into the base
+  // array's own storage for a 1-D, unit-stride, literal-bound slice
+  // assigned directly to a bare name, instead of handle_range_slice()'s
+  // usual independent copy. Split out to keep that already large
+  // function's own decision count from growing further; see
+  // list_access.cpp for the full rationale and the cases intentionally
+  // left out of this first slice (returns std::nullopt for those, and the
+  // caller falls through to the existing copy).
+  std::optional<exprt> try_build_1d_pointer_view(
+    const exprt &array,
+    const typet &elem_type,
+    long long step_val,
+    bool needs_null_term,
+    long long literal_start,
+    long long static_slice_len);
+
+  std::optional<exprt> try_build_row_pointer_view(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
+  std::optional<exprt> try_copy_numpy_pointer_view_slice(
+    const exprt &array,
+    const typet &elem_type,
+    const nlohmann::json &slice_node,
+    long long step_val,
+    bool literal_step);
+
+  void emit_slice_zero_step_raise(
+    const nlohmann::json &slice_node,
+    bool literal_zero_step);
+
+  exprt guard_numpy_pointer_view_index(
+    const exprt &array,
+    const exprt &index,
+    const nlohmann::json &slice_node);
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
@@ -663,7 +723,8 @@ private:
   /**
    * @brief Append every element of src onto dst at runtime.
    *
-   * Shared by list concatenation (a + b) and variable-list repetition (lst * n).
+   * Shared by list concatenation (a + b) and variable-list repetition (lst *
+   * n).
    *
    * @param src Source list expression (value or pointer)
    * @param dst Destination list symbol
@@ -723,4 +784,11 @@ private:
 
   // <list_id, <elem_id, elem_type>>
   static std::unordered_map<std::string, TypeInfo> list_type_map;
+
+  /// Element type already handed out for one syntactic pop() site, keyed by
+  /// list symbol and source position. The assignment path converts its RHS
+  /// more than once, and build_pop_list_call consumes a list_type_map entry
+  /// per call, so without this the second conversion of a single pop() sees an
+  /// empty map and falls back to the list's annotation (#4780).
+  static std::unordered_map<std::string, typet> pop_elem_type_memo;
 };

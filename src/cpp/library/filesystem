@@ -6,6 +6,10 @@
 
 #include "cstring"
 #include "string"
+/* [filesystem.syn] declares an error_code& overload of nearly every
+ * operation, so <filesystem> is where code expects std::error_code to
+ * become visible. */
+#include "system_error"
 
 // Minimal C++17 <filesystem> operational model.
 //
@@ -72,6 +76,18 @@ public:
   {
     return __p_;
   }
+  /* [fs.path.native.obs]: u8string returns the path in UTF-8. This model
+   * stores a narrow string, so it is the same sequence as string(); the C++20
+   * std::u8string return type is not modelled. generic_string is the same
+   * again, since the generic and native formats coincide here. */
+  ::std::string u8string() const
+  {
+    return __p_;
+  }
+  ::std::string generic_string() const
+  {
+    return __p_;
+  }
   bool empty() const noexcept
   {
     return __p_.empty();
@@ -130,6 +146,16 @@ inline path current_path()
 inline bool equivalent(const path &a, const path &b)
 {
   return a == b;
+}
+
+/* [fs.path.factory]: u8path builds a path from UTF-8 encoded source. This
+ * model's path already stores a narrow string, so it is the path constructor.
+ * The iterator-pair overload is deliberately absent rather than declared
+ * without a body, which would convert as a nondeterministic return. */
+template <class Source>
+inline path u8path(const Source &source)
+{
+  return path(source);
 }
 
 } // namespace filesystem

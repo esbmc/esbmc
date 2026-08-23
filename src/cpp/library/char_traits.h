@@ -39,12 +39,12 @@ struct char_traits
     return s;
   }
 
-  static bool eq(char_type c1, char_type c2) OM_NOEXCEPT
+  static OM_CONSTEXPR bool eq(char_type c1, char_type c2) OM_NOEXCEPT
   {
     return c1 == c2;
   }
 
-  static bool lt(char_type c1, char_type c2) OM_NOEXCEPT
+  static OM_CONSTEXPR bool lt(char_type c1, char_type c2) OM_NOEXCEPT
   {
     return c1 < c2;
   }
@@ -61,7 +61,7 @@ struct char_traits
     return 0;
   }
 
-  static std::size_t length(const char_type *s)
+  static OM_CONSTEXPR14 std::size_t length(const char_type *s)
   {
     std::size_t i = 0;
     while (!eq(s[i], char_type(0)))
@@ -88,27 +88,27 @@ struct char_traits
     return static_cast<char_type *>(memcpy(dest, src, n * sizeof(charT)));
   }
 
-  static int_type eof() OM_NOEXCEPT
+  static OM_CONSTEXPR int_type eof() OM_NOEXCEPT
   {
     return EOF;
   }
 
-  static int_type to_int_type(char_type c) OM_NOEXCEPT
+  static OM_CONSTEXPR int_type to_int_type(char_type c) OM_NOEXCEPT
   {
     return static_cast<unsigned char>(c);
   }
 
-  static char_type to_char_type(int_type c) OM_NOEXCEPT
+  static OM_CONSTEXPR char_type to_char_type(int_type c) OM_NOEXCEPT
   {
     return static_cast<char_type>(c);
   }
 
-  static bool eq_int_type(int_type c1, int_type c2) OM_NOEXCEPT
+  static OM_CONSTEXPR bool eq_int_type(int_type c1, int_type c2) OM_NOEXCEPT
   {
     return c1 == c2;
   }
 
-  static int_type not_eof(int_type c) OM_NOEXCEPT
+  static OM_CONSTEXPR int_type not_eof(int_type c) OM_NOEXCEPT
   {
     return (c == eof()) ? 0 : c;
   }
@@ -120,13 +120,13 @@ struct char_traits
 // above 0x7f wrongly wherever char is signed -- and compare(), hence
 // std::string's ordering, is built on lt. See #7048.
 template <>
-inline bool char_traits<char>::eq(char c1, char c2) OM_NOEXCEPT
+inline OM_CONSTEXPR bool char_traits<char>::eq(char c1, char c2) OM_NOEXCEPT
 {
   return static_cast<unsigned char>(c1) == static_cast<unsigned char>(c2);
 }
 
 template <>
-inline bool char_traits<char>::lt(char c1, char c2) OM_NOEXCEPT
+inline OM_CONSTEXPR bool char_traits<char>::lt(char c1, char c2) OM_NOEXCEPT
 {
   return static_cast<unsigned char>(c1) < static_cast<unsigned char>(c2);
 }

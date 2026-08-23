@@ -539,6 +539,17 @@ BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
   return dest;
 }
 
+#if __cplusplus >= 201103L
+// [alg.move]: the moving counterpart of copy_backward.
+template <class BidIt1, class BidIt2>
+BidIt2 move_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
+{
+  while (last != first)
+    *(--dest) = ::std::move(*(--last));
+  return dest;
+}
+#endif
+
 /* swap is provided by <utility> (included above) for both C++03 and C++11+;
    defining it here as well caused a redefinition error under -std=c++03. */
 

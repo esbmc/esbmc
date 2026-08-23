@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^.*assertion return_value.*python_scalar_eq_obj.*$
