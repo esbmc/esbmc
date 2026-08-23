@@ -161,6 +161,8 @@ private:
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
 
+  void adjust_sole_arms_tail(expr2tc &expr);
+
   contextt &context;
   const bool sole_adjuster;
   namespacet ns{context};
