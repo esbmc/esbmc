@@ -68,7 +68,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if (
     symbol.get_type().is_code() &&
     has_prefix(symbol.id.as_string(), "c:@F@main"))
-    adjust_argc_argv(symbol);
+    declare_argc_argv(context, symbol);
 
   {
     typet t = symbol.get_type();
@@ -1799,7 +1799,7 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
   gen_typecast_bool(ns, expr.op1());
 }
 
-void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
+void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 {
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.get_type()).arguments();

@@ -64,7 +64,9 @@ private:
   /// symbol in the context; clang_c_adjust::adjust_side_effect_function_call
   /// declares one. That is a symbol-table side effect rather than an expression
   /// rewrite, so it ports independently of the rest of that arm (§70).
-  void declare_implicit_callee(const expr2tc &expr);
+  void declare_implicit_callee(
+    const expr2tc &expr,
+    const locationt &stmt_location = locationt());
 
   /// IREP2 form of clang_c_adjust::adjust_expr_{unary,binary}_boolean's live
   /// half. Their type write is dead for C (§58.1); the operand conversion is
@@ -123,6 +125,12 @@ private:
   /// "assign" case: the node takes the target's type, and the source converts
   /// to it.
   void adjust_plain_assignment(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's tail: the
+  /// compound operators take the usual arithmetic conversions on *both*
+  /// operands (C11 6.5.16.2p3 -- `b += a` is `b = b + a`, so a narrow target
+  /// promotes), while the node keeps the target's type.
+  void adjust_compound_assignment(expr2tc &expr);
   /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
   /// and adjust_for apply to a statement's controlling expression (§95).
   void adjust_statement_condition(expr2tc &expr);

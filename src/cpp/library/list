@@ -3,7 +3,9 @@
 
 #include <stdlib.h>
 
+#include "cstddef" /* ptrdiff_t */
 #include "definitions.h"
+#include "iterator_tags.h"
 #include "type_traits"
 #include "vector"
 #if __cplusplus >= 201103L
@@ -175,6 +177,18 @@ public:
   class iterator
   {
   public:
+    /* [iterator.traits] reads these five from the iterator itself. Without
+     * them iterator_traits<list<T>::iterator> does not resolve, so a generic
+     * algorithm over a list iterator fails -- boost::adaptors::reversed over
+     * an SSA step list is what surfaced it. The category is bidirectional:
+     * the operators below advance and retreat one step, with no random
+     * access. */
+    typedef ::std::bidirectional_iterator_tag iterator_category;
+    typedef T value_type;
+    typedef ::std::ptrdiff_t difference_type;
+    typedef T *pointer;
+    typedef T &reference;
+
     list<T> *owner;
     size_type idx;
 

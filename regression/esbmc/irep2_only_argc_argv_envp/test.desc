@@ -1,0 +1,6 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --symbol-table-only
+^Symbol\.+: envp_size'$
+^Symbol\.+: envp'$
+^Type\.+: signed char \* \[envp_size\]$

@@ -75,6 +75,52 @@ classify_branch_literal_assigns(const nlohmann::json &block)
 
   return types;
 }
+
+// Classifies a single `return <literal>` statement: "num", "str", or "" if
+// it isn't a literal return.
+std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
+{
+  if (!ret_stmt.is_object() || ret_stmt.value("_type", "") != "Return")
+    return "";
+  if (!ret_stmt.contains("value") || ret_stmt["value"].is_null())
+    return "";
+
+  const auto &value = ret_stmt["value"];
+  if (value.value("_type", "") != "Constant" || !value.contains("value"))
+    return "";
+
+  const auto &lit = value["value"];
+  if (lit.is_string())
+    return "str";
+  if (lit.is_number_integer() || lit.is_boolean())
+    return "num";
+  return "";
+}
+
+// Collects every literal return kind reachable from the tail of `block`,
+// following elif chains (a nested If as the block's last statement) into
+// both of their arms.
+void collect_branch_return_kinds(
+  const nlohmann::json &block,
+  std::unordered_set<std::string> &kinds)
+{
+  if (!block.is_array() || block.empty())
+    return;
+
+  const auto &last = block.back();
+  if (last.is_object() && last.value("_type", "") == "If")
+  {
+    if (last.contains("body"))
+      collect_branch_return_kinds(last["body"], kinds);
+    if (last.contains("orelse"))
+      collect_branch_return_kinds(last["orelse"], kinds);
+    return;
+  }
+
+  const std::string kind = classify_return_literal_kind(last);
+  if (!kind.empty())
+    kinds.insert(kind);
+}
 } // namespace
 
 dynamic_type_handler::dynamic_type_handler(
@@ -294,11 +340,7 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   return instructions;
 }
 
-void dynamic_type_handler::assign(
-  const exprt &rhs,
-  const locationt &location,
-  const std::string &name,
-  codet &target_block)
+symbolt *dynamic_type_handler::find_tag_symbol(const std::string &name) const
 {
   symbolt *tag_symbol =
     converter_.symbol_table().find_symbol(tagged_symbol_id(name));
@@ -306,6 +348,16 @@ void dynamic_type_handler::assign(
     tag_symbol &&
     "tagged scalar symbol must already be declared before its branches are "
     "converted");
+  return tag_symbol;
+}
+
+void dynamic_type_handler::assign(
+  const exprt &rhs,
+  const locationt &location,
+  const std::string &name,
+  codet &target_block)
+{
+  symbolt *tag_symbol = find_tag_symbol(name);
 
   for (const codet &instr : build_tag_field_assigns(*tag_symbol, rhs, location))
     target_block.copy_to_operands(instr);
@@ -607,6 +659,74 @@ exprt dynamic_type_handler::build_isinstance_check(
   throw std::runtime_error(
     "isinstance() against this type is not yet supported for a "
     "dynamically-typed variable");
+}
+
+bool dynamic_type_handler::detect_dynamic_return_type(
+  const nlohmann::json &function_body) const
+{
+  if (!function_body.is_array())
+    return false;
+
+  for (size_t i = 0; i < function_body.size(); ++i)
+  {
+    const auto &stmt = function_body[i];
+    if (!stmt.is_object() || stmt.value("_type", "") != "If")
+      continue;
+    if (!stmt.contains("body") || stmt["body"].empty())
+      continue;
+
+    std::unordered_set<std::string> kinds;
+    collect_branch_return_kinds(stmt["body"], kinds);
+
+    if (stmt.contains("orelse") && !stmt["orelse"].empty())
+      collect_branch_return_kinds(stmt["orelse"], kinds);
+    else if (i + 1 < function_body.size())
+    {
+      // No else: an idiomatic early return falls through to the next
+      // statement at this level.
+      const std::string next_kind =
+        classify_return_literal_kind(function_body[i + 1]);
+      if (!next_kind.empty())
+        kinds.insert(next_kind);
+    }
+
+    if (kinds.size() > 1)
+      return true;
+  }
+
+  return false;
+}
+
+exprt dynamic_type_handler::build_tagged_return_value(
+  const exprt &value,
+  const locationt &location,
+  codet &target_block)
+{
+  symbolt &tag_symbol = converter_.create_tmp_symbol(
+    location, "$return_tag$", type_handler_.get_tagged_object_type(), exprt());
+
+  code_declt tag_decl(build_symbol(tag_symbol));
+  tag_decl.location() = location;
+  target_block.copy_to_operands(tag_decl);
+
+  for (const codet &instr :
+       build_tag_field_assigns(tag_symbol, value, location))
+    target_block.copy_to_operands(instr);
+
+  return build_symbol(tag_symbol);
+}
+
+void dynamic_type_handler::assign_tagged_object(
+  const exprt &rhs,
+  const locationt &location,
+  const std::string &name,
+  codet &target_block)
+{
+  symbolt *tag_symbol = find_tag_symbol(name);
+
+  code_assignt whole_struct_copy(build_symbol(*tag_symbol), rhs);
+  whole_struct_copy.location() = location;
+  target_block.copy_to_operands(whole_struct_copy);
 }
 
 dynamic_type_handler::scope_guard::scope_guard(

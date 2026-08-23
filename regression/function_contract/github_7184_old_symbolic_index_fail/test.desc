@@ -1,0 +1,5 @@
+CORE
+main.c
+--function array_bump --enforce-contract array_bump
+^VERIFICATION FAILED$
+^.*contract ensures.*$
