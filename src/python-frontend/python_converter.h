@@ -48,10 +48,12 @@ bool is_imported_numpy_module_alias(
 
 /**
  * @class python_converter
- * @brief Main converter for transforming Python AST into ESBMC's intermediate representation.
+ * @brief Main converter for transforming Python AST into ESBMC's intermediate
+ * representation.
  *
- * This class is responsible for converting Python source code (represented as JSON AST)
- * into GOTO programs that can be processed by ESBMC's symbolic execution engine.
+ * This class is responsible for converting Python source code (represented as
+ * JSON AST) into GOTO programs that can be processed by ESBMC's symbolic
+ * execution engine.
  */
 class python_converter
 {
@@ -489,13 +491,15 @@ private:
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
   // True iff `t` denotes a user-defined Python class struct — either the struct
-  // itself or a `symbol_typet("tag-<Class>")` reference to it (robust to whether
-  // the struct has been built yet). Excludes the list/dict/object model structs.
+  // itself or a `symbol_typet("tag-<Class>")` reference to it (robust to
+  // whether the struct has been built yet). Excludes the list/dict/object model
+  // structs.
   bool is_user_class_struct_type(const typet &t);
 
   // True iff `t` is a pointer to a user-defined class struct (a migrated
   // `Class*` instance). Used to gate the object-model migration's
-  // None-keeps-Class* and dunder-dispatch-through-pointer paths to real classes.
+  // None-keeps-Class* and dunder-dispatch-through-pointer paths to real
+  // classes.
   bool is_user_class_pointer(const typet &t);
 
   // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
@@ -1154,6 +1158,12 @@ private:
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  bool record_numpy_transpose_view(
+    const exprt &lhs,
+    const nlohmann::json &view_node);
+
+  bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
+
   void clear_numpy_view_copy(const exprt &lhs);
 
   void
@@ -1183,6 +1193,21 @@ private:
   /// the same storage and silently start observing the new value instead.
   void detach_numpy_pointer_views_of(
     const std::string &rebound_id,
+    const locationt &location,
+    codet &target_block);
+
+  void clear_numpy_transpose_views_of(const std::string &source_id);
+
+  void mirror_numpy_transpose_assignment(
+    const nlohmann::json &target,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block);
+
+  void emit_numpy_transpose_mirror_assignment(
+    const std::string &symbol_id,
+    const std::vector<long long> &cell_indices,
+    const exprt &rhs,
     const locationt &location,
     codet &target_block);
 
@@ -1365,7 +1390,8 @@ private:
    * @param rhs The right operand expression.
    * @param left The left operand JSON AST node.
    * @param right The right operand JSON AST node.
-   * @return Boolean result expression, or nil_exprt if not a type identity check.
+   * @return Boolean result expression, or nil_exprt if not a type identity
+   * check.
    */
   exprt handle_type_identity_check(
     const std::string &op,
@@ -1425,7 +1451,8 @@ private:
    *
    * @param op The operator string.
    * @param lhs The left operand expression (may be modified for concatenation).
-   * @param rhs The right operand expression (may be modified for concatenation).
+   * @param rhs The right operand expression (may be modified for
+   * concatenation).
    * @param left The left operand JSON AST node.
    * @param right The right operand JSON AST node.
    * @param element The full binary operation JSON AST node.
@@ -1692,6 +1719,14 @@ private:
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
+  struct numpy_transpose_view_infot
+  {
+    std::string source_id;
+    std::size_t rank;
+    bool swaps_axes;
+  };
+  std::unordered_map<std::string, numpy_transpose_view_infot>
+    numpy_transpose_view_info_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
@@ -1701,8 +1736,9 @@ private:
   /// symbol id. Such a list may have been mutated (e.g. appended to) by the
   /// callee, which the caller's static length tracking (list_type_map / the AST
   /// literal) does not observe. The convert-time constant-index bounds check in
-  /// python-list/list_access.cpp is therefore suppressed for these lists, so the
-  /// access falls back to the sound runtime __ESBMC_list_at path (GitHub #5991).
+  /// python-list/list_access.cpp is therefore suppressed for these lists, so
+  /// the access falls back to the sound runtime __ESBMC_list_at path (GitHub
+  /// #5991).
   std::set<std::string> call_escaped_lists_;
 
   /// Map object to list of instance attributes
@@ -1718,7 +1754,8 @@ private:
   /// across annotator calls.
   std::map<std::string, nlohmann::json> module_ast_pool_;
   /// Maps any symbol currently known to refer to an input() string
-  /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
+  /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol
+  /// ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
 
   /// Straight-line dynamic-retyping support (#4770, #4774). Maps the original
@@ -1744,8 +1781,8 @@ private:
   /// Returns "" for any other shape (e.g. subscript, nested attribute base).
   std::string flow_lvalue_path(const nlohmann::json &node) const;
 
-  /// Class name of an assignment RHS for flow_class_map_: a `Cls(...)` call to a
-  /// known class, or a Name already tracked in flow_class_map_. Else "".
+  /// Class name of an assignment RHS for flow_class_map_: a `Cls(...)` call to
+  /// a known class, or a Name already tracked in flow_class_map_. Else "".
   std::string flow_rhs_class(const nlohmann::json &rhs) const;
 
   /// User-class name returned by a non-constructor call RHS (`y = f(...)` where
@@ -1777,9 +1814,9 @@ private:
 
   /// How many enclosing get_block() frames are while/for loop bodies. A loop
   /// target variable (and any rebinding inside the body) leaks past the loop in
-  /// Python, so reverting its retype at the body's join would be wrong (it would
-  /// hide the leaked value). Dynamic retyping (#4770/#4774) is therefore refused
-  /// while loop_body_depth_ > 0 and left to the existing fallback — the
+  /// Python, so reverting its retype at the body's join would be wrong (it
+  /// would hide the leaked value). Dynamic retyping (#4770/#4774) is therefore
+  /// refused while loop_body_depth_ > 0 and left to the existing fallback — the
   /// pre-#5716 behaviour — whereas if/else/try bodies do retype-with-revert.
   unsigned loop_body_depth_ = 0;
 

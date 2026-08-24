@@ -216,6 +216,47 @@ try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
   return true;
 }
 
+static bool is_numpy_literal_int_node(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return true;
+
+  return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+         node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+         node["operand"].value("_type", "") == "Constant" &&
+         node["operand"].contains("value") &&
+         node["operand"]["value"].is_number_integer();
+}
+
+static bool is_concrete_transpose_axes(const nlohmann::json &node)
+{
+  if (is_numpy_literal_int_node(node))
+    return true;
+
+  if (node.value("_type", "") != "Tuple" && node.value("_type", "") != "List")
+    return false;
+
+  if (!node.contains("elts") || !node["elts"].is_array())
+    return false;
+
+  return std::all_of(
+    node["elts"].begin(), node["elts"].end(), is_numpy_literal_int_node);
+}
+
+static void reject_symbolic_transpose_axes(
+  const std::string &function,
+  const nlohmann::json &call)
+{
+  if (
+    function == "transpose" && call.contains("args") &&
+    call["args"].is_array() && call["args"].size() > 1 &&
+    !is_concrete_transpose_axes(call["args"][1]))
+    throw std::runtime_error(
+      "TypeError: numpy.transpose() axes must be concrete integers");
+}
+
 static std::optional<nlohmann::json>
 try_build_numpy_arange_list(const nlohmann::json &call)
 {
@@ -4252,6 +4293,9 @@ exprt numpy_call_expr::create_expr_from_call()
     }
 
     const auto &arg_type = call_["args"][0]["_type"];
+    const std::string &numpy_function = function_id_.get_function();
+    reject_symbolic_transpose_axes(numpy_function, call_);
+
     if (
       arg_type == "Constant" || arg_type == "UnaryOp" ||
       arg_type == "Subscript")
@@ -4348,7 +4392,8 @@ exprt numpy_call_expr::create_expr_from_call()
         }
 
         // Constant-fold transpose for fully constant 2D numeric lists.
-        // This avoids forcing integer-only backend transpose for float literals.
+        // This avoids forcing integer-only backend transpose for float
+        // literals.
         if (
           allow_numpy_fold && list_arg.contains("elts") &&
           !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
@@ -4691,7 +4736,8 @@ exprt numpy_call_expr::create_expr_from_call()
           }
         }
 
-        // Append array postfix to call array variants, e.g., ceil_array instead of ceil
+        // Append array postfix to call array variants, e.g., ceil_array instead
+        // of ceil
         std::string func_name = function_id_.get_function();
         if (func_name == "ceil")
           func_name = "__" + func_name + "_array";
@@ -4706,8 +4752,10 @@ exprt numpy_call_expr::create_expr_from_call()
             "assignment target");
         auto &current_lhs = *converter_.current_lhs;
 
-        // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
-        // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
+        // In a call like result = np.ceil(v), the type of 'result' is only
+        // known after processing the argument 'v'. At this point, we have the
+        // argument's type information, so we update the type of the LHS
+        // expression accordingly.
 
         if (t.subtype().is_array())
           current_lhs.type() = long_long_int_type();
@@ -4716,9 +4764,10 @@ exprt numpy_call_expr::create_expr_from_call()
 
         converter_.update_symbol(current_lhs);
 
-        // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
-        // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
-        // The lines below add the output array and size arguments to the call.
+        // NumPy math functions on arrays are translated to C-style calls with
+        // the signature: func(input, output, size). For example, result =
+        // np.ceil(v) becomes ceil_array(v, result, sizeof(v)). The lines below
+        // add the output array and size arguments to the call.
 
         // Add output argument
         call.arguments().push_back(np_address_of(current_lhs));
@@ -5680,6 +5729,7 @@ exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
+  reject_symbolic_transpose_axes(function, call_);
 
   static const std::set<std::string> reducer_and_arange_functions = {
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
@@ -7676,7 +7726,6 @@ exprt numpy_call_expr::get()
 
       return expr;
     }
-
     broadcast_check(call_["args"]);
 
     exprt expr = create_expr_from_call();
