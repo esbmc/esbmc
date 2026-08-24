@@ -5087,6 +5087,100 @@ locally and return their expected verdicts on master and here alike.
 `github_3487` — `ERROR: uncaught exception [St19bad_optional_access]` under the
 flag, SUCCESSFUL without. The last row of §118.1's three, and the only one that
 is a crash in ESBMC's own code rather than a modelling gap.
+## 127. The "unclustered four" were four causes (2026-08-23)
+
+(§127: PRs #7266-#7287 are in flight against this file and claim §115-§126.)
+
+§126.4 said "unclustered" meant only that nobody had read them. Read, the four
+are four distinct causes — no two share a signature:
+
+| test | `-only` outcome |
+|---|---|
+| `github_382_6` | `ERROR: Unexpected type in int/ptr typecast` — fixed here |
+| `github_301` | `ERROR: Bitwuzla error encountered` |
+| `github_1934-1` | `ERROR: Can't construct rvalue reference to array type during dereference` |
+| `32_floppy` | no verdict (SIGSEGV) |
+
+That closes the question §123.2 opened: grouping by signal number produced one
+four-test "cluster" containing four unrelated defects, and the two earlier
+splits were not bad luck.
+
+### 127.1 `*main`, and a missing arm rather than a wrong one
+## 124. A field excluded from equality, dropped by four rebuilds (2026-08-23)
+
+(§124: PRs #7266, #7271, #7274, #7275, #7278, #7280, #7282, #7283 and #7284 are
+in flight against this file and claim §115-§123.)
+
+§123.5 named the four false-alarm rows as next, on the grounds that they were
+the only ones left producing a wrong *answer* rather than no answer, and that
+two naming `pragma_unroll` were probably one cause. They were.
+
+### 124.1 The mechanism, which the test's own comment predicted
+
+`github_4715_irep2_bodies_pragma_unroll_01` documents its failure mode in
+advance:
+
+> If the count were dropped on the round-trip the loop would run to its natural
+> bound of 8, writing a[3..7] out of the 3-element array: a spurious
+> array-bounds violation seen only under the flag.
+
+Which is exactly what happens — though not on the round-trip. `migrate_expr`
+carries `#pragma_unroll` onto the IREP2 loop and `migrate_expr_back` writes it
+out again; both halves are correct. What drops it is this pass. Four sites
+rebuild a loop node, and every one of them omitted the count:
+
+| site | node |
+|---|---|
+| `adjust_statement_condition` | `code_while2tc(cond, body, loc)` |
+| `adjust_statement_condition` | `code_dowhile2tc(cond, body, loc)` |
+| `adjust_statement_condition` | `code_for2tc(init, cond, iter, body, loc)` |
+| `hoist_for_init` | `code_for2tc(nil, cond, iter, body, loc)` |
+
+The constructor's last parameter defaults to `0`, and `0` means "no pragma".
+
+### 124.2 Why nothing caught it
+
+`pragma_unroll_count` is deliberately **excluded** from the loop kinds' `fields`
+tuple (`irep2_expr.h:2258-2264`, alongside `location`), so it takes no part in
+`operator==`. This pass writes a symbol's value back only when it changed —
+
+```cpp
+if (value != before)
+  s->set_value(value);
+```
+
+— and a rebuilt loop that dropped the count compares **equal** to the original
+that had it. The guard cannot see the loss, the A/B census cannot see it
+(`--goto-functions-only` prints the unrolled program, not the annotation), and
+only a verdict differs.
+
+That is a general hazard, not a one-off: any excluded-from-`fields` member is
+invisible to both the change guard and structural equality, so every rebuild has
+to carry it by hand. `location` is the other one, and §115 was the same bug in
+that field.
+
+### 124.3 Result
+
+Closes `github_4715_irep2_bodies_pragma_unroll_01` and
+`pragma_unroll_nested_dowhile_true`; the other two false alarms
+(`builtin_arith_overflow`, `github_2174`) are unaffected and are a different
+cause. Whole-suite verdict residue **13 → 11**.
+
+The `_fail` test earns its place with an under-unroll mutant rather than the
+absent patch: forcing the carried count to `1` truncates the loop before the
+out-of-bounds write and turns FAILED into SUCCESSFUL. The positive test moves
+against the unfixed binary directly (FAILED → SUCCESSFUL). Both loop shapes are
+covered — a `while` for the condition-rebuild sites and a `for` for the hoist.
+
+Default path byte-identical on 226 C sources. Suites: `esbmc` 1857/1857,
+`cstd` 142/142, `goto-coverage` 144/144, `k-induction` 122/122,
+`loop-invariants` 81/81.
+
+### 124.4 Next
+
+| tests | signature |
+|---:|---|
+| 4 | SIGABRT on vectors / unary bool (`gcc_vector_float_{arith,scalar_mul}`, `github_4078_unary_bool{,_fail}`) |
 ## 123. The complex cluster was four, not six — and a decline that crashes
 ## (2026-08-23)
 
@@ -5130,6 +5224,58 @@ that in mind rather than assumed safe.
 int main(void) { global_var3 = *main; assert(global_var3 == *main); return 0; }
 ```
 
+```
+<         ASSIGN global_var3=(unsigned int)(&(*(&main)));
+>         ASSIGN global_var3=*(&main);
+```
+
+C11 6.3.2.1p4: dereferencing a pointer to a function yields a function
+designator, which converts straight back to a pointer — `*f` is `f`, and
+`******f` too. `clang_c_adjust::adjust_dereference` re-takes the address for
+exactly this case (`clang_c_adjust_expr.cpp:918-927`, its comment says
+"allowing ******...*p"). This pass had **no dereference arm at all**, so the
+code-typed dereference reached a consumer wanting a pointer.
+
+Only that arm is ported. The array (`*a` → `a[0]`) and pointer-subtype arms
+above it retype a node migration already builds with the right type, and no
+corpus input distinguishes them — porting them would be §94.1's guard again, an
+arm nothing executes.
+
+### 127.2 A mutant that was an alternative implementation
+
+Replacing `address_of2tc(type, expr, true)` with `to_dereference2t(expr).value`
+— strip the dereference instead of re-addressing it — left both tests passing.
+That is not §39.1's "unreachable by construction": `*(&f)` and `&f` denote the
+same pointer, so the mutation is a *semantically equivalent rewrite*, and no
+test can distinguish them because there is nothing to distinguish. It is a
+sixth way for a mutant to sit still, and the useful response is to note the
+arm has an equally valid alternative form rather than to hunt for a test.
+
+The discriminating mutant is the absent patch, which the base binary supplies:
+both tests abort there and return SUCCESSFUL / FAILED here. The `_fail` test
+needed `***f` rather than `*f` to reach that state — with a single dereference
+it failed identically on both binaries and measured nothing.
+
+### 127.3 Result
+
+Whole-suite verdict residue **7 → 6**. Default path byte-identical on 226 C
+sources. Suites: `esbmc` 1857/1857, `cstd` 142/142, `cbmc` 307/307, `floats`
+106/106, `extensions` 201/201.
+
+### 127.4 Next
+
+| test | signature |
+|---|---|
+| `github_301` | bitwuzla error |
+| `github_1934-1` | rvalue reference to array during dereference |
+| `32_floppy` | SIGSEGV |
+| `builtin_arith_overflow`, `github_2174` | false alarm SUCCESSFUL → FAILED |
+| `complex_25` | §88.2 binding |
+
+Six rows, six causes, and no grouping left to exploit — each is now its own
+investigation. `github_1934-1`'s message names a specific construction site
+(`dereference` on an array-typed rvalue reference) and is the most precisely
+signposted, so it is next.
 Dereferencing a function. It was grouped with the others only because the
 census records a signal number, and `SIGSEGV` is not a cause. Moved to the
 unclustered rows.
@@ -5238,6 +5384,10 @@ the three-way comparison is what caught it.
 | 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
 | 1 | `complex_25`, the §88.2 binding |
 
+The vector/unary-bool four are next by size. `github_4078_unary_bool` names an
+issue whose fix is the integer promotion of a boolean operand under `unary-`
+(`clang_c_adjust_expr.cpp:150-160`) — an arm this pass may not have ported, and
+a cheap thing to check first.
 No cluster larger than the unclustered four, and "unclustered" now means only
 that nobody has read them — they were grouped by signal number and §123.2/§125.2
 both show that is not a grouping. The next step is to read those four
