@@ -5021,6 +5021,250 @@ cast", three tests each, on the reading that both were spelling-level. Reduced,
 neither is what its census tag said.
 
 ### 116.1 The comparison cast is §113.3's class, not a missing promotion
+## 126. Vector float arithmetic — the half clang does not lower itself
+## (2026-08-23)
+
+(§126: PRs #7266-#7286 are in flight against this file and claim §115-§125.)
+
+§125.3 named the `gcc_vector_float_{arith,scalar_mul}` pair and predicted the
+cause would be §123.1's again — a deliberate decline that hands the backend an
+unencodable node. It is a *missing* arm rather than a decline, but the shape of
+the consequence is identical.
+
+### 126.1 Why the scalar case never showed this
+
+Under the flag a scalar `float a + b` is byte-identical between the two paths:
+
+```
+ASSIGN s=IEEE_ADD(a, b);
+```
+
+on both. Nothing in this pass promotes it — **clang emits `ieee_add` itself**
+for scalar float arithmetic, and `migrate_ieee_arith_2op` carries it across. So
+the pass never needed a float-promotion arm and the gap was invisible.
+
+For a vector of float clang hands over the plain operator, and
+`clang_c_adjust::adjust_float_arith` promotes it
+(`clang_c_adjust_expr.cpp:796-817`, the `t.is_vector()` widening). That pass
+does not run under this flag:
+
+```
+<         ASSIGN s=IEEE_ADD(a, b);
+>         ASSIGN s=a + b;
+```
+
+and the backend aborts on a bitvector operator over a floating-point vector.
+
+### 126.2 The rounding mode the legacy arm does not attach
+
+`adjust_float_arith` returns *before* setting `rounding_mode` when the type is a
+vector, with the comment "BUG: setting rounding_mode breaks migration". The
+attribute-less legacy node then reaches `migrate_rounding_mode`, which
+synthesises the default `c:@__ESBMC_rounding_mode` symbol for it. So the node
+the default path actually produces carries that symbol, and the arm here builds
+the same one — the goto dumps are byte-identical after the patch, which is what
+confirms the reasoning rather than an argument from the comment.
+
+### 126.3 Result
+
+Closes both. Whole-suite verdict residue **9 → 7**. Default path byte-identical
+on 226 C sources. Suites: `esbmc` 1857/1857, `floats` 106/106,
+`floats-regression` 65/65, `cstd` 142/142, `cbmc` 307/307, `extensions`
+201/201.
+
+A note on the test rather than the code: the first version of the positive test
+carried `+/-/*//` in its block comment, and the `*/` inside it closed the
+comment early — `PARSING ERROR` on *all three* binaries, including the default
+path. A test that fails identically everywhere is not measuring anything, and
+the three-way comparison is what caught it.
+
+### 126.4 Next
+
+| tests | signature |
+|---:|---|
+| 4 | unclustered (`32_floppy`, `github_301`, `github_1934-1`, `github_382_6`) |
+| 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
+| 1 | `complex_25`, the §88.2 binding |
+
+No cluster larger than the unclustered four, and "unclustered" now means only
+that nobody has read them — they were grouped by signal number and §123.2/§125.2
+both show that is not a grouping. The next step is to read those four
+individually, starting with `github_382_6` (`global_var3 = *main`, a function
+dereference), which is the smallest input of the seven.
+## 118. The census re-run through verdicts, not goto dumps — and what it saw
+## (2026-08-23)
+
+(§118: PRs #7266, #7271 and #7274 are in flight against this file and claim
+§115-§117.)
+
+§117.4 asked for this: two of the previous three causes had been mis-tagged as
+spellings when they were programs the flag cannot verify, because
+`--goto-functions-only` stops before the encoder. Re-run reading each test's
+**verdict** under its own `test.desc` flags, default path against
+`--clang-c-irep2-adjust-only`, on the same pinned stride-8 list, at a build with
+those three PRs merged locally.
+
+For reference the goto census at that same build is **9 differing, 217 same** —
+down from 24, better than any of the three alone, because several tests carried
+more than one cause.
+
+### 118.1 What the verdict census found
+
+| | tests |
+|---|---:|
+| same verdict | **217** |
+| differing verdict | **3** |
+| skipped (`test.desc` already carries the flag) | 6 |
+
+Three, and none of them is a spelling:
+
+| test | default | `-only` | |
+|---|---|---|---|
+| `github_2572_2` | SUCCESSFUL | **FAILED** | §118.2, fixed here |
+| `github_2335_4` | FAILED | **SUCCESSFUL** | §118.3, the unsound direction |
+| `github_3487` | SUCCESSFUL | **uncaught `bad_optional_access`** | §118.4 |
+
+The goto census ranked the second of these as "struct padding in an aggregate
+initialiser" and did not see the third at all. That is the whole argument for
+this instrument: a `diff` row says the printers disagree, and says nothing about
+whether the verifier still works.
+
+### 118.2 `__builtin_isinf_sign` — the one fixed here
+
+`do_special_functions` spells it exactly, and deliberately: the neighbouring
+`isinf` arm matches a *base* name a program may reuse (`is_name_matched_builtin`,
+#6904), whereas `__builtin_isinf_sign` is reserved. This pass mirrored the base-
+name arm and not the exact one, so the call survived — and the symbol is
+bodyless, which makes the result nondet rather than differently shaped:
+
+```c
+assert(__builtin_isinf_sign(1.0) == 0);   /* SUCCESSFUL by default, FAILED under the flag */
+```
+
+Ported as the same nested conditional the legacy arm builds,
+`isinf ? (signbit ? -1 : 1) : 0`. `github_2572_2` agrees on both paths after it,
+and both new tests move under a sign-swap mutant — the `_fail` one inverts,
+which is the stronger signal of the pair.
+
+### 118.3 `github_2335_4` is the unsound direction, and it is next
+
+A test that FAILS by default SUCCEEDS under the flag. The goto diff is a missing
+`anon_pad#3` in an aggregate initialiser for an array of structs, so the
+initialiser is being built without the padding member the layout carries. A
+frame that verifies because a member vanished is exactly the shape §110.2 warns
+about read in the opposite direction, and it is the highest-value row left.
+
+`github_578_success3` shows the same missing-padding spelling
+(`anon_bit_field_pad#1`, `anon_pad#2`) without a verdict change, so the two are
+one cause with two symptoms and should be taken together.
+
+### 118.4 `github_3487` aborts in an optional
+
+`ERROR: uncaught exception [St19bad_optional_access]: bad optional access` under
+the flag, SUCCESSFUL without. Not diagnosed here beyond the reproduction; an
+unhandled `std::optional` access is a defect wherever it is, and it is the only
+row of the three that is a crash in ESBMC's own code rather than a modelling
+gap.
+
+### 118.5 A harness note worth keeping
+
+Running a test with its own `test.desc` flags from its source directory writes
+that test's output artefacts into the *source tree* —
+`cwe_dead_code_dead_store_sarif` takes `--sarif-output out.sarif`, and the stale
+file a census run left behind then failed the real `ctest` run of that test on a
+later invocation. The census must either run in a copy or clean up after itself;
+a suite failure immediately following a census run should be checked against
+`git status` before it is believed.
+
+### 118.6 Next
+
+`github_2335_4` / `github_578_success3` — the missing padding member in an
+aggregate initialiser, the one row in the residue that is unsound rather than
+merely wrong.
+## 117. The `POINTER_OFFSET` group is a third abort, and `offsetof` was fatal
+## (2026-08-23)
+
+(§117 rather than §115: PRs #7266 and #7271 are in flight against this file and
+claim §115 and §116.)
+
+The `POINTER_OFFSET` spelling was the largest remaining group in §114's table,
+at three tests. It is five, and it is not a spelling — the second time in two
+sittings that a row tagged `diff` turned out to be a program the flag cannot
+verify at all.
+
+### 117.1 The three intrinsics matched by name, not by prefix
+
+`do_special_functions` selects most of its lowerings by a reserved
+`__builtin_` prefix, and this pass mirrors those. Three it selects by the
+`__ESBMC_` name instead — `POINTER_OFFSET`, `POINTER_OBJECT`, `same_object` —
+and none had been ported. Each lowers to a node the backend evaluates in place
+(`pointer_offset2t`, `pointer_object2t`, `same_object2t`, all long-standing).
+
+Left as calls the symbols are bodyless, and `goto_check` refuses them:
+
+```c
+#include <stddef.h>
+struct s { int x; int y; };
+int main(void) { assert(offsetof(struct s, y) == 4); return 0; }
+```
+
+```
+$ esbmc pv.c                              # VERIFICATION SUCCESSFUL
+$ esbmc pv.c --clang-c-irep2-adjust-only
+ERROR: Function call to non-intrinsic prefixed with __ESBMC (fatal)
+```
+
+`offsetof` is the reachable one: `clang_c_language.cpp:705` defines the macro
+as `((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))`, so *every* use of
+`<stddef.h>`'s `offsetof` was fatal under this flag. The census saw `&0->y` in
+an `ASSIGN` on one side and a `FUNCTION_CALL` to a temporary on the other, and
+recorded a spelling difference.
+
+### 117.2 Result
+
+Census on the stride-8 list pinned to a file before the A/B (233 entries, 226
+with a `.c` source), same base:
+
+| goto program | before | after |
+|---|---:|---:|
+| same | 202 | **207** |
+| diff | **24** | **19** |
+
+Five converge — `github_2512_8`, `github_2512_12`, `github_426_2`,
+`github_1064-3-32`, `pointer-offset2` — against the three §114 tagged; two
+carried the cause under another tag. None diverges that did not before, and the
+default path is byte-identical on all 226 C sources (the arm is reached only
+from `adjust_special_functions`, which the flag gates, but it was measured
+rather than argued). Suites: `esbmc` 1857/1857, `cstd` 142/142, `floats`
+106/106, `function_contract` 414/414, `goto-coverage` 144/144.
+
+### 117.3 Mutants, and the one that did not move
+
+Per §39.1 of `frontends-to-irep2.md`, each arm was corrupted rather than
+deleted:
+
+| mutation | ok-test |
+|---|---|
+| `pointer_offset` → `pointer_object` | FAILED ✓ |
+| `same_object(a, b)` → `same_object(a, a)` | FAILED ✓ |
+| `pointer_object` → `pointer_offset` | **SUCCESSFUL ✗** |
+
+The third is §39.1's *first* failure mode, not its second: the test asserted
+`POINTER_OBJECT(&a) == POINTER_OBJECT(&a)`, which holds whatever the intrinsic
+lowers to. Rewritten against two distinct globals — where every intrinsic here
+yields offset 0, so only the object id separates them — the mutant moves. The
+arm was fine; the test was not.
+
+### 117.4 Next
+
+The residue is 19: temporary numbering (`tmp$3` vs `tmp$4`, 2 tests), struct
+padding in an aggregate initialiser (`github_578_success3`), and the untagged
+remainder. The identity-cast class stays closed as non-work.
+
+A re-census is now worth more than another slice. Two of the last three causes
+were mis-tagged because `--goto-functions-only` stops before the encoder, and
+the residue is small enough to read every row through a full verification run
+instead of a goto dump.
 ## 115. §114.2's dominant cause closed — the hoist's wrapper block had no close
 ## (2026-08-23)
 
