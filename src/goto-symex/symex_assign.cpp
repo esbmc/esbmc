@@ -1149,14 +1149,20 @@ void goto_symext::symex_assign_concat(
   // it'll change during the assignment
   cur_state->rename(rhs);
 
-  // Produce a corresponding set of byte extracts from the rhs value. Note that
-  // the byte offset is always the same no matter endianness here, any byte
-  // order flipping is handled at the smt layer.
+  // Produce a corresponding set of byte extracts from the rhs value.
+  // operand_list was built by peeling side_2 first, so it runs in reverse of
+  // the concat's left-to-right byte order. stitch_together_from_byte_array
+  // nests the two endiannesses in opposite directions: little-endian puts
+  // byte 0 last, which that reversal turns back into index i, while
+  // big-endian puts byte 0 first, so the index has to be mirrored. Pairing
+  // both the same way stored every multi-byte big-endian value byte-reversed
+  // against the read that stitched it (#7044).
   std::list<expr2tc> extracts;
   for (unsigned int i = 0; i < operand_list.size(); i++)
   {
-    expr2tc byte =
-      byte_extract2tc(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
+    unsigned int byte_idx = is_big_endian ? operand_list.size() - 1 - i : i;
+    expr2tc byte = byte_extract2tc(
+      get_uint_type(8), rhs, gen_ulong(byte_idx), is_big_endian);
     extracts.push_back(byte);
   }
 
