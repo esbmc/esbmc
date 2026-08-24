@@ -5013,6 +5013,175 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 129. The false alarm was not in the builtin's lowering (2026-08-24)
+
+(§129: PRs #7278-#7290 are in flight against this file and claim §119-§128;
+#7284 has since landed as §123.)
+
+§128.4 picked `builtin_arith_overflow` on the reasoning that it "names a builtin
+family (`__builtin_*_overflow`) whose lowering is a specific, findable arm — the
+same shape as §117 and §125, both of which were unported name-matched builtins."
+
+The family is the right place to look and the wrong place to patch. The
+builtins are lowered identically on both paths; what this pass corrupts is the
+type of the *argument* they are handed, in `expr2t::with_type` — a generic irep2
+utility with no connection to builtins. The family matters only because its
+lowering is the one consumer that reads that type.
+
+### 129.1 A trait that is structurally right and semantically wrong
+
+`c_typecastt::implicit_typecast_followed` re-attaches a pointer argument's own
+type when source and destination compare equal without being identical
+(`c_typecast.cpp:838-842` — qualifier differences). It does so through
+`expr2t::with_type`, which rebuilds a node from a new type plus its remaining
+fields, gated on `supports_with_type_v`:
+
+1. the kind's first `fields` entry is `&expr2t::type`, and
+2. the kind is constructible from `(const type2tc &, rest...)`.
+
+`address_of2t` passes both — and means something else by the type it accepts.
+Its primary constructor takes the **pointee** type and builds
+`pointer_type2tc(subtype)` itself, a signature its own comment already calls
+"slightly unintuitive". Handed a pointer type it wraps it a second time, so
+`&y` on an `int` acquires type `int **`.
+
+Gate 2 is what makes this the only such kind. Forty-one kinds synthesise their
+own type in the constructor and still list `&expr2t::type` first; a compiled
+fold of both gates over `expr_kinds.inc` counts 106 passing gate 1, 66 passing
+both, so 40 are excluded by gate 2 alone. Representative rows:
+
+| kind | constructor's first parameter | gate 2 |
+|---|---|---|
+| `constant_bool2t` | `bool value` | rejects |
+| `constant_fixedbv2t` | `const fixedbvt &` | rejects |
+| `constant_floatbv2t` | `const ieee_floatt &` | rejects |
+| `same_object2t` | `const expr2tc &v1` | rejects |
+| `overflow2t`, `overflow_cast2t`, `overflow_neg2t` | `const expr2tc &operand` | rejects |
+| **`address_of2t`** | **`const type2tc &subtype`** | **accepts** |
+
+All forty are excluded because their constructor will not take a leading
+`type2tc` at all — the case the trait's comment was written for. `address_of2t`
+takes one and means the subtype by it, which no structural test can see. That
+it is the only kind to do so is exhaustive, not sampled: every `expr2t(...)`
+base initializer lives in `irep2_expr.h`, and tallying them by first argument
+gives `type` x43, `get_empty_type()` x20, `get_bool_type()` x11, `t` x5,
+`value.spec.get_type()` x2, `size_type2()` x1, `get_int32_type()` x1, and
+`pointer_type2tc(subtype)` x1.
+
+The trait is left alone: the callers do want the rebuild, they want it built
+from `to_pointer_type(new_type).subtype`. The override is an explicit
+specialization of `rebuild_with_type<address_of2t>` rather than an early return
+in `with_type`, because the trait still admits the kind — an early return leaves
+the dispatcher expanding a `case address_of_id:` arm that performs the very
+double-wrap being fixed, dead only by virtue of being shadowed. Specialising
+puts the exception on the generic mechanism it overrides, and any future
+reordering that would have resurrected the bug now has nothing to resurrect.
+
+One field does not survive the rebuild. `pointer_type2t` carries
+`carry_provenance` beside `subtype`, and `address_of2t`'s constructor rebuilds
+the pointer with that parameter's `false` default, so `with_type(T)` returns a
+node whose type is not `T` when `T` carries provenance. The drop is inherited,
+not introduced — `migrate.cpp:1609` builds address-of nodes through the same
+constructor — and it is unobservable today: `can_carry_provenance` is set only
+under `ESBMC_CHERI_CLANG`, and every `with_type` caller derives its new type
+from `expr->type`, which for an address-of is already `false`. Closing it
+properly means an `address_of2t` constructor overload taking the full pointer
+type, which is a separate change with `migrate.cpp` in its blast radius.
+
+### 129.2 Why only a builtin reproduces it
+
+An ordinary call masks the widening completely. Measured on the pre-patch
+binary, under the flag:
+
+| shape | verdict |
+|---|---|
+| `void store(int *p) { *p = 4; } store(&y);` | SUCCESSFUL |
+| the same with no body | SUCCESSFUL |
+| `memcpy(&y, &s, sizeof(int))` | SUCCESSFUL |
+| `*(&y) = 4;` | SUCCESSFUL |
+| `__builtin_sadd_overflow(2, x, &y)` | **FAILED** — spurious out-of-bounds |
+
+Binding an argument to a parameter discards the argument's type: the callee
+dereferences `p`, whose type is its own and correct. The overflow builtins have
+no body, so nothing binds. `goto_symext::run_builtin` synthesises the store
+itself, and sizes it from the argument:
+
+```cpp
+symex_assign(code_assign2tc(
+  dereference2tc(
+    to_pointer_type(func_call.operands[2]->type).subtype,
+    func_call.operands[2]),
+  op));
+```
+
+`operands[2]->type`, not `func_type.arguments[2]` — which the assert at
+`run_builtin.cpp:113`, thirty lines up, has already established is a pointer. With the argument widened, the subtype
+is `int *`, so the store writes eight bytes into a four-byte object and
+`dereferencet` reports the out-of-bounds. That asymmetry is why the four probes
+above are silent: this is the only consumer in the corpus that reads an
+argument's own type where a parameter type exists.
+
+The lesson for the census is narrower than "read the verdict". A defect can be
+one node deep and still surface in exactly one test, because only one consumer
+looks at the field it corrupted. The reduced test is not the minimal program
+exhibiting the wrong type — every probe above carries the wrong type too — it is
+the minimal program with a consumer that reads it.
+
+### 129.3 The default path never reaches the arm
+
+`with_type` is shared — `base_type`, `goto_symex_state`, `symex_main`,
+`smt_solver` and `python_adjust` all call it — so the patch was measured for
+reach rather than argued safe. A counter in the new arm, over the pinned
+226-source corpus:
+
+| path | tests firing | firings |
+|---|---:|---:|
+| default | **0** | **0** |
+| `--clang-c-irep2-adjust-only` | 138 | 937 |
+
+Zero on the default path over the whole corpus, and zero on a 40-test Python
+and a 24-test C++ sample. The default path is unchanged by construction, which
+is a stronger statement than the byte-identity diff the earlier sections take.
+
+### 129.4 Result
+
+Whole-suite verdict residue **5 → 4**; `builtin_arith_overflow` is `SUCCESSFUL`
+on both paths. Both new tests reproduce the false alarm on the pre-patch binary.
+The pinned 233-test sample carries three divergences — `github_2335_4`,
+`github_3487`, `memset-const-2` — and all three were re-measured on the same
+tree with the patch reverted and are unchanged by it. Suites, rebased onto
+master: `esbmc` 1891/1891, unit 713/713.
+
+Four tests pin the fix, and all four fail when the specialization is removed:
+the two regression directories, plus an `address_of2t` row in
+`unit/irep2/with_type.test.cpp`'s supported-kinds table and a case asserting one
+level of indirection, an unchanged `ptr_obj`, a preserved `implicit`, and
+`irep2_cast_error` on a non-pointer `new_type`. The unit case is what pins
+`implicit`: it is `false` on every call site that reaches the arm, so a mutant
+dropping it survives both regression tests.
+
+The `_fail` test pins the violated property (`^  assertion uy == 5$`) rather
+than the verdict alone: the pre-patch binary also fails that program, on the
+spurious out-of-bounds, so a bare `VERIFICATION FAILED` regex would have
+measured nothing. A negative test against a false *alarm* has to name which
+property fails, not that one does.
+
+### 129.5 Next
+
+| test | signature |
+|---|---|
+| `github_2174` | false alarm SUCCESSFUL → FAILED |
+| `github_301` | `ERROR: Bitwuzla error encountered` |
+| `32_floppy` | SIGSEGV, no verdict |
+| `complex_25` | §88.2 binding |
+
+`github_2174` is the last false alarm and was expected to share this cause. It
+does not: with the address-of correctly typed, `atomic_init(&a, 10)` followed by
+`atomic_load(&a)` still returns something other than 10 under the flag, so the
+`__c11_atomic_*` lowering is a separate arm. It is the one to take next — and
+being body-less builtins reading their arguments' types, they are the same
+family of consumer §129.2 describes.
+
 ## 123. The complex cluster was four, not six — and a decline that crashes
 ## (2026-08-23)
 
@@ -5099,6 +5268,7 @@ both, the `_fail` one inverting.
 The false-alarm four are next. They are the only rows left that produce a wrong
 *answer* rather than no answer, and two of them name `pragma_unroll`, so that
 pair is likely one cause.
+
 ## 126. Vector float arithmetic — the half clang does not lower itself
 ## (2026-08-23)
 
