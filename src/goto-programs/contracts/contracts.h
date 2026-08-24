@@ -442,18 +442,19 @@ private:
 
   // ========== Phase 2C: pointer-parameter dereference assigns compliance ==========
 
-  /// \brief Snapshot pointer params whose dereferenced value is NOT in the assigns clause.
-  /// For each pointer parameter p not covered by the assigns clause:
+  /// \brief Snapshot pointer params whose dereferenced value is NOT in the
+  /// assigns clause. For each pointer parameter p not covered by the assigns
+  /// clause:
   ///   - scalar pointee: snapshot *p
   ///   - struct pointee: snapshot each field of *p
   /// Called before the function call in the checking wrapper.
-  /// \param classified Classified assigns targets (provides pointer_targets, ptr_field_targets)
-  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
-  /// \param original_func Original function symbol (provides parameter types/names)
-  /// \param wrapper GOTO program to append snapshot instructions to
-  /// \param location Source location
-  /// \param func_name Function name for unique snapshot naming
-  /// \param param_extents Byte extent of each harness allocation, used to
+  /// \param classified Classified assigns targets (provides pointer_targets,
+  /// ptr_field_targets) \param assigns_targets Full assigns target list (must
+  /// be non-empty to enable check) \param original_func Original function
+  /// symbol (provides parameter types/names) \param wrapper GOTO program to
+  /// append snapshot instructions to \param location Source location \param
+  /// func_name Function name for unique snapshot naming \param param_extents
+  /// Byte extent of each harness allocation, used to
   ///        decide the condition each snapshot is read under.
   /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
   std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
