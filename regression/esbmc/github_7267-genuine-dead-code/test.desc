@@ -1,6 +1,6 @@
 CORE
 main.c
 --dead-code-check
-main\.c:11: dead code: unreachable branch \[guard: !\(x > 10\)\]$
+main\.c:11: dead code: unreachable branch \[guard: x > 10\]$
 CWE-561
 ^VERIFICATION SUCCESSFUL$

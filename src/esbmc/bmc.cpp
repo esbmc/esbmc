@@ -1028,7 +1028,9 @@ static bool is_kpath_maximal(const std::string &claim_sig)
 // assertion over a branch guard) that multi_property_check never violated is
 // unreachable under all inputs up to the current unwinding bound — i.e. that
 // branch direction is dead. The dead set is therefore
-// `all_claims \ reached_claims`. Findings are advisory: they are printed as a
+// `all_claims \ reached_claims`. The probe is `assert(c)`, so leaving it
+// unviolated proves `!c` infeasible: the advisory names the claim's recorded
+// negation, not its own comment. Findings are advisory: they are printed as a
 // separate [Dead code] section and, when --sarif-output is set, emitted at
 // SARIF note level. They never flip the verdict (see report_result).
 static void report_dead_code(
@@ -1044,13 +1046,17 @@ static void report_dead_code(
     if (reached_claims.count(claim_sig))
       continue; // reachable branch direction — live code
 
+    const auto neg = goto_coveraget::claim_negation.find({comment, loc});
+    const std::string dead_guard =
+      neg == goto_coveraget::claim_negation.end() ? "" : neg->second;
+
     nlohmann::json parsed = parse_claim_location(loc);
     dead_code_finding_t f;
     f.file = parsed["file"].get<std::string>();
     f.line = static_cast<unsigned>(parsed["line"].get<int>());
-    f.message = comment.empty()
+    f.message = dead_guard.empty()
                   ? "dead code: unreachable branch"
-                  : "dead code: unreachable branch [guard: " + comment + "]";
+                  : "dead code: unreachable branch [guard: " + dead_guard + "]";
     findings.push_back(std::move(f));
   }
 
