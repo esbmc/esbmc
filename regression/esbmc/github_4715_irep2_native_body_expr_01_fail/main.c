@@ -3,7 +3,7 @@
 // statements natively as OTHER instructions neither corrupts the following
 // assignment nor suppresses bug detection: g is still x+1 after touch(), so the
 // wrong-value assertion is a reachable violation reported as VERIFICATION FAILED
-// under --irep2-native-body.
+// under native conversion.
 #include <assert.h>
 
 int g;
