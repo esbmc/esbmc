@@ -5087,6 +5087,92 @@ locally and return their expected verdicts on master and here alike.
 `github_3487` — `ERROR: uncaught exception [St19bad_optional_access]` under the
 flag, SUCCESSFUL without. The last row of §118.1's three, and the only one that
 is a crash in ESBMC's own code rather than a modelling gap.
+## 123. The complex cluster was four, not six — and a decline that crashes
+## (2026-08-23)
+
+(§123: PRs #7266, #7271, #7274, #7275, #7278, #7280, #7282 and #7283 are in
+flight against this file and claim §115-§122.)
+
+§122.4 grouped six SIGSEGVs as "complex arithmetic". Read individually, that
+grouping was wrong in one place and incomplete in another.
+
+### 123.1 The four that share a cause
+
+`adjust_compound_assignment` *declines* a complex operand, with a comment
+deferring to `clang_c_adjust::lower_complex_compound_assignment` — an arm that
+does not run under `--clang-c-irep2-adjust-only`, because the flag replaces the
+legacy pass rather than shadowing it. Nobody performs the lowering, and #6713's
+own comment says what happens next: `goto_convert`'s `remove_assignment`
+rebuilds `a op b` long after adjustment, so the SMT layer is handed a raw
+complex operator. Bitwuzla faults inside `mk_bvadd`:
+
+```
+#0  bitwuzla_mk_term2 ()
+#1  bitwuzla_convt::mk_bvadd (...) at bitwuzla_conv.cpp:107
+#2  smt_solver_baset::convert_ast_node (...) at smt_solver.cpp:745
+```
+
+The port is small because the decomposition already exists here: rewrite
+`a op= b` to `a = a op b` and hand the binary node to `adjust_complex_arith`.
+Closes `github_6713_complex_{compound,div_nondet}{,_fail}` — all four agree on
+both paths after.
+
+**A decline is not free.** §88.2 justified leaving these nodes alone with
+"declining only leaves the node where this mode already had it", which was true
+of the *shape* and false of the *outcome*: what this mode already had was a
+segfault. A decline that hands the backend a node it cannot encode is a crash
+with extra steps, and the other declines in this file should be re-read with
+that in mind rather than assumed safe.
+
+### 123.2 `github_382_6` is not a complex test at all
+
+```c
+int main(void) { global_var3 = *main; assert(global_var3 == *main); return 0; }
+```
+
+Dereferencing a function. It was grouped with the others only because the
+census records a signal number, and `SIGSEGV` is not a cause. Moved to the
+unclustered rows.
+
+### 123.3 `complex_25` is the §88.2 decline, and it is the real one
+
+```c
+_Complex double f(void) { calls++; return 1.0 + 2.0i; }
+```
+
+`adjust_complex_arith` reads each operand twice, once per component, so it
+declines any operand carrying a side effect rather than evaluating it twice —
+and `complex_25` is built entirely from side-effecting complex calls. The
+decline is correct as far as it goes; the consequence is §123.1's, a node the
+backend faults on.
+
+Closing it needs the binding `clang_c_adjust` does first — a context temporary
+plus a statement expression — which §88.2 records as separate work and this
+patch does not attempt. It is now the *only* known input where the decline is
+reachable, which makes it the concrete justification for doing that port.
+
+### 123.4 Result
+
+Whole-suite verdict residue **17 → 13**. Default path byte-identical on 226 C
+sources. Suites: `esbmc` 1857/1857, `floats` 106/106, `floats-regression`
+65/65, `cstd` 142/142.
+
+Both new tests produce **no verdict at all** on the pre-patch binary — it
+segfaults — and SUCCESSFUL / FAILED after. A mutant lowering `*=` as `+=` moves
+both, the `_fail` one inverting.
+
+### 123.5 Next
+
+| tests | signature |
+|---:|---|
+| 4 | false alarm SUCCESSFUL → FAILED (`builtin_arith_overflow`, `github_2174`, `github_4715_irep2_bodies_pragma_unroll_01`, `pragma_unroll_nested_dowhile_true`) |
+| 4 | SIGABRT on vectors / unary bool (`gcc_vector_float_{arith,scalar_mul}`, `github_4078_unary_bool{,_fail}`) |
+| 4 | unclustered (`32_floppy`, `github_301`, `github_1934-1`, `github_382_6`) |
+| 1 | `complex_25`, the §88.2 binding |
+
+The false-alarm four are next. They are the only rows left that produce a wrong
+*answer* rather than no answer, and two of them name `pragma_unroll`, so that
+pair is likely one cause.
 ## 126. Vector float arithmetic — the half clang does not lower itself
 ## (2026-08-23)
 
