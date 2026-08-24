@@ -471,8 +471,11 @@ void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
   else
     end_location.make_nil();
 
-  const expr2tc bare =
-    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+  // pragma_unroll_count is excluded from code_for2t::fields, so it does not
+  // participate in equality and a rebuild that drops it compares equal to one
+  // that keeps it. Every loop rebuild in this pass has to carry it explicitly.
+  const expr2tc bare = code_for2tc(
+    expr2tc(), f.cond, f.iter, f.body, f.location, f.pragma_unroll_count);
 
   // Splice a block-shaped init rather than nesting it: an inner block would end
   // the declaration's scope at its own closing brace, so the variable would be
@@ -602,17 +605,18 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
   else if (is_code_while2t(expr))
   {
     const code_while2t &w = to_code_while2t(expr);
-    expr = code_while2tc(cond, w.body, w.location);
+    expr = code_while2tc(cond, w.body, w.location, w.pragma_unroll_count);
   }
   else if (is_code_dowhile2t(expr))
   {
     const code_dowhile2t &w = to_code_dowhile2t(expr);
-    expr = code_dowhile2tc(cond, w.body, w.location);
+    expr = code_dowhile2tc(cond, w.body, w.location, w.pragma_unroll_count);
   }
   else
   {
     const code_for2t &f = to_code_for2t(expr);
-    expr = code_for2tc(f.init, cond, f.iter, f.body, f.location);
+    expr = code_for2tc(
+      f.init, cond, f.iter, f.body, f.location, f.pragma_unroll_count);
   }
 }
 
