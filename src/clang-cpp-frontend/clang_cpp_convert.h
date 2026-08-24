@@ -462,7 +462,6 @@ protected:
    *  - type: ESBMC IR representing the derived class' type
    */
   void add_thunk_method(
-    const clang::CXXRecordDecl &derived_rd,
     const clang::CXXMethodDecl &md,
     const struct_typet::componentt &component,
     struct_typet &type);

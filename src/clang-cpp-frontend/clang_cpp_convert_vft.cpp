@@ -101,7 +101,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       get_overriden_methods(*md, cxxmethods_overriden);
 
       for (const auto &overriden_md_entry : cxxmethods_overriden)
-        add_thunk_method(cxxrd, overriden_md_entry.second, comp, type);
+        add_thunk_method(overriden_md_entry.second, comp, type);
     }
   }
 
@@ -330,7 +330,6 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXRecordDecl &derived_rd,
   const clang::CXXMethodDecl &md,
   const struct_typet::componentt &component,
   struct_typet &type)

@@ -392,6 +392,23 @@ static bool flattened_base_offset(
   return true;
 }
 
+// Displacement of `base_id`'s subobject inside `derived`, from ESBMC's own
+// layout -- the only one the base-offset paths may use. Pick the oracle by
+// layout, never by whichever answers first: a flattened struct also carries
+// the "@base@" components it copied out of a nested-layout base, and walking
+// those lands on storage duplicated at displacement zero (the <ios> models
+// depend on that aliasing).
+static bool base_displacement(
+  const namespacet &ns,
+  const typet &derived,
+  const irep_idt &base_id,
+  BigInt &offset)
+{
+  return uses_flattened_layout(ns, derived)
+           ? flattened_base_offset(ns, derived, base_id, offset)
+           : base_subobject_offset(ns, derived, base_id, offset);
+}
+
 static bool has_side_effect(const exprt &expr)
 {
   if (expr.id() == "sideeffect")
@@ -414,18 +431,8 @@ void clang_c_adjust::adjust_derived_to_base(
   const bool ptr_mode = expr.type().is_pointer();
   const typet derived = ptr_mode ? expr.type().subtype() : expr.type();
 
-  // Pick the oracle by layout, never by whichever answers first: a flattened
-  // struct also carries the "@base@" components it copied out of a
-  // nested-layout base, and walking those lands on storage duplicated at
-  // displacement zero (the <ios> models depend on that aliasing). Both oracles
-  // read ESBMC's own layout, which is the only one the base-offset paths may
-  // use.
   BigInt offset = 0;
-  const bool flat = uses_flattened_layout(ns, derived);
-  if (!(flat ? flattened_base_offset(ns, derived, base_id, offset)
-             : base_subobject_offset(ns, derived, base_id, offset)))
-    return;
-  if (offset == 0)
+  if (!base_displacement(ns, derived, base_id, offset) || offset == 0)
     return;
 
   // The null guard below names the operand twice, and side effects are not
@@ -488,14 +495,16 @@ void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 
   const irep_idt base_id = src.type().subtype().identifier();
   BigInt offset = 0;
-  if (!base_subobject_offset(ns, expr.type().subtype(), base_id, offset))
+  if (!base_displacement(ns, expr.type().subtype(), base_id, offset))
   {
-    // The hierarchy kept the legacy flattened layout, so there is no @base@
-    // component to undo. Left as a plain typecast the result keeps pointing
-    // at the base subobject, which is only exact when the two coincide.
+    // Neither layout places the base at a single fixed displacement -- a
+    // virtual base shared by two sibling bases has none. Left as a plain
+    // typecast the result keeps pointing at the base subobject, which is only
+    // exact when the two coincide.
     log_debug(
       "c++",
-      "base-to-derived cast to {}: no @base@ path to {}, left unadjusted",
+      "base-to-derived cast to {} left unadjusted: no fixed displacement for "
+      "{} in ESBMC's layout",
       expr.type().subtype().identifier(),
       base_id);
     return;
