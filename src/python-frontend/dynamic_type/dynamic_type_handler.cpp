@@ -76,37 +76,34 @@ classify_branch_literal_assigns(const nlohmann::json &block)
   return types;
 }
 
-// Recursively collects, per name, the literal kinds an elif chain's leaves
-// assign it. Returns false for a dangling elif with no final else.
-bool collect_orelse_literal_kinds(
-  const nlohmann::json &orelse,
+// Recursively collects, per name, the literal kinds assigned to it across
+// every leaf reachable from `block` -- following a nested If (an elif in
+// orelse, or a plain nested if/else in body) into both of its arms.
+// Returns false if any such nested If is dangling (no final else).
+bool collect_branch_literal_kinds(
+  const nlohmann::json &block,
   std::unordered_map<std::string, std::unordered_set<std::string>> &kinds,
   std::unordered_map<std::string, int> &leaf_count,
   int &leaf_total)
 {
   if (
-    orelse.is_array() && orelse.size() == 1 && orelse[0].is_object() &&
-    orelse[0].value("_type", "") == "If")
+    block.is_array() && block.size() == 1 && block[0].is_object() &&
+    block[0].value("_type", "") == "If")
   {
-    const auto &elif = orelse[0];
-    if (!elif.contains("orelse") || elif["orelse"].empty())
+    const auto &nested = block[0];
+    if (
+      !nested.contains("body") || !nested.contains("orelse") ||
+      nested["orelse"].empty())
       return false;
 
-    leaf_total++;
-    if (elif.contains("body"))
-      for (const auto &[name, kind] :
-           classify_branch_literal_assigns(elif["body"]))
-      {
-        kinds[name].insert(kind);
-        leaf_count[name]++;
-      }
-
-    return collect_orelse_literal_kinds(
-      elif["orelse"], kinds, leaf_count, leaf_total);
+    return collect_branch_literal_kinds(
+             nested["body"], kinds, leaf_count, leaf_total) &&
+           collect_branch_literal_kinds(
+             nested["orelse"], kinds, leaf_count, leaf_total);
   }
 
   leaf_total++;
-  for (const auto &[name, kind] : classify_branch_literal_assigns(orelse))
+  for (const auto &[name, kind] : classify_branch_literal_assigns(block))
   {
     kinds[name].insert(kind);
     leaf_count[name]++;
@@ -175,24 +172,17 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
 
   if (!if_node.contains("body"))
     return dynamic_type_names;
-
-  auto then_types = classify_branch_literal_assigns(if_node["body"]);
-  if (then_types.empty())
-    return dynamic_type_names;
-
   if (!if_node.contains("orelse") || if_node["orelse"].empty())
     return dynamic_type_names;
 
   std::unordered_map<std::string, std::unordered_set<std::string>> kinds;
   std::unordered_map<std::string, int> leaf_count;
-  int leaf_total = 1; // the "then" branch is the first leaf
-  for (const auto &[name, kind] : then_types)
-  {
-    kinds[name].insert(kind);
-    leaf_count[name]++;
-  }
+  int leaf_total = 0;
 
-  if (!collect_orelse_literal_kinds(
+  if (!collect_branch_literal_kinds(
+        if_node["body"], kinds, leaf_count, leaf_total))
+    return dynamic_type_names;
+  if (!collect_branch_literal_kinds(
         if_node["orelse"], kinds, leaf_count, leaf_total))
     return dynamic_type_names;
 
@@ -609,17 +599,7 @@ exprt dynamic_type_handler::build_div_literal(
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
   exprt divisor = tagged_is_left ? lit_value : tagged_numeric_value;
-  exprt is_zero = build_equal(divisor, from_integer(BigInt(0), divisor.type()));
-
-  exprt raise = converter_.get_exception_handler().gen_exception_raise(
-    "ZeroDivisionError", "division by zero");
-  code_expressiont throw_code(raise);
-
-  code_ifthenelset guard;
-  guard.cond() = build_and(type_matches, is_zero);
-  guard.then_case() = throw_code;
-  guard.location() = location;
-  converter_.add_instruction(guard);
+  guard_zero_division(divisor, type_matches, location);
 
   return build_call_expr(
     *div_func,
@@ -705,25 +685,13 @@ exprt dynamic_type_handler::build_div_tagged(
   exprt rhs_is_num =
     type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
 
-  // A catchable raise, not an assert, so it's guarded only when both
-  // operands are numeric.
   exprt rhs_numeric_value = build_dereference(
     build_typecast(
       build_member(rhs, "value", pointer_typet(empty_typet())),
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
-  exprt is_zero = build_equal(
-    rhs_numeric_value, from_integer(BigInt(0), rhs_numeric_value.type()));
-
-  exprt raise = converter_.get_exception_handler().gen_exception_raise(
-    "ZeroDivisionError", "division by zero");
-  code_expressiont throw_code(raise);
-
-  code_ifthenelset guard;
-  guard.cond() = build_and(build_and(lhs_is_num, rhs_is_num), is_zero);
-  guard.then_case() = throw_code;
-  guard.location() = location;
-  converter_.add_instruction(guard);
+  guard_zero_division(
+    rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
 
   return build_call_expr(
     *div_func,
@@ -732,6 +700,24 @@ exprt dynamic_type_handler::build_div_tagged(
      build_typecast(lhs_is_num, int_type()),
      build_address_of(rhs),
      build_typecast(rhs_is_num, int_type())});
+}
+
+void dynamic_type_handler::guard_zero_division(
+  const exprt &divisor,
+  const exprt &type_ok,
+  const locationt &location)
+{
+  exprt is_zero = build_equal(divisor, from_integer(BigInt(0), divisor.type()));
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ZeroDivisionError", "division by zero");
+  code_expressiont throw_code(raise);
+
+  code_ifthenelset guard;
+  guard.cond() = build_and(type_ok, is_zero);
+  guard.then_case() = throw_code;
+  guard.location() = location;
+  converter_.add_instruction(guard);
 }
 
 exprt dynamic_type_handler::build_isinstance_check(
