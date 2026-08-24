@@ -173,14 +173,12 @@ prepare_platform_config() {
         STATIC=ON
       fi
 
-      # aarch64 has no prebuilt LLVM to download (Options.cmake), so it uses the
-      # distro packages whether or not the ESBMC binary itself is linked static.
-      if [[ "$STATIC" == "OFF" || "$ARCH" == "aarch64" ]]; then
+      if [[ "$STATIC" == "OFF" ]]; then
         BASE_ARGS+=(
           "-DClang_DIR=/usr/lib/cmake/clang-$CLANG_VERSION"
           "-DLLVM_DIR=/usr/lib/llvm-$CLANG_VERSION/lib/cmake/llvm"
         )
-        log "Configuring Ubuntu build with the system Clang-$CLANG_VERSION frontend (static=$STATIC)"
+        log "Configuring shared Ubuntu build with Clang-$CLANG_VERSION frontend"
       else
         log "Configuring static Ubuntu build"
       fi
@@ -272,18 +270,15 @@ collect_ubuntu_packages() {
     UBUNTU_PACKAGES+=(lcov)
   fi
 
-  if [[ "$STATIC" == "OFF" || "$ARCH" == "aarch64" ]]; then
+  if [[ "$STATIC" == "OFF" ]]; then
     UBUNTU_PACKAGES+=(
       "llvm-$CLANG_VERSION-dev"
       "libclang-$CLANG_VERSION-dev"
       "libclang-cpp${CLANG_VERSION}-dev"
       # Ships /usr/lib/cmake/clang-N (ClangConfig.cmake); no -dev package has it.
       "clang-$CLANG_VERSION"
+      libz3-dev
     )
-  fi
-
-  if [[ "$STATIC" == "OFF" ]]; then
-    UBUNTU_PACKAGES+=(libz3-dev)
   fi
 }
 
