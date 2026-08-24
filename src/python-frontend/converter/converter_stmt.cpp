@@ -2425,7 +2425,11 @@ void python_converter::emit_numpy_transpose_mirror_assignment(
       view_it->second.rank, view_it->second.swaps_axes, cell_indices);
   if (source_indices)
     emit_numpy_transpose_mirror_assignment(
-      view_it->second.source_id, *source_indices, rhs, location, target_block);
+      resolve_numpy_array_storage_alias_id(view_it->second.source_id),
+      *source_indices,
+      rhs,
+      location,
+      target_block);
 }
 
 void python_converter::mirror_numpy_transpose_assignment(
@@ -2457,7 +2461,11 @@ void python_converter::mirror_numpy_transpose_assignment(
         direct->second.rank, direct->second.swaps_axes, indices);
     if (cell_indices)
       emit_numpy_transpose_mirror_assignment(
-        direct->second.source_id, *cell_indices, rhs, location, target_block);
+        resolve_numpy_array_storage_alias_id(direct->second.source_id),
+        *cell_indices,
+        rhs,
+        location,
+        target_block);
     return;
   }
 
