@@ -97,6 +97,9 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t);
 // `a % b : t` over same-width operands (modulus2t asserts width consistency).
 exprt build_mod(const exprt &a, const exprt &b, const typet &t);
 
+// `a * b : t` over same-width operands (mul2t asserts width consistency).
+exprt build_mul(const exprt &a, const exprt &b, const typet &t);
+
 // Equality `a == b` over same-typed operands. migrate lowers a legacy
 // "=" node to equality2tc(migrate(a), migrate(b)), so this is the
 // byte-identical round-trip.

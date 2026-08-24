@@ -112,6 +112,7 @@ private:
   void adjust_address_of(expr2tc &expr);
 
   void adjust_decl_init(expr2tc &expr);
+  void adjust_vector_float_arith(expr2tc &expr);
   void hoist_for_init(expr2tc &expr);
 
   /// Pad a complete struct or union type symbol to its ABI layout (§96).
