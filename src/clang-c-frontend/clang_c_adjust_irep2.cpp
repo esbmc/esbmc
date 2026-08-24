@@ -9,6 +9,7 @@
 #include <util/config/config.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/pretty.h>
+#include <util/symtab/cprover_prefix.h>
 #include <utility>
 
 bool clang_c_adjust_irep2::adjust()
@@ -250,6 +251,45 @@ fold_unary_builtin(const std::string &name, const expr2tc &arg, expr2tc &expr)
     expr = bswap2tc(expr->type, arg);
 }
 
+/// The three pointer intrinsics `do_special_functions` matches by their
+/// `__ESBMC_` name rather than a `__builtin_` prefix. Each lowers to a node the
+/// backend evaluates in place; left as a call the symbol is bodyless and
+/// `goto_check`'s "non-intrinsic prefixed with __ESBMC" rejects the program.
+/// Returns true when \p expr was rewritten.
+static bool fold_pointer_intrinsic(
+  const std::string &name,
+  const std::vector<expr2tc> &args,
+  expr2tc &expr)
+{
+  if (name == CPROVER_PREFIX "same_object" && args.size() == 2)
+  {
+    expr = same_object2tc(args[0], args[1]);
+    return true;
+  }
+
+  if (args.size() != 1)
+    return false;
+
+  if (name == CPROVER_PREFIX "POINTER_OBJECT")
+  {
+    expr = pointer_object2tc(expr->type, args[0]);
+    return true;
+  }
+
+  // pointer_offset2t admits only an address-width signedbv. The declared
+  // return type is __PTRDIFF_TYPE__, which is exactly that on every supported
+  // target; decline rather than assert if a target ever disagrees.
+  if (
+    name == CPROVER_PREFIX "POINTER_OFFSET" && is_signedbv_type(expr->type) &&
+    expr->type->get_width() == config.ansi_c.address_width)
+  {
+    expr = pointer_offset2tc(expr->type, args[0]);
+    return true;
+  }
+
+  return false;
+}
+
 /// The lowerings `do_special_functions` selects by base name rather than by a
 /// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
 ///
@@ -306,6 +346,20 @@ bool clang_c_adjust_irep2::adjust_float_builtin(
     expr = isnormal2tc(arg);
   else if (compare_unscore_builtin(name, "signbit"))
     expr = signbit2tc(arg);
+  // Exact spelling: `isinf_sign` is reserved, and compare_unscore_builtin's
+  // "isinf" arm above matches a base name a program may reuse. Left as a call
+  // the symbol is bodyless, so the result is nondet rather than differently
+  // shaped -- the flag turns a provable comparison into an unprovable one.
+  else if (name == "__builtin_isinf_sign")
+    expr = if2tc(
+      expr->type,
+      isinf2tc(arg),
+      if2tc(
+        expr->type,
+        typecast2tc(get_bool_type(), signbit2tc(arg)),
+        constant_int2tc(expr->type, BigInt(-1)),
+        constant_int2tc(expr->type, BigInt(1))),
+      gen_zero(expr->type));
   else if (
     compare_float_suffix(name, "finite") ||
     compare_unscore_builtin(name, "isfinite") ||
@@ -364,6 +418,9 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   // Before the arity check: inf/huge_val/nan take no argument at all.
   if (adjust_float_builtin(expr, s->name, args))
+    return;
+
+  if (fold_pointer_intrinsic(name, args, expr))
     return;
 
   if (args.size() == 2)

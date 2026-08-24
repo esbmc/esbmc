@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body IREP2-native code_ifthenelse2t dispatcher
+// Exercises the IREP2-native code_ifthenelse2t dispatcher
 // (W1-loc spike Phase C, esbmc/esbmc#4715): classify() has both branches
 // side-effect-free, so goto_convert consumes the whole if/else natively as the
 // general branch shape (v: if(!c) goto y; w: P; x: goto z; y: Q; z: ;), with no
