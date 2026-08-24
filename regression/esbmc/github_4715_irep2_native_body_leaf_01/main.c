@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body IREP2-native leaf dispatcher (W1-loc spike
+// Exercises the IREP2-native leaf dispatcher (W1-loc spike
 // Phase C, esbmc/esbmc#4715): nop()'s skip-only body and noop()'s empty body
 // are consumed natively by goto_convert (code_block2t/code_skip2t read
 // directly, no legacy round-trip), while main() (decl + assert) falls back to
