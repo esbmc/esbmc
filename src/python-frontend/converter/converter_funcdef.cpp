@@ -436,6 +436,20 @@ bool body_returns_list_value(const nlohmann::json &body)
 
 // Return true if 'param_name' has any attribute written (x.attr = ...)
 // anywhere in 'body' (recursive scan over nested blocks).
+/// A subscripted annotation spelled with either of @p name or @p alt, e.g.
+/// `Tuple[int, str]` -- the form that carries arguments, as opposed to a bare
+/// `Tuple`.
+static bool is_subscripted_as(
+  const nlohmann::json &return_type,
+  const nlohmann::json &node,
+  const char *name,
+  const char *alt = nullptr)
+{
+  if (node["_type"] != "Subscript")
+    return false;
+  return return_type == name || (alt && return_type == alt);
+}
+
 static bool param_is_mutated_in_body(
   const std::string &param_name,
   const nlohmann::json &body)
@@ -1653,14 +1667,12 @@ void python_converter::get_function_definition(
       // String return types should be pointers, not arrays
       type.return_type() = gen_pointer_type(char_type());
     }
-    else if (
-      (return_type == "Tuple" || return_type == "tuple") &&
-      return_node["_type"] == "Subscript")
+    else if (is_subscripted_as(return_type, return_node, "Tuple", "tuple"))
     {
       type.return_type() =
         tuple_handler_->get_tuple_type_from_annotation(return_node);
     }
-    else if (return_type == "Callable" && return_node["_type"] == "Subscript")
+    else if (is_subscripted_as(return_type, return_node, "Callable"))
     {
       // A function returning a callable is the general shape of #6640: the
       // caller binds the result to a variable and calls through it, so the
@@ -1668,7 +1680,7 @@ void python_converter::get_function_definition(
       // pointer has an empty return type, which leaves every such call nondet.
       type.return_type() = get_callable_type(return_node, function_node);
     }
-    else if (return_type == "Optional" && return_node["_type"] == "Subscript")
+    else if (is_subscripted_as(return_type, return_node, "Optional"))
     {
       // Optional[T]: delegate to the annotation handler, which builds either
       // an Optional<T> struct (for primitive T) or a T* pointer (for str /
