@@ -588,6 +588,9 @@ private:
    * Honours reverse=<constant bool>; returns nullopt for any other shape.
    */
   std::optional<exprt> try_fold_sorted();
+  /// Internal keys-list symbol id behind a `<name>.keys()` argument.
+  std::string dict_keys_list_id_for_call(const nlohmann::json &arg) const;
+
   std::optional<exprt> fold_sorted_int_list(
     const std::string &list_id,
     size_t map_size,

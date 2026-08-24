@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 12 --timeout 120
+^  assertion ss\.str\(\)\.size\(\) == 0$
+^VERIFICATION FAILED$

@@ -9,6 +9,20 @@
 #include <set>
 #include <vector>
 
+namespace
+{
+/// True when the guard is constant once folded, so the instruction is not a
+/// branch at all: `if (1)` lowers to `IF !1 THEN GOTO`, and instrumenting both
+/// directions of that leaves one probe unsatisfiable by construction, which
+/// --dead-code-check reports as CWE-561 (#7267).
+bool guard_folds_to_constant(const expr2tc &guard)
+{
+  expr2tc simplified = guard->simplify();
+  const expr2tc &folded = is_nil_expr(simplified) ? guard : simplified;
+  return is_true(folded) || is_false(folded);
+}
+} // namespace
+
 size_t goto_coveraget::total_assert = 0;
 size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
@@ -280,7 +294,9 @@ void goto_coveraget::branch_coverage()
         }
 
         // e.g. IF !(a > 1) THEN GOTO 3
-        else if (it->is_goto() && !is_true(it->guard))
+        else if (
+          it->is_goto() && !is_true(it->guard) &&
+          !guard_folds_to_constant(it->guard))
         {
           if (it->is_target())
             target_num = it->target_number;

@@ -974,24 +974,96 @@ static expr2tc unwrap_array_decay(const expr2tc &expr)
     if (is_index2t(addr.ptr_obj))
     {
       const index2t &idx = to_index2t(addr.ptr_obj);
-      // Check if index is 0
-      if (is_constant_int2t(idx.index))
-      {
-        const constant_int2t &idx_val = to_constant_int2t(idx.index);
-        if (idx_val.value == 0)
-        {
-          // Check if source is an array type
-          if (is_array_type(idx.source_value->type))
-          {
-            // Return the original array
-            return idx.source_value;
-          }
-        }
-      }
+      // Any constant index, not only 0. `&b[2]` is not the decay a compiler
+      // produces, but it names a place inside b that the callee then writes
+      // forward from, and the array is the only object we can widen to. That
+      // over-havocs b[0..1]; havocking more than the callee writes loses the
+      // caller information rather than granting it any, so it is the safe
+      // direction, and it is what a decayed `b` already does.
+      if (is_constant_int2t(idx.index) && is_array_type(idx.source_value->type))
+        return idx.source_value;
     }
   }
 
   return expr;
+}
+
+// The place a havoc writes to. Substituting a formal with an array argument
+// re-introduces the decay the collection step stripped once — `p` becomes
+// `&b[0]` — and an address is not a place to assign to. Widening back to the
+// whole array also covers everything the callee reaches through the decayed
+// pointer (#6961). Any other address_of names its own operand.
+static expr2tc havoc_place(const expr2tc &target)
+{
+  expr2tc place = unwrap_array_decay(target);
+  if (is_address_of2t(place))
+    return to_address_of2t(place).ptr_obj;
+  return place;
+}
+
+// Pointees a havoc has nothing to write through: void and function pointees
+// name no object, and a pointer pointee is left alone under
+// --add-symex-value-sets, as the loop-invariant havoc does. Shared by both
+// pointer-havoc paths so the two cannot drift apart.
+static bool skip_pointee_havoc(const type2tc &pointee)
+{
+  if (is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee))
+    return true;
+
+  return config.options.get_bool_option("add-symex-value-sets") &&
+         is_pointer_type(pointee);
+}
+
+// A pointer parameter is pass-by-value, so the callee cannot change the
+// caller's pointer, only what it points at. Havocking the argument itself both
+// misses that write and invents a bogus pointer, which the ensures ASSUME then
+// dereferences. Only the first element is reached this way; widening needs an
+// object, which only the decay case names. Nil when there is nothing to write
+// through.
+static expr2tc havoc_through_pointer(const expr2tc &place, const namespacet &ns)
+{
+  if (!is_pointer_type(place))
+    return place;
+
+  type2tc pointee = ns.follow(to_pointer_type(place->type).subtype);
+  if (skip_pointee_havoc(pointee))
+    return expr2tc();
+
+  return dereference2tc(pointee, place);
+}
+
+expr2tc code_contractst::instantiate_assigns_target(
+  const expr2tc &target_expr,
+  const symbolt &function_symbol,
+  const std::vector<expr2tc> &actual_args,
+  bool &is_pointer_param) const
+{
+  is_pointer_param = false;
+  expr2tc instantiated = target_expr;
+
+  if (!function_symbol.get_type().is_code())
+    return instantiated;
+
+  const code_typet::argumentst &params =
+    to_code_type(function_symbol.get_type()).arguments();
+
+  for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+  {
+    irep_idt param_id = params[i].get_identifier();
+    if (param_id.empty() || is_nil_expr(actual_args[i]))
+      continue;
+
+    type2tc param_type = migrate_type(params[i].type());
+    expr2tc param_symbol = symbol2tc(param_type, param_id);
+    // The whole target is the formal, so the havoc has an argument to follow
+    // rather than a subexpression that already names its own place.
+    if (instantiated == param_symbol)
+      is_pointer_param = is_pointer_type(param_type);
+    instantiated =
+      replace_symbol_in_expr(instantiated, param_symbol, actual_args[i]);
+  }
+
+  return instantiated;
 }
 
 std::vector<expr2tc>
@@ -1116,6 +1188,15 @@ void code_contractst::havoc_function_parameters(
   }
 }
 
+// Python module-level globals carry static_lifetime=false so the C-side
+// static-init pass does not const-propagate them (converter_stmt.cpp). They are
+// still program-wide state a replaced call can write, and rw_set.cpp:180
+// already recognises them by this rule.
+static bool is_python_module_global(const symbolt &s)
+{
+  return s.mode == "Python" && !s.file_local;
+}
+
 void code_contractst::havoc_static_globals(
   goto_programt &dest,
   const locationt &location)
@@ -1127,7 +1208,7 @@ void code_contractst::havoc_static_globals(
       return;
 
     // Only process static lifetime variables (globals and static locals)
-    if (!s.static_lifetime)
+    if (!s.static_lifetime && !is_python_module_global(s))
       return;
 
     // Skip internal ESBMC symbols
@@ -1438,6 +1519,31 @@ static expr2tc byte_malloc(const expr2tc &size_bytes)
     sideeffect2t::allockind::malloc);
 }
 
+/// The Clang temporaries that carry an __ESBMC_old() value all have
+/// "___ESBMC_old" in their name; that name is the only handle on them, which is
+/// why replace_old_in_expr matches on it too.
+static bool is_old_temp_symbol(const expr2tc &expr)
+{
+  return is_symbol2t(expr) &&
+         id2string(to_symbol2t(expr).thename).find("___ESBMC_old") !=
+           std::string::npos;
+}
+
+static bool reads_old(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (is_old_temp_symbol(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([&found](const expr2tc &op) {
+    if (!found)
+      found = reads_old(op);
+  });
+  return found;
+}
+
 goto_programt code_contractst::generate_checking_wrapper(
   const symbolt &original_func,
   const expr2tc &requires_clause,
@@ -1722,9 +1828,6 @@ goto_programt code_contractst::generate_checking_wrapper(
       location,
       fmt::join(is_fresh_struct_ptrs, ", "));
 
-  materialize_old_snapshots_at_wrapper(
-    old_snapshots, wrapper, id2string(original_func.name), location);
-
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
   auto add_contract_clause = [&wrapper, &location](
@@ -1740,15 +1843,25 @@ goto_programt code_contractst::generate_checking_wrapper(
     t->location.comment(comment);
   };
 
-  // 3. Assume requires clause (after memory allocation for is_fresh)
-  // Also replace __ESBMC_old() references in the requires clause — old snapshots
-  // have already been materialized above (step 2), so replacement is safe here.
-  {
-    expr2tc req = requires_clause;
-    if (!old_snapshots.empty() && !is_nil_expr(req))
-      req = replace_old_in_expr(req, old_snapshots);
-    add_contract_clause(req, ASSUME, "contract requires");
-  }
+  // 3. Assume requires clause (after memory allocation for is_fresh), then
+  // materialize the __ESBMC_old() snapshots under it: __ESBMC_old(arr[i])
+  // dereferences at a symbolic index, and snapshotting it before the
+  // precondition is assumed reads out of bounds for free (#7184). A requires
+  // that reads __ESBMC_old itself cannot precede its own snapshots, so that
+  // case keeps the original order.
+  const bool requires_reads_old = reads_old(requires_clause);
+
+  if (!requires_reads_old)
+    add_contract_clause(requires_clause, ASSUME, "contract requires");
+
+  materialize_old_snapshots_at_wrapper(
+    old_snapshots, wrapper, id2string(original_func.name), location);
+
+  if (requires_reads_old)
+    add_contract_clause(
+      replace_old_in_expr(requires_clause, old_snapshots),
+      ASSUME,
+      "contract requires");
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call).
@@ -2578,35 +2691,37 @@ bool code_contractst::is_old_call(const expr2tc &expr) const
   return false;
 }
 
+// A fresh lvalue of \p type registered under \p name.
+//
+// Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc). This is
+// ESBMC's architecture: the symbol table is IRep1-based for global state, while
+// modern code (GOTO programs, contracts) uses IRep2 for local logic. Set the
+// symbol's IREP2 type directly via the migrate-layer chokepoint;
+// set_symbol_type stores the cache authoritatively and derives the legacy field
+// via migrate_type_back exactly once (esbmc/esbmc#4715, B2 S4b).
+expr2tc code_contractst::declare_local_symbol(
+  const std::string &name,
+  const type2tc &type) const
+{
+  symbolt symbol;
+  symbol.name = name;
+  symbol.id = name;
+  set_symbol_type(symbol, type);
+  symbol.lvalue = true;
+  symbol.static_lifetime = false;
+  symbol.file_local = false;
+
+  return symbol2tc(type, context.move_symbol_to_context(symbol)->id);
+}
+
 expr2tc code_contractst::create_snapshot_variable(
   const expr2tc &expr,
   const std::string &func_name,
   size_t index) const
 {
-  // Generate unique snapshot variable name
-  std::string snapshot_name =
-    "__ESBMC_old_snapshot_" + func_name + "_" + std::to_string(index);
-
-  // Create symbol and add to symbol table
-  // Note: symbolt uses IRep1 (typet) while we work with IRep2 (type2tc).
-  // This is ESBMC's architecture: Symbol Table is IRep1-based for global state,
-  // while modern code (GOTO programs, contracts) uses IRep2 for local logic.
-  // Set the symbol's IREP2 type directly via the migrate-layer chokepoint;
-  // set_symbol_type stores the cache authoritatively and derives the legacy
-  // field via migrate_type_back exactly once (esbmc/esbmc#4715, B2 S4b).
-  symbolt snapshot_symbol;
-  snapshot_symbol.name = snapshot_name;
-  snapshot_symbol.id = snapshot_name;
-  set_symbol_type(snapshot_symbol, expr->type);
-  snapshot_symbol.lvalue = true;
-  snapshot_symbol.static_lifetime = false;
-  snapshot_symbol.file_local = false;
-
-  // Add to context (symbol table)
-  symbolt *added = context.move_symbol_to_context(snapshot_symbol);
-
-  // Return symbol expression (IRep2)
-  return symbol2tc(expr->type, added->id);
+  return declare_local_symbol(
+    "__ESBMC_old_snapshot_" + func_name + "_" + std::to_string(index),
+    expr->type);
 }
 
 expr2tc code_contractst::replace_old_in_expr(
@@ -2654,12 +2769,11 @@ expr2tc code_contractst::replace_old_in_expr(
   if (is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
-    std::string sym_name = id2string(sym.thename);
 
-    // Only process symbols that are related to __ESBMC_old
-    // These temp variables have names containing "___ESBMC_old"
-    // This prevents accidentally replacing __ESBMC_return_value or other symbols
-    if (sym_name.find("___ESBMC_old") != std::string::npos)
+    // Only process symbols that are related to __ESBMC_old.
+    // This prevents accidentally replacing __ESBMC_return_value or other
+    // symbols
+    if (is_old_temp_symbol(expr))
     {
       for (const auto &snapshot : snapshots)
       {
@@ -3416,23 +3530,30 @@ void code_contractst::emit_ptr_deref_assertions(
 
 // ========== Phase 2B: array element assigns compliance ==========
 
-std::vector<code_contractst::arr_elem_snapshot_t>
-code_contractst::materialize_arr_elem_snapshots(
-  const frame_enforcert::classified_assignst &classified,
-  const std::vector<expr2tc> &assigns_targets,
-  goto_programt &wrapper,
-  const locationt &location,
-  const std::string &func_name,
-  const std::map<irep_idt, param_extentt> &param_extents)
+namespace
 {
-  std::vector<arr_elem_snapshot_t> result;
+/// One array the assigns clause names, with every index it names on that array.
+struct arr_elem_groupt
+{
+  expr2tc arr_ptr;
+  type2tc arr_add_type; ///< Result type of the (arr + idx) pointer arithmetic
+  type2tc elem_type;
+  std::vector<expr2tc> indices;
+};
 
-  if (assigns_targets.empty())
-    return result;
+/// Collect the add(arr_sym, idx) entries of \p pointer_targets into one group
+/// per array symbol, in first-seen order. Targets this check does not cover
+/// (complex pointer expressions, void / function / pointer element types) are
+/// dropped here rather than in the caller.
+std::vector<arr_elem_groupt> group_arr_elem_targets(
+  const std::vector<expr2tc> &pointer_targets,
+  const namespacet &ns)
+{
+  std::vector<arr_elem_groupt> groups;
+  std::map<irep_idt, size_t> group_of;
 
-  for (const auto &t : classified.pointer_targets)
+  for (const auto &t : pointer_targets)
   {
-    // Only process pointer-arithmetic targets: add2t(arr_sym, idx_expr)
     if (!is_add2t(t))
       continue;
 
@@ -3451,22 +3572,50 @@ code_contractst::materialize_arr_elem_snapshots(
       idx_expr = add.side_1;
     }
     else
-    {
-      // Complex pointer expression — skip
       continue;
-    }
 
-    // Resolve element type
-    const pointer_type2t &ptr_type = to_pointer_type(arr_ptr->type);
-    type2tc elem_type = ptr_type.subtype;
+    type2tc elem_type = to_pointer_type(arr_ptr->type).subtype;
     if (is_symbol_type(elem_type))
       elem_type = ns.follow(elem_type);
 
-    // Skip void, function, or pointer element types
     if (
       is_empty_type(elem_type) || is_code_type(elem_type) ||
       is_nil_type(elem_type) || is_pointer_type(elem_type))
       continue;
+
+    auto [it, fresh] =
+      group_of.emplace(to_symbol2t(arr_ptr).thename, groups.size());
+    if (fresh)
+      groups.push_back({arr_ptr, add.type, elem_type, {}});
+    groups[it->second].indices.push_back(idx_expr);
+  }
+
+  return groups;
+}
+} // namespace
+
+std::vector<code_contractst::arr_elem_snapshot_t>
+code_contractst::materialize_arr_elem_snapshots(
+  const frame_enforcert::classified_assignst &classified,
+  const std::vector<expr2tc> &assigns_targets,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name,
+  const std::map<irep_idt, param_extentt> &param_extents)
+{
+  std::vector<arr_elem_snapshot_t> result;
+
+  if (assigns_targets.empty())
+    return result;
+
+  // One witness per array, not per target: N per-target assertions carrying the
+  // same exemption set are the same formula modulo witness renaming (#7184).
+  for (const auto &group :
+       group_arr_elem_targets(classified.pointer_targets, ns))
+  {
+    const expr2tc &arr_ptr = group.arr_ptr;
+    const type2tc &elem_type = group.elem_type;
+    const expr2tc &idx_expr = group.indices.front();
 
     type2tc j_type = idx_expr->type;
     std::string cnt_str = std::to_string(arr_elem_snap_counter);
@@ -3553,7 +3702,7 @@ code_contractst::materialize_arr_elem_snapshots(
     expr2tc snapshot_sym = symbol2tc(elem_type, snap_added->id);
 
     // arr + j (pointer arithmetic, same result type as arr + idx)
-    type2tc arr_add_type = add.type;
+    const type2tc &arr_add_type = group.arr_add_type;
     expr2tc arr_plus_j = add2tc(arr_add_type, arr_ptr, witness_j);
     expr2tc arr_at_j = dereference2tc(elem_type, arr_plus_j);
 
@@ -3571,7 +3720,7 @@ code_contractst::materialize_arr_elem_snapshots(
     entry.arr_ptr = arr_ptr;
     entry.arr_add_type = arr_add_type;
     entry.elem_type = elem_type;
-    entry.declared_idx = idx_expr;
+    entry.declared_indices = group.indices;
     entry.witness_idx = witness_j;
     entry.snapshot_sym = snapshot_sym;
     result.push_back(entry);
@@ -3594,10 +3743,15 @@ void code_contractst::emit_arr_elem_assertions(
       add2tc(snap.arr_add_type, snap.arr_ptr, snap.witness_idx);
     expr2tc arr_at_j_after = dereference2tc(snap.elem_type, arr_plus_j);
 
-    // Guard: (j == declared_idx) || (arr[j] == snap)
-    expr2tc eq_idx = equality2tc(snap.witness_idx, snap.declared_idx);
-    expr2tc eq_val = equality2tc(arr_at_j_after, snap.snapshot_sym);
-    expr2tc guard = or2tc(eq_idx, eq_val);
+    // Guard: arr[j] == snap, excused at every index the clause named.
+    // Compare the addresses rather than the index values: the indices of one
+    // clause need not share a type, and narrowing them to the witness's type
+    // could make a wide index alias a witnessed element and excuse it.
+    expr2tc guard = equality2tc(arr_at_j_after, snap.snapshot_sym);
+    for (const expr2tc &idx : snap.declared_indices)
+      guard = or2tc(
+        guard,
+        equality2tc(arr_plus_j, add2tc(snap.arr_add_type, snap.arr_ptr, idx)));
 
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = guard;
@@ -4713,6 +4867,77 @@ static bool havoc_pointed_to_array(
   return true;
 }
 
+// The value the removed body would have returned: a fresh unconstrained one,
+// which is what `__ESBMC_return_value` is rewritten to.
+//
+// The caller's own lvalue cannot play that part. The ensures is instantiated
+// with the caller's argument expressions, so for `r = f(r)` it would carry `r`
+// on both sides and the ASSUME would read `r == r + 1` -- `assume false`, the
+// path dies, and a reachable assertion after the call goes unreported (#7009).
+// Naming the result separately keeps the arguments at their pre-call values
+// for as long as the clause speaks about them; the caller's place is written
+// once, after (§4.b).
+//
+// A discarded result still needs one. The ensures is assumed either way, and
+// with nothing to rewrite `__ESBMC_return_value` to it was assumed over a
+// symbol no instruction defines.
+expr2tc code_contractst::declare_call_result(
+  const symbolt &function_symbol,
+  const expr2tc &ret_val,
+  const locationt &call_location,
+  goto_programt &replacement) const
+{
+  type2tc result_type;
+  if (!is_nil_expr(ret_val))
+    result_type = ret_val->type;
+  else if (function_symbol.get_type().is_code())
+    result_type =
+      migrate_type(to_code_type(function_symbol.get_type()).return_type());
+
+  // A void function returns nothing for a clause to name.
+  if (is_nil_type(result_type) || is_empty_type(result_type))
+    return expr2tc();
+
+  // Unlike the three havoc sites, this one does not skip a pointer under
+  // --add-symex-value-sets. They leave existing state alone; this one is the
+  // result's only definition, and omitting it puts the ensures back over the
+  // caller's stale value. A pointer result therefore carries no value set, so
+  // a write through it is lost (github_7009_pointer_result_knownbug).
+  static size_t counter = 0;
+  expr2tc result = declare_local_symbol(
+    "__ESBMC_return_value$" + std::to_string(counter++), result_type);
+
+  goto_programt::targett decl = replacement.add_instruction(DECL);
+  decl->code = code_decl2tc(result_type, to_symbol2t(result).thename);
+  decl->location = call_location;
+  decl->location.comment("contract call result declaration");
+
+  goto_programt::targett assign = replacement.add_instruction(ASSIGN);
+  assign->code = code_assign2tc(result, gen_nondet(result_type));
+  assign->location = call_location;
+  assign->location.comment("contract call result");
+
+  return result;
+}
+
+// The caller's place takes the result only once the ensures has been assumed:
+// until then the arguments the clause was instantiated with must still hold
+// their pre-call values, and one of them can be that very place.
+static void write_back_call_result(
+  const expr2tc &ret_val,
+  const expr2tc &call_result,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  if (is_nil_expr(ret_val) || is_nil_expr(call_result))
+    return;
+
+  goto_programt::targett t = replacement.add_instruction(ASSIGN);
+  t->code = code_assign2tc(ret_val, call_result);
+  t->location = call_location;
+  t->location.comment("contract call result written back");
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -4855,30 +5080,37 @@ void code_contractst::generate_replacement_at_call(
     // Now assigns targets are expression trees that need parameter substitution
     for (const expr2tc &target_expr : assigns_target_exprs)
     {
-      // Substitute function parameters with actual call arguments
-      expr2tc instantiated_target = target_expr;
+      bool target_is_pointer_param = false;
+      expr2tc instantiated_target = instantiate_assigns_target(
+        target_expr, function_symbol, actual_args, target_is_pointer_param);
 
-      if (function_symbol.get_type().is_code())
+      // `&x` names the place already, and havoc_place resolves it to x.
+      // Following the pointer as well would write through x rather than to it,
+      // which for an `int **pp` argument means havocking `*x` -- a dereference
+      // of whatever the caller's pointer happens to hold.
+      const bool names_place_directly = is_address_of2t(instantiated_target);
+      instantiated_target = havoc_place(instantiated_target);
+
+      if (target_is_pointer_param && !names_place_directly)
       {
-        const code_typet &code_type = to_code_type(function_symbol.get_type());
-        const code_typet::argumentst &params = code_type.arguments();
-
-        for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+        instantiated_target = havoc_through_pointer(instantiated_target, ns);
+        if (is_nil_expr(instantiated_target))
         {
-          const code_typet::argumentt &param = params[i];
-          irep_idt param_id = param.get_identifier();
-
-          if (!param_id.empty() && !is_nil_expr(actual_args[i]))
-          {
-            type2tc param_type = migrate_type(param.type());
-            expr2tc param_symbol = symbol2tc(param_type, param_id);
-            instantiated_target = replace_symbol_in_expr(
-              instantiated_target, param_symbol, actual_args[i]);
-          }
+          // The frame the contract named cannot be written, so say so: a
+          // dropped target reads exactly like one that was havocked.
+          log_warning(
+            "__ESBMC_assigns: nothing can be written through the pointer "
+            "parameter named at {}; the caller keeps its pre-call value",
+            call_location.as_string());
+          continue;
         }
       }
 
-      // Skip pointer havoc in value-set mode (consistent with loop invariant)
+      // Skip pointer havoc in value-set mode (consistent with loop invariant).
+      // Tested on the place actually written, after widening and after
+      // following a pointer parameter: the skip is about assigning a pointer,
+      // not about writing through one, and a target the contract named should
+      // not vanish because it was reached through a pointer variable.
       if (
         config.options.get_bool_option("add-symex-value-sets") &&
         is_pointer_type(instantiated_target))
@@ -4960,17 +5192,7 @@ void code_contractst::generate_replacement_at_call(
       // one was missing it. ns.follow() is a no-op for non-symbol types.
       type2tc pointee_type = ns.follow(ptr_type.subtype);
 
-      // Skip void*, function pointers, and unknown/nil pointed-to types
-      if (
-        is_empty_type(pointee_type) || is_code_type(pointee_type) ||
-        is_nil_type(pointee_type))
-        continue;
-
-      // Skip pointer-to-pointer havoc in value-set mode (consistent with
-      // loop-invariant havoc behaviour)
-      if (
-        config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(pointee_type))
+      if (skip_pointee_havoc(pointee_type))
         continue;
 
       // If precise assigns clause was provided it already handled this arg
@@ -4996,9 +5218,13 @@ void code_contractst::generate_replacement_at_call(
     }
   }
 
+  // 2.5. Name the value the removed body would have returned.
+  expr2tc call_result =
+    declare_call_result(function_symbol, ret_val, call_location, replacement);
+
   // 3. Normalize ensures guard: replace return_value, fix types, normalize floating-point
   expr2tc ensures_guard =
-    normalize_ensures_guard_for_return_value(ensures_clause, ret_val);
+    normalize_ensures_guard_for_return_value(ensures_clause, call_result);
 
   // 3.b Replace __ESBMC_old() occurrences in ensures using call-site snapshots
   if (!callsite_snapshots.empty() && !is_nil_expr(ensures_guard))
@@ -5019,6 +5245,9 @@ void code_contractst::generate_replacement_at_call(
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
+
+  // 4.b The caller's place takes the result only now.
+  write_back_call_result(ret_val, call_result, call_location, replacement);
 
   // Replace the call with the replacement code.
   //

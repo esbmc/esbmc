@@ -2200,7 +2200,17 @@ operands and array element types, but **no restriction on throw-expressions or
 catch parameters**. So the vector names are unobserved over 949 tests, which
 after §30.2 is evidence and not proof.
 
-### 33.3 Consequence for Phase 0
+#### 33.4 Superseded in part (2026-08-17)
+
+§33.3's "go for the scalar subset, not a B-4 closure" reads as though the
+semantics half can be taken now and the presentation half deferred. Measurement
+in `scope-clang-c-irep2.md` §102 shows the two are coupled: the printers need the
+spelling to tell `char` from `int8_t`, which is the same question catch-matching
+asks, so a field carrying only the four catch-matching spellings does not serve
+them. The split, the options and the one measurement that decides between them
+are now in **`scope-c-spelling-carriage.md`**.
+
+## 33.3 Consequence for Phase 0
 
 The go/no-go the phase asks for, with what is now known:
 

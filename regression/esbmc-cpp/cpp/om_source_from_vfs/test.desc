@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--incremental-bmc
+file ([A-Za-z]:)?/esbmc-vfs/cpp/vector line \d+
+^VERIFICATION FAILED$

@@ -653,29 +653,6 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   return value;
 }
 
-// Parameter names are not part of a function's type (C++ [dcl.fct]p5, C11
-// 6.7.6.3p15), but irep2 type equality compares argument_names too. An
-// out-of-line virtual definition gives its parameters fresh symbol ids, so the
-// vtable slot and the function symbol end up with code types that differ in
-// nothing else -- enough for the virtual call to lose its target (#6749).
-static bool same_function_pointer_ignoring_argument_names(
-  const type2tc &a,
-  const type2tc &b)
-{
-  if (!is_pointer_type(a) || !is_pointer_type(b))
-    return false;
-
-  const type2tc &sub_a = to_pointer_type(a).subtype;
-  const type2tc &sub_b = to_pointer_type(b).subtype;
-  if (!is_code_type(sub_a) || !is_code_type(sub_b))
-    return false;
-
-  const code_type2t &ca = to_code_type(sub_a);
-  const code_type2t &cb = to_code_type(sub_b);
-  return ca.arguments == cb.arguments && ca.ret_type == cb.ret_type &&
-         ca.ellipsis == cb.ellipsis;
-}
-
 bool dereferencet::dereference_type_compare(
   expr2tc &object,
   const type2tc &dereference_type) const
@@ -2730,16 +2707,19 @@ void dereferencet::check_data_obj_access(
 
   BigInt data_sz = type_byte_size_bits(value->type);
   BigInt access_sz = type_byte_size_bits(type);
-  expr2tc data_sz_e = gen_long(offset->type, data_sz);
-  expr2tc access_sz_e = gen_long(offset->type, access_sz);
 
   // Only erroneous thing we check for right now is that the offset is out of
   // bounds, misaligned access happens elsewhere. The highest byte read is at
-  // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
-  // Lower bound not checked, instead we just treat everything as unsigned,
-  // which has the same effect.
-  expr2tc add = add2tc(access_sz_e->type, offset, access_sz_e);
-  expr2tc gt = greaterthan2tc(add, data_sz_e);
+  // offset+access_sz-1, so the access fails if offset+access_sz > data_sz.
+  // The lower bound is not checked separately: an offset below the object
+  // arrives here as a huge unsigned value. That relies on the sum not
+  // wrapping, so it is rearranged into offset > data_sz-access_sz, which is
+  // equivalent over the integers and cannot overflow. Adding instead let every
+  // offset in [-access_sz, 0) wrap back into range (R35).
+  expr2tc gt =
+    access_sz > data_sz
+      ? gen_true_expr()
+      : greaterthan2tc(offset, gen_long(offset->type, data_sz - access_sz));
 
   if (!options.get_bool_option("no-bounds-check"))
   {

@@ -107,6 +107,11 @@ struct tuple_size<tuple<Types...>>
 {
 };
 
+#if __cplusplus >= 201703L
+template <typename Tuple>
+inline constexpr std::size_t tuple_size_v = tuple_size<Tuple>::value;
+#endif
+
 template <std::size_t I, typename... Types>
 constexpr typename tuple_element<I, tuple<Types...>>::type &
 get(tuple<Types...> &t) noexcept
@@ -208,29 +213,6 @@ constexpr bool operator>=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
 {
   return !(lhs < rhs);
 }
-
-// Minimal reference_wrapper needed by unwrap_refwrapper below.
-// The full implementation lives in <functional>; this stub is sufficient
-// for make_tuple to strip reference_wrapper<T> → T& at compile time.
-template <class T>
-class reference_wrapper
-{
-  T *ptr_;
-
-public:
-  using type = T;
-  reference_wrapper(T &ref) noexcept : ptr_(&ref)
-  {
-  }
-  operator T &() const noexcept
-  {
-    return *ptr_;
-  }
-  T &get() const noexcept
-  {
-    return *ptr_;
-  }
-};
 
 template <class T>
 struct unwrap_refwrapper

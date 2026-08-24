@@ -1,19 +1,22 @@
 # Plan — affording the schedule space #6607 exposed (issue #6831, cause 1)
 
-**Status:** W0, W2 and W1.1 shipped; `--state-hashing` was **unsound** and is
-fixed (see W2); `--sleep-sets` is new, off by default, and sound on the paths
+**Status:** W0, W2, W1.1 and W4.1 shipped; `--state-hashing` was **unsound** and
+is fixed (see W2); `--sleep-sets` is new, off by default, and sound on the paths
 it is allowed to run on (see W1.1). W3 and W4 are investigated, and both turn
 out to be about existing machinery rather than new: W3's exit is already
 discharged by `--smt-during-symex`, and W4 is re-scoped from a wrapper change to
-a code change.
+a code change. W3's remaining wrapper question is now closed too (W3.3) — the
+flag was already on, and the segfault that closing it uncovered on the shipped
+configuration is fixed.
 **Owner issue:** [#6831](https://github.com/esbmc/esbmc/issues/6831), *cause 1 —
 schedule-space explosion*, 291 of 489 lost SV-COMP tasks.
 **Bisected to:** `bac652b13c` — `[goto-symex] Track main-thread termination per
 state, not per search` (#6607), which fixes #4584.
-**Last updated:** 2026-08-11.
+**Last updated:** 2026-08-15.
 
-**Measurement environment.** All numbers below were measured on an x86_64 Linux
-host against `build/src/esbmc/esbmc`, ESBMC 8.4.0, built from `19db2adc96`
+**Measurement environment.** Except where a workstream names its own build (W3.3
+does), all numbers below were measured on an x86_64 Linux host against
+`build/src/esbmc/esbmc`, ESBMC 8.4.0, built from `19db2adc96`
 (a descendant of `bac652b13c`, so the post-#6607 behaviour). Solver: Bitwuzla
 0.9.0 (the default). Single run per configuration, one machine, no repetition —
 treat the ratios as indicative and the orderings as reliable, not the absolute
@@ -131,8 +134,9 @@ Two orthogonal levers, both open:
   sliced, encoded and solved as an independent formula. The DFS restores
   execution states on backtracking, but the per-formula pipeline downstream of
   symex does not exploit the shared prefix. **Closed by W3:** `--smt-during-symex`
-  already makes it exploit the prefix, for −13.5 %, and what remains under this
-  lever is ~5 % of the run. Lever A is the only one with headroom left.
+  already makes it exploit the prefix, for −13.5 % (−7.2 % under the wrapper's
+  own flags, W3.3), and what remains under this lever is ~5 % of the run. Lever A
+  is the only one with headroom left.
 
 ---
 
@@ -561,7 +565,7 @@ the constant is where 74 % of the time is.
 
 #### W3.1 — The first item is already built: `--smt-during-symex`
 
-`dfs_execution_statet::clone()` (`execution_state.cpp:1589`) deep-copies the
+`dfs_execution_statet::clone()` (`execution_state.cpp:1631`) deep-copies the
 whole target equation at every DFS node — which is why each of the 940 formulas
 carries the full trace rather than its suffix (mean 451 SSA assignments, 424,349
 across the run, for a program whose single schedule is ~451). Except under
@@ -583,8 +587,11 @@ counters and verdict identical (940 / 296 MPOR / 0 hash / SUCCESSFUL):
 prefix predicts — encoding −71 %, solving −32 % — and symex is untouched, as it
 must be when the same 940 schedules are still enumerated.
 
-**So W3's stated exit is already discharged by an existing flag**, which the
-SV-COMP wrapper does not pass (275 regression tests do). It also generalises,
+**So W3's stated exit is already discharged by an existing flag**, which 275
+regression tests pass explicitly — and which the SV-COMP wrapper, as W3.3
+found after this was written, has been passing all along by implication.
+(This paragraph originally read "which the SV-COMP wrapper does not pass";
+that was wrong, and W3.3 is the correction.) It also generalises,
 which `01_malloc_20` alone could not have shown — the §2.1 mistake. Every CORE
 test in `esbmc-unix`/`esbmc-unix2` that calls `pthread_create`, 346 of them, run
 twice with its own flags, 120 s cap, 4-way parallel:
@@ -630,11 +637,149 @@ therefore the only remaining lever with headroom**, and W3 should not be
 resourced further on the strength of §2.3's 74 % — that share is symex doing
 work, not repeating it.
 
+#### W3.3 — The wrapper question was already answered, and the answer crashes
+
+W3.2 left one open decision: does `--smt-during-symex` belong in the SV-COMP
+concurrency configuration? **It has been in it all along.** `--smt-symex-guard`
+sets `smt-during-symex` (`command_line_options.cpp:442-450`, logging "Enabling
+--smt-during-symex to use features that involve encoding SMT during symex"), and
+the wrapper's concurrency block passes `--smt-symex-guard`
+(`esbmc-wrapper.py:271`). The implication is now pinned by
+`github_6831_smt_during_symex_implied` so the wrapper's dependency on it cannot
+be refactored away silently.
+
+Re-measured under the wrapper's concurrency flags rather than the ones the tests
+carry (W4.2's method note), against a build of `f2df960d08` — 135 commits past
+the §2 environment, which is what puts the five `mpor_aggregate_ptr_*` tests
+#6981 added on 2026-08-14 inside the corpus at all. All 376 CORE tests across
+`esbmc-unix` and `esbmc-unix2` that call `pthread_create` (377 once this
+workstream's own test is counted; the sweep predates it), 60 s cap, 8-way
+parallel, base = the wrapper's concurrency flags minus
+`--smt-symex-guard`, variant = base plus `--smt-during-symex`:
+
+| | result |
+|---|---|
+| agreed answers | 332 |
+| no answer in either arm | 37 |
+| wall over the agreed set | 690.0 s → 639.9 s, **−7.2 %** |
+| verdict differences | 7, of which **5 are a segfault** |
+
+**The arms isolate the implied flag, not the shipped line.** `--smt-symex-guard`
+is not an alias for `--smt-during-symex`: it also queries the solver at undecided
+branches (`symex_goto.cpp:34-56`), so the wrapper's actual configuration is a
+third arm — and the schedule table below shows it not tracking the variant arm on
+two of five tests. The −7.2 % is therefore the value of `--smt-during-symex` in
+isolation; the shipped line's own wall number is still unmeasured. Three
+corrections to W3.1 follow.
+
+**Schedule counts are not invariant under this flag.** W3.1 reported them
+identical on all 323 tests "as they must be: the flag changes how a schedule is
+encoded, never which are explored". Five tests contradict that under the
+wrapper's flags. Complete schedules (`schedules_explored - pruned_by_mpor -
+pruned_by_hash`) summed over the three rounds `--falsify-context-bound 1
+--incremental-bmc` runs — all three arms run the same three rounds, so the round
+count is not the confound — re-run sequentially under a hard cap:
+
+| test | base | `--smt-during-symex` | `--smt-symex-guard` |
+|---|---|---|---|
+| `SV_COMP_03` | 8 | **10** | 8 |
+| `github_4423_atomic_norace` | 55 | 52 | 52 |
+| `github_6478-spinlock` | 32 | 29 | **28** |
+| `github_6831_sleep_sets_forced_off` | 50 | 49 | 49 |
+| `race_guard_merge_locked` | 65 | **23** | 23 |
+
+So the cheap "not a reduction in disguise" check W3.1 relied on does not hold in
+general, and a future measurement must not assume it. Two further readings: the
+flag can raise the count as well as lower it (`SV_COMP_03`), and the guard arm
+differs from the variant arm on two of the five, which is the direct evidence
+that the guard's branch pruning is a separate effect rather than a wrapper for
+this one. The mechanism is **not** established — `reachability_tree.cpp:671` is a
+place the DFS reads the flag (backtracking clears already-checked assertions and
+lowers `remaining_claims` only when it is off), but `schedules_explored` is
+incremented independently of claim counts, so that line is a candidate and not a
+demonstration. Quoted as a measurement.
+
+**Two of the seven verdict differences were parallel artefacts.**
+`02_account_symbolic_02` and `02_phase_06` agree when re-run sequentially under a
+hard cap. W4.2's method note firing again; the −7.2 % is likewise a ratio from a
+parallel run, not a per-test time.
+
+**The other five are a crash on the shipped command line.**
+`mpor_aggregate_ptr_race_symbolic_{offset,offset_locked,skip_mismatch,struct_member}`
+and `mpor_aggregate_ptr_widen_contained` — all added by #6981 on 2026-08-14 —
+SIGSEGV under `--smt-symex-guard` alone, which is exactly what the wrapper
+passes. Bitwuzla and Boolector; Z3 is unaffected, so
+`github_6831_smt_during_symex_crash` pins the solver — it is
+`mpor_aggregate_ptr_race_symbolic_offset`'s program under the wrapper's flags,
+the flags being the only load-bearing difference.
+
+Root cause, from a backtrace taken with an `LD_PRELOAD` SIGSEGV handler (no
+debugger on the measurement host): an array of pointers is an array of tuples,
+so a symbolic index reaches `array_convt::mk_select`'s case switch
+(`array_conv.cpp:174`), whose ite chain projects out of
+`tuple_node_smt_ast::elements` (`smt_tuple_node_ast.cpp:195`, reached through
+the ite chain at `:86-91`), itself reached from
+`dfs_execution_statet::clone()`. `elements` is filled in lazily, so a tuple
+created at one context level can hold ASTs allocated at a deeper one, and
+`pop_ctx` deletes every AST allocated since the matching push
+(`smt_solver.cpp:278-282`). `array_convt::pop_array_ctx` clears its own
+select / with / index-map records, but `pop_tuple_ctx` only forwarded to it and
+cleared nothing of its own — so a DFS backtrack under `--smt-during-symex` left
+those vectors dangling. A scalar array does not reproduce it; the array must
+hold tuples.
+
+Two dead ends are worth recording, because both look right. Comparing the level
+`elements` was filled at against the current one does **not** work: levels are
+reused, and the observed failure is a tuple filled at level 2, popped to 1, then
+reached again at level 2. Invalidating on every pop instead is worse than
+useless — it is unsound. Elements that are still alive would be rebuilt as fresh
+unconstrained symbols, silently disconnecting the tuple from every assertion
+already made about it. The fix has to clear exactly the vectors whose contents
+the pop destroyed, which is why it is a registry keyed by the level the elements
+were *installed* at, and why tuples whose elements belong to their own level are
+deliberately left alone: the same pop destroys them too.
+
 **Exit:** ~~measurable wall-time reduction on `01_malloc_20`~~ — discharged by
-W3.1 across the concurrent CORE corpus at unchanged schedule counts and
-verdicts. W3.2 closes the workstream: what remains under lever B is ~5 % of the
-run, so the open decision is a wrapper one (does `--smt-during-symex` belong in
-the concurrency configuration?), not an implementation one.
+W3.1 across the concurrent CORE corpus at unchanged verdicts (and, under the
+tests' own flags, unchanged schedule counts — W3.3 finds that second half does
+not generalise). W3.2 closes the performance question: what remains under lever B
+is ~5 % of the run. W3.3 closes the wrapper question — the flag is already in the
+concurrency configuration, is worth ~7 % in isolation there, and should stay.
+The availability defect W3.3 uncovered is **fixed**: `pop_tuple_ctx` now clears
+the element vectors the pop destroyed, all five reproducers answer, and Bitwuzla,
+Boolector and Z3 agree on every one. Every registered test whose `test.desc`
+passes a flag that implies `--smt-during-symex` — `--smt-symex-guard`,
+`--smt-thread-guard`, `--smt-symex-assert`, `--smt-symex-assume` or the flag
+itself — passes: 276 such directories exist, 273 are registered with `ctest`, and
+all 273 are green. So are all 186 registered tests of `esbmc-unix2` (138 of them
+CORE). `github_6831_smt_during_symex_{crash,safe}` pin the FAILED and SUCCESSFUL
+verdicts on this path, and both segfault on the pre-fix binary.
+
+#### W3.4 — The sibling hazard is latent, and the invariant behind it is measured
+
+`array_ast::array_fields` looks like the same bug waiting to happen: every site
+that writes it does so into an `array_ast` created in the same statement, except
+`convert_array_assign` (`array_conv.cpp:40`), which copies into a pre-existing
+destination — the exact shape of the tuple `assign` path. It also copies
+`base_array_id`, which indexes the containers `pop_array_ctx` resizes, so a
+stale destination would be an out-of-range index as well as a dangling pointer.
+
+Both sites rest on one unstated invariant: **an assign destination is
+current-level**. It holds because `convert_assign`'s LHS (`smt_solver.cpp:364`)
+is an SSA symbol, converted at the level its defining assignment is encoded at
+rather than fetched from a shallower cache. Measured rather than argued: a build
+instrumented to log every assign whose destination predates the current level
+found **zero** across 379 CORE concurrent tests under the wrapper's flags, and
+**zero** across all 2133 CORE tests that pass a flag implying a push/pop
+strategy, each run with its own `test.desc` flags.
+
+So the hazard is latent, not live, and no machinery is warranted at either site.
+What the patch leaves behind is the invariant itself, stated at both sites and
+asserted at the tuple one, so a future change to symbol caching trips an
+assertion in the Debug CI build rather than a segfault in competition. The
+tuple `assign` registration is kept as a defensive fallback and is triaged as
+such: it is correct under any input, costs one comparison, and the measurement
+above is evidence of unreachability rather than proof of it.
 
 ### W4 — Bound the schedule space in the SV-COMP strategy — **investigated, not a flag flip**
 
@@ -666,7 +811,7 @@ the unwind bound in the ordinary BMC sense, which the log line is careful about
 `--incremental-context-bound` is rejected in combination with `--incremental-bmc`
 (`driver.cpp:218`, #6480 — only one driver may own the outer loop), and the
 wrapper sends *every* concurrency task through `--incremental-bmc`
-(`esbmc-wrapper.py:315`). So W4 is a code change after all, but not for the
+(`esbmc-wrapper.py:318`). So W4 is a code change after all, but not for the
 reason anticipated above: not a soundness gap, but that the two deepening
 loops do not compose. Designing that composition is the remaining W4 work.
 
@@ -728,7 +873,7 @@ second half is now discharged above). The composition design is the open work.
 The wrapper cannot adopt `--incremental-context-bound`: it is rejected
 alongside `--incremental-bmc` (`driver.cpp:218`, #6480 — only one driver may own
 the outer loop) and the wrapper sends every concurrency task through
-`--incremental-bmc` (`esbmc-wrapper.py:315`). The two deepening loops do not
+`--incremental-bmc` (`esbmc-wrapper.py:318`). The two deepening loops do not
 compose because both own the *verdict*, not because they cannot run in sequence.
 
 `--falsify-context-bound N` gives up the half that collides. It deepens the

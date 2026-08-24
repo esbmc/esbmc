@@ -732,9 +732,17 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
 #define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
 #define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
 
+/* offsetof has to be an integer constant expression (C23 7.21p3,
+ * [support.types.layout]/1) and this expansion is not, so under it no constexpr
+ * or non-type template argument may be spelt with offsetof. clang's
+ * OffsetOfExpr is lowered in clang_c_convert.cpp and agrees with the expansion
+ * on every layout in regression/esbmc-cpp/cpp/offsetof_layout_parity. C keeps
+ * the expansion because dropping it there exposes #7127, a void*-arithmetic
+ * dereference defect that regression/esbmc/github_2512_* stands on. */
+#ifndef __cplusplus
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
-
+#endif
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)

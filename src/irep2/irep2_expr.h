@@ -1292,9 +1292,9 @@ ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_add);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_sub);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_mul);
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_div);
-/* IEEE 754 remainder (SMT-LIB fp.rem, C's remainder()): x - n*y with
- * n = rne(x/y). Exact for every input, so the rounding mode the macro
- * carries is ignored; it exists only to share the 2-op plumbing. */
+/** IEEE 754 remainder (SMT-LIB fp.rem, C's remainder()): x - n*y with
+ *  n = rne(x/y). Exact for every input, so the rounding mode the macro
+ *  carries is ignored; it exists only to share the 2-op plumbing. */
 ESBMC_DEFINE_IEEE_ARITH_2OP(ieee_rem);
 #undef ESBMC_DEFINE_IEEE_ARITH_2OP
 

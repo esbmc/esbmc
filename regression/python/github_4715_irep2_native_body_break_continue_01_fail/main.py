@@ -2,7 +2,7 @@
 # spike Phase C, esbmc/esbmc#4715). Pins that consuming break/continue
 # natively neither corrupts the loop's result nor suppresses bug detection:
 # with_continue(5) is 13, so the wrong-value assertion is a reachable
-# violation reported as VERIFICATION FAILED under --irep2-native-body.
+# violation reported as VERIFICATION FAILED under native conversion.
 
 
 def with_continue(n: int) -> int:

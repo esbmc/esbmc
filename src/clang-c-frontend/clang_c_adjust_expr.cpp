@@ -1,5 +1,6 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/arith/arith_tools.h>
@@ -67,7 +68,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if (
     symbol.get_type().is_code() &&
     has_prefix(symbol.id.as_string(), "c:@F@main"))
-    adjust_argc_argv(symbol);
+    declare_argc_argv(context, symbol);
 
   {
     typet t = symbol.get_type();
@@ -86,6 +87,18 @@ static bool is_shift_id(const irep_idt &id)
 
 void clang_c_adjust::adjust_expr(exprt &expr)
 {
+  // A derived->base conversion the frontend could not route through a
+  // "@base@" component; the displacement is only computable once the layout
+  // is padded, which is here. See clang_c_convertert::get_cast_expr (#7025).
+  const irep_idt dtb_base = expr.get("#derived_to_base");
+  if (!dtb_base.empty())
+  {
+    expr.remove("#derived_to_base");
+    adjust_expr(expr);
+    adjust_derived_to_base(expr, dtb_base);
+    return;
+  }
+
   adjust_type(expr.type());
 
   if (expr.id() == "sideeffect")
@@ -186,15 +199,11 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_ptr_mem(expr);
   }
-  else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
-  {
-    adjust_operands(expr);
-    adjust_base_to_derived(expr);
-  }
   else
   {
     // Just check operands of everything else
     adjust_operands(expr);
+    adjust_base_to_derived(expr);
   }
 }
 
@@ -285,8 +294,162 @@ static bool base_subobject_offset(
   return false;
 }
 
+// How far `c`, a component of the base, has moved in the derived struct.
+// Nothing if the derived has no such member: matching is on type and on which
+// class declared the member, not just on the name, because
+// is_duplicate_component merges by name alone -- two bases with a same-named
+// member share one slot, and a name-only match would confidently land in the
+// other base's storage. A member the base itself declares is owned by it.
+static std::optional<BigInt> member_delta(
+  const namespacet &ns,
+  const struct_typet &ds,
+  const type2tc &d2,
+  const type2tc &b2,
+  const struct_typet::componentt &c,
+  const irep_idt &base_id)
+{
+  const struct_typet::componentt &dc = ds.get_component(c.get_name());
+  const irep_idt owner =
+    c.get("#base_owner").empty() ? base_id : c.get("#base_owner");
+  if (dc.is_nil() || dc.type() != c.type() || dc.get("#base_owner") != owner)
+    return std::nullopt;
+
+  return member_offset(d2, c.get_name(), &ns) -
+         member_offset(b2, c.get_name(), &ns);
+}
+
+// Displacement of `base_id`'s members inside the flattened `derived` layout,
+// which get_base_components_methods produces for any hierarchy containing a
+// virtual base. Every member of the base must appear in the derived struct at
+// one common delta; a virtual base shared by two sibling bases has no such
+// delta, so the caller keeps the unadjusted pointer. Padding is already in
+// place here: adjust() completes every type symbol before any value.
+static bool flattened_base_offset(
+  const namespacet &ns,
+  const typet &derived,
+  const irep_idt &base_id,
+  BigInt &offset)
+{
+  const typet &d = ns.follow(derived);
+  const symbolt *base_sym = ns.lookup(base_id);
+  if (!d.is_struct() || !base_sym)
+    return false;
+
+  const typet &b = ns.follow(base_sym->get_type());
+  if (!b.is_struct())
+    return false;
+
+  const struct_typet &ds = to_struct_type(d);
+  const struct_typet &bs = to_struct_type(b);
+
+  // A base that keeps the nested layout reaches its own bases through an
+  // "@base@" component, yet get_base_components_methods *also* copies those
+  // ancestors' fields flat into the derived struct. The two copies alias only
+  // at displacement zero, which is what every other access assumes (the
+  // <ios>/<istream>/<ostream> models rely on it), so leave such a base alone.
+  for (const auto &c : bs.components())
+    if (c.get_bool("is_base_subobject"))
+      return false;
+
+  const type2tc d2 = migrate_type(ds);
+  const type2tc b2 = migrate_type(bs);
+
+  bool seen = false;
+  BigInt delta = 0;
+  for (const auto &c : bs.components())
+  {
+    if (c.get_is_padding() || c.get_is_unnamed_bitfield())
+      continue;
+
+    const std::optional<BigInt> d = member_delta(ns, ds, d2, b2, c, base_id);
+    if (!d)
+      return false;
+    if (seen && *d != delta)
+      return false;
+    delta = *d;
+    seen = true;
+  }
+
+  if (!seen || delta < 0)
+    return false;
+
+  offset = delta;
+  return true;
+}
+
+static bool has_side_effect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
+// Displace a derived->base pointer onto the base subobject under the legacy
+// flattened layout. See the marker set in clang_c_convertert::get_cast_expr
+// (#7025).
+void clang_c_adjust::adjust_derived_to_base(
+  exprt &expr,
+  const irep_idt &base_id)
+{
+  // Pointer form: (Base *)derived_ptr. Value form: the derived lvalue itself,
+  // which clang leaves in place for an implicit object argument.
+  const bool ptr_mode = expr.type().is_pointer();
+  const typet derived = ptr_mode ? expr.type().subtype() : expr.type();
+
+  BigInt offset = 0;
+  if (!flattened_base_offset(ns, derived, base_id, offset) || offset == 0)
+    return;
+
+  // The null guard below names the operand twice, and side effects are not
+  // lifted out until remove_sideeffects; displacing `f()` would call f twice.
+  // Decline rather than duplicate.
+  if (has_side_effect(expr))
+  {
+    log_debug(
+      "c++",
+      "derived-to-base displacement onto {} skipped: side-effecting operand",
+      base_id);
+    return;
+  }
+
+  const typet base_ptr = pointer_typet(symbol_typet(base_id));
+  exprt src = expr;
+  if (!ptr_mode)
+    src = address_of_exprt(expr);
+
+  typet char_ptr = pointer_typet(char_type());
+  exprt adjusted = src;
+  gen_typecast(ns, adjusted, char_ptr);
+  // plus_exprt leaves the node's type nil, so set it before casting back.
+  adjusted = plus_exprt(adjusted, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  gen_typecast(ns, adjusted, base_ptr);
+
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. A value-form operand is an lvalue
+  // and can never be null, so only the pointer form needs the guard.
+  if (ptr_mode)
+  {
+    exprt guarded = if_exprt(
+      equality_exprt(src, gen_zero(src.type())), gen_zero(base_ptr), adjusted);
+    guarded.location() = expr.location();
+    expr = guarded;
+    return;
+  }
+
+  // dereference_exprt takes the pointer type and uses its subtype.
+  dereference_exprt deref(adjusted, base_ptr);
+  deref.location() = expr.location();
+  expr = deref;
+}
+
 void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 {
+  if (!expr.get_bool("#base_to_derived"))
+    return;
   expr.remove("#base_to_derived");
 
   if (expr.operands().size() != 1)
@@ -1028,6 +1191,41 @@ void clang_c_adjust::adjust_type(typet &type)
   }
 }
 
+/// A compound assignment over a complex operand has to be expanded here.
+/// goto_convert's remove_assignment rebuilds `a op b` long after adjustment, so
+/// the component-level lowering would never see it and the SMT layer would be
+/// handed a raw complex operator (#6713). An lvalue with its own side effect is
+/// left alone: expanding it would evaluate that effect twice, and a loud
+/// failure downstream beats a wrong answer.
+bool clang_c_adjust::lower_complex_compound_assignment(exprt &expr)
+{
+  exprt &op0 = expr.op0();
+  exprt &op1 = expr.op1();
+  const typet type0 = op0.type();
+
+  if (
+    (type0.id() != "complex" && op1.type().id() != "complex") ||
+    contains_sideeffect(op0))
+    return false;
+
+  static const std::map<irep_idt, irep_idt> complex_compound_ops = {
+    {"assign+", "+"}, {"assign-", "-"}, {"assign*", "*"}, {"assign_div", "/"}};
+
+  auto it = complex_compound_ops.find(expr.statement());
+  if (it == complex_compound_ops.end())
+    return false;
+
+  exprt rhs(it->second, type0);
+  rhs.location() = expr.location();
+  rhs.copy_to_operands(op0, op1);
+  if (!lower_complex_binary_arithmetic(rhs))
+    return false;
+
+  expr.statement("assign");
+  expr.op1().swap(rhs);
+  return true;
+}
+
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 {
   const irep_idt &statement = expr.statement();
@@ -1044,44 +1242,9 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     return;
   }
 
-  // A compound assignment over a complex operand has to be expanded here.
-  // goto_convert's remove_assignment rebuilds `a op b` long after adjustment,
-  // so the component-level lowering would never see it and the SMT layer
-  // would be handed a raw complex operator (#6713). An lvalue with its own
-  // side effect is left alone: expanding it would evaluate that effect twice,
-  // and a loud failure downstream beats a wrong answer.
-  if (
-    (type0.id() == "complex" || op1.type().id() == "complex") &&
-    !contains_sideeffect(op0))
-  {
-    static const std::map<irep_idt, irep_idt> complex_compound_ops = {
-      {"assign+", "+"},
-      {"assign-", "-"},
-      {"assign*", "*"},
-      {"assign_div", "/"}};
+  if (lower_complex_compound_assignment(expr))
+    return;
 
-    auto it = complex_compound_ops.find(statement);
-    if (it != complex_compound_ops.end())
-    {
-      exprt rhs(it->second, type0);
-      rhs.location() = expr.location();
-      rhs.copy_to_operands(op0, op1);
-      if (lower_complex_binary_arithmetic(rhs))
-      {
-        expr.statement("assign");
-        expr.op1().swap(rhs);
-        return;
-      }
-    }
-  }
-
-  /* assign_lshr / assign_ashr are the already-specialised forms: this
-   * function can see the same expression twice (adjust walks types before
-   * values), and on the second visit the statement has been rewritten. They
-   * must be recognised here too, or they fall through to the two-operand
-   * gen_typecast_arithmetic below, which converts the shift COUNT to the
-   * shifted type -- for a fixed-point LHS that reinterprets `1` as one ulp
-   * and the shift becomes `x >> -1`. */
   if (
     statement == "assign_shl" || statement == "assign_shr" ||
     statement == "assign_lshr" || statement == "assign_ashr")
@@ -1090,8 +1253,8 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
 
     if (is_number(op1.type()))
     {
-      /* assign_shl needs no specialisation, and the *shr forms are already
-       * specialised (a re-visit); either way the count stays integral. */
+      // The C converter now picks the kind (§76); Solidity still emits the
+      // untyped assign_shr, so the rewrite below stays for it.
       if (
         statement == "assign_shl" || statement == "assign_lshr" ||
         statement == "assign_ashr")
@@ -1218,7 +1381,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
       }
       else
       {
-        // clang will complain about this already, no need for us to do the same!
+        // clang will complain about this already, no need for us to do the
+        // same!
 
         // maybe this is an undeclared function
         // let's just add it
@@ -1343,50 +1507,42 @@ void clang_c_adjust::adjust_function_call_arguments(
   }
 }
 
-static inline bool
-compare_float_suffix(const irep_idt &identifier, const std::string &name)
+/// The float functions that lower to a node taking the call's arguments
+/// unchanged, keyed by base name; null when `expr` is not such a call.
+///
+/// The match is on the callee's base name, which a program is free to reuse --
+/// `int remainder(int, int)` is an ordinary definition, and the nodes below are
+/// floating-point only (`ieee_rem2t::do_simplify` asserts on the type). Lower
+/// only when the call is actually shaped like the C library function, so a
+/// same-named integer function keeps its body.
+static const char *float_lowering_id(
+  const irep_idt &identifier,
+  const side_effect_expr_function_callt &expr)
 {
-  return (identifier == name) || ((identifier == (name + "f"))) ||
-         ((identifier == (name + "d"))) || ((identifier == (name + "l")));
-}
+  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  static const std::pair<const char *, const char *> lowerings[] = {
+    {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
 
-static inline bool
-compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
-{
-  // compare a given identifier with a set of possible names, e.g,
-  //
-  // compare_unscore_builtin(identifier, "isnan")
-  //
-  // will compare identifier to:
-  // isnan
-  // __isnan
-  // __isnanf
-  // __isnanl
-  // __isnand
-  // __builtin_isnan
-  // __builtin_isnanf
-  // __builtin_isnanl
-  // __builtin_isnand
-  const std::string builtin_name = "__builtin_" + name;
-  const std::string underscore_name = "__" + name;
+  /* c2goto compiles the models with this same binary, and libm/remainder.c's
+   * own call is what puts ieee_rem into the model. The shape test would strip
+   * it there, so only a program's call is checked -- which is where a
+   * same-named integer definition can appear. */
+  if (!config.options.get_bool_option("building-c-library"))
+  {
+    if (!expr.type().is_floatbv())
+      return nullptr;
 
-  return (identifier == name) ||
-         compare_float_suffix(identifier, builtin_name) ||
-         (identifier == builtin_name) ||
-         compare_float_suffix(identifier, underscore_name) ||
-         (identifier == underscore_name);
-}
+    for (const exprt &arg : expr.arguments())
+      if (!arg.type().is_floatbv())
+        return nullptr;
+  }
 
-/// True for the abs builtins that may be lowered to an `abs` node. That node
-/// becomes `(x >= 0) ? x : -x`, ill-typed for anything but an arithmetic
-/// argument, so a program overloading the name for a class type --
-/// std::abs(complex) is why <complex> ships without it -- keeps its call.
-static inline bool is_abs_builtin_name(const irep_idt &identifier)
-{
-  return identifier == "abs" || identifier == "labs" ||
-         identifier == "imaxabs" || identifier == "llabs" ||
-         compare_float_suffix(identifier, "fabs") ||
-         compare_unscore_builtin(identifier, "fabs");
+  for (const auto &[name, node_id] : lowerings)
+    if (compare_float_suffix(identifier, name))
+      return node_id;
+
+  return nullptr;
 }
 
 /// The `abs` node lowers to `(x >= 0) ? x : -x`, which is ill-typed for
@@ -1404,25 +1560,6 @@ bool clang_c_adjust::has_single_arithmetic_argument(
          !ns.follow(expr.arguments()[0].type()).is_fixedbv();
 }
 
-/// The lowerings in do_special_functions match a callee's base name, so a
-/// program that defines one of these names itself would have its body discarded
-/// and the builtin verified in its place (#6904). These are all spellings a
-/// program is free to reuse -- `mylib::abs`, `mylib::isinf` -- unlike the
-/// `__builtin_`-prefixed and CPROVER-prefixed entries, which are reserved.
-static inline bool is_name_matched_builtin(const irep_idt &identifier)
-{
-  return is_abs_builtin_name(identifier) ||
-         compare_unscore_builtin(identifier, "isnan") ||
-         compare_unscore_builtin(identifier, "isinf") ||
-         compare_unscore_builtin(identifier, "isnormal") ||
-         compare_unscore_builtin(identifier, "signbit") ||
-         compare_unscore_builtin(identifier, "isfinite") ||
-         compare_float_suffix(identifier, "finite") ||
-         compare_unscore_builtin(identifier, "finite") ||
-         compare_unscore_builtin(identifier, "inf") ||
-         compare_unscore_builtin(identifier, "huge_val");
-}
-
 /// True when lowering this call would throw away a definition the program
 /// supplies. Libc's own declarations are bodiless and the <cmath> overloads
 /// forward to their `__builtin_` spelling, so both still lower.
@@ -1430,18 +1567,8 @@ bool clang_c_adjust::shadows_user_definition(
   const irep_idt &identifier,
   const exprt &f_op) const
 {
-  if (!is_name_matched_builtin(identifier))
-    return false;
-
-  /* c2goto compiles the operational models themselves, where libm/fabs.c and
-   * friends do define these names. Those definitions are the models, not a
-   * program's, so honouring them here would stop every call inside the models
-   * folding to its native node and blow the encoding up (#6904). */
-  if (config.options.get_bool_option("building-c-library"))
-    return false;
-
-  const symbolt *s = context.find_symbol(to_symbol_expr(f_op).get_identifier());
-  return s != nullptr && !s->get_value().is_nil();
+  return builtin_shadows_user_definition(
+    context, identifier, to_symbol_expr(f_op).get_identifier());
 }
 
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
@@ -1673,15 +1800,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(op);
     }
-    else if (compare_float_suffix(identifier, "nearbyint"))
+    else if (const char *node_id = float_lowering_id(identifier, expr))
     {
-      exprt new_expr("nearbyint", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
-    }
-    else if (compare_float_suffix(identifier, "fma"))
-    {
-      exprt new_expr("ieee_fma", expr.type());
+      exprt new_expr(node_id, expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
@@ -1904,7 +2025,7 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
   gen_typecast_bool(ns, expr.op1());
 }
 
-void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
+void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 {
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.get_type()).arguments();

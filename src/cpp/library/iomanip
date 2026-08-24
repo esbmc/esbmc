@@ -3,17 +3,72 @@
 
 #include "definitions.h"
 #include "ios"
+#if __cplusplus >= 201103L
+#  include "ctime"   /* std::tm, for put_time */
+#  include "iosfwd"  /* ostream, declared only -- see below */
+#endif
 
 namespace std
 {
 //Parameterized manipulators
 
-smanip setiosflags(ios_base::fmtflags mask);
-smanip resetiosflags(ios_base::fmtflags mask);
-smanip setbase(int base);
-smanip setfill(char c);
-smanip setprecision(int n);
-smanip setw(int n);
+inline smanip setiosflags(ios_base::fmtflags mask)
+{
+  return smanip(smanip::_setiosflags, mask);
+}
+
+inline smanip resetiosflags(ios_base::fmtflags mask)
+{
+  return smanip(smanip::_resetiosflags, mask);
+}
+
+inline smanip setbase(int base)
+{
+  return smanip(smanip::_setbase, base);
+}
+
+inline smanip setfill(char c)
+{
+  return smanip(smanip::_setfill, c);
+}
+
+inline smanip setprecision(int n)
+{
+  return smanip(smanip::_setprecision, n);
+}
+
+inline smanip setw(int n)
+{
+  return smanip(smanip::_setw, n);
+}
+
+#if __cplusplus >= 201103L
+/* [ext.manip]: put_time returns an object of unspecified type, insertable into
+ * a basic_ostream. The stream models do not render text -- the manipulators
+ * above only set flags -- so this carries its arguments and inserts nothing.
+ * The insertion operator needs ostream declared, not defined, because it only
+ * returns the reference it was given. ESBMC's own message.h uses put_time, so
+ * without it no header reaching message.h parses. */
+template <class CharT>
+struct __put_time_manip
+{
+  const tm *_tmb;
+  const CharT *_fmt;
+};
+
+template <class CharT>
+inline __put_time_manip<CharT> put_time(const tm *tmb, const CharT *fmt)
+{
+  __put_time_manip<CharT> m = {tmb, fmt};
+  return m;
+}
+
+template <class CharT>
+inline ostream &operator<<(ostream &os, const __put_time_manip<CharT> &)
+{
+  return os;
+}
+#endif
 
 } // namespace std
 

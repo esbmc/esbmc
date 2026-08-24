@@ -556,6 +556,66 @@ static void collect_self_attr_stores_of_param(
   }
 }
 
+/// True for `a, b = x` / `first, *rest = x`, which iterates `x`. Unpacking is
+/// evidence that a parameter is a sequence, but on its own it says nothing
+/// about the element type, so it is used only where the call sites agree on
+/// one (see seed_unpacked_param_type).
+static bool
+node_unpacks_param(const std::string &param_name, const nlohmann::json &node)
+{
+  if (node.value("_type", "") != "Assign" || !node.contains("value"))
+    return false;
+
+  const nlohmann::json &value = node["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Name" ||
+    value.value("id", "") != param_name)
+    return false;
+
+  if (!node.contains("targets") || !node["targets"].is_array())
+    return false;
+
+  for (const auto &target : node["targets"])
+  {
+    const std::string kind =
+      target.is_object() ? target.value("_type", "") : "";
+    if (kind == "Tuple" || kind == "List")
+      return true;
+  }
+  return false;
+}
+
+/// True if `node` anywhere within it unpacks `param_name`; the unpacking is
+/// commonly guarded (`if xs: first, *rest = xs`), so this has to look inside
+/// nested statements rather than only at the top level of the body.
+static bool
+body_unpacks_param(const std::string &param_name, const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      if (body_unpacks_param(param_name, child))
+        return true;
+    return false;
+  }
+
+  if (!node.is_object())
+    return false;
+
+  if (node_unpacks_param(param_name, node))
+    return true;
+
+  // A nested function rebinds the name, so its body is not evidence here.
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "Lambda")
+    return false;
+
+  for (const char *key : {"body", "orelse", "finalbody"})
+    if (node.contains(key) && body_unpacks_param(param_name, node[key]))
+      return true;
+  return false;
+}
+
 static bool node_uses_param_as_list_like(
   const std::string &param_name,
   const nlohmann::json &node)
@@ -753,6 +813,173 @@ static bool param_used_in_variable_index_subscript(
         return true;
   }
   return false;
+}
+
+/// Element type a bare `list` parameter receives, taken from the call sites
+/// that can be resolved statically. `list` alone carries no element type, so
+/// a subscript of such a parameter otherwise reads as Any and neither
+/// arithmetic nor equality on the result behaves (#7187). Every resolvable
+/// call site must agree, so a second caller passing a different element type
+/// cannot silently inherit the first one's.
+/// The list literal a call argument denotes, directly or through the binding
+/// of a Name. Returns false when the argument is not a statically resolvable
+/// list.
+static bool list_literal_for_call_arg(
+  const nlohmann::json &arg,
+  const std::string &enclosing_function,
+  const nlohmann::json &ast,
+  nlohmann::json &out)
+{
+  if (!arg.is_object())
+    return false;
+
+  out = arg;
+  if (arg.value("_type", "") == "Name" && arg.contains("id"))
+  {
+    const nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"].get<std::string>(), enclosing_function, ast);
+    if (
+      !decl.is_object() || !decl.contains("value") ||
+      !decl["value"].is_object())
+      return false;
+    out = decl["value"];
+  }
+
+  return out.value("_type", "") == "List";
+}
+
+/// Refines one unannotated (Any) parameter to the list model when the body
+/// or the call sites show it holds a list, and records the element type when
+/// one is known.
+void python_converter::refine_any_param_to_list(
+  code_typet::argumentt &param_arg,
+  const nlohmann::json &body,
+  const std::string &func_name,
+  size_t param_index)
+{
+  const std::string param_name = param_arg.get_base_name().as_string();
+  if (param_name == "self" || param_name == "cls" || param_name.empty())
+    return;
+  if (param_arg.type() != any_type())
+    return;
+
+  typet elem_type;
+  if (!param_is_list_like(param_name, body, func_name, param_index, elem_type))
+    return;
+
+  param_arg.type() = type_handler_.get_list_type();
+
+  const std::string param_id = param_arg.cmt_identifier().as_string();
+  if (param_id.empty())
+    return;
+  if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
+    param_sym->set_type(param_arg.type());
+  if (elem_type != typet())
+    python_list::add_type_info_entry(param_id, "", elem_type);
+}
+
+/// Whether an unannotated parameter should be refined to the list model.
+/// Body usage (`len(x)`, `x[i]`, a list mutator) is enough on its own.
+/// Unpacking (`first, *rest = x`) shows the parameter is a sequence but not
+/// what it holds, so it counts only when the call sites agree on an element
+/// type -- without one the elements read back untyped, which turns the
+/// unpacking's clean refusal into a wrong verdict (quixbugs powerset).
+/// `elem_type` receives that agreed type, or stays nil.
+bool python_converter::param_is_list_like(
+  const std::string &param_name,
+  const nlohmann::json &body,
+  const std::string &func_name,
+  size_t param_index,
+  typet &elem_type) const
+{
+  if (param_is_list_like_in_body(param_name, body))
+    return true;
+
+  return body_unpacks_param(param_name, body) &&
+         infer_list_elem_type_from_call_sites(
+           func_name, param_index, elem_type);
+}
+
+/// Records the element type of a list-annotated parameter, so a subscript of
+/// it reads at the right type. `list[T]` states it; a bare `list` has it
+/// recovered from the call sites (#7187).
+void python_converter::seed_list_param_element_type(
+  const nlohmann::json &element,
+  const symbol_id &id,
+  const std::string &arg_id,
+  size_t param_index)
+{
+  const nlohmann::json &annotation = element["annotation"];
+  const std::string kind = annotation.value("_type", "");
+
+  if (
+    kind == "Subscript" && annotation.contains("value") &&
+    annotation["value"].contains("id"))
+  {
+    const std::string container = annotation["value"]["id"].get<std::string>();
+    if (container != "List" && container != "list")
+      return;
+    const typet elem_type = type_handler_.get_list_type(element).subtype();
+    if (!elem_type.is_empty())
+      python_list::add_type_info_entry(arg_id, "", elem_type);
+    return;
+  }
+
+  const std::string ann_id = annotation.value("id", "");
+  if (
+    kind != "Name" || (ann_id != "list" && ann_id != "List") ||
+    !current_class_name_.empty())
+    return;
+
+  typet elem_type;
+  if (infer_list_elem_type_from_call_sites(
+        id.get_function(), param_index, elem_type))
+    python_list::add_type_info_entry(arg_id, "", elem_type);
+}
+
+bool python_converter::infer_list_elem_type_from_call_sites(
+  const std::string &func_name,
+  size_t param_index,
+  typet &out) const
+{
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  bool found = false;
+  typet resolved;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      !call.contains("func") || !call["func"].is_object() ||
+      call["func"].value("_type", "") != "Name" ||
+      call["func"].value("id", "") != func_name || !call.contains("args") ||
+      call["args"].size() <= param_index)
+      continue;
+
+    nlohmann::json literal;
+    if (!list_literal_for_call_arg(
+          call["args"][param_index],
+          site.enclosing_function,
+          *ast_json,
+          literal))
+      continue;
+
+    python_list list_helper(const_cast<python_converter &>(*this), literal);
+    const typet candidate = list_helper.infer_literal_element_type(literal);
+    if (candidate == typet() || candidate.is_empty())
+      continue;
+
+    // Disagreeing call sites leave the parameter untyped rather than pick one.
+    if (found && resolved != candidate)
+      return false;
+    resolved = candidate;
+    found = true;
+  }
+
+  if (found)
+    out = resolved;
+  return found;
 }
 
 bool python_converter::try_infer_numpy_param_type(
@@ -998,21 +1225,7 @@ size_t python_converter::register_function_argument(
     get_typechecker().cache_annotation_types(
       *stored_param, element["annotation"]);
 
-    if (
-      element["annotation"].contains("_type") &&
-      element["annotation"]["_type"] == "Subscript" &&
-      element["annotation"].contains("value") &&
-      element["annotation"]["value"].contains("id"))
-    {
-      const std::string container_name =
-        element["annotation"]["value"]["id"].get<std::string>();
-      if (container_name == "List" || container_name == "list")
-      {
-        typet elem_type = type_handler_.get_list_type(element).subtype();
-        if (!elem_type.is_empty())
-          python_list::add_type_info_entry(arg_id, "", elem_type);
-      }
-    }
+    seed_list_param_element_type(element, id, arg_id, inserted_index);
   }
 
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
@@ -1093,28 +1306,8 @@ void python_converter::process_function_arguments(
         {
           exprt default_expr = get_expr(defaults[i]);
           type.arguments()[positional_index].default_value() = default_expr;
-
-          // If the default is a function pointer and the parameter was
-          // annotated as Any (void*), upgrade the parameter type to match.
-          // This enables indirect-call resolution for function-alias defaults
-          // like def h(op=g) where g = f (a named function).
-          if (
-            default_expr.type().is_pointer() &&
-            default_expr.type().subtype().is_code())
-          {
-            auto &param_arg = type.arguments()[positional_index];
-            if (param_arg.type() == any_type())
-            {
-              param_arg.type() = default_expr.type();
-              std::string param_id = param_arg.cmt_identifier().as_string();
-              if (!param_id.empty())
-              {
-                symbolt *param_sym = symbol_table_.find_symbol(param_id);
-                if (param_sym)
-                  param_sym->set_type(default_expr.type());
-              }
-            }
-          }
+          upgrade_param_type_from_default(
+            type.arguments()[positional_index], default_expr);
         }
       }
     }
@@ -1131,6 +1324,8 @@ void python_converter::process_function_arguments(
       {
         exprt default_expr = get_expr(kw_defaults[i]);
         type.arguments()[kwonly_indices[i]].default_value() = default_expr;
+        upgrade_param_type_from_default(
+          type.arguments()[kwonly_indices[i]], default_expr);
       }
     }
   }
@@ -1144,34 +1339,19 @@ void python_converter::process_function_arguments(
 
   // Refine unannotated Any parameters to list model type when body usage
   // clearly matches list semantics (len(x), x[i], list mutator methods).
-  // Restrict this refinement to the program's own files (the entry file or
-  // an extra positional command-line file, github #6211) to avoid affecting
-  // imported module internals.
-  if (is_program_file(location.get_file().as_string()))
+  // Excluded for the operational models, whose parameters are deliberately
+  // typed and whose internals this must not disturb (github #6211). An
+  // ordinary imported module is as much part of the program as the entry
+  // file: leaving its parameters Any made len() over one run strlen rather
+  // than the list model.
+  if (!is_model_file(function_node))
   {
     for (auto &param_arg : type.arguments())
-    {
-      const std::string param_name = param_arg.get_base_name().as_string();
-      if (param_name == "self" || param_name == "cls" || param_name.empty())
-        continue;
-
-      if (param_arg.type() != any_type())
-        continue;
-
-      if (!param_is_list_like_in_body(param_name, body))
-        continue;
-
-      typet list_t = type_handler_.get_list_type();
-      param_arg.type() = list_t;
-
-      const std::string param_id = param_arg.cmt_identifier().as_string();
-      if (!param_id.empty())
-      {
-        symbolt *param_sym = symbol_table_.find_symbol(param_id);
-        if (param_sym)
-          param_sym->set_type(list_t);
-      }
-    }
+      refine_any_param_to_list(
+        param_arg,
+        body,
+        id.get_function(),
+        &param_arg - type.arguments().data());
   }
 
   for (auto &param_arg : type.arguments())
@@ -1368,6 +1548,31 @@ typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
   return empty_typet();
 }
 
+/// A default value is direct evidence of an unannotated parameter's type. A
+/// function-pointer default enables indirect-call resolution (`def h(op=g)`);
+/// a container default keeps len()/subscript off the string path, and unlike
+/// the body-usage refinement below it holds inside an imported module too.
+void python_converter::upgrade_param_type_from_default(
+  code_typet::argumentt &param_arg,
+  const exprt &default_expr)
+{
+  if (param_arg.type() != any_type())
+    return;
+
+  const typet &default_type = default_expr.type();
+  const bool is_function_pointer =
+    default_type.is_pointer() && default_type.subtype().is_code();
+  if (!is_function_pointer && default_type != type_handler_.get_list_type())
+    return;
+
+  param_arg.type() = default_type;
+  const std::string param_id = param_arg.cmt_identifier().as_string();
+  if (param_id.empty())
+    return;
+  if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
+    param_sym->set_type(default_type);
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -1381,9 +1586,17 @@ void python_converter::get_function_definition(
   bool annotation_is_optional = false;
 
   // Determine return type
-  if (
-    return_node.is_null() ||
-    (return_node["_type"] == "Constant" && return_node["value"].is_null()))
+  if (return_node.is_null())
+  {
+    // Detects a genuine int/str return divergence, so the function gets a
+    // tagged return type instead of the post-hoc scan below narrowing to
+    // whichever branch it sees first.
+    type.return_type() =
+      dynamic_type_handler_.detect_dynamic_return_type(function_node["body"])
+        ? type_handler_.get_tagged_object_type()
+        : empty_typet();
+  }
+  else if (return_node["_type"] == "Constant" && return_node["value"].is_null())
   {
     type.return_type() = empty_typet();
   }
@@ -1599,6 +1812,7 @@ void python_converter::get_function_definition(
 
   bool already_optional =
     annotation_is_optional || is_user_class_pointer(type.return_type()) ||
+    type_handler_.is_tagged_scalar_type(type.return_type()) ||
     (type.return_type().is_struct() && to_struct_type(type.return_type())
                                          .tag()
                                          .as_string()

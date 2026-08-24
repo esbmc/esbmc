@@ -1,3 +1,4 @@
+#include <c2goto/cprover_library.h>
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_convert_functions.h>
@@ -78,6 +79,10 @@ public:
       log_error("Must set output file");
       return 1;
     }
+
+    /* The model sources are named by their VFS paths, so they have to be in the
+     * registry before anything tries to open one. */
+    register_bundled_libc();
 
     if (parse(cmdline))
       return 1;
