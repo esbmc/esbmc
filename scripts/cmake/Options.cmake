@@ -59,7 +59,9 @@ option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (def
 # PRE-BUILT DEPENDENCIES
 #############################
 
-# these URLs are all for an x86_64 target
+# Pre-built LLVM toolchains. Windows ships upstream's x86_64 archive; Linux
+# x86_64 uses a hand-trimmed archive on the ESBMC release, Linux aarch64 uses
+# the trimmed archive produced by esbmc/llvm (same LLVM major, 22).
 if(WIN32)
   set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang+llvm-22.1.4-x86_64-pc-windows-msvc.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-22.1.4-x86_64-pc-windows-msvc")
@@ -70,8 +72,17 @@ if(WIN32)
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
   set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
 else()
-  set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v8.3/clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
-  set(DEFAULT_LLVM_NAME "clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04")
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    # Trimmed from upstream LLVM-22.1.6-Linux-ARM64 by esbmc/llvm's
+    # tools/trim.sh (see the Build trimmed LLVM archive workflow there). The
+    # archive's top-level directory is preserved verbatim so SetupLocalLLVM's
+    # ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME} extraction contract holds.
+    set(DEFAULT_LLVM_URL "https://github.com/esbmc/llvm/releases/download/llvm-22.1.6-armv8/LLVM-22.1.6-Linux-ARM64-esbmc.tar.xz")
+    set(DEFAULT_LLVM_NAME "LLVM-22.1.6-Linux-ARM64")
+  else()
+    set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v8.3/clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
+    set(DEFAULT_LLVM_NAME "clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04")
+  endif()
 
   set(DEFAULT_CHERI_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/clang-cheri-17.zip")
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
