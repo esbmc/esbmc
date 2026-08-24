@@ -1741,6 +1741,25 @@ bool python_converter::is_tracked_numpy_view_id(
          numpy_transpose_view_info_.count(symbol_id) != 0;
 }
 
+bool python_converter::has_numpy_transpose_view_of(
+  const std::string &source_id) const
+{
+  if (numpy_transpose_view_info_.count(source_id) != 0)
+    return true;
+
+  const std::string storage_id =
+    resolve_numpy_array_storage_alias_id(source_id);
+  for (const auto &entry : numpy_transpose_view_info_)
+  {
+    if (
+      resolve_numpy_array_storage_alias_id(entry.second.source_id) ==
+      storage_id)
+      return true;
+  }
+
+  return false;
+}
+
 void python_converter::reject_unknown_numpy_view_call(
   const nlohmann::json &node)
 {
@@ -2427,6 +2446,8 @@ void python_converter::mirror_numpy_transpose_assignment(
   const std::string root_id = resolve_name_symbol_id(root_name);
   if (root_id.empty())
     return;
+  const std::string storage_root_id =
+    resolve_numpy_array_storage_alias_id(root_id);
 
   auto direct = numpy_transpose_view_info_.find(root_id);
   if (direct != numpy_transpose_view_info_.end())
@@ -2443,7 +2464,7 @@ void python_converter::mirror_numpy_transpose_assignment(
   for (const auto &entry : numpy_transpose_view_info_)
   {
     const numpy_transpose_view_infot &view = entry.second;
-    if (view.source_id != root_id)
+    if (resolve_numpy_array_storage_alias_id(view.source_id) != storage_root_id)
       continue;
 
     std::optional<std::vector<long long>> cell_indices =
@@ -2454,6 +2475,21 @@ void python_converter::mirror_numpy_transpose_assignment(
   }
 }
 
+void python_converter::mirror_numpy_transpose_assignment_from_targets(
+  const nlohmann::json &ast_node,
+  const exprt &rhs,
+  const locationt &location,
+  codet &target_block)
+{
+  if (
+    !ast_node.contains("targets") || !ast_node["targets"].is_array() ||
+    ast_node["targets"].empty())
+    return;
+
+  mirror_numpy_transpose_assignment(
+    ast_node["targets"][0], rhs, location, target_block);
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -2462,7 +2498,6 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
-  clear_numpy_transpose_views_of(lhs_id);
 
   if (rhs_node.value("_type", "") == "Name" && rhs_node.contains("id"))
   {
@@ -2496,6 +2531,7 @@ void python_converter::update_numpy_array_binding(
     }
   }
 
+  clear_numpy_transpose_views_of(lhs_id);
   clear_numpy_array_storage_aliases_for(lhs_id);
 
   if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
@@ -3449,6 +3485,8 @@ void python_converter::handle_function_call_rhs(
   }
 
   target_block.copy_to_operands(rhs);
+  mirror_numpy_transpose_assignment_from_targets(
+    ast_node, lhs, location, target_block);
 }
 
 exprt python_converter::handle_string_literal_rhs(
@@ -3629,7 +3667,13 @@ bool python_converter::try_handle_flat_index_assignment(
   {
     const std::string root_id = resolve_name_symbol_id(root_name);
     if (!root_id.empty())
+    {
       reject_unsafe_numpy_view_write_to(root_id);
+      if (has_numpy_transpose_view_of(root_id))
+        throw std::runtime_error(
+          "TypeError: mutation through .flat with a live numpy transpose view "
+          "is not supported");
+    }
   }
 
   exprt array_expr = get_expr(receiver);

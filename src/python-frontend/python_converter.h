@@ -1164,6 +1164,8 @@ private:
 
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
+  bool has_numpy_transpose_view_of(const std::string &source_id) const;
+
   void clear_numpy_view_copy(const exprt &lhs);
 
   void
@@ -1200,6 +1202,12 @@ private:
 
   void mirror_numpy_transpose_assignment(
     const nlohmann::json &target,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block);
+
+  void mirror_numpy_transpose_assignment_from_targets(
+    const nlohmann::json &ast_node,
     const exprt &rhs,
     const locationt &location,
     codet &target_block);
