@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body IREP2-native code_return2t dispatcher (W1-loc
+// Exercises the IREP2-native code_return2t dispatcher (W1-loc
 // spike Phase C, esbmc/esbmc#4715): inc()/doubled() are value-returning functions
 // whose bodies reduce to a side-effect-free return, so goto_convert consumes each
 // code_return2t natively (a RETURN carrying the statement's own value, then an
