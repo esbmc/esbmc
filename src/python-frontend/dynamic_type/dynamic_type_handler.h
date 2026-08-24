@@ -21,8 +21,9 @@ public:
   dynamic_type_handler(python_converter &converter, type_handler &type_handler);
 
   /**
-   * @brief Names of variables whose two branches assign
-   * genuinely incompatible literal types
+   * @brief Names assigned genuinely incompatible literal types across
+   * every branch of `if_node`, following nested if/else (including elif)
+   * on either side; a name must be assigned in every branch to qualify
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
@@ -169,6 +170,20 @@ private:
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left,
+    const locationt &location);
+  exprt build_sub_tagged(const exprt &lhs, const exprt &rhs);
+  exprt build_div_tagged(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
+
+  /**
+   * @brief Emits a catchable ZeroDivisionError raise, guarded so it only
+   * fires when `type_ok` holds and `divisor` is zero
+   */
+  void guard_zero_division(
+    const exprt &divisor,
+    const exprt &type_ok,
     const locationt &location);
 
   python_converter &converter_;
