@@ -183,6 +183,8 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_code_expression2t(expr))
     adjust_expression_statement(expr);
+  if (is_dereference2t(expr))
+    adjust_dereference(expr);
 
   adjust_sole_arms_tail(expr);
 }
@@ -482,8 +484,11 @@ void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
   else
     end_location.make_nil();
 
-  const expr2tc bare =
-    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+  // pragma_unroll_count is excluded from code_for2t::fields, so it does not
+  // participate in equality and a rebuild that drops it compares equal to one
+  // that keeps it. Every loop rebuild in this pass has to carry it explicitly.
+  const expr2tc bare = code_for2tc(
+    expr2tc(), f.cond, f.iter, f.body, f.location, f.pragma_unroll_count);
 
   // Splice a block-shaped init rather than nesting it: an inner block would end
   // the declaration's scope at its own closing brace, so the variable would be
@@ -613,17 +618,18 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
   else if (is_code_while2t(expr))
   {
     const code_while2t &w = to_code_while2t(expr);
-    expr = code_while2tc(cond, w.body, w.location);
+    expr = code_while2tc(cond, w.body, w.location, w.pragma_unroll_count);
   }
   else if (is_code_dowhile2t(expr))
   {
     const code_dowhile2t &w = to_code_dowhile2t(expr);
-    expr = code_dowhile2tc(cond, w.body, w.location);
+    expr = code_dowhile2tc(cond, w.body, w.location, w.pragma_unroll_count);
   }
   else
   {
     const code_for2t &f = to_code_for2t(expr);
-    expr = code_for2tc(f.init, cond, f.iter, f.body, f.location);
+    expr = code_for2tc(
+      f.init, cond, f.iter, f.body, f.location, f.pragma_unroll_count);
   }
 }
 
@@ -817,6 +823,23 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
     address_of2tc(
       elem, index2tc(elem, op, gen_zero(migrate_type(index_type())))),
     stmt.location);
+}
+
+/// Dereferencing a pointer to a function yields a function designator, which
+/// converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`, and
+/// `******f` too. clang_c_adjust::adjust_dereference re-takes the address for
+/// exactly this case; left bare, the code-typed dereference reaches a consumer
+/// that wants a pointer.
+///
+/// Only that arm is ported: the array and pointer-subtype arms above it
+/// retype a node the migration already builds with the right type, so no
+/// corpus input distinguishes them.
+void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
+{
+  if (!is_code_type(expr->type))
+    return;
+
+  expr = address_of2tc(expr->type, expr, true);
 }
 
 /// IREP2 form of clang_c_adjust::lower_complex_compound_assignment. `a op= b`
