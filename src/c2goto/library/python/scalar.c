@@ -187,3 +187,35 @@ __ESBMC_HIDE:;
   return tagged_is_left ? (double)tagged_val / (double)value
                         : (double)value / (double)tagged_val;
 }
+
+// Both operands tagged, so lhs/rhs already match the AST order.
+long long __python_scalar_sub_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for -");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0;
+  return *(const long long *)lhs->value - *(const long long *)rhs->value;
+}
+
+double __python_scalar_div_num_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  const PyObject *rhs,
+  int rhs_is_num)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    lhs && rhs && lhs_is_num && rhs_is_num,
+    "TypeError: unsupported operand type(s) for /");
+  if (!lhs || !rhs || !lhs_is_num || !rhs_is_num)
+    return 0.0;
+  return (double)(*(const long long *)lhs->value) /
+         (double)(*(const long long *)rhs->value);
+}
