@@ -23,6 +23,7 @@
 #include <util/expr/symbolic_types.h>
 
 #include <functional>
+#include <map>
 #include <set>
 
 using namespace json_utils;
@@ -96,8 +97,6 @@ void collect_bindings(
   }
   else if (target_kinds.count(kind))
     collect_bound_target(field(node, "target"), bound);
-  else if (kind == "withitem")
-    collect_bound_target(field(node, "optional_vars"), bound);
   else if (kind == "ExceptHandler")
     collect_bound_target(field(node, "name"), bound);
   else if (kind == "alias")
@@ -182,6 +181,36 @@ std::set<std::string> free_variables(const nlohmann::json &function_node)
   }
   return free;
 }
+
+/// How many times @p node's subtree writes each name, as an upper bound on the
+/// writes an enclosing function performs. Inside a nested scope (@p nested)
+/// only a `global`/`nonlocal` declaration counts: everything else a nested
+/// scope binds -- its parameters above all -- is its own storage, not the
+/// enclosing local a capture cell would freeze.
+void count_bindings(
+  const nlohmann::json &node,
+  std::map<std::string, std::size_t> &writes,
+  bool nested = false)
+{
+  if (node.is_array())
+  {
+    for (const auto &item : node)
+      count_bindings(item, writes, nested);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  const std::string kind = node.value("_type", "");
+  std::set<std::string> bound, rebound;
+  collect_bindings(kind, node, bound, rebound);
+  for (const std::string &name : nested ? rebound : bound)
+    ++writes[name];
+
+  const bool enters_scope = scope_kinds.count(kind) != 0;
+  for (const auto &child : node.items())
+    count_bindings(child.value(), writes, nested || enters_scope);
+}
 } // namespace
 
 code_blockt python_converter::create_capture_cells(
@@ -202,8 +231,15 @@ code_blockt python_converter::create_capture_cells(
 
   const std::string func_id = id.to_string();
   const std::string enclosing_scope = func_id.substr(0, func_id.rfind("@F@"));
-  const std::string module_name =
-    current_python_file.substr(0, current_python_file.find_last_of("."));
+
+  // A Python closure reads the enclosing binding, not a def-time copy, so the
+  // cell is only faithful while nothing rebinds the name after the `def`. The
+  // enclosing body may bind a local once (necessarily before the def -- a
+  // later-only binding has no symbol yet, so the loop below skips it) and a
+  // parameter not at all; anything more keeps the scope walk.
+  std::map<std::string, std::size_t> writes;
+  if (enclosing_function_node_ != nullptr)
+    count_bindings(field(*enclosing_function_node_, "body"), writes);
 
   auto add_static = [&](
                       const std::string &sym_id,
@@ -213,7 +249,8 @@ code_blockt python_converter::create_capture_cells(
     if (symbolt *existing = symbol_table_.find_symbol(sym_id))
       return symbol_expr(*existing);
 
-    symbolt symbol = create_symbol(module_name, name, sym_id, location, type);
+    symbolt symbol =
+      create_symbol(current_python_file, name, sym_id, location, type);
     symbol.lvalue = true;
     symbol.file_local = true;
     symbol.static_lifetime = true;
@@ -225,7 +262,7 @@ code_blockt python_converter::create_capture_cells(
   for (const std::string &name : free_variables(function_node))
   {
     symbolt *source = symbol_table_.find_symbol(enclosing_scope + "@" + name);
-    if (source == nullptr)
+    if (source == nullptr || writes[name] > (source->is_parameter ? 0u : 1u))
       continue;
 
     // Scalars only. A container (list/dict/str/instance) carries per-symbol
@@ -1986,6 +2023,9 @@ void python_converter::get_function_definition(
   // to the enclosing frame's local.
   code_blockt captures = create_capture_cells(function_node, id, location);
 
+  const nlohmann::json *enclosing_node = enclosing_function_node_;
+  enclosing_function_node_ = &function_node;
+
   // Stage 1 object-model migration (#3067): a function returning a user-defined
   // class instance returns a *reference* (pointer) to the heap object, matching
   // CPython and the pointer representation already used for locals, parameters
@@ -2293,6 +2333,7 @@ void python_converter::get_function_definition(
   added_symbol->set_value(function_body);
 
   pending_captures_ = std::move(captures);
+  enclosing_function_node_ = enclosing_node;
 
   scope_stack_.pop_back();
 

@@ -689,6 +689,10 @@ private:
   /// drained by get_block where the `def` statement sits.
   code_blockt pending_captures_;
 
+  /// The FunctionDef currently being converted, seen from a nested def as its
+  /// enclosing scope. Null at module level.
+  const nlohmann::json *enclosing_function_node_ = nullptr;
+
   /**
    * @brief Infer a numpy-array parameter's concrete array type by scanning
    * call sites of @c func_name across the module and returning the shape of
