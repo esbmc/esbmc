@@ -12,6 +12,9 @@ typedef struct
 } poly;
 void add(poly *r, const poly *b)
 {
+  /* Guarded: an unconditional is_fresh would also state r and b apart. */
+  __ESBMC_requires(r == NULL || __ESBMC_is_fresh(r, sizeof(poly)));
+  __ESBMC_requires(b == NULL || __ESBMC_is_fresh(b, sizeof(poly)));
   __ESBMC_requires(r != NULL && b != NULL);
   __ESBMC_assigns(r->coeffs);
   __ESBMC_ensures(1);
