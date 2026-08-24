@@ -1,0 +1,5 @@
+CORE
+main.py
+--dead-code-check
+^No provably-dead code found\.$
+^VERIFICATION SUCCESSFUL$

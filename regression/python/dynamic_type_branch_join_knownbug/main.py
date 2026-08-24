@@ -1,7 +1,9 @@
-# Runtime type diverges across branches (int vs str). ESBMC does not yet
-# support arithmetic on a variable whose type differs per branch, so it
-# refuses with a clean error. Correct verdict, once supported: VERIFICATION
-# FAILED ("ab" == 3 is False).
+# Runtime type diverges across branches (int vs str). '-'/'/' between two
+# such variables works now, but '+' still refuses with a clean error, since
+# a genuine str+str path would need string concatenation between two
+# tagged operands (unlike '-'/'/', which never apply to str in Python).
+# Correct verdict, once '+' is supported: VERIFICATION FAILED ("ab" == 3 is
+# False).
 cond = nondet_bool()
 if cond:
     x = 1

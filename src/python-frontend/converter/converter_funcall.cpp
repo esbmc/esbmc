@@ -493,11 +493,11 @@ std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
   if (arg_id.empty())
     return std::nullopt;
 
-  const auto it = numpy_pointer_view_lengths_.find(arg_id);
-  if (it == numpy_pointer_view_lengths_.end())
+  const auto it = numpy_pointer_view_info_.find(arg_id);
+  if (it == numpy_pointer_view_info_.end())
     return std::nullopt;
 
-  return from_integer(it->second, long_long_int_type());
+  return from_integer(it->second.length, long_long_int_type());
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)

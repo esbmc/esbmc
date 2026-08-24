@@ -193,6 +193,82 @@ public:
     const nlohmann::json &element);
 
   /**
+   * @brief np.diagonal(a[, offset=k])/a.diagonal([k]): a read-only strided
+   * pointer view into a's own buffer (ADR-NP-003 etapa 2). Public so
+   * numpy_call_expr.cpp's Call dispatch (where the offset/axis1/axis2
+   * argument parsing lives) can build it directly. Declines (returns
+   * std::nullopt) for a non-symbol/non-numpy-tracked source or a source
+   * that isn't a fixed-shape 2-D array (including 3-D+). When current_lhs
+   * is unset (the type-inference pre-pass that runs before the real `d`
+   * symbol exists), returns a same-typed placeholder pointer instead of
+   * declining, so that pass can read a type and complete -- the real,
+   * current_lhs-correct view is built on the unconditional second pass
+   * that follows for a Call RHS.
+   * @param array Source 2-D array expression.
+   * @param k     Literal diagonal offset (0 = main diagonal).
+   */
+  std::optional<exprt>
+  try_build_diagonal_pointer_view(const exprt &array, long long k);
+
+  /**
+   * @brief np.trace(a, offset=k): sum of the elements np.diagonal(a, k)
+   * would view, computed directly as a scalar reduction (no view is built).
+   * Public for the same reason as try_build_diagonal_pointer_view. Declines
+   * for a non-symbol/non-numpy-tracked source or a source that isn't a
+   * fixed-shape 2-D array.
+   * @param array Source 2-D array expression.
+   * @param k     Literal diagonal offset (0 = main diagonal).
+   */
+  std::optional<exprt> build_trace_reduction(const exprt &array, long long k);
+
+  /**
+   * @brief np.fill_diagonal(a, value): mutates a's main diagonal in place
+   * via converter_.add_instruction, using the same offset/stride math as
+   * try_build_diagonal_pointer_view/build_trace_reduction with k=0. `value`
+   * is either a scalar expression or a List literal whose length must equal
+   * the diagonal's exactly (throws ValueError otherwise, matching NumPy's
+   * own broadcasting rule for a 1-D val). Public for the same reason as
+   * try_build_diagonal_pointer_view. Declines (returns false) for a
+   * non-symbol/non-numpy-tracked source or a source that isn't a
+   * fixed-shape 2-D array.
+   * @param array      Source 2-D array expression.
+   * @param value_node Raw AST node for the value argument.
+   */
+  bool try_build_fill_diagonal_mutation(
+    const exprt &array,
+    const nlohmann::json &value_node);
+
+  /**
+   * @brief np.ravel(a)/a.ravel(): a writable, contiguous strided pointer
+   * view into a's own buffer (ADR-NP-003 etapa 2), for a fixed-shape 1-D or
+   * 2-D array. Public for the same reason as try_build_diagonal_pointer_view.
+   * Declines (returns std::nullopt) for a non-symbol/non-numpy-tracked
+   * source, a source that isn't fixed-shape 1-D/2-D (including 3-D+), or an
+   * unassigned RHS (current_lhs unset) outside the discardable
+   * type-inference pre-pass -- same current_lhs/in_rhs_type_probe_ handling
+   * as try_build_diagonal_pointer_view, for the same reason.
+   * @param array Source 1-D or 2-D array expression.
+   */
+  std::optional<exprt> try_build_ravel_pointer_view(const exprt &array);
+
+  /**
+   * @brief a.flat[i] = x: builds a dereferenced-pointer lvalue into a's own
+   * buffer at flat index i (bounds-checked and negative-index-normalized
+   * the same way a registered pointer view's index is), for a fixed-shape
+   * 1-D or 2-D array -- the same eligibility and offset/stride=1 math as
+   * try_build_ravel_pointer_view, but built inline for an assignment target
+   * that has no intermediate bare-name view symbol to register into
+   * numpy_pointer_view_info_. Declines (returns std::nullopt) for a
+   * non-symbol/non-numpy-tracked source or a source that isn't fixed-shape
+   * 1-D/2-D (including 3-D+).
+   * @param array      Source 1-D or 2-D array expression.
+   * @param index_node Raw AST node for the flat index expression.
+   */
+  std::optional<exprt> try_build_flat_index_assignment_target(
+    const exprt &array,
+    const nlohmann::json &index_node);
+
+  /**
    * @brief Lower an N-D mixed slice/index tuple subscript with one or more
    * bounded slice axes and fixed-index axes, e.g. `a[:, 0, 0]`,
    * `a[0:2, 0, 0]`, or `a[:, :, 0]` on a 3-D array. Slice bounds are resolved
@@ -628,6 +704,12 @@ public:
 private:
   friend class python_dict_handler;
 
+  // Evaluates value_node once and snapshots it into a fresh temporary, so a
+  // multi-write caller (try_build_fill_diagonal_mutation) can reuse the
+  // snapshot instead of re-embedding (and re-evaluating) the same expression
+  // at each write site. Throws if the value isn't scalar-typed.
+  exprt snapshot_scalar_value(const nlohmann::json &value_node);
+
   // Repeat the elements in `list_elems` `count` times at runtime (`count` may
   // be any integer expression: a constant, a symbol like `n`, or a compound
   // like `m + 1`). Each iteration pushes every element in order. Builds a
@@ -650,6 +732,26 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
+  // handle_range_slice's process_bound: normalizes a literal negative bound
+  // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
+  // site's own comment for why the clamp differs by step direction. Split
+  // out to keep handle_range_slice's own decision count from growing
+  // further.
+  exprt normalize_negative_slice_bound(
+    const nlohmann::json &operand_node,
+    const exprt &logical_len,
+    bool negative_step);
+
+  // Shared core of every ADR-NP-003 scalar pointer view producer; see
+  // list_access.cpp for the full rationale, including when this declines.
+  std::optional<exprt> build_scalar_pointer_view(
+    const exprt &array,
+    const typet &elem_type,
+    long long offset,
+    std::size_t length,
+    long long stride,
+    bool readonly);
+
   // ADR-NP-003 etapa 2, first slice: builds a pointer into the base
   // array's own storage for a 1-D, unit-stride, literal-bound slice
   // assigned directly to a bare name, instead of handle_range_slice()'s
@@ -670,6 +772,10 @@ private:
     const exprt &array,
     const nlohmann::json &slice_node);
 
+  std::optional<exprt> try_build_column_pointer_view(
+    const exprt &array,
+    const nlohmann::json &col_index_node);
+
   std::optional<exprt> try_copy_numpy_pointer_view_slice(
     const exprt &array,
     const typet &elem_type,
@@ -680,6 +786,12 @@ private:
   void emit_slice_zero_step_raise(
     const nlohmann::json &slice_node,
     bool literal_zero_step);
+
+  exprt normalize_and_scale_index(
+    const exprt &index,
+    long long length,
+    long long stride,
+    const nlohmann::json &slice_node);
 
   exprt guard_numpy_pointer_view_index(
     const exprt &array,
