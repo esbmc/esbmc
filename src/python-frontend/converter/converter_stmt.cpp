@@ -515,6 +515,17 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     if (var_type_str.empty())
       return {var_type_str, var_typet};
 
+    // A spelled `Callable[[A], R]` keeps its signature, so a call through the
+    // variable recovers R. A bare one -- what the annotation pass infers for a
+    // variable bound to a function value -- resolves to a pointer whose code
+    // type returns void, leaving that call nondet: worse than no annotation at
+    // all, since an unannotated binding takes the callee's own return type. So
+    // defer to the RHS instead (#6640).
+    if (var_type_str == "Callable")
+      return {
+        var_type_str,
+        ann.contains("slice") ? get_callable_type(ann, var_node) : typet()};
+
     // User-defined classes named "list"/"List" or "dict"/"Dict" take priority
     // over the built-in types when used as a plain Name annotation.
     if (

@@ -125,6 +125,12 @@ public:
     const nlohmann::json &element);
 
   std::string get_op(const std::string &op, const typet &type) const;
+  /// `Callable[[A, B], R]` as the function-pointer type `R (*)(A, B)`; the
+  /// generic `Callable` pointer when the signature is not spelled.
+  typet get_callable_type(
+    const nlohmann::json &annotation,
+    const nlohmann::json &stmt);
+
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);

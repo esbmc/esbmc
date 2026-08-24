@@ -1660,6 +1660,14 @@ void python_converter::get_function_definition(
       type.return_type() =
         tuple_handler_->get_tuple_type_from_annotation(return_node);
     }
+    else if (return_type == "Callable" && return_node["_type"] == "Subscript")
+    {
+      // A function returning a callable is the general shape of #6640: the
+      // caller binds the result to a variable and calls through it, so the
+      // return type has to carry the signature. The generic `Callable`
+      // pointer has an empty return type, which leaves every such call nondet.
+      type.return_type() = get_callable_type(return_node, function_node);
+    }
     else if (return_type == "Optional" && return_node["_type"] == "Subscript")
     {
       // Optional[T]: delegate to the annotation handler, which builds either
