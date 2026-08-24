@@ -558,10 +558,11 @@ void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
   if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
     return;
 
-  // A complex operand is lower_complex_compound_assignment's, and that arm
-  // rewrites the node rather than converting it.
   if (is_complex_type(a.lhs->type) || is_complex_type(a.rhs->type))
+  {
+    lower_complex_compound_assignment(expr);
     return;
+  }
 
   const type2tc target = a.lhs->type;
   expr2tc lhs = a.lhs, rhs = a.rhs;
@@ -782,6 +783,44 @@ static bool contains_sideeffect(const expr2tc &expr)
   expr->foreach_operand(
     [&found](const expr2tc &op) { found = found || contains_sideeffect(op); });
   return found;
+}
+
+/// IREP2 form of clang_c_adjust::lower_complex_compound_assignment. `a op= b`
+/// over a complex operand becomes `a = a op b`, with the binary node handed to
+/// adjust_complex_arith for the component-level decomposition. goto_convert's
+/// remove_assignment rebuilds the compound form long after adjustment, so a
+/// node left here reaches the SMT layer as a raw complex operator and the
+/// backend faults on it (#6713).
+void clang_c_adjust_irep2::lower_complex_compound_assignment(expr2tc &expr)
+{
+  const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+
+  // adjust_complex_arith reads each operand twice, once per component, so a
+  // side-effecting target would be evaluated twice. Same decline as there.
+  if (contains_sideeffect(a.lhs))
+    return;
+
+  const type2tc &ct = a.lhs->type;
+  expr2tc binop;
+  if (a.op == "assign+")
+    binop = add2tc(ct, a.lhs, a.rhs);
+  else if (a.op == "assign-")
+    binop = sub2tc(ct, a.lhs, a.rhs);
+  else if (a.op == "assign*")
+    binop = mul2tc(ct, a.lhs, a.rhs);
+  else if (a.op == "assign_div")
+    binop = div2tc(ct, a.lhs, a.rhs);
+  else
+    return;
+
+  const expr2tc before = binop;
+  adjust_complex_arith(binop);
+  // It declines on a side-effecting operand; leave the node rather than emit a
+  // plain assignment of an undecomposed complex operator.
+  if (binop == before)
+    return;
+
+  expr = sideeffect_assign2tc(ct, "assign", a.lhs, binop, a.location);
 }
 
 /// clang emits `ieee_*` for scalar float arithmetic itself, but hands over a

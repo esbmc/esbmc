@@ -1,0 +1,4 @@
+CORE
+main.c
+--multi-property --proof-cache-verify
+^ERROR: --proof-cache-verify has no cache to check without --proof-cache <dir>$
