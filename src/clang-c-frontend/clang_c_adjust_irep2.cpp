@@ -1,3 +1,4 @@
+#include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
@@ -38,6 +39,11 @@ bool clang_c_adjust_irep2::adjust()
 
   for (symbolt *s : symbol_list)
   {
+    if (
+      sole_adjuster && s->get_type().is_code() &&
+      has_prefix(s->id.as_string(), "c:@F@main"))
+      declare_argc_argv(context, *s);
+
     if (!s->is_type && s->get_value().is_not_nil())
     {
       const expr2tc before = s->get_value2();
@@ -184,7 +190,10 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
     adjust_binary_arith_operands(expr);
 
   if (is_sideeffect_assign2t(expr))
+  {
     adjust_plain_assignment(expr);
+    adjust_compound_assignment(expr);
+  }
 }
 
 /// One of a family of spellings differing only by the argument's width:
@@ -393,9 +402,14 @@ void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
   if (is_nil_expr(f.init))
     return;
 
+  // A default-constructed locationt is empty but not nil, and migrate_expr_back
+  // guards only on nil: left default it reaches convert_block, which stamps it
+  // on every destructor it unwinds. Same idiom as goto_convert_functions.cpp.
   locationt end_location;
   if (!is_nil_expr(f.body) && is_code_block2t(f.body))
     end_location = to_code_block2t(f.body).end_location;
+  else
+    end_location.make_nil();
 
   const expr2tc bare =
     code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
@@ -463,6 +477,35 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
 
   if (rhs != a.rhs || expr->type != target)
     expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
+}
+
+/// The shift spellings clang_c_adjust returns early on: it promotes only the
+/// right operand there, which the corpus shows is already the migrated shape.
+static bool is_shift_assignment(const irep_idt &op)
+{
+  return op == "assign_shl" || op == "assign_shr" || op == "assign_lshr" ||
+         op == "assign_ashr";
+}
+
+void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
+{
+  const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+  if (a.op == "assign" || is_shift_assignment(a.op))
+    return;
+  if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+    return;
+
+  // A complex operand is lower_complex_compound_assignment's, and that arm
+  // rewrites the node rather than converting it.
+  if (is_complex_type(a.lhs->type) || is_complex_type(a.rhs->type))
+    return;
+
+  const type2tc target = a.lhs->type;
+  expr2tc lhs = a.lhs, rhs = a.rhs;
+  c_implicit_typecast_arithmetic(lhs, rhs, ns);
+
+  if (lhs != a.lhs || rhs != a.rhs || expr->type != target)
+    expr = sideeffect_assign2tc(target, a.op, lhs, rhs, a.location);
 }
 
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,

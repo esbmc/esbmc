@@ -87,6 +87,16 @@ if(NOT WIN32)
     list(APPEND ESBMC_TEST_CAPABILITIES bundled_libm)
 endif()
 
+# value_sett::to_expr materialises a descriptor's offset through the host's
+# `unsigned long` (gen_ulong), so a negative offset wraps at 32 bits on LLP64
+# and at 64 bits elsewhere. The two constants get opposite out-of-bounds
+# verdicts, so a test pinning either one holds on LP64 hosts only.
+include(CheckTypeSize)
+check_type_size("long" ESBMC_SIZEOF_LONG)
+if(ESBMC_SIZEOF_LONG EQUAL 8)
+    list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 
@@ -588,10 +598,13 @@ set(_slow_regression_tests
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
     # support land, so ESBMC now reaches the real BFS symex (deque + set +
-    # 6-node graph), which does not converge under --incremental-bmc due to
-    # the __memcpy_impl loop in the list OM (string.c:278). These stay
-    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
-    # verdict instead of ctest hard-killing the run.
+    # 6-node graph). breadth_first_search still does not converge under
+    # --incremental-bmc, due to the __memcpy_impl loop in the list OM
+    # (string.c:278), and stays KNOWNBUG: the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
+    # the run. breadth_first_search_fail is CORE since #7235 and reaches its
+    # VERIFICATION FAILED at ~123s on the DebugOpt Linux runner, so the 2x
+    # budget is what keeps it off the 120s cap -- removing it flaps the test.
     "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
     # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a

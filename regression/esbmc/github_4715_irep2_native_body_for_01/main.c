@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body dispatcher's code_for2t handling (W1-loc
+// Exercises the IREP2-native dispatcher's code_for2t handling (W1-loc
 // spike Phase C, esbmc/esbmc#4715). Each of these converts natively end to
 // end: a for with a declaration in the init, a nested pair, one whose body
 // uses break and continue, and one with the iteration statement omitted
