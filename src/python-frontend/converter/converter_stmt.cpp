@@ -6318,14 +6318,9 @@ exprt python_converter::get_block(
       // would otherwise scale with the data size. Gated on the test containing
       // a function call so plain symbolic asserts stay on the solver path;
       // only a constant True short-circuits — False/unknown fall through so
-      // the solver still detects genuine violations. Disabled under any
-      // coverage mode, where the original assert/branches must be instrumented.
-      const bool coverage_active =
-        is_coverage_mode() ||
-        config.options.get_bool_option("assertion-coverage") ||
-        config.options.get_bool_option("assertion-coverage-claims");
+      // the solver still detects genuine violations.
       if (
-        !coverage_active && element.contains("test") &&
+        !is_assert_fold_disabled() && element.contains("test") &&
         ast_contains_call(element["test"]))
       {
         python_consteval evaluator(*ast_json);
