@@ -167,7 +167,10 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
     adjust_if_expr(expr);
 
   if (is_binary_arith(expr))
+  {
     adjust_complex_arith(expr);
+    adjust_vector_float_arith(expr);
+  }
 
   /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
    * block is not a statement-with-condition, so the loop's guard would never
@@ -775,6 +778,38 @@ static bool contains_sideeffect(const expr2tc &expr)
   expr->foreach_operand(
     [&found](const expr2tc &op) { found = found || contains_sideeffect(op); });
   return found;
+}
+
+/// clang emits `ieee_*` for scalar float arithmetic itself, but hands over a
+/// plain `+`/`-`/`*`/`/` when the operands are vectors of float and leaves
+/// clang_c_adjust::adjust_float_arith to promote it. Unpromoted, the backend is
+/// handed a bitvector operator over a floating-point vector and aborts.
+///
+/// The legacy arm returns before attaching a rounding mode for a vector ("BUG:
+/// setting rounding_mode breaks migration"), and migrate_rounding_mode then
+/// synthesises the default symbol for the attribute-less node -- so the node
+/// the default path produces carries that symbol, and this builds the same one.
+void clang_c_adjust_irep2::adjust_vector_float_arith(expr2tc &expr)
+{
+  const type2tc t = ns.follow(expr->type);
+  if (!is_vector_type(t) || !is_floatbv_type(to_vector_type(t).subtype))
+    return;
+
+  const expr2tc &l = *expr->get_sub_expr(0);
+  const expr2tc &r = *expr->get_sub_expr(1);
+  if (is_nil_expr(l) || is_nil_expr(r))
+    return;
+
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+  if (is_add2t(expr))
+    expr = ieee_add2tc(expr->type, l, r, rm);
+  else if (is_sub2t(expr))
+    expr = ieee_sub2tc(expr->type, l, r, rm);
+  else if (is_mul2t(expr))
+    expr = ieee_mul2tc(expr->type, l, r, rm);
+  else if (is_div2t(expr))
+    expr = ieee_div2tc(expr->type, l, r, rm);
 }
 
 void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
