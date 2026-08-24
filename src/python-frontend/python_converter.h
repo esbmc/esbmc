@@ -669,6 +669,26 @@ private:
     const locationt &location,
     bool is_keyword_only);
 
+  /// Give the nested function @p id its own static cell for each free variable
+  /// that resolves to a local of the enclosing function, and return the
+  /// statements that bind those cells where the `def` executes.
+  ///
+  /// A nested `def` becomes a standalone GOTO function, so a free variable it
+  /// reads resolves (converter_symbols.cpp's scope walk) to the enclosing
+  /// function's own local. Once the closure outlives that frame the read is
+  /// unconstrained, so `make_adder(5)(3) == 8` fails (#6256). The cell is
+  /// static, so it survives the frame; the binding poisons it with a nondet
+  /// value when a second instantiation disagrees, since a Python function
+  /// value is one static symbol here (#6640) and cannot hold per-closure state.
+  code_blockt create_capture_cells(
+    const nlohmann::json &function_node,
+    const symbol_id &id,
+    const locationt &location);
+
+  /// Cell bindings produced by the last nested `get_function_definition`,
+  /// drained by get_block where the `def` statement sits.
+  code_blockt pending_captures_;
+
   /**
    * @brief Infer a numpy-array parameter's concrete array type by scanning
    * call sites of @c func_name across the module and returning the shape of
