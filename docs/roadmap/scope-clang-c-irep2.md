@@ -5013,6 +5013,90 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 117. The `POINTER_OFFSET` group is a third abort, and `offsetof` was fatal
+## (2026-08-23)
+
+(§117 rather than §115: PRs #7266 and #7271 are in flight against this file and
+claim §115 and §116.)
+
+The `POINTER_OFFSET` spelling was the largest remaining group in §114's table,
+at three tests. It is five, and it is not a spelling — the second time in two
+sittings that a row tagged `diff` turned out to be a program the flag cannot
+verify at all.
+
+### 117.1 The three intrinsics matched by name, not by prefix
+
+`do_special_functions` selects most of its lowerings by a reserved
+`__builtin_` prefix, and this pass mirrors those. Three it selects by the
+`__ESBMC_` name instead — `POINTER_OFFSET`, `POINTER_OBJECT`, `same_object` —
+and none had been ported. Each lowers to a node the backend evaluates in place
+(`pointer_offset2t`, `pointer_object2t`, `same_object2t`, all long-standing).
+
+Left as calls the symbols are bodyless, and `goto_check` refuses them:
+
+```c
+#include <stddef.h>
+struct s { int x; int y; };
+int main(void) { assert(offsetof(struct s, y) == 4); return 0; }
+```
+
+```
+$ esbmc pv.c                              # VERIFICATION SUCCESSFUL
+$ esbmc pv.c --clang-c-irep2-adjust-only
+ERROR: Function call to non-intrinsic prefixed with __ESBMC (fatal)
+```
+
+`offsetof` is the reachable one: `clang_c_language.cpp:705` defines the macro
+as `((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))`, so *every* use of
+`<stddef.h>`'s `offsetof` was fatal under this flag. The census saw `&0->y` in
+an `ASSIGN` on one side and a `FUNCTION_CALL` to a temporary on the other, and
+recorded a spelling difference.
+
+### 117.2 Result
+
+Census on the stride-8 list pinned to a file before the A/B (233 entries, 226
+with a `.c` source), same base:
+
+| goto program | before | after |
+|---|---:|---:|
+| same | 202 | **207** |
+| diff | **24** | **19** |
+
+Five converge — `github_2512_8`, `github_2512_12`, `github_426_2`,
+`github_1064-3-32`, `pointer-offset2` — against the three §114 tagged; two
+carried the cause under another tag. None diverges that did not before, and the
+default path is byte-identical on all 226 C sources (the arm is reached only
+from `adjust_special_functions`, which the flag gates, but it was measured
+rather than argued). Suites: `esbmc` 1857/1857, `cstd` 142/142, `floats`
+106/106, `function_contract` 414/414, `goto-coverage` 144/144.
+
+### 117.3 Mutants, and the one that did not move
+
+Per §39.1 of `frontends-to-irep2.md`, each arm was corrupted rather than
+deleted:
+
+| mutation | ok-test |
+|---|---|
+| `pointer_offset` → `pointer_object` | FAILED ✓ |
+| `same_object(a, b)` → `same_object(a, a)` | FAILED ✓ |
+| `pointer_object` → `pointer_offset` | **SUCCESSFUL ✗** |
+
+The third is §39.1's *first* failure mode, not its second: the test asserted
+`POINTER_OBJECT(&a) == POINTER_OBJECT(&a)`, which holds whatever the intrinsic
+lowers to. Rewritten against two distinct globals — where every intrinsic here
+yields offset 0, so only the object id separates them — the mutant moves. The
+arm was fine; the test was not.
+
+### 117.4 Next
+
+The residue is 19: temporary numbering (`tmp$3` vs `tmp$4`, 2 tests), struct
+padding in an aggregate initialiser (`github_578_success3`), and the untagged
+remainder. The identity-cast class stays closed as non-work.
+
+A re-census is now worth more than another slice. Two of the last three causes
+were mis-tagged because `--goto-functions-only` stops before the encoder, and
+the residue is small enough to read every row through a full verification run
+instead of a goto dump.
 ## 115. §114.2's dominant cause closed — the hoist's wrapper block had no close
 ## (2026-08-23)
 
