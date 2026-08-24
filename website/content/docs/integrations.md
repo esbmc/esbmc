@@ -3,8 +3,8 @@ title: Editor and Tool Integration
 weight: 16
 ---
 
-Besides the command line, ESBMC has three interactive front-ends — an editor
-extension, a browser GUI and a plugin for an AI coding agent. All three drive
+Besides the command line, ESBMC has three interactive front-ends: an editor
+extension, a browser GUI, and a plugin for an AI coding agent. All three drive
 the same `esbmc` binary, so everything under [Usage](/docs/usage) applies to
 them too. For verification in CI rather than at the keyboard, see
 [GitHub Action](/docs/github-action).
@@ -30,11 +30,11 @@ editing without leaving the editor. It contributes four command-palette entries:
   download and unpack the latest release into `$HOME/bin`, so you do not need
   ESBMC on your `PATH` beforehand.
 
-It requires VS Code 1.68 or later. The install and update commands are Linux
+Note that it requires VS Code 1.68 or later. The install and update commands are Linux
 only; elsewhere, install ESBMC first via [Setup](/docs/setup).
 
 The extension is not on the VS Code Marketplace yet, so build the `.vsix` from
-source and install it from the Extensions view — the repository README has the
+source and install it from the Extensions view; the repository README has the
 walkthrough. Sideloading this way does not pull in the extension's dependency
 on `mindaro-dev.file-downloader`, which the install and update commands need.
 Publishing to the Marketplace and Open VSX is tracked in
@@ -43,7 +43,7 @@ Publishing to the Marketplace and Open VSX is tracked in
 ## Web interface
 
 [ESBMC-Web](https://github.com/esbmc/esbmc-web) is a browser GUI for C, C++ and
-Python. You write or upload a file — plus any dependency headers or modules —
+Python. You write or upload a file, plus any dependency headers or modules,
 pick the checks and solver from a form rather than remembering flag names, and
 read the result either as the raw ESBMC log or as a dashboard that tabulates
 each violation with its file, function and line and shows the counterexample.
