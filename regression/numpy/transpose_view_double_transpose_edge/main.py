@@ -1,7 +1,8 @@
 import numpy as np
 
 a = np.array([[1, 2], [3, 4]])
-t = np.transpose(np.transpose(a))
+u = np.transpose(a)
+t = np.transpose(u)
 
 t[0][1] = 7
 
