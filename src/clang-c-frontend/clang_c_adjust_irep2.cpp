@@ -343,6 +343,20 @@ bool clang_c_adjust_irep2::adjust_float_builtin(
     expr = isnormal2tc(arg);
   else if (compare_unscore_builtin(name, "signbit"))
     expr = signbit2tc(arg);
+  // Exact spelling: `isinf_sign` is reserved, and compare_unscore_builtin's
+  // "isinf" arm above matches a base name a program may reuse. Left as a call
+  // the symbol is bodyless, so the result is nondet rather than differently
+  // shaped -- the flag turns a provable comparison into an unprovable one.
+  else if (name == "__builtin_isinf_sign")
+    expr = if2tc(
+      expr->type,
+      isinf2tc(arg),
+      if2tc(
+        expr->type,
+        typecast2tc(get_bool_type(), signbit2tc(arg)),
+        constant_int2tc(expr->type, BigInt(-1)),
+        constant_int2tc(expr->type, BigInt(1))),
+      gen_zero(expr->type));
   else if (
     compare_float_suffix(name, "finite") ||
     compare_unscore_builtin(name, "isfinite") ||
