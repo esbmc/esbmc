@@ -1,10 +1,8 @@
 extern int __VERIFIER_nondet_int(void);
 
-// Pins the polarity of the guard named in a dead-code advisory: a probe
-// assert(c) that is never violated proves !c infeasible, so the advisory names
-// the opposite direction. `flag` also pins that the negation is derived from
-// the expression rather than by flipping the probe's comment text, which would
-// print "!flag" here — from_expr parenthesises by precedence.
+// Pins both polarities of the guard named in a dead-code advisory. `flag` also
+// pins that the negation is derived from the expression: flipping the probe's
+// comment text would print "!flag" here.
 int main(void)
 {
   _Bool flag = 0;

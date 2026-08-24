@@ -98,11 +98,11 @@ public:
   // all instrumented claims (condition, location) for JSON report
   static std::set<std::pair<std::string, std::string>> all_claims;
   // Guard text of the opposite direction for each claim in all_claims, keyed
-  // the same way. A probe assert(c) that multi-property never violated proves
-  // !c infeasible, not c, so --dead-code-check reports this string rather than
-  // the claim's own comment. Kept as an expression-derived string because the
-  // two are not textual complements: from_expr parenthesises by precedence,
-  // so !flag negates to flag but a > b negates to !(a > b).
+  // the same way. A probe assert(c) left unviolated proves !c infeasible, so
+  // --dead-code-check names this rather than the claim's own comment. Derived
+  // from the expression, not by flipping the comment text: from_expr
+  // parenthesises by precedence, so !flag negates to flag but a > b negates
+  // to !(a > b).
   static std::map<std::pair<std::string, std::string>, std::string>
     claim_negation;
 

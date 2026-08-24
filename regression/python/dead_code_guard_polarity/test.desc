@@ -1,7 +1,5 @@
 CORE
 main.py
 --dead-code-check
-^\[Dead code\]$
-:2: dead code: unreachable branch \[guard: a > b\]$
-^  CWE: CWE-561$
+main\.py:2: dead code: unreachable branch \[guard: a > b\]$
 ^VERIFICATION SUCCESSFUL$

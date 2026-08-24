@@ -1024,15 +1024,14 @@ static bool is_kpath_maximal(const std::string &claim_sig)
 
 // Advisory dead-code reporter for --dead-code-check (CWE-561, issue #4495).
 //
-// Reuses the branch-coverage instrumentation: a probe (an instrumented
-// assertion over a branch guard) that multi_property_check never violated is
-// unreachable under all inputs up to the current unwinding bound — i.e. that
-// branch direction is dead. The dead set is therefore
-// `all_claims \ reached_claims`. The probe is `assert(c)`, so leaving it
-// unviolated proves `!c` infeasible: the advisory names the claim's recorded
-// negation, not its own comment. Findings are advisory: they are printed as a
-// separate [Dead code] section and, when --sarif-output is set, emitted at
-// SARIF note level. They never flip the verdict (see report_result).
+// Reuses the branch-coverage instrumentation: a probe `assert(c)` (an
+// instrumented assertion over a branch guard) that multi_property_check never
+// violated proves `!c` infeasible up to the current unwinding bound — so `!c`
+// is the dead direction, and the advisory names goto_coveraget::claim_negation
+// rather than the claim's own comment. The dead set is `all_claims \
+// reached_claims`. Findings are advisory: they are printed as a separate
+// [Dead code] section and, when --sarif-output is set, emitted at SARIF note
+// level. They never flip the verdict (see report_result).
 static void report_dead_code(
   const optionst &options,
   const std::unordered_set<std::string> &reached_claims,
@@ -1046,9 +1045,9 @@ static void report_dead_code(
     if (reached_claims.count(claim_sig))
       continue; // reachable branch direction — live code
 
-    const auto neg = goto_coveraget::claim_negation.find({comment, loc});
-    const std::string dead_guard =
-      neg == goto_coveraget::claim_negation.end() ? "" : neg->second;
+    // Populated in lockstep with all_claims, so the key is always present.
+    const std::string &dead_guard =
+      goto_coveraget::claim_negation.at({comment, loc});
 
     nlohmann::json parsed = parse_claim_location(loc);
     dead_code_finding_t f;

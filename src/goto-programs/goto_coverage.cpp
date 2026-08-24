@@ -907,8 +907,8 @@ std::set<std::pair<std::string, std::string>>
 goto_coveraget::get_total_cond_assert() const
 {
   std::set<std::pair<std::string, std::string>> total_cond_assert = {};
-  // Rebuilt in lockstep with the returned claim set, which callers assign to
-  // all_claims wholesale.
+  // Rebuilt in lockstep with the returned claim set: every call site assigns
+  // it to all_claims, which report_dead_code indexes this map by.
   claim_negation.clear();
   forall_goto_functions (f_it, goto_functions)
   {

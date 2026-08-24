@@ -1,8 +1,6 @@
 CORE
 main.c
 --dead-code-check
-^\[Dead code\]$
-:12: dead code: unreachable branch \[guard: flag\]$
-:15: dead code: unreachable branch \[guard: !\(x > 5\)\]$
-^  CWE: CWE-561$
+main\.c:10: dead code: unreachable branch \[guard: flag\]$
+main\.c:13: dead code: unreachable branch \[guard: !\(x > 5\)\]$
 ^VERIFICATION SUCCESSFUL$

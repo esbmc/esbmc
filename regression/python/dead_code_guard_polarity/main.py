@@ -4,9 +4,4 @@ def find_max(a, b):
     return b
 
 
-def main():
-    result = find_max(10, 20)
-    assert result >= 20
-
-
-main()
+assert find_max(10, 20) == 20
