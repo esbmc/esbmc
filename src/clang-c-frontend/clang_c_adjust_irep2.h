@@ -111,6 +111,7 @@ private:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  void lower_complex_compound_assignment(expr2tc &expr);
   void adjust_vector_float_arith(expr2tc &expr);
   void hoist_for_init(expr2tc &expr);
 
