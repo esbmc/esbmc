@@ -111,6 +111,19 @@ bool python_converter::is_coverage_mode() const
          config.options.get_bool_option("branch-function-coverage-claims");
 }
 
+/// Every mode that must see the original assert and its call. Beyond the
+/// coverage modes, --dead-code-check keeps a verdict and so is deliberately
+/// not part of is_coverage_mode() (#6387), but folding the assert would drop
+/// the call and report everything reachable only through it as CWE-561
+/// (#7268).
+bool python_converter::is_assert_fold_disabled() const
+{
+  return is_coverage_mode() ||
+         config.options.get_bool_option("assertion-coverage") ||
+         config.options.get_bool_option("assertion-coverage-claims") ||
+         config.options.get_bool_option("dead-code-check");
+}
+
 bool python_converter::is_pytest_generation_mode() const
 {
   return config.options.get_bool_option("generate-pytest-testcase");

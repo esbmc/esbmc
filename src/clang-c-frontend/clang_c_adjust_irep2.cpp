@@ -9,6 +9,7 @@
 #include <util/config/config.h>
 #include <util/symtab/namespace.h>
 #include <util/symtab/pretty.h>
+#include <util/symtab/cprover_prefix.h>
 #include <utility>
 
 bool clang_c_adjust_irep2::adjust()
@@ -166,7 +167,10 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
     adjust_if_expr(expr);
 
   if (is_binary_arith(expr))
+  {
     adjust_complex_arith(expr);
+    adjust_vector_float_arith(expr);
+  }
 
   /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
    * block is not a statement-with-condition, so the loop's guard would never
@@ -258,6 +262,45 @@ fold_unary_builtin(const std::string &name, const expr2tc &arg, expr2tc &expr)
     expr = bswap2tc(expr->type, arg);
 }
 
+/// The three pointer intrinsics `do_special_functions` matches by their
+/// `__ESBMC_` name rather than a `__builtin_` prefix. Each lowers to a node the
+/// backend evaluates in place; left as a call the symbol is bodyless and
+/// `goto_check`'s "non-intrinsic prefixed with __ESBMC" rejects the program.
+/// Returns true when \p expr was rewritten.
+static bool fold_pointer_intrinsic(
+  const std::string &name,
+  const std::vector<expr2tc> &args,
+  expr2tc &expr)
+{
+  if (name == CPROVER_PREFIX "same_object" && args.size() == 2)
+  {
+    expr = same_object2tc(args[0], args[1]);
+    return true;
+  }
+
+  if (args.size() != 1)
+    return false;
+
+  if (name == CPROVER_PREFIX "POINTER_OBJECT")
+  {
+    expr = pointer_object2tc(expr->type, args[0]);
+    return true;
+  }
+
+  // pointer_offset2t admits only an address-width signedbv. The declared
+  // return type is __PTRDIFF_TYPE__, which is exactly that on every supported
+  // target; decline rather than assert if a target ever disagrees.
+  if (
+    name == CPROVER_PREFIX "POINTER_OFFSET" && is_signedbv_type(expr->type) &&
+    expr->type->get_width() == config.ansi_c.address_width)
+  {
+    expr = pointer_offset2tc(expr->type, args[0]);
+    return true;
+  }
+
+  return false;
+}
+
 /// The lowerings `do_special_functions` selects by base name rather than by a
 /// reserved `__builtin_` prefix. Returns true when `expr` was rewritten.
 ///
@@ -314,6 +357,20 @@ bool clang_c_adjust_irep2::adjust_float_builtin(
     expr = isnormal2tc(arg);
   else if (compare_unscore_builtin(name, "signbit"))
     expr = signbit2tc(arg);
+  // Exact spelling: `isinf_sign` is reserved, and compare_unscore_builtin's
+  // "isinf" arm above matches a base name a program may reuse. Left as a call
+  // the symbol is bodyless, so the result is nondet rather than differently
+  // shaped -- the flag turns a provable comparison into an unprovable one.
+  else if (name == "__builtin_isinf_sign")
+    expr = if2tc(
+      expr->type,
+      isinf2tc(arg),
+      if2tc(
+        expr->type,
+        typecast2tc(get_bool_type(), signbit2tc(arg)),
+        constant_int2tc(expr->type, BigInt(-1)),
+        constant_int2tc(expr->type, BigInt(1))),
+      gen_zero(expr->type));
   else if (
     compare_float_suffix(name, "finite") ||
     compare_unscore_builtin(name, "isfinite") ||
@@ -372,6 +429,9 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 
   // Before the arity check: inf/huge_val/nan take no argument at all.
   if (adjust_float_builtin(expr, s->name, args))
+    return;
+
+  if (fold_pointer_intrinsic(name, args, expr))
     return;
 
   if (args.size() == 2)
@@ -746,6 +806,38 @@ void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
     return;
 
   expr = address_of2tc(expr->type, expr, true);
+}
+
+/// clang emits `ieee_*` for scalar float arithmetic itself, but hands over a
+/// plain `+`/`-`/`*`/`/` when the operands are vectors of float and leaves
+/// clang_c_adjust::adjust_float_arith to promote it. Unpromoted, the backend is
+/// handed a bitvector operator over a floating-point vector and aborts.
+///
+/// The legacy arm returns before attaching a rounding mode for a vector ("BUG:
+/// setting rounding_mode breaks migration"), and migrate_rounding_mode then
+/// synthesises the default symbol for the attribute-less node -- so the node
+/// the default path produces carries that symbol, and this builds the same one.
+void clang_c_adjust_irep2::adjust_vector_float_arith(expr2tc &expr)
+{
+  const type2tc t = ns.follow(expr->type);
+  if (!is_vector_type(t) || !is_floatbv_type(to_vector_type(t).subtype))
+    return;
+
+  const expr2tc &l = *expr->get_sub_expr(0);
+  const expr2tc &r = *expr->get_sub_expr(1);
+  if (is_nil_expr(l) || is_nil_expr(r))
+    return;
+
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+  if (is_add2t(expr))
+    expr = ieee_add2tc(expr->type, l, r, rm);
+  else if (is_sub2t(expr))
+    expr = ieee_sub2tc(expr->type, l, r, rm);
+  else if (is_mul2t(expr))
+    expr = ieee_mul2tc(expr->type, l, r, rm);
+  else if (is_div2t(expr))
+    expr = ieee_div2tc(expr->type, l, r, rm);
 }
 
 void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)

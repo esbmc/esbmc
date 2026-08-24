@@ -4,8 +4,8 @@
 // which materialises an empty (id "", non-nil) #location, while code_decl2t
 // carries a properly nil one -- so the native path emitted a nil location where
 // legacy emitted an empty-but-present one. The GOTO dump renders the two
-// differently ("no location" vs blank), which is how this surfaced as a
-// --irep2-native-body byte-identity divergence. The DECL keeps the nil location
+// differently ("no location" vs blank), which is how this surfaced as an
+// IREP2-native byte-identity divergence. The DECL keeps the nil location
 // in both paths: convert_decl emits it before that mutable access happens.
 int my_func(int stat_loc)
 {

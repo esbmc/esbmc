@@ -1,6 +1,6 @@
 // W1-loc spike Phase C (esbmc/esbmc#4715): pins that a `while` loop whose
 // condition is directly a function call (has_sideeffect(cond) true) converts
-// natively under --irep2-native-body, delegating to the shared
+// natively, delegating to the shared
 // generate_conditional_branch/remove_sideeffects helpers instead of falling
 // back to goto_convert_rec. The loop body's plain C reassignment statements
 // are themselves still unsupported natively (code_expression2t wrapping a

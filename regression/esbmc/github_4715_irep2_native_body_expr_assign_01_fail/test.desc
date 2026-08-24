@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 12 --irep2-native-body
+--unwind 12
 ^VERIFICATION FAILED$
