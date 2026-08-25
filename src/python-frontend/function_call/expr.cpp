@@ -4156,19 +4156,19 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
     return std::nullopt;
 
-  if (
-    !call_["args"].empty() ||
-    (call_.contains("keywords") && !call_["keywords"].empty()))
-    throw std::runtime_error(
-      "TypeError: numpy.ndarray." + func_name +
-      "() does not support axis, keepdims, where or out arguments yet");
-
   auto materialized = converter_.build_numpy_descriptor_materialized_elements(
     call_["func"]["value"],
     "TypeError: numpy.ndarray." + func_name +
       "() currently supports rank 1 or 2 arrays");
   if (!materialized)
     return std::nullopt;
+
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray." + func_name +
+      "() does not support axis, keepdims, where or out arguments yet");
 
   const std::vector<exprt> &elems = materialized->second;
   if (elems.empty())

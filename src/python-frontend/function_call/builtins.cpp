@@ -1771,6 +1771,9 @@ exprt function_call_expr::handle_any()
   if (std::optional<exprt> reduced = try_reduce_numpy_descriptor_method())
     return *reduced;
 
+  if (call_["func"]["_type"] == "Attribute")
+    return handle_general_function_call();
+
   return handle_any_all(ReduceOp::Any, "any");
 }
 
@@ -1778,6 +1781,9 @@ exprt function_call_expr::handle_all()
 {
   if (std::optional<exprt> reduced = try_reduce_numpy_descriptor_method())
     return *reduced;
+
+  if (call_["func"]["_type"] == "Attribute")
+    return handle_general_function_call();
 
   return handle_any_all(ReduceOp::All, "all");
 }
