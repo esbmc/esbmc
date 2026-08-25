@@ -118,6 +118,7 @@ exprt python_dict_handler::handle_dict_subscript(
     key_check.cond() = key_not_found;
     key_check.then_case() = throw_block;
     key_check.location() = location;
+    key_check.location().property("skipped");
     converter_.add_instruction(key_check);
   }
 
@@ -563,6 +564,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   if_stmt.then_case() = update_block;
   if_stmt.else_case() = insert_block;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
 
   target_block.copy_to_operands(if_stmt);
 }
@@ -728,6 +730,7 @@ void python_dict_handler::handle_dict_delete(
   if_stmt.then_case() = delete_block;
   if_stmt.else_case() = raise_code;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
 
   target_block.copy_to_operands(if_stmt);
 }

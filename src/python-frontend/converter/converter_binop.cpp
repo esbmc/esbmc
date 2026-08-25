@@ -1670,6 +1670,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     guard.cond() = is_zero;
     guard.then_case() = throw_code;
     guard.location() = div_loc;
+    guard.location().property("skipped");
     add_instruction(guard);
   }
 

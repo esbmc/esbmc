@@ -956,6 +956,7 @@ exprt function_call_expr::build_constant_from_arg() const
         guard.cond() = migrate_expr_back(not2tc(valid2));
         guard.then_case() = throw_code;
         guard.location() = loc;
+        guard.location().property("skipped");
         converter_.add_instruction(guard);
 
         return sh.handle_string_to_float(expr, loc);
@@ -3516,6 +3517,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     guard.cond() = domain_check;
     guard.then_case() = raise_code;
     guard.location() = loc;
+    guard.location().property("skipped");
 
     // Add the guard to the current block
     converter_.current_block->copy_to_operands(guard);
@@ -3552,6 +3554,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     guard.cond() = domain_check;
     guard.then_case() = raise_code;
     guard.location() = loc;
+    guard.location().property("skipped");
     converter_.current_block->copy_to_operands(guard);
     return converter_.get_math_handler().handle_log(arg_expr, call_);
   }
@@ -3591,6 +3594,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     guard.cond() = domain_check;
     guard.then_case() = raise_code;
     guard.location() = loc;
+    guard.location().property("skipped");
 
     converter_.current_block->copy_to_operands(guard);
 
