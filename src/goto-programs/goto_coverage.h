@@ -100,9 +100,9 @@ public:
   // Guard text of the opposite direction for each claim in all_claims, keyed
   // the same way. A probe assert(c) left unviolated proves !c infeasible, so
   // --dead-code-check names this rather than the claim's own comment. Derived
-  // from the expression, not by flipping the comment text: from_expr
-  // parenthesises by precedence, so !flag negates to flag but a > b negates
-  // to !(a > b).
+  // from the expression, not by rewriting the comment text: gen_not_expr drops
+  // a leading not2t, so the comment "!flag" gives "flag" and not "!(!flag)",
+  // and from_expr re-parenthesises by precedence, so "x > 5" gives "!(x > 5)".
   static std::map<std::pair<std::string, std::string>, std::string>
     claim_negation;
 
