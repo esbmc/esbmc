@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.swapaxes returns a view and is not supported$
+^VERIFICATION FAILED$
