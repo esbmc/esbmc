@@ -111,6 +111,10 @@ private:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  void adjust_decl_init(expr2tc &expr);
+  void adjust_dereference(expr2tc &expr);
+  void lower_complex_compound_assignment(expr2tc &expr);
+  void adjust_vector_float_arith(expr2tc &expr);
   void hoist_for_init(expr2tc &expr);
 
   /// Pad a complete struct or union type symbol to its ABI layout (§96).
@@ -159,6 +163,8 @@ private:
 
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
+
+  void adjust_sole_arms_tail(expr2tc &expr);
 
   contextt &context;
   const bool sole_adjuster;
