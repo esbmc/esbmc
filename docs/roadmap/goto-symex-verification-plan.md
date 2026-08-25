@@ -724,7 +724,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R35** | **High (missed bug, default configuration)** — found by R34's controls, §15 M9 (R34); **FIXED**, §15 M9 (R35) | **A write below an object's base is neither performed nor flagged.** `char *base = (char *)&s; *(int *)(base - 4) = 42;` on a 16-byte stack struct reports `VERIFICATION SUCCESSFUL`: the `object-out-of-bounds` claim **passes**, the struct is unchanged, and a neighbouring local is unchanged — the store lands nowhere. The symmetric overflow `*(int *)(base + 16) = 42` **is** caught, so the bound is checked on one side only. Independent of R34: it reproduces through `char *`, which never had the sign defect, and the pointer model again disagrees with the check — `__ESBMC_POINTER_OFFSET` is `-4` and `__ESBMC_same_object` holds | the sign is discarded by `value_sett::to_expr`'s `gen_ulong`, but the wrapped constant is not flagged either; probes in the §15 M9 (R34) entry | `regression/esbmc/deref_negative_offset{,_fail}` (both CORE) | **Fixed**: the check is rearranged to `offset > data_sz - access_sz`, equivalent over the integers and free of the wrap. The unsigned reading is kept — a negative offset stays "a huge address", it is simply now compared without an addition that can carry it back into range. The pre-fix symptom was LP64-only — the wrap needed a 64-bit `unsigned long` — so the pin no longer needs `REQUIRES lp64_host` |
 | **R36** | **High (no verdict, then spurious counterexample, default configuration)** — found by code review of R35's fix, §15 M9 (R36) | **Relational comparison read pointer offsets unsigned, so a pointer below its object sorted above the base.** `char *b = a; char *below = b - 1;` gives `below >= b` — `assert(!(below >= b))` fails while `__ESBMC_POINTER_OFFSET(below) == -1` verifies on the same expression. The consequence is that `for (p = end; p >= begin; p--)` **never terminates**: the guard stays true below the base, so the loop exhausts its unwinding bound and then dereferences out of bounds — one unwinding-assertion failure and one spurious out-of-bounds report on a program gcc runs clean. `convert_ptr_cmp` did `typecast2tc(uint, pointer_offset2tc(sint, side))`; the stated reason was that an object larger than half the address space would flip the sign of its upper offsets, but that object is already unrepresentable in the signed `pointer_offset2t` every other consumer reads | `src/solvers/smt/smt_memspace.cpp`, `convert_ptr_cmp`; the cast dates to `79c621ff20` (#1537), which changed the cross-object arm and carried the unsigned reading in unremarked | `regression/esbmc/ptr_rel_below_base{,_fail}` | **Fixed**: drop the two typecasts and compare the signed offsets. The lexicographic object-id step is untouched, so cross-object ordering — the only thing #1537 was about — is unchanged, and it is still a total order |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
-| **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **OPEN** | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both KNOWNBUG) | **Open**, inherited from R37, and now also covering the `--force-malloc-success` symbolic-size case, where the bound assumed is layability rather than the cap (the NULL branch costs 21 s → >400 s; see §15 M9 (R37)). Extending the cap is not the one-line change it looks like — see §15 M9 (R38) for two more measured obstacles |
+| **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both KNOWNBUG) | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual**: under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -6470,6 +6470,55 @@ the old object is unchanged.
 | `regression/esbmc/ptr_rel_huge_object_realloc` | default | `KNOWNBUG` — same, at `n = 0xFFFFFFFFFFFFFFDF` |
 | `regression/esbmc/symbolic_malloc_cap` | `--force-malloc-success` | `SUCCESSFUL` — pins the cap on the *symbolic-size* arm, which no constant-size test reaches |
 | `-L esbmc/` | as recorded | 1852/1852 |
+
+
+### M9 (R38 fix) — 2026-08-25, both obstacles dissolved by not sharing a helper
+
+R38 is fixed, and neither obstacle the reverted attempt recorded survived
+contact with a change that treats the three allocation paths as three
+different things rather than routing them through one bounding helper.
+
+**Obstacle 1 dissolves because `alloca` must not fail.** C gives `alloca` no
+failure outcome — an over-large request is undefined, not `NULL` — so the bound
+belongs in an assumption, not a branch. `getenv`'s model writes
+`buffer[buf_size - 1]` without checking the result precisely because a real
+`alloca` cannot hand it one to check. Bounding by assumption leaves all six
+`getenv` tests green; the modelling decision the obstacle called for turns out
+to be *not* making `alloca` fail.
+
+**Obstacle 2 does not reproduce.** `github_1352-success-32bit` measures
+**8.7 s** with the cap extended, against a **9.6 s** baseline on the same
+binary and machine. The blow-up therefore belonged to the reverted attempt's
+shared helper — which necessarily changed the `malloc` path, the only path that
+test exercises — and not to capping `alloca` or `realloc`. Nothing about the
+cap costs anything here.
+
+**`realloc` needed exactly what the previous entry prescribed, and one thing it
+did not.** Joining the cap to `alloc_fail` rather than post-processing the
+result works first time: `update_pointer_validity` keys the old object's
+validity on that same condition, so failure leaves the old object untouched and
+`realloc17`'s `test_realloc_failure` stays green. The unrecorded hazard is
+*ordering*. The size rewrite `if (fits) size else 0` must follow
+`handle_realloc_zero_size`; ahead of it an over-cap request folds to `0`, is
+mistaken for `realloc(p, 0)`, and frees the old object — so the caller's
+`if (!q) free(p);` double-frees. That is what `invalidated dynamic object
+freed` reports, and it is a *different* defect from the one the previous entry
+predicted at the same test: it arrives through the zero-size path, not through
+`update_pointer_validity`.
+
+**Under `--force-realloc-success` the cap is not applied at all**, for the
+reason the symbolic `malloc` arm already gives: assuming it away would prune
+`realloc(p, (size_t)negative)` vacuously. That residual, and the matching
+`--force-malloc-success` one, are what is left of R38's row.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_alloca` | default | `CORE`, was `KNOWNBUG` — `SUCCESSFUL`; `FAILED` on the pre-patch control |
+| `regression/esbmc/ptr_rel_huge_object_realloc` | default | `CORE`, was `KNOWNBUG` — same |
+| `regression/esbmc/realloc_above_ptrdiff_max` | default | `SUCCESSFUL` — pins the C17 7.22.3.5 contract directly: `q == NULL` *and* `p[0] == 7` after the failed request. Kills both mutants — dropping the `alloc_fail` join (`q != NULL`) and moving the rewrite ahead of `handle_realloc_zero_size` (`p[0]` reads freed memory) |
+| `regression/esbmc/getenv{,1,2,3,4,_success}` | default | 6/6, unchanged — obstacle 1 |
+| `github_1352-success-32bit` | as recorded | 8.7 s vs 9.6 s baseline — obstacle 2 |
+| `-L esbmc/` | as recorded | 1909/1909; unit suite 716/716 |
 
 ---
 
