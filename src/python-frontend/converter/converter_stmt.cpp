@@ -703,7 +703,7 @@ std::optional<std::vector<long long>> numpy_transpose_cell_indices(
   const std::vector<long long> &indices)
 {
   if (rank == 1 && indices.size() == 1)
-    return indices;
+    return std::vector<long long>{indices[0]};
 
   if (rank != 2 || indices.size() != 2)
     return std::nullopt;
@@ -711,7 +711,7 @@ std::optional<std::vector<long long>> numpy_transpose_cell_indices(
   if (swaps_axes)
     return std::vector<long long>{indices[1], indices[0]};
 
-  return indices;
+  return std::vector<long long>{indices[0], indices[1]};
 }
 
 // A bare `:` slice axis (no lower/upper/step), matching
