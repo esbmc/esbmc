@@ -181,14 +181,8 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
-  if (is_constant_struct2t(expr))
-    adjust_struct(expr);
-  if (is_constant_array2t(expr))
-    adjust_array_subtype(expr);
-  if (is_code_decl2t(expr))
-    adjust_decl_init(expr);
-  if (is_dereference2t(expr))
-    adjust_dereference(expr);
+  if (is_code_expression2t(expr))
+    adjust_expression_statement(expr);
 
   adjust_sole_arms_tail(expr);
 }
@@ -198,8 +192,30 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 /// order-independent of the ones above.
 void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
 {
+  // A comma expression takes its right operand's type (C11 6.5.17p2). Clang
+  // hands it the *decayed* type when the right operand is an array, so leaving
+  // it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
+  // the named array-bounds check for the generic dereference one. Same rewrite
+  // as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
+  if (is_code_comma2t(expr))
+  {
+    const code_comma2t &c = to_code_comma2t(expr);
+    if (expr->type != c.side_2->type)
+      expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
+  }
+  if (is_constant_struct2t(expr))
+    adjust_struct(expr);
+  if (is_constant_array2t(expr))
+    adjust_array_subtype(expr);
+  if (is_code_decl2t(expr))
+    adjust_decl_init(expr);
+  if (is_dereference2t(expr))
+    adjust_dereference(expr);
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
+  else if (is_neg2t(expr) || is_bitnot2t(expr))
+    promote_unary_bool_operand(expr);
 
   if (is_relational(expr))
     adjust_relational(expr);
@@ -881,6 +897,33 @@ static bool contains_sideeffect(const expr2tc &expr)
   return found;
 }
 
+/// An expression statement whose value has array type -- `y->ss;` where `y`
+/// points at a struct with an array member -- is rewritten to `&y->ss[0]`.
+/// clang_c_adjust does this because the dereference code does not assume such
+/// an object exists; the statement's value is unused, so taking the first
+/// element's address is free (clang_c_adjust_code.cpp:57-74).
+///
+/// An assignment operand is exempt there and here: the array is the assignment
+/// target, not a value being discarded.
+void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
+{
+  const code_expression2t &stmt = to_code_expression2t(expr);
+  const expr2tc &op = stmt.operand;
+  if (is_nil_expr(op) || is_sideeffect_assign2t(op) || is_code_assign2t(op))
+    return;
+
+  const type2tc t = ns.follow(op->type);
+  if (!is_array_type(t) && !is_vector_type(t))
+    return;
+
+  const type2tc &elem =
+    is_array_type(t) ? to_array_type(t).subtype : to_vector_type(t).subtype;
+  expr = code_expression2tc(
+    address_of2tc(
+      elem, index2tc(elem, op, gen_zero(migrate_type(index_type())))),
+    stmt.location);
+}
+
 /// Dereferencing a pointer to a function yields a function designator, which
 /// converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`, and
 /// `******f` too. clang_c_adjust::adjust_dereference re-takes the address for
@@ -1062,6 +1105,24 @@ void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
   }
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+/// C11 6.5.3.3: the operand of unary `-` and `~` undergoes integer promotion,
+/// so a boolean one -- a comparison, `||` or `&&` -- becomes int. Left boolean
+/// it reaches the solver where a bitvector is wanted (#4078).
+void clang_c_adjust_irep2::promote_unary_bool_operand(expr2tc &expr)
+{
+  const expr2tc &op = *expr->get_sub_expr(0);
+  if (is_nil_expr(op) || !is_bool_type(op->type) || is_bool_type(expr->type))
+    return;
+
+  expr2tc promoted = op;
+  c_implicit_typecast(promoted, expr->type, ns);
+  if (promoted == op)
+    return;
+
+  expr = is_neg2t(expr) ? expr2tc(neg2tc(expr->type, promoted))
+                        : expr2tc(bitnot2tc(expr->type, promoted));
 }
 
 void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)
