@@ -197,6 +197,11 @@ prepare_platform_config() {
           "-DENABLE_CVC5=Off"
         )
         BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
+        # c2goto stubs sol64 out on ARM64, where clang has no _BitInt > 128
+        # (src/c2goto/CMakeLists.txt), so the frontend would build against an
+        # empty model and every esbmc-solidity test would abort. Off here also
+        # unregisters that suite in regression/CMakeLists.txt.
+        BASE_ARGS+=("-DENABLE_SOLIDITY_FRONTEND=OFF")
       fi
       ;;
 
