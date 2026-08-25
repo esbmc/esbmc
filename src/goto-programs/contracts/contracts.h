@@ -442,8 +442,7 @@ private:
 
   /// \brief Does this old-temp's hoisted symbol appear under a
   /// pointer-region dereference shape somewhere in the body? Sets
-  /// is_ptr_region/region_index/region_elem_type on each entry that does.
-  /// #7057.
+  /// is_ptr_region/region_elem_type on each entry that does. #7057.
   static void classify_ptr_region_snapshots(
     std::vector<old_snapshot_t> &old_snapshots,
     const goto_programt &function_body);

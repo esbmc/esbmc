@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract bump --unwind 8
+on a pointer parameter is not yet supported under --replace-call-with-contract
