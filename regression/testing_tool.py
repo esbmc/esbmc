@@ -227,6 +227,10 @@ STATIC_CAPABILITIES = {
     # The 32-bit target (--32) is usable: multi-arch headers exist and the
     # frontend's type model matches them. See issue #1400.
     "arch32",
+    # The host is x86. For tests whose *input* is x86-only: clang's SSE/MMX
+    # intrinsic headers reject other targets outright, and inline asm naming
+    # x86 register constraints ('=a', '=q') does not compile elsewhere.
+    "arch_x86",
     # The operational-model library is bundled as a goto binary. With
     # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
     # measuring the blob has nothing to measure.
@@ -249,6 +253,11 @@ DYNAMIC_CAPABILITY_PROBES = {
     # Clang caps _BitInt/_ExtInt width per target (128 bits on aarch64-darwin,
     # far higher on x86_64-linux), so this cannot be answered statically.
     "bitint_wide": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
+    # does not. A test spelling a char type in expected output ("signed char c",
+    # "signed char * [argc + 1]") pins one of the two and cannot hold on both.
+    "signed_char_host": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
+    "int main() { return 0; }\n",
 }
 
 KNOWN_CAPABILITIES = STATIC_CAPABILITIES | set(DYNAMIC_CAPABILITY_PROBES)

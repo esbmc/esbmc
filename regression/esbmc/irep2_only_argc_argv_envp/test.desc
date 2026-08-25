@@ -1,6 +1,7 @@
 CORE
 main.c
 --clang-c-irep2-adjust-only --symbol-table-only
+REQUIRES signed_char_host
 ^Symbol\.+: envp_size'$
 ^Symbol\.+: envp'$
 ^Type\.+: signed char \* \[envp_size\]$

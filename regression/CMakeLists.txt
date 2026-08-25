@@ -74,6 +74,9 @@ endif()
 # it does not, which is the case issue #1400 was filed about.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
     list(APPEND ESBMC_TEST_CAPABILITIES arch32)
+    # A test whose input is x86-only: clang's SSE/MMX intrinsic headers reject
+    # any other target, and x86 asm register constraints do not compile there.
+    list(APPEND ESBMC_TEST_CAPABILITIES arch_x86)
 endif()
 
 if(ESBMC_BUNDLE_LIBC)
