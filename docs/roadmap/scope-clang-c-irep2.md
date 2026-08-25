@@ -5101,6 +5101,103 @@ The complex-arithmetic six is next by size, and `github_6713` names an issue
 whose own fix (#6713, the compound-assignment lowering) is already in the tree —
 so the reproducers are pinned and the divergence is in how this pass carries
 that lowering.
+## 121. The whole-suite verdict census — the sample's zero was a sampling
+## artefact (2026-08-23)
+
+(§121: PRs #7266, #7271, #7274, #7275, #7278 and #7280 are in flight against
+this file and claim §115-§120.)
+
+§120.5 asked for the verdict comparison to be widened from the pinned stride-8
+list to all of `regression/esbmc`, on the argument that any remaining live
+divergence had to come from the other seven-eighths. It does — emphatically.
+
+| | sample (226) | whole suite (1 742) |
+|---|---:|---:|
+| same verdict | 226 | 1 742 |
+| **differing verdict** | **0** | **25** |
+| skipped (`test.desc` already carries the flag) | 6 | 43 |
+
+**Zero on the sample meant nothing.** The stride-8 list is 1-in-8 of an
+alphabetical listing, and it contained not one of the 25. Every "exit criterion
+met" claim this scope has made against a stride sample should be read with that
+in mind: the sample was sized for a *goto-dump* census, where divergences were
+dense, and it was never re-sized when the instrument changed to verdicts, where
+they are rare and clustered.
+
+### 121.1 The 25, by failure mode
+
+| mode | tests |
+|---|---:|
+| SIGABRT (mostly a solver sort mismatch) | 8 |
+| uncaught `irep2_cast_error` | 7 |
+| SIGSEGV | 6 |
+| verdict flip, SUCCESSFUL → FAILED (false alarm) | 4 |
+
+Twenty-one of the 25 are crashes. Only four produce a wrong answer rather than
+no answer, and all four are false alarms rather than missed bugs — worth noting,
+though 21 aborts is not a comfortable position either.
+
+### 121.2 What this patch closes
+
+`bitvector_04`:
+
+```c
+_ExtInt(10) x = nondet_float();
+_ExtInt(10) y = nondet_int();
+_ExtInt(10) z = x + y;
+```
+
+```
+<         ASSIGN z=(signed _ExtInt(10))((signed int)x + (signed int)y);
+>         ASSIGN z=(signed int)x + (signed int)y;
+```
+
+The operands promote to `int` for the addition, and
+`clang_c_adjust::adjust_decl` ends with a `gen_typecast` of the initialiser back
+to the declared type (`clang_c_adjust_code.cpp:104`). This pass had no
+`code_decl2t` arm at all, so the 10-bit object was initialised from an `int` and
+bitwuzla aborted on the mismatched sorts.
+
+Note this is *not* `adjust_assign`: the first port targeted `code_assign2t` and
+did nothing, because a declaration's initialiser rides in `code_decl2t::init`
+rather than lowering to a separate assignment.
+
+The tests need **nondet** operands. With constants the initialiser folds before
+the mismatch can reach the encoder, and a constant-initialised pair passes on
+the unfixed binary — §39.1's first failure mode again, and the second time in
+three sittings that the first test written was the thin one.
+
+Census 24 → 24 on the pinned sample (which does not contain `bitvector_04`) with
+nothing new, and 25 → 24 on the whole-suite verdict census. Default path
+byte-identical on all 226 C sources of the sample. Suites: `esbmc` 1857/1857,
+`cstd` 142/142, `floats` 106/106, `function_contract` 414/414, `goto-coverage`
+144/144.
+
+### 121.3 The residue of 24, clustered
+
+Ordered by cluster size, since these are a handful of causes rather than 24:
+
+| tests | signature | members |
+|---:|---|---|
+| 7 | `to_struct_type() called on type whose type_id is union` | `github_162{,_fail}`, `github_571_{1,2,3}`, `struct_bitfields_16`, `union_bitfield_0` |
+| 6 | SIGSEGV in complex arithmetic | `complex_25`, `github_382_6`, `github_6713_complex_{compound,div_nondet}{,_fail}` |
+| 4 | SIGABRT on vectors / unary bool | `gcc_vector_float_{arith,scalar_mul}`, `github_4078_unary_bool{,_fail}` |
+| 4 | false alarm, SUCCESSFUL → FAILED | `builtin_arith_overflow`, `github_2174`, `github_4715_irep2_bodies_pragma_unroll_01`, `pragma_unroll_nested_dowhile_true` |
+| 3 | unclustered | `32_floppy`, `github_301`, `github_1934-1` |
+
+All reproduce on **master** as well as on the six-PR branch — checked directly
+for the `to_struct_type` cluster — so none is a regression from the series.
+
+### 121.4 Next
+
+The `to_struct_type()`-on-a-union cluster, at seven tests the largest. Its
+signature names the defect precisely: something in the pass assumes a struct
+where the type is a union, and both a `union_bitfield` and a `struct_bitfields`
+test are in it, so the bitfield lowering is where to look.
+
+The methodological point stands on its own: **census on the whole suite, not a
+stride sample**. The sample was calibrated for a denser instrument and silently
+under-reported by a factor of infinity once the instrument changed.
 ## 127. The "unclustered four" were four causes (2026-08-23)
 
 (§127: PRs #7266-#7287 are in flight against this file and claim §115-§126.)
