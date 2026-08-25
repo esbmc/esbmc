@@ -1100,6 +1100,108 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
+    def _lower_min_max_key_scan(self, call_node):
+        """Lower ``min``/``max(iterable, key=f)`` to an explicit linear scan.
+
+        Only reached once ``_lower_min_max_with_key_call`` has declined, i.e. the
+        iterable or the key is not constant-foldable. The runtime model takes no
+        key parameter, so without this the key is dropped and the call answers by
+        natural order. Returns ``(prefix_statements, expr)``, or None when the
+        shape does not apply.
+
+        Ties keep the first occurrence, matching CPython. An empty iterable
+        raises IndexError here where CPython raises ValueError.
+        """
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id in ("min", "max") and len(call_node.args) == 1):
+            return None
+
+        key_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == "key" and key_kw is None:
+                key_kw = kw
+            else:
+                return None
+        if key_kw is None:
+            return None
+        # A lambda has to be bound to a name first (an inline lambda argument is
+        # not resolved as a callee); a plain name is called directly, since a
+        # function alias assignment does not produce a callable symbol.
+        if isinstance(key_kw.value, ast.Lambda):
+            if len(key_kw.value.args.args) != 1:
+                return None
+        elif not isinstance(key_kw.value, ast.Name):
+            return None
+
+        n = self.minmax_key_counter
+        self.minmax_key_counter += 1
+        seq = f"ESBMC_mmseq_{n}"
+        key_fn = f"ESBMC_mmkey_{n}"
+        best = f"ESBMC_mmbest_{n}"
+        best_key = f"ESBMC_mmbestk_{n}"
+        idx = f"ESBMC_mmi_{n}"
+        cur = f"ESBMC_mmcur_{n}"
+        cur_key = f"ESBMC_mmcurk_{n}"
+
+        def store(name, value):
+            return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+
+        def load(name):
+            return ast.Name(id=name, ctx=ast.Load())
+
+        bind_key = isinstance(key_kw.value, ast.Lambda)
+
+        def call_key(arg_name):
+            callee = load(key_fn) if bind_key else copy.deepcopy(key_kw.value)
+            return ast.Call(func=callee, args=[load(arg_name)], keywords=[])
+
+        def at(index_expr):
+            return ast.Subscript(value=load(seq), slice=index_expr, ctx=ast.Load())
+
+        # max keeps a strictly greater key, min a strictly smaller one, so the
+        # first occurrence wins a tie either way.
+        better = ast.Gt() if call_node.func.id == "max" else ast.Lt()
+
+        loop_body = [
+            store(cur, at(load(idx))),
+            store(cur_key, call_key(cur)),
+            ast.If(
+                test=ast.Compare(left=load(cur_key), ops=[better], comparators=[load(best_key)]),
+                body=[store(best, load(cur)),
+                      store(best_key, load(cur_key))],
+                orelse=[],
+            ),
+            store(idx, ast.BinOp(left=load(idx), op=ast.Add(), right=ast.Constant(value=1))),
+        ]
+
+        prefix = [store(seq, copy.deepcopy(call_node.args[0]))]
+        if bind_key:
+            prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
+        prefix += [
+            store(best, at(ast.Constant(value=0))),
+            store(best_key, call_key(best)),
+            store(idx, ast.Constant(value=1)),
+            ast.While(
+                test=ast.Compare(
+                    left=load(idx),
+                    ops=[ast.Lt()],
+                    comparators=[
+                        ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                 args=[load(seq)],
+                                 keywords=[])
+                    ],
+                ),
+                body=loop_body,
+                orelse=[],
+            ),
+        ]
+
+        result = load(best)
+        for node in prefix + [result]:
+            self.ensure_all_locations(node, call_node)
+            ast.fix_missing_locations(node)
+        return prefix, result
+
     def _eval_const_key_values(self, key_node, elts):
         """Return the list of constant key values for `key=` applied to each
         element, or None when the key form or elements are not constant-

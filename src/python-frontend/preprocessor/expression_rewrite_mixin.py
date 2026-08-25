@@ -239,6 +239,12 @@ class ExpressionRewriteMixin:
                 self.statements.extend(prefix)
                 return result
 
+            scanned_min_max = self.preprocessor._lower_min_max_key_scan(node)
+            if scanned_min_max is not None:
+                prefix, result = scanned_min_max
+                self.statements.extend(prefix)
+                return result
+
             lowered_tuple_sorted_pair = self.preprocessor._lower_tuple_sorted_pair_call(node)
             if lowered_tuple_sorted_pair is not None:
                 prefix, result = lowered_tuple_sorted_pair
