@@ -3184,6 +3184,55 @@ exprt numpy_call_expr::handle_broadcast_to_call()
   return converter_.get_expr(result);
 }
 
+std::optional<exprt>
+numpy_call_expr::try_build_nditer_descriptor_list(const nlohmann::json &arg)
+{
+  std::optional<std::vector<nlohmann::json>> logical_elements =
+    converter_.build_numpy_nditer_logical_elements(arg);
+  if (!logical_elements)
+    return std::nullopt;
+
+  std::vector<exprt> elems;
+  elems.reserve(logical_elements->size());
+  for (const nlohmann::json &elem : *logical_elements)
+    elems.push_back(converter_.get_expr(elem));
+
+  nlohmann::json list_node{
+    {"_type", "List"}, {"elts", nlohmann::json::array()}};
+  python_list list(converter_, list_node);
+  return list.build_list_from_exprs(elems);
+}
+
+void numpy_call_expr::reject_unsupported_nditer_keywords(
+  const nlohmann::json &arg) const
+{
+  if (!call_.contains("keywords"))
+    return;
+
+  for (const auto &kw : call_["keywords"])
+  {
+    if (kw["_type"] != "keyword" || kw["arg"].is_null())
+      continue;
+
+    if (kw["arg"] == "flags")
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() flags are not supported");
+
+    if (kw["arg"] == "op_flags")
+    {
+      if (converter_.is_numpy_readonly_view_arg(arg))
+        throw std::runtime_error(
+          "ValueError: assignment destination is read-only");
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_flags are not supported");
+    }
+
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() keyword '" + kw["arg"].get<std::string>() +
+      "' is not supported");
+  }
+}
+
 void numpy_call_expr::reject_unsupported_transpose_axes_rank(
   const std::string &function)
 {
@@ -7415,26 +7464,22 @@ exprt numpy_call_expr::get()
       throw std::runtime_error(
         "TypeError: numpy." + function + "() requires an array argument");
 
-    if (function == "nditer" && call_.contains("keywords"))
-    {
-      for (const auto &kw : call_["keywords"])
-      {
-        if (kw["_type"] != "keyword" || kw["arg"].is_null())
-          continue;
-
-        if (kw["arg"] == "op_flags")
-          throw std::runtime_error(
-            "TypeError: numpy.nditer() op_flags are not supported");
-
-        throw std::runtime_error(
-          "TypeError: numpy.nditer() keyword '" + kw["arg"].get<std::string>() +
-          "' is not supported");
-      }
-    }
-
     nlohmann::json arr_arg = call_["args"][0];
+    if (
+      function == "nditer" && arr_arg.is_object() &&
+      arr_arg.value("_type", "") == "List")
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() currently supports a single operand");
+
     if (function == "nditer")
     {
+      reject_unsupported_nditer_keywords(arr_arg);
+
+      if (
+        std::optional<exprt> descriptor_list =
+          try_build_nditer_descriptor_list(arr_arg))
+        return *descriptor_list;
+
       auto literal_arg = get_literal_numpy_array_arg(arr_arg);
       if (literal_arg.has_value())
         arr_arg = std::move(*literal_arg);

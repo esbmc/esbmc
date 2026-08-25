@@ -1171,6 +1171,14 @@ private:
 
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
+  std::optional<std::vector<nlohmann::json>>
+  build_numpy_nditer_logical_elements(const nlohmann::json &arg) const;
+
+  std::optional<std::vector<std::size_t>>
+  get_numpy_nditer_logical_shape(const std::string &root_id) const;
+
+  bool is_numpy_readonly_view_arg(const nlohmann::json &arg) const;
+
   bool has_numpy_transpose_view_of(const std::string &source_id) const;
 
   void clear_numpy_view_copy(const exprt &lhs);

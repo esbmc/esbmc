@@ -655,6 +655,36 @@ std::optional<std::vector<long long>> numpy_shape_view_source_indices(
   return flat ? numpy_unravel_index(*flat, source_shape) : std::nullopt;
 }
 
+nlohmann::json numpy_constant_index_node(const std::size_t value)
+{
+  return {{"_type", "Constant"}, {"value", static_cast<long long>(value)}};
+}
+
+nlohmann::json numpy_name_load_node(const std::string &name)
+{
+  return {{"_type", "Name"}, {"id", name}, {"ctx", {{"_type", "Load"}}}};
+}
+
+nlohmann::json
+numpy_subscript_node(nlohmann::json value, const std::size_t index)
+{
+  return {
+    {"_type", "Subscript"},
+    {"value", std::move(value)},
+    {"slice", numpy_constant_index_node(index)},
+    {"ctx", {{"_type", "Load"}}}};
+}
+
+nlohmann::json numpy_subscript_node(
+  const std::string &root_name,
+  const std::vector<std::size_t> &indices)
+{
+  nlohmann::json node = numpy_name_load_node(root_name);
+  for (const std::size_t index : indices)
+    node = numpy_subscript_node(std::move(node), index);
+  return node;
+}
+
 std::size_t numpy_array_rank(const namespacet &ns, typet source_type)
 {
   if (source_type.is_pointer())
@@ -2191,6 +2221,90 @@ bool python_converter::is_tracked_numpy_view_id(
   return numpy_view_copy_sources_.count(symbol_id) != 0 ||
          numpy_transpose_view_info_.count(symbol_id) != 0 ||
          numpy_reshape_view_info_.count(symbol_id) != 0;
+}
+
+std::optional<std::vector<nlohmann::json>>
+python_converter::build_numpy_nditer_logical_elements(
+  const nlohmann::json &arg) const
+{
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Name" ||
+    !arg.contains("id") || !arg["id"].is_string())
+    return std::nullopt;
+
+  const std::string root_name = arg["id"].get<std::string>();
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return std::nullopt;
+
+  std::optional<std::vector<std::size_t>> shape =
+    get_numpy_nditer_logical_shape(root_id);
+  if (!shape || shape->empty() || shape->size() > 2)
+    return std::nullopt;
+
+  std::vector<nlohmann::json> result;
+  if (shape->size() == 1)
+  {
+    for (std::size_t i = 0; i < (*shape)[0]; ++i)
+      result.push_back(
+        numpy_subscript_node(root_name, std::vector<std::size_t>{i}));
+    return result;
+  }
+
+  for (std::size_t i = 0; i < (*shape)[0]; ++i)
+    for (std::size_t j = 0; j < (*shape)[1]; ++j)
+      result.push_back(
+        numpy_subscript_node(root_name, std::vector<std::size_t>{i, j}));
+  return result;
+}
+
+std::optional<std::vector<std::size_t>>
+python_converter::get_numpy_nditer_logical_shape(
+  const std::string &root_id) const
+{
+  if (auto reshape_it = numpy_reshape_view_info_.find(root_id);
+      reshape_it != numpy_reshape_view_info_.end())
+    return reshape_it->second.view_shape;
+
+  auto transpose_it = numpy_transpose_view_info_.find(root_id);
+  if (transpose_it == numpy_transpose_view_info_.end())
+    return std::nullopt;
+
+  const symbolt *source = symbol_table_.find_symbol(
+    resolve_numpy_array_storage_alias_id(transpose_it->second.source_id));
+  if (source == nullptr)
+    return std::nullopt;
+
+  const namespacet ns(symbol_table_);
+  std::vector<std::size_t> shape =
+    numpy_shape_from_type(ns, ns.follow(source->get_type()));
+  if (transpose_it->second.rank == 2 && transpose_it->second.swaps_axes)
+    std::reverse(shape.begin(), shape.end());
+  return shape;
+}
+
+bool python_converter::is_numpy_readonly_view_arg(
+  const nlohmann::json &arg) const
+{
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Name" ||
+    !arg.contains("id") || !arg["id"].is_string())
+    return false;
+
+  const std::string root_id =
+    resolve_name_symbol_id(arg["id"].get<std::string>());
+  if (root_id.empty())
+    return false;
+
+  if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
+      pointer_it != numpy_pointer_view_info_.end())
+    return pointer_it->second.readonly;
+
+  if (auto reshape_it = numpy_reshape_view_info_.find(root_id);
+      reshape_it != numpy_reshape_view_info_.end())
+    return reshape_it->second.readonly;
+
+  return false;
 }
 
 bool python_converter::has_numpy_transpose_view_of(
