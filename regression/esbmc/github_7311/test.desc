@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 260
+--unwind 800
 ^VERIFICATION SUCCESSFUL$
