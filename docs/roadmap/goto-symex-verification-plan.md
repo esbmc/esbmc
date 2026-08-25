@@ -724,7 +724,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R35** | **High (missed bug, default configuration)** — found by R34's controls, §15 M9 (R34); **FIXED**, §15 M9 (R35) | **A write below an object's base is neither performed nor flagged.** `char *base = (char *)&s; *(int *)(base - 4) = 42;` on a 16-byte stack struct reports `VERIFICATION SUCCESSFUL`: the `object-out-of-bounds` claim **passes**, the struct is unchanged, and a neighbouring local is unchanged — the store lands nowhere. The symmetric overflow `*(int *)(base + 16) = 42` **is** caught, so the bound is checked on one side only. Independent of R34: it reproduces through `char *`, which never had the sign defect, and the pointer model again disagrees with the check — `__ESBMC_POINTER_OFFSET` is `-4` and `__ESBMC_same_object` holds | the sign is discarded by `value_sett::to_expr`'s `gen_ulong`, but the wrapped constant is not flagged either; probes in the §15 M9 (R34) entry | `regression/esbmc/deref_negative_offset{,_fail}` (both CORE) | **Fixed**: the check is rearranged to `offset > data_sz - access_sz`, equivalent over the integers and free of the wrap. The unsigned reading is kept — a negative offset stays "a huge address", it is simply now compared without an addition that can carry it back into range. The pre-fix symptom was LP64-only — the wrap needed a 64-bit `unsigned long` — so the pin no longer needs `REQUIRES lp64_host` |
 | **R36** | **High (no verdict, then spurious counterexample, default configuration)** — found by code review of R35's fix, §15 M9 (R36) | **Relational comparison read pointer offsets unsigned, so a pointer below its object sorted above the base.** `char *b = a; char *below = b - 1;` gives `below >= b` — `assert(!(below >= b))` fails while `__ESBMC_POINTER_OFFSET(below) == -1` verifies on the same expression. The consequence is that `for (p = end; p >= begin; p--)` **never terminates**: the guard stays true below the base, so the loop exhausts its unwinding bound and then dereferences out of bounds — one unwinding-assertion failure and one spurious out-of-bounds report on a program gcc runs clean. `convert_ptr_cmp` did `typecast2tc(uint, pointer_offset2tc(sint, side))`; the stated reason was that an object larger than half the address space would flip the sign of its upper offsets, but that object is already unrepresentable in the signed `pointer_offset2t` every other consumer reads | `src/solvers/smt/smt_memspace.cpp`, `convert_ptr_cmp`; the cast dates to `79c621ff20` (#1537), which changed the cross-object arm and carried the unsigned reading in unremarked | `regression/esbmc/ptr_rel_below_base{,_fail}` | **Fixed**: drop the two typecasts and compare the signed offsets. The lexicographic object-id step is untouched, so cross-object ordering — the only thing #1537 was about — is unchanged, and it is still a total order |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
-| **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both KNOWNBUG) | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual**: under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously |
+| **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both now CORE), `ptr_rel_huge_object_force_success` (KNOWNBUG), `force_malloc_success_negative_indirect` | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual, measured and left open**, §15 M9 (R38 residual): under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously. Exempting that case by inspecting the argument's syntax was built and **refuted** — one intervening assignment (`size_t n = a; malloc(n)`) hides the typecast, the cap is assumed anyway, and a reachable `assert(0)` becomes a false SUCCESSFUL. Every other cut is worse or costs the >400 s M9 (R37) measured. The defect stays confined to allocations at or above 8 EiB |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -6519,6 +6519,94 @@ reason the symbolic `malloc` arm already gives: assuming it away would prune
 | `regression/esbmc/getenv{,1,2,3,4,_success}` | default | 6/6, unchanged — obstacle 1 |
 | `github_1352-success-32bit` | as recorded | 8.7 s vs 9.6 s baseline — obstacle 2 |
 | `-L esbmc/` | as recorded | 1909/1909; unit suite 716/716 |
+
+---
+
+### M9 (R38 residual) — 2026-08-25, the exemption a single assignment defeats
+
+R38's residual is measured, pinned, and **deliberately left open**: the obvious
+fix was built and it trades a Low-severity spurious counterexample for a
+**false SUCCESSFUL**.
+
+The residual reproduces exactly as the row predicts. `ptr_rel_huge_object`'s
+program — `p = malloc(n); q = p + n; assert(q >= p)` — verifies on the default
+path, where the cap applies, and reports `VERIFICATION FAILED` under
+`--force-malloc-success`, where a symbolic size is bounded only at
+`max_layable_size()`. Pinned by `regression/esbmc/ptr_rel_huge_object_force_success`
+(`KNOWNBUG`), which is `ptr_rel_huge_object` with the flag and nothing else
+changed.
+
+**The candidate fix.** Assume the cap under the flag as well, exempting the one
+case the previous entry names — a size that is huge only because a negative
+signed value was widened — by testing whether the argument is syntactically a
+typecast from a signed type. Built and measured against a control binary of the
+same tree:
+
+| shape | control | candidate |
+|---|---|---|
+| `ptr_rel_huge_object` + `--force-malloc-success` | `FAILED` | `SUCCESSFUL` — residual closed |
+| `github_1631_nondet_compact` (`malloc(a)`, `a < 0`) | `FAILED` | `FAILED` — exemption holds |
+| the same laundered: `size_t n = a; malloc(n)` | `FAILED` | **`SUCCESSFUL`** |
+| `force_malloc_success_unrepresentable` | `SUCCESSFUL` | `SUCCESSFUL` — unchanged |
+
+Row 3 is the refutation. **One intervening assignment defeats the exemption.**
+`cur_state->rename(size)` hands `symex_mem` the L2 expression, which for
+`malloc(n)` is the plain symbol `n` — the `(unsigned long)a` typecast is on the
+*assignment to* `n`, not on the argument — so the exemption does not fire, the
+cap is assumed, `a < 0` contradicts it, and a reachable `assert(0)` is proved
+vacuously. The verdict moves in the false-SUCCESSFUL direction, and
+`github_1631_nondet_compact` does not catch it: it uses the direct spelling,
+which is exactly the one the exemption covers.
+
+The exemption cannot be repaired by looking harder. It is a syntactic test on an
+expression the SSA is free to re-shape, and `n = a + 0`, a helper's return value
+or a struct field would each defeat a deeper version of it. Every hole is a false
+SUCCESSFUL, so the fix is only as sound as the completeness of a heuristic that
+cannot be complete. **Pinned by `regression/esbmc/force_malloc_success_negative_indirect`**
+(`CORE`, expects `FAILED`), which is `github_1631_nondet_compact` with the size
+laundered through a `size_t` variable and nothing else changed; it is
+mutation-killing — it passes on the tree and fails on the candidate.
+
+**The three other cuts are worse, and none is available cheaply.** Branching to
+NULL under the flag is correct and costs 21 s → >400 s on
+`github_1352-success-32bit`, measured in M9 (R37); every one of the six variants
+that ablation timed carried a `fits` ITE and every one was slow, so clamping the
+size to the cap is unlikely to be cheap either — though that exact variant was
+not among the six. Clamping would also invent out-of-bounds reports on a program
+that asked for `n` bytes and got fewer. Asserting the bound instead of assuming
+it prunes nothing, but would report a failed property on `malloc(nondet_size_t())`
+under a flag whose whole purpose is to make that program verify (reasoned, not
+measured). Leaving the loose bound keeps the defect confined to allocations at or
+above 8 EiB.
+
+**The principled fix is out of scope and unbuilt.** Every cut above is forced by
+one W-bit `pointer_struct` offset field, in which a below-base pointer and an
+offset at or above `2^63` are the same bit pattern — the ambiguity M9 (R37)
+identifies. A field one bit wider would separate them and make the whole R34–R38
+family disappear without any cap. That is a hypothesis, not a result: it touches
+every pointer encoding and its cost is unmeasured, and R31/R33's lesson is that a
+causal story is refuted by *building* the alternative, not by describing it.
+
+**A measurement trap that invalidated a full round of results, worth more than
+the finding.** The first pass concluded the residual did *not* reproduce — the
+witness verified under the flag, and the satisfiable/unsatisfiable boundary sat
+at exactly `PTRDIFF_MAX`, which read convincingly as a property of the
+address-space layout. All of it was wrong. `build/src/esbmc/esbmc` had been built
+from the working tree *with* the candidate patch applied; `git stash` then
+reverted the source but not the binary, so the "control" was the patch. It
+surfaced only when a `--show-vcc` dump showed an assumption
+(`addr2 < 0 || (unsigned long)addr2 <= 9223372036854775807`) that exists nowhere
+in the checked-out source. This is the mirror image of the stale-binary trap: the
+binary was *ahead* of the source, not behind, so checking that the fix commit is
+an ancestor of the built tree would not have caught it. **Verify a control binary
+against the source it is supposed to embody — a VCC dump or a `--verbosity` probe
+naming the constraint — not against the commit it was built at.**
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_force_success` | `--force-malloc-success` | `KNOWNBUG` — pins the residual; XPASSes if it is ever closed. Weak by construction, as M9 (R36)'s note records: a timeout also satisfies `KNOWNBUG` |
+| `regression/esbmc/force_malloc_success_negative_indirect` | `--force-malloc-success` | `CORE`, `FAILED` — pins the trap; `SUCCESSFUL` on the candidate |
+| `-L esbmc/` | as recorded | 1912/1912 |
 
 ---
 
