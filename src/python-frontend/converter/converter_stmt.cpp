@@ -2223,6 +2223,17 @@ bool python_converter::is_tracked_numpy_view_id(
          numpy_reshape_view_info_.count(symbol_id) != 0;
 }
 
+void python_converter::reject_nonconstant_numpy_view_write(
+  const nlohmann::json &target) const
+{
+  const std::string root_name = root_name_from_subscript(target);
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (!root_id.empty() && is_tracked_numpy_view_id(root_id))
+    throw std::runtime_error(
+      "TypeError: writing through a numpy view with a non-constant index is "
+      "not supported");
+}
+
 std::optional<std::vector<nlohmann::json>>
 python_converter::build_numpy_nditer_logical_elements(
   const nlohmann::json &arg) const
@@ -3164,7 +3175,7 @@ void python_converter::clear_numpy_transpose_views_of(
   }
 }
 
-void python_converter::emit_numpy_transpose_mirror_assignment(
+void python_converter::emit_numpy_view_cell_assignment(
   const std::string &symbol_id,
   const std::vector<long long> &cell_indices,
   const exprt &rhs,
@@ -3183,6 +3194,74 @@ void python_converter::emit_numpy_transpose_mirror_assignment(
   code_assignt mirror(cell, rhs);
   mirror.location() = location;
   target_block.copy_to_operands(mirror);
+}
+
+void python_converter::mirror_numpy_source_write_to_views(
+  const std::string &source_id,
+  const std::vector<long long> &source_indices,
+  const exprt &rhs,
+  const locationt &location,
+  codet &target_block,
+  const std::string &skip_view_id)
+{
+  const std::string storage_source_id =
+    resolve_numpy_array_storage_alias_id(source_id);
+
+  for (const auto &entry : numpy_transpose_view_info_)
+  {
+    if (entry.first == skip_view_id)
+      continue;
+
+    const numpy_transpose_view_infot &view = entry.second;
+    if (
+      resolve_numpy_array_storage_alias_id(view.source_id) != storage_source_id)
+      continue;
+
+    std::optional<std::vector<long long>> view_indices =
+      numpy_transpose_cell_indices(view.rank, view.swaps_axes, source_indices);
+    if (view_indices)
+      emit_numpy_view_cell_assignment(
+        entry.first, *view_indices, rhs, location, target_block);
+  }
+
+  for (const auto &entry : numpy_reshape_view_info_)
+  {
+    if (entry.first == skip_view_id)
+      continue;
+
+    const numpy_reshape_view_infot &view = entry.second;
+    if (
+      resolve_numpy_array_storage_alias_id(view.source_id) != storage_source_id)
+      continue;
+
+    if (view.broadcast)
+    {
+      for (const auto &current : numpy_broadcast_view_indices_for_source(
+             source_indices, view.view_shape, view.source_shape))
+        emit_numpy_view_cell_assignment(
+          entry.first, current, rhs, location, target_block);
+      continue;
+    }
+
+    std::optional<std::size_t> flat =
+      numpy_flat_index(source_indices, view.source_shape);
+    std::optional<std::vector<long long>> view_indices =
+      flat ? numpy_unravel_index(*flat, view.view_shape) : std::nullopt;
+    if (view_indices)
+      emit_numpy_view_cell_assignment(
+        entry.first, *view_indices, rhs, location, target_block);
+  }
+}
+
+void python_converter::emit_numpy_transpose_mirror_assignment(
+  const std::string &symbol_id,
+  const std::vector<long long> &cell_indices,
+  const exprt &rhs,
+  const locationt &location,
+  codet &target_block)
+{
+  emit_numpy_view_cell_assignment(
+    symbol_id, cell_indices, rhs, location, target_block);
 
   auto view_it = numpy_transpose_view_info_.find(symbol_id);
   if (view_it == numpy_transpose_view_info_.end())
@@ -3191,13 +3270,15 @@ void python_converter::emit_numpy_transpose_mirror_assignment(
   std::optional<std::vector<long long>> source_indices =
     numpy_transpose_cell_indices(
       view_it->second.rank, view_it->second.swaps_axes, cell_indices);
-  if (source_indices)
-    emit_numpy_transpose_mirror_assignment(
-      resolve_numpy_array_storage_alias_id(view_it->second.source_id),
-      *source_indices,
-      rhs,
-      location,
-      target_block);
+  if (!source_indices)
+    return;
+
+  const std::string source_id =
+    resolve_numpy_array_storage_alias_id(view_it->second.source_id);
+  emit_numpy_view_cell_assignment(
+    source_id, *source_indices, rhs, location, target_block);
+  mirror_numpy_source_write_to_views(
+    source_id, *source_indices, rhs, location, target_block, symbol_id);
 }
 
 void python_converter::mirror_numpy_transpose_assignment(
@@ -3213,7 +3294,10 @@ void python_converter::mirror_numpy_transpose_assignment(
   const std::vector<long long> indices =
     subscript_indices_from_root(target, root_name);
   if (root_name.empty())
+  {
+    reject_nonconstant_numpy_view_write(target);
     return;
+  }
 
   const std::string root_id = resolve_name_symbol_id(root_name);
   if (root_id.empty())
@@ -3228,12 +3312,14 @@ void python_converter::mirror_numpy_transpose_assignment(
       numpy_transpose_cell_indices(
         direct->second.rank, direct->second.swaps_axes, indices);
     if (cell_indices)
-      emit_numpy_transpose_mirror_assignment(
-        resolve_numpy_array_storage_alias_id(direct->second.source_id),
-        *cell_indices,
-        rhs,
-        location,
-        target_block);
+    {
+      const std::string source_id =
+        resolve_numpy_array_storage_alias_id(direct->second.source_id);
+      emit_numpy_view_cell_assignment(
+        source_id, *cell_indices, rhs, location, target_block);
+      mirror_numpy_source_write_to_views(
+        source_id, *cell_indices, rhs, location, target_block, root_id);
+    }
     return;
   }
 
@@ -3264,7 +3350,10 @@ void python_converter::mirror_numpy_reshape_assignment(
   const std::vector<long long> indices =
     subscript_indices_from_root(target, root_name);
   if (root_name.empty())
+  {
+    reject_nonconstant_numpy_view_write(target);
     return;
+  }
 
   const std::string root_id = resolve_name_symbol_id(root_name);
   if (root_id.empty())
@@ -3280,12 +3369,14 @@ void python_converter::mirror_numpy_reshape_assignment(
         direct->second.source_shape,
         direct->second.broadcast);
     if (source_indices)
-      emit_numpy_transpose_mirror_assignment(
-        resolve_numpy_array_storage_alias_id(direct->second.source_id),
-        *source_indices,
-        rhs,
-        location,
-        target_block);
+    {
+      const std::string source_id =
+        resolve_numpy_array_storage_alias_id(direct->second.source_id);
+      emit_numpy_view_cell_assignment(
+        source_id, *source_indices, rhs, location, target_block);
+      mirror_numpy_source_write_to_views(
+        source_id, *source_indices, rhs, location, target_block, root_id);
+    }
     return;
   }
 

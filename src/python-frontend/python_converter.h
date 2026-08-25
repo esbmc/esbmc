@@ -1171,6 +1171,8 @@ private:
 
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
+  void reject_nonconstant_numpy_view_write(const nlohmann::json &target) const;
+
   std::optional<std::vector<nlohmann::json>>
   build_numpy_nditer_logical_elements(const nlohmann::json &arg) const;
 
@@ -1251,6 +1253,21 @@ private:
     const exprt &rhs,
     const locationt &location,
     codet &target_block);
+
+  void emit_numpy_view_cell_assignment(
+    const std::string &symbol_id,
+    const std::vector<long long> &cell_indices,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block);
+
+  void mirror_numpy_source_write_to_views(
+    const std::string &source_id,
+    const std::vector<long long> &source_indices,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block,
+    const std::string &skip_view_id = "");
 
   bool should_rebuild_cached_numpy_row_subscript_rhs(
     const nlohmann::json &rhs_node) const;
