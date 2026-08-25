@@ -1,8 +1,8 @@
 extern int __VERIFIER_nondet_int(void);
 
 // Pins both polarities of the guard named in a dead-code advisory. `flag` also
-// pins that the negation is derived from the expression: flipping the probe's
-// comment text would print "!flag" here.
+// pins expression-level negation: the surviving probe's comment is "!flag", so
+// printing it gives "!flag" and wrapping it in !(...) gives "!(!flag)".
 int main(void)
 {
   _Bool flag = 0;
