@@ -1100,6 +1100,43 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
+    def _scan_key_argument(self, call_node, func_names):
+        """Return the ``key=`` keyword a scan lowering should apply, else None.
+
+        Rejects anything the scans cannot lower: a call that is not
+        ``<name>(iterable, key=...)``, a second keyword, a multi-parameter
+        lambda, and a key that is neither a lambda nor a plain name (see
+        _lower_min_max_key_scan for why only those two). An all-constant list
+        literal is rejected too: the constant fold above owns that case and
+        declined only because the key values are mutually incomparable, which
+        the regular dispatch reports as a mixed-element-type error -- scanning
+        instead would bury that behind a vaguer one.
+        """
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id in func_names and len(call_node.args) == 1):
+            return None
+
+        key_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == "key" and key_kw is None:
+                key_kw = kw
+            else:
+                return None
+        if key_kw is None:
+            return None
+
+        if isinstance(key_kw.value, ast.Lambda):
+            if len(key_kw.value.args.args) != 1:
+                return None
+        elif not isinstance(key_kw.value, ast.Name):
+            return None
+
+        literal = self._resolve_list_literal_iterable(call_node.args[0])
+        if literal is not None and all(
+                self._const_scalar_value(elt) is not None for elt in literal.elts):
+            return None
+        return key_kw
+
     def _lower_sorted_key_scan(self, call_node):
         """Lower ``sorted(iterable, key=f)`` to an explicit insertion sort.
 
@@ -1114,32 +1151,8 @@ class GeneratorMixin:
         which aliases its argument -- sorting through the alias would mutate the
         caller's list, and ``sorted`` must not.
         """
-        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
-                and call_node.func.id == "sorted" and len(call_node.args) == 1):
-            return None
-
-        key_kw = None
-        for kw in call_node.keywords:
-            if kw.arg == "key" and key_kw is None:
-                key_kw = kw
-            else:
-                return None
+        key_kw = self._scan_key_argument(call_node, ("sorted", ))
         if key_kw is None:
-            return None
-        # See _lower_min_max_key_scan for why only these two key shapes.
-        if isinstance(key_kw.value, ast.Lambda):
-            if len(key_kw.value.args.args) != 1:
-                return None
-        elif not isinstance(key_kw.value, ast.Name):
-            return None
-
-        # An all-constant list literal belongs to the fold above; it declined
-        # only because the key values are mutually incomparable, and the regular
-        # dispatch names that (a mixed-element-type error) far better than a
-        # scan over the same list would.
-        literal = self._resolve_list_literal_iterable(call_node.args[0])
-        if literal is not None and all(
-                self._const_scalar_value(elt) is not None for elt in literal.elts):
             return None
 
         n = self.minmax_key_counter
@@ -1237,32 +1250,11 @@ class GeneratorMixin:
         Ties keep the first occurrence, matching CPython. An empty iterable
         raises IndexError here where CPython raises ValueError.
         """
-        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
-                and call_node.func.id in ("min", "max") and len(call_node.args) == 1):
-            return None
-
-        key_kw = None
-        for kw in call_node.keywords:
-            if kw.arg == "key" and key_kw is None:
-                key_kw = kw
-            else:
-                return None
-        if key_kw is None:
-            return None
         # A lambda has to be bound to a name first (an inline lambda argument is
         # not resolved as a callee); a plain name is called directly, since a
         # function alias assignment does not produce a callable symbol.
-        if isinstance(key_kw.value, ast.Lambda):
-            if len(key_kw.value.args.args) != 1:
-                return None
-        elif not isinstance(key_kw.value, ast.Name):
-            return None
-
-        # See _lower_sorted_key_scan: an all-constant literal belongs to the
-        # fold, whose decline the regular dispatch diagnoses better.
-        literal = self._resolve_list_literal_iterable(call_node.args[0])
-        if literal is not None and all(
-                self._const_scalar_value(elt) is not None for elt in literal.elts):
+        key_kw = self._scan_key_argument(call_node, ("min", "max"))
+        if key_kw is None:
             return None
 
         n = self.minmax_key_counter
