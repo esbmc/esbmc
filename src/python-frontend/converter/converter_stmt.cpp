@@ -467,6 +467,19 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     }
   }
 }
+/// True when @p spelling names the built-in @p lower / @p upper and no
+/// user-defined class of that name shadows it.
+static bool names_builtin(
+  const std::string &spelling,
+  const char *lower,
+  const char *upper,
+  const nlohmann::json &ast)
+{
+  if (spelling != lower && spelling != upper)
+    return false;
+  return !json_utils::is_class(spelling, ast);
+}
+
 std::pair<std::string, typet>
 python_converter::extract_type_info(const nlohmann::json &var_node)
 {
@@ -515,15 +528,22 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     if (var_type_str.empty())
       return {var_type_str, var_typet};
 
+    // A spelled `Callable[[A], R]` keeps its signature, so a call through the
+    // variable recovers R. A bare one -- what the annotation pass infers for a
+    // variable bound to a function value -- resolves to a pointer whose code
+    // type returns void, leaving that call nondet: worse than no annotation at
+    // all, since an unannotated binding takes the callee's own return type. So
+    // defer to the RHS instead (#6640).
+    if (var_type_str == "Callable")
+      return {
+        var_type_str,
+        ann.contains("slice") ? get_callable_type(ann, var_node) : typet()};
+
     // User-defined classes named "list"/"List" or "dict"/"Dict" take priority
     // over the built-in types when used as a plain Name annotation.
-    if (
-      (var_type_str == "dict" || var_type_str == "Dict") &&
-      !json_utils::is_class(var_type_str, *ast_json))
+    if (names_builtin(var_type_str, "dict", "Dict", *ast_json))
       var_typet = dict_handler_->get_dict_struct_type();
-    else if (
-      (var_type_str == "list" || var_type_str == "List") &&
-      !json_utils::is_class(var_type_str, *ast_json))
+    else if (names_builtin(var_type_str, "list", "List", *ast_json))
       var_typet = type_handler_.get_list_type();
     else
       var_typet = type_handler_.get_typet(var_type_str, type_size);
@@ -6303,6 +6323,12 @@ exprt python_converter::get_block(
       get_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
+
+      // Bind the closure's capture cells where the `def` executes (#6256).
+      exprt::operandst &bindings = pending_captures_.operands();
+      block.operands().insert(
+        block.operands().end(), bindings.begin(), bindings.end());
+      bindings.clear();
       break;
     }
     case StatementType::RETURN:

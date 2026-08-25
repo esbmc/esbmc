@@ -77,6 +77,7 @@ TEST_CASE("with_type round-trips on supported kinds (H-B5)", "[core][irep2]")
     {mul2tc(u32, c5, c7), s32},
     {bitand2tc(u32, c5, c7), s32},
     {bitor2tc(u32, c5, c7), s32},
+    {address_of2tc(u32, symbol2tc(u32, "x")), pointer_type2tc(u64)},
   };
 
   for (const auto &[e, alt] : supported)
@@ -89,6 +90,31 @@ TEST_CASE("with_type round-trips on supported kinds (H-B5)", "[core][irep2]")
     REQUIRE(retyped->type == alt);
     REQUIRE(retyped->with_type(e->type) == e);
   }
+}
+
+TEST_CASE("with_type rebuilds an address-of from the pointee", "[core][irep2]")
+{
+  config.ansi_c.word_size = 32;
+
+  type2tc u32 = get_uint_type(32);
+  type2tc u64 = get_uint_type(64);
+  expr2tc obj = symbol2tc(u32, "x");
+
+  // address_of2t's ctor takes the *pointee* type and builds the pointer, so a
+  // generic rebuild that forwards new_type verbatim wraps it a second time.
+  expr2tc retyped = address_of2tc(u32, obj)->with_type(pointer_type2tc(u64));
+  const type2tc &pointee = to_pointer_type(retyped->type).subtype;
+  REQUIRE(pointee == u64);
+  REQUIRE(!is_pointer_type(pointee));
+  REQUIRE(to_address_of2t(retyped).ptr_obj == obj);
+
+  // implicit is in the fields tuple, so dropping it would also break equality.
+  expr2tc sugar =
+    address_of2tc(u32, obj, true)->with_type(pointer_type2tc(u64));
+  REQUIRE(to_address_of2t(sugar).implicit);
+
+  // The rebuild reads new_type as a pointer; a non-pointer is a caller bug.
+  REQUIRE_THROWS_AS(address_of2tc(u32, obj)->with_type(u64), irep2_cast_error);
 }
 
 #if !defined(_WIN32)
