@@ -151,11 +151,9 @@ public:
 
   /** Whether a satisfiable result can be turned into a model. False for the
    *  subprocess SMT-LIB backends with no interactive model solver attached:
-   *  they answer sat/unsat, but get() and l_get() have nothing to read. */
-  virtual bool has_model() const
-  {
-    return true;
-  }
+   *  they answer sat/unsat, but get() and l_get() have nothing to read.
+   *  Defined in camada_conv.cpp, where the backend's shape is known. */
+  bool has_model() const;
 
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,

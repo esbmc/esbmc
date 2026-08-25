@@ -798,15 +798,25 @@ void clang_c_adjust_irep2::lower_complex_compound_assignment(expr2tc &expr)
     return;
 
   const type2tc &ct = a.lhs->type;
+
+  /* `a *= 2.0f` leaves the scalar as written, but the node built below takes
+   * the complex result type, and the arith2t constructors assert operand and
+   * result widths agree. adjust_complex_arith promotes a scalar operand to
+   * {val, 0} itself; do it here too so the node can be constructed at all. */
+  expr2tc rhs = a.rhs;
+  if (!is_complex_type(rhs->type))
+    rhs = constant_struct2tc(
+      ct, std::vector<expr2tc>{rhs, gen_zero(to_complex_type(ct).subtype)});
+
   expr2tc binop;
   if (a.op == "assign+")
-    binop = add2tc(ct, a.lhs, a.rhs);
+    binop = add2tc(ct, a.lhs, rhs);
   else if (a.op == "assign-")
-    binop = sub2tc(ct, a.lhs, a.rhs);
+    binop = sub2tc(ct, a.lhs, rhs);
   else if (a.op == "assign*")
-    binop = mul2tc(ct, a.lhs, a.rhs);
+    binop = mul2tc(ct, a.lhs, rhs);
   else if (a.op == "assign_div")
-    binop = div2tc(ct, a.lhs, a.rhs);
+    binop = div2tc(ct, a.lhs, rhs);
   else
     return;
 

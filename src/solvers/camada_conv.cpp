@@ -651,6 +651,25 @@ void smt_solver_baset::assert_ast(smt_astt a)
   solver->addConstraint(a);
 }
 
+/* A write-only SMT-LIB solver emits the script and never reads anything back,
+ * so get()/l_get() have nothing to answer with; in one-shot mode the model
+ * comes from the auxiliary interactive solver, which is only there while it
+ * is live. Every linked backend always has a model. Without this, --result-only
+ * runs still reach the readout paths and die on "write-only mode does not
+ * support get*". */
+bool smt_solver_baset::has_model() const
+{
+#if CAMADA_HAVE_SMTLIB
+  if (oneshot)
+  {
+    const auto *smtlib =
+      dynamic_cast<const camada::SMTLIBSolver *>(solver.get());
+    return smtlib && smtlib->oneShotModelSolverLive();
+  }
+#endif
+  return !streams_script;
+}
+
 /* Non-null only when the model comes from an external one-shot model
  * solver, whose disappearance must be reported rather than defaulted. */
 const char *smt_solver_baset::oneshot_label() const
