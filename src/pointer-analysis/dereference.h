@@ -124,12 +124,16 @@ public:
   virtual bool
   has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) = 0;
 
-  /** Optionally rename the given expression. The default implementation is a
-   *  no-op; the symbolic-execution override substitutes the SSA names and
-   *  recorded constants symex currently holds. Called on the index operands
-   *  of dereference chains once their inner dereferences are resolved, so an
-   *  index whose value symex knows folds to a constant and the access stays
-   *  on the constant-offset path (see dereference_expr_nonscalar, #7311).
+  /** Rename the given expression into the callback's current execution
+   *  context. The default implementation is a no-op; the symbolic-execution
+   *  override substitutes the SSA names and recorded constants symex
+   *  currently holds. Called on the index operands of dereference chains once
+   *  their inner dereferences are resolved, so an index whose value symex
+   *  knows folds to a constant and the access stays on the constant-offset
+   *  path (see dereference_expr_nonscalar, #7311). Indices mentioning a
+   *  symbol bound by an enclosing quantifier are excluded: the callback has
+   *  no quantifier context and would substitute the like-named program
+   *  variable's value.
    *  @param expr An expression to be renamed
    */
   virtual void rename(expr2tc &expr [[maybe_unused]])
