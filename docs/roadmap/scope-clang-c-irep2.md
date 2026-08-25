@@ -5114,6 +5114,88 @@ so the honest next step is **not another slice but a wider census** — run the
 verdict comparison over the whole `regression/esbmc` suite rather than 1-in-8,
 which is where any remaining live divergence now has to come from. §118.5's
 artefact warning applies at that scale: the run must clean up after itself.
+## 119. §118.6's unsound row closed — the literal's type is a pre-padding copy
+## (2026-08-23)
+
+(§119: PRs #7266, #7271, #7274 and #7275 are in flight against this file and
+claim §115-§118.)
+
+§118.3 named `github_2335_4` — FAILED by default, SUCCESSFUL under the flag —
+as the highest-value row left, being the only one unsound rather than merely
+wrong. It is `clang_c_adjust::adjust_struct`, which this pass never had.
+
+### 119.1 The missing arm, and why the obvious port does not work
+
+The legacy arm inserts a zero operand at each synthetic padding member so a
+literal's operand list matches its padded type
+(`clang_c_adjust_expr.cpp:202-226`). Ported directly it does nothing: the
+literal's own type reports two members where the tag reports three.
+
+The reason is that the value's type is an **inline copy the converter recorded
+before `add_padding` ran**. `pad_type_symbol` pads the *type symbols*, and the
+legacy arm needs no more than that because there the value's type is a
+`symbol_typet` — `ns.follow` resolves it to the padded one. Under this flag the
+value has come through `migrate_expr`, which resolved that symbol type to a
+concrete `struct_type2t` snapshot, and `ns.follow` on a concrete type is the
+identity. The padded layout has to be read off the tag symbol by name.
+
+`pad_struct_operands` already existed for exactly this job, file-local in
+`python_adjust.cpp` (§V.3's Optional/union literals). It moves to
+`irep2_utils`, so the two frontends share one definition rather than the second
+copy §39.2 of `frontends-to-irep2.md` warns about.
+
+### 119.2 The first pair of tests did not reproduce, and why
+
+The obvious test — read a trailing member out of a padded literal — passes on
+the *pre-patch* binary. Trailing padding shifts nothing before it, so every
+declared member still resolves at its own index. §39.1's first failure mode:
+the corpus was thin, and a green mutant meant the test, not the code.
+
+What `github_2335_4` actually exercises is a dispatch through a function-pointer
+member of an array element, where the short literal changes the flow rather
+than a single read. Reduced to 21 lines:
+
+```c
+struct command { char *name; void (*function)(void); char state_needed; };
+const struct command commands[] = {{"c1", c1, 0}, {"c2", c2, 1}};
+/* parse() dispatches through commands[i].function; c1() leaks on the second call */
+```
+
+```
+$ esbmc v2.c --memory-leak-check ...                              VERIFICATION FAILED
+$ esbmc v2.c --memory-leak-check ... --clang-c-irep2-adjust-only  VERIFICATION SUCCESSFUL
+```
+
+That is the shipped `_fail` test, and it is the strongest kind available here:
+the pre-patch binary does not merely print differently, it **misses a real
+leak**. Corrupting the arm (skip the insert) returns both tests to SUCCESSFUL.
+
+### 119.3 Result
+
+Census on the pinned stride-8 list, same base: **24 → 22**, with
+`github_2335_4` and `github_578_success3` converging and nothing new. The two
+were one cause with two symptoms, as §118.3 predicted. The verdict census's
+three-row residue is now one (`github_3487`, §118.4).
+
+`irep2_utils` is shared, so the default path was measured: byte-identical on all
+226 C sources. Suites: `esbmc` 1857/1857, `cstd` 142/142, `function_contract`
+414/414, `python/list` 294/294, `python` class/struct/optional/union 110/110,
+`esbmc-cpp/cpp` 931/933 — `ch9_7` and `ch13_10` exceed the harness's 120 s cap
+locally and return their expected verdicts on master and here alike.
+
+### 119.4 Next
+
+`github_3487` — `ERROR: uncaught exception [St19bad_optional_access]` under the
+flag, SUCCESSFUL without. The last row of §118.1's three, and the only one that
+is a crash in ESBMC's own code rather than a modelling gap.
+## 116. §114.2's two three-test causes: one is a crash, one is not work
+## (2026-08-23)
+
+§114.2 deferred "the promotion at a comparison, and the decay rendered as a
+cast", three tests each, on the reading that both were spelling-level. Reduced,
+neither is what its census tag said.
+
+### 116.1 The comparison cast is §113.3's class, not a missing promotion
 ## 129. The false alarm was not in the builtin's lowering (2026-08-24)
 
 (§129: PRs #7278-#7290 are in flight against this file and claim §119-§128;
@@ -6044,6 +6126,102 @@ __attribute__((aligned)) int g = 42;
 int main(void) { int p = 1; if (g == 42) p = 2; return p; }
 ```
 
+Legacy emits `(signed int)g == 42`; the hop-off emits `g == 42`. Dropping the
+attribute makes the pair byte-identical, so the operand needs no promotion —
+`g` is already `int`. What legacy emits is an identity cast, and it emits it
+because the *legacy* types differ on an alignment attribute.
+
+`signedbv_type2t` has exactly one field, `width`
+(`src/irep2/irep2_type.h:209-221`). `__attribute__((aligned)) int` and plain
+`int` are therefore not merely observed-equal after `migrate_type`, they are the
+same node by construction, and the symbol tables are byte-identical on both
+paths. No pass reading IREP2 can know the cast is owed — §113.3's argument
+verbatim, reached from a different node.
+
+**Do not mirror.** Three of the 24 close as non-work, on the same footing as
+`atexit`'s function-pointer cast.
+
+### 116.2 The array decay is not a spelling difference at all
+
+The other cause reduces to six lines:
+
+```c
+char a[4];
+char b[4];
+int main(int argc, char **argv) { char *c = argc == 1 ? a : b; return c[0]; }
+```
+
+```
+<         ASSIGN c=argc == 1 ? &a[0] : &b[0];
+>         ASSIGN c=argc == 1 ? (signed char *)a : (signed char *)b;
+```
+
+The same conversion through an `if` statement (`if (argc == 1) c = a; else c =
+b;`) and through a plain initialiser is byte-identical, so it is the ternary
+that is special — and the site is not in the adjuster.
+
+`migrate_expr`'s `if` arm coerces any branch whose `type_id` differs from the
+node's, by construction a typecast (`migrate.cpp:1186`). It was added for the C
+`assert` idiom `cond ? 0 : __assert_fail()`, whose branches diverge from a void
+result, and its comment claims "well-typed ternaries already have matching
+branch types". That premise is false: a well-typed conditional yielding a
+pointer from array operands has branch `type_id` `array` against a node
+`pointer`, so the coercion fires on the common path and wins the race against
+the adjuster, which never sees an array to decay.
+
+The consequence is worse than a spelling. `typecast(array, pointer)` is not a
+form the SMT backend accepts:
+
+```
+$ esbmc v.c --clang-c-irep2-adjust-only
+ERROR: Unexpected type in int/ptr typecast
+```
+
+on a nine-line program that verifies on the default path. The census could not
+see it: `--goto-functions-only` stops before the encoder, so the row read
+`diff`, not `crash`.
+
+The fix gives that pair its C conversion (C11 6.3.2.1p3) rather than a cast —
+`&a[0]`, exactly what `c_typecastt::do_typecast` already spells for the same
+pair on both of its copies — and falls through to the typecast for every other
+divergent pair, so the `assert` idiom the arm was written for is untouched.
+
+### 116.3 Result
+
+`regression/esbmc/irep2_only_ternary_array_decay{,_fail}` pin the verdict rather
+than the printer: both abort with `Unexpected type in int/ptr typecast` before
+the patch, and return SUCCESSFUL / FAILED-with-`array bounds violated` after.
+That is the strongest mutant this scope has had — the pre-patch binary does not
+merely print differently, it produces no verdict at all.
+
+Census on a stride-8 list of `regression/esbmc` pinned to a file before the A/B
+(233 entries, 226 with a `.c` source), against the same base:
+
+| goto program | before | after |
+|---|---:|---:|
+| same | 202 | **204** |
+| diff | **24** | **22** |
+
+`github_6966_fail` and `memset-const-2` converge; none diverges that did not
+before. §114 tagged this cause at three tests — the third carries a second
+cause and stays.
+
+`migrate_expr` is shared, so the default path was measured separately: over the
+same 226 C sources, `--goto-functions-only` with no `-only` flag is
+**byte-identical on all 226** between master and the patch. Suites:
+`esbmc` 1857/1857, `cstd` 142/142, `floats` 106/106, `function_contract`
+414/414, `goto-coverage` 144/144, `python/list` 294/294, `esbmc-cpp/cpp`
+931/933 — `ch9_7` and `ch13_10` exceed the harness's 120 s cap locally and
+`ch9_7` takes 2 m 04 s on master against 2 m 01 s here, so neither is this
+patch.
+
+### 116.4 Next
+
+The residue is 22, and the named causes left are the temporary numbering
+(`tmp$3` vs `tmp$4`, 2 tests), struct padding in an aggregate initialiser
+(`github_578_success3`), and `POINTER_OFFSET` spelling in an `offsetof`
+lowering (`github_2512_8`, `github_426_2`, `github_2512_12`) — the largest
+remaining group and the one to reduce first. Three tests are untagged.
 ```
 <         IF !((signed int)g == 42) THEN GOTO 1
 >         IF !(g == 42) THEN GOTO 1
