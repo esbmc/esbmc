@@ -2909,6 +2909,81 @@ ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
   return node.value("attr", fallback);
 }
 
+/// Replace \p dest's recorded element types with \p src's, but only when every
+/// one of src's entries has the same type. sorted()/reversed() permute their
+/// argument, so a per-position copy would misattribute the elements of a
+/// heterogeneous list; a homogeneous one is permutation-invariant.
+static void
+copy_homogeneous_elem_types(const std::string &src, const std::string &dest)
+{
+  const size_t n = python_list::get_list_type_map_size(src);
+  if (n == 0)
+    return;
+
+  const typet first = python_list::get_list_element_type(src, 0);
+  if (first.is_nil())
+    return;
+  for (size_t i = 1; i < n; ++i)
+    if (python_list::get_list_element_type(src, i) != first)
+      return;
+
+  python_list::copy_type_info(src, dest);
+}
+
+/// sorted()/reversed()/list() reorder or copy their argument, they do not
+/// retype it, so the result's elements are the argument's. Without this the
+/// runtime path leaves the result untyped and a tuple element reads back as an
+/// int -- `for u, v in sorted(d, key=d.__getitem__)` then fails to unpack.
+/// Only reached when nothing more precise has typed the destination.
+void python_converter::copy_elem_types_from_reordering_builtin(
+  const nlohmann::json &ast_node,
+  const std::string &lhs_id)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return;
+
+  const auto &call = ast_node["value"];
+  if (
+    !call.contains("func") || !call["func"].is_object() ||
+    call["func"].value("_type", "") != "Name")
+    return;
+
+  const std::string builtin = call["func"].value("id", "");
+  if (builtin != "sorted" && builtin != "reversed" && builtin != "list")
+    return;
+
+  if (!call.contains("args") || call["args"].empty())
+    return;
+
+  const auto &arg = call["args"][0];
+
+  if (arg.value("_type", "") == "Name")
+  {
+    symbol_id arg_sid = create_symbol_id();
+    arg_sid.set_object(arg["id"].get<std::string>());
+    copy_homogeneous_elem_types(arg_sid.to_string(), lhs_id);
+    return;
+  }
+
+  // The dict-iterating form: the preprocessor rewrites `sorted(d, ...)` to
+  // `sorted(d.keys(), ...)`, so the argument is a call, not a name.
+  if (
+    arg.value("_type", "") != "Call" || !arg.contains("func") ||
+    arg["func"].value("_type", "") != "Attribute" ||
+    arg["func"]["value"].value("_type", "") != "Name")
+    return;
+
+  const std::string component = arg["func"].value("attr", "");
+  if (component != "keys" && component != "values")
+    return;
+
+  symbol_id dict_sid = create_symbol_id();
+  dict_sid.set_object(arg["func"]["value"]["id"].get<std::string>());
+  const std::string &src = python_dict_handler::get_internal_list_id(
+    dict_sid.to_string(), component == "keys");
+  copy_homogeneous_elem_types(src, lhs_id);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -3021,6 +3096,7 @@ void python_converter::handle_function_call_rhs(
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
+    copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
     if (python_list::get_list_type_map_size(lhs_id) == 0)
     {
       std::string func_name;
