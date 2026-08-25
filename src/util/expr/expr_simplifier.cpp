@@ -8,6 +8,7 @@
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
+#include <irep2/simplification_check.h>
 #include <util/expr/type_byte_size.h>
 
 expr2tc expr2t::do_simplify() const
@@ -56,6 +57,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       expr2tc shortcut = do_simplify();
       if (!is_nil_expr(shortcut))
       {
+        simplification_check::verify_node_rewrite(*this, shortcut);
         expr2tc resimp = shortcut->simplify(suppress_reassoc);
         return is_nil_expr(resimp) ? shortcut : resimp;
       }
@@ -133,6 +135,8 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     expr2tc top = changed ? current->do_simplify() : do_simplify();
     if (!is_nil_expr(top))
     {
+      simplification_check::verify_rewrite_or_node(current, *this, top);
+
       // Pass our own suppress_reassoc through: if a peephole rewrote an
       // add into a sub (or vice versa), that result is still subject to
       // whatever suppression we were given.
@@ -168,6 +172,9 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       if (is_arith_chain || is_other_chain)
       {
         expr2tc canonical = is_nil_expr(result) ? clone() : result;
+        // The reassociators replace the container rather than mutating through
+        // it, so this keeps the pre-rewrite tree without a clone.
+        const expr2tc before_reassoc = canonical;
         bool rewrote = false;
         if (is_arith_chain)
           rewrote = reassociate_arith(canonical);
@@ -181,6 +188,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
           rewrote = reassociate_bitxor(canonical);
         if (rewrote)
         {
+          simplification_check::verify_rewrite(before_reassoc, canonical);
           // Run peepholes on the rebuilt tree so add(x, neg(y)) -> sub(x, y)
           // and friends collapse. simplify_no_reassoc forces
           // suppress_reassoc=true throughout to avoid re-entering the
@@ -207,7 +215,8 @@ static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
   if (is_nil_expr(to_simplify))
-    to_simplify = expr;
+    return expr;
+  simplification_check::verify_rewrite(expr, to_simplify);
   return to_simplify;
 }
 
