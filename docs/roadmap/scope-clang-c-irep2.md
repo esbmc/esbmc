@@ -5594,6 +5594,80 @@ test are in it, so the bitfield lowering is where to look.
 The methodological point stands on its own: **census on the whole suite, not a
 stride sample**. The sample was calibrated for a denser instrument and silently
 under-reported by a factor of infinity once the instrument changed.
+
+## 128. The array-typed expression statement (2026-08-23)
+
+(§128: PRs #7267-#7288 are in flight against this file and claim §116-§127.)
+
+§127.4 picked `github_1934-1` as the most precisely signposted of the six
+remaining rows. Its message —
+
+```
+ERROR: Can't construct rvalue reference to array type during dereference
+```
+
+— names the consumer, and the producer is a nine-line program:
+
+```c
+struct Base { int ss[128]; };
+int main() { struct Base x, *y = &x; y->ss; }
+```
+
+### 128.1 A statement whose value is an array
+
+`clang_c_adjust::adjust_code` rewrites an array-typed expression statement to
+`&y->ss[0]` (`clang_c_adjust_code.cpp:57-74`), with its own comment explaining
+why: the dereference code does not assume such an object exists, and the
+statement's value is unused, so taking the first element's address is free.
+This pass had no `code_expression2t` arm — the only place it touches that kind
+is `declare_implicit_callee`, which reads the operand and does not rewrite it —
+so the bare array reached `dereferencet`.
+
+Ported with the same shape, extended to `vector` as well as `array` because
+`is_array_like` (the legacy predicate) covers both.
+
+### 128.2 The assignment exemption, which nothing reaches
+
+The legacy arm exempts an assignment operand (`op.statement() != "assign"`):
+there the array is the assignment target, not a discarded value. Mirrored here,
+and **no input found reaches it**. The probes:
+
+| probe | result |
+|---|---|
+| `struct` assignment (`b = a` with an array member) | struct-typed, so the array guard already excludes it |
+| array-to-pointer assignment (`q = p`) | pointer-typed, excluded |
+| **vector** assignment (`b = a`, `v4f`) — legal in C, and vector-typed | reaches the arm as a `code_assign2t` statement, not wrapped in `code_expression2t` |
+
+Removing the exemption leaves all three byte-identical to the default path.
+
+This is **not** §94.1's case, where a ported guard *undid* a rewrite the legacy
+pass also performed and so added behaviour that had to be justified. Here the
+guard makes this pass's condition identical to legacy's; dropping it would be
+the deviation, and could only be justified by an input showing legacy's own
+guard is dead. Kept, and recorded as untested rather than left to look tested.
+
+### 128.3 Result
+
+Whole-suite verdict residue **6 → 5**. Both tests abort on the pre-patch binary
+and return SUCCESSFUL / FAILED after. Default path byte-identical on 226 C
+sources. Suites: `esbmc` 1854/1857, `cstd` 142/142, `cbmc` 307/307,
+`extensions` 201/201 — the three are `github_302`, `github_2335_1` and
+`github_4634`, all exceeding the harness's 120 s cap locally and all returning
+their expected verdict on master and here alike.
+
+### 128.4 Next
+
+| test | signature |
+|---|---|
+| `github_301` | `ERROR: Bitwuzla error encountered` |
+| `32_floppy` | SIGSEGV, no verdict |
+| `builtin_arith_overflow`, `github_2174` | false alarm SUCCESSFUL → FAILED |
+| `complex_25` | §88.2 binding |
+
+The two false alarms are next: they are the only rows producing a wrong answer
+rather than no answer, and `builtin_arith_overflow` names a builtin family
+(`__builtin_*_overflow`) whose lowering is a specific, findable arm — the same
+shape as §117 and §125, both of which were unported name-matched builtins.
 ## 127. The "unclustered four" were four causes (2026-08-23)
 
 (§127: PRs #7266-#7287 are in flight against this file and claim §115-§126.)
