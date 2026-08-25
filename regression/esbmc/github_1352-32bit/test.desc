@@ -1,5 +1,5 @@
 THOROUGH
 gh-1352.c
---fp2bv --unwind 1 --no-unwinding-assertion --force-malloc-success --32
+--unwind 1 --no-unwinding-assertion --force-malloc-success --32
 ^VERIFICATION FAILED$
 \bdereference failure: array bounds violated\b

@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---fp2bv -Wno-error=implicit-function-declaration
+-Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$
