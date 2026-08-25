@@ -111,6 +111,7 @@ private:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  void promote_unary_bool_operand(expr2tc &expr);
   void adjust_struct(expr2tc &expr);
   void adjust_array_subtype(expr2tc &expr);
   void adjust_decl_init(expr2tc &expr);
