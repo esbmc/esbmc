@@ -726,7 +726,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
 | **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both now CORE), `ptr_rel_huge_object_force_success` (KNOWNBUG), `force_malloc_success_negative_indirect` | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual, measured and left open**, §15 M9 (R38 residual): under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously. Exempting that case by inspecting the argument's syntax was built and **refuted** — one intervening assignment (`size_t n = a; malloc(n)`) hides the typecast, the cap is assumed anyway, and a reachable `assert(0)` becomes a false SUCCESSFUL. Every other cut is worse or costs the >400 s M9 (R37) measured. The defect stays confined to allocations at or above 8 EiB |
 | **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
-| **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **open** | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (KNOWNBUG; confirmed to fail on the *assertion*, not by timing out) | **Open.** R38's treatment does not port directly: an `ASSUME` emitted in `goto_convert` is stated on a symbol that symex may constant-fold to a violating value, which is exactly R39's vacuity arriving through a different door. The bound has to be placed where the size's constness is visible — after renaming — and a VLA never reaches `symex_mem`, being a `DECL`ed local with a `DYNAMIC_SIZE` assignment. Carries `needs-svcomp-run`: every VLA program passes through this site |
+| **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -6676,6 +6676,58 @@ door. Pinned `KNOWNBUG`, failing on the assertion rather than by timing out.
 Reachability of the added branch is discharged by the two pins whose expected
 output is the claim's own message, which is a stronger witness than a Mode C
 run over a model of the same code.
+### M9 (R40) — 2026-08-25, the bound that could not go where the branch is
+
+R40 is fixed, and the obstacle its row predicted is the whole reason the fix
+looks the way it does. `generate_dynamic_size_vla` is where a VLA acquires its
+size, and it already emits two guards there — a positive dimension and a size
+computation that does not overflow the address space. Adding `PTRDIFF_MAX` as a
+third looks obvious and is wrong twice over. As an `ASSERT` it reports every
+`char a[n]` whose `n` is unbounded, on a check the existing overflow guard
+already makes for every element type wider than a byte, so it would be new noise
+on programs nothing else objects to. As an `ASSUME` it is stated on `tmp$2`, a
+symbol symex may later constant-fold to a violating value — and an assumption
+that folds to false proves the program. That is R39, one week old, arriving
+through a different door.
+
+**The site has to be where constness is visible, which is symex.** A VLA never
+reaches `symex_mem`: it is a `DECL`ed local plus one `ASSIGN DYNAMIC_SIZE(&a) =
+size`, and `generate_dynamic_size_vla` is that assignment's only producer for
+VLAs. Bounding at that assignment gets renaming for free — the same
+`cur_state->rename(size)` that lets `symex_mem` tell a constant request from a
+symbolic one. Symbolic sizes are assumed below the cap, exactly as `alloca`'s
+are and for the same reason (a declaration has no failure outcome to report);
+a constant one is reported.
+
+**What the fix does not do.** The report leaves the oversized object in place —
+unlike R39, where returning NULL kept an unrepresentable object from being laid
+out, the `DECL` has already happened by the time the size is seen. A
+constant-size violation therefore reports its own claim *and* whatever the
+oversized object then makes fail. That is noise on a run already reported as
+failing, and it is preferable to the alternatives: nulling nothing and assuming
+false is the vacuity, and clamping the size would invent out-of-bounds reports.
+
+**Measured, with a control for the one failure that appeared.**
+`github_2335_1` timed out at `-j8` in the first post-patch sweep. It contains
+**zero** `DYNAMIC_SIZE` instructions, so the new code cannot execute for it, and
+a control binary of the same tree without the patch runs it in **164.7 s**
+against the patched binary's **157.8 s** — the test is simply slower than its
+50 s historical mean on this tree, and 240 s is not enough for it at 8-way load.
+Re-run alone it passes at 169 s, and the whole label passes at `-j6`.
+
+| Artefact | Invocation | Verdict | Mutation it kills |
+|---|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_vla` | default | `CORE`, was `KNOWNBUG` — `SUCCESSFUL` | cap loosened to `max_layable_size()` |
+| `regression/esbmc/vla_above_ptrdiff_max` | default | `CORE`, `FAILED` — reports the declaration | the constant report dropped |
+| `regression/esbmc/vla_ptrdiff_max` | default | `CORE`, `SUCCESSFUL` — the boundary is allocated, not reported | `>` widened to `>=` |
+| `regression/esbmc/vla_bounds_preserved` | default | `CORE`, `FAILED` — anti-vacuity twin: a reachable `assert(0)` under a symbolic VLA | the assumption strengthened past the cap (also caught by `mpor_aggregate_ptr_race_vla_element`) |
+| `-L esbmc/` | `-j6` | 1931/1931 | — |
+| `github_2335_1` | standalone | 157.8 s patched vs 164.7 s control | — |
+
+With R40 closed, every path that can size an object — `malloc`, `alloca`,
+`realloc` and a VLA declaration — is bounded at `PTRDIFF_MAX`, and the R34–R38
+family has no remaining spelling except R38's `--force-*-success` residual, which
+is open by decision rather than by omission.
 ---
 
 ## Appendix A — Methodological basis
