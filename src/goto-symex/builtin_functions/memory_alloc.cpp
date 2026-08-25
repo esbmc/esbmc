@@ -19,7 +19,8 @@
 // it pointer subtraction overflows, and an object's offset -- stored in
 // ptraddr_type2() but read signed by the bounds checks, pointer subtraction and
 // the relational comparator -- becomes indistinguishable from a below-base
-// pointer (R37). alloca and realloc are still uncapped; see R38.
+// pointer (R37). alloca bounds a symbolic request by assumption and reports a
+// constant one; realloc joins the cap to its failure condition (R38, R39).
 static BigInt max_object_size()
 {
   return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
@@ -654,11 +655,11 @@ expr2tc goto_symext::symex_mem(
     // reaches the address-space model is encoded as a contradiction rather
     // than as a failed allocation, which silently proves the whole program.
     bool is_negative_size = false;
-    if (is_malloc && is_typecast2t(size))
+    if (is_typecast2t(size))
     {
-      // Detect malloc(-N) before the fold to typecast(size_t, -N) erases the
-      // sign; to_uint64() below discards it, so malloc(-1) would otherwise be
-      // mistaken for a 1-byte allocation.
+      // Detect a negative request before the fold to typecast(size_t, -N)
+      // erases the sign; to_uint64() below discards it, so malloc(-1) would
+      // otherwise be mistaken for a 1-byte allocation.
       expr2tc inner = to_typecast2t(size).from;
       simplify(inner);
       is_negative_size = is_constant_int2t(inner) &&
@@ -668,11 +669,17 @@ expr2tc goto_symext::symex_mem(
     expr2tc folded = size;
     simplify(folded);
 
-    if (is_malloc && is_constant_int2t(folded))
+    if (is_constant_int2t(folded))
     {
       const BigInt &val = to_constant_int2t(folded).value;
       if (is_negative_size || val.is_negative() || val > max_object_size())
       {
+        // A constant request cannot be bounded by assumption the way a symbolic
+        // one is: the assumption is identically false, so every execution is
+        // pruned and the whole program is proved. Report the request instead --
+        // an over-large alloca is undefined, not a failure C defines. R39.
+        if (!is_malloc)
+          claim(gen_false_expr(), "alloca: size exceeds PTRDIFF_MAX");
         // Return NULL even under --force-malloc-success, matching real OS
         // behaviour.
         expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
