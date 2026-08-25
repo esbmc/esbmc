@@ -4769,6 +4769,18 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
           list_arg, list_id, func_name, comparison_op);
       }
     }
+    // Reaching the runtime model means the preprocessor could not fold the
+    // call, and the model has no key parameter -- the key is dropped, which
+    // silently reorders the result (sorted([a, a + 1], key=lambda v: -v) then
+    // reports a spurious counterexample). Refuse instead of answering wrongly.
+    if (is_sorted_min_max && call_.contains("keywords"))
+      for (const auto &kw : call_["keywords"])
+        if (kw.value("arg", "") == "key")
+          throw std::runtime_error(
+            func_name +
+            "() with key= is only supported over a constant iterable; here "
+            "the key function cannot be applied and would be ignored");
+
     // Dispatch to typed builtin based on element type
     if (has_default_kwarg)
       actual_func_name += "_default";
