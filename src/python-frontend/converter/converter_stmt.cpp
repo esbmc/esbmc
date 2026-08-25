@@ -2935,27 +2935,36 @@ copy_homogeneous_elem_types(const std::string &src, const std::string &dest)
 /// runtime path leaves the result untyped and a tuple element reads back as an
 /// int -- `for u, v in sorted(d, key=d.__getitem__)` then fails to unpack.
 /// Only reached when nothing more precise has typed the destination.
-void python_converter::copy_elem_types_from_reordering_builtin(
-  const nlohmann::json &ast_node,
-  const std::string &lhs_id)
+const nlohmann::json *
+python_converter::reordering_builtin_arg(const nlohmann::json &ast_node)
 {
   if (!ast_node.contains("value") || !ast_node["value"].is_object())
-    return;
+    return nullptr;
 
   const auto &call = ast_node["value"];
   if (
     !call.contains("func") || !call["func"].is_object() ||
     call["func"].value("_type", "") != "Name")
-    return;
+    return nullptr;
 
   const std::string builtin = call["func"].value("id", "");
   if (builtin != "sorted" && builtin != "reversed" && builtin != "list")
-    return;
+    return nullptr;
 
   if (!call.contains("args") || call["args"].empty())
-    return;
+    return nullptr;
 
-  const auto &arg = call["args"][0];
+  return &call["args"][0];
+}
+
+void python_converter::copy_elem_types_from_reordering_builtin(
+  const nlohmann::json &ast_node,
+  const std::string &lhs_id)
+{
+  const nlohmann::json *arg_p = reordering_builtin_arg(ast_node);
+  if (arg_p == nullptr)
+    return;
+  const auto &arg = *arg_p;
 
   if (arg.value("_type", "") == "Name")
   {
