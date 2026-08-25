@@ -1,7 +1,6 @@
-/* R38: the PTRDIFF_MAX cap applies to malloc only, so alloca can still lay out
-   an object whose upper offsets read negative in the pointer comparator. The
-   malloc spelling of this program verifies (ptr_rel_huge_object); this one
-   reports a spurious counterexample at n = 0x8000000000000000. The width is
+/* The alloca half of R38: an object above PTRDIFF_MAX would put upper offsets
+   in the below-base window of the pointer comparator. alloca has no failure
+   outcome, so the bound is assumed rather than branched on. The width is
    fixed: `unsigned long` is 32-bit on LLP64 and never reaches 2^63. */
 #include <assert.h>
 #include <alloca.h>

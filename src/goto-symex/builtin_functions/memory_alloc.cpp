@@ -662,14 +662,20 @@ expr2tc goto_symext::symex_mem(
         size_is_one = true;
     }
     else if (
-      is_malloc && is_unsignedbv_type(size->type) &&
+      is_unsignedbv_type(size->type) &&
       size->type->get_width() >= ptraddr_type2()->get_width())
     {
       // A symbolic request can exceed the bound too, and the layout constraints
       // are asserted unconditionally, so leaving it unbounded makes the formula
       // UNSAT — silently pruning the executions the program asked about instead
       // of failing the allocation.
-      if (options.get_bool_option("force-malloc-success"))
+      if (!is_malloc)
+        // alloca has no failure outcome to report -- C leaves an over-large
+        // request undefined, and stdlib.c's getenv writes through the result
+        // without checking it -- so bound it by assumption. R38.
+        assume(lessthanequal2tc(
+          size, constant_int2tc(size->type, max_object_size())));
+      else if (options.get_bool_option("force-malloc-success"))
         // Only layability, and by assumption: branching to NULL costs
         // 21 s -> >400 s on github_1352-success-32bit, and assuming
         // max_object_size() instead would prune malloc((size_t)negative)
