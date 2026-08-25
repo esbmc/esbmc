@@ -578,6 +578,12 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /** Variables bound by quantifiers enclosing the expression currently
+   *  being dereferenced. */
+  std::set<irep_idt> quantifier_bound_vars;
+
+  /** True when @p expr mentions a symbol bound by an enclosing quantifier. */
+  bool mentions_bound_var(const expr2tc &expr) const;
 
 public:
   void set_block_assertions(void)

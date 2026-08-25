@@ -143,6 +143,36 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 static expr2tc distribute_steps_over_if(const expr2tc &e);
 
+/// Base name of the variable a forall2t/exists2t binds (mirrors
+/// quantifier_bound_name in goto_symex_state.cpp), or an empty id when the
+/// binder is not the (typecast of) address_of(symbol) shape the solver
+/// expects.
+static irep_idt quantifier_binder_name(const expr2tc &binder)
+{
+  expr2tc sym = binder;
+  while (is_typecast2t(sym))
+    sym = to_typecast2t(sym).from;
+  if (is_address_of2t(sym))
+    sym = to_address_of2t(sym).ptr_obj;
+  return is_symbol2t(sym) ? to_symbol2t(sym).thename : irep_idt();
+}
+
+bool dereferencet::mentions_bound_var(const expr2tc &expr) const
+{
+  if (quantifier_bound_vars.empty() || is_nil_expr(expr))
+    return false;
+  if (is_symbol2t(expr))
+    return quantifier_bound_vars.count(to_symbol2t(expr).thename) != 0;
+  bool found = false;
+  expr->foreach_operand(
+    [this, &found](const expr2tc &e)
+    {
+      if (!found)
+        found = mentions_bound_var(e);
+    });
+  return found;
+}
+
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
@@ -150,6 +180,30 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 
   switch (expr->expr_id)
   {
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+  {
+    /* Descend with the bound variable tracked: the index-operand fold in
+     * dereference_expr_nonscalar must not substitute a quantifier-bound
+     * symbol with the like-named program variable's SSA value -- the rename
+     * hook has no quantifier context (rename_quantified handles the same
+     * concern at the renaming layer, #7024). */
+    const expr2tc &binder =
+      is_forall2t(expr) ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1;
+    const irep_idt bound = quantifier_binder_name(binder);
+    const bool tracked =
+      bound != irep_idt() && quantifier_bound_vars.insert(bound).second;
+    expr->Foreach_operand(
+      [this, &guard, &mode](expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          dereference_expr(e, guard, mode);
+      });
+    if (tracked)
+      quantifier_bound_vars.erase(bound);
+    break;
+  }
+
   case expr2t::and_id:
   case expr2t::or_id:
   case expr2t::if_id:
@@ -515,8 +569,12 @@ expr2tc dereferencet::dereference_expr_nonscalar(
      * member/index reference. A symbolic index degenerates to a whole-object
      * byte_extract/byte_update that constant propagation cannot see through:
      * the assignment drops the object's recorded constant, later guards over
-     * it become undecidable and loops unwind to the bound (#7311). */
-    if (!is_constant_int2t(index.index))
+     * it become undecidable and loops unwind to the bound (#7311).
+     *
+     * Never substitute a symbol bound by an enclosing quantifier: the rename
+     * callback would replace it with the like-named program variable's SSA
+     * value, collapsing the quantified body to a constant (#7024 shape). */
+    if (!is_constant_int2t(index.index) && !mentions_bound_var(index.index))
     {
       dereference_callback.rename(index.index);
       simplify(index.index);
