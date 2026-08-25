@@ -685,10 +685,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // --dead-code-check reuses the branch-coverage instrumentation: each
     // conditional branch gets `assert(guard)` and `assert(!guard)` reachability
-    // probes, and a probe proven UNSAT means that branch direction is
-    // unreachable under all inputs — i.e. dead code. report_dead_code() reports
-    // those as CWE-561 note-level advisories without flipping the verdict (see
-    // bmc.cpp).
+    // probes, and an unviolated probe means the *opposite* direction is dead.
+    // report_dead_code() reports those as CWE-561 note-level advisories without
+    // flipping the verdict (see bmc.cpp).
     if (
       cmdline.isset("branch-coverage") ||
       cmdline.isset("branch-coverage-claims") ||
