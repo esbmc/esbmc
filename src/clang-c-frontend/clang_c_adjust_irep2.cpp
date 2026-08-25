@@ -531,6 +531,8 @@ void clang_c_adjust_irep2::adjust_array_subtype(expr2tc &expr)
   expr = constant_array2tc(
     array_type2tc(elem, at.array_size, at.size_is_infinite),
     a.datatype_members);
+}
+
 /// IREP2 form of clang_c_adjust::adjust_decl's trailing `gen_typecast`: a
 /// declaration's initialiser converts to the declared type. Distinct from
 /// adjust_plain_assignment, which handles the *expression* form
