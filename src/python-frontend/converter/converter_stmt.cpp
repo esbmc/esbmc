@@ -2321,7 +2321,7 @@ python_converter::build_numpy_descriptor_materialized_elements(
 
   std::optional<std::vector<nlohmann::json>> element_nodes =
     build_numpy_nditer_logical_elements(arg);
-  if (!element_nodes || element_nodes->empty())
+  if (!element_nodes)
     return std::nullopt;
 
   std::vector<exprt> elems;
@@ -2335,9 +2335,9 @@ python_converter::build_numpy_descriptor_materialized_elements(
 static exprt build_numpy_descriptor_array_value(
   const std::vector<std::size_t> &shape,
   const std::vector<exprt> &elems,
+  const typet &elem_type,
   type_handler &type_handler)
 {
-  const typet &elem_type = elems.front().type();
   typet result_type = type_handler.build_array(elem_type, shape.back());
   if (shape.size() == 2)
     result_type = type_handler.build_array(result_type, shape[0]);
@@ -2368,8 +2368,21 @@ python_converter::build_numpy_descriptor_materialized_array(
   if (!materialized)
     return std::nullopt;
 
+  std::optional<typet> empty_elem_type;
+  if (materialized->second.empty())
+  {
+    const std::string root_id =
+      resolve_name_symbol_id(arg["id"].get<std::string>());
+    empty_elem_type = get_numpy_descriptor_element_type(root_id);
+    if (!empty_elem_type)
+      return std::nullopt;
+  }
+
+  const typet &elem_type = materialized->second.empty()
+                             ? *empty_elem_type
+                             : materialized->second.front().type();
   exprt value = build_numpy_descriptor_array_value(
-    materialized->first, materialized->second, type_handler_);
+    materialized->first, materialized->second, elem_type, type_handler_);
 
   symbolt &tmp =
     create_tmp_symbol(arg, "$numpy_descriptor_copy$", value.type(), value);
@@ -2385,6 +2398,10 @@ std::optional<std::vector<std::size_t>>
 python_converter::get_numpy_nditer_logical_shape(
   const std::string &root_id) const
 {
+  if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
+      pointer_it != numpy_pointer_view_info_.end())
+    return std::vector<std::size_t>{pointer_it->second.length};
+
   if (auto reshape_it = numpy_reshape_view_info_.find(root_id);
       reshape_it != numpy_reshape_view_info_.end())
     return reshape_it->second.view_shape;
@@ -2404,6 +2421,24 @@ python_converter::get_numpy_nditer_logical_shape(
   if (transpose_it->second.rank == 2 && transpose_it->second.swaps_axes)
     std::reverse(shape.begin(), shape.end());
   return shape;
+}
+
+std::optional<typet> python_converter::get_numpy_descriptor_element_type(
+  const std::string &root_id) const
+{
+  const symbolt *symbol = symbol_table_.find_symbol(root_id);
+  if (symbol == nullptr)
+    return std::nullopt;
+
+  const namespacet ns(symbol_table_);
+  typet current = ns.follow(symbol->get_type());
+  if (current.is_pointer())
+    return ns.follow(current.subtype());
+
+  while (current.is_array())
+    current = ns.follow(to_array_type(current).subtype());
+
+  return current;
 }
 
 bool python_converter::is_numpy_readonly_view_arg(

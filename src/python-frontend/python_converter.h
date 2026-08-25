@@ -1191,6 +1191,9 @@ private:
   std::optional<std::vector<std::size_t>>
   get_numpy_nditer_logical_shape(const std::string &root_id) const;
 
+  std::optional<typet>
+  get_numpy_descriptor_element_type(const std::string &root_id) const;
+
   bool is_numpy_readonly_view_arg(const nlohmann::json &arg) const;
 
   bool has_numpy_transpose_view_of(const std::string &source_id) const;

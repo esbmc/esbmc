@@ -3315,8 +3315,17 @@ numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
       "arguments yet");
 
   if (materialized->second.empty())
+  {
+    if (function == "sum")
+    {
+      nlohmann::json zero{
+        {"_type", "Constant"}, {"value", 0}, {"kind", nullptr}};
+      return converter_.get_expr(zero);
+    }
+
     throw std::runtime_error(
       "ValueError: numpy." + function + "() arg is an empty sequence");
+  }
 
   return reduce_numpy_descriptor_values(function, materialized->second);
 }
