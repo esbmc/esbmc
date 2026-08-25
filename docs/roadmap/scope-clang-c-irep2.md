@@ -5013,6 +5013,107 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 120. The verdict census reaches zero — and the last live row was a comma
+## (2026-08-23)
+
+(§120: PRs #7266, #7271, #7274, #7275 and #7278 are in flight against this file
+and claim §115-§119.)
+
+With those five merged locally, both censuses were re-run on the pinned
+stride-8 list (226 C sources).
+
+| | before the series | after |
+|---|---:|---:|
+| goto program differing | 24 | **6** |
+| **verdict differing** | 3 | **0** |
+
+Every test in the sample now returns the same verdict on both paths. That is
+the first time this scope has measured zero on the instrument that matters.
+
+### 120.1 §119.4's row was already closed
+
+`github_3487`'s `bad_optional_access` is `member2t::do_simplify` calling
+`.value()` on an unresolvable component number
+(`expr_simplifier.cpp:1327`). The member it fails to find is **`anon_pad#1`**:
+the source is a `constant_struct2t` still carrying the pre-padding operand list,
+so the padding member the read names is not in its type. §119's arm removes the
+producer, and the test verifies.
+
+**Do not "harden" the `.value()`.** `member2t`'s constructor already asserts
+that the member resolves (`irep2_expr.h:1607-1610`), exempting only the
+transient symbol/pointer/array source types — which a `constant_struct2t` is
+not. So an assert-enabled build (CI's DebugOpt) would have caught this at
+construction, and the uncaught exception is only how a `-DNDEBUG` build notices
+the same violated invariant. Returning `expr2tc()` there would convert an
+asserted invariant into a silent decline and hide the next producer. The three
+unguarded `.value()` calls in that file (1226, 1243, 1327) are correct as they
+stand.
+
+### 120.2 The six remaining goto rows, classified
+
+| rows | cause | verdict |
+|---:|---|---|
+| 2 | identity cast from an alignment attribute (`aligned_attr`, `github_2337_6`) | do not mirror, §115.1 |
+| 3 | function-pointer identity cast (`atexit-1`, `github_5138_fail`, `github_5296`) | do not mirror, §113.3 |
+| 1 | `00_aiob_4_true-unreach-call` | **work**, §120.3 |
+
+Five of six were already-recorded decisions. Only one was live.
+
+### 120.3 The comma expression's type
+
+Reduced from `00_aiob_4`:
+
+```c
+unsigned g[42][3];
+unsigned i;
+int main(void) { i = 3; if ((i = i, g[i])[0] != 0) return 1; return 0; }
+```
+
+```
+<         ASSERT (signed long int)i >= 0 // array bounds violated: array `g' lower bound
+<         ASSERT (signed long int)i < 42 // array bounds violated: array `g' upper bound
+<         IF !(g[(signed long int)i][0] != 0) THEN GOTO 1
+---
+>         IF !((&g[(signed long int)i][0])[0] != 0) THEN GOTO 1
+```
+
+C11 6.5.17p2 gives a comma expression its right operand's type. Clang hands the
+node the *decayed* type when that operand is an array, and
+`clang_c_adjust::adjust_comma` overwrites it (`expr.type() = expr.op1().type()`,
+`clang_c_adjust_expr.cpp:1884`). This pass had no such arm — `adjust_sole_arms`
+never matched `code_comma2t` at all — so the pointer type survived,
+`adjust_index` took its `p[i]` sugar path, and the row was indexed as a pointer.
+
+The visible cost is the two named array-bounds ASSERTs. It is **not** a
+soundness hole: an out-of-range subscript is still caught, as
+`dereference failure: array bounds violated` rather than
+``array bounds violated: array `g' upper bound``. What is lost is the check's
+attribution, and with it the ability of a `test.desc` to pin *which* check
+fired — which is why the `_fail` test regexes the named form.
+
+`adjust_comma_at_dispatch` (`clang_c_adjust_irep2.cpp:875-885`) already performs
+exactly this rewrite for the `--clang-c-irep2-adjust` probe; the sole-adjuster
+path simply never called it. The arm added here is the same three lines,
+natively.
+
+### 120.4 Result
+
+Census 24 → 23 for this patch alone, with `00_aiob_4_true-unreach-call`
+converging and nothing new; default path byte-identical on all 226 C sources.
+Suites: `esbmc` 1857/1857, `cstd` 142/142, `floats` 106/106,
+`function_contract` 414/414, `goto-coverage` 144/144.
+
+Applied on top of the other five, the goto residue falls to **5**, and all five
+are recorded do-not-mirror decisions.
+
+### 120.5 Next
+
+The stride-8 sample is exhausted: zero verdict divergences, and every goto
+difference is a recorded decision. The sample was pinned at 226 of 1 863 tests,
+so the honest next step is **not another slice but a wider census** — run the
+verdict comparison over the whole `regression/esbmc` suite rather than 1-in-8,
+which is where any remaining live divergence now has to come from. §118.5's
+artefact warning applies at that scale: the run must clean up after itself.
 ## 125. The unary promotion the complex arm displaced (2026-08-23)
 
 (§125: PRs #7266-#7285 are in flight against this file and claim §115-§124.)
