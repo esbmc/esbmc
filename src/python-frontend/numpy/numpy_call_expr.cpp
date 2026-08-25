@@ -3139,6 +3139,13 @@ exprt numpy_call_expr::handle_broadcast_to_call()
   nlohmann::json arr_arg = call_["args"][0];
   if (arr_arg.contains("_type") && arr_arg["_type"] == "Name")
   {
+    const std::string name = arr_arg["id"].get<std::string>();
+    if (json_utils::has_multiple_assignments_in_scope(
+          name, converter_.current_function_name(), converter_.ast()))
+      throw std::runtime_error(
+        "TypeError: numpy.broadcast_to() currently supports only "
+        "single-assignment array inputs");
+
     arr_arg = json_utils::find_var_decl(
       arr_arg["id"], converter_.current_function_name(), converter_.ast());
     if (arr_arg.contains("value") && arr_arg["value"].is_object())
