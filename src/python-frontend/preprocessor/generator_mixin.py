@@ -1100,6 +1100,131 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
+    def _lower_sorted_key_scan(self, call_node):
+        """Lower ``sorted(iterable, key=f)`` to an explicit insertion sort.
+
+        Only reached once ``_lower_sorted_with_key_call`` has declined, i.e. the
+        iterable or the key is not constant-foldable. The runtime sort model
+        takes no key parameter, so without this the key is dropped and the call
+        answers by natural order. Returns ``(prefix_statements, expr)``, or None
+        when the shape does not apply.
+
+        Insertion sort with a strict ``>`` is stable, as CPython's sort is. The
+        working list is copied with a full slice rather than ``list(iterable)``,
+        which aliases its argument -- sorting through the alias would mutate the
+        caller's list, and ``sorted`` must not.
+        """
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id == "sorted" and len(call_node.args) == 1):
+            return None
+
+        key_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == "key" and key_kw is None:
+                key_kw = kw
+            else:
+                return None
+        if key_kw is None:
+            return None
+        # See _lower_min_max_key_scan for why only these two key shapes.
+        if isinstance(key_kw.value, ast.Lambda):
+            if len(key_kw.value.args.args) != 1:
+                return None
+        elif not isinstance(key_kw.value, ast.Name):
+            return None
+
+        # An all-constant list literal belongs to the fold above; it declined
+        # only because the key values are mutually incomparable, and the regular
+        # dispatch names that (a mixed-element-type error) far better than a
+        # scan over the same list would.
+        literal = self._resolve_list_literal_iterable(call_node.args[0])
+        if literal is not None and all(
+                self._const_scalar_value(elt) is not None for elt in literal.elts):
+            return None
+
+        n = self.minmax_key_counter
+        self.minmax_key_counter += 1
+        seq = f"ESBMC_srcseq_{n}"
+        key_fn = f"ESBMC_srckey_{n}"
+        out = f"ESBMC_srt_{n}"
+        i = f"ESBMC_srti_{n}"
+        j = f"ESBMC_srtj_{n}"
+        cur = f"ESBMC_srtc_{n}"
+        cur_key = f"ESBMC_srtck_{n}"
+
+        def store(name, value):
+            return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+
+        def load(name):
+            return ast.Name(id=name, ctx=ast.Load())
+
+        def num(value):
+            return ast.Constant(value=value)
+
+        def add(left, right):
+            return ast.BinOp(left=left, op=ast.Add(), right=right)
+
+        def sub(left, right):
+            return ast.BinOp(left=left, op=ast.Sub(), right=right)
+
+        def at(index_expr, ctx=None):
+            return ast.Subscript(value=load(out), slice=index_expr, ctx=ctx or ast.Load())
+
+        bind_key = isinstance(key_kw.value, ast.Lambda)
+
+        def call_key(arg_expr):
+            callee = load(key_fn) if bind_key else copy.deepcopy(key_kw.value)
+            return ast.Call(func=callee, args=[arg_expr], keywords=[])
+
+        def length(name):
+            return ast.Call(func=ast.Name(id="len", ctx=ast.Load()), args=[load(name)], keywords=[])
+
+        shift = ast.While(
+            test=ast.BoolOp(op=ast.And(),
+                            values=[
+                                ast.Compare(left=load(j), ops=[ast.GtE()], comparators=[num(0)]),
+                                ast.Compare(left=call_key(at(load(j))),
+                                            ops=[ast.Gt()],
+                                            comparators=[load(cur_key)]),
+                            ]),
+            body=[
+                ast.Assign(targets=[at(add(load(j), num(1)), ast.Store())], value=at(load(j))),
+                store(j, sub(load(j), num(1))),
+            ],
+            orelse=[],
+        )
+
+        outer = ast.While(
+            test=ast.Compare(left=load(i), ops=[ast.Lt()], comparators=[length(out)]),
+            body=[
+                store(cur, at(load(i))),
+                store(cur_key, call_key(load(cur))),
+                store(j, sub(load(i), num(1))),
+                shift,
+                ast.Assign(targets=[at(add(load(j), num(1)), ast.Store())], value=load(cur)),
+                store(i, add(load(i), num(1))),
+            ],
+            orelse=[],
+        )
+
+        # A full slice copies; list(iterable) aliases (see the docstring).
+        whole_slice = ast.Subscript(
+            value=load(seq),
+            slice=ast.Slice(lower=None, upper=None, step=None),
+            ctx=ast.Load(),
+        )
+
+        prefix = [store(seq, copy.deepcopy(call_node.args[0]))]
+        if bind_key:
+            prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
+        prefix += [store(out, whole_slice), store(i, num(1)), outer]
+
+        result = load(out)
+        for node in prefix + [result]:
+            self.ensure_all_locations(node, call_node)
+            ast.fix_missing_locations(node)
+        return prefix, result
+
     def _lower_min_max_key_scan(self, call_node):
         """Lower ``min``/``max(iterable, key=f)`` to an explicit linear scan.
 
@@ -1131,6 +1256,13 @@ class GeneratorMixin:
             if len(key_kw.value.args.args) != 1:
                 return None
         elif not isinstance(key_kw.value, ast.Name):
+            return None
+
+        # See _lower_sorted_key_scan: an all-constant literal belongs to the
+        # fold, whose decline the regular dispatch diagnoses better.
+        literal = self._resolve_list_literal_iterable(call_node.args[0])
+        if literal is not None and all(
+                self._const_scalar_value(elt) is not None for elt in literal.elts):
             return None
 
         n = self.minmax_key_counter
