@@ -181,6 +181,25 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
+  adjust_sole_arms_tail(expr);
+}
+
+/// The tail of adjust_sole_arms. Split only to keep either half under
+/// the complexity gate; the two run back to back and the arms below are
+/// order-independent of the ones above.
+void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
+{
+  // A comma expression takes its right operand's type (C11 6.5.17p2). Clang
+  // hands it the *decayed* type when the right operand is an array, so leaving
+  // it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
+  // the named array-bounds check for the generic dereference one. Same rewrite
+  // as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
+  if (is_code_comma2t(expr))
+  {
+    const code_comma2t &c = to_code_comma2t(expr);
+    if (expr->type != c.side_2->type)
+      expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
+  }
   if (is_constant_struct2t(expr))
     adjust_struct(expr);
   if (is_constant_array2t(expr))
@@ -190,14 +209,6 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_dereference2t(expr))
     adjust_dereference(expr);
 
-  adjust_sole_arms_tail(expr);
-}
-
-/// The tail of adjust_sole_arms. Split only to keep either half under
-/// the complexity gate; the two run back to back and the arms below are
-/// order-independent of the ones above.
-void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
-{
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
   else if (is_neg2t(expr) || is_bitnot2t(expr))
