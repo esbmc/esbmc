@@ -3241,12 +3241,6 @@ static exprt numpy_cast_to_double(const exprt &value)
                                        : typecast_exprt(value, double_type());
 }
 
-static exprt numpy_cast_to_bool(const exprt &value)
-{
-  return value.type() == bool_type() ? value
-                                     : typecast_exprt(value, bool_type());
-}
-
 static exprt reduce_numpy_descriptor_values(
   const std::string &function,
   const std::vector<exprt> &elems)
@@ -3280,14 +3274,7 @@ static exprt reduce_numpy_descriptor_values(
     return result;
   }
 
-  exprt result = numpy_cast_to_bool(elems.front());
-  for (std::size_t i = 1; i < elems.size(); ++i)
-  {
-    exprt current = numpy_cast_to_bool(elems[i]);
-    result = function == "any" ? exprt(or_exprt(result, current))
-                               : exprt(and_exprt(result, current));
-  }
-  return result;
+  throw std::runtime_error("unsupported numpy descriptor reducer");
 }
 
 std::optional<exprt>
@@ -4708,8 +4695,6 @@ exprt numpy_call_expr::create_expr_from_call()
     }
 
     const auto &arg_type = call_["args"][0]["_type"];
-    const std::string &numpy_function = function_id_.get_function();
-    reject_symbolic_transpose_axes(numpy_function, call_);
 
     if (
       arg_type == "Constant" || arg_type == "UnaryOp" ||

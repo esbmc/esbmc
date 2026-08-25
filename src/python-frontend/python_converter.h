@@ -1040,7 +1040,13 @@ private:
   std::string
   root_name_from_numpy_view_copy_expr(const nlohmann::json &node) const;
 
-  bool contains_copied_numpy_view_name(const nlohmann::json &node);
+  bool contains_tracked_numpy_view_name(const nlohmann::json &node);
+
+  bool is_tracked_numpy_view_name_node(const nlohmann::json &node);
+
+  bool is_basic_numpy_view_subscript_escape(const nlohmann::json &node);
+
+  bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
   void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
 

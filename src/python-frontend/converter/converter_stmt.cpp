@@ -2092,98 +2092,85 @@ std::string python_converter::root_name_from_numpy_view_copy_expr(
   return "";
 }
 
-bool python_converter::contains_copied_numpy_view_name(
+bool python_converter::is_tracked_numpy_view_name_node(
   const nlohmann::json &node)
 {
-  if (!node.is_object() && !node.is_array())
+  if (node.value("_type", "") != "Name" || !node.contains("id"))
     return false;
 
+  const std::string id = resolve_name_symbol_id(node["id"].get<std::string>());
+  return !id.empty() && is_tracked_numpy_view_id(id);
+}
+
+bool python_converter::is_basic_numpy_view_subscript_escape(
+  const nlohmann::json &node)
+{
+  if (
+    !is_basic_numpy_view_subscript(node) ||
+    root_name_from_subscript(node["value"]).empty())
+    return false;
+
+  code_blockt scratch_block;
+  code_blockt *saved_block = current_block;
+  exprt *saved_lhs = current_lhs;
+  current_block = &scratch_block;
+  current_lhs = nullptr;
+  exprt probe;
+  try
+  {
+    probe = get_expr(node);
+  }
+  catch (...)
+  {
+    current_block = saved_block;
+    current_lhs = saved_lhs;
+    throw;
+  }
+  current_block = saved_block;
+  current_lhs = saved_lhs;
+  return !contains_cpp_throw(probe) && probe.type().is_array();
+}
+
+bool python_converter::contains_tracked_numpy_view_object(
+  const nlohmann::json &node)
+{
+  const std::string node_type = node.value("_type", "");
+  if (
+    node_type == "GeneratorExp" || node_type == "ListComp" ||
+    node_type == "SetComp" || node_type == "DictComp")
+    return false;
+
+  if (is_tracked_numpy_view_name_node(node))
+    return true;
+
+  if (is_basic_numpy_view_subscript_escape(node))
+    return true;
+
+  if (
+    node_type == "Subscript" && node.contains("value") &&
+    node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
+    contains_tracked_numpy_view_name(node["value"]))
+    return contains_tracked_numpy_view_name(node["slice"]);
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (contains_tracked_numpy_view_name(it.value()))
+      return true;
+
+  return false;
+}
+
+bool python_converter::contains_tracked_numpy_view_name(
+  const nlohmann::json &node)
+{
   if (node.is_object())
-  {
-    const std::string node_type = node.value("_type", "");
+    return contains_tracked_numpy_view_object(node);
 
-    // A comprehension/generator always builds a brand-new list/set/dict, so
-    // it cannot itself be a numpy view; and its element/key/value
-    // expressions reference the comprehension's own loop variable(s), which
-    // are not registered as real symbols outside of the comprehension's own
-    // conversion (handle_comprehension/_lower_listcomp) — probing a
-    // Subscript inside one here (e.g. `x[j]` for `for j in ...`) would look
-    // up `j` before it exists and abort the conversion.
-    if (
-      node_type == "GeneratorExp" || node_type == "ListComp" ||
-      node_type == "SetComp" || node_type == "DictComp")
-      return false;
+  if (!node.is_array())
+    return false;
 
-    if (node_type == "Name" && node.contains("id"))
-    {
-      const std::string id =
-        resolve_name_symbol_id(node["id"].get<std::string>());
-      return !id.empty() && is_tracked_numpy_view_id(id);
-    }
-
-    // An inline basic-indexing view used directly as a container literal
-    // element (x[0]) escapes just as much as one already bound to a name
-    // first — what makes it escape is the container literal, not whether
-    // an intermediate variable was involved. Scoped to the Subscript form
-    // only (not `.T`/`transpose`/`reshape`/`ravel` Call forms): probing
-    // those via get_expr here would convert them a second time, and
-    // unlike a plain index-into-a-symbol, their conversion is not free of
-    // side effects on converter state. The same Subscript AST shape also
-    // matches a plain scalar element read (x[0][0]), which is not a view,
-    // so confirm the expression is actually array-typed before treating
-    // it as an escape.
-    //
-    // The probe itself is not free of side effects either: a bounds-checked
-    // subscript (list index, when `--no-bounds-check` is not set) emits a
-    // size lookup and an IndexError-raise guard into current_block. This
-    // function can be reached while walking an AST subtree that has not
-    // been selected for evaluation yet (e.g. the untaken branch of a
-    // ternary, still being probed by contains_copied_numpy_view_name before
-    // get_conditional_stm's own short-circuit guard is built), so those
-    // instructions must not leak into the real block. Redirect them into a
-    // throwaway block for the duration of the probe.
-    if (
-      is_basic_numpy_view_subscript(node) &&
-      !root_name_from_subscript(node["value"]).empty())
-    {
-      code_blockt scratch_block;
-      code_blockt *saved_block = current_block;
-      exprt *saved_lhs = current_lhs;
-      current_block = &scratch_block;
-      current_lhs = nullptr;
-      exprt probe;
-      try
-      {
-        probe = get_expr(node);
-      }
-      catch (...)
-      {
-        current_block = saved_block;
-        current_lhs = saved_lhs;
-        throw;
-      }
-      current_block = saved_block;
-      current_lhs = saved_lhs;
-      if (!contains_cpp_throw(probe) && probe.type().is_array())
-        return true;
-    }
-
-    if (
-      node_type == "Subscript" && node.contains("value") &&
-      node.contains("slice") && !json_contains_slice_node(node["slice"]) &&
-      contains_copied_numpy_view_name(node["value"]))
-      return contains_copied_numpy_view_name(node["slice"]);
-
-    for (auto it = node.begin(); it != node.end(); ++it)
-      if (contains_copied_numpy_view_name(it.value()))
-        return true;
-  }
-  else
-  {
-    for (const auto &elem : node)
-      if (contains_copied_numpy_view_name(elem))
-        return true;
-  }
+  for (const auto &elem : node)
+    if (contains_tracked_numpy_view_name(elem))
+      return true;
 
   return false;
 }
@@ -2504,7 +2491,7 @@ void python_converter::reject_unknown_numpy_view_call(
 
   for (const auto &arg : node["args"])
   {
-    if (contains_copied_numpy_view_name(arg))
+    if (contains_tracked_numpy_view_name(arg))
       throw std::runtime_error(
         "TypeError: passing a copied numpy view to an unknown function is not "
         "supported");
@@ -2577,7 +2564,7 @@ void python_converter::reject_copied_numpy_view_in_container(
   const nlohmann::json &value_node = ast_node["value"];
   if (
     container_types.count(value_node.value("_type", "")) == 0 ||
-    !contains_copied_numpy_view_name(value_node))
+    !contains_tracked_numpy_view_name(value_node))
     return;
 
   throw std::runtime_error(
@@ -3040,16 +3027,7 @@ bool python_converter::record_numpy_shape_stride_view(
     return record_numpy_transpose_view(lhs, rhs_node);
   }
 
-  if (is_numpy_reshape_call_node(rhs_node))
-  {
-    clear_numpy_view_copy(lhs);
-    return record_numpy_reshape_view(lhs, rhs_node);
-  }
-
-  if (
-    is_numpy_squeeze_call_node(rhs_node) ||
-    is_numpy_expand_dims_call_node(rhs_node) ||
-    is_numpy_broadcast_to_call_node(rhs_node))
+  if (is_numpy_shape_only_view_call_node(rhs_node))
   {
     clear_numpy_view_copy(lhs);
     return record_numpy_reshape_view(lhs, rhs_node);
@@ -5195,7 +5173,7 @@ void python_converter::get_var_assign(
 
   if (
     ast_node.contains("value") && ast_node["value"].is_object() &&
-    contains_copied_numpy_view_name(ast_node["value"]))
+    contains_tracked_numpy_view_name(ast_node["value"]))
   {
     if (target.value("_type", "") == "Attribute")
       throw std::runtime_error(
@@ -7371,7 +7349,7 @@ void python_converter::get_return_statements(
                             ast_node["value"].contains("id");
   if (
     is_user_defined_function && returns_name &&
-    contains_copied_numpy_view_name(ast_node["value"]))
+    contains_tracked_numpy_view_name(ast_node["value"]))
     throw std::runtime_error(
       "TypeError: returning a copied numpy view is not supported");
   const locationt return_location = get_location_from_decl(ast_node);
