@@ -2988,8 +2988,12 @@ void python_converter::copy_elem_types_from_reordering_builtin(
 
   symbol_id dict_sid = create_symbol_id();
   dict_sid.set_object(arg["func"]["value"]["id"].get<std::string>());
-  const std::string &src = python_dict_handler::get_internal_list_id(
-    dict_sid.to_string(), component == "keys");
+  // Named local, not a temporary argument: GCC's -Wdangling-reference flags
+  // binding a reference to a call whose arguments are temporaries, even though
+  // get_internal_list_id returns into a static map.
+  const std::string dict_id = dict_sid.to_string();
+  const std::string &src =
+    python_dict_handler::get_internal_list_id(dict_id, component == "keys");
   copy_homogeneous_elem_types(src, lhs_id);
 }
 
