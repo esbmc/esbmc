@@ -268,7 +268,11 @@ collect_ubuntu_packages() {
   if [[ "$ARCH" != "aarch64" ]]; then
     UBUNTU_PACKAGES+=(g++-multilib)
   else
-    log "Skipping g++-multilib on aarch64"
+    # No multilib on aarch64, but plain g++ still has to be there: the tests
+    # passing --no-abstracted-cpp-includes reach for the system <cctype>,
+    # <cassert> and friends, which only libstdc++-dev provides.
+    log "Skipping g++-multilib on aarch64; installing g++ for libstdc++ headers"
+    UBUNTU_PACKAGES+=(g++)
   fi
 
   if [[ "$COVERAGE" == "ON" ]]; then
