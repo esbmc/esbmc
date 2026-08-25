@@ -1025,6 +1025,39 @@ normalize_numpy_axis(long long axis, std::size_t rank, bool insertion_axis)
   return static_cast<std::size_t>(axis);
 }
 
+static std::optional<std::vector<std::size_t>>
+parse_numpy_literal_shape_arg(const nlohmann::json &shape_arg)
+{
+  std::vector<nlohmann::json> dims;
+  if (
+    shape_arg.is_object() && shape_arg.contains("_type") &&
+    (shape_arg["_type"] == "Tuple" || shape_arg["_type"] == "List") &&
+    shape_arg.contains("elts"))
+  {
+    dims = shape_arg["elts"].get<std::vector<nlohmann::json>>();
+  }
+  else
+  {
+    dims.push_back(shape_arg);
+  }
+
+  std::vector<std::size_t> shape;
+  for (const auto &dim_node : dims)
+  {
+    if (!is_numpy_literal_int_node(dim_node))
+      return std::nullopt;
+
+    numeric_value dim_value;
+    if (
+      !try_extract_numeric_constant(dim_node, dim_value) || !dim_value.is_int ||
+      dim_value.int_value < 0)
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(dim_value.int_value));
+  }
+
+  return shape;
+}
+
 enum class scalar_kind
 {
   int_like,
@@ -1416,6 +1449,32 @@ static bool build_broadcast_literal_result(
           indices,
           depth + 1,
           child))
+      return false;
+    out["elts"].push_back(child);
+    indices.pop_back();
+  }
+  return true;
+}
+
+static bool build_broadcast_to_literal_result(
+  const nlohmann::json &source,
+  const std::vector<std::size_t> &source_shape,
+  const std::vector<std::size_t> &target_shape,
+  std::vector<std::size_t> &indices,
+  std::size_t depth,
+  nlohmann::json &out)
+{
+  if (depth == target_shape.size())
+    return fetch_broadcast_leaf(source, source_shape, indices, out);
+
+  out["_type"] = "List";
+  out["elts"] = nlohmann::json::array();
+  for (std::size_t i = 0; i < target_shape[depth]; ++i)
+  {
+    indices.push_back(i);
+    nlohmann::json child;
+    if (!build_broadcast_to_literal_result(
+          source, source_shape, target_shape, indices, depth + 1, child))
       return false;
     out["elts"].push_back(child);
     indices.pop_back();
@@ -3069,6 +3128,60 @@ exprt numpy_call_expr::handle_axis_permutation_view_call(
     converter_.update_symbol(*converter_.current_lhs);
   }
   return transposed;
+}
+
+exprt numpy_call_expr::handle_broadcast_to_call()
+{
+  if (call_["args"].size() < 2)
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() requires array and shape arguments");
+
+  nlohmann::json arr_arg = call_["args"][0];
+  if (arr_arg.contains("_type") && arr_arg["_type"] == "Name")
+  {
+    arr_arg = json_utils::find_var_decl(
+      arr_arg["id"], converter_.current_function_name(), converter_.ast());
+    if (arr_arg.contains("value") && arr_arg["value"].is_object())
+      arr_arg = arr_arg["value"];
+  }
+  if (
+    std::optional<nlohmann::json> literal_arg =
+      get_literal_numpy_array_arg(arr_arg))
+    arr_arg = std::move(*literal_arg);
+
+  std::vector<std::size_t> source_shape;
+  if (!get_literal_shape(arr_arg, source_shape))
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() currently supports only constant "
+      "arrays");
+
+  std::optional<std::vector<std::size_t>> target_shape =
+    parse_numpy_literal_shape_arg(call_["args"][1]);
+  if (!target_shape)
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() shape must contain concrete integers");
+
+  if (target_shape->empty() || target_shape->size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() currently supports rank 1 or 2 shapes");
+
+  std::vector<std::size_t> computed_shape;
+  if (
+    !compute_broadcast_shape(source_shape, *target_shape, computed_shape) ||
+    computed_shape != *target_shape)
+    throw std::runtime_error(
+      "ValueError: operands could not be broadcast together with shapes " +
+      format_shape(source_shape) + " " + format_shape(*target_shape));
+
+  std::vector<std::size_t> indices;
+  nlohmann::json result;
+  if (!build_broadcast_to_literal_result(
+        arr_arg, source_shape, *target_shape, indices, 0, result))
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() currently supports only constant "
+      "arrays");
+
+  return converter_.get_expr(result);
 }
 
 void numpy_call_expr::reject_unsupported_transpose_axes_rank(
@@ -7473,9 +7586,7 @@ exprt numpy_call_expr::get()
     return handle_axis_permutation_view_call(function);
 
   if (function == "broadcast_to")
-    throw std::runtime_error(
-      "TypeError: numpy.broadcast_to returns a readonly view and is not "
-      "supported");
+    return handle_broadcast_to_call();
 
   // np.stack(arrays[, axis]) — join arrays along a new first axis.
   // Only axis=0 is fully supported; other axes are accepted but also lower

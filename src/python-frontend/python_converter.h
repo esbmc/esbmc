@@ -1753,6 +1753,8 @@ private:
     std::string source_id;
     std::vector<std::size_t> source_shape;
     std::vector<std::size_t> view_shape;
+    bool readonly = false;
+    bool broadcast = false;
   };
   std::unordered_map<std::string, numpy_reshape_view_infot>
     numpy_reshape_view_info_;

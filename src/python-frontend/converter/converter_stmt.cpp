@@ -275,12 +275,21 @@ bool is_numpy_expand_dims_call_node(const nlohmann::json &node)
          node["func"].value("attr", "") == "expand_dims";
 }
 
+bool is_numpy_broadcast_to_call_node(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Call" && node.contains("func") &&
+         node["func"].is_object() &&
+         node["func"].value("_type", "") == "Attribute" &&
+         node["func"].value("attr", "") == "broadcast_to";
+}
+
 bool is_numpy_shape_only_view_call_node(const nlohmann::json &node)
 {
   const std::string attr = node.contains("func") && node["func"].is_object()
                              ? node["func"].value("attr", "")
                              : "";
-  return attr == "reshape" || attr == "squeeze" || attr == "expand_dims";
+  return attr == "reshape" || attr == "squeeze" || attr == "expand_dims" ||
+         attr == "broadcast_to";
 }
 
 std::optional<std::size_t>
@@ -481,6 +490,53 @@ std::optional<std::vector<std::size_t>> numpy_expand_dims_view_shape(
   return view_shape;
 }
 
+bool numpy_shapes_broadcast_to(
+  const std::vector<std::size_t> &source_shape,
+  const std::vector<std::size_t> &view_shape)
+{
+  if (source_shape.size() > view_shape.size())
+    return false;
+
+  const std::size_t offset = view_shape.size() - source_shape.size();
+  for (std::size_t axis = 0; axis < source_shape.size(); ++axis)
+  {
+    const std::size_t source_dim = source_shape[axis];
+    const std::size_t view_dim = view_shape[axis + offset];
+    if (source_dim != view_dim && source_dim != 1)
+      return false;
+  }
+  return true;
+}
+
+std::optional<std::vector<std::size_t>> numpy_broadcast_to_view_shape(
+  const nlohmann::json &node,
+  const std::vector<std::size_t> &source_shape)
+{
+  if (
+    !is_numpy_broadcast_to_call_node(node) || !node.contains("args") ||
+    !node["args"].is_array() || node["args"].size() < 2)
+    return std::nullopt;
+
+  std::optional<std::vector<long long>> raw_shape =
+    numpy_raw_reshape_sequence(node["args"][1]);
+  if (!raw_shape)
+    return std::nullopt;
+
+  std::vector<std::size_t> view_shape;
+  for (long long dim : *raw_shape)
+  {
+    if (dim < 0)
+      return std::nullopt;
+    view_shape.push_back(static_cast<std::size_t>(dim));
+  }
+
+  if (view_shape.empty() || view_shape.size() > 2)
+    return std::nullopt;
+  return numpy_shapes_broadcast_to(source_shape, view_shape)
+           ? std::optional<std::vector<std::size_t>>(view_shape)
+           : std::nullopt;
+}
+
 std::optional<std::vector<std::size_t>> numpy_shape_only_view_shape(
   const nlohmann::json &node,
   const std::vector<std::size_t> &source_shape)
@@ -492,7 +548,63 @@ std::optional<std::vector<std::size_t>> numpy_shape_only_view_shape(
     return numpy_squeeze_view_shape(node, source_shape);
   if (is_numpy_expand_dims_call_node(node))
     return numpy_expand_dims_view_shape(node, source_shape);
+  if (is_numpy_broadcast_to_call_node(node))
+    return numpy_broadcast_to_view_shape(node, source_shape);
   return std::nullopt;
+}
+
+std::optional<std::vector<long long>> numpy_broadcast_source_indices(
+  const std::vector<long long> &view_indices,
+  const std::vector<std::size_t> &view_shape,
+  const std::vector<std::size_t> &source_shape)
+{
+  if (view_indices.size() != view_shape.size())
+    return std::nullopt;
+
+  const std::size_t offset = view_shape.size() - source_shape.size();
+  std::vector<long long> source_indices;
+  for (std::size_t axis = 0; axis < source_shape.size(); ++axis)
+  {
+    const long long view_index = view_indices[axis + offset];
+    source_indices.push_back(source_shape[axis] == 1 ? 0 : view_index);
+  }
+  return source_indices;
+}
+
+bool numpy_indices_equal(
+  const std::vector<long long> &lhs,
+  const std::vector<long long> &rhs)
+{
+  return lhs.size() == rhs.size() &&
+         std::equal(lhs.begin(), lhs.end(), rhs.begin());
+}
+
+std::vector<std::vector<long long>> numpy_broadcast_view_indices_for_source(
+  const std::vector<long long> &source_indices,
+  const std::vector<std::size_t> &view_shape,
+  const std::vector<std::size_t> &source_shape)
+{
+  std::vector<std::vector<long long>> matches;
+  if (view_shape.empty() || view_shape.size() > 2)
+    return matches;
+
+  const std::size_t outer = view_shape[0];
+  const std::size_t inner = view_shape.size() == 1 ? 1 : view_shape[1];
+  for (std::size_t i = 0; i < outer; ++i)
+  {
+    for (std::size_t j = 0; j < inner; ++j)
+    {
+      std::vector<long long> current{static_cast<long long>(i)};
+      if (view_shape.size() == 2)
+        current.push_back(static_cast<long long>(j));
+
+      std::optional<std::vector<long long>> mapped =
+        numpy_broadcast_source_indices(current, view_shape, source_shape);
+      if (mapped && numpy_indices_equal(*mapped, source_indices))
+        matches.push_back(std::move(current));
+    }
+  }
+  return matches;
 }
 
 std::optional<std::size_t> numpy_flat_index(
@@ -527,6 +639,20 @@ numpy_unravel_index(std::size_t flat, const std::vector<std::size_t> &shape)
   return std::vector<long long>{
     static_cast<long long>(flat / shape[1]),
     static_cast<long long>(flat % shape[1])};
+}
+
+std::optional<std::vector<long long>> numpy_shape_view_source_indices(
+  const std::vector<long long> &view_indices,
+  const std::vector<std::size_t> &view_shape,
+  const std::vector<std::size_t> &source_shape,
+  const bool broadcast)
+{
+  if (broadcast)
+    return numpy_broadcast_source_indices(
+      view_indices, view_shape, source_shape);
+
+  std::optional<std::size_t> flat = numpy_flat_index(view_indices, view_shape);
+  return flat ? numpy_unravel_index(*flat, source_shape) : std::nullopt;
 }
 
 std::size_t numpy_array_rank(const namespacet &ns, typet source_type)
@@ -2444,6 +2570,13 @@ void python_converter::reject_unsafe_numpy_view_write_to(
         "ValueError: assignment destination is read-only");
   }
 
+  {
+    auto it = numpy_reshape_view_info_.find(root_id);
+    if (it != numpy_reshape_view_info_.end() && it->second.readonly)
+      throw std::runtime_error(
+        "ValueError: assignment destination is read-only");
+  }
+
   // A view symbol this PR's 1-D slice aliasing retyped to a pointer (see
   // list_access.cpp's handle_range_slice, which populates
   // numpy_pointer_view_info_ exactly for that case) genuinely aliases
@@ -2618,7 +2751,9 @@ bool python_converter::record_numpy_reshape_view(
     return false;
 
   const std::string lhs_id = lhs.identifier().as_string();
-  numpy_reshape_view_info_[lhs_id] = {source_id, source_shape, *view_shape};
+  const bool readonly = is_numpy_broadcast_to_call_node(view_node);
+  numpy_reshape_view_info_[lhs_id] = {
+    source_id, source_shape, *view_shape, readonly, readonly};
   numpy_array_symbols_.insert(lhs_id);
   return true;
 }
@@ -2641,7 +2776,8 @@ bool python_converter::record_numpy_shape_stride_view(
 
   if (
     is_numpy_squeeze_call_node(rhs_node) ||
-    is_numpy_expand_dims_call_node(rhs_node))
+    is_numpy_expand_dims_call_node(rhs_node) ||
+    is_numpy_broadcast_to_call_node(rhs_node))
   {
     clear_numpy_view_copy(lhs);
     return record_numpy_reshape_view(lhs, rhs_node);
@@ -2911,11 +3047,12 @@ void python_converter::mirror_numpy_reshape_assignment(
   auto direct = numpy_reshape_view_info_.find(root_id);
   if (direct != numpy_reshape_view_info_.end())
   {
-    std::optional<std::size_t> flat =
-      numpy_flat_index(indices, direct->second.view_shape);
     std::optional<std::vector<long long>> source_indices =
-      flat ? numpy_unravel_index(*flat, direct->second.source_shape)
-           : std::nullopt;
+      numpy_shape_view_source_indices(
+        indices,
+        direct->second.view_shape,
+        direct->second.source_shape,
+        direct->second.broadcast);
     if (source_indices)
       emit_numpy_transpose_mirror_assignment(
         resolve_numpy_array_storage_alias_id(direct->second.source_id),
@@ -2933,6 +3070,15 @@ void python_converter::mirror_numpy_reshape_assignment(
     const numpy_reshape_view_infot &view = entry.second;
     if (resolve_numpy_array_storage_alias_id(view.source_id) != storage_root_id)
       continue;
+
+    if (view.broadcast)
+    {
+      for (const auto &current : numpy_broadcast_view_indices_for_source(
+             indices, view.view_shape, view.source_shape))
+        emit_numpy_transpose_mirror_assignment(
+          entry.first, current, rhs, location, target_block);
+      continue;
+    }
 
     std::optional<std::size_t> flat =
       numpy_flat_index(indices, view.source_shape);
