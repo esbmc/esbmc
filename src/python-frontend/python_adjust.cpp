@@ -220,17 +220,6 @@ bool convert_call_arguments(const type2tc &callee, std::vector<expr2tc> &args)
   return changed;
 }
 
-// Insert a gen_zero operand at each reserved padding-member position so the
-// literal's operand list matches the struct's component list, exactly as the
-// legacy adjust_struct insertion loop does. Idempotent when already padded.
-std::vector<expr2tc>
-pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
-{
-  for (size_t i = 0; i < st.members.size(); i++)
-    if (i <= ops.size() && is_padding_name(st.member_names[i].as_string()))
-      ops.insert(ops.begin() + i, gen_zero(st.members[i]));
-  return ops;
-}
 } // namespace
 
 // clang_c_adjust::adjust_float_arith rewrites +,-,*,/ over a float type to

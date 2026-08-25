@@ -452,4 +452,12 @@ void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols);
 
+/** Insert a zero operand at each reserved padding-member position so a struct
+ *  literal's operand list matches its type's component list, exactly as
+ *  clang_c_adjust::adjust_struct's insertion loop does. IREP2 carries no
+ *  is_padding flag, so the member name is the signal (util/irep/pad_names.h).
+ *  Idempotent: returns @p ops unchanged when already padded. */
+std::vector<expr2tc>
+pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops);
+
 #endif /* UTIL_IREP2_UTILS_H_ */

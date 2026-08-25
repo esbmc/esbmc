@@ -201,10 +201,11 @@ inputs. Unlike a compiler's `-Wunreachable-code`, BMC-based detection is sound
 under non-trivial guards.
 
 Detection is off by default and enabled with `--dead-code-check`. It reuses the
-branch-coverage instrumentation: every conditional branch is probed with a
-reachability assertion, and any probe the solver proves unsatisfiable marks that
-branch direction as dead. Because it issues one solver query per branch probe,
-it can be slow on large programs — hence the default-off gate.
+branch-coverage instrumentation: each conditional branch is probed with a
+reachability assertion `assert(c)` per direction, and a probe the solver never
+violates marks the *opposite* direction, `!c`, as dead — that is the guard
+named in the finding. Because it issues one solver query per branch probe, it
+can be slow on large programs — hence the default-off gate.
 
 Findings are reported as:
 
@@ -225,11 +226,23 @@ coverage modes, instrumentation is keyed off the source locations of the input
 translation units, so it has no effect on a pre-compiled `.goto` binary.
 
 ```
+$ cat dead.c
+int f(void) { return 1; }
+
+int main(void)
+{
+  int x = 5;
+  if (x > 10)
+    f();
+  return 0;
+}
+
 $ esbmc dead.c --dead-code-check
 
 [Dead code]
 
-dead.c:9: dead code: unreachable branch [guard: x > 5]
+The following branches are unreachable up to the current unwinding bound:
+dead.c:6: dead code: unreachable branch [guard: x > 10]
   CWE: CWE-561
 
 VERIFICATION SUCCESSFUL
