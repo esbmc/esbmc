@@ -1013,6 +1013,18 @@ get_literal_shape(const nlohmann::json &node, std::vector<std::size_t> &shape)
   return true;
 }
 
+static std::optional<std::size_t>
+normalize_numpy_axis(long long axis, std::size_t rank, bool insertion_axis)
+{
+  const long long upper =
+    static_cast<long long>(rank) + (insertion_axis ? 1 : 0);
+  if (axis < 0)
+    axis += upper;
+  if (axis < 0 || axis >= upper)
+    return std::nullopt;
+  return static_cast<std::size_t>(axis);
+}
+
 enum class scalar_kind
 {
   int_like,
@@ -7378,14 +7390,27 @@ exprt numpy_call_expr::get()
       throw std::runtime_error(
         "TypeError: numpy.expand_dims() axis must be a concrete integer");
 
-    if (axis_value.int_value != 0)
+    std::vector<std::size_t> old_shape;
+    if (!get_literal_shape(arr_arg, old_shape))
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() currently supports only constant "
+        "arrays");
+
+    std::optional<std::size_t> axis =
+      normalize_numpy_axis(axis_value.int_value, old_shape.size(), true);
+    if (!axis)
       throw std::runtime_error(
         "AxisError: axis " + std::to_string(axis_value.int_value) +
-        " is out of bounds for array of dimension 1");
+        " is out of bounds for array of dimension " +
+        std::to_string(old_shape.size() + 1));
 
-    nlohmann::json result;
-    result["_type"] = "List";
-    result["elts"] = nlohmann::json::array({arr_arg});
+    std::vector<std::size_t> new_shape = old_shape;
+    new_shape.insert(new_shape.begin() + *axis, 1);
+
+    std::vector<nlohmann::json> flat;
+    flatten_json_list(arr_arg, flat);
+    std::size_t offset = 0;
+    nlohmann::json result = reshape_flat_to_json(flat, new_shape, 0, offset);
     return converter_.get_expr(result);
   }
 
@@ -7399,29 +7424,49 @@ exprt numpy_call_expr::get()
     nlohmann::json arr_arg = call_["args"][0];
     resolve_numpy_var(arr_arg);
 
-    // Recursively strip List wrappers that contain exactly one element, which
-    // is a nested List (i.e. the axis has size 1).
-    std::function<nlohmann::json(const nlohmann::json &)> do_squeeze =
-      [&](const nlohmann::json &node) -> nlohmann::json {
-      if (
-        !node.is_object() || node.value("_type", std::string()) != "List" ||
-        !node.contains("elts"))
-        return node;
-      const auto &elts = node["elts"];
-      if (
-        elts.size() == 1 && elts[0].is_object() &&
-        elts[0].value("_type", std::string()) == "List")
-        return do_squeeze(elts[0]);
-      if (elts.size() == 1)
-        return do_squeeze(elts[0]);
-      nlohmann::json out = node;
-      out["elts"] = nlohmann::json::array();
-      for (const auto &e : elts)
-        out["elts"].push_back(do_squeeze(e));
-      return out;
-    };
+    std::vector<std::size_t> old_shape;
+    if (!get_literal_shape(arr_arg, old_shape))
+      throw std::runtime_error(
+        "TypeError: numpy.squeeze() currently supports only constant arrays");
 
-    return converter_.get_expr(do_squeeze(arr_arg));
+    std::vector<std::size_t> new_shape;
+    if (call_["args"].size() > 1)
+    {
+      numeric_value axis_value;
+      if (
+        !try_extract_numeric_constant(call_["args"][1], axis_value) ||
+        !axis_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy.squeeze() axis must be a concrete integer");
+
+      std::optional<std::size_t> axis =
+        normalize_numpy_axis(axis_value.int_value, old_shape.size(), false);
+      if (!axis)
+        throw std::runtime_error(
+          "AxisError: axis " + std::to_string(axis_value.int_value) +
+          " is out of bounds for array of dimension " +
+          std::to_string(old_shape.size()));
+      if (old_shape[*axis] != 1)
+        throw std::runtime_error(
+          "ValueError: cannot select an axis to squeeze out which has size not "
+          "equal to one");
+
+      for (std::size_t i = 0; i < old_shape.size(); ++i)
+        if (i != *axis)
+          new_shape.push_back(old_shape[i]);
+    }
+    else
+    {
+      for (std::size_t dim : old_shape)
+        if (dim != 1)
+          new_shape.push_back(dim);
+    }
+
+    std::vector<nlohmann::json> flat;
+    flatten_json_list(arr_arg, flat);
+    std::size_t offset = 0;
+    nlohmann::json result = reshape_flat_to_json(flat, new_shape, 0, offset);
+    return converter_.get_expr(result);
   }
 
   if (function == "swapaxes" || function == "moveaxis")

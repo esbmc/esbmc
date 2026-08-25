@@ -259,6 +259,42 @@ bool is_numpy_reshape_call_node(const nlohmann::json &node)
          node["func"].value("attr", "") == "reshape";
 }
 
+bool is_numpy_squeeze_call_node(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Call" && node.contains("func") &&
+         node["func"].is_object() &&
+         node["func"].value("_type", "") == "Attribute" &&
+         node["func"].value("attr", "") == "squeeze";
+}
+
+bool is_numpy_expand_dims_call_node(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Call" && node.contains("func") &&
+         node["func"].is_object() &&
+         node["func"].value("_type", "") == "Attribute" &&
+         node["func"].value("attr", "") == "expand_dims";
+}
+
+bool is_numpy_shape_only_view_call_node(const nlohmann::json &node)
+{
+  const std::string attr = node.contains("func") && node["func"].is_object()
+                             ? node["func"].value("attr", "")
+                             : "";
+  return attr == "reshape" || attr == "squeeze" || attr == "expand_dims";
+}
+
+std::optional<std::size_t>
+normalize_numpy_axis(long long axis, std::size_t rank, bool insertion_axis)
+{
+  const long long upper =
+    static_cast<long long>(rank) + (insertion_axis ? 1 : 0);
+  if (axis < 0)
+    axis += upper;
+  if (axis < 0 || axis >= upper)
+    return std::nullopt;
+  return static_cast<std::size_t>(axis);
+}
+
 std::vector<std::size_t>
 numpy_shape_from_type(const namespacet &ns, typet source_type)
 {
@@ -387,6 +423,76 @@ parse_numpy_reshape_shape(const nlohmann::json &node, std::size_t total)
     return std::nullopt;
 
   return normalize_numpy_reshape_shape(*raw_shape, total);
+}
+
+std::optional<std::vector<std::size_t>> numpy_squeeze_view_shape(
+  const nlohmann::json &node,
+  const std::vector<std::size_t> &source_shape)
+{
+  if (
+    !is_numpy_squeeze_call_node(node) || !node.contains("args") ||
+    !node["args"].is_array() || node["args"].empty())
+    return std::nullopt;
+
+  std::vector<std::size_t> view_shape;
+  if (node["args"].size() == 1)
+  {
+    for (std::size_t dim : source_shape)
+      if (dim != 1)
+        view_shape.push_back(dim);
+    return view_shape;
+  }
+
+  std::optional<long long> raw_axis = literal_int_value(node["args"][1]);
+  if (!raw_axis)
+    return std::nullopt;
+
+  std::optional<std::size_t> axis =
+    normalize_numpy_axis(*raw_axis, source_shape.size(), false);
+  if (!axis || source_shape[*axis] != 1)
+    return std::nullopt;
+
+  for (std::size_t i = 0; i < source_shape.size(); ++i)
+    if (i != *axis)
+      view_shape.push_back(source_shape[i]);
+  return view_shape;
+}
+
+std::optional<std::vector<std::size_t>> numpy_expand_dims_view_shape(
+  const nlohmann::json &node,
+  const std::vector<std::size_t> &source_shape)
+{
+  if (
+    !is_numpy_expand_dims_call_node(node) || !node.contains("args") ||
+    !node["args"].is_array() || node["args"].size() < 2)
+    return std::nullopt;
+
+  std::optional<long long> raw_axis = literal_int_value(node["args"][1]);
+  if (!raw_axis)
+    return std::nullopt;
+
+  std::optional<std::size_t> axis =
+    normalize_numpy_axis(*raw_axis, source_shape.size(), true);
+  if (!axis)
+    return std::nullopt;
+
+  std::vector<std::size_t> view_shape = source_shape;
+  view_shape.insert(view_shape.begin() + *axis, 1);
+  return view_shape;
+}
+
+std::optional<std::vector<std::size_t>> numpy_shape_only_view_shape(
+  const nlohmann::json &node,
+  const std::vector<std::size_t> &source_shape)
+{
+  if (is_numpy_reshape_call_node(node))
+    return parse_numpy_reshape_shape(
+      node, numpy_shape_element_count(source_shape));
+  if (is_numpy_squeeze_call_node(node))
+    return numpy_squeeze_view_shape(node, source_shape);
+  if (is_numpy_expand_dims_call_node(node))
+    return numpy_expand_dims_view_shape(node, source_shape);
+  return std::nullopt;
 }
 
 std::optional<std::size_t> numpy_flat_index(
@@ -2484,7 +2590,7 @@ bool python_converter::record_numpy_reshape_view(
   const exprt &lhs,
   const nlohmann::json &view_node)
 {
-  if (!lhs.is_symbol() || !is_numpy_reshape_call_node(view_node))
+  if (!lhs.is_symbol() || !is_numpy_shape_only_view_call_node(view_node))
     return false;
 
   if (
@@ -2507,8 +2613,7 @@ bool python_converter::record_numpy_reshape_view(
     return false;
 
   std::optional<std::vector<std::size_t>> view_shape =
-    parse_numpy_reshape_shape(
-      view_node, numpy_shape_element_count(source_shape));
+    numpy_shape_only_view_shape(view_node, source_shape);
   if (!view_shape || view_shape->empty() || view_shape->size() > 2)
     return false;
 
@@ -2529,6 +2634,14 @@ bool python_converter::record_numpy_shape_stride_view(
   }
 
   if (is_numpy_reshape_call_node(rhs_node))
+  {
+    clear_numpy_view_copy(lhs);
+    return record_numpy_reshape_view(lhs, rhs_node);
+  }
+
+  if (
+    is_numpy_squeeze_call_node(rhs_node) ||
+    is_numpy_expand_dims_call_node(rhs_node))
   {
     clear_numpy_view_copy(lhs);
     return record_numpy_reshape_view(lhs, rhs_node);
