@@ -176,6 +176,33 @@ python_converter::extract_non_none_type(const nlohmann::json &annotation_node)
   return inner_type;
 }
 
+/// `Callable[[A, B], R]` as `R (*)(A, B)`, which parses as
+/// Subscript(slice=Tuple([List([A, B]), R])). Carrying the signature lets a
+/// call through the value recover the return type; a bare `Callable`, or one
+/// whose signature is not spelled, keeps the generic function pointer, whose
+/// empty return type leaves every call through it nondet.
+typet python_converter::get_callable_type(
+  const nlohmann::json &annotation,
+  const nlohmann::json &stmt)
+{
+  code_typet fn_type;
+  const nlohmann::json &slice = annotation["slice"];
+  if (
+    slice.is_object() && slice.value("_type", "") == "Tuple" &&
+    slice.contains("elts") && slice["elts"].size() == 2 &&
+    slice["elts"][0].value("_type", "") == "List")
+  {
+    for (const auto &arg : slice["elts"][0]["elts"])
+      fn_type.arguments().push_back(
+        code_typet::argumentt(get_type_from_annotation(arg, stmt)));
+    fn_type.return_type() = get_type_from_annotation(slice["elts"][1], stmt);
+  }
+
+  return fn_type.return_type().is_nil()
+           ? type_handler_.get_typet(std::string("Callable"))
+           : gen_pointer_type(fn_type);
+}
+
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
