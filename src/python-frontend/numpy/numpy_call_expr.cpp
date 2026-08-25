@@ -19,6 +19,7 @@
 #include <util/irep/std_types.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <functional>
@@ -2970,6 +2971,119 @@ std::optional<exprt> numpy_call_expr::try_get_pointer_view_call_result()
   return std::nullopt;
 }
 
+static exprt build_numpy_axis_swapped_2d_expr(
+  const type_handler &type_handler,
+  const exprt &source_expr,
+  const std::vector<int> &source_shape)
+{
+  const typet source_row_type = source_expr.type().subtype();
+  const typet base_type = source_row_type.subtype();
+  typet row_type = type_handler.build_array(base_type, source_shape[0]);
+  typet result_type = type_handler.build_array(row_type, source_shape[1]);
+
+  exprt result = gen_zero(result_type);
+  result.operands().clear();
+  for (int c = 0; c < source_shape[1]; ++c)
+  {
+    exprt row = gen_zero(row_type);
+    row.operands().clear();
+    for (int r = 0; r < source_shape[0]; ++r)
+    {
+      exprt source_row =
+        np_index(source_expr, from_integer(r, size_type()), source_row_type);
+      row.operands().push_back(
+        np_index(source_row, from_integer(c, size_type()), base_type));
+    }
+    result.operands().push_back(row);
+  }
+
+  return result;
+}
+
+exprt numpy_call_expr::handle_axis_permutation_view_call(
+  const std::string &function)
+{
+  if (call_["args"].size() < 3)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() requires array and axis arguments");
+
+  exprt source_expr = converter_.get_expr(call_["args"][0]);
+  std::vector<int> source_shape =
+    type_handler_.get_array_type_shape(source_expr.type());
+  if (source_shape.empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() currently supports only fixed-shape arrays");
+
+  const std::size_t rank = source_shape.size();
+  if (rank == 0 || rank > 2)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " currently supports up to 2D arrays");
+
+  std::array<long long, 2> axes{};
+  for (std::size_t i = 0; i < axes.size(); ++i)
+  {
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(call_["args"][i + 1], axis_value) ||
+      !axis_value.is_int)
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() axis must be a concrete integer");
+
+    axes[i] = axis_value.int_value;
+    if (axes[i] < 0)
+      axes[i] += static_cast<long long>(rank);
+    if (axes[i] < 0 || axes[i] >= static_cast<long long>(rank))
+      throw std::runtime_error(
+        "AxisError: axis " + std::to_string(axis_value.int_value) +
+        " is out of bounds for array of dimension " + std::to_string(rank));
+  }
+
+  if (axes[0] == axes[1])
+  {
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = source_expr.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return source_expr;
+  }
+
+  exprt transposed =
+    build_numpy_axis_swapped_2d_expr(type_handler_, source_expr, source_shape);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = transposed.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return transposed;
+}
+
+void numpy_call_expr::reject_unsupported_transpose_axes_rank(
+  const std::string &function)
+{
+  if (
+    function != "transpose" || !call_.contains("args") ||
+    !call_["args"].is_array() || call_["args"].size() < 2)
+    return;
+
+  exprt *saved_lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  try
+  {
+    exprt source_expr = converter_.get_expr(call_["args"][0]);
+    converter_.current_lhs = saved_lhs;
+    if (type_handler_.get_array_type_shape(source_expr.type()).size() > 2)
+      throw std::runtime_error(
+        "TypeError: numpy.transpose currently supports up to 2D arrays");
+  }
+  catch (...)
+  {
+    converter_.current_lhs = saved_lhs;
+    throw;
+  }
+}
+
 template <typename T>
 static auto create_list(int size, T default_value)
 {
@@ -5730,6 +5844,7 @@ exprt numpy_call_expr::get()
   const std::string &function = function_id_.get_function();
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
   reject_symbolic_transpose_axes(function, call_);
+  reject_unsupported_transpose_axes_rank(function);
 
   static const std::set<std::string> reducer_and_arange_functions = {
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
@@ -7297,41 +7412,7 @@ exprt numpy_call_expr::get()
   }
 
   if (function == "swapaxes" || function == "moveaxis")
-  {
-    if (call_["args"].size() < 3)
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() requires array and axis arguments");
-
-    nlohmann::json arr_arg = call_["args"][0];
-    resolve_numpy_var(arr_arg);
-
-    std::vector<std::size_t> shape;
-    const std::size_t rank =
-      get_literal_shape(arr_arg, shape) ? shape.size() : 0;
-
-    for (std::size_t i = 1; i <= 2; ++i)
-    {
-      numeric_value axis_value;
-      if (
-        !try_extract_numeric_constant(call_["args"][i], axis_value) ||
-        !axis_value.is_int)
-        throw std::runtime_error(
-          "TypeError: numpy." + function +
-          "() axis must be a concrete integer");
-
-      long long axis = axis_value.int_value;
-      if (axis < 0)
-        axis += static_cast<long long>(rank);
-      if (rank != 0 && (axis < 0 || axis >= static_cast<long long>(rank)))
-        throw std::runtime_error(
-          "AxisError: axis " + std::to_string(axis_value.int_value) +
-          " is out of bounds for array of dimension " + std::to_string(rank));
-    }
-
-    throw std::runtime_error(
-      "TypeError: numpy." + function + " returns a view and is not supported");
-  }
+    return handle_axis_permutation_view_call(function);
 
   if (function == "broadcast_to")
     throw std::runtime_error(

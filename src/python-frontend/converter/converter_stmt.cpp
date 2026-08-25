@@ -37,6 +37,7 @@
 #include <util/expr/symbolic_types.h>
 
 #include <algorithm>
+#include <array>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -183,11 +184,28 @@ bool is_numpy_transpose_call_node(const nlohmann::json &node)
          node["func"].value("attr", "") == "transpose";
 }
 
+bool is_numpy_axis_permutation_call_node(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") != "Call" || !node.contains("func") ||
+    !node["func"].is_object() || node["func"].value("_type", "") != "Attribute")
+    return false;
+
+  const std::string attr = node["func"].value("attr", "");
+  return attr == "swapaxes" || attr == "moveaxis";
+}
+
+bool is_numpy_transpose_view_call_node(const nlohmann::json &node)
+{
+  return is_numpy_transpose_call_node(node) ||
+         is_numpy_axis_permutation_call_node(node);
+}
+
 const nlohmann::json *
 numpy_transpose_source_node(const nlohmann::json &node, bool &swaps_axes)
 {
   if (
-    !is_numpy_transpose_call_node(node) || !node.contains("args") ||
+    !is_numpy_transpose_view_call_node(node) || !node.contains("args") ||
     !node["args"].is_array() || node["args"].empty())
     return nullptr;
 
@@ -202,6 +220,34 @@ numpy_transpose_source_node(const nlohmann::json &node, bool &swaps_axes)
   }
 
   return source;
+}
+
+std::optional<bool> numpy_axis_permutation_swaps_axes(
+  const nlohmann::json &node,
+  std::size_t rank,
+  bool default_swaps_axes)
+{
+  if (!is_numpy_axis_permutation_call_node(node))
+    return default_swaps_axes;
+
+  if (rank > 2 || node["args"].size() < 3)
+    return std::nullopt;
+
+  std::array<long long, 2> axes{};
+  for (std::size_t i = 0; i < axes.size(); ++i)
+  {
+    std::optional<long long> axis = literal_int_value(node["args"][i + 1]);
+    if (!axis)
+      return std::nullopt;
+
+    axes[i] = *axis;
+    if (axes[i] < 0)
+      axes[i] += static_cast<long long>(rank);
+    if (axes[i] < 0 || axes[i] >= static_cast<long long>(rank))
+      return std::nullopt;
+  }
+
+  return axes[0] != axes[1];
 }
 
 std::size_t numpy_array_rank(const namespacet &ns, typet source_type)
@@ -2247,6 +2293,12 @@ bool python_converter::record_numpy_transpose_view(
   if (rank == 0 || rank > 2)
     return false;
 
+  std::optional<bool> axis_swaps =
+    numpy_axis_permutation_swaps_axes(view_node, rank, swaps_axes);
+  if (!axis_swaps)
+    return false;
+  swaps_axes = *axis_swaps;
+
   const std::string lhs_id = lhs.identifier().as_string();
   numpy_transpose_view_info_[lhs_id] = {
     source_id, rank, swaps_axes && rank == 2};
@@ -2545,7 +2597,7 @@ void python_converter::update_numpy_array_binding(
   if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
     return;
 
-  if (is_numpy_transpose_call_node(rhs_node))
+  if (is_numpy_transpose_view_call_node(rhs_node))
   {
     clear_numpy_view_copy(lhs);
     if (record_numpy_transpose_view(lhs, rhs_node))

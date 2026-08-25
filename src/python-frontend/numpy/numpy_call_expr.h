@@ -61,4 +61,6 @@ private:
   exprt handle_trace_call();
   exprt handle_fill_diagonal_call();
   std::optional<exprt> handle_ravel_pointer_view_attempt();
+  exprt handle_axis_permutation_view_call(const std::string &function);
+  void reject_unsupported_transpose_axes_rank(const std::string &function);
 };
