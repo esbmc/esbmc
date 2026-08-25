@@ -2292,7 +2292,7 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
 std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
 python_converter::build_numpy_descriptor_materialized_elements(
   const nlohmann::json &arg,
-  const char *unsupported_rank_error)
+  const std::string &unsupported_rank_error)
 {
   if (
     !arg.is_object() || arg.value("_type", "") != "Name" ||

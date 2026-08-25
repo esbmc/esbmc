@@ -589,6 +589,7 @@ private:
    */
   std::optional<exprt> try_fold_sorted();
   std::optional<exprt> try_materialize_numpy_tolist();
+  std::optional<exprt> try_reduce_numpy_descriptor_method();
   /// Internal keys-list symbol id behind a `<name>.keys()` argument.
   std::string dict_keys_list_id_for_call(const nlohmann::json &arg) const;
 

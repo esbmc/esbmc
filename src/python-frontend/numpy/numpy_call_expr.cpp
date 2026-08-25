@@ -3223,6 +3223,97 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
   return converter_.build_numpy_descriptor_materialized_array(array_arg);
 }
 
+static bool numpy_reducer_has_unsupported_keywords(const nlohmann::json &call)
+{
+  return call.contains("keywords") && !call["keywords"].empty();
+}
+
+static exprt numpy_cast_to_double(const exprt &value)
+{
+  return value.type() == double_type() ? value
+                                       : typecast_exprt(value, double_type());
+}
+
+static exprt numpy_cast_to_bool(const exprt &value)
+{
+  return value.type() == bool_type() ? value
+                                     : typecast_exprt(value, bool_type());
+}
+
+static exprt reduce_numpy_descriptor_values(
+  const std::string &function,
+  const std::vector<exprt> &elems)
+{
+  if (function == "mean")
+  {
+    exprt total = numpy_cast_to_double(elems.front());
+    for (std::size_t i = 1; i < elems.size(); ++i)
+      total = plus_exprt(total, numpy_cast_to_double(elems[i]));
+    return div_exprt(
+      total, from_double(static_cast<double>(elems.size()), double_type()));
+  }
+
+  if (function == "sum")
+  {
+    exprt total = elems.front();
+    for (std::size_t i = 1; i < elems.size(); ++i)
+      total = plus_exprt(total, elems[i]);
+    return total;
+  }
+
+  if (function == "min" || function == "max")
+  {
+    exprt result = elems.front();
+    for (std::size_t i = 1; i < elems.size(); ++i)
+    {
+      const irep_idt relation = function == "min" ? "<" : ">";
+      result = if_exprt(
+        binary_relation_exprt(elems[i], relation, result), elems[i], result);
+    }
+    return result;
+  }
+
+  exprt result = numpy_cast_to_bool(elems.front());
+  for (std::size_t i = 1; i < elems.size(); ++i)
+  {
+    exprt current = numpy_cast_to_bool(elems[i]);
+    result = function == "any" ? exprt(or_exprt(result, current))
+                               : exprt(and_exprt(result, current));
+  }
+  return result;
+}
+
+std::optional<exprt>
+numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
+{
+  if (
+    function != "sum" && function != "mean" && function != "min" &&
+    function != "max")
+    return std::nullopt;
+
+  if (call_["args"].empty())
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    call_["args"][0],
+    "TypeError: numpy descriptor reducers currently support rank 1 or 2 "
+    "arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  if (numpy_reducer_has_unsupported_keywords(call_) || call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support axis, keepdims, where, out, initial or dtype "
+      "arguments yet");
+
+  if (materialized->second.empty())
+    throw std::runtime_error(
+      "ValueError: numpy." + function + "() arg is an empty sequence");
+
+  return reduce_numpy_descriptor_values(function, materialized->second);
+}
+
 void numpy_call_expr::reject_unsupported_nditer_keywords(
   const nlohmann::json &arg) const
 {
@@ -6044,6 +6135,9 @@ exprt numpy_call_expr::get()
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
   if (reducer_and_arange_functions.count(function))
   {
+    if (std::optional<exprt> descriptor = try_reduce_descriptor_call(function))
+      return *descriptor;
+
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {

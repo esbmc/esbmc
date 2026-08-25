@@ -4148,6 +4148,41 @@ std::optional<exprt> function_call_expr::try_materialize_numpy_tolist()
   return std::nullopt;
 }
 
+std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
+{
+  const std::string &func_name = function_id_.get_function();
+  if (
+    (func_name != "any" && func_name != "all") ||
+    call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
+    return std::nullopt;
+
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray." + func_name +
+      "() does not support axis, keepdims, where or out arguments yet");
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    call_["func"]["value"],
+    "TypeError: numpy.ndarray." + func_name +
+      "() currently supports rank 1 or 2 arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  const std::vector<exprt> &elems = materialized->second;
+  if (elems.empty())
+    return func_name == "all" ? migrate_expr_back(gen_true_expr())
+                              : migrate_expr_back(gen_false_expr());
+
+  const ReduceOp op = func_name == "any" ? ReduceOp::Any : ReduceOp::All;
+  exprt result = compute_element_truthiness(elems.front());
+  for (std::size_t i = 1; i < elems.size(); ++i)
+    result =
+      combine_truthiness(result, compute_element_truthiness(elems[i]), op);
+  return result;
+}
+
 std::optional<exprt> function_call_expr::try_fold_sorted()
 {
   const std::string &func_name = function_id_.get_function();

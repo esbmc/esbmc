@@ -1177,7 +1177,7 @@ private:
   std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
   build_numpy_descriptor_materialized_elements(
     const nlohmann::json &arg,
-    const char *unsupported_rank_error);
+    const std::string &unsupported_rank_error);
 
   std::optional<exprt> build_numpy_descriptor_materialized_list(
     const nlohmann::json &arg,
