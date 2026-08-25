@@ -625,6 +625,34 @@ void goto_symext::offer_malloc_zero_null(
   rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
 }
 
+void goto_symext::bound_dynamic_object_size(const expr2tc &size)
+{
+  expr2tc bound_on = size;
+  cur_state->rename(bound_on);
+  simplify(bound_on);
+
+  if (
+    !is_unsignedbv_type(bound_on->type) ||
+    bound_on->type->get_width() < ptraddr_type2()->get_width())
+    return;
+
+  if (is_constant_int2t(bound_on))
+  {
+    // An assumption would be identically false here and would prove the whole
+    // program rather than bound it, so report the declaration instead. R39's
+    // principle at R40's site.
+    if (to_constant_int2t(bound_on).value > max_object_size())
+      claim(gen_false_expr(), "object size exceeds PTRDIFF_MAX");
+    return;
+  }
+
+  // Above the cap the object's upper offsets read negative in the pointer
+  // comparator (R37). A declaration has no failure outcome to report, so the
+  // bound is an assumption, as alloca's is. R40.
+  assume(lessthanequal2tc(
+    bound_on, constant_int2tc(bound_on->type, max_object_size())));
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,

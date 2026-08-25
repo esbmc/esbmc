@@ -764,6 +764,15 @@ protected:
     const expr2tc &over_cap);
 
   /**
+   *  Bound an object's size at PTRDIFF_MAX, reporting a constant request that
+   *  exceeds it rather than assuming it away. Called for every assignment to a
+   *  dynamic_size2t -- a VLA declaration is the only way a stack object's size
+   *  reaches symex, and renaming has exposed its constness by then. R40.
+   *  @param size The size the declaration records, unrenamed.
+   */
+  void bound_dynamic_object_size(const expr2tc &size);
+
+  /**
    *  Create result pointer from newly allocated array.
    *  Constructs the appropriate pointer expression that points to the base
    *  of the newly allocated dynamic memory array, with proper type casting.
