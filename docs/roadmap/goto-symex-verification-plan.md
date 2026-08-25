@@ -722,6 +722,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R33** | **High (false SUCCESSFUL, default configuration)** — found by code review of R31's fix, not by the census, §15 M9 (R33) | **A constant member offset and a constant element offset would not compose, so the descriptor arrived with no offset at all.** `struct S { long pad; int *v[2]; }; int **pp = &s.v[1];` then `**pp = 1` against `g = 2` reported **SUCCESSFUL** by default, **FAILED** under `--no-por`. Each half works alone — `&s.v[0]` (base 8, index 0) and a member at a nonzero offset both detect the race — and only the composition failed, which is what makes it a distinct defect from R31 rather than another shape of it. The index arm of `get_reference_set_rec` added a constant element offset only when the base offset was **zero**, and otherwise fell to the unknown-offset branch and cleared `offset_is_set`; R31's walk then had nothing to spell back out. Reaching byte offset 16 by two members instead (`&s.v.b`) detects the race, which pins the route rather than the offset as the discriminator. The member arm one screen below already composed with `o.offset += offset_in_bytes` | `regression/esbmc-unix/mpor_aggregate_ptr_race_member_index` (CORE), with `..._addrof_offset` and `..._array_decay` the two halves that always worked | code review of R31 | **Fixed**: the index arm composes when the base offset is set (`o.offset += index_offset`) instead of requiring it to be zero. Identical on the old domain — `offset_is_zero()` already implied `offset_is_set`, and adding to a zero offset is assignment — so only the previously-abandoned case changes. Increases precision rather than widening: the descriptor gains a definite offset where it used to carry none |
 | **R34** | **High (missed bug, default configuration)** — found by #7126's attempt to remove `offsetof`'s expansion, §15 M9 (R34) | **Subtracting a constant from a `void *` moved the value set *forwards*.** `void *p = &s.f2; *(int *)(p - 8) = 42;` wrote at offset 16, not 0, so `s.f0 == 0` held and `s.f4 == 0` failed. The pointer model was right the whole time — ESBMC proves `__ESBMC_POINTER_OFFSET(p - 8) == 0` for the same expression — and only the dereference address was wrong, which is why the GOTO is byte-identical to the working `char *` spelling. `get_value_set_rec`'s add/sub arm applies the sign inside its `try` block, but a `void *` never reaches that line: an empty subtype throws `symbolic_type_excp` at the element-size step, and the handler that recovers the byte offset assigned the magnitude and stopped. Where the flipped address stays inside the object the store is silently misdirected; where it leaves, it surfaces as a spurious out-of-bounds instead | `value_sett::get_value_set_rec`'s add/sub arm, `src/pointer-analysis/value_set.cpp`; issue #7127 | `regression/esbmc/github_7127{,_fail}` | **Fixed**: the sign is applied once, after the handlers, so both arms share it. The issue's "base is a member address" clause is **withdrawn** — `void *p = (char *)&s + 8` fails identically; a member base only keeps the wrong address in bounds |
 | **R35** | **High (missed bug, default configuration)** — found by R34's controls, §15 M9 (R34); **FIXED**, §15 M9 (R35) | **A write below an object's base is neither performed nor flagged.** `char *base = (char *)&s; *(int *)(base - 4) = 42;` on a 16-byte stack struct reports `VERIFICATION SUCCESSFUL`: the `object-out-of-bounds` claim **passes**, the struct is unchanged, and a neighbouring local is unchanged — the store lands nowhere. The symmetric overflow `*(int *)(base + 16) = 42` **is** caught, so the bound is checked on one side only. Independent of R34: it reproduces through `char *`, which never had the sign defect, and the pointer model again disagrees with the check — `__ESBMC_POINTER_OFFSET` is `-4` and `__ESBMC_same_object` holds | the sign is discarded by `value_sett::to_expr`'s `gen_ulong`, but the wrapped constant is not flagged either; probes in the §15 M9 (R34) entry | `regression/esbmc/deref_negative_offset{,_fail}` (both CORE) | **Fixed**: the check is rearranged to `offset > data_sz - access_sz`, equivalent over the integers and free of the wrap. The unsigned reading is kept — a negative offset stays "a huge address", it is simply now compared without an addition that can carry it back into range. The pre-fix symptom was LP64-only — the wrap needed a 64-bit `unsigned long` — so the pin no longer needs `REQUIRES lp64_host` |
+| **R36** | **High (no verdict, then spurious counterexample, default configuration)** — found by code review of R35's fix, §15 M9 (R36) | **Relational comparison read pointer offsets unsigned, so a pointer below its object sorted above the base.** `char *b = a; char *below = b - 1;` gives `below >= b` — `assert(!(below >= b))` fails while `__ESBMC_POINTER_OFFSET(below) == -1` verifies on the same expression. The consequence is that `for (p = end; p >= begin; p--)` **never terminates**: the guard stays true below the base, so the loop exhausts its unwinding bound and then dereferences out of bounds — one unwinding-assertion failure and one spurious out-of-bounds report on a program gcc runs clean. `convert_ptr_cmp` did `typecast2tc(uint, pointer_offset2tc(sint, side))`; the stated reason was that an object larger than half the address space would flip the sign of its upper offsets, but that object is already unrepresentable in the signed `pointer_offset2t` every other consumer reads | `src/solvers/smt/smt_memspace.cpp`, `convert_ptr_cmp`; the cast dates to `79c621ff20` (#1537), which changed the cross-object arm and carried the unsigned reading in unremarked | `regression/esbmc/ptr_rel_below_base{,_fail}` | **Fixed**: drop the two typecasts and compare the signed offsets. The lexicographic object-id step is untouched, so cross-object ordering — the only thing #1537 was about — is unchanged, and it is still a total order |
+| **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (KNOWNBUG) | Open: capping allocations at `PTRDIFF_MAX` would make the signed reading exact — C11 6.5.6p9 already requires `ptrdiff_t` to represent any in-object difference, and the model computes that difference signed. Verify the glibc precedent before citing it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -6183,6 +6185,83 @@ below the base. Fixing the value set is what routed them here.
 | `regression/esbmc/deref_negative_offset` | default | `SUCCESSFUL` on **both** binaries — an over-fire guard, not a discriminating test: every in-bounds byte offset still verifies, and it hits the tight boundary `offset == data_sz - access_sz` twice, so a `>=` mutant dies |
 | `regression/esbmc/deref_oversized_access_fail` | default | `FAILED`; the only test in the corpus that reaches the over-sized arm, which is otherwise a surviving mutant |
 | `-L esbmc/` | as recorded | 1842/1842; unit suite 682/682 |
+
+
+### M9 (R36) — 2026-08-21, the third component that had to agree about a sign
+
+R35's reviewer, probing the fix, found that `for (p = end; p >= begin; p--)`
+never terminates. That is R36, it is older than either of the two fixes above,
+and it completes a set.
+
+**Three components read the same offset and one of them read it differently.**
+`__ESBMC_POINTER_OFFSET(b - 1)` proves `-1`. `check_data_obj_access` reads the
+same offset as a huge unsigned and — after R35 — reports out of bounds.
+`convert_ptr_cmp` read it as a huge unsigned too, but then *ordered* by it, so
+`b - 1` sorted **above** `b`:
+
+```c
+char *b = a, *below = b - 1;
+assert(__ESBMC_POINTER_OFFSET(below) == -1);   /* PASSES */
+assert(!(below >= b));                          /* FAILS  */
+```
+
+The two claims are about the same pointer, in the same run, and disagree.
+
+**What it costs.** The guard of a reverse iteration never goes false, so the
+loop runs to its unwinding bound and fails the unwinding assertion — no verdict
+on the program's actual properties — and then dereferences below the base,
+which since R35 is a *spurious out-of-bounds report* on a program gcc and ASan
+run clean. Before R35 the same loop still failed to terminate; only the second
+symptom is new, which is why the reviewer found it there.
+
+**Why the code did it — and the first version of this entry got that wrong.**
+The cast is deliberate and commented: "objects could be larger than half the
+address space, in which case offsets could flip sign". I wrote that such an
+object is already unrepresentable in the signed `pointer_offset2tc(stype, …)`
+being cast, and that the cast therefore protected nothing. **That is false**,
+and code review produced the counterexample. `pointer_offset2t`'s converter
+discards its own type annotation and projects field 1 of `pointer_struct`
+(`smt_solver.cpp`), whose offset member is `ptraddr_type2()` — full *unsigned*
+width. The signed annotation is a reading convention, not a bound, which is
+exactly why the old typecast was free: it changed the reading, not the bits.
+And `memory_alloc.cpp` caps allocations just under `2^64`, not `2^63`, so the
+huge object is reachable. Measured on this branch, default configuration:
+
+```c
+unsigned long n = nondet_ulong();
+char *p = malloc(n); if (!p) return 0;
+char *q = p + n;     /* one-past-the-end: defined, C11 6.5.6p8 */
+assert(q >= p);      /* defined and true, C11 6.5.8p5 */
+```
+
+→ `FAILED`, counterexample `n = 0x8000000000000000`. Pre-patch the same program
+is `SUCCESSFUL`, because `bvuge(2^63, 0)` is a tautology. So this fix is a
+**trade, not a strict improvement**, and the honest statement of it is: the
+unsigned reading mis-ordered every below-base pointer — a common idiom — while
+the signed reading mis-orders only offsets at or above 8 EiB. Registered as
+**R37** and pinned KNOWNBUG so the residual cannot go quiet.
+
+The cast itself arrived in `79c621ff20` (#1537), whose subject was the
+*cross-object* arm; the sign reading came along unremarked.
+
+**The fix drops the two casts.** The lexicographic step still orders by object
+id first, so cross-object comparison — the whole of #1537 — is untouched, and
+signed comparison is as total an order as unsigned, so the antisymmetry
+argument in the surrounding comment still holds.
+
+**A note on UB.** Forming `b - 1` is undefined (C11 6.5.6p8), and ESBMC does not
+check pointer *formation* — only dereferences. So the choice here is not
+"correct vs incorrect" but "which unchecked reading": one where the idiom
+terminates as every implementation runs it, or one where it silently diverges
+and then reports a violation the program does not have. The first is the useful
+answer, and it is the one the rest of the model already gives.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_below_base` | `--unwind 10` | `SUCCESSFUL`; on the pre-patch control **all four** relational assertions fail independently (`!(below >= b)`, `below < b`, `!(below > b)`, `below <= b`), alongside the unwinding assertion and a bounds violation — so each operator is pinned on its own, not just `>=`. 21 of its 47 VCCs survive simplification, so the comparisons reach the solver rather than being folded |
+| `regression/esbmc/ptr_rel_below_base_fail` | default | `FAILED` on `below >= b` — the pre-fix reading, asserted directly |
+| `regression/esbmc/ptr_rel_huge_object` | default | `KNOWNBUG` — pins R37, the residual this fix accepts. Weak by construction: `testing_tool.py` counts a timeout as satisfying a `KNOWNBUG`, and the expectation is only that `VERIFICATION SUCCESSFUL` is absent, so a future crash or timeout on the 8 EiB `malloc` would keep it green while R37 stopped being what is measured. It is exact today; it will not stay exact under drift |
+| `-L esbmc/`, `-L esbmc-unix` | as recorded | 1846/1846 and 624/624 (`01_pthread60` passes alone at 95.4 s; its parallel failure is the documented load artefact) |
 
 ---
 
