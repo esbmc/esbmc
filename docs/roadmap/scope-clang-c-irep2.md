@@ -5013,6 +5013,151 @@ and the `migrate_expr` renaming warning. The measured 133 residue on the pinned
 sample wants a fresh cause census before another arm is written — the old one
 is stale, and §113.1 shows it was reading the wrong stage.
 
+## 120. The verdict census reaches zero — and the last live row was a comma
+## (2026-08-23)
+
+(§120: PRs #7266, #7271, #7274, #7275 and #7278 are in flight against this file
+and claim §115-§119.)
+
+With those five merged locally, both censuses were re-run on the pinned
+stride-8 list (226 C sources).
+
+| | before the series | after |
+|---|---:|---:|
+| goto program differing | 24 | **6** |
+| **verdict differing** | 3 | **0** |
+
+Every test in the sample now returns the same verdict on both paths. That is
+the first time this scope has measured zero on the instrument that matters.
+
+### 120.1 §119.4's row was already closed
+
+`github_3487`'s `bad_optional_access` is `member2t::do_simplify` calling
+`.value()` on an unresolvable component number
+(`expr_simplifier.cpp:1327`). The member it fails to find is **`anon_pad#1`**:
+the source is a `constant_struct2t` still carrying the pre-padding operand list,
+so the padding member the read names is not in its type. §119's arm removes the
+producer, and the test verifies.
+
+**Do not "harden" the `.value()`.** `member2t`'s constructor already asserts
+that the member resolves (`irep2_expr.h:1607-1610`), exempting only the
+transient symbol/pointer/array source types — which a `constant_struct2t` is
+not. So an assert-enabled build (CI's DebugOpt) would have caught this at
+construction, and the uncaught exception is only how a `-DNDEBUG` build notices
+the same violated invariant. Returning `expr2tc()` there would convert an
+asserted invariant into a silent decline and hide the next producer. The three
+unguarded `.value()` calls in that file (1226, 1243, 1327) are correct as they
+stand.
+
+### 120.2 The six remaining goto rows, classified
+
+| rows | cause | verdict |
+|---:|---|---|
+| 2 | identity cast from an alignment attribute (`aligned_attr`, `github_2337_6`) | do not mirror, §115.1 |
+| 3 | function-pointer identity cast (`atexit-1`, `github_5138_fail`, `github_5296`) | do not mirror, §113.3 |
+| 1 | `00_aiob_4_true-unreach-call` | **work**, §120.3 |
+
+Five of six were already-recorded decisions. Only one was live.
+
+### 120.3 The comma expression's type
+
+Reduced from `00_aiob_4`:
+
+```c
+unsigned g[42][3];
+unsigned i;
+int main(void) { i = 3; if ((i = i, g[i])[0] != 0) return 1; return 0; }
+```
+
+```
+<         ASSERT (signed long int)i >= 0 // array bounds violated: array `g' lower bound
+<         ASSERT (signed long int)i < 42 // array bounds violated: array `g' upper bound
+<         IF !(g[(signed long int)i][0] != 0) THEN GOTO 1
+---
+>         IF !((&g[(signed long int)i][0])[0] != 0) THEN GOTO 1
+```
+
+C11 6.5.17p2 gives a comma expression its right operand's type. Clang hands the
+node the *decayed* type when that operand is an array, and
+`clang_c_adjust::adjust_comma` overwrites it (`expr.type() = expr.op1().type()`,
+`clang_c_adjust_expr.cpp:1884`). This pass had no such arm — `adjust_sole_arms`
+never matched `code_comma2t` at all — so the pointer type survived,
+`adjust_index` took its `p[i]` sugar path, and the row was indexed as a pointer.
+
+The visible cost is the two named array-bounds ASSERTs. It is **not** a
+soundness hole: an out-of-range subscript is still caught, as
+`dereference failure: array bounds violated` rather than
+``array bounds violated: array `g' upper bound``. What is lost is the check's
+attribution, and with it the ability of a `test.desc` to pin *which* check
+fired — which is why the `_fail` test regexes the named form.
+
+`adjust_comma_at_dispatch` (`clang_c_adjust_irep2.cpp:875-885`) already performs
+exactly this rewrite for the `--clang-c-irep2-adjust` probe; the sole-adjuster
+path simply never called it. The arm added here is the same three lines,
+natively.
+
+### 120.4 Result
+
+Census 24 → 23 for this patch alone, with `00_aiob_4_true-unreach-call`
+converging and nothing new; default path byte-identical on all 226 C sources.
+Suites: `esbmc` 1857/1857, `cstd` 142/142, `floats` 106/106,
+`function_contract` 414/414, `goto-coverage` 144/144.
+
+Applied on top of the other five, the goto residue falls to **5**, and all five
+are recorded do-not-mirror decisions.
+
+### 120.5 Next
+
+The stride-8 sample is exhausted: zero verdict divergences, and every goto
+difference is a recorded decision. The sample was pinned at 226 of 1 863 tests,
+so the honest next step is **not another slice but a wider census** — run the
+verdict comparison over the whole `regression/esbmc` suite rather than 1-in-8,
+which is where any remaining live divergence now has to come from. §118.5's
+artefact warning applies at that scale: the run must clean up after itself.
+## 125. The unary promotion the complex arm displaced (2026-08-23)
+
+(§125: PRs #7266-#7285 are in flight against this file and claim §115-§124.)
+
+§124.4 guessed that `github_4078_unary_bool` was an unported arm and said it
+was cheap to check first. It was, and it was.
+
+### 125.1 One `if`, two obligations
+
+`clang_c_adjust` handles `unary-` and `bitnot` in a single arm that does two
+things: recurse into the operands, and promote a boolean operand to the node's
+type (`clang_c_adjust_expr.cpp:150-160`, added for #4078). This pass ported the
+*complex* half of the unary story — `adjust_complex_unary`, guarded by
+`is_complex_unary`, which requires `is_complex_type(expr->type)` — and nothing
+covers the ordinary case. A `~(a || b)` therefore kept a boolean operand, and
+the solver was handed a boolean where it wanted a bitvector:
+
+```
+$ esbmc main.c --unwind 2 --clang-c-irep2-adjust-only
+ERROR: Bitwuzla error encountered
+```
+
+The port is the same shape as the legacy arm, expressed with
+`c_implicit_typecast`, and hangs off the existing `is_complex_unary` branch as
+its `else`.
+
+### 125.2 Result
+
+Closes `github_4078_unary_bool` and `github_4078_unary_bool_fail`. The
+`gcc_vector_float_{arith,scalar_mul}` pair that §124.4 grouped with them is a
+different cause — both still abort in bitwuzla after this patch — so the
+"SIGABRT on vectors / unary bool" row was two causes, as its name half-admitted.
+That is the second time a cluster named by *symptom* has split on inspection
+(§123.2 was the first); the census groups by signal, and a signal is not a
+cause.
+
+Whole-suite verdict residue **11 → 9**. Both new tests abort in bitwuzla on the
+pre-patch binary and return SUCCESSFUL / FAILED after; a mutant swapping `neg`
+for `bitnot` moves both, the `_fail` one inverting.
+
+Default path byte-identical on 226 C sources. Suites: `esbmc` 1857/1857,
+`cstd` 142/142, `floats` 106/106, `cbmc` 307/307, `goto-coverage` 144/144.
+
+### 125.3 Next
 ## 119. §118.6's unsound row closed — the literal's type is a pre-padding copy
 ## (2026-08-23)
 
@@ -5449,6 +5594,80 @@ test are in it, so the bitfield lowering is where to look.
 The methodological point stands on its own: **census on the whole suite, not a
 stride sample**. The sample was calibrated for a denser instrument and silently
 under-reported by a factor of infinity once the instrument changed.
+
+## 128. The array-typed expression statement (2026-08-23)
+
+(§128: PRs #7267-#7288 are in flight against this file and claim §116-§127.)
+
+§127.4 picked `github_1934-1` as the most precisely signposted of the six
+remaining rows. Its message —
+
+```
+ERROR: Can't construct rvalue reference to array type during dereference
+```
+
+— names the consumer, and the producer is a nine-line program:
+
+```c
+struct Base { int ss[128]; };
+int main() { struct Base x, *y = &x; y->ss; }
+```
+
+### 128.1 A statement whose value is an array
+
+`clang_c_adjust::adjust_code` rewrites an array-typed expression statement to
+`&y->ss[0]` (`clang_c_adjust_code.cpp:57-74`), with its own comment explaining
+why: the dereference code does not assume such an object exists, and the
+statement's value is unused, so taking the first element's address is free.
+This pass had no `code_expression2t` arm — the only place it touches that kind
+is `declare_implicit_callee`, which reads the operand and does not rewrite it —
+so the bare array reached `dereferencet`.
+
+Ported with the same shape, extended to `vector` as well as `array` because
+`is_array_like` (the legacy predicate) covers both.
+
+### 128.2 The assignment exemption, which nothing reaches
+
+The legacy arm exempts an assignment operand (`op.statement() != "assign"`):
+there the array is the assignment target, not a discarded value. Mirrored here,
+and **no input found reaches it**. The probes:
+
+| probe | result |
+|---|---|
+| `struct` assignment (`b = a` with an array member) | struct-typed, so the array guard already excludes it |
+| array-to-pointer assignment (`q = p`) | pointer-typed, excluded |
+| **vector** assignment (`b = a`, `v4f`) — legal in C, and vector-typed | reaches the arm as a `code_assign2t` statement, not wrapped in `code_expression2t` |
+
+Removing the exemption leaves all three byte-identical to the default path.
+
+This is **not** §94.1's case, where a ported guard *undid* a rewrite the legacy
+pass also performed and so added behaviour that had to be justified. Here the
+guard makes this pass's condition identical to legacy's; dropping it would be
+the deviation, and could only be justified by an input showing legacy's own
+guard is dead. Kept, and recorded as untested rather than left to look tested.
+
+### 128.3 Result
+
+Whole-suite verdict residue **6 → 5**. Both tests abort on the pre-patch binary
+and return SUCCESSFUL / FAILED after. Default path byte-identical on 226 C
+sources. Suites: `esbmc` 1854/1857, `cstd` 142/142, `cbmc` 307/307,
+`extensions` 201/201 — the three are `github_302`, `github_2335_1` and
+`github_4634`, all exceeding the harness's 120 s cap locally and all returning
+their expected verdict on master and here alike.
+
+### 128.4 Next
+
+| test | signature |
+|---|---|
+| `github_301` | `ERROR: Bitwuzla error encountered` |
+| `32_floppy` | SIGSEGV, no verdict |
+| `builtin_arith_overflow`, `github_2174` | false alarm SUCCESSFUL → FAILED |
+| `complex_25` | §88.2 binding |
+
+The two false alarms are next: they are the only rows producing a wrong answer
+rather than no answer, and `builtin_arith_overflow` names a builtin family
+(`__builtin_*_overflow`) whose lowering is a specific, findable arm — the same
+shape as §117 and §125, both of which were unported name-matched builtins.
 ## 127. The "unclustered four" were four causes (2026-08-23)
 
 (§127: PRs #7266-#7287 are in flight against this file and claim §115-§126.)
@@ -5744,6 +5963,16 @@ the three-way comparison is what caught it.
 | tests | signature |
 |---:|---|
 | 4 | unclustered (`32_floppy`, `github_301`, `github_1934-1`, `github_382_6`) |
+| 2 | vector float arithmetic (`gcc_vector_float_{arith,scalar_mul}`) |
+| 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
+| 1 | `complex_25`, the §88.2 binding |
+
+The vector pair is the next coherent cause: `adjust_complex_arith` declines a
+vector operand deliberately (`§88` records that the legacy pass "returns before
+attaching a rounding mode for them"), and §123.1's finding applies — a decline
+that hands the backend an unencodable node is a crash, not a no-op. Check
+whether the same reasoning that closed the complex compound assignment closes
+these.
 | 2 | false alarm (`builtin_arith_overflow`, `github_2174`) |
 | 1 | `complex_25`, the §88.2 binding |
 
