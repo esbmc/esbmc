@@ -6303,6 +6303,12 @@ exprt python_converter::get_block(
       get_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
+
+      // Bind the closure's capture cells where the `def` executes (#6256).
+      exprt::operandst &bindings = pending_captures_.operands();
+      block.operands().insert(
+        block.operands().end(), bindings.begin(), bindings.end());
+      bindings.clear();
       break;
     }
     case StatementType::RETURN:
