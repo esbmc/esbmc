@@ -1162,6 +1162,13 @@ private:
     const exprt &lhs,
     const nlohmann::json &view_node);
 
+  bool
+  record_numpy_reshape_view(const exprt &lhs, const nlohmann::json &view_node);
+
+  bool record_numpy_shape_stride_view(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node);
+
   bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
 
   bool has_numpy_transpose_view_of(const std::string &source_id) const;
@@ -1208,6 +1215,12 @@ private:
 
   void mirror_numpy_transpose_assignment_from_targets(
     const nlohmann::json &ast_node,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block);
+
+  void mirror_numpy_reshape_assignment(
+    const nlohmann::json &target,
     const exprt &rhs,
     const locationt &location,
     codet &target_block);
@@ -1735,6 +1748,14 @@ private:
   };
   std::unordered_map<std::string, numpy_transpose_view_infot>
     numpy_transpose_view_info_;
+  struct numpy_reshape_view_infot
+  {
+    std::string source_id;
+    std::vector<std::size_t> source_shape;
+    std::vector<std::size_t> view_shape;
+  };
+  std::unordered_map<std::string, numpy_reshape_view_infot>
+    numpy_reshape_view_info_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

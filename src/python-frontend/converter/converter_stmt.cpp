@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <array>
+#include <numeric>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -248,6 +249,178 @@ std::optional<bool> numpy_axis_permutation_swaps_axes(
   }
 
   return axes[0] != axes[1];
+}
+
+bool is_numpy_reshape_call_node(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Call" && node.contains("func") &&
+         node["func"].is_object() &&
+         node["func"].value("_type", "") == "Attribute" &&
+         node["func"].value("attr", "") == "reshape";
+}
+
+std::vector<std::size_t>
+numpy_shape_from_type(const namespacet &ns, typet source_type)
+{
+  if (source_type.is_pointer())
+    source_type = ns.follow(source_type.subtype());
+
+  std::vector<std::size_t> shape;
+  while (source_type.is_array())
+  {
+    const array_typet &array_type = to_array_type(source_type);
+    const exprt &size = array_type.size();
+    if (!size.is_constant())
+      return {};
+    shape.push_back(static_cast<std::size_t>(
+      binary2integer(to_constant_expr(size).value().c_str(), false)
+        .to_uint64()));
+    source_type = ns.follow(array_type.subtype());
+  }
+  return shape;
+}
+
+std::size_t numpy_shape_element_count(const std::vector<std::size_t> &shape)
+{
+  return std::accumulate(
+    shape.begin(), shape.end(), std::size_t{1}, std::multiplies<>());
+}
+
+std::optional<std::vector<long long>>
+numpy_raw_reshape_sequence(const nlohmann::json &shape_arg)
+{
+  if (!shape_arg.contains("elts"))
+    return std::nullopt;
+
+  std::vector<long long> raw_shape;
+  for (const auto &dim_node : shape_arg["elts"])
+  {
+    std::optional<long long> dim = literal_int_value(dim_node);
+    if (!dim)
+      return std::nullopt;
+    raw_shape.push_back(*dim);
+  }
+
+  return raw_shape;
+}
+
+std::optional<std::vector<long long>>
+numpy_raw_reshape_method_shape(const nlohmann::json &args)
+{
+  std::vector<long long> raw_shape;
+  for (std::size_t i = 1; i < args.size(); ++i)
+  {
+    std::optional<long long> dim = literal_int_value(args[i]);
+    if (!dim)
+      return std::nullopt;
+    raw_shape.push_back(*dim);
+  }
+
+  return raw_shape;
+}
+
+std::optional<std::vector<long long>>
+numpy_raw_reshape_shape(const nlohmann::json &node)
+{
+  if (
+    !is_numpy_reshape_call_node(node) || !node.contains("args") ||
+    !node["args"].is_array() || node["args"].size() < 2)
+    return std::nullopt;
+
+  const nlohmann::json &shape_arg = node["args"][1];
+  if (
+    shape_arg.is_object() && shape_arg.contains("_type") &&
+    (shape_arg["_type"] == "Tuple" || shape_arg["_type"] == "List"))
+    return numpy_raw_reshape_sequence(shape_arg);
+
+  if (node.value("_numpy_method_form", false) && node["args"].size() > 2)
+    return numpy_raw_reshape_method_shape(node["args"]);
+
+  std::optional<long long> dim = literal_int_value(shape_arg);
+  if (!dim)
+    return std::nullopt;
+
+  return std::vector<long long>{*dim};
+}
+
+std::optional<std::vector<std::size_t>> normalize_numpy_reshape_shape(
+  const std::vector<long long> &raw_shape,
+  std::size_t total)
+{
+  std::vector<std::size_t> shape;
+  std::size_t inferred_idx = raw_shape.size();
+  std::size_t known_product = 1;
+  for (std::size_t i = 0; i < raw_shape.size(); ++i)
+  {
+    if (raw_shape[i] == -1)
+    {
+      if (inferred_idx != raw_shape.size())
+        return std::nullopt;
+      inferred_idx = i;
+      shape.push_back(0);
+      continue;
+    }
+    if (raw_shape[i] < 0)
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(raw_shape[i]));
+    known_product *= shape.back();
+  }
+
+  if (inferred_idx != raw_shape.size())
+  {
+    if (known_product == 0 || total % known_product != 0)
+      return std::nullopt;
+    shape[inferred_idx] = total / known_product;
+  }
+
+  return numpy_shape_element_count(shape) == total
+           ? std::optional<std::vector<std::size_t>>(shape)
+           : std::nullopt;
+}
+
+std::optional<std::vector<std::size_t>>
+parse_numpy_reshape_shape(const nlohmann::json &node, std::size_t total)
+{
+  std::optional<std::vector<long long>> raw_shape =
+    numpy_raw_reshape_shape(node);
+  if (!raw_shape)
+    return std::nullopt;
+
+  return normalize_numpy_reshape_shape(*raw_shape, total);
+}
+
+std::optional<std::size_t> numpy_flat_index(
+  const std::vector<long long> &indices,
+  const std::vector<std::size_t> &shape)
+{
+  if (indices.size() != shape.size())
+    return std::nullopt;
+
+  std::size_t flat = 0;
+  for (std::size_t i = 0; i < shape.size(); ++i)
+  {
+    if (indices[i] < 0 || static_cast<std::size_t>(indices[i]) >= shape[i])
+      return std::nullopt;
+    flat = flat * shape[i] + static_cast<std::size_t>(indices[i]);
+  }
+  return flat;
+}
+
+std::optional<std::vector<long long>>
+numpy_unravel_index(std::size_t flat, const std::vector<std::size_t> &shape)
+{
+  if (shape.empty() || shape.size() > 2)
+    return std::nullopt;
+
+  if (shape.size() == 1)
+    return std::vector<long long>{static_cast<long long>(flat)};
+
+  if (shape[1] == 0)
+    return std::nullopt;
+
+  return std::vector<long long>{
+    static_cast<long long>(flat / shape[1]),
+    static_cast<long long>(flat % shape[1])};
 }
 
 std::size_t numpy_array_rank(const namespacet &ns, typet source_type)
@@ -1784,7 +1957,8 @@ bool python_converter::is_tracked_numpy_view_id(
   const std::string &symbol_id) const
 {
   return numpy_view_copy_sources_.count(symbol_id) != 0 ||
-         numpy_transpose_view_info_.count(symbol_id) != 0;
+         numpy_transpose_view_info_.count(symbol_id) != 0 ||
+         numpy_reshape_view_info_.count(symbol_id) != 0;
 }
 
 bool python_converter::has_numpy_transpose_view_of(
@@ -2306,6 +2480,63 @@ bool python_converter::record_numpy_transpose_view(
   return true;
 }
 
+bool python_converter::record_numpy_reshape_view(
+  const exprt &lhs,
+  const nlohmann::json &view_node)
+{
+  if (!lhs.is_symbol() || !is_numpy_reshape_call_node(view_node))
+    return false;
+
+  if (
+    !view_node.contains("args") || !view_node["args"].is_array() ||
+    view_node["args"].empty())
+    return false;
+
+  const std::string root_name = root_name_from_subscript(view_node["args"][0]);
+  const std::string source_id = resolve_name_symbol_id(root_name);
+  if (source_id.empty() || is_tracked_numpy_view_id(source_id))
+    return false;
+
+  const symbolt *source = symbol_table_.find_symbol(source_id);
+  if (!source)
+    return false;
+
+  const std::vector<std::size_t> source_shape =
+    numpy_shape_from_type(ns, ns.follow(source->get_type()));
+  if (source_shape.empty() || source_shape.size() > 2)
+    return false;
+
+  std::optional<std::vector<std::size_t>> view_shape =
+    parse_numpy_reshape_shape(
+      view_node, numpy_shape_element_count(source_shape));
+  if (!view_shape || view_shape->empty() || view_shape->size() > 2)
+    return false;
+
+  const std::string lhs_id = lhs.identifier().as_string();
+  numpy_reshape_view_info_[lhs_id] = {source_id, source_shape, *view_shape};
+  numpy_array_symbols_.insert(lhs_id);
+  return true;
+}
+
+bool python_converter::record_numpy_shape_stride_view(
+  const exprt &lhs,
+  const nlohmann::json &rhs_node)
+{
+  if (is_numpy_transpose_view_call_node(rhs_node))
+  {
+    clear_numpy_view_copy(lhs);
+    return record_numpy_transpose_view(lhs, rhs_node);
+  }
+
+  if (is_numpy_reshape_call_node(rhs_node))
+  {
+    clear_numpy_view_copy(lhs);
+    return record_numpy_reshape_view(lhs, rhs_node);
+  }
+
+  return false;
+}
+
 symbolt *
 python_converter::resolve_numpy_array_storage_alias(symbolt *symbol) const
 {
@@ -2345,6 +2576,7 @@ void python_converter::clear_numpy_view_copy(const exprt &lhs)
   numpy_view_copy_sources_.erase(lhs_id);
   numpy_pointer_view_info_.erase(lhs_id);
   numpy_transpose_view_info_.erase(lhs_id);
+  numpy_reshape_view_info_.erase(lhs_id);
 }
 
 void python_converter::detach_numpy_pointer_views_of(
@@ -2446,6 +2678,15 @@ void python_converter::clear_numpy_transpose_views_of(
     else
       ++it;
   }
+
+  for (auto it = numpy_reshape_view_info_.begin();
+       it != numpy_reshape_view_info_.end();)
+  {
+    if (it->second.source_id == source_id)
+      it = numpy_reshape_view_info_.erase(it);
+    else
+      ++it;
+  }
 }
 
 void python_converter::emit_numpy_transpose_mirror_assignment(
@@ -2535,6 +2776,61 @@ void python_converter::mirror_numpy_transpose_assignment(
   }
 }
 
+void python_converter::mirror_numpy_reshape_assignment(
+  const nlohmann::json &target,
+  const exprt &rhs,
+  const locationt &location,
+  codet &target_block)
+{
+  if (!target.is_object() || target.value("_type", "") != "Subscript")
+    return;
+
+  std::string root_name;
+  const std::vector<long long> indices =
+    subscript_indices_from_root(target, root_name);
+  if (root_name.empty())
+    return;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return;
+
+  auto direct = numpy_reshape_view_info_.find(root_id);
+  if (direct != numpy_reshape_view_info_.end())
+  {
+    std::optional<std::size_t> flat =
+      numpy_flat_index(indices, direct->second.view_shape);
+    std::optional<std::vector<long long>> source_indices =
+      flat ? numpy_unravel_index(*flat, direct->second.source_shape)
+           : std::nullopt;
+    if (source_indices)
+      emit_numpy_transpose_mirror_assignment(
+        resolve_numpy_array_storage_alias_id(direct->second.source_id),
+        *source_indices,
+        rhs,
+        location,
+        target_block);
+    return;
+  }
+
+  const std::string storage_root_id =
+    resolve_numpy_array_storage_alias_id(root_id);
+  for (const auto &entry : numpy_reshape_view_info_)
+  {
+    const numpy_reshape_view_infot &view = entry.second;
+    if (resolve_numpy_array_storage_alias_id(view.source_id) != storage_root_id)
+      continue;
+
+    std::optional<std::size_t> flat =
+      numpy_flat_index(indices, view.source_shape);
+    std::optional<std::vector<long long>> view_indices =
+      flat ? numpy_unravel_index(*flat, view.view_shape) : std::nullopt;
+    if (view_indices)
+      emit_numpy_transpose_mirror_assignment(
+        entry.first, *view_indices, rhs, location, target_block);
+  }
+}
+
 void python_converter::mirror_numpy_transpose_assignment_from_targets(
   const nlohmann::json &ast_node,
   const exprt &rhs,
@@ -2547,6 +2843,8 @@ void python_converter::mirror_numpy_transpose_assignment_from_targets(
     return;
 
   mirror_numpy_transpose_assignment(
+    ast_node["targets"][0], rhs, location, target_block);
+  mirror_numpy_reshape_assignment(
     ast_node["targets"][0], rhs, location, target_block);
 }
 
@@ -2597,12 +2895,8 @@ void python_converter::update_numpy_array_binding(
   if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
     return;
 
-  if (is_numpy_transpose_view_call_node(rhs_node))
-  {
-    clear_numpy_view_copy(lhs);
-    if (record_numpy_transpose_view(lhs, rhs_node))
-      return;
-  }
+  if (record_numpy_shape_stride_view(lhs, rhs_node))
+    return;
 
   if (is_numpy_view_copy_expr(rhs_node))
   {
@@ -5321,6 +5615,7 @@ void python_converter::get_var_assign(
     target_block.copy_to_operands(code_assign);
     mirror_numpy_transpose_assignment(
       target, rhs, location_begin, target_block);
+    mirror_numpy_reshape_assignment(target, rhs, location_begin, target_block);
     if (
       effective_ast_node.contains("value") &&
       effective_ast_node["value"].is_object())

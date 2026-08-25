@@ -7141,7 +7141,20 @@ exprt numpy_call_expr::get()
       throw std::runtime_error(
         "TypeError: numpy.reshape() requires array and shape arguments");
 
-    nlohmann::json arr_arg = call_["args"][0];
+    const nlohmann::json &original_arr_arg = call_["args"][0];
+    if (
+      original_arr_arg.is_object() &&
+      original_arr_arg.value("_type", "") == "Name" &&
+      original_arr_arg.contains("id"))
+    {
+      const std::string source_id = converter_.resolve_name_symbol_id(
+        original_arr_arg["id"].get<std::string>());
+      if (!source_id.empty() && converter_.is_tracked_numpy_view_id(source_id))
+        throw std::runtime_error(
+          "TypeError: numpy.reshape() requires contiguous input");
+    }
+
+    nlohmann::json arr_arg = original_arr_arg;
     resolve_numpy_var(arr_arg);
 
     std::vector<std::size_t> old_shape;
