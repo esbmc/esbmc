@@ -18,31 +18,27 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
+            arch: x86_64
+            flags: '-b RelWithDebInfo -e OFF'
+          - os: ubuntu-24.04
+            arch: armv8
             flags: '-b RelWithDebInfo -e OFF'
           - os: windows-latest
+            arch: x86_64
             flags: '-b RelWithDebInfo -e OFF'
           - os: macos-latest
+            arch: x86_64
             flags: '-b RelWithDebInfo -e OFF -c 21'
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
+      architecture: ${{ matrix.arch }}
       build-flags: ${{ matrix.flags }}
       testing: false
       canon-names: true
 
-  # Separate from the matrix above so create-release can wait for it without
-  # being gated on it -- see the `if` there.
-  build-linux-armv8:
-    uses: ./.github/workflows/build.yml
-    with:
-      operating-system: ubuntu-24.04
-      architecture: armv8
-      build-flags: '-b RelWithDebInfo -e OFF'
-      testing: false
-      canon-names: true
-
-  # build-linux-armv8 above covers ARM64 with the bundled LLVM; this covers the
-  # distinct axis Homebrew actually uses -- a system-installed, shared LLVM 22.
+  # The armv8 matrix leg above covers ARM64 with the bundled LLVM; this covers
+  # the distinct axis Homebrew actually uses -- a system-installed, shared LLVM 22.
   # That is a slow drift check against Homebrew's LLVM bumps (#5252), not a
   # release gate, so it runs on the weekly cron only and not on v* tags or
   # manual dispatches.
@@ -67,10 +63,7 @@ jobs:
   create-release:
     name: Upload Release Asset
     runs-on: ubuntu-24.04
-    needs: [build, build-linux-armv8, build-info]
-    # Wait for the armv8 leg so its asset is ready, but never let it hold up the
-    # release: the other platforms publish even when the ARM build fails.
-    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build-info.result == 'success' }}
+    needs: [build, build-info]
     steps:
       # The build jobs run with canon-names: true, so each platform already
       # uploaded its canonical esbmc-<platform>.zip; just fetch and attach them.
@@ -80,7 +73,6 @@ jobs:
           name: esbmc-linux
           path: .
       - name: Download Linux ARMv8 Build
-        continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: esbmc-linux-armv8
@@ -102,13 +94,6 @@ jobs:
           path: .
       - name: Get files
         run: ls
-      # The armv8 leg is deliberately not a gate (see this job's `if`), so a
-      # failed ARM build reaches here as a silently absent asset while the
-      # download page keeps linking it. Make that loud in the run summary.
-      - name: Warn on missing ARMv8 asset
-        if: ${{ needs.build-linux-armv8.result != 'success' }}
-        run: |
-          echo "::warning::esbmc-linux-armv8.zip is missing (build-linux-armv8: ${{ needs.build-linux-armv8.result }}). The release publishes without it and the ARMv8 download link will 404 until the next successful run."
       - name: Do the release
         uses: softprops/action-gh-release@v3
         with:
