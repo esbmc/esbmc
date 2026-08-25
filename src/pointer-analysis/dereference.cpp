@@ -508,6 +508,19 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
+
+    /* Now free of dereferences, fold in any value symex already knows for
+     * the index (e.g. an array index stored in a struct field): a constant
+     * index keeps this access on the constant-offset path, which produces a
+     * member/index reference. A symbolic index degenerates to a whole-object
+     * byte_extract/byte_update that constant propagation cannot see through:
+     * the assignment drops the object's recorded constant, later guards over
+     * it become undecidable and loops unwind to the bound (#7311). */
+    if (!is_constant_int2t(index.index))
+    {
+      dereference_callback.rename(index.index);
+      simplify(index.index);
+    }
     return dereference_expr_nonscalar(index.source_value, guard, mode, base);
   }
 
