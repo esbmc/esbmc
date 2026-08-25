@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.broadcast_to returns a readonly view and is not supported$
+^ERROR: ValueError: assignment destination is read-only
