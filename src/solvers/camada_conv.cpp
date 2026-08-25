@@ -158,7 +158,6 @@ public:
 };
 #endif
 
-
 camada::RM to_camada_rm(ieee_floatt::rounding_modet rm)
 {
   switch (rm)
