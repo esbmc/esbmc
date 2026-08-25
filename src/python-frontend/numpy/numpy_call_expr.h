@@ -65,6 +65,9 @@ private:
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);
+  std::optional<exprt> try_materialize_descriptor_copy_call();
+  std::optional<exprt>
+  try_materialize_descriptor_array_call(nlohmann::json &array_arg);
   void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
   void reject_unsupported_transpose_axes_rank(const std::string &function);
 };

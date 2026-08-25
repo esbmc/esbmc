@@ -1174,6 +1174,18 @@ private:
   std::optional<std::vector<nlohmann::json>>
   build_numpy_nditer_logical_elements(const nlohmann::json &arg) const;
 
+  std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
+  build_numpy_descriptor_materialized_elements(
+    const nlohmann::json &arg,
+    const char *unsupported_rank_error);
+
+  std::optional<exprt> build_numpy_descriptor_materialized_list(
+    const nlohmann::json &arg,
+    bool nested);
+
+  std::optional<exprt>
+  build_numpy_descriptor_materialized_array(const nlohmann::json &arg);
+
   std::optional<std::vector<std::size_t>>
   get_numpy_nditer_logical_shape(const std::string &root_id) const;
 

@@ -3203,6 +3203,26 @@ numpy_call_expr::try_build_nditer_descriptor_list(const nlohmann::json &arg)
   return list.build_list_from_exprs(elems);
 }
 
+std::optional<exprt> numpy_call_expr::try_materialize_descriptor_copy_call()
+{
+  if (function_id_.get_function() != "copy")
+    return std::nullopt;
+
+  if (call_["args"].empty())
+    throw std::runtime_error("TypeError: numpy.copy() requires an array");
+
+  return converter_.build_numpy_descriptor_materialized_array(call_["args"][0]);
+}
+
+std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
+  nlohmann::json &array_arg)
+{
+  if (function_id_.get_function() != "array")
+    return std::nullopt;
+
+  return converter_.build_numpy_descriptor_materialized_array(array_arg);
+}
+
 void numpy_call_expr::reject_unsupported_nditer_keywords(
   const nlohmann::json &arg) const
 {
@@ -6586,10 +6606,18 @@ exprt numpy_call_expr::get()
     }
   }
 
+  if (std::optional<exprt> copied = try_materialize_descriptor_copy_call())
+    return *copied;
+
   // Create array from numpy.array()
   if (function == "array")
   {
     nlohmann::json array_arg = call_["args"][0];
+    if (
+      std::optional<exprt> copied =
+        try_materialize_descriptor_array_call(array_arg))
+      return *copied;
+
     const std::string dtype = get_dtype();
     if (!dtype.empty())
       array_arg = cast_numpy_literal_to_dtype(array_arg, dtype);

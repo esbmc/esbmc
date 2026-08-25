@@ -2258,6 +2258,118 @@ python_converter::build_numpy_nditer_logical_elements(
   return result;
 }
 
+std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
+  const nlohmann::json &arg,
+  const bool nested)
+{
+  auto materialized = build_numpy_descriptor_materialized_elements(
+    arg,
+    "TypeError: numpy.ndarray.tolist() currently supports rank 1 or 2 arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  const std::vector<std::size_t> &shape = materialized->first;
+  const std::vector<exprt> &elems = materialized->second;
+
+  nlohmann::json list_node{
+    {"_type", "List"}, {"elts", nlohmann::json::array()}};
+  python_list list(*this, list_node);
+  if (!nested || shape.size() == 1)
+    return list.build_list_from_exprs(elems);
+
+  std::vector<exprt> rows;
+  const std::size_t cols = shape[1];
+  for (std::size_t row = 0; row < shape[0]; ++row)
+  {
+    const auto first = elems.begin() + static_cast<std::ptrdiff_t>(row * cols);
+    const auto last = first + static_cast<std::ptrdiff_t>(cols);
+    const std::vector<exprt> row_elems(first, last);
+    rows.push_back(list.build_list_from_exprs(row_elems));
+  }
+  return list.build_list_from_exprs(rows);
+}
+
+std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
+python_converter::build_numpy_descriptor_materialized_elements(
+  const nlohmann::json &arg,
+  const char *unsupported_rank_error)
+{
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Name" ||
+    !arg.contains("id") || !arg["id"].is_string())
+    return std::nullopt;
+
+  const std::string root_id =
+    resolve_name_symbol_id(arg["id"].get<std::string>());
+  std::optional<std::vector<std::size_t>> shape =
+    get_numpy_nditer_logical_shape(root_id);
+  if (!shape)
+    return std::nullopt;
+  if (shape->empty() || shape->size() > 2)
+    throw std::runtime_error(unsupported_rank_error);
+
+  std::optional<std::vector<nlohmann::json>> element_nodes =
+    build_numpy_nditer_logical_elements(arg);
+  if (!element_nodes || element_nodes->empty())
+    return std::nullopt;
+
+  std::vector<exprt> elems;
+  elems.reserve(element_nodes->size());
+  for (const nlohmann::json &node : *element_nodes)
+    elems.push_back(get_expr(node));
+
+  return std::make_pair(*shape, elems);
+}
+
+static exprt build_numpy_descriptor_array_value(
+  const std::vector<std::size_t> &shape,
+  const std::vector<exprt> &elems,
+  type_handler &type_handler)
+{
+  const typet &elem_type = elems.front().type();
+  typet result_type = type_handler.build_array(elem_type, shape.back());
+  if (shape.size() == 2)
+    result_type = type_handler.build_array(result_type, shape[0]);
+
+  exprt value = gen_zero(result_type);
+  if (shape.size() == 1)
+  {
+    for (std::size_t i = 0; i < elems.size(); ++i)
+      value.operands().at(i) = elems[i];
+    return value;
+  }
+
+  const std::size_t cols = shape[1];
+  for (std::size_t row = 0; row < shape[0]; ++row)
+    for (std::size_t col = 0; col < cols; ++col)
+      value.operands().at(row).operands().at(col) = elems[(row * cols) + col];
+  return value;
+}
+
+std::optional<exprt>
+python_converter::build_numpy_descriptor_materialized_array(
+  const nlohmann::json &arg)
+{
+  auto materialized = build_numpy_descriptor_materialized_elements(
+    arg,
+    "TypeError: numpy descriptor materialization currently supports rank 1 "
+    "or 2 arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  exprt value = build_numpy_descriptor_array_value(
+    materialized->first, materialized->second, type_handler_);
+
+  symbolt &tmp =
+    create_tmp_symbol(arg, "$numpy_descriptor_copy$", value.type(), value);
+  exprt tmp_expr = symbol_expr(tmp);
+  code_declt decl(tmp_expr);
+  decl.operands().push_back(value);
+  if (current_block != nullptr)
+    current_block->copy_to_operands(decl);
+  return tmp_expr;
+}
+
 std::optional<std::vector<std::size_t>>
 python_converter::get_numpy_nditer_logical_shape(
   const std::string &root_id) const
