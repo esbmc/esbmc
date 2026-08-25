@@ -211,6 +211,8 @@ void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
 
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
+  else if (is_neg2t(expr) || is_bitnot2t(expr))
+    promote_unary_bool_operand(expr);
 
   if (is_relational(expr))
     adjust_relational(expr);
@@ -1073,6 +1075,24 @@ void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
   }
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+/// C11 6.5.3.3: the operand of unary `-` and `~` undergoes integer promotion,
+/// so a boolean one -- a comparison, `||` or `&&` -- becomes int. Left boolean
+/// it reaches the solver where a bitvector is wanted (#4078).
+void clang_c_adjust_irep2::promote_unary_bool_operand(expr2tc &expr)
+{
+  const expr2tc &op = *expr->get_sub_expr(0);
+  if (is_nil_expr(op) || !is_bool_type(op->type) || is_bool_type(expr->type))
+    return;
+
+  expr2tc promoted = op;
+  c_implicit_typecast(promoted, expr->type, ns);
+  if (promoted == op)
+    return;
+
+  expr = is_neg2t(expr) ? expr2tc(neg2tc(expr->type, promoted))
+                        : expr2tc(bitnot2tc(expr->type, promoted));
 }
 
 void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)
