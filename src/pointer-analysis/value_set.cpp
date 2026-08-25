@@ -1259,6 +1259,18 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
   insert(dest, unknown, BigInt(0));
 }
 
+/// is_subclass_of is struct-only -- it casts both operands with to_struct_type
+/// -- and inheritance has no union analogue, so a union pair that is not
+/// base_type_eq is simply incompatible.
+static bool is_related_struct(
+  const type2tc &lhs_type,
+  const type2tc &rhs_type,
+  const namespacet &ns)
+{
+  return is_struct_type(lhs_type) && is_struct_type(rhs_type) &&
+         is_subclass_of(lhs_type, rhs_type, ns);
+}
+
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
@@ -1312,7 +1324,7 @@ void value_sett::assign(
     const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
     if (
       rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
-      !is_subclass_of(lhs_type, rhs->type, ns))
+      !is_related_struct(lhs_type, rhs->type, ns))
       return;
 
     // Assign the values of all members of the rhs thing to the lhs. It's
