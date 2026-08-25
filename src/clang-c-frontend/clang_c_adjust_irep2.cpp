@@ -183,6 +183,8 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 
   if (is_constant_struct2t(expr))
     adjust_struct(expr);
+  if (is_constant_array2t(expr))
+    adjust_array_subtype(expr);
   if (is_dereference2t(expr))
     adjust_dereference(expr);
 
@@ -505,6 +507,28 @@ void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
   // it stands rather than build one the type cannot describe.
   if (ops.size() == st.members.size())
     expr = constant_struct2tc(padded, ops);
+}
+
+/// adjust_struct retypes an element to its tag's padded layout, which leaves
+/// an enclosing array literal still naming the unpadded element type. The
+/// operands are walked before the node itself, so the retyped elements are
+/// already in place here; value_sett::assign's base_type_eq rejects the pair
+/// otherwise.
+void clang_c_adjust_irep2::adjust_array_subtype(expr2tc &expr)
+{
+  const constant_array2t &a = to_constant_array2t(expr);
+  if (a.datatype_members.empty())
+    return;
+
+  const array_type2t &at = to_array_type(expr->type);
+  const type2tc &elem = a.datatype_members.front()->type;
+  if (
+    !is_struct_type(at.subtype) || !is_struct_type(elem) || at.subtype == elem)
+    return;
+
+  expr = constant_array2tc(
+    array_type2tc(elem, at.array_size, at.size_is_infinite),
+    a.datatype_members);
 }
 
 void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
