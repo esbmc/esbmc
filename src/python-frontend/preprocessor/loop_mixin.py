@@ -1800,16 +1800,24 @@ class LoopMixin:
         expression is copied into a fresh annotated ESBMC_iter variable. Returns
         (iter_var_name, setup_statements, element_type).
         """
+        # A key'd sorted() has to be lowered here: this assignment is built
+        # after the pass that lowers one, so the call would otherwise reach the
+        # frontend with its key= dropped, and be refused.
+        setup = []
+        lowered = self._lower_sorted_key_scan(seq)
+        if lowered is not None:
+            setup, seq = lowered
+
         annotation_id = self._get_iterable_type_annotation(seq)
         element_type = self._get_element_type_from_container(annotation_id, seq)
         if isinstance(seq, ast.Name):
-            return seq.id, [], element_type
+            return seq.id, setup, element_type
         iter_var_name = f"ESBMC_iter_{loop_id}{suffix}"
         saved = node.iter
         node.iter = seq
         iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
         node.iter = saved
-        return iter_var_name, [iter_assign], element_type
+        return iter_var_name, setup + [iter_assign], element_type
 
     def _make_target_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self, node, target, iter_var_name, index_var, element_type):
@@ -2111,18 +2119,26 @@ class LoopMixin:
                 node.iter = keys_call
                 annotation_id = "list"  # d.keys() returns list
 
+        # A key'd sorted() has to be lowered here: this assignment is built
+        # after the pass that lowers one, so the call would otherwise reach the
+        # frontend with its key= dropped, and be refused.
+        scan_setup = []
+        lowered = self._lower_sorted_key_scan(node.iter)
+        if lowered is not None:
+            scan_setup, node.iter = lowered
+
         # Determine iterator variable name and whether to create ESBMC_iter
         if isinstance(node.iter, ast.Name):
             # For any Name reference (parameter or variable), use it directly
             # This preserves type information for the converter
             iter_var_name = node.iter.id
-            setup_statements = []
+            setup_statements = list(scan_setup)
         else:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f"{iter_var_base}_{loop_id}"
             iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name,
                                                        element_type)
-            setup_statements = [iter_assign]
+            setup_statements = scan_setup + [iter_assign]
 
         # Create common setup statements (index and length) with unique names
         index_assign = self._create_index_assignment(node, index_var)
