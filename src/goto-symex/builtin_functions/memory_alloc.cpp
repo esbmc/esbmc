@@ -233,6 +233,26 @@ void goto_symext::symex_realloc(
   if (handle_realloc_zero_size(lhs, code, guard, realloc_size))
     return;
 
+  // Nil unless the request can exceed max_object_size(); see R38. Under
+  // --force-realloc-success the cap is not applied at all, for the reason the
+  // symbolic malloc arm gives: assuming it away would prune
+  // realloc(p, (size_t)negative) vacuously.
+  expr2tc over_cap;
+  if (
+    !options.get_bool_option("force-realloc-success") &&
+    is_unsignedbv_type(realloc_size->type) &&
+    realloc_size->type->get_width() >= ptraddr_type2()->get_width())
+  {
+    expr2tc fits = lessthanequal2tc(
+      realloc_size, constant_int2tc(realloc_size->type, max_object_size()));
+    over_cap = not2tc(fits);
+    // Zero size on the failing branch keeps the object layable; the request
+    // fails through alloc_fail below, leaving the old object untouched as
+    // C17 7.22.3.5 requires.
+    realloc_size = if2tc(
+      realloc_size->type, fits, realloc_size, gen_zero(realloc_size->type));
+  }
+
   // ===== determine element type and old object info =====
   type2tc elem_type;
   expr2tc old_base_array;
@@ -269,7 +289,7 @@ void goto_symext::symex_realloc(
 
   // create result and handle failure modelling
   expr2tc result = create_result_pointer(new_array, lhs->type);
-  result = model_allocation_failure(result, code.operand, guard);
+  result = model_allocation_failure(result, code.operand, guard, over_cap);
 
   // finalize assignment and tracking
   finalize_realloc_result(lhs, result, new_array, guard, realloc_size);
@@ -422,7 +442,8 @@ expr2tc goto_symext::create_result_pointer(
 expr2tc goto_symext::model_allocation_failure(
   const expr2tc &result,
   const expr2tc &old_ptr,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &over_cap)
 {
   if (!options.get_bool_option("force-realloc-success"))
   {
@@ -434,6 +455,13 @@ expr2tc goto_symext::model_allocation_failure(
       type2tc(),
       sideeffect2t::allockind::nondet);
     replace_nondet(alloc_fail);
+
+    // The cap joins the failure condition rather than nulling the result
+    // afterwards: update_pointer_validity keys the old object's validity on
+    // alloc_fail, so a result nulled past that point would leave the old
+    // object invalidated on a branch where the allocation failed.
+    if (!is_nil_expr(over_cap))
+      alloc_fail = or2tc(alloc_fail, over_cap);
 
     expr2tc null_ptr = symbol2tc(result->type, "NULL");
     expr2tc conditional_result =

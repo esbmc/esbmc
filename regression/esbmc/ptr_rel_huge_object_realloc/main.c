@@ -1,7 +1,7 @@
-/* R38, the realloc half: symex_realloc never bounds its size at all, so the
-   same offset at 2^63 reaches the comparator. See ptr_rel_huge_object for the
-   malloc spelling, which the PTRDIFF_MAX cap fixed. The width is fixed:
-   `unsigned long` is 32-bit on LLP64 and never reaches 2^63. */
+/* The realloc half of R38: the cap joins realloc's failure condition, so an
+   over-cap request returns NULL and never lays out an object whose upper
+   offsets read negative. See ptr_rel_huge_object for the malloc spelling. The
+   width is fixed: `unsigned long` is 32-bit on LLP64 and never reaches 2^63. */
 #include <assert.h>
 #include <stdlib.h>
 #include <stdint.h>
