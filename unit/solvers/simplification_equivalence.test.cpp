@@ -104,6 +104,105 @@ SCENARIO(
     }
   }
 
+  GIVEN("shapes whose conversion would not return a term")
+  {
+    // Each of these reaches an abort() or an assert() inside convert_ast, which
+    // no catch can turn back into a decline, so the screen has to refuse them
+    // up front. They only start arriving once the check covers symex and the
+    // per-node folds (esbmc/esbmc#7260).
+    const type2tc double_ty = migrate_type(double_type());
+    const expr2tc g = symbol2tc(double_ty, "g");
+    const expr2tc rne =
+      from_integer(ieee_floatt::ROUND_TO_EVEN, get_int32_type());
+
+    THEN("a value-set placeholder is declined")
+    {
+      const expr2tc unknown = unknown2tc(get_int32_type());
+      REQUIRE(
+        check_simplification_equivalence(
+          add2tc(get_int32_type(), unknown, zero), unknown, ns, options) ==
+        simplification_equivalencet::skipped);
+    }
+    THEN("a round-to-nearest-away rounding mode is declined")
+    {
+      // Z3 and CVC5 abort on RNA; Bitwuzla does not. Refused for all of them.
+      const expr2tc rna =
+        from_integer(ieee_floatt::ROUND_TO_AWAY, get_int32_type());
+      REQUIRE(
+        check_simplification_equivalence(
+          ieee_mul2tc(double_ty, g, g, rna),
+          ieee_mul2tc(double_ty, g, g, rne),
+          ns,
+          options) == simplification_equivalencet::skipped);
+    }
+    THEN("a symbolic rounding mode is declined")
+    {
+      // convert_rounding_mode() builds an ite over every mode, RNA included.
+      const expr2tc rm =
+        symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+      REQUIRE(
+        check_simplification_equivalence(
+          ieee_mul2tc(double_ty, g, g, rm),
+          ieee_mul2tc(double_ty, g, g, rne),
+          ns,
+          options) == simplification_equivalencet::skipped);
+    }
+    THEN("narrowing a float to an integer is declined")
+    {
+      // Undefined out of range (C11 6.3.1.4p1), so there is no value to state
+      // an equality about.
+      REQUIRE(
+        check_simplification_equivalence(
+          typecast2tc(get_int32_type(), g, rne), x, ns, options) ==
+        simplification_equivalencet::skipped);
+    }
+    THEN("a byte extract over an array is declined")
+    {
+      // convert_byte_extract() asserts its source is not an array.
+      const type2tc arr =
+        array_type2tc(get_int32_type(), from_integer(4, size_type2()), false);
+      REQUIRE(
+        check_simplification_equivalence(
+          byte_extract2tc(get_int8_type(), symbol2tc(arr, "a"), zero, false),
+          from_integer(0, get_int8_type()),
+          ns,
+          options) == simplification_equivalencet::skipped);
+    }
+  }
+
+  GIVEN("the unsound folds from issue #7260")
+  {
+    // Both were planted by hand in do_simplify() to show the hook was not
+    // seeing per-node peepholes. Keeping them here pins the other half of that
+    // claim: that the checker does decide them, so a widened hook has
+    // something to widen onto.
+    THEN("x * 2 -> x differs")
+    {
+      REQUIRE(
+        check_simplification_equivalence(
+          mul2tc(get_int32_type(), x, from_integer(2, get_int32_type())),
+          x,
+          ns,
+          options) == simplification_equivalencet::differs);
+    }
+    THEN("x * 0.0 -> 0.0 differs")
+    {
+      // Unsound under IEEE 754 twice over: inf * 0 and NaN * 0 are NaN, and
+      // the product's zero takes the sign of neither operand alone.
+      const type2tc double_ty = migrate_type(double_type());
+      ieee_floatt zero_val(ieee_float_spect::double_precision());
+      zero_val.from_double(0.0);
+      const expr2tc fp_zero = constant_floatbv2tc(zero_val);
+      const expr2tc g = symbol2tc(double_ty, "g");
+      const expr2tc rm =
+        from_integer(ieee_floatt::ROUND_TO_EVEN, get_int32_type());
+      REQUIRE(
+        check_simplification_equivalence(
+          ieee_mul2tc(double_ty, g, fp_zero, rm), fp_zero, ns, options) ==
+        simplification_equivalencet::differs);
+    }
+  }
+
   GIVEN("a floating-point rewrite")
   {
     const type2tc double_ty = migrate_type(double_type());
