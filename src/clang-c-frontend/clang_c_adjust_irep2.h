@@ -112,6 +112,8 @@ private:
   void adjust_address_of(expr2tc &expr);
 
   void promote_unary_bool_operand(expr2tc &expr);
+  void adjust_struct(expr2tc &expr);
+  void adjust_array_subtype(expr2tc &expr);
   void adjust_decl_init(expr2tc &expr);
   void adjust_dereference(expr2tc &expr);
   void lower_complex_compound_assignment(expr2tc &expr);
