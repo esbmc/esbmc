@@ -69,13 +69,18 @@ if(ESBMC_HAVE_UCHAR_H)
     list(APPEND ESBMC_TEST_CAPABILITIES uchar_h)
 endif()
 
-# --32 needs multi-arch headers whose type model agrees with the frontend's
-# under -m32. That holds on x86 hosts carrying the 32-bit headers; on aarch64
-# it does not, which is the case issue #1400 was filed about.
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+# --32 reads the bundled 32-bit libc that c2goto builds, not the host's own
+# headers, so the capability follows that build option rather than the host
+# CPU. Apple Silicon keeps it on and runs the --32 tests; the aarch64 Linux
+# build turns it off (scripts/build.sh), which is the case #1400 was filed
+# about.
+if(ESBMC_BUNDLE_LIBC AND ESBMC_BUNDLE_LIBC_32BIT)
     list(APPEND ESBMC_TEST_CAPABILITIES arch32)
-    # A test whose input is x86-only: clang's SSE/MMX intrinsic headers reject
-    # any other target, and x86 asm register constraints do not compile there.
+endif()
+
+# A test whose input is x86-only: clang's SSE/MMX intrinsic headers reject any
+# other target, and x86 asm register constraints do not compile there.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
     list(APPEND ESBMC_TEST_CAPABILITIES arch_x86)
 endif()
 
