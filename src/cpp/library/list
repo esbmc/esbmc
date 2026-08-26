@@ -913,18 +913,21 @@ void advance(list<int>::iterator &it, int n)
       --it;
 }
 
-bool operator==(const list<int> &x, const list<int> &y)
+/* [container.requirements]: the comparisons are templates over the element
+ * type, not the two hardcoded instantiations this used to carry -- a
+ * list<char> could not be compared at all. The static step bound is what stops
+ * ESBMC unrolling speculatively to --unwind instead of to LIST_MAX_SIZE. */
+template <class T>
+bool operator==(const list<T> &x, const list<T> &y)
 {
   if (x._size != y._size)
     return false;
-  list<int>::size_type ix = x._sentinel_next;
-  list<int>::size_type iy = y._sentinel_next;
-  // Static step bound so ESBMC stops unrolling at LIST_MAX_SIZE
-  // (== SENTINEL) instead of speculatively unrolling to --unwind.
-  for (list<int>::size_type step = 0; step < list<int>::SENTINEL; step++)
+  typename list<T>::size_type ix = x._sentinel_next;
+  typename list<T>::size_type iy = y._sentinel_next;
+  for (typename list<T>::size_type step = 0; step < list<T>::SENTINEL; step++)
   {
-    if (ix == list<int>::SENTINEL)
-      return iy == list<int>::SENTINEL;
+    if (ix == list<T>::SENTINEL)
+      return iy == list<T>::SENTINEL;
     if (x._storage.buf[ix].data != y._storage.buf[iy].data)
       return false;
     ix = x._storage.buf[ix].next_idx;
@@ -933,32 +936,52 @@ bool operator==(const list<int> &x, const list<int> &y)
   return true;
 }
 
-bool operator!=(const list<int> &x, const list<int> &y)
+template <class T>
+bool operator!=(const list<T> &x, const list<T> &y)
 {
   return !(x == y);
 }
 
-bool operator==(const list<double> &x, const list<double> &y)
+/* The ordering is the lexicographical comparison of the two ranges, so the
+ * first differing element decides it and the lengths matter only when one
+ * range is a prefix of the other. */
+template <class T>
+bool operator<(const list<T> &x, const list<T> &y)
 {
-  if (x._size != y._size)
-    return false;
-  list<double>::size_type ix = x._sentinel_next;
-  list<double>::size_type iy = y._sentinel_next;
-  for (list<double>::size_type step = 0; step < list<double>::SENTINEL; step++)
+  typename list<T>::size_type ix = x._sentinel_next;
+  typename list<T>::size_type iy = y._sentinel_next;
+  for (typename list<T>::size_type step = 0; step < list<T>::SENTINEL; step++)
   {
-    if (ix == list<double>::SENTINEL)
-      return iy == list<double>::SENTINEL;
-    if (x._storage.buf[ix].data != y._storage.buf[iy].data)
+    if (ix == list<T>::SENTINEL)
+      return iy != list<T>::SENTINEL;
+    if (iy == list<T>::SENTINEL)
+      return false;
+    if (x._storage.buf[ix].data < y._storage.buf[iy].data)
+      return true;
+    if (y._storage.buf[iy].data < x._storage.buf[ix].data)
       return false;
     ix = x._storage.buf[ix].next_idx;
     iy = y._storage.buf[iy].next_idx;
   }
-  return true;
+  return false;
 }
 
-bool operator!=(const list<double> &x, const list<double> &y)
+template <class T>
+bool operator>(const list<T> &x, const list<T> &y)
 {
-  return !(x == y);
+  return y < x;
+}
+
+template <class T>
+bool operator<=(const list<T> &x, const list<T> &y)
+{
+  return !(y < x);
+}
+
+template <class T>
+bool operator>=(const list<T> &x, const list<T> &y)
+{
+  return !(x < y);
 }
 
 } // namespace std
