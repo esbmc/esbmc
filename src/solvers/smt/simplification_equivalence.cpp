@@ -296,7 +296,17 @@ expr2tc preserves_value(const expr2tc &before, const expr2tc &after)
 optionst checker_options(const optionst &run_options)
 {
   optionst opts = run_options;
-  for (const char *opt : {"int-encoding", "ir", "ir-ieee", "smtlib", "output"})
+  // bitwuzllob and neurosym run one task in Mallob's mono mode and abort() on
+  // an incremental option rather than declining it, so a run under either has
+  // to ask its questions of something else.
+  for (const char *opt :
+       {"int-encoding",
+        "ir",
+        "ir-ieee",
+        "smtlib",
+        "output",
+        "bitwuzllob",
+        "neurosym"})
     opts.set_option(opt, "");
   opts.set_option("fixedbv", false);
   // check() pushes a frame per query, and boolector only accepts
