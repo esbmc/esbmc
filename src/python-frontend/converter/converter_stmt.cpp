@@ -2913,21 +2913,23 @@ ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
 /// one of src's entries has the same type. sorted()/reversed() permute their
 /// argument, so a per-position copy would misattribute the elements of a
 /// heterogeneous list; a homogeneous one is permutation-invariant.
-static void
-copy_homogeneous_elem_types(const std::string &src, const std::string &dest)
+static void copy_homogeneous_elem_types(
+  element_type_registry &registry,
+  const std::string &src,
+  const std::string &dest)
 {
-  const size_t n = python_list::get_list_type_map_size(src);
+  const size_t n = registry.size(src);
   if (n == 0)
     return;
 
-  const typet first = python_list::get_list_element_type(src, 0);
+  const typet first = registry.element_type(src, 0);
   if (first.is_nil())
     return;
   for (size_t i = 1; i < n; ++i)
-    if (python_list::get_list_element_type(src, i) != first)
+    if (registry.element_type(src, i) != first)
       return;
 
-  python_list::copy_type_info(src, dest);
+  registry.assign_from(src, dest);
 }
 
 /// sorted()/reversed()/list() reorder or copy their argument, they do not
@@ -2970,7 +2972,8 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   {
     symbol_id arg_sid = create_symbol_id();
     arg_sid.set_object(arg["id"].get<std::string>());
-    copy_homogeneous_elem_types(arg_sid.to_string(), lhs_id);
+    copy_homogeneous_elem_types(
+      element_type_registry_, arg_sid.to_string(), lhs_id);
     return;
   }
 
@@ -2994,7 +2997,7 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   const std::string dict_id = dict_sid.to_string();
   const std::string &src =
     python_dict_handler::get_internal_list_id(dict_id, component == "keys");
-  copy_homogeneous_elem_types(src, lhs_id);
+  copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
 }
 
 void python_converter::handle_function_call_rhs(
@@ -3100,17 +3103,17 @@ void python_converter::handle_function_call_rhs(
     if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
         !ret.is_nil())
     {
-      python_list::copy_type_info(
+      element_type_registry_.assign_from(
         ret.op0().identifier().as_string(), lhs.identifier().as_string());
     }
 
-    // If list_type_map is still empty for the LHS
+    // If nothing is recorded for the LHS yet
     // e.g. the list was passed through as a parameter inside the function,
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
     copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
-    if (python_list::get_list_type_map_size(lhs_id) == 0)
+    if (element_type_registry_.size(lhs_id) == 0)
     {
       std::string func_name;
       if (
@@ -3155,7 +3158,7 @@ void python_converter::handle_function_call_rhs(
                   returns["slice"]["id"].get<std::string>());
                 if (elem_type != typet())
                 {
-                  python_list::add_type_info_entry(
+                  element_type_registry_.record(
                     lhs_id, std::string(), elem_type);
                 }
               }
@@ -4799,7 +4802,7 @@ void python_converter::get_var_assign(
     {
       const std::string &lhs_identifier = lhs.identifier().as_string();
       const std::string &rhs_identifier = rhs.identifier().as_string();
-      python_list::copy_type_info(rhs_identifier, lhs_identifier);
+      element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
 
       // When rhs is dict_sym.keys / dict_sym.values (a member expression
       // rather than a list symbol), rhs_identifier is empty and
@@ -4822,7 +4825,7 @@ void python_converter::get_var_assign(
             dict_id, component == "keys");
           if (!src.empty())
           {
-            python_list::copy_type_info(src, lhs_identifier);
+            element_type_registry_.assign_from(src, lhs_identifier);
             // Tuple values are recorded under the $dict_value_types$ key,
             // not the values-list id (github_3719_4), so the copy above is
             // a no-op for them. Propagate the stored tuple struct type so
@@ -4833,8 +4836,8 @@ void python_converter::get_var_assign(
                 dict_handler_->recorded_tuple_value_type(dict_sym);
               if (
                 !tuple_t.is_nil() && !tuple_t.is_empty() &&
-                python_list::get_list_type_map_size(lhs_identifier) == 0)
-                python_list::add_type_info_entry(
+                element_type_registry_.size(lhs_identifier) == 0)
+                element_type_registry_.record(
                   lhs_identifier, std::string(), tuple_t);
             }
           }

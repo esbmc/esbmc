@@ -516,7 +516,7 @@ exprt python_list::build_concat_list_call(
   auto copy_type_info_from_expr = [&](const exprt &src_list) {
     if (!src_list.is_symbol())
       return;
-    copy_type_map_entries(src_list.identifier().as_string(), dst_id);
+    elem_types().append_from(src_list.identifier().as_string(), dst_id);
   };
 
   copy_type_info_from_expr(lhs);
@@ -578,7 +578,7 @@ bool python_list::literal_still_describes_list(
     return true;
 
   const size_t recorded =
-    get_list_type_map_size(source_list.identifier().as_string());
+    elem_types().size(source_list.identifier().as_string());
   // No records at all means nothing was tracked for this list, so the literal
   // is the only description available; keep using it.
   return recorded == 0 || recorded == literal_elem_count;
@@ -698,20 +698,20 @@ exprt python_list::list_repetition(
           exprt map_elem = materialize_list_elem(elem);
           converter_.add_instruction(
             build_push_list_call(result, list_value_, map_elem));
-          list_type_map[result_id].push_back(
-            std::make_pair(map_elem.identifier().as_string(), map_elem.type()));
+          elem_types().record(
+            result_id, map_elem.identifier().as_string(), map_elem.type());
         }
       }
       return build_symbol(result);
     }
   }
 
-  // Get element expression from list_type_map for a variable list.
+  // Get element expression from the registry for a variable list.
   auto elem_from_type_map = [&](const std::string &src_id) -> exprt {
-    const std::string elem_id = get_list_element_id(src_id, 0);
+    const std::string elem_id = elem_types().element_id(src_id, 0);
     if (elem_id.empty())
     {
-      const typet fallback_type = get_list_element_type(src_id, 0);
+      const typet fallback_type = elem_types().element_type(src_id, 0);
       if (!fallback_type.is_nil() && !fallback_type.is_empty())
         return gen_zero(fallback_type);
       return exprt();
@@ -723,14 +723,14 @@ exprt python_list::list_repetition(
     return build_symbol(*elem_sym);
   };
 
-  // Get all element expressions from list_type_map for a variable list.
+  // Get all element expressions from the registry for a variable list.
   auto elems_from_type_map =
     [&](const std::string &src_id) -> std::vector<exprt> {
     std::vector<exprt> elems;
-    auto it = list_type_map.find(src_id);
-    if (it == list_type_map.end() || it->second.empty())
+    const auto *recorded = elem_types().find(src_id);
+    if (!recorded)
       return elems;
-    for (const auto &entry : it->second)
+    for (const auto &entry : *recorded)
     {
       if (entry.first.empty())
         return {};
@@ -770,7 +770,7 @@ exprt python_list::list_repetition(
     const bool from_elts = right_node.contains("elts");
     if (!from_elts)
     {
-      // rhs is a variable list — get element from list_type_map
+      // rhs is a variable list — get element from the registry
       list_elem = elem_from_type_map(rhs.identifier().as_string());
       if (list_elem.is_nil())
         return build_symbol(create_list());
@@ -798,7 +798,7 @@ exprt python_list::list_repetition(
     const bool from_elts = left_node.contains("elts");
     if (!from_elts)
     {
-      // lhs is a variable list — get element from list_type_map
+      // lhs is a variable list — get element from the registry
       list_elem = elem_from_type_map(lhs.identifier().as_string());
       if (list_elem.is_nil())
         return build_symbol(create_list());
@@ -870,14 +870,8 @@ exprt python_list::list_repetition(
     // Make sure later element-type lookups see correct types.
     if (src.is_symbol())
     {
-      auto it = list_type_map.find(src.identifier().as_string());
-      if (it != list_type_map.end())
-      {
-        const auto src_entries = it->second;
-        for (int64_t i = 0; i < repeat_count; ++i)
-          for (const auto &entry : src_entries)
-            list_type_map[list_id].push_back(entry);
-      }
+      for (int64_t i = 0; i < repeat_count; ++i)
+        elem_types().append_from(src.identifier().as_string(), list_id);
     }
 
     return build_symbol(*list_symbol);
@@ -891,8 +885,8 @@ exprt python_list::list_repetition(
     converter_.add_instruction(
       build_push_list_call(*list_symbol, list_value_, list_elem));
 
-    list_type_map[list_id].push_back(
-      std::make_pair(list_elem.identifier().as_string(), list_elem.type()));
+    elem_types().record(
+      list_id, list_elem.identifier().as_string(), list_elem.type());
   }
 
   return build_symbol(*list_symbol);
@@ -1068,8 +1062,8 @@ exprt python_list::build_extend_list_call(
     converter_.add_instruction(while_loop);
 
     // Update type map for the elements we just added
-    list_type_map[temp_list.id.as_string()].push_back(
-      std::make_pair(char_elem.id.as_string(), char_arr_type));
+    elem_types().record(
+      temp_list.id.as_string(), char_elem.id.as_string(), char_arr_type);
 
     actual_list = build_symbol(temp_list);
   }
@@ -1088,23 +1082,17 @@ exprt python_list::build_extend_list_call(
       exprt elem = build_member(actual_list, comp.get_name(), comp.type());
       exprt push = build_push_list_call(temp_list, op, elem);
       converter_.add_instruction(push);
-      add_type_info(temp_id, std::string(), comp.type());
+      elem_types().record(temp_id, std::string(), comp.type());
     }
     actual_list = build_symbol(temp_list);
   }
 
-  // Update list_type_map: copy type info from actual_list to list
+  // Append actual_list's recorded entries onto list's
   const std::string &list_name = list.id.as_string();
   const std::string &other_list_name = actual_list.identifier().as_string();
 
   // Copy all type entries from actual_list to the end of list
-  if (list_type_map.find(other_list_name) != list_type_map.end())
-  {
-    for (const auto &type_entry : list_type_map[other_list_name])
-    {
-      list_type_map[list_name].push_back(type_entry);
-    }
-  }
+  elem_types().append_from(other_list_name, list_name);
 
   code_function_callt extend_func_call;
   extend_func_call.function() = build_symbol(*extend_func_sym);
@@ -1140,28 +1128,23 @@ exprt python_list::build_pop_list_call(
   const std::string &list_id = list.id.as_string();
   typet elem_type;
 
-  // One syntactic pop() consumes one list_type_map entry, but the assignment
-  // path converts its RHS more than once; replay the first answer rather than
+  // One syntactic pop() consumes one recorded entry, but the assignment path
+  // converts its RHS more than once; replay the first answer rather than
   // consuming a second entry (#4780).
   const std::string site = list_id + ":" + location.get_line().as_string() +
                            ":" + location.get_column().as_string();
-  auto memo_it = pop_elem_type_memo.find(site);
-  if (memo_it != pop_elem_type_memo.end())
-    elem_type = memo_it->second;
+  elem_type = elem_types().memoized_pop_type(site);
 
-  // Try to get element type from list_type_map (use last element for default pop)
-  auto type_map_it = list_type_map.find(list_id);
-  if (
-    elem_type == typet() && type_map_it != list_type_map.end() &&
-    !type_map_it->second.empty())
+  // Default pop() takes from the end, so use the last recorded element and
+  // drop it to keep the recorded sequence aligned with the runtime list.
+  if (elem_type == typet())
   {
-    // Get the last element's type (since default pop() pops from the end)
-    size_t last_idx = type_map_it->second.size() - 1;
-    elem_type = type_map_it->second[last_idx].second;
-
-    // Remove the popped element from type map to maintain consistency
-    type_map_it->second.pop_back();
-    pop_elem_type_memo[site] = elem_type;
+    if (const auto *recorded = elem_types().find(list_id))
+    {
+      elem_type = recorded->back().second;
+      elem_types().pop_last(list_id);
+      elem_types().memoize_pop_type(site, elem_type);
+    }
   }
 
   // If type map lookup failed, try to infer from list declaration
@@ -1232,7 +1215,7 @@ exprt python_list::build_copy_list_call(
   converter_.add_instruction(copy_call);
 
   // Copy type information from original list to copied list
-  copy_type_map_entries(list.id.as_string(), copied_list.id.as_string());
+  elem_types().append_from(list.id.as_string(), copied_list.id.as_string());
 
   return build_symbol(copied_list);
 }
@@ -1297,10 +1280,10 @@ exprt python_list::build_shallow_copy_call(
   size_t float_type_id = 0;
   if (src.is_symbol())
   {
-    auto it = list_type_map.find(src.identifier().as_string());
-    if (it != list_type_map.end() && !it->second.empty())
+    const auto *recorded = elem_types().find(src.identifier().as_string());
+    if (recorded)
     {
-      const typet &elem_type = converter_.ns.follow(it->second.back().second);
+      const typet &elem_type = converter_.ns.follow(recorded->back().second);
       if (
         elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
         elem_type.is_floatbv() || elem_type.is_bool())
@@ -1310,7 +1293,7 @@ exprt python_list::build_shallow_copy_call(
       }
     }
     int type_flag = 0;
-    get_list_type_flags(
+    elem_types().type_flags(
       src.identifier().as_string(),
       converter_.get_type_handler(),
       type_flag,
@@ -1332,7 +1315,8 @@ exprt python_list::build_shallow_copy_call(
   converter_.add_instruction(copy_call);
 
   if (src.is_symbol())
-    copy_type_map_entries(src.identifier().as_string(), copied.id.as_string());
+    elem_types().append_from(
+      src.identifier().as_string(), copied.id.as_string());
 
   return build_symbol(copied);
 }
