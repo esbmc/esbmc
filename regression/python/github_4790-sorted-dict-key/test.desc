@@ -1,0 +1,5 @@
+CORE
+main.py
+--goto-functions-only
+value->element_0;$
+value->element_1;$
