@@ -1,4 +1,5 @@
 CORE
 main.c
 
+REQUIRES signed_char_host
 ^VERIFICATION FAILED$
