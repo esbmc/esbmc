@@ -227,23 +227,20 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(formula)
                 return self.visit(formula)
 
-            lowered_sorted = self.preprocessor._lower_sorted_with_key_call(node)
-            if lowered_sorted is not None:
-                prefix, result = lowered_sorted
-                self.statements.extend(prefix)
-                return result
-
-            lowered_min_max = self.preprocessor._lower_min_max_with_key_call(node)
-            if lowered_min_max is not None:
-                prefix, result = lowered_min_max
-                self.statements.extend(prefix)
-                return result
-
-            lowered_tuple_sorted_pair = self.preprocessor._lower_tuple_sorted_pair_call(node)
-            if lowered_tuple_sorted_pair is not None:
-                prefix, result = lowered_tuple_sorted_pair
-                self.statements.extend(prefix)
-                return result
+            # Ordered: each constant fold gets first refusal, then the scan
+            # that handles what it could not fold.
+            for lower in (
+                    self.preprocessor._lower_sorted_with_key_call,
+                    self.preprocessor._lower_min_max_with_key_call,
+                    self.preprocessor._lower_min_max_key_scan,
+                    self.preprocessor._lower_sorted_key_scan,
+                    self.preprocessor._lower_tuple_sorted_pair_call,
+            ):
+                lowered = lower(node)
+                if lowered is not None:
+                    prefix, result = lowered
+                    self.statements.extend(prefix)
+                    return result
 
             return self.generic_visit(node)
 

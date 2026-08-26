@@ -172,6 +172,7 @@ exprt complex_handler::complex_div(
   guard.cond() = denom_is_zero;
   guard.then_case() = raise_code;
   guard.location() = loc;
+  guard.location().property("skipped");
 
   converter_.current_block->copy_to_operands(guard);
   return normal_result;

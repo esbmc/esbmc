@@ -165,6 +165,7 @@ exprt python_list::build_list_at_call(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -623,6 +624,7 @@ exprt python_list::index_bool_mask_rows(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -1092,6 +1094,7 @@ exprt python_list::resolve_fixed_axis_index(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -2156,6 +2159,7 @@ exprt python_list::normalize_and_scale_index(
   normalize_guard.cond() = idx_lt_zero;
   normalize_guard.then_case() = normalize;
   normalize_guard.location() = loc;
+  normalize_guard.location().property("skipped");
   converter_.add_instruction(normalize_guard);
 
   const type2tc ll_type2 = migrate_type(ll_type);
@@ -2175,6 +2179,7 @@ exprt python_list::normalize_and_scale_index(
   oob_guard.cond() = migrate_expr_back(or2tc(still_negative, past_end));
   oob_guard.then_case() = throw_code;
   oob_guard.location() = loc;
+  oob_guard.location().property("skipped");
   converter_.add_instruction(oob_guard);
 
   exprt scaled =
@@ -4098,6 +4103,7 @@ exprt python_list::handle_index_access(
     norm_guard.cond() = idx_lt_zero;
     norm_guard.then_case() = normalize;
     norm_guard.location() = loc;
+    norm_guard.location().property("skipped");
     converter_.add_instruction(norm_guard);
 
     // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
@@ -4118,6 +4124,7 @@ exprt python_list::handle_index_access(
     oob_guard.cond() = migrate_expr_back(or2tc(still_neg, idx_ge_len));
     oob_guard.then_case() = throw_code;
     oob_guard.location() = loc;
+    oob_guard.location().property("skipped");
     converter_.add_instruction(oob_guard);
 
     // --- 5. __python_str_slice(array, idx, idx+1, 1) ---
