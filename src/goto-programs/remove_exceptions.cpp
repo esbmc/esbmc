@@ -1644,6 +1644,7 @@ private:
     auto g = body.insert(std::next(call));
     g->make_goto(dest, thrown);
     g->location = call->location;
+    g->location.property("skipped");
     g->function = call->function;
   }
 };

@@ -73,6 +73,7 @@ exprt python_list::build_symbolic_fill_list(
     guard.cond() = build_less_than(size, gen_zero(size.type()));
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 

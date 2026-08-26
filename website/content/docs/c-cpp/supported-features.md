@@ -176,6 +176,9 @@ case. See [Limitations](./limitations#constructor-and-destructor-ordering).
   across bases, override thunks keyed by each base's virtual name and adjusted
   by the indirect base's cumulative offset, and catch-by-base binding re-offset
   for multiple-inheritance thrown types
+- Under a virtual base, a derived-to-base conversion onto a non-first base is
+  displaced, so the base's methods, constructor and destructor address the
+  base subobject rather than the derived object's leading storage
 - Virtual dispatch through a non-arrow member expression — `(*p).f()` and
   `ref.f()` dispatch virtually
 
