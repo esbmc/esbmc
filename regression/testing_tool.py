@@ -260,7 +260,9 @@ DYNAMIC_CAPABILITY_PROBES = {
     # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
     # does not. Pins both tests spelling a char type in expected output
     # ("signed char c") and tests whose verdict turns on the range: CHAR_MIN,
-    # and whether char arithmetic such as 100 + 100 overflows.
+    # and whether char arithmetic such as 100 + 100 overflows. It also pins the
+    # Python frontend, whose string model assumes a signed char throughout and
+    # aborts where the target disagrees (#7308).
     "signed_char_host": {
         "source": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
         "int main() { return 0; }\n",
