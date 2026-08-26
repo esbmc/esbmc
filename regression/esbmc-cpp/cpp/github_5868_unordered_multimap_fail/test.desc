@@ -2,3 +2,4 @@ CORE
 main.cpp
 --std gnu++17
 ^VERIFICATION FAILED$
+^\s*assertion m\.size\(\) == 1$
