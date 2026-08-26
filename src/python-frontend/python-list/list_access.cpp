@@ -1,4 +1,5 @@
 #include "python_list_internal.h"
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/numpy/ndarray_descriptor.h>
 #include <algorithm>
 #include <optional>
@@ -88,7 +89,10 @@ exprt python_list::build_list_at_call(
   // execution step purely to prove what the index's type already guarantees.
   const bool index_may_be_negative = !index.type().is_unsignedbv();
 
-  if (!index_may_be_negative)
+  // A discarded type probe only reads this call's type, and the real RHS
+  // build re-emits the whole check; normalizing here would emit a second
+  // __ESBMC_list_size call and IndexError guard per subscript assignment.
+  if (!index_may_be_negative || converter_.in_rhs_type_probe_)
   {
     exprt index_as_size = build_typecast(index, size_type());
     exprt list_at_call = build_call_expr(
@@ -2261,6 +2265,40 @@ exprt python_list::normalize_negative_slice_bound(
     if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
 }
 
+/// A dict view (d.keys()[:] / d.values()[:]) is a member expression, so
+/// handle_range_slice's element-by-element copy never runs and its id-keyed
+/// fallbacks cannot reach it: the entries live under the dict's internal list
+/// id. Without this the slice result is untyped and a tuple element reads back
+/// as a bare pointer, which unpacking then rejects.
+void python_list::copy_dict_view_elem_types(
+  const exprt &array,
+  const std::string &sliced_id)
+{
+  if (!list_type_map[sliced_id].empty() || array.id() != exprt::member)
+    return;
+
+  const exprt &dict_sym = array.op0();
+  const std::string component =
+    to_member_expr(array).get_component_name().as_string();
+  if (!dict_sym.is_symbol() || (component != "keys" && component != "values"))
+    return;
+
+  const std::string &src = python_dict_handler::get_internal_list_id(
+    dict_sym.identifier().as_string(), component == "keys");
+  if (!src.empty())
+    copy_type_info(src, sliced_id);
+
+  // Tuple values are recorded under $dict_value_types$ rather than the
+  // values-list id, so the copy above is a no-op for them.
+  if (component == "values" && list_type_map[sliced_id].empty())
+  {
+    const typet tuple_t =
+      converter_.get_dict_handler()->recorded_tuple_value_type(dict_sym);
+    if (!tuple_t.is_nil() && !tuple_t.is_empty())
+      add_type_info_entry(sliced_id, std::string(), tuple_t);
+  }
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -2897,6 +2935,9 @@ exprt python_list::handle_range_slice(
   // numbers[:-1]), or where the source is a function parameter rather than a
   // locally constructed list, so list_type_map has no entries for it.
   const std::string &sliced_id = sliced_list.id.as_string();
+
+  copy_dict_view_elem_types(array, sliced_id);
+
   if (list_type_map[sliced_id].empty())
   {
     if (

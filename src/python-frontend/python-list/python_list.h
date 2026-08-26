@@ -732,6 +732,11 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
+  // Propagate a dict view's element types onto its slice result. Split out for
+  // the same reason as normalize_negative_slice_bound below.
+  void
+  copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
+
   // handle_range_slice's process_bound: normalizes a literal negative bound
   // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
   // site's own comment for why the clamp differs by step direction. Split
