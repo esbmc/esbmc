@@ -50,6 +50,93 @@ struct __om_list_pool<node_t, false>
   }
 };
 
+/* The iterator is a namespace-scope template, not a member of list<T>, so
+ * that argument-dependent lookup on an iterator reaches T's namespace --
+ * [basic.lookup.argdep] associates a nested class's *enclosing class*, not
+ * that class's template arguments. libc++ spells it __list_iterator<T, ...>
+ * for the same reason. ESBMC's own goto_programt declares
+ * operator<(const_targett, const_targett) and keys a std::map on it; with a
+ * nested iterator that operator is never found. */
+template <class T>
+class list;
+
+template <class T>
+class __om_list_iterator
+{
+public:
+  /* [iterator.traits] reads these five from the iterator itself. Without
+   * them iterator_traits<list<T>::iterator> does not resolve, so a generic
+   * algorithm over a list iterator fails -- boost::adaptors::reversed over
+   * an SSA step list is what surfaced it. The category is bidirectional:
+   * the operators below advance and retreat one step, with no random
+   * access. */
+  typedef ::std::bidirectional_iterator_tag iterator_category;
+  typedef T value_type;
+  typedef ::std::ptrdiff_t difference_type;
+  typedef T *pointer;
+  typedef T &reference;
+
+  list<T> *owner;
+  unsigned int idx;
+
+  __om_list_iterator() : owner(NULL), idx(LIST_MAX_SIZE)
+  {
+  }
+  __om_list_iterator(list<T> *o, unsigned int i) : owner(o), idx(i)
+  {
+  }
+  __om_list_iterator(const __om_list_iterator &x) : owner(x.owner), idx(x.idx)
+  {
+  }
+  __om_list_iterator &operator=(const __om_list_iterator &x)
+  {
+    owner = x.owner;
+    idx = x.idx;
+    return *this;
+  }
+
+  reference operator*() const
+  {
+    return owner->_storage.buf[idx].data;
+  }
+  pointer operator->() const
+  {
+    return &owner->_storage.buf[idx].data;
+  }
+
+  __om_list_iterator &operator++()
+  {
+    idx = owner->_next_idx(idx);
+    return *this;
+  }
+  __om_list_iterator operator++(int)
+  {
+    __om_list_iterator tmp(*this);
+    idx = owner->_next_idx(idx);
+    return tmp;
+  }
+  __om_list_iterator &operator--()
+  {
+    idx = owner->_prev_idx(idx);
+    return *this;
+  }
+  __om_list_iterator operator--(int)
+  {
+    __om_list_iterator tmp(*this);
+    idx = owner->_prev_idx(idx);
+    return tmp;
+  }
+
+  bool operator==(const __om_list_iterator &x) const
+  {
+    return idx == x.idx && owner == x.owner;
+  }
+  bool operator!=(const __om_list_iterator &x) const
+  {
+    return !(*this == x);
+  }
+};
+
 template <class T>
 class list
 {
@@ -174,81 +261,7 @@ public:
     return _storage.buf[idx].prev_idx;
   }
 
-  class iterator
-  {
-  public:
-    /* [iterator.traits] reads these five from the iterator itself. Without
-     * them iterator_traits<list<T>::iterator> does not resolve, so a generic
-     * algorithm over a list iterator fails -- boost::adaptors::reversed over
-     * an SSA step list is what surfaced it. The category is bidirectional:
-     * the operators below advance and retreat one step, with no random
-     * access. */
-    typedef ::std::bidirectional_iterator_tag iterator_category;
-    typedef T value_type;
-    typedef ::std::ptrdiff_t difference_type;
-    typedef T *pointer;
-    typedef T &reference;
-
-    list<T> *owner;
-    size_type idx;
-
-    iterator() : owner(NULL), idx(SENTINEL)
-    {
-    }
-    iterator(list<T> *o, size_type i) : owner(o), idx(i)
-    {
-    }
-    iterator(const iterator &x) : owner(x.owner), idx(x.idx)
-    {
-    }
-    iterator &operator=(const iterator &x)
-    {
-      owner = x.owner;
-      idx = x.idx;
-      return *this;
-    }
-
-    reference operator*() const
-    {
-      return owner->_storage.buf[idx].data;
-    }
-    pointer operator->() const
-    {
-      return &owner->_storage.buf[idx].data;
-    }
-
-    iterator &operator++()
-    {
-      idx = owner->_next_idx(idx);
-      return *this;
-    }
-    iterator operator++(int)
-    {
-      iterator tmp(*this);
-      idx = owner->_next_idx(idx);
-      return tmp;
-    }
-    iterator &operator--()
-    {
-      idx = owner->_prev_idx(idx);
-      return *this;
-    }
-    iterator operator--(int)
-    {
-      iterator tmp(*this);
-      idx = owner->_prev_idx(idx);
-      return tmp;
-    }
-
-    bool operator==(const iterator &x) const
-    {
-      return idx == x.idx && owner == x.owner;
-    }
-    bool operator!=(const iterator &x) const
-    {
-      return !(*this == x);
-    }
-  };
+  typedef __om_list_iterator<T> iterator;
 
   class reverse_iterator
   {
