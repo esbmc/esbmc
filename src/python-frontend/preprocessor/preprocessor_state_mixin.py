@@ -26,6 +26,7 @@ class PreprocessorStateMixin:
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
         self.listcomp_counter = 0
+        self.minmax_key_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
         self.class_attr_annotations = {}

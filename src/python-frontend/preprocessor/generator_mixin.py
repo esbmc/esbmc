@@ -1133,6 +1133,265 @@ class GeneratorMixin:
         ast.fix_missing_locations(result)
         return [], result
 
+    @staticmethod
+    def _is_scannable_key(key_value):
+        """True for the key shapes a scan lowering can emit.
+
+        A single-parameter lambda is bound to a temporary and called; a plain
+        name is called directly (binding one yields a symbol the callee
+        resolution does not accept). Of the bound methods only ``__getitem__``
+        qualifies, because it is emitted as a subscript -- a scan's own
+        statements are not re-visited, so any other would be a call nothing gets
+        the chance to rewrite.
+        """
+        if isinstance(key_value, ast.Lambda):
+            return len(key_value.args.args) == 1
+        if isinstance(key_value, ast.Attribute):
+            return key_value.attr == "__getitem__"
+        return isinstance(key_value, ast.Name)
+
+    @staticmethod
+    def _scan_key_call(key_value, bind_name, arg_expr):
+        """Build one application of a scan lowering's ``key=``.
+
+        ``d.__getitem__`` becomes a subscript rather than a call: the statements
+        a lowering emits are not re-visited, so the dunder-to-operator rewrite in
+        visit_Call would never reach it and the frontend would raise
+        AttributeError on the method spelling.
+        """
+        if bind_name is not None:
+            return ast.Call(func=ast.Name(id=bind_name, ctx=ast.Load()),
+                            args=[arg_expr],
+                            keywords=[])
+        if isinstance(key_value, ast.Attribute) and key_value.attr == "__getitem__":
+            return ast.Subscript(value=copy.deepcopy(key_value.value),
+                                 slice=arg_expr,
+                                 ctx=ast.Load())
+        return ast.Call(func=copy.deepcopy(key_value), args=[arg_expr], keywords=[])
+
+    def _scan_key_argument(self, call_node, func_names):
+        """Return the ``key=`` keyword a scan lowering should apply, else None.
+
+        Rejects anything the scans cannot lower: a call that is not
+        ``<name>(iterable, key=...)``, a second keyword, a multi-parameter
+        lambda, and a key that is not a lambda, a plain name or a bound method
+        (see _lower_min_max_key_scan for why). An all-constant list
+        literal is rejected too: the constant fold above owns that case and
+        declined only because the key values are mutually incomparable, which
+        the regular dispatch reports as a mixed-element-type error -- scanning
+        instead would bury that behind a vaguer one.
+        """
+        if not (isinstance(call_node, ast.Call) and isinstance(call_node.func, ast.Name)
+                and call_node.func.id in func_names and len(call_node.args) == 1):
+            return None
+
+        key_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == "key" and key_kw is None:
+                key_kw = kw
+            else:
+                return None
+        if key_kw is None:
+            return None
+
+        if not self._is_scannable_key(key_kw.value):
+            return None
+
+        literal = self._resolve_list_literal_iterable(call_node.args[0])
+        if literal is not None and all(
+                self._const_scalar_value(elt) is not None for elt in literal.elts):
+            return None
+        return key_kw
+
+    def _lower_sorted_key_scan(self, call_node):
+        """Lower ``sorted(iterable, key=f)`` to an explicit insertion sort.
+
+        Only reached once ``_lower_sorted_with_key_call`` has declined, i.e. the
+        iterable or the key is not constant-foldable. The runtime sort model
+        takes no key parameter, so without this the key is dropped and the call
+        answers by natural order. Returns ``(prefix_statements, expr)``, or None
+        when the shape does not apply.
+
+        Insertion sort with a strict ``>`` is stable, as CPython's sort is. The
+        working list is copied with a full slice rather than ``list(iterable)``,
+        which aliases its argument -- sorting through the alias would mutate the
+        caller's list, and ``sorted`` must not.
+        """
+        key_kw = self._scan_key_argument(call_node, ("sorted", ))
+        if key_kw is None:
+            return None
+
+        n = self.minmax_key_counter
+        self.minmax_key_counter += 1
+        key_fn = f"ESBMC_srckey_{n}"
+        out = f"ESBMC_srt_{n}"
+        i = f"ESBMC_srti_{n}"
+        j = f"ESBMC_srtj_{n}"
+        cur = f"ESBMC_srtc_{n}"
+        cur_key = f"ESBMC_srtck_{n}"
+
+        def store(name, value):
+            return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+
+        def load(name):
+            return ast.Name(id=name, ctx=ast.Load())
+
+        def num(value):
+            return ast.Constant(value=value)
+
+        def add(left, right):
+            return ast.BinOp(left=left, op=ast.Add(), right=right)
+
+        def sub(left, right):
+            return ast.BinOp(left=left, op=ast.Sub(), right=right)
+
+        def at(index_expr, ctx=None):
+            return ast.Subscript(value=load(out), slice=index_expr, ctx=ctx or ast.Load())
+
+        bind_key = isinstance(key_kw.value, ast.Lambda)
+
+        def call_key(arg_expr):
+            return self._scan_key_call(key_kw.value, key_fn if bind_key else None, arg_expr)
+
+        def length(name):
+            return ast.Call(func=ast.Name(id="len", ctx=ast.Load()), args=[load(name)], keywords=[])
+
+        shift = ast.While(
+            test=ast.BoolOp(op=ast.And(),
+                            values=[
+                                ast.Compare(left=load(j), ops=[ast.GtE()], comparators=[num(0)]),
+                                ast.Compare(left=call_key(at(load(j))),
+                                            ops=[ast.Gt()],
+                                            comparators=[load(cur_key)]),
+                            ]),
+            body=[
+                ast.Assign(targets=[at(add(load(j), num(1)), ast.Store())], value=at(load(j))),
+                store(j, sub(load(j), num(1))),
+            ],
+            orelse=[],
+        )
+
+        outer = ast.While(
+            test=ast.Compare(left=load(i), ops=[ast.Lt()], comparators=[length(out)]),
+            body=[
+                store(cur, at(load(i))),
+                store(cur_key, call_key(load(cur))),
+                store(j, sub(load(i), num(1))),
+                shift,
+                ast.Assign(targets=[at(add(load(j), num(1)), ast.Store())], value=load(cur)),
+                store(i, add(load(i), num(1))),
+            ],
+            orelse=[],
+        )
+
+        # A full slice copies; list(iterable) aliases (see the docstring). The
+        # iterable is sliced in place rather than bound to a temporary first:
+        # a dict view carries its element types on the member expression, and
+        # binding it to a name loses them before the slice can copy them.
+        whole_slice = ast.Subscript(
+            value=copy.deepcopy(call_node.args[0]),
+            slice=ast.Slice(lower=None, upper=None, step=None),
+            ctx=ast.Load(),
+        )
+
+        prefix = []
+        if bind_key:
+            prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
+        prefix += [store(out, whole_slice), store(i, num(1)), outer]
+
+        result = load(out)
+        for node in prefix + [result]:
+            self.ensure_all_locations(node, call_node)
+            ast.fix_missing_locations(node)
+        return prefix, result
+
+    def _lower_min_max_key_scan(self, call_node):
+        """Lower ``min``/``max(iterable, key=f)`` to an explicit linear scan.
+
+        Only reached once ``_lower_min_max_with_key_call`` has declined, i.e. the
+        iterable or the key is not constant-foldable. The runtime model takes no
+        key parameter, so without this the key is dropped and the call answers by
+        natural order. Returns ``(prefix_statements, expr)``, or None when the
+        shape does not apply.
+
+        Ties keep the first occurrence, matching CPython. An empty iterable
+        raises IndexError here where CPython raises ValueError.
+        """
+        # A lambda has to be bound to a name first (an inline lambda argument is
+        # not resolved as a callee); a plain name is called directly, since a
+        # function alias assignment does not produce a callable symbol.
+        key_kw = self._scan_key_argument(call_node, ("min", "max"))
+        if key_kw is None:
+            return None
+
+        n = self.minmax_key_counter
+        self.minmax_key_counter += 1
+        seq = f"ESBMC_mmseq_{n}"
+        key_fn = f"ESBMC_mmkey_{n}"
+        best = f"ESBMC_mmbest_{n}"
+        best_key = f"ESBMC_mmbestk_{n}"
+        idx = f"ESBMC_mmi_{n}"
+        cur = f"ESBMC_mmcur_{n}"
+        cur_key = f"ESBMC_mmcurk_{n}"
+
+        def store(name, value):
+            return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
+
+        def load(name):
+            return ast.Name(id=name, ctx=ast.Load())
+
+        bind_key = isinstance(key_kw.value, ast.Lambda)
+
+        def call_key(arg_name):
+            return self._scan_key_call(key_kw.value, key_fn if bind_key else None, load(arg_name))
+
+        def at(index_expr):
+            return ast.Subscript(value=load(seq), slice=index_expr, ctx=ast.Load())
+
+        # max keeps a strictly greater key, min a strictly smaller one, so the
+        # first occurrence wins a tie either way.
+        better = ast.Gt() if call_node.func.id == "max" else ast.Lt()
+
+        loop_body = [
+            store(cur, at(load(idx))),
+            store(cur_key, call_key(cur)),
+            ast.If(
+                test=ast.Compare(left=load(cur_key), ops=[better], comparators=[load(best_key)]),
+                body=[store(best, load(cur)),
+                      store(best_key, load(cur_key))],
+                orelse=[],
+            ),
+            store(idx, ast.BinOp(left=load(idx), op=ast.Add(), right=ast.Constant(value=1))),
+        ]
+
+        prefix = [store(seq, copy.deepcopy(call_node.args[0]))]
+        if bind_key:
+            prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
+        prefix += [
+            store(best, at(ast.Constant(value=0))),
+            store(best_key, call_key(best)),
+            store(idx, ast.Constant(value=1)),
+            ast.While(
+                test=ast.Compare(
+                    left=load(idx),
+                    ops=[ast.Lt()],
+                    comparators=[
+                        ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                 args=[load(seq)],
+                                 keywords=[])
+                    ],
+                ),
+                body=loop_body,
+                orelse=[],
+            ),
+        ]
+
+        result = load(best)
+        for node in prefix + [result]:
+            self.ensure_all_locations(node, call_node)
+            ast.fix_missing_locations(node)
+        return prefix, result
+
     def _eval_const_key_values(self, key_node, elts):
         """Return the list of constant key values for `key=` applied to each
         element, or None when the key form or elements are not constant-
