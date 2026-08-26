@@ -320,13 +320,7 @@ bool configt::set(const cmdlinet &cmdline)
   /* wchar_t is ABI-dependent: Windows: 16, other: 32 */
   ansi_c.wchar_t_width = ansi_c.target.is_windows_abi() ? 16 : 32;
 
-  /* Plain char is unsigned under the AAPCS, signed under the System V x86-64
-   * ABI. Apple's arm64 platforms keep it signed, deviating from the AAPCS.
-   * Clang applies this per target, so a type ESBMC builds itself through
-   * char_type() has to match or it will not join with one the frontend built
-   * (irep2's assert_type_compat_for_with). */
   ansi_c.char_is_unsigned =
-    (ansi_c.target.is_arm() && !ansi_c.target.is_macos()) ||
     (std::find(
        ansi_c.forces.begin(),
        ansi_c.forces.end(),
