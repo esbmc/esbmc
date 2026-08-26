@@ -724,6 +724,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R35** | **High (missed bug, default configuration)** — found by R34's controls, §15 M9 (R34); **FIXED**, §15 M9 (R35) | **A write below an object's base is neither performed nor flagged.** `char *base = (char *)&s; *(int *)(base - 4) = 42;` on a 16-byte stack struct reports `VERIFICATION SUCCESSFUL`: the `object-out-of-bounds` claim **passes**, the struct is unchanged, and a neighbouring local is unchanged — the store lands nowhere. The symmetric overflow `*(int *)(base + 16) = 42` **is** caught, so the bound is checked on one side only. Independent of R34: it reproduces through `char *`, which never had the sign defect, and the pointer model again disagrees with the check — `__ESBMC_POINTER_OFFSET` is `-4` and `__ESBMC_same_object` holds | the sign is discarded by `value_sett::to_expr`'s `gen_ulong`, but the wrapped constant is not flagged either; probes in the §15 M9 (R34) entry | `regression/esbmc/deref_negative_offset{,_fail}` (both CORE) | **Fixed**: the check is rearranged to `offset > data_sz - access_sz`, equivalent over the integers and free of the wrap. The unsigned reading is kept — a negative offset stays "a huge address", it is simply now compared without an addition that can carry it back into range. The pre-fix symptom was LP64-only — the wrap needed a 64-bit `unsigned long` — so the pin no longer needs `REQUIRES lp64_host` |
 | **R36** | **High (no verdict, then spurious counterexample, default configuration)** — found by code review of R35's fix, §15 M9 (R36) | **Relational comparison read pointer offsets unsigned, so a pointer below its object sorted above the base.** `char *b = a; char *below = b - 1;` gives `below >= b` — `assert(!(below >= b))` fails while `__ESBMC_POINTER_OFFSET(below) == -1` verifies on the same expression. The consequence is that `for (p = end; p >= begin; p--)` **never terminates**: the guard stays true below the base, so the loop exhausts its unwinding bound and then dereferences out of bounds — one unwinding-assertion failure and one spurious out-of-bounds report on a program gcc runs clean. `convert_ptr_cmp` did `typecast2tc(uint, pointer_offset2tc(sint, side))`; the stated reason was that an object larger than half the address space would flip the sign of its upper offsets, but that object is already unrepresentable in the signed `pointer_offset2t` every other consumer reads | `src/solvers/smt/smt_memspace.cpp`, `convert_ptr_cmp`; the cast dates to `79c621ff20` (#1537), which changed the cross-object arm and carried the unsigned reading in unremarked | `regression/esbmc/ptr_rel_below_base{,_fail}` | **Fixed**: drop the two typecasts and compare the signed offsets. The lexicographic object-id step is untouched, so cross-object ordering — the only thing #1537 was about — is unchanged, and it is still a total order |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (KNOWNBUG) | Open: capping allocations at `PTRDIFF_MAX` would make the signed reading exact — C11 6.5.6p9 already requires `ptrdiff_t` to represent any in-object difference, and the model computes that difference signed. Verify the glibc precedent before citing it |
+| **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -6262,6 +6263,88 @@ answer, and it is the one the rest of the model already gives.
 | `regression/esbmc/ptr_rel_below_base_fail` | default | `FAILED` on `below >= b` — the pre-fix reading, asserted directly |
 | `regression/esbmc/ptr_rel_huge_object` | default | `KNOWNBUG` — pins R37, the residual this fix accepts. Weak by construction: `testing_tool.py` counts a timeout as satisfying a `KNOWNBUG`, and the expectation is only that `VERIFICATION SUCCESSFUL` is absent, so a future crash or timeout on the 8 EiB `malloc` would keep it green while R37 stopped being what is measured. It is exact today; it will not stay exact under drift |
 | `-L esbmc/`, `-L esbmc-unix` | as recorded | 1846/1846 and 624/624 (`01_pthread60` passes alone at 95.4 s; its parallel failure is the documented load artefact) |
+
+### M9 (R42) — 2026-08-26, the gate that was right for a reason nobody wrote down
+
+R28's unbounded form is "a loop whose trip count `do_simplify` cannot fold", and
+R30 found one shape of it. A census asks how many there are: 20 trip-count
+spellings, each bounding a loop that runs exactly four times, run with no flags
+and a 15 s cap.
+
+**One hit, then a clean boundary.** Nineteen fold. `t[0][0]` on a
+two-dimensional array hangs, and narrowing it gives an exact split: every 1-D
+shape folds (index 0, index 2, through a pointer, assigned rather than
+initialised), and **every** multi-dimensional shape hangs — 2-D, 3-D, `const`,
+`static`, assigned, reached through a flat `int *` or a row `int (*)[2]`.
+Structs, arrays of structs and structs containing arrays all fold, so it is
+dimensionality and nothing else.
+
+**It is not the simplifier.** `index2t::do_simplify` handles nested
+`constant_array2t` correctly and would fold the pair. `--program-only` shows
+why it never gets the chance: on the 1-D program the equation is empty, while
+the 2-D program keeps `t == { { 4, 0 }, { 0, 0 } }` and
+`n == (unsigned int)(t[0][0])` as constraints. The array was never propagated.
+`goto_symex_statet::constant_propagation` says so in three lines whose comment
+restates them:
+
+```cpp
+    // Don't propagate multi dimensional arrays
+    if (is_array_type(arr.subtype))
+      return false;
+```
+
+Added in `e401c5ed8d` (2017-06-10) as "Fix #186" against the pre-migration
+tracker, so the rationale is gone.
+
+**Deleting it fixes all 15 shapes and is still the wrong patch.** The census
+goes green, the anti-vacuity twin still fails, and a bounds violation through a
+2-D element is still caught. Then an N x N array filled by a nested loop:
+
+| elements | with the gate | gate deleted |
+|---|---|---|
+| 64 | 0.16 s | 0.13 s |
+| 256 | 0.10 s | 0.11 s |
+| 576 | 0.11 s | 0.17 s |
+| 1024 | 0.12 s | 0.33 s |
+| 2304 | 0.17 s | 1.19 s |
+| 4096 | 0.31 s | 3.49 s |
+
+Every write rewrites the whole nested constant, so the cost is superlinear.
+The 2017 gate was protecting something real; the census is what recovered the
+reason.
+
+**So bound it rather than drop it.** Propagate a multi-dimensional array only
+below 256 elements — parity in the table, and four orders of magnitude above
+every shape that hangs. Above the bound the timings are the pre-patch ones
+exactly (0.22 s vs 0.22 s at 4096). The number is a measurement, not a
+principle, and it is stated as one where it is used.
+
+**One test changed, and it is the interesting part of the review.**
+`github_1520_witness_no_aggregate` pins that no brace initialiser reaches a
+GraphML witness assumption (#1520, #1471), and guards against vacuity by also
+requiring `key="assumption">x == 0;`. Propagating its 2x3 `status` array folds
+`x` to a constant, the assignment step stops being symbolic, and that
+assumption disappears — the negative check would then pass on a witness with no
+assumptions at all. The fix is not to relax the expectation but to make it
+load-bearing: the element is now nondeterministic, which is the case #1520 is
+actually about, and both binaries then emit `status[1][2] == 0;` and
+`x == 0;` with no braces. On a deterministic element the assumption carried
+nothing a validator could not compute for itself; its sibling
+`github_1520_witness_scalar_kept` already used a nondet input for the same
+reason.
+
+**Mode C is not run and the reason is the finding.** The patch narrows a
+branch that the census demonstrates is reachable and wrong, so a C-Dead
+obligation would fail by construction and correctly so; the census is the
+cited reproducer that discharges it implicitly.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/multidim_const_array_bound` | `--unwind 6` | `CORE`, `SUCCESSFUL` and `Generated 1 VCC(s), 0 remaining` — identical to the 1-D program. On an unpatched control the same run leaves **2 VCCs, 2 remaining**, so the pin is a VCC count rather than a timeout: the unbounded form hangs, and a `KNOWNBUG` on a hang is satisfied by any timeout |
+| `regression/esbmc/multidim_const_array_bound_fail` | `--unwind 6` | `CORE`, `FAILED` — the folded bound is the real one |
+| `regression/esbmc/github_1520_witness_no_aggregate` | as recorded | `CORE`, unchanged verdict; identical witness on both binaries |
+| `-L esbmc/`, `-L floats` | `-j6` | 1915/1917 and 171/171. The two are `bundled_headers_from_vfs` and `github_2572_2`, both failing identically on a control; the second is R41, fixed on its own branch |
+| corpus wall-clock | `-L esbmc/ -j6` | 75.3 / 80.0 s patched against 70.9 / 76.7 s control — the within-arm spread exceeds the between-arm gap, so no difference is resolvable here and the microbenchmark above is the measurement that counts |
 
 ---
 
