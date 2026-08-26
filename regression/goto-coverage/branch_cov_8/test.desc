@@ -1,6 +1,6 @@
 CORE
 main.c
 --branch-coverage-claims --unwind 3 --no-unwinding-assertions
-^Branches : 14
-^Reached : 12
+^Branches : 12
+^Reached : 11
 ^COVERAGE ANALYSIS INCOMPLETE

@@ -2,6 +2,7 @@
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/loop_unroll.h>
 #include <langapi/language_util.h>
+#include <map>
 #include <unordered_set>
 
 class goto_coveraget
@@ -67,7 +68,7 @@ public:
   void condition_coverage();
   expr2tc gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs);
   expr2tc gen_and_expr(const expr2tc &lhs, const expr2tc &rhs);
-  expr2tc gen_not_expr(const expr2tc &expr);
+  expr2tc gen_not_expr(const expr2tc &expr) const;
   int get_total_instrument() const;
   int get_total_assert_instance() const;
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
@@ -96,6 +97,14 @@ public:
     k_path_spanning_redundant;
   // all instrumented claims (condition, location) for JSON report
   static std::set<std::pair<std::string, std::string>> all_claims;
+  // Guard text of the opposite direction for each claim in all_claims, keyed
+  // the same way. A probe assert(c) left unviolated proves !c infeasible, so
+  // --dead-code-check names this rather than the claim's own comment. Derived
+  // from the expression, not by rewriting the comment text: gen_not_expr drops
+  // a leading not2t, so the comment "!flag" gives "flag" and not "!(!flag)",
+  // and from_expr re-parenthesises by precedence, so "x > 5" gives "!(x > 5)".
+  static std::map<std::pair<std::string, std::string>, std::string>
+    claim_negation;
 
   std::string target_function = "";
   bool cov_assume_asserts = false;

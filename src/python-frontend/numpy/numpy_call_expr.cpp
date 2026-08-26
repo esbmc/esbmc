@@ -2783,6 +2783,152 @@ numpy_call_expr::~numpy_call_expr()
   converter_.build_static_lists = false;
 }
 
+const nlohmann::json *
+numpy_call_expr::find_keyword_arg(const std::string &name) const
+{
+  if (!call_.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call_["keywords"])
+    if (kw["_type"] == "keyword" && !kw["arg"].is_null() && kw["arg"] == name)
+      return &kw["value"];
+  return nullptr;
+}
+
+long long
+numpy_call_expr::extract_literal_diagonal_offset(const char *error_context)
+{
+  long long offset = 0;
+  const nlohmann::json *offset_node =
+    call_["args"].size() > 1 ? &call_["args"][1] : find_keyword_arg("offset");
+  if (!offset_node)
+    return offset;
+
+  numeric_value offset_value;
+  if (
+    !try_extract_numeric_constant(*offset_node, offset_value) ||
+    !offset_value.is_int)
+    throw std::runtime_error(
+      std::string("TypeError: numpy ") + error_context +
+      " requires a literal offset");
+  return offset_value.int_value;
+}
+
+exprt numpy_call_expr::handle_diagonal_call()
+{
+  if (call_["args"].empty())
+    throw std::runtime_error(
+      "TypeError: numpy.diagonal() requires an array argument");
+
+  // NumPy's diagonal(a, offset=0, axis1=0, axis2=1) supports arbitrary
+  // axis1/axis2 for arrays with more than 2 dimensions; this ADR is
+  // 2-D-only, so anything other than the default pair is out of scope.
+  // axis1/axis2 are the 3rd/4th positional parameters, so a caller can
+  // pass them positionally instead of by keyword.
+  if (
+    call_["args"].size() > 2 || find_keyword_arg("axis1") ||
+    find_keyword_arg("axis2"))
+    throw std::runtime_error(
+      "TypeError: numpy diagonal only supports the default axis1/axis2");
+
+  long long offset = extract_literal_diagonal_offset("diagonal");
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list list(converter_, call_);
+  if (
+    std::optional<exprt> view =
+      list.try_build_diagonal_pointer_view(array_expr, offset))
+    return *view;
+
+  throw std::runtime_error(
+    "TypeError: numpy.diagonal() is only supported when assigned "
+    "directly to a variable");
+}
+
+exprt numpy_call_expr::handle_trace_call()
+{
+  if (call_["args"].empty())
+    throw std::runtime_error(
+      "TypeError: numpy.trace() requires an array argument");
+
+  // Same 2-D-only scope as np.diagonal: axis1/axis2 are trace's 3rd/4th
+  // positional parameters (trace(a, offset=0, axis1=0, axis2=1, dtype=None,
+  // out=None)), so passing axis1 alone already means a 3rd positional arg
+  // (size() > 2), one before dtype/out's own threshold below.
+  if (
+    call_["args"].size() > 2 || find_keyword_arg("axis1") ||
+    find_keyword_arg("axis2"))
+    throw std::runtime_error(
+      "TypeError: numpy trace only supports the default axis1/axis2");
+
+  // Any positional dtype/out is already excluded by the axis1/axis2 check
+  // above (dtype/out sit two positions further out), so only their keyword
+  // forms need checking here.
+  if (find_keyword_arg("dtype") || find_keyword_arg("out"))
+    throw std::runtime_error(
+      "TypeError: numpy trace does not support out/dtype");
+
+  long long offset = extract_literal_diagonal_offset("trace");
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list list(converter_, call_);
+  if (std::optional<exprt> sum = list.build_trace_reduction(array_expr, offset))
+    return *sum;
+
+  throw std::runtime_error("TypeError: numpy.trace() requires a 2-D array");
+}
+
+exprt numpy_call_expr::handle_fill_diagonal_call()
+{
+  if (call_["args"].size() < 2)
+    throw std::runtime_error(
+      "TypeError: numpy.fill_diagonal() requires an array and a value "
+      "argument");
+
+  if (call_["args"].size() > 2 || find_keyword_arg("wrap"))
+    throw std::runtime_error(
+      "TypeError: numpy fill_diagonal does not support wrap");
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list list(converter_, call_);
+  if (!list.try_build_fill_diagonal_mutation(array_expr, call_["args"][1]))
+    throw std::runtime_error(
+      "TypeError: numpy fill_diagonal requires a 2-D array");
+
+  return exprt();
+}
+
+std::optional<exprt> numpy_call_expr::handle_ravel_pointer_view_attempt()
+{
+  if (function_id_.get_function() != "ravel" || call_["args"].empty())
+    return std::nullopt;
+
+  // np.ravel(a, order='C') (the default) flattens row-major and aliases a's
+  // own buffer; any other order (e.g. 'F') flattens column-major and is a
+  // copy in real NumPy (confirmed against NumPy 2.5.2), not this same
+  // pointer view. order= is ravel's only other parameter, so a 2nd
+  // positional argument or an order= keyword at all -- regardless of its
+  // literal value -- means declining here and falling through to the
+  // existing copy-based ravel/flatten/nditer handling below.
+  if (call_["args"].size() > 1 || find_keyword_arg("order"))
+    return std::nullopt;
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list ravel_view_list(converter_, call_);
+  return ravel_view_list.try_build_ravel_pointer_view(array_expr);
+}
+
+std::optional<exprt> numpy_call_expr::try_get_pointer_view_call_result()
+{
+  const std::string &function = function_id_.get_function();
+  if (function == "diagonal")
+    return handle_diagonal_call();
+  if (function == "trace")
+    return handle_trace_call();
+  if (function == "fill_diagonal")
+    return handle_fill_diagonal_call();
+  return std::nullopt;
+}
+
 template <typename T>
 static auto create_list(int size, T default_value)
 {
@@ -5535,10 +5681,9 @@ exprt numpy_call_expr::get()
   const std::string &function = function_id_.get_function();
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
 
-  if (
-    function == "sum" || function == "prod" || function == "min" ||
-    function == "max" || function == "mean" || function == "argmin" ||
-    function == "argmax" || function == "arange")
+  static const std::set<std::string> reducer_and_arange_functions = {
+    "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
+  if (reducer_and_arange_functions.count(function))
   {
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
@@ -6958,6 +7103,9 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
+  if (std::optional<exprt> ravel_view = handle_ravel_pointer_view_attempt())
+    return *ravel_view;
+
   if (function == "ravel" || function == "flatten" || function == "nditer")
   {
     if (call_["args"].empty())
@@ -7030,6 +7178,11 @@ exprt numpy_call_expr::get()
       result["elts"].push_back(elem);
     return converter_.get_expr(result);
   }
+
+  if (
+    std::optional<exprt> pointer_view_result =
+      try_get_pointer_view_call_result())
+    return *pointer_view_result;
 
   if (function == "expand_dims")
   {

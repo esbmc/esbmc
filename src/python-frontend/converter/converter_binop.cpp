@@ -538,6 +538,58 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
+// Sound over-approximation for a relational comparison that cannot be lowered
+// to a typed binop. Returns nil when the comparison lowers normally.
+static exprt relational_nondet_fallback(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &loc)
+{
+  auto nondet_comparison = [&loc](const char *reason) {
+    log_debug(
+      "python-binop",
+      "{} at {}:{} -- falling back to nondet bool",
+      reason,
+      loc.is_nil() ? std::string("<unknown>") : loc.get_file().as_string(),
+      loc.is_nil() ? std::string("?") : loc.get_line().as_string());
+    side_effect_expr_nondett nondet(bool_type());
+    nondet.location() = loc;
+    return nondet;
+  };
+
+  auto unresolved = [](const exprt &e) {
+    return e.type().is_empty() || e.type().is_nil();
+  };
+  // An operand whose type is unresolvable (e.g. the result of calling a
+  // generator function). Aborting here loses an entire verification run for
+  // what is often a frontend type-inference gap, not a real soundness issue.
+  // See #4807.
+  if (unresolved(lhs) || unresolved(rhs))
+    return nondet_comparison(
+      "unsupported comparison with unresolved operand type");
+
+  // Both operands carry the Any representation (void*), so nothing here knows
+  // whether they box numbers, strings or object references. Ordering them as
+  // pointers asserts SAME-OBJECT on two boxed values and compares offsets
+  // rather than the values (GitHub #7254); ordering them as integers would
+  // silently truncate a boxed float. Equality is excluded: it compares the
+  // handles, which is already correct for boxed values.
+  auto is_erased = [](const exprt &e) {
+    return e.type().is_pointer() && e.type().subtype().id() == "empty";
+  };
+  if (type_utils::is_ordered_comparison(op) && is_erased(lhs) && is_erased(rhs))
+    return nondet_comparison("ordered comparison between type-erased values");
+
+  // One side is a pointer-backed value (e.g. a list/dict variable reassigned
+  // across incompatible types in the same scope) and the other is not.
+  if (lhs.type().is_pointer() != rhs.type().is_pointer())
+    return nondet_comparison(
+      "unsupported comparison between pointer-backed and non-pointer values");
+
+  return nil_exprt();
+}
+
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
@@ -1560,9 +1612,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   if (type_utils::is_relational_op(op))
   {
-    const bool lhs_invalid = lhs.type().is_empty() || lhs.type().is_nil();
-    const bool rhs_invalid = rhs.type().is_empty() || rhs.type().is_nil();
-    locationt loc = get_location_from_decl(element);
+    const locationt loc = get_location_from_decl(element);
 
     // Sound over-approximation when the comparison cannot be lowered to a
     // typed binop: either an operand's type is unresolvable, or one side is
@@ -1573,28 +1623,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // returning nondet bool lets symbolic execution explore both outcomes
     // and keeps safety verification sound (we cannot conclude SAFE when
     // the real comparison would fail). See #4807.
-    auto nondet_comparison = [&](const char *reason) {
-      log_debug(
-        "python-binop",
-        "{} at {}:{} -- falling back to nondet bool",
-        reason,
-        loc.is_nil() ? std::string("<unknown>") : loc.get_file().as_string(),
-        loc.is_nil() ? std::string("?") : loc.get_line().as_string());
-      side_effect_expr_nondett nondet(bool_type());
-      nondet.location() = loc;
-      return nondet;
-    };
-
-    if (lhs_invalid || rhs_invalid)
-      return nondet_comparison(
-        "unsupported comparison with unresolved operand type");
-
-    const bool lhs_ptr = lhs.type().is_pointer();
-    const bool rhs_ptr = rhs.type().is_pointer();
-    if (lhs_ptr != rhs_ptr)
-      return nondet_comparison(
-        "unsupported comparison between pointer-backed and non-pointer "
-        "values");
+    exprt fallback = relational_nondet_fallback(op, lhs, rhs, loc);
+    if (fallback.is_not_nil())
+      return fallback;
   }
 
   if (needs_zero_division_guard(op, rhs))
@@ -1639,6 +1670,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     guard.cond() = is_zero;
     guard.then_case() = throw_code;
     guard.location() = div_loc;
+    guard.location().property("skipped");
     add_instruction(guard);
   }
 

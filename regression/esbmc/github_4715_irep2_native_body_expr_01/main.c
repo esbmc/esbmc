@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body IREP2-native code_expression2t dispatcher
+// Exercises the IREP2-native code_expression2t dispatcher
 // (W1-loc spike Phase C, esbmc/esbmc#4715): the decl-free bodies of touch() and
 // discard() contain side-effect-free expression statements (`x;`, `(void)a;`,
 // `b;`) that goto_convert consumes natively as OTHER instructions (code2 stored

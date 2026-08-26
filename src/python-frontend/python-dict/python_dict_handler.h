@@ -475,6 +475,10 @@ public:
    */
   static bool is_value_returning_method(const std::string &method_name);
 
+  /// Gives a tuple key an identity so value-reading folds can resolve it.
+  std::string
+  materialize_tuple_key(exprt &key_expr, const nlohmann::json &element);
+
   /// Return the keys-list or values-list symbol id for dict_sym_id.
   /// Returns an empty string when the dict was not created via a literal
   /// (e.g. it is a function parameter).

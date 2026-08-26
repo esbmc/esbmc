@@ -1,0 +1,7 @@
+CORE
+main.c
+--result-only --show-cex
+^  FAILED +\[main\.assertion\.1\]  line 6  assertion x > 100$
+^\*\* 1 of 2 properties failed, 1 not checked$
+^VERIFICATION FAILED$
+\A(?![\s\S]*produced no model)[\s\S]*\Z

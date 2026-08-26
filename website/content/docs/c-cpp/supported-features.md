@@ -176,6 +176,9 @@ case. See [Limitations](./limitations#constructor-and-destructor-ordering).
   across bases, override thunks keyed by each base's virtual name and adjusted
   by the indirect base's cumulative offset, and catch-by-base binding re-offset
   for multiple-inheritance thrown types
+- Under a virtual base, a derived-to-base conversion onto a non-first base is
+  displaced, so the base's methods, constructor and destructor address the
+  base subobject rather than the derived object's leading storage
 - Virtual dispatch through a non-arrow member expression — `(*p).f()` and
   `ref.f()` dispatch virtually
 
@@ -223,6 +226,8 @@ Other exception behaviour:
 | Feature | Standard |
 | --- | --- |
 | Structured bindings, including binding by reference and over `std::tuple` | C++17 |
+| `if` and `switch` init-statements | C++17 |
+| Class template argument deduction for an aggregate | C++20 |
 | Three-way comparison `<=>`, including pointer, floating-point and side-effecting operands | C++20 |
 | A defaulted friend `operator<=>` / `operator==`, with both operands bound | C++20 |
 | Parenthesized aggregate initialization | C++20 |
@@ -241,53 +246,63 @@ by regression tests under `regression/esbmc-cpp*`.
 | Header | Notes |
 | --- | --- |
 | `<vector>` | Including `data()`, `emplace_back`, `shrink_to_fit`, `cbegin`/`cend`; the destructor frees its buffer. Elements are constructed into the raw buffer, so a vector of a non-trivial element type works |
-| `<list>` | Const `front`/`back`/`rbegin`/`rend`, `cbegin`/`cend` |
-| `<deque>` | Const iteration |
-| `<map>` | Const `at`, `emplace`, `try_emplace`, `insert_or_assign`, C++20 `contains` |
+| `<list>`, `<forward_list>` | Const `front`/`back`/`rbegin`/`rend`, `cbegin`/`cend`; `emplace`, `emplace_back`, `emplace_front`; `reverse_iterator::base()`; the iterator carries its `iterator_traits` typedefs. Both may hold an incomplete element type, so a node that points back at its own container compiles |
+| `<deque>` | Const iteration; lexicographic `<`/`<=`/`>`/`>=` with const-qualified comparators |
+| `<map>` | Const `at`, `emplace`, `try_emplace`, `insert_or_assign`, C++20 `contains`; const `find`/`count`/`lower_bound`/`upper_bound`/`equal_range`. Const iterators compare by position rather than by a cached pair, so two iterators into equal-keyed entries stay distinct. `mapped_type` may be incomplete |
 | `<set>` | Const-correct const iterators, `emplace`, C++20 `contains` |
-| `<unordered_map>`, `<unordered_set>` | |
+| `<unordered_map>`, `<unordered_set>` | `<unordered_set>` provides `std::unordered_multiset` too |
 | `<array>` | `iterator` / `const_iterator` typedefs; usable in C++11 |
 | `<queue>`, `<stack>`, `<bitset>` | Includes `std::priority_queue` |
-| `<iterator>` | `iterator_traits` and the iterator tags; `advance`, `distance`, `next`, `prev`; the range accessors including the reverse forms `rbegin` / `rend` / `crbegin` / `crend` |
+| `<iterator>` | `iterator_traits` and the iterator tags; `advance`, `distance`, `next`, `prev` — stepped one element at a time for an iterator that is not random-access, instead of requiring `+=`; the range accessors including the reverse forms `rbegin` / `rend` / `crbegin` / `crend` and the free `size` / `empty` / `data` |
 | `<valarray>` | |
 
 `std::multimap` and `std::multiset` track `std::map` and `std::set`, including
 `contains` and `cbegin`/`cend`.
 
+The ordered and unordered containers take their `Allocator` template
+parameter, so a container spelled with an explicit allocator names the same
+type it does in a host build. `size_type` is unsigned, iterator dereference is
+const-qualified, and `vector`'s iterator-pair constructor is constrained so it
+does not hijack `vector<int>(3, 0)`.
+
 ### Strings and streams
 
 | Header | Notes |
 | --- | --- |
-| `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>`/`operator<=`/`operator>=` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; `at` throws `std::out_of_range`; the full `sto*` family (`stoi`, `stol`, `stoll`, `stoul`, `stoull`, `stof`, `stod`, `stold`) |
-| `<string_view>` | Search members, `string` → `string_view` conversion, `hash<string_view>` |
+| `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>`/`operator<=`/`operator>=` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; `at` throws `std::out_of_range`; `clear`, `find_last_not_of`; the full `sto*` family (`stoi`, `stol`, `stoll`, `stoul`, `stoull`, `stof`, `stod`, `stold`). The iterators carry their `iterator_traits` typedefs, `compare` takes its argument by const reference, and `operator+` accepts a `const CharT*`. `size`, `resize`, `max_size` and `rfind` agree with the standard, and the constructor and comparison loops run to a concrete trip count so they converge under a bound |
+| `<string_view>` | An instantiation of `basic_string_view`, so `wstring_view` and friends name the same template. Search members, `string` → `string_view` conversion, `hash<string_view>` |
 | `<iostream>`, `<istream>`, `<ostream>`, `<ios>`, `<iosfwd>` | Standard stream objects, `ios::widen`/`narrow`, `ios::exceptions`, `ios::copyfmt` |
-| `<sstream>`, `<fstream>`, `<streambuf>`, `<iomanip>` | `ostringstream` accumulates into the buffer its `str()` reports |
+| `<sstream>`, `<fstream>`, `<streambuf>`, `<iomanip>` | `ostringstream` accumulates into the buffer its `str()` reports; the string streams are templated on their character type and `streambuf` is an instantiation of `basic_streambuf`; `operator<<` is modelled for the built-in types; `<iomanip>` has `std::put_time` |
 | `<locale>` | |
+
+`char_traits` is reachable without including `<string>`, its single-return
+members are `constexpr`, and `char_traits<char>` compares as `unsigned char`
+([char.traits.specializations.char] p2).
 
 ### Utilities and type support
 
 | Header | Notes |
 | --- | --- |
-| `<type_traits>` | Classification traits and the `_t` / `_v` forms, including `is_trivial`, `is_standard_layout`, `is_aggregate`, `is_assignable` and the copy/move/destructible variants, `remove_cvref`, `aligned_storage`, `invoke_result`, and the logical traits `conjunction` / `disjunction` / `negation` |
+| `<type_traits>` | Classification traits and the `_t` / `_v` forms, including `is_trivial`, `is_standard_layout`, `is_aggregate`, `is_assignable` and the copy/move/destructible variants, `remove_cvref`, `aligned_storage`, `invoke_result`, and the logical traits `conjunction` / `disjunction` / `negation`. Also `is_object`, `is_scalar`, `is_compound`, `is_fundamental`, `rank`, `add_cv`, `add_volatile`, `has_virtual_destructor`, `is_member_object_pointer`, `is_member_function_pointer`, `is_default_constructible`, `is_move_constructible` / `is_move_assignable`, and the `is_nothrow_*` and `is_trivially_*_constructible` families. `is_convertible` is defined by copy-initialization rather than `static_cast`, so an explicit constructor no longer makes it `true` ([meta.rel]) |
 | `<utility>` | Including `index_sequence_for` and C++23 `std::unreachable` |
-| `<functional>`, `<memory>`, `<initializer_list>` | `<functional>` has the transparent operation functors (`plus<>`, `less<>`, …); `<memory>` has `std::allocate_shared` and a correct default-constructed `unique_ptr` |
-| `<tuple>` | `std::tie`, `std::ignore`, structured binding over a tuple |
-| `<optional>` | `emplace`, `swap`, `std::make_optional` |
+| `<functional>`, `<memory>`, `<initializer_list>` | `<functional>` has the transparent operation functors (`plus<>`, `less<>`, …), `std::reference_wrapper` with `ref`/`cref` and its call operator, `std::placeholders`, and a `std::function` whose call target is templated on its signature; `<memory>` has `std::allocate_shared`, a correct default-constructed `unique_ptr`, the `uninitialized_copy` / `uninitialized_fill` family, and an `allocator_traits` that works with a minimal allocator — `rebind_alloc`, the nothrow copy traits, and `construct`/`destroy` templated on the pointee |
+| `<tuple>` | `std::tie`, `std::ignore`, structured binding over a tuple, `tuple_size_v` |
+| `<optional>` | `emplace`, `swap`, `std::make_optional`; comparison and ordering against a bare value as well as another `optional` |
 | `<variant>`, `<any>` | `std::visit` calls the visitor on the currently held alternative; the converting constructor does not hijack copies |
 | `<expected>` | C++23 |
 | `<compare>` | Includable before C++20 |
 | `<source_location>`, `<span>`, `<bit>` | C++20 |
 | `<typeinfo>`, `<exception>`, `<stdexcept>`, `<system_error>`, `<new>` | |
 | `<limits>` | Works under `--std c++11` and `c++14` |
-| `<filesystem>` | |
+| `<filesystem>` | `filesystem::u8path`, `path::u8string`, `path::generic_string`; `std::error_code` is visible through the header |
 
 ### Algorithms and numerics
 
 | Header | Notes |
 | --- | --- |
-| `<algorithm>` | Including the C++11 algorithms |
+| `<algorithm>` | Including the C++11 algorithms and `move_backward` |
 | `<numeric>` | `iota`, `gcd`, `lcm`, `reduce` |
-| `<cmath>` | The floating-point classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics |
+| `<cmath>` | The floating-point classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics. `fmod`, `remainder` and `remquo` lower to the solver's exact FP remainder rather than being computed as `x - y*(int)(x/y)`, which double-rounded and overflowed the cast for a large quotient |
 | `<complex>`, `<random>` | |
 
 ### Time

@@ -49,6 +49,9 @@
 #include <util/symtab/show_symbol_table.h>
 #include <util/base/time_stopping.h>
 #include <util/ssa/cache.h>
+#include <util/ssa/fingerprint.h>
+#include <util/ssa/proof_cache.h>
+#include <esbmc/globals.h>
 #include <atomic>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -538,19 +541,15 @@ void bmct::report_trace(smt_resultt &res, const symex_target_equationt &eq)
     // read, so there is no trace to build and dereferencing it would crash.
     if (!runtime_solver)
       break;
-    if (!bs && show_cex)
-    {
-      // --show-cex on an inductive-step or forward-condition SAT: that model
-      // starts from a havoc'd state, so it witnesses no violation of the
-      // program and must not reach a verdict (multi_property_check draws the
-      // same line at its `is ? Unknown : Failed`).
-      error_trace(*runtime_solver, eq);
-    }
-    else if (!is && !fc)
-    {
+    // An inductive-step or forward-condition model starts from a havoc'd
+    // state, so it witnesses no violation of the program and must not reach a
+    // verdict (multi_property_check draws the same line at its
+    // `is ? Unknown : Failed`). Printing that trace under --show-cex is a
+    // separate decision from recording it, so the two conditions are separate.
+    if (!is && !fc)
       record_violated_properties(*runtime_solver, eq);
+    if ((!bs && show_cex) || (!is && !fc))
       error_trace(*runtime_solver, eq);
-    }
     break;
 
   default:
@@ -1025,13 +1024,15 @@ static bool is_kpath_maximal(const std::string &claim_sig)
 
 // Advisory dead-code reporter for --dead-code-check (CWE-561, issue #4495).
 //
-// Reuses the branch-coverage instrumentation: a probe (an instrumented
-// assertion over a branch guard) that multi_property_check never violated is
-// unreachable under all inputs up to the current unwinding bound — i.e. that
-// branch direction is dead. The dead set is therefore
-// `all_claims \ reached_claims`. Findings are advisory: they are printed as a
-// separate [Dead code] section and, when --sarif-output is set, emitted at
-// SARIF note level. They never flip the verdict (see report_result).
+// Reuses the branch-coverage instrumentation: a probe `assert(c)` (an
+// instrumented assertion over a branch guard) that multi_property_check never
+// violated proves `!c` infeasible up to the current unwinding bound — so `!c`
+// is the dead direction, and the advisory names goto_coveraget::claim_negation
+// rather than the claim's own comment. claim_negation is keyed by, and rebuilt
+// with, goto_coveraget::all_claims, so the dead set is exactly the entries
+// below that reached_claims does not hold. Findings are advisory: they are
+// printed as a separate [Dead code] section and, when --sarif-output is set,
+// emitted at SARIF note level. They never flip the verdict (see report_result).
 static void report_dead_code(
   const optionst &options,
   const std::unordered_set<std::string> &reached_claims,
@@ -1039,19 +1040,19 @@ static void report_dead_code(
 {
   std::vector<dead_code_finding_t> findings;
 
-  for (const auto &[comment, loc] : goto_coveraget::all_claims)
+  for (const auto &[claim, dead_guard] : goto_coveraget::claim_negation)
   {
-    const std::string claim_sig = comment + "\t" + loc;
-    if (reached_claims.count(claim_sig))
+    const auto &[comment, loc] = claim;
+    if (reached_claims.count(comment + "\t" + loc))
       continue; // reachable branch direction — live code
 
     nlohmann::json parsed = parse_claim_location(loc);
     dead_code_finding_t f;
     f.file = parsed["file"].get<std::string>();
     f.line = static_cast<unsigned>(parsed["line"].get<int>());
-    f.message = comment.empty()
+    f.message = dead_guard.empty()
                   ? "dead code: unreachable branch"
-                  : "dead code: unreachable branch [guard: " + comment + "]";
+                  : "dead code: unreachable branch [guard: " + dead_guard + "]";
     findings.push_back(std::move(f));
   }
 
@@ -1085,6 +1086,20 @@ static void report_dead_code(
   // document: they share the one output path, so a second write would truncate
   // these findings away.
   sarif_dead_code(options, findings, dead_stores);
+}
+
+/// Coverage numerator over the branch instrumentation. reached_claims records
+/// every claim symex refuted, including ones outside the instrumentation (an
+/// uncaught exception, say), so its raw size can exceed the goal count and
+/// report over 100% (#7296). all_claims is the instrumented set.
+static size_t
+count_reached_goals(const std::unordered_set<std::string> &reached_claims)
+{
+  size_t reached = 0;
+  for (const auto &[comment, loc] : goto_coveraget::all_claims)
+    if (reached_claims.count(comment + "\t" + loc))
+      ++reached;
+  return reached;
 }
 
 void report_coverage(
@@ -1304,9 +1319,7 @@ void report_coverage(
   else if (is_branch_cov)
   {
     const size_t total = goto_coveraget::total_branch;
-    // this also included the non-unwinding-assertions
-    // which is not what we want
-    const size_t tracked_instance = reached_claims.size();
+    const size_t tracked_instance = count_reached_goals(reached_claims);
     log_success("\n[Coverage]\n");
     log_result("Branches : {}", total);
     log_result("Reached : {}", tracked_instance);
@@ -1330,9 +1343,7 @@ void report_coverage(
     //! Might got incorrect total number when using --k-induction
     //! due to that the symex->goto_functions has been simplified
     const size_t total = goto_coveraget::total_func_branch;
-    // this also included the non-unwinding-assertions
-    // which is not what we want
-    const size_t tracked_instance = reached_claims.size();
+    const size_t tracked_instance = count_reached_goals(reached_claims);
     log_success("\n[Coverage]\n");
     log_result("Function Entry Points & Branches : {}", total);
     log_result("Reached : {}", tracked_instance);
@@ -2450,6 +2461,173 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   return ltl_res_good;
 }
 
+/// Look the claim's cone up in the cache. Returns true when the stored proof
+/// stands in for solving; `cone_key` and `hit` are set for the store step.
+static bool proof_cache_hit(
+  proof_cachet *cache,
+  bool verify,
+  const symex_target_equationt::SSA_stepst &steps,
+  std::string &cone_key,
+  bool &hit)
+{
+  if (cache == nullptr)
+    return false;
+  cone_key = ssa_cone_key_string(steps, fingerprint_modet::srcloc);
+  hit = cache->proved(cone_key);
+  return hit && !verify;
+}
+
+/// Store a fresh proof, or fail the run over a stored one the solver has just
+/// refuted. `hit` can only be set here under --proof-cache-verify: a hit
+/// short-circuits the solve otherwise.
+static void proof_cache_store(
+  proof_cachet *cache,
+  const std::string &cone_key,
+  bool hit,
+  smt_resultt solver_result,
+  bool is_vacuous,
+  const std::string &claim,
+  smt_resultt &final_result,
+  std::mutex &result_mutex)
+{
+  if (cache == nullptr)
+    return;
+  // A vacuous discharge reports Unknown, not Passed, so it is not a proof and
+  // must not be stored.
+  if (solver_result == P_UNSATISFIABLE && !is_vacuous)
+  {
+    cache->record(cone_key);
+    return;
+  }
+
+  if (proof_cache_contradicted(hit, solver_result == P_SATISFIABLE))
+  {
+    log_error(
+      "Proof cache: stored proof of '{}' contradicted by the solver", claim);
+    std::lock_guard lock(result_mutex);
+    final_result = P_ERROR;
+    return;
+  }
+
+  // Neither re-proved nor refuted, so --proof-cache-verify checked nothing
+  // here and must not be read as having done so.
+  if (hit)
+    log_warning(
+      "Proof cache: stored proof of '{}' could not be re-checked", claim);
+}
+
+/// A dead-code probe is advisory and a non-probe claim in a coverage run is
+/// not being reported, so neither prints a per-claim solve (issue #4495).
+static bool
+coverage_silences_claim(bool goto_cov, bool dead_code, const std::string &prop)
+{
+  return goto_cov && (dead_code || prop != "instrumented assertion");
+}
+
+/// A coverage probe: SAT means "this location is reachable". It is not a
+/// property, so it must not be reported as one (issue #6387).
+static bool is_coverage_goal(bool cov_run, const std::string &prop)
+{
+  return cov_run && prop == "instrumented assertion";
+}
+
+/// Which ESBMC this is. Hashing the executable is the fallback when the build
+/// ID does not name one build, so it is computed once and held.
+static const std::string &proof_cache_identity()
+{
+  static const std::string identity =
+    proof_cache_build_identity(esbmc_build_id());
+  return identity;
+}
+
+/// Build the cache only where a stored proof would be sound; nullptr disables
+/// every cache interaction downstream. A cached proof is only sound where the
+/// claim's sliced cone is everything its verdict depends on. The k-induction
+/// phases and --incremental-bmc qualify: each sets its phase flags and unwind
+/// on this optionst before running, so both are already part of a claim's key.
+static std::unique_ptr<proof_cachet> make_proof_cache(
+  const optionst &options,
+  const std::string &dir,
+  const BigInt &interleaving_number)
+{
+  if (dir.empty())
+    return nullptr;
+
+  // Reasons the option set alone decides were reported before any solving, by
+  // proof_cache_flags_usable in parseoptions/driver.cpp.
+  if (!proof_cache_inactive_reason(options).empty())
+    return nullptr;
+
+  if (interleaving_number > 1)
+  {
+    report_proof_cache_inactive(
+      "thread interleavings after the first, where a claim carries a schedule "
+      "its cone does not name");
+    return nullptr;
+  }
+
+  // A proof must not outlive the build that produced it, so a key that cannot
+  // name the verifier is no key at all.
+  if (proof_cache_identity().empty())
+  {
+    report_proof_cache_inactive(
+      "the running esbmc binary could not be identified");
+    return nullptr;
+  }
+
+  return std::make_unique<proof_cachet>(dir, options, proof_cache_identity());
+}
+
+/// A warm run solves nothing, so without this the report shows no solver
+/// activity at all and gives no sign of where the verdicts came from.
+static void log_proof_cache_summary(const proof_cachet *cache)
+{
+  if (cache == nullptr)
+    return;
+  log_status(
+    "Proof cache: {} claim(s) reused, {} solved",
+    cache->hits(),
+    cache->misses());
+}
+
+/// One line per solved claim, digesting its cone under each normalisation:
+/// the instrument for measuring what --proof-cache can reuse.
+/// No-op when --claim-fingerprint-dump was not given.
+static void dump_claim_fingerprint(
+  const std::string &path,
+  const symex_target_equationt::SSA_stepst &cone,
+  smt_resultt result,
+  const std::string &loc,
+  const std::string &msg)
+{
+  if (path.empty())
+    return;
+
+  const char *verdict = result == P_UNSATISFIABLE ? "UNSAT"
+                        : result == P_SATISFIABLE ? "SAT"
+                                                  : "OTHER";
+
+  std::string line = fmt::format(
+    "{:016x}\t{:016x}\t{:016x}\t{}\t{}\t{}\t{}",
+    ssa_cone_digest(cone, fingerprint_modet::raw),
+    ssa_cone_digest(cone, fingerprint_modet::srcloc),
+    ssa_cone_digest(cone, fingerprint_modet::full),
+    ssa_cone_size(cone),
+    verdict,
+    loc,
+    msg);
+
+  static std::mutex dump_mutex;
+  std::lock_guard<std::mutex> lock(dump_mutex);
+  if (path == "-")
+  {
+    log_status("CLAIM-FP {}", line);
+    return;
+  }
+  std::ofstream out(path, std::ios::app);
+  out << line << "\n";
+}
+
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
@@ -2528,6 +2706,15 @@ smt_resultt bmct::multi_property_check(
 
   // For incr/kind in multi-property
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
+  const std::string fingerprint_dump =
+    options.get_option("claim-fingerprint-dump");
+
+  // Only where a claim's sliced cone is all its verdict depends on -- the
+  // exclusions the in-run assertion_cache makes, plus the coverage probes.
+  const std::string proof_cache_dir = options.get_option("proof-cache");
+  const bool proof_cache_verify = options.get_bool_option("proof-cache-verify");
+  std::unique_ptr<proof_cachet> proof_cache =
+    make_proof_cache(options, proof_cache_dir, interleaving_number);
   bool bs = options.get_bool_option("base-case");
   bool fc = options.get_bool_option("forward-condition");
   bool is = options.get_bool_option("inductive-step");
@@ -2577,6 +2764,9 @@ smt_resultt bmct::multi_property_check(
                        &is_dead_code,
                        &is_cov_run,
                        &is_keep_verified,
+                       &fingerprint_dump,
+                       &proof_cache,
+                       &proof_cache_verify,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt,
@@ -2672,6 +2862,30 @@ smt_resultt bmct::multi_property_check(
       features.run(local_eq.SSA_steps);
     }
 
+    std::string cone_key;
+    bool cached_proof = false;
+    if (proof_cache_hit(
+          proof_cache.get(),
+          proof_cache_verify,
+          local_eq.SSA_steps,
+          cone_key,
+          cached_proof))
+    {
+      goto_functionst::property_verdicts.record(
+        claim.claim_cstr, property_verdictt::Passed, claim_ploc, "");
+
+      // A reused proof has to leave the run in the state a fresh one would,
+      // or a warm k-induction / --incremental-bmc run keeps re-symexing the
+      // claims a cold one had already dropped -- the opposite of the point
+      // (esbmc/esbmc#7143). Same guard as the P_UNSATISFIABLE arm below.
+      if (!is_keep_verified && !bs)
+      {
+        clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+        clear_verified_claims_in_goto(claim, is_goto_cov);
+      }
+      return;
+    }
+
     // Initialize a solver
     smt_convt *solver_ptr = &runtime_solver;
     std::unique_ptr<smt_convt> new_solver;
@@ -2709,13 +2923,8 @@ smt_resultt bmct::multi_property_check(
     // detection is advisory: silence every per-claim solve/trace so only the
     // final [Dead code] summary is shown (issue #4495).
     bool is_cov_silent =
-      is_goto_cov &&
-      (is_dead_code || claim.claim_property != "instrumented assertion");
-    // A coverage probe: SAT means "this location is reachable". It is not a
-    // property, so it must not be reported as one (issue #6387). Keyed off
-    // is_cov_run so a --dead-code-check probe keeps its own handling.
-    const bool is_cov_goal =
-      is_cov_run && claim.claim_property == "instrumented assertion";
+      coverage_silences_claim(is_goto_cov, is_dead_code, claim.claim_property);
+    const bool is_cov_goal = is_coverage_goal(is_cov_run, claim.claim_property);
 
     if (!is_cov_silent)
       log_status(
@@ -2727,6 +2936,13 @@ smt_resultt bmct::multi_property_check(
     fine_timet solve_start = current_time();
     smt_resultt solver_result = run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
+
+    dump_claim_fingerprint(
+      fingerprint_dump,
+      local_eq.SSA_steps,
+      solver_result,
+      claim.claim_loc,
+      claim.claim_msg);
 
     // After UNSAT, probe whether the path to the kept claim is reachable.
     // UNSAT in vacuity mode means the discharge was vacuous -> UNKNOWN.
@@ -2740,6 +2956,16 @@ smt_resultt bmct::multi_property_check(
       if (is_vacuous)
         vacuity_detected = true;
     }
+
+    proof_cache_store(
+      proof_cache.get(),
+      cone_key,
+      cached_proof,
+      solver_result,
+      is_vacuous,
+      claim.claim_cstr,
+      final_result,
+      result_mutex);
 
     // A claim is re-checked in every thread interleaving, and can be
     // discharged in one schedule while being violated in another. Record the
@@ -3099,6 +3325,10 @@ smt_resultt bmct::multi_property_check(
   else
     std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
+  // A warm run solves nothing, so without this the report shows no solver
+  // activity at all and gives no sign of where the verdicts came from.
+  log_proof_cache_summary(proof_cache.get());
+
   // For coverage with fixed bound unwinding
   if (
     bs && !fc && !is && !options.get_bool_option("k-induction") &&
@@ -3135,9 +3365,6 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
 
 bool bmct::reports_final_verdict(smt_resultt res) const
 {
-  if (options.get_bool_option("k-induction-parallel"))
-    return false;
-
   const bool fc = options.get_bool_option("forward-condition");
   const bool is = options.get_bool_option("inductive-step");
 

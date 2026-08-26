@@ -8,6 +8,14 @@
 #  include <python-frontend/python_language.h>
 #endif
 
+extern "C" const char buildidstring_buf[];
+extern "C" const unsigned int buildidstring_buf_size;
+
+std::string esbmc_build_id()
+{
+  return {buildidstring_buf, buildidstring_buf_size};
+}
+
 void register_bundled_files()
 {
   clang_c_languaget::register_bundled();

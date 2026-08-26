@@ -525,6 +525,65 @@ exprt python_list::build_concat_list_call(
   return build_symbol(dst_list);
 }
 
+/// The declaring literal's elements for a list held in a variable, or empty
+/// when the literal cannot be used -- it does not exist, or the list has been
+/// mutated since and the literal no longer describes it.
+std::vector<exprt> python_list::literal_elems_for_variable_list(
+  const nlohmann::json *source_node,
+  const exprt &source_list)
+{
+  std::string var_name;
+  if (
+    source_node->contains("_type") && (*source_node)["_type"] == "Name" &&
+    source_node->contains("id") && (*source_node)["id"].is_string())
+    var_name = (*source_node)["id"].get<std::string>();
+  else
+    var_name = json_utils::extract_var_name_from_symbol_id(
+      source_list.identifier().as_string());
+
+  const nlohmann::json var_decl = json_utils::find_var_decl(
+    var_name, converter_.current_function_name(), converter_.ast());
+
+  std::vector<exprt> elems;
+  if (
+    var_decl.is_null() || !var_decl.contains("value") ||
+    !var_decl["value"].is_object() || !var_decl["value"].contains("_type") ||
+    var_decl["value"]["_type"] != "List" ||
+    !var_decl["value"].contains("elts") ||
+    !var_decl["value"]["elts"].is_array())
+    return elems;
+
+  if (!literal_still_describes_list(
+        source_list, var_decl["value"]["elts"].size()))
+    return elems;
+
+  for (const auto &elt : var_decl["value"]["elts"])
+    elems.push_back(converter_.get_expr(elt));
+  return elems;
+}
+
+/// True when the declaring literal still describes the list's contents.
+///
+/// `xs * n` expands the literal's elements at convert time, which is wrong
+/// once the list has been mutated: after `xs = [1, 2, 3]; xs += [4]` the
+/// literal still has three elements, and the repetition silently produced a
+/// six-element result where Python gives eight. The recorded element types
+/// track every push, so a length mismatch means the literal is stale and the
+/// caller must build from those records instead.
+bool python_list::literal_still_describes_list(
+  const exprt &source_list,
+  size_t literal_elem_count)
+{
+  if (!source_list.is_symbol())
+    return true;
+
+  const size_t recorded =
+    get_list_type_map_size(source_list.identifier().as_string());
+  // No records at all means nothing was tracked for this list, so the literal
+  // is the only description available; keep using it.
+  return recorded == 0 || recorded == literal_elem_count;
+}
+
 exprt python_list::list_repetition(
   const nlohmann::json &left_node,
   const nlohmann::json &right_node,
@@ -608,33 +667,7 @@ exprt python_list::list_repetition(
         source_elems.push_back(converter_.get_expr(elt));
     }
     else
-    {
-      std::string var_name;
-      if (
-        source_node->contains("_type") && (*source_node)["_type"] == "Name" &&
-        source_node->contains("id") && (*source_node)["id"].is_string())
-      {
-        var_name = (*source_node)["id"].get<std::string>();
-      }
-      else
-      {
-        var_name = json_utils::extract_var_name_from_symbol_id(
-          source_list.identifier().as_string());
-      }
-
-      nlohmann::json var_decl = json_utils::find_var_decl(
-        var_name, converter_.current_function_name(), converter_.ast());
-      if (
-        !var_decl.is_null() && var_decl.contains("value") &&
-        var_decl["value"].is_object() && var_decl["value"].contains("_type") &&
-        var_decl["value"]["_type"] == "List" &&
-        var_decl["value"].contains("elts") &&
-        var_decl["value"]["elts"].is_array())
-      {
-        for (const auto &elt : var_decl["value"]["elts"])
-          source_elems.push_back(converter_.get_expr(elt));
-      }
-    }
+      source_elems = literal_elems_for_variable_list(source_node, source_list);
 
     if (!source_elems.empty())
     {
@@ -1358,5 +1391,6 @@ exprt python_list::build_remove_list_call(
   guard.cond() = migrate_expr_back(not2tc(rr2));
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
+  guard.location().property("skipped");
   return guard;
 }

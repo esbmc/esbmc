@@ -51,24 +51,30 @@ public:
   // Constructors
   // [string.view.cons]: the default constructor leaves data() null, not
   // indeterminate.
-  basic_string_view() : str(nullptr), len(0) {}
-  basic_string_view(const CharT *str) : str(str), len(Traits::length(str)) {}
-  basic_string_view(const CharT *str, size_t len) : str(str), len(len) {}
+  OM_CONSTEXPR basic_string_view() : str(nullptr), len(0) {}
+  OM_CONSTEXPR basic_string_view(const CharT *str)
+    : str(str), len(Traits::length(str))
+  {
+  }
+  OM_CONSTEXPR basic_string_view(const CharT *str, size_t len)
+    : str(str), len(len)
+  {
+  }
 
   // Iterators
-  const_iterator begin() const noexcept { return str; }
-  const_iterator cbegin() const noexcept { return str; }
-  const_iterator end() const noexcept { return str + len; }
-  const_iterator cend() const noexcept { return str + len; }
+  OM_CONSTEXPR const_iterator begin() const noexcept { return str; }
+  OM_CONSTEXPR const_iterator cbegin() const noexcept { return str; }
+  OM_CONSTEXPR const_iterator end() const noexcept { return str + len; }
+  OM_CONSTEXPR const_iterator cend() const noexcept { return str + len; }
 
   // Capacity
-  size_t size() const noexcept { return len; }
-  size_t length() const noexcept { return len; }
-  size_t max_size() const noexcept { return SIZE_MAX; }
-  bool empty() const noexcept { return len == 0; }
+  OM_CONSTEXPR size_t size() const noexcept { return len; }
+  OM_CONSTEXPR size_t length() const noexcept { return len; }
+  OM_CONSTEXPR size_t max_size() const noexcept { return SIZE_MAX; }
+  OM_CONSTEXPR bool empty() const noexcept { return len == 0; }
 
   // Element access
-  const CharT &operator[](size_t pos) const { return str[pos]; }
+  OM_CONSTEXPR const CharT &operator[](size_t pos) const { return str[pos]; }
   const CharT &at(size_t pos) const
   {
     /* [string.view.access]: at() throws out_of_range for pos >= size(). The
@@ -80,7 +86,7 @@ public:
   }
   const CharT &front() const { return *str; }
   const CharT &back() const { return str[len - 1]; }
-  const CharT *data() const noexcept { return str; }
+  OM_CONSTEXPR const CharT *data() const noexcept { return str; }
 
   // Modifiers
   void remove_prefix(size_t n) { str += n; len -= n; }

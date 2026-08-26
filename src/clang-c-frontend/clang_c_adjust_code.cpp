@@ -7,6 +7,33 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 
+// A base-subobject `this` -- a base constructor's or destructor's, or a
+// thunk's -- is the one argument here that still needs expression adjustment:
+// it carries a base-adjustment marker, which only clang_c_adjust::adjust_expr
+// resolves. Search the whole argument rather than the typecast chain
+// gen_typecast happens to wrap today's producers in: an unresolved marker
+// leaves the pointer on the wrong subobject silently, so the test must not
+// depend on where in the expression it sits. See #7025, #3894.
+static bool carries_base_adjustment(const exprt &arg)
+{
+  if (!arg.get("#derived_to_base").empty() || arg.get_bool("#base_to_derived"))
+    return true;
+
+  for (const exprt &op : arg.operands())
+    if (carries_base_adjustment(op))
+      return true;
+
+  return false;
+}
+
+void clang_c_adjust::adjust_call_argument(exprt &arg)
+{
+  if (arg.is_index())
+    adjust_index(to_index_expr(arg));
+  else if (carries_base_adjustment(arg))
+    adjust_expr(arg);
+}
+
 void clang_c_adjust::adjust_code(codet &code)
 {
   const irep_idt &statement = code.statement();
@@ -42,13 +69,8 @@ void clang_c_adjust::adjust_code(codet &code)
       if (op.is_index())
         adjust_index(to_index_expr(op));
       else if (op.id() == "arguments")
-      {
         for (auto &arg : op.operands())
-        {
-          if (arg.is_index())
-            adjust_index(to_index_expr(arg));
-        }
-      }
+          adjust_call_argument(arg);
     }
   }
   else if (statement == "decl-block")

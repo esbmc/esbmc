@@ -673,17 +673,6 @@ void goto_checkt::shift_check(
   // get a signedness mismatch in the lessthan2tc below
   expr2tc left_op_type_size =
     constant_int2tc(right_op_type, BigInt(left_op_type->get_width()));
-#ifndef NDEBUG
-  // Be paranoid and verify that the size is the same regardless of which type we're using for the
-  // constant. In theory, we could have different signedness or width, but in practice
-  // those differences should not be relevant as the relevant numbers e.g. 32 or 64 can't
-  // cause wraparound issues.
-  expr2tc check2 = (equality2tc(
-    constant_int2tc(left_op_type, BigInt(left_op_type->get_width())),
-    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()))));
-  simplify(check2);
-  assert(is_true(check2));
-#endif
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 

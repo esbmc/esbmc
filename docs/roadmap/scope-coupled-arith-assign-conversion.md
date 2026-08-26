@@ -215,9 +215,9 @@ coupling achieves this.
 ### Phase 3 — the flip
 
 Make `python_adjust` the sole adjuster; `--python-irep2-adjust-only` becomes
-the default with an opt-out, mirroring how the W1-loc keystone shipped
-(`--irep2-native-body` → deprecated no-op, `--no-irep2-native-body` the escape
-hatch, `src/esbmc/options.cpp:964-975`).
+the default with an opt-out, mirroring how the W1-loc keystone shipped: only
+the `--no-` escape hatch is a real option (`src/esbmc/options.cpp:1036`); the
+positive flag was never released and has been removed.
 
 ## 5. Gates
 

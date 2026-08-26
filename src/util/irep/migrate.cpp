@@ -610,6 +610,20 @@ static void promote_complex_operand(const type2tc &t, expr2tc &op)
   op = constant_struct2tc(t, std::vector<expr2tc>{op, gen_zero(et)});
 }
 
+/// C11 6.3.2.1p3. clang_c_convert drops CK_ArrayToPointerDecay and leaves
+/// clang_c_adjust to insert the `&a[0]`, so an expression migrated before that
+/// pass -- which --clang-c-irep2-adjust-only does -- still carries the array,
+/// and add2t/sub2t assert on it (esbmc/esbmc#4715).
+static void decay_array_operand(expr2tc &op)
+{
+  if (is_nil_expr(op) || !is_array_type(op->type))
+    return;
+
+  const type2tc &elem = to_array_type(op->type).subtype;
+  op = address_of2tc(
+    elem, index2tc(elem, op, gen_zero(migrate_type(index_type()))));
+}
+
 static void
 convert_operand_pair(const exprt &expr, expr2tc &arg1, expr2tc &arg2)
 {
@@ -912,6 +926,29 @@ static bool migrate_ieee_arith_2op(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+/// Bring one ternary branch to the ternary's own type.
+///
+/// C11 6.3.2.1p3: an array operand converts to a pointer to its first element.
+/// That is not a cast of the array object, and the frontend's own conversion
+/// (c_typecastt::do_typecast) spells it &a[0]; coerced as a plain typecast the
+/// node reaches the encoder as typecast(array, pointer) and aborts it.
+static void coerce_ternary_branch(expr2tc &branch, const type2tc &type)
+{
+  if (branch->type->type_id == type->type_id)
+    return;
+
+  if (is_array_type(branch->type) && is_pointer_type(type))
+  {
+    const array_type2t &arr = to_array_type(branch->type);
+    expr2tc first = index2tc(arr.subtype, branch, gen_zero(index_type2()));
+    branch = address_of2tc(arr.subtype, first);
+    if (branch->type == type)
+      return;
+  }
+
+  branch = typecast2tc(type, branch);
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1169,10 +1206,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // ternaries already have matching branch types, so no cast is added on the
     // common path. Matching on type_id (not full structural type) keeps this to
     // exactly the cases the if2t invariant rejects.
-    if (true_val->type->type_id != type->type_id)
-      true_val = typecast2tc(type, true_val);
-    if (false_val->type->type_id != type->type_id)
-      false_val = typecast2tc(type, false_val);
+    coerce_ternary_branch(true_val, type);
+    coerce_ternary_branch(false_val, type);
 
     new_expr_ref = if2tc(type, cond, true_val, false_val, expr.location());
     return;
@@ -1428,6 +1463,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     convert_operand_pair(expr, side1, side2);
+    decay_array_operand(side1);
+    decay_array_operand(side2);
 
     new_expr_ref = add2tc(type, side1, side2);
     return;
@@ -1445,6 +1482,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
+    decay_array_operand(side1);
+    decay_array_operand(side2);
 
     new_expr_ref = sub2tc(type, side1, side2);
     return;

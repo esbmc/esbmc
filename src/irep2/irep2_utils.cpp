@@ -1,6 +1,7 @@
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_dispatch.h>
 #include <util/lang/c_types.h>
+#include <util/irep/pad_names.h>
 
 void make_not(expr2tc &expr)
 {
@@ -733,4 +734,13 @@ int do_type_lt(const type2tc &side1, const type2tc &side2)
     return 1;
   else
     return side1->lt(*side2.get());
+}
+
+std::vector<expr2tc>
+pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
+{
+  for (size_t i = 0; i < st.members.size(); i++)
+    if (i <= ops.size() && is_padding_name(st.member_names[i].as_string()))
+      ops.insert(ops.begin() + i, gen_zero(st.members[i]));
+  return ops;
 }

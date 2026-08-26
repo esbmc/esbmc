@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body dispatcher's side-effecting-condition
+// Exercises the IREP2-native dispatcher's side-effecting-condition
 // slices for code_for2t, code_dowhile2t and code_switch2t (W1-loc spike Phase
 // C, esbmc/esbmc#4715). Each kind was first landed for the side-effect-free
 // condition only, where the lowering preamble is empty and the back-edge /

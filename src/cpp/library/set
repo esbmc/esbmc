@@ -35,7 +35,7 @@ public:
   typedef Compare key_compare;
   typedef Compare value_compare;
 
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
 
   class iterator
@@ -777,6 +777,53 @@ public:
   {
     return make_pair(lower_bound(x), upper_bound(x));
   }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison -- the first
+   * differing element decides it, and the sizes matter only when one range is
+   * a prefix of the other. buf[0.._size) is kept sorted by insert(). */
+  bool operator==(const multiset &rhv) const
+  {
+    if (_size != rhv._size)
+      return false;
+    for (size_t i = 0; i < _size; i++)
+      if (!(buf[i] == rhv.buf[i]))
+        return false;
+    return true;
+  }
+
+  bool operator!=(const multiset &rhv) const
+  {
+    return !(*this == rhv);
+  }
+
+  bool operator<(const multiset &rhv) const
+  {
+    size_t n = _size < rhv._size ? _size : rhv._size;
+    for (size_t i = 0; i < n; i++)
+    {
+      if (buf[i] < rhv.buf[i])
+        return true;
+      if (rhv.buf[i] < buf[i])
+        return false;
+    }
+    return _size < rhv._size;
+  }
+
+  bool operator>(const multiset &rhv) const
+  {
+    return rhv < *this;
+  }
+
+  bool operator<=(const multiset &rhv) const
+  {
+    return !(rhv < *this);
+  }
+
+  bool operator>=(const multiset &rhv) const
+  {
+    return !(*this < rhv);
+  }
 };
 
 template <
@@ -798,7 +845,7 @@ public:
   typedef Compare key_compare;
   typedef Compare value_compare;
 
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
 
   class iterator
@@ -1534,6 +1581,53 @@ public:
   pair<const_iterator, const_iterator> equal_range(const key_type &x) const
   {
     return make_pair(lower_bound(x), upper_bound(x));
+  }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison -- the first
+   * differing element decides it, and the sizes matter only when one range is
+   * a prefix of the other. buf[0.._size) is kept sorted by insert(). */
+  bool operator==(const set &rhv) const
+  {
+    if (_size != rhv._size)
+      return false;
+    for (size_t i = 0; i < _size; i++)
+      if (!(buf[i] == rhv.buf[i]))
+        return false;
+    return true;
+  }
+
+  bool operator!=(const set &rhv) const
+  {
+    return !(*this == rhv);
+  }
+
+  bool operator<(const set &rhv) const
+  {
+    size_t n = _size < rhv._size ? _size : rhv._size;
+    for (size_t i = 0; i < n; i++)
+    {
+      if (buf[i] < rhv.buf[i])
+        return true;
+      if (rhv.buf[i] < buf[i])
+        return false;
+    }
+    return _size < rhv._size;
+  }
+
+  bool operator>(const set &rhv) const
+  {
+    return rhv < *this;
+  }
+
+  bool operator<=(const set &rhv) const
+  {
+    return !(rhv < *this);
+  }
+
+  bool operator>=(const set &rhv) const
+  {
+    return !(*this < rhv);
   }
 };
 

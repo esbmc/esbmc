@@ -1,4 +1,4 @@
-# Exercises the --irep2-native-body IREP2-native code_break2t/code_continue2t
+# Exercises the IREP2-native code_break2t/code_continue2t
 # dispatcher (W1-loc spike Phase C, esbmc/esbmc#4715): with_break()'s and
 # with_continue()'s conditions and bodies are side-effect-free, so the whole
 # while loop -- including the break/continue statements themselves, each an

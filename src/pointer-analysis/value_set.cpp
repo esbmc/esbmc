@@ -377,6 +377,134 @@ void value_sett::get_constant_union_value_set(
   get_value_set_rec(cu.datatype_members[0], dest, rest, original_type);
 }
 
+std::optional<BigInt> value_sett::constant_pointer_arith_offset(
+  const expr2tc &non_ptr_op,
+  const type2tc &subtype,
+  bool subtracting) const
+{
+  // Calculate the offset caused by this addition, in _bytes_. Involves
+  // pointer arithmetic. We also use the _perceived_ type of what we're
+  // adding or subtracting from/to, it might be being typecasted.
+  BigInt total_offs(0);
+  bool is_const = false;
+  try
+  {
+    if (is_constant_int2t(non_ptr_op))
+    {
+      const BigInt &val = to_constant_int2t(non_ptr_op).value;
+      if (!val.is_zero())
+      {
+        BigInt elem_size = 1;
+        if (!is_nil_type(subtype))
+        {
+          if (is_empty_type(subtype))
+            throw type2t::symbolic_type_excp();
+
+          // Potentially rename,
+          elem_size = type_byte_size(subtype, &ns);
+        }
+        total_offs = val * elem_size;
+      }
+      is_const = true;
+    }
+  }
+  catch (const array_type2t::dyn_sized_array_excp &e)
+  { // Nondet'ly sized.
+  }
+  catch (const array_type2t::inf_sized_array_excp &e)
+  {
+  }
+  catch (const type2t::symbolic_type_excp &e)
+  {
+    // This vastly annoying piece of code is making operations on void
+    // pointers, or worse. If a void pointer, treat the multiplier of the
+    // addition as being one. If not void pointer, throw cookies.
+    if (!is_empty_type(subtype))
+    {
+      log_error(
+        "Pointer arithmetic on type where we can't determine size\n{}",
+        *subtype);
+      abort();
+    }
+    total_offs = to_constant_int2t(non_ptr_op).value;
+    is_const = true;
+  }
+
+  if (!is_const)
+    return std::nullopt;
+
+  // Every arm above produces a magnitude, so the direction is applied once
+  // here; applying it inside the try block alone left void-pointer
+  // subtraction moving forwards (#7127).
+  if (subtracting)
+    total_offs.negate();
+
+  return total_offs;
+}
+
+void value_sett::offset_pointer_arith_objects(
+  const object_mapt &pointer_expr_set,
+  const expr2tc &ptr_op,
+  const std::optional<BigInt> &total_offs,
+  object_mapt &dest) const
+{
+  const bool is_const = total_offs.has_value();
+  unsigned int ptr_align = get_natural_alignment(ptr_op);
+
+  for (const auto &it : pointer_expr_set)
+  {
+    objectt object = it.second;
+
+    unsigned int nat_align = get_natural_alignment(object_numbering[it.first]);
+
+    if (is_const && object.offset_is_set)
+    {
+      // Both are const; we can accumulate offsets;
+      object.offset += *total_offs;
+    }
+    else if (is_const && !object.offset_is_set)
+    {
+      // Offset is const, but existing pointer isn't. The alignment is now
+      // at least as small as the operand alignment.
+      object.offset_alignment = std::min(nat_align, object.offset_alignment);
+    }
+    else if (!is_const && object.offset_is_set)
+    {
+      // Nondet but aligned offset from arithmetic; but offset set in
+      // current object. Take the minimum alignment again.
+      unsigned int offset_align = 0;
+      if ((object.offset % nat_align) != 0)
+      {
+        // We have some kind of offset into this data object, but it's less
+        // than the data objects natural alignment. So, the maximum
+        // alignment we can have is that of the pointer type being added
+        // or subtracted. The minimum, depends on the offset into the
+        // data object we're pointing at.
+        offset_align = ptr_align;
+        if (object.offset % ptr_align != 0)
+          // Too complex to calculate; clamp to bytes.
+          offset_align = 1;
+      }
+      else
+      {
+        offset_align = nat_align;
+      }
+
+      object.offset_is_set = false;
+      object.offset_alignment = std::min(nat_align, offset_align);
+    }
+    else
+    {
+      // Final case: nondet offset from operation, and nondet offset in
+      // the current object. So, just take the minimum available.
+      object.offset_alignment = std::min(nat_align, object.offset_alignment);
+    }
+
+    // Once updated, store object reference into destination map.
+    insert(dest, it.first, object);
+  }
+}
+
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
@@ -820,126 +948,14 @@ void value_sett::get_value_set_rec(
       if (is_pointer_type(ptr_op))
         subtype = to_pointer_type(ptr_op->type).subtype;
 
-      // Calculate the offset caused by this addition, in _bytes_. Involves
-      // pointer arithmetic. We also use the _perceived_ type of what we're
-      // adding or subtracting from/to, it might be being typecasted.
-      BigInt total_offs(0);
-      bool is_const = false;
-      try
-      {
-        if (is_constant_int2t(non_ptr_op))
-        {
-          if (to_constant_int2t(non_ptr_op).value.is_zero())
-          {
-            total_offs = 0;
-          }
-          else
-          {
-            BigInt elem_size = 1;
-            if (!is_nil_type(subtype))
-            {
-              if (is_empty_type(subtype))
-                throw type2t::symbolic_type_excp();
-
-              // Potentially rename,
-              elem_size = type_byte_size(subtype, &ns);
-            }
-            const BigInt &val = to_constant_int2t(non_ptr_op).value;
-            total_offs = val * elem_size;
-            if (is_sub2t(expr))
-              total_offs.negate();
-          }
-          is_const = true;
-        }
-        else
-        {
-          is_const = false;
-        }
-      }
-      catch (const array_type2t::dyn_sized_array_excp &e)
-      { // Nondet'ly sized.
-      }
-      catch (const array_type2t::inf_sized_array_excp &e)
-      {
-      }
-      catch (const type2t::symbolic_type_excp &e)
-      {
-        // This vastly annoying piece of code is making operations on void
-        // pointers, or worse. If a void pointer, treat the multiplier of the
-        // addition as being one. If not void pointer, throw cookies.
-        if (is_empty_type(subtype))
-        {
-          total_offs = to_constant_int2t(non_ptr_op).value;
-          is_const = true;
-        }
-        else
-        {
-          log_error(
-            "Pointer arithmetic on type where we can't determine size\n{}",
-            *subtype);
-          abort();
-        }
-      }
-
       // For each object, update its offset data according to the integer
       // offset to this expr. Potential outcomes are keeping it nondet, making
       // it nondet, or calculating a new static offset.
-      for (const auto &it : pointer_expr_set)
-      {
-        objectt object = it.second;
-
-        unsigned int nat_align =
-          get_natural_alignment(object_numbering[it.first]);
-        unsigned int ptr_align = get_natural_alignment(ptr_op);
-
-        if (is_const && object.offset_is_set)
-        {
-          // Both are const; we can accumulate offsets;
-          object.offset += total_offs;
-        }
-        else if (is_const && !object.offset_is_set)
-        {
-          // Offset is const, but existing pointer isn't. The alignment is now
-          // at least as small as the operand alignment.
-          object.offset_alignment =
-            std::min(nat_align, object.offset_alignment);
-        }
-        else if (!is_const && object.offset_is_set)
-        {
-          // Nondet but aligned offset from arithmetic; but offset set in
-          // current object. Take the minimum alignment again.
-          unsigned int offset_align = 0;
-          if ((object.offset % nat_align) != 0)
-          {
-            // We have some kind of offset into this data object, but it's less
-            // than the data objects natural alignment. So, the maximum
-            // alignment we can have is that of the pointer type being added
-            // or subtracted. The minimum, depends on the offset into the
-            // data object we're pointing at.
-            offset_align = ptr_align;
-            if (object.offset % ptr_align != 0)
-              // Too complex to calculate; clamp to bytes.
-              offset_align = 1;
-          }
-          else
-          {
-            offset_align = nat_align;
-          }
-
-          object.offset_is_set = false;
-          object.offset_alignment = std::min(nat_align, offset_align);
-        }
-        else
-        {
-          // Final case: nondet offset from operation, and nondet offset in
-          // the current object. So, just take the minimum available.
-          object.offset_alignment =
-            std::min(nat_align, object.offset_alignment);
-        }
-
-        // Once updated, store object reference into destination map.
-        insert(dest, it.first, object);
-      }
+      offset_pointer_arith_objects(
+        pointer_expr_set,
+        ptr_op,
+        constant_pointer_arith_offset(non_ptr_op, subtype, is_sub2t(expr)),
+        dest);
 
       return;
     }
@@ -1243,6 +1259,18 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
   insert(dest, unknown, BigInt(0));
 }
 
+/// is_subclass_of is struct-only -- it casts both operands with to_struct_type
+/// -- and inheritance has no union analogue, so a union pair that is not
+/// base_type_eq is simply incompatible.
+static bool is_related_struct(
+  const type2tc &lhs_type,
+  const type2tc &rhs_type,
+  const namespacet &ns)
+{
+  return is_struct_type(lhs_type) && is_struct_type(rhs_type) &&
+         is_subclass_of(lhs_type, rhs_type, ns);
+}
+
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
@@ -1296,7 +1324,7 @@ void value_sett::assign(
     const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
     if (
       rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
-      !is_subclass_of(lhs_type, rhs->type, ns))
+      !is_related_struct(lhs_type, rhs->type, ns))
       return;
 
     // Assign the values of all members of the rhs thing to the lhs. It's

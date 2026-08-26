@@ -92,6 +92,16 @@ __ESBMC_ensures(counter == __ESBMC_old(counter) + 1);
 `__ESBMC_old` works on any expression: a global variable, a field of a struct,
 or a value reachable through a pointer.
 
+It also works under a quantifier, as `__ESBMC_old(r->coeffs[j])` inside an
+`__ESBMC_forall` over `j`. A quantified index cannot be snapshotted one element
+at a time — the snapshot is taken once, before the body runs, while `j` still
+ranges — so the whole region is copied at entry and indexed afterwards. That
+needs a named object to copy: an array wrapped in a struct, or an array named
+directly, both work. A bare `int r[N]` parameter (which is a pointer, with its
+extent stated only in an `__ESBMC_is_fresh` clause the rewrite never sees) and
+an `int (*r)[N]` parameter are declined, and say so
+([#7057](https://github.com/esbmc/esbmc/issues/7057)).
+
 ## What a function may modify: `__ESBMC_assigns`
 
 Consider a function that is supposed to update one global and leave another
@@ -130,6 +140,8 @@ stronger guarantees.
 | `__ESBMC_assigns(p->field)`                 | A field via pointer                |
 | `__ESBMC_assigns(*p)`                       | Whatever a pointer points to       |
 | `__ESBMC_assigns(arr[i])`                   | A single array element             |
+| `__ESBMC_assigns(arr)`                      | Every element of the array         |
+| `__ESBMC_assigns(p->sub->field)`            | A path through more than one pointer, rooted at a parameter |
 | `__ESBMC_assigns(x, y, z)`                  | Multiple targets (up to 5)         |
 | `__ESBMC_assigns()` or `__ESBMC_assigns(0)` | Nothing — declares a pure function |
 
@@ -384,8 +396,13 @@ esbmc file.c --enforce-contract find_min --function find_min --z3
 allocated block of at least `size` bytes that does not alias any existing
 memory.
 
-In `requires`: the caller must provide a freshly allocated pointer. In
+In `requires`: the caller must provide a pointer to a block of its own. In
 `ensures`: the function promises to return a freshly allocated block.
+
+"Fresh" is about separation and extent, not about the heap: a caller can
+discharge a `requires`-side `__ESBMC_is_fresh(p, n)` by passing the address of
+an object with automatic storage, as long as that object really is disjoint
+from the other arguments and really does extend `n` bytes.
 
 Because a fresh block aliases nothing, a `requires`-side `__ESBMC_is_fresh` is
 also how a contract states that a pointer parameter is separate from the
@@ -572,7 +589,7 @@ $ esbmc counter.py --enforce-contract add
 $ esbmc counter.py --enforce-contract "py:counter.py@C@Counter@F@add"
 ```
 
-### No `__ESBMC_old` for parameters
+### `__ESBMC_old` over scalars
 
 Python passes scalars by value, so a parameter named in `ensures` already
 denotes its value at entry, even when the body reassigns it:
@@ -585,9 +602,31 @@ def bump(x: int) -> int:
     return x
 ```
 
-`__ESBMC_old` is therefore unnecessary for parameters, and is not yet supported
-in Python. It remains necessary in C, and will be needed in Python once
-contracts reach mutable state.
+`__ESBMC_old` is therefore unnecessary for a parameter, but it is available, and
+it is what a clause over a *global* needs — a global does change under the body:
+
+```python
+count: int = 0
+
+def bump(k: int) -> int:
+    global count
+    __ESBMC_requires(k > 0)
+    __ESBMC_ensures(count == __ESBMC_old(count) + k)
+    count = count + k
+    return count
+```
+
+It works under both `--enforce-contract` and `--replace-call-with-contract`, and
+snapshots `int`, `float` and `bool`. Anything else is named and refused rather
+than snapshotted as something it is not:
+
+```
+ERROR: __ESBMC_old at line 3 takes 'l', which is not an int, float or bool;
+       only scalars can be snapshotted by the Python frontend yet
+```
+
+`__ESBMC_old` in a `requires` is likewise rejected — a precondition already
+speaks about the pre-state.
 
 ### A clause must be a pure expression
 
@@ -637,7 +676,7 @@ determined.
 | `list`, `str`, class instances, unannotated parameters | supported when the clause does not mention them |
 | methods | supported |
 | globals in a clause | supported |
-| `__ESBMC_old` | not supported, and not needed for parameters (above) |
+| `__ESBMC_old` | supported over `int`, `float` and `bool`, in `ensures` only; not needed for parameters (above) |
 | `__ESBMC_assigns` | not supported |
 | `__ESBMC_is_fresh` | not supported |
 | `__ESBMC_forall` / `__ESBMC_exists` | not supported |
@@ -710,14 +749,24 @@ is honoured when enforcing — the lvalue gets its own allocation — but
 replacement keys the separation obligation on a parameter position and emits
 nothing for these forms.
 
-**Global array element assigns is unsupported.** `__ESBMC_assigns(global[i])`
-does not work correctly for global arrays. Use `__ESBMC_assigns(global)` (the
-whole array) as a conservative alternative.
+**A two-dimensional global past the element-wise cap keeps the whole-array
+check.** `__ESBMC_assigns(global[i])` is checked element-wise up to a cap on the
+array's extent. Past the cap ESBMC falls back to asserting the whole array
+unchanged, which the write the clause itself names then falsifies — so a large
+`int m[300][4]` with `__ESBMC_assigns(m[i])` reports a spurious frame violation.
+The element-wise form cannot be used there because reading an array-typed
+element back out of the snapshot is the same gap that stops `__ESBMC_old` over
+an array ([#7057](https://github.com/esbmc/esbmc/issues/7057)). Below the cap,
+and for one-dimensional globals, the element-wise check applies.
 
-**Multi-level pointer assigns is unsupported.** `__ESBMC_assigns(*p)` and
-`__ESBMC_assigns(p->field)` work for a single level of indirection. Patterns
-like `__ESBMC_assigns(p->sub->field)` are not classified and violations on the
-untracked sub-fields will not be caught.
+**A multi-level assigns path must be rooted at a parameter, and does not reach
+past it.** `__ESBMC_assigns(o->sub->a)` is classified when `o` is a pointer
+parameter: the check then holds every other field of `*o` unchanged, so a write
+to `o->x` is caught. It does not extend through the inner pointer — a write to
+`o->sub->b` is not reported, and a body that reassigns `o->sub` itself verifies
+— because the pointee of `o->sub` is not a parameter and has nothing to root a
+snapshot at. A path rooted at a *global* pointer (`__ESBMC_assigns(g->sub->a)`)
+still generates no verification conditions at all.
 
 **Quantifiers require Z3.** `__ESBMC_forall` and `__ESBMC_exists` are not
 supported by Boolector or other backends. Pass `--z3` when using quantified

@@ -388,6 +388,23 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"output-goto",
      boost::program_options::value<std::string>(),
      "Export generated goto program"},
+    {"proof-cache",
+     boost::program_options::value<std::string>()->value_name("<dir>"),
+     "Reuse claims already proved unsatisfiable in an earlier run, keyed on "
+     "the claim's sliced SSA cone, this ESBMC build, every option in effect "
+     "and the data model. Requires --multi-property. Only proofs are stored. "
+     "Inactive under --ltl, --smt-during-symex, coverage modes and past the "
+     "first thread interleaving. "
+     "See https://esbmc.github.io/docs/proof-cache/"},
+    {"proof-cache-verify",
+     NULL,
+     "Consult --proof-cache but solve every claim anyway, reporting an error "
+     "when a stored proof disagrees with the solver"},
+    {"claim-fingerprint-dump",
+     boost::program_options::value<std::string>()->value_name("<file>"),
+     "Append one line per solved claim (digest of its sliced cone under each "
+     "SSA-name normalisation, cone size, verdict, location) to this file; "
+     "'-' writes to stdout prefixed with CLAIM-FP"},
     {"cex-output",
      boost::program_options::value<std::string>(),
      "Save the counterexample into a file or, "
@@ -1033,11 +1050,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
      "bypass and the --no-irep2-bodies escape hatch have been removed."},
-    {"irep2-native-body",
-     NULL,
-     "Deprecated no-op (accepted for backward compatibility). Function bodies "
-     "are routed to the IREP2-native goto_convert by default since the W1-loc "
-     "keystone concluded; --no-irep2-native-body opts out."},
     {"no-irep2-native-body",
      NULL,
      "Convert function bodies through the whole-body legacy round-trip "

@@ -64,7 +64,9 @@ private:
   /// symbol in the context; clang_c_adjust::adjust_side_effect_function_call
   /// declares one. That is a symbol-table side effect rather than an expression
   /// rewrite, so it ports independently of the rest of that arm (§70).
-  void declare_implicit_callee(const expr2tc &expr);
+  void declare_implicit_callee(
+    const expr2tc &expr,
+    const locationt &stmt_location = locationt());
 
   /// IREP2 form of clang_c_adjust::adjust_expr_{unary,binary}_boolean's live
   /// half. Their type write is dead for C (§58.1); the operand conversion is
@@ -109,6 +111,14 @@ private:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  void adjust_expression_statement(expr2tc &expr);
+  void promote_unary_bool_operand(expr2tc &expr);
+  void adjust_struct(expr2tc &expr);
+  void adjust_array_subtype(expr2tc &expr);
+  void adjust_decl_init(expr2tc &expr);
+  void adjust_dereference(expr2tc &expr);
+  void lower_complex_compound_assignment(expr2tc &expr);
+  void adjust_vector_float_arith(expr2tc &expr);
   void hoist_for_init(expr2tc &expr);
 
   /// Pad a complete struct or union type symbol to its ABI layout (§96).
@@ -123,6 +133,12 @@ private:
   /// "assign" case: the node takes the target's type, and the source converts
   /// to it.
   void adjust_plain_assignment(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's tail: the
+  /// compound operators take the usual arithmetic conversions on *both*
+  /// operands (C11 6.5.16.2p3 -- `b += a` is `b = b + a`, so a narrow target
+  /// promotes), while the node keeps the target's type.
+  void adjust_compound_assignment(expr2tc &expr);
   /// IREP2 form of the gen_typecast_bool that adjust_ifthenelse, adjust_while
   /// and adjust_for apply to a statement's controlling expression (§95).
   void adjust_statement_condition(expr2tc &expr);
@@ -151,6 +167,8 @@ private:
 
   /// Arms that run only when this pass is the sole adjuster.
   void adjust_sole_arms(expr2tc &expr);
+
+  void adjust_sole_arms_tail(expr2tc &expr);
 
   contextt &context;
   const bool sole_adjuster;

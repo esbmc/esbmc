@@ -45,6 +45,7 @@ set(inputs
            # Socket / network operational models
            sys/socket.h
            sys/select.h
+           sys/time.h
            netinet/in.h
            arpa/inet.h
            # end sockets

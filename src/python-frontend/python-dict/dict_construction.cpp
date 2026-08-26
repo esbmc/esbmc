@@ -470,6 +470,31 @@ exprt python_dict_handler::build_range_dict_comprehension(
   return build_symbol(dict_sym);
 }
 
+/// Gives a tuple key an identity of its own, as a list literal already does
+/// for its elements. Folds that read an element's value (sorted() over tuple
+/// keys) resolve it through the recorded element id; without one they decline
+/// and fall back to a path that retypes tuple elements as int. Returns the id
+/// to record, empty when the key has none.
+std::string python_dict_handler::materialize_tuple_key(
+  exprt &key_expr,
+  const nlohmann::json &element)
+{
+  if (key_expr.is_symbol())
+    return key_expr.identifier().as_string();
+
+  if (!converter_.get_tuple_handler().is_tuple_type(key_expr.type()))
+    return {};
+
+  symbolt &key_tmp = converter_.create_tmp_symbol(
+    element, "$dict_key$", key_expr.type(), key_expr);
+  code_declt key_decl(build_symbol(key_tmp));
+  key_decl.copy_to_operands(key_expr);
+  key_decl.location() = converter_.get_location_from_decl(element);
+  converter_.add_instruction(key_decl);
+  key_expr = build_symbol(key_tmp);
+  return key_tmp.id.as_string();
+}
+
 exprt python_dict_handler::create_dict_from_literal(
   const nlohmann::json &element,
   const exprt &target_symbol)
@@ -576,6 +601,9 @@ exprt python_dict_handler::create_dict_from_literal(
   for (size_t i = 0; i < keys.size(); ++i)
   {
     exprt key_expr = converter_.get_expr(keys[i]);
+
+    const std::string key_elem_id = materialize_tuple_key(key_expr, element);
+
     exprt push_key =
       list_handler.build_push_list_call(keys_list, element, key_expr);
     converter_.add_instruction(push_key);
@@ -583,7 +611,7 @@ exprt python_dict_handler::create_dict_from_literal(
     // the concrete struct type for tuple keys instead of relying solely on
     // the "tuple" annotation (which produces empty_typet as a sentinel).
     list_handler.add_type_info(
-      keys_list.id.as_string(), std::string(), key_expr.type());
+      keys_list.id.as_string(), key_elem_id, key_expr.type());
 
     exprt value_expr = converter_.get_expr(values[i]);
 

@@ -541,6 +541,66 @@ The assumption is scoped to the entry point only, and it does not imply the
 parameters are distinct pointers: `f(NULL, NULL)` is a conforming call
 (C11 6.7.3.1p4), so `a != b` still does not follow.
 
+## Per-property results
+
+Every verification run ends with a `** Results:` block naming each property,
+grouped by file and function in source order. It is printed whatever the
+strategy — plain BMC, `--incremental-bmc`, `--k-induction` — and `--result-only`
+keeps it while suppressing the rest of the output (a coverage run reports its
+own goals instead):
+
+```sh
+esbmc file.c --result-only
+```
+
+```
+** Results:
+file.c, function main
+  PASSED       [main.assertion.1]  line 5  A1
+  FAILED       [main.assertion.2]  line 6  A2
+
+** 1 of 2 properties failed, 1 passed
+
+VERIFICATION FAILED
+```
+
+A property is reported `NOT CHECKED` rather than `PASSED` when the run never
+separated it. A default run stops at the first violation, so the properties
+after it were never decided, and saying they passed would be wrong:
+
+```
+  PASSED       [main.assertion.1]  line 5  addition commutes
+  FAILED       [main.assertion.2]  line 8  a is not one
+  NOT CHECKED  [main.assertion.3]  line 9  a is not two
+
+** 1 of 3 properties failed, 1 passed, 1 not checked
+   (this mode stops at the first violation; use --multi-property for a verdict on every property)
+```
+
+Adding `--multi-property` decides all three, and appends the solver and its
+decision-procedure time to the summary.
+
+## Bounding the stack
+
+```sh
+esbmc file.c --stack-limit 8192
+esbmc file.c --total-stack-limit 65536
+```
+
+`--stack-limit` bounds a *single* stack frame, so a deep recursion whose
+individual frames each fit never trips it. `--total-stack-limit` bounds the
+combined size of all live frames instead, which is what a real stack budget
+constrains. ESBMC's own operational models are excluded from the total, so the
+bound stays calibratable against the program's own frames.
+
+Both bounds are given in **bits**, not bytes. The total is accounted per
+symbolic path at declaration points, and over-approximates for spawned threads.
+A violation names the declaration that crossed the bound:
+
+```
+Total stack limit property was violated when declaring buf
+```
+
 ## Multiple Property Verification
 
 ```sh
@@ -705,6 +765,15 @@ SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
 `--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
 implicitly, and NeuroSym rejects `--ir` and incremental strategies.
 
+Floating-point arithmetic is encoded with the SMT floating-point theory
+(`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
+CVC4/CVC5 — and lowered to bit-vectors elsewhere. `--fp2bv` forces the
+bit-vector lowering on any backend, which is the encoding to reach for when a
+property depends on the sign of a NaN: the theory cannot represent it
+([#7021](https://github.com/esbmc/esbmc/issues/7021)). `fmod`, `remainder` and
+`remquo` are always lowered through a bit-vector round-trip, since the theory's
+`fp.rem` is far slower to solve.
+
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
 environment variable. The `CMD` for the SMTLIB backend is interpreted by the
@@ -718,6 +787,14 @@ shell, so it can include options or chain commands (the tools must be on
 - `cvc5 -L smt2 -m`
 
 Remember to quote the `CMD` string when invoking ESBMC.
+
+A backend that cannot decide a goal says so rather than ending the run without a
+verdict. Under the integer/real encoding (`--ir`, `--ir-ieee`) Z3's `smt` tactic
+is incomplete for nonlinear real arithmetic, so the tactic chain falls back to
+`qfnra-nlsat` on exactly the goals `smt` abandoned, and declines anything
+outside QF_NRA. Bitwuzla returns a query term unchanged when evaluating it would
+need a quantifier it never registered; that is reported as an unknown value, as
+the Z3 backend already did.
 
 ### Symmetry breaking
 

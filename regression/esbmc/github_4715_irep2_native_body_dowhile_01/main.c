@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body dispatcher's code_dowhile2t handling
+// Exercises the IREP2-native dispatcher's code_dowhile2t handling
 // (W1-loc spike Phase C, esbmc/esbmc#4715). The loops below convert natively
 // end to end: a plain do/while, one whose body uses break and continue (whose
 // targets this kind installs), and a nested pair.

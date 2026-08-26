@@ -956,6 +956,7 @@ exprt function_call_expr::build_constant_from_arg() const
         guard.cond() = migrate_expr_back(not2tc(valid2));
         guard.then_case() = throw_code;
         guard.location() = loc;
+        guard.location().property("skipped");
         converter_.add_instruction(guard);
 
         return sh.handle_string_to_float(expr, loc);
@@ -2751,6 +2752,16 @@ exprt function_call_expr::handle_numpy_astype() const
   return build_symbol(result_sym);
 }
 
+/// A function name used as a value decays to a function pointer, as it already
+/// does in call-argument position. Storing the code symbol itself aborts
+/// conversion with "got invalid code for function" (#6640).
+static exprt decay_function_to_pointer(const exprt &value)
+{
+  if (!value.type().is_code() || !value.is_symbol())
+    return value;
+  return python_expr::build_address_of(value);
+}
+
 exprt function_call_expr::handle_list_append() const
 {
   const auto &args = call_["args"];
@@ -2767,6 +2778,12 @@ exprt function_call_expr::handle_list_append() const
 
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
+
+  // A function name stored in a list decays to a function pointer, mirroring
+  // the implicit conversion the call-argument path already applies. Storing
+  // the code symbol itself aborts with "got invalid code for function"
+  // (#6640).
+  value_to_append = decay_function_to_pointer(value_to_append);
 
   // If value_to_append is a function call, materialize its return value
   bool is_func_call = (value_to_append.is_code() &&
@@ -3500,6 +3517,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     guard.cond() = domain_check;
     guard.then_case() = raise_code;
     guard.location() = loc;
+    guard.location().property("skipped");
 
     // Add the guard to the current block
     converter_.current_block->copy_to_operands(guard);
@@ -3536,6 +3554,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     guard.cond() = domain_check;
     guard.then_case() = raise_code;
     guard.location() = loc;
+    guard.location().property("skipped");
     converter_.current_block->copy_to_operands(guard);
     return converter_.get_math_handler().handle_log(arg_expr, call_);
   }
@@ -3575,6 +3594,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     guard.cond() = domain_check;
     guard.then_case() = raise_code;
     guard.location() = loc;
+    guard.location().property("skipped");
 
     converter_.current_block->copy_to_operands(guard);
 
@@ -4133,11 +4153,20 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
   if (!fast_path_ok)
     return std::nullopt;
 
-  exprt list_arg = converter_.get_expr(call_["args"][0]);
-  if (!list_arg.is_symbol())
-    return std::nullopt;
+  // `sorted(d)` lowers to `sorted(d.keys())`, whose argument is a call rather
+  // than a named list, so resolve the dict's internal keys list directly.
+  // Without it the fold declines and the generic path retypes tuple keys as
+  // int, which a later `u, v = key` cannot unpack.
+  std::string list_id = dict_keys_list_id_for_call(call_["args"][0]);
 
-  const std::string list_id = list_arg.identifier().as_string();
+  if (list_id.empty())
+  {
+    exprt list_arg = converter_.get_expr(call_["args"][0]);
+    if (!list_arg.is_symbol())
+      return std::nullopt;
+    list_id = list_arg.identifier().as_string();
+  }
+
   const size_t map_size = python_list::get_list_type_map_size(list_id);
   if (map_size == 0 || map_size > 32)
     return std::nullopt;
@@ -4148,6 +4177,27 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
     auto r = fold_sorted_constant_tuples(list_id, map_size, fast_path_reverse))
     return r;
   return fold_sorted_symbolic_tuples(list_id, map_size, fast_path_reverse);
+}
+
+/// The internal keys-list symbol of the dict `<name>.keys()` reads, or empty
+/// when the argument is not that shape or the dict has no literal keys list.
+std::string
+function_call_expr::dict_keys_list_id_for_call(const nlohmann::json &arg) const
+{
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Call" ||
+    !arg.contains("func") || !arg["func"].is_object() ||
+    arg["func"].value("_type", "") != "Attribute" ||
+    arg["func"].value("attr", "") != "keys" || !arg["func"].contains("value") ||
+    arg["func"]["value"].value("_type", "") != "Name")
+    return {};
+
+  const std::string dict_id = converter_.resolve_name_symbol_id(
+    arg["func"]["value"]["id"].get<std::string>());
+  if (dict_id.empty())
+    return {};
+
+  return python_dict_handler::get_internal_list_id(dict_id, true);
 }
 
 std::optional<exprt> function_call_expr::fold_sorted_int_list(
@@ -4606,6 +4656,26 @@ std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
   return std::nullopt;
 }
 
+/// Reaching the runtime model means the preprocessor could not fold the call,
+/// and the model has no key parameter -- the key is dropped, which silently
+/// reorders the result (sorted([a, a + 1], key=lambda v: -v) then reports a
+/// spurious counterexample). Refuse instead of answering wrongly.
+static void reject_unfoldable_key(
+  const nlohmann::json &call,
+  const std::string &func_name,
+  bool is_sorted_min_max)
+{
+  if (!is_sorted_min_max || !call.contains("keywords"))
+    return;
+
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") == "key")
+      throw std::runtime_error(
+        func_name +
+        "() with key= is only supported over a constant iterable; here "
+        "the key function cannot be applied and would be ignored");
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -4723,6 +4793,8 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
           list_arg, list_id, func_name, comparison_op);
       }
     }
+    reject_unfoldable_key(call_, func_name, is_sorted_min_max);
+
     // Dispatch to typed builtin based on element type
     if (has_default_kwarg)
       actual_func_name += "_default";

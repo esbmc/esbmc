@@ -2023,9 +2023,9 @@ bool clang_c_convertert::get_bitfield_type(
 // converted once and each of its non-bitfield fields is pushed as a
 // member_exprt, keeping types aligned without duplication.
 //
-// Note: get_base_components_methods uses an alphabetically-ordered base_map,
-// so for multiple-inheritance the component order may not match declaration
-// order.  Single-inheritance (the common case) is unaffected.
+// Note: get_base_components_methods walks the base_map ancestors first, so for
+// multiple inheritance the component order interleaves each base's ancestors
+// ahead of it. Single inheritance (the common case) is unaffected.
 bool clang_c_convertert::get_base_flattened_inits(
   const clang::InitListExpr &init,
   std::vector<exprt> &flat)
@@ -4028,8 +4028,27 @@ bool clang_c_convertert::get_cast_expr(
     }
 
     if (routed)
+    {
       expr = cur;
-    else if (cast.getCastKind() == clang::CK_DerivedToBase)
+      break;
+    }
+
+    // No @base@ path: the hierarchy kept the legacy flattened layout, where a
+    // non-primary base's members sit at a non-zero displacement inside the
+    // derived object. Left unadjusted, `this` in a base method addresses the
+    // derived object's leading storage instead (#7025). Padding is not in
+    // place until the adjust pass, so only mark the conversion here;
+    // clang_c_adjust::adjust_derived_to_base resolves the displacement and
+    // leaves the expression untouched when there is none.
+    // A chain of unchecked casts overwrites the marker on the same node rather
+    // than nesting, which is what we want: the unchecked fallback leaves the
+    // expression's type alone, so the surviving outermost marker names the
+    // final base and the displacement is computed in one hop.
+    const typet &base_t = type.is_pointer() ? type.subtype() : type;
+    if (base_t.id() == "symbol")
+      expr.set("#derived_to_base", base_t.identifier());
+
+    if (cast.getCastKind() == clang::CK_DerivedToBase)
       // Preserve prior fallback: CK_DerivedToBase always typecast;
       // CK_UncheckedDerivedToBase was a no-op.
       gen_typecast(ns, expr, type);

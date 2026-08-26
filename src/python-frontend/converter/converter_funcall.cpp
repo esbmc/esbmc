@@ -24,6 +24,7 @@
 #include <util/expr/string_constant.h>
 
 #include <optional>
+#include <sstream>
 
 using namespace json_utils;
 
@@ -67,6 +68,48 @@ std::optional<std::size_t> get_keyword_literal_size(
   }
 
   return std::nullopt;
+}
+
+std::optional<long long> get_literal_int_index(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return node["value"].get<long long>();
+
+  if (
+    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+    node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+    node["operand"].value("_type", "") == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<long long>();
+
+  return std::nullopt;
+}
+
+std::optional<std::pair<long long, long long>>
+get_fixed_2d_array_shape(const symbolt &source, const namespacet &ns)
+{
+  typet source_type = ns.follow(source.get_type());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &array_type = to_array_type(source_type);
+  if (array_type.size().is_nil() || !array_type.size().is_constant())
+    return std::nullopt;
+
+  source_type = ns.follow(array_type.subtype());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_type = to_array_type(source_type);
+  if (row_type.size().is_nil() || !row_type.size().is_constant())
+    return std::nullopt;
+
+  return std::make_pair(
+    binary2integer(array_type.size().value().c_str(), false).to_int64(),
+    binary2integer(row_type.size().value().c_str(), false).to_int64());
 }
 
 bool is_numpy_random_attr(const nlohmann::json &func, const std::string &name)
@@ -150,7 +193,8 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   return nil_exprt();
 }
 
-// Resolve function calls (both identity functions and constant-returning functions)
+// Resolve function calls (both identity functions and constant-returning
+// functions)
 exprt python_converter::resolve_function_call(
   const exprt &func_expr,
   const exprt &args_expr)
@@ -362,27 +406,98 @@ exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
 // shorter) logical length -- e.g. an empty view still points at a valid
 // position with nonzero remaining capacity. Returns the tracked literal
 // length directly instead of routing through the generic len() dispatch.
-std::optional<exprt> python_converter::try_get_numpy_pointer_view_len(
-  const nlohmann::json &element) const
+std::optional<exprt>
+python_converter::try_get_numpy_pointer_view_len(const nlohmann::json &element)
 {
   if (
     !element.contains("func") || !element["func"].is_object() ||
     element["func"].value("_type", "") != "Name" ||
     element["func"].value("id", "") != "len" || !element.contains("args") ||
-    !element["args"].is_array() || element["args"].size() != 1 ||
-    element["args"][0].value("_type", "") != "Name")
+    !element["args"].is_array() || element["args"].size() != 1)
+    return std::nullopt;
+
+  const nlohmann::json &arg = element["args"][0];
+  if (
+    std::optional<exprt> subscript_len =
+      try_get_numpy_subscript_pointer_view_len(arg, element))
+    return subscript_len;
+
+  return try_get_numpy_named_pointer_view_len(arg);
+}
+
+std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
+  const nlohmann::json &arg,
+  const nlohmann::json &element)
+{
+  if (
+    arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
+    arg["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  std::optional<long long> literal_index = get_literal_int_index(arg["slice"]);
+  if (!literal_index)
+    return std::nullopt;
+
+  const std::string source_id =
+    resolve_name_symbol_id(arg["value"]["id"].get<std::string>());
+  if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+    return std::nullopt;
+
+  const symbolt *source = symbol_table_.find_symbol(source_id);
+  if (!source)
+    return std::nullopt;
+
+  const namespacet ns(symbol_table_);
+  std::optional<std::pair<long long, long long>> shape =
+    get_fixed_2d_array_shape(*source, ns);
+  if (!shape)
+    return std::nullopt;
+
+  long long row_index = *literal_index;
+  const long long row_count = shape->first;
+  const long long col_count = shape->second;
+  if (row_count == 0)
+    return from_integer(0, long_long_int_type());
+
+  if (row_index < 0)
+    row_index += row_count;
+  if (row_index < 0 || row_index >= row_count)
+  {
+    std::ostringstream msg;
+    msg << "index " << *literal_index
+        << " is out of bounds for axis 0 with size " << row_count;
+    const locationt location = get_location_from_decl(element);
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+
+    exprt raise =
+      get_exception_handler().gen_exception_raise("IndexError", msg.str());
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = location;
+    add_instruction(throw_code);
+    return from_integer(0, long_long_int_type());
+  }
+
+  return from_integer(col_count, long_long_int_type());
+}
+
+std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
+  const nlohmann::json &arg) const
+{
+  if (arg.value("_type", "") != "Name")
     return std::nullopt;
 
   const std::string arg_id =
-    resolve_name_symbol_id(element["args"][0]["id"].get<std::string>());
+    resolve_name_symbol_id(arg["id"].get<std::string>());
   if (arg_id.empty())
     return std::nullopt;
 
-  const auto it = numpy_pointer_view_lengths_.find(arg_id);
-  if (it == numpy_pointer_view_lengths_.end())
+  const auto it = numpy_pointer_view_info_.find(arg_id);
+  if (it == numpy_pointer_view_info_.end())
     return std::nullopt;
 
-  return from_integer(it->second, long_long_int_type());
+  return from_integer(it->second.length, long_long_int_type());
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -932,7 +1047,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   }
 
   const std::string function = config.options.get_option("function");
-  // To verify a specific function, it is necessary to load the definitions of functions it calls.
+  // To verify a specific function, it is necessary to load the definitions of
+  // functions it calls.
   if (!function.empty() && !is_loading_models)
   {
     std::string func_name("");
@@ -1121,9 +1237,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   function_call_builder call_builder(*this, element);
   exprt call_expr = call_builder.build();
 
-  // Convert boolean-returning function calls to side-effect expressions when used
-  // in expression contexts (e.g., logical operations). This prevents GOTO generation
-  // failures where code statements appear in boolean expression operands.
+  // Convert boolean-returning function calls to side-effect expressions when
+  // used in expression contexts (e.g., logical operations). This prevents GOTO
+  // generation failures where code statements appear in boolean expression
+  // operands.
   if (
     call_expr.is_code() && call_expr.statement() == "function_call" &&
     is_converting_rhs)
@@ -1188,7 +1305,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (it == param_positions.end())
       {
         // For user-defined functions, unknown kwargs are a TypeError.
-        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently skip.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently
+        // skip.
         if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
           throw std::runtime_error(
             "Unknown keyword argument: " + arg_name + " in function " +
@@ -1292,7 +1410,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       throw std::runtime_error(msg.str());
     }
 
-    // Fill empty arguments with proper Optional values or None for optional parameters
+    // Fill empty arguments with proper Optional values or None for optional
+    // parameters
     for (size_t i = 0; i < args.size(); ++i)
     {
       if (args[i].is_nil() || args[i].id().empty())
@@ -1358,10 +1477,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // so a struct is passed to a pointer parameter (#4558/#4564).
           if (arg_actual_type.id() == "symbol")
             arg_actual_type = ns.follow(arg_actual_type);
-          // Handle union types: if param is pointer and arg is struct (or symbol
-          // to struct), take address. This is the post-processing pass for
-          // general pointer-to-struct coercion.
-          // NOTE: function_call_expr.cpp also has an earlier coercion pass that
+          // Handle union types: if param is pointer and arg is struct (or
+          // symbol to struct), take address. This is the post-processing pass
+          // for general pointer-to-struct coercion. NOTE:
+          // function_call_expr.cpp also has an earlier coercion pass that
           // specifically handles char[0]* union parameters (str | T pattern).
           // These two mechanisms are complementary: the pass here handles the
           // general case; the earlier pass handles the specific char[0]* union

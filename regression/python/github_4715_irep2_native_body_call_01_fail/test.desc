@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 3 --irep2-native-body
+--unwind 3
 ^VERIFICATION FAILED$

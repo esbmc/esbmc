@@ -33,6 +33,12 @@ This page is a reference of all Python language constructs, data structures, and
 - **Variable inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type
 - **`Optional[T]` equality**: Equality (`==`, `!=`, `is`, `is not`) between an `Optional[T]` value and a matching primitive succeeds after an `is not None` round-trip — the primitive side is implicitly cast to the pointer-backed representation. Ordered comparisons (`<`, `>`, `<=`, `>=`) on `Optional[T]` are deliberately disabled (they would compare addresses, not values).
 - **`Optional[T]` return type**: A function annotated `-> Optional[T]` (the `typing.Optional` subscript form) lowers to a `T*` pointer with `None` encoded as `NULL`, so a body that returns `None` on some path verifies correctly. `None` comparisons (`is`, `is not`, `==`, `!=`) applied directly to such a call — `f() is None`, `f() == None` — are evaluated against the function's return type rather than collapsed to a constant. (The dedicated `Optional<T>` struct representation is used for the PEP 604 `T | None` annotation with primitive `T`, not for the `Optional[T]` subscript form.)
+- **Parameter type recovery**: A bare `list` annotation, or no annotation at all, does not stop the parameter being typed. A body that uses the parameter as a list (`len(x)`, `x[i]`, a list mutator, or an unpack such as `first, *rest = arr`) refines it to the list model — in an imported module as well as the entry file — and the *element* type is recovered from the statically resolvable call sites when they agree on one, so `x[i] + 1` behaves as it does under a `list[T]` annotation instead of reading as `Any`
+- **Default arguments**: A parameter whose default is a `list`, `dict` or `set` literal receives that container when the argument is omitted, rather than `None`. Defaults are also filled in for a call into an imported module and for an imported class's constructor
+- **Callables in containers**: A function name stored in a list decays to a function pointer, so a callable read back out of the list can be invoked
+- **Closures**: a nested `def` may read a scalar of the enclosing function and write through a captured list (`c[0] += 1`), provided nothing rebinds the captured name after the `def`; a nested `c = [9]` binds its own local rather than the enclosing list
+- **`Callable[[A], R]` annotations** on a return type or a variable carry the spelled signature, so a call through the value returns `R` rather than a nondeterministic value; a bare `Callable` takes its signature from the assigned function
+- **Dunder spellings of operators**: `d.__getitem__(k)`, `xs.__len__()` and `d.__contains__(k)` are rewritten to `d[k]`, `len(xs)` and `k in d`, and dispatch to a user class's own dunder as the operators do
 - **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly
 
 ## Object-Oriented Programming
@@ -210,7 +216,7 @@ Byte sequences and integer class methods:
 ## Error Handling
 
 - **`try`/`except`** blocks with multiple handlers and `except ExceptionType as var` binding
-- **`try`/`finally`** blocks: the `finally` body runs on normal completion, after a caught exception, and when an exception propagates uncaught (run `finally`, then re-raise). Bare `try`/`finally` (no `except`) is supported. Shapes that cannot be lowered soundly are refused with a clean diagnostic (see [Limitations](./limitations#exception-handling))
+- **`try`/`finally`** blocks: the `finally` body runs on normal completion, after a caught exception, when an exception propagates uncaught (run `finally`, then re-raise), and on the `return` / `break` / `continue` edges that escape the `try`, a handler, or the `finally` itself. A returned expression is spilled to a temporary before the `finally` runs, as CPython evaluates it first. Bare `try`/`finally` (no `except`) is supported. Shapes that cannot be lowered soundly are refused with a clean diagnostic (see [Limitations](./limitations#exception-handling))
 - **`raise`** statements with exception instantiation and custom messages; bare `raise` re-raises the active exception inside an `except` handler
 - **`assert`** statements for property verification
 - **`__ESBMC_assume`** for constraining non-deterministic inputs
@@ -320,6 +326,47 @@ if x > 0:
     __ESBMC_cover(x > 100)  # Is this branch reachable?
 ```
 
+## Dynamic Typing
+
+A variable whose type diverges across an `if`/`else` — or an `if`/`elif`/`else`
+chain in which every branch assigns it — `x = 1` in one branch and
+`x = "hello"` in the other — is given a *tagged* representation carrying a
+runtime type tag alongside the value, instead of being forced to one branch's
+type. This covers a variable created inside the branches and one that already
+had a native type before them:
+
+```python
+def main() -> None:
+    flag: bool = __VERIFIER_nondet_bool()
+    x = 1
+    if flag:
+        x = "hello"
+    else:
+        x = 2
+    assert isinstance(x, str) or isinstance(x, int)
+    assert not isinstance(x, float)
+```
+
+Supported on a tagged variable:
+
+- **`isinstance(x, T)`** for `bool`, `int`, `float` and `str`, compared against
+  the runtime tag. An aggregate or user class is answered `False` rather than
+  refused, since a tag cannot hold one.
+- **`x is None`**, folded against a literal `None` — a tagged variable never
+  holds one.
+- **`==` between two tagged variables**, dispatched on the tag, with the numeric
+  arm fixed-width and the `str` arm under a compile-time bound.
+- **`+`, `-`, `*`, `/` against a literal**, numeric, plus string concatenation
+  for `+`; **`-` and `/` between two tagged operands**, raising `TypeError`
+  when either turns out non-numeric.
+- **Rebinding to a container** — a list, tuple or class instance assigned to a
+  tagged variable gets its own slot, as Python rebinds the name outright.
+- **Function return values**: a function whose `return` statements diverge in
+  type across an `if`/`else` reconciles both branches into one tagged return
+  type, instead of the type of whichever `return` was reached first.
+
+See [Limitations](./limitations#dynamic-typing) for what a tag cannot hold.
+
 ## Strict Type Checking
 
 The `--strict-types` flag enables type compatibility validation for function arguments at verification time. When a type mismatch is detected, a `TypeError` is generated with a descriptive message. Instance methods, class methods, and static methods are all handled with appropriate implicit-parameter awareness.
@@ -348,13 +395,13 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `pow(b, e, m)` | 3-argument modular exponentiation: exact `BigInt` for constant integer operands; symbolic operands raise an unsupported diagnostic rather than emit unsound floating-point modulo |
 | `format(value[, spec])` | Builtin formatting (distinct from the `str.format()` method). Constant-folds a literal integer with a bare presentation-type spec (`'d'`/`'x'`/`'X'`/`'o'`/`'b'` or empty) — `format(255, "x")` → `"ff"` (no `0x`/`0o`/`0b` prefix, leading `-` for negatives, `LLONG_MIN`-safe) — and a constant string with the default spec to itself. A **typeless float spec** (no presentation type) is folded too: width, alignment, sign and zero-padding (`format(1.5, "10")`, `format(-1.5, "08")`, `format(1.5, "=+10")`) render the digits through the shared shortest-repr renderer and then pad, and `,`/`_` grouping groups the integer part by 3 as CPython does (`format(1234.5, ",")` → `"1,234.5"`). Combinations that are *not* modelled — typeless precision (`format(1.5, ".2")`), grouping with an explicit float type (`",.1f"`), grouping plus zero/`=` padding (`"08,"`) — and variable arguments raise a clean error rather than a wrong fold |
 | `callable(obj)`, `issubclass(cls, base)` | Resolved at compile time from the symbol table and AST class hierarchy |
-| `len` | Works on lists, sets, strings, tuples |
+| `len` | Works on lists, sets, strings, tuples. On a class instance it dispatches to `__len__`, walking the ancestry so an inherited one is found; a class that defines none raises `TypeError` as CPython does, rather than measuring the struct with `strlen` and answering 0 |
 | `range` | Used in `for` loops |
 | `min(a, b)`, `max(a, b)` | Two-argument form only; promotes `int` to `float` |
-| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types. The `key=` argument is honoured over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms (the winning element is returned; ties break toward the first occurrence) |
+| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types. The `key=` argument is honoured over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms (the winning element is returned; ties break toward the first occurrence); any other `key=` is refused rather than dropped |
 | `sum([...])` | Sum of list elements; supports `int` and `float` |
 | `sum(range(EXPR))` | Single-arg `sum` of a single-arg `range` is rewritten to the Gauss closed form `EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0`, yielding an exact value (and `0` for `EXPR <= 0`) instead of a nondet result |
-| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements |
+| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements and homogeneous lists of tuples, whose element types are carried through (as `reversed()` and `list()` also do). `key=` is honoured only where the call constant-folds and is refused otherwise |
 | `any([...])` | List literals only; short-circuit OR logic |
 | `all([...])` | List literals only; short-circuit AND logic |
 | `enumerate(iterable, start=0)` | Tuple unpacking and single-variable forms; optional `start` |
@@ -362,10 +409,14 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `reversed(iter)` | Lowered to an index-based `while` loop in `for` form; `reversed(range(...))` is rewritten to an equivalent forward `range(...)` |
 | `filter(pred, iter)` | Lowered to an index-based `while` loop guarded by `pred` in `for` form |
 | `list()` | Zero-arg constructor lowers to an empty list literal. `list(iterable)` over a list, `range`, or tuple (`list((2, 3))`, `list(t)`) builds a real list; `list("abc")` over a constant string yields a list of single-character strings. `list(bytes)` is rejected with a clean diagnostic (CPython would produce a list of ints). |
-| `isinstance(obj, type)` | Runtime type checking |
+| `isinstance(obj, type)` | Runtime type checking, including over a [dynamically-typed](#dynamic-typing) variable |
 | `float("nan")`, `float("inf")` | Special values (case-insensitive, whitespace-tolerant) |
 | `input()` | Modelled as nondeterministic string, max 256 chars |
 | `print(...)` | Arguments evaluated for side effects; no output produced |
+
+`sum`, `min`, `max` and `sorted` over a **generator expression** keep the
+generator's `if` clauses, so `sum(x for x in xs if x > 2)` filters rather than
+summing every element.
 
 ## Complex Math Module (`cmath`)
 
@@ -510,17 +561,19 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 
 Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants, now covering 1-D, 2-D, and 3-D (n-D) shapes. Some APIs remain stubs for type inference only.
 
-**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for 1-D, 2-D, and 3-D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs; `np.arange(n)`, `np.full(shape, value)`, `np.eye(N[, M])`, `np.identity(n)`, and `np.linspace(start, stop, num)`. **Symbolic shapes** are handled: a nondeterministic dimension such as `np.zeros(n)` with a constrained `n` yields an array of the corresponding length (`len(a) == 0` when `n == 0`)
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for 1-D, 2-D, and 3-D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs; `np.arange([start, ]stop[, step])`, `np.full(shape, value)`, `np.eye(N[, M])`, `np.identity(n)`, and `np.linspace(start, stop, num)`. **Symbolic shapes** are handled: a nondeterministic dimension such as `np.zeros(n)` with a constrained `n` yields an array of the corresponding length (`len(a) == 0` when `n == 0`)
 
 **Indexing**: n-D tuple indexing `a[i, j, k]` on 2-D and 3-D arrays (`a[0, 0, 0]`, `a[1, 1, 1]`); supplying more indices than the array has dimensions is rejected. **Boolean-mask selection** `a[mask]` returns the elements where a same-length boolean array is `True` (an all-`False` mask yields an empty array); a non-boolean or symbolic mask is rejected
 
 **Slicing**: bounded 1-D slicing `a[i:j]` on a list-backed array returns a new `list[T]` (bounded, open-ended `a[i:]`/`a[:j]`, and full-copy `a[:]` forms), with the slice typed as the element type rather than collapsing to a scalar. **2-D slicing** selects whole rows (`a[i, :]`) and whole columns (`a[:, j]`)
 
+**Views**: a slice or selection with literal bounds assigned to a bare name is a real **view** onto `a`'s own buffer, so writes through either side are observed by the other, and `len(v)`, `v.shape` and `v.ndim` report the view's own extent: 1-D slices with any step (`a[1:3]`, `a[::2]`, `a[::-1]`), 2-D row views (`a[0]`, `a[-1]`) and column views (`a[:, j]`), `np.ravel(a)` / `a.ravel()` / `a.flat[i]` (writable, contiguous), and `np.diagonal(a, offset=k)` / `a.diagonal()` (read-only). `np.trace(a)` and `np.fill_diagonal(a, v)` reuse the same offset arithmetic as a reduction and an in-place write. Rebinding the base array detaches its live views. A slice with a symbolic bound still copies
+
 **Shape manipulation**: `np.reshape(a, shape)` (2-D and 3-D targets; an incompatible element count is rejected), `np.flatten(a)` / `np.ravel(a)` (row-major 1-D view), `np.squeeze(a)` (drop unit-length axes; a non-unit axis is rejected), `np.stack([a, b, ...])` (join arrays along a new leading axis, e.g. 1-D → 2-D), `np.concatenate([a, b, ...])` (join along the existing axis), and `a.astype(dtype)` (dtype conversion; `astype` to a complex dtype is rejected)
 
 **Reductions**: `np.sum(a)`, `np.prod(a)`, `np.min(a)`, `np.max(a)`, `np.mean(a)`, `np.std(a)`, `np.var(a)`, `np.argmin(a)`, `np.argmax(a)` over list-backed arrays. The reductions, `transpose` and `flatten` accept arrays built by any constructor (`zeros`, `ones`, `full`, `eye`, `identity`, `linspace`, `arange`), not only `np.array(<literal>)`. The method spellings (`a.sum()`, `a.min()`, `a.prod()`, `a.transpose()`, `a.flatten()`, …) are rewritten to the module form in any expression context — e.g. `assert a.min() == 0` — not just on the right-hand side of an assignment
 
-**Comparison and logical ufuncs**: `np.greater`, `np.greater_equal`, `np.less`, `np.less_equal`, `np.equal`, `np.not_equal`, `np.logical_and`, `np.logical_or`, `np.logical_not`, and `np.where(cond, a, b)` (element-wise select; also the scalar-condition form `np.where(False, 1, 2)`)
+**Comparison and logical ufuncs**: `np.greater`, `np.greater_equal`, `np.less`, `np.less_equal`, `np.equal`, `np.not_equal`, `np.logical_and`, `np.logical_or`, `np.logical_not`, and `np.where(cond, a, b)` (element-wise select; also the scalar-condition form `np.where(False, 1, 2)`). One of these may be **chained** as another numpy call's argument, nested directly or through an intermediate variable, instead of the inner result being silently substituted
 
 **Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
 

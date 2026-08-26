@@ -1519,6 +1519,31 @@ static expr2tc byte_malloc(const expr2tc &size_bytes)
     sideeffect2t::allockind::malloc);
 }
 
+/// The Clang temporaries that carry an __ESBMC_old() value all have
+/// "___ESBMC_old" in their name; that name is the only handle on them, which is
+/// why replace_old_in_expr matches on it too.
+static bool is_old_temp_symbol(const expr2tc &expr)
+{
+  return is_symbol2t(expr) &&
+         id2string(to_symbol2t(expr).thename).find("___ESBMC_old") !=
+           std::string::npos;
+}
+
+static bool reads_old(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (is_old_temp_symbol(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([&found](const expr2tc &op) {
+    if (!found)
+      found = reads_old(op);
+  });
+  return found;
+}
+
 goto_programt code_contractst::generate_checking_wrapper(
   const symbolt &original_func,
   const expr2tc &requires_clause,
@@ -1803,9 +1828,6 @@ goto_programt code_contractst::generate_checking_wrapper(
       location,
       fmt::join(is_fresh_struct_ptrs, ", "));
 
-  materialize_old_snapshots_at_wrapper(
-    old_snapshots, wrapper, id2string(original_func.name), location);
-
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
   auto add_contract_clause = [&wrapper, &location](
@@ -1821,15 +1843,25 @@ goto_programt code_contractst::generate_checking_wrapper(
     t->location.comment(comment);
   };
 
-  // 3. Assume requires clause (after memory allocation for is_fresh)
-  // Also replace __ESBMC_old() references in the requires clause — old snapshots
-  // have already been materialized above (step 2), so replacement is safe here.
-  {
-    expr2tc req = requires_clause;
-    if (!old_snapshots.empty() && !is_nil_expr(req))
-      req = replace_old_in_expr(req, old_snapshots);
-    add_contract_clause(req, ASSUME, "contract requires");
-  }
+  // 3. Assume requires clause (after memory allocation for is_fresh), then
+  // materialize the __ESBMC_old() snapshots under it: __ESBMC_old(arr[i])
+  // dereferences at a symbolic index, and snapshotting it before the
+  // precondition is assumed reads out of bounds for free (#7184). A requires
+  // that reads __ESBMC_old itself cannot precede its own snapshots, so that
+  // case keeps the original order.
+  const bool requires_reads_old = reads_old(requires_clause);
+
+  if (!requires_reads_old)
+    add_contract_clause(requires_clause, ASSUME, "contract requires");
+
+  materialize_old_snapshots_at_wrapper(
+    old_snapshots, wrapper, id2string(original_func.name), location);
+
+  if (requires_reads_old)
+    add_contract_clause(
+      replace_old_in_expr(requires_clause, old_snapshots),
+      ASSUME,
+      "contract requires");
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call).
@@ -2737,12 +2769,11 @@ expr2tc code_contractst::replace_old_in_expr(
   if (is_symbol2t(expr))
   {
     const symbol2t &sym = to_symbol2t(expr);
-    std::string sym_name = id2string(sym.thename);
 
-    // Only process symbols that are related to __ESBMC_old
-    // These temp variables have names containing "___ESBMC_old"
-    // This prevents accidentally replacing __ESBMC_return_value or other symbols
-    if (sym_name.find("___ESBMC_old") != std::string::npos)
+    // Only process symbols that are related to __ESBMC_old.
+    // This prevents accidentally replacing __ESBMC_return_value or other
+    // symbols
+    if (is_old_temp_symbol(expr))
     {
       for (const auto &snapshot : snapshots)
       {
@@ -3499,23 +3530,30 @@ void code_contractst::emit_ptr_deref_assertions(
 
 // ========== Phase 2B: array element assigns compliance ==========
 
-std::vector<code_contractst::arr_elem_snapshot_t>
-code_contractst::materialize_arr_elem_snapshots(
-  const frame_enforcert::classified_assignst &classified,
-  const std::vector<expr2tc> &assigns_targets,
-  goto_programt &wrapper,
-  const locationt &location,
-  const std::string &func_name,
-  const std::map<irep_idt, param_extentt> &param_extents)
+namespace
 {
-  std::vector<arr_elem_snapshot_t> result;
+/// One array the assigns clause names, with every index it names on that array.
+struct arr_elem_groupt
+{
+  expr2tc arr_ptr;
+  type2tc arr_add_type; ///< Result type of the (arr + idx) pointer arithmetic
+  type2tc elem_type;
+  std::vector<expr2tc> indices;
+};
 
-  if (assigns_targets.empty())
-    return result;
+/// Collect the add(arr_sym, idx) entries of \p pointer_targets into one group
+/// per array symbol, in first-seen order. Targets this check does not cover
+/// (complex pointer expressions, void / function / pointer element types) are
+/// dropped here rather than in the caller.
+std::vector<arr_elem_groupt> group_arr_elem_targets(
+  const std::vector<expr2tc> &pointer_targets,
+  const namespacet &ns)
+{
+  std::vector<arr_elem_groupt> groups;
+  std::map<irep_idt, size_t> group_of;
 
-  for (const auto &t : classified.pointer_targets)
+  for (const auto &t : pointer_targets)
   {
-    // Only process pointer-arithmetic targets: add2t(arr_sym, idx_expr)
     if (!is_add2t(t))
       continue;
 
@@ -3534,22 +3572,50 @@ code_contractst::materialize_arr_elem_snapshots(
       idx_expr = add.side_1;
     }
     else
-    {
-      // Complex pointer expression — skip
       continue;
-    }
 
-    // Resolve element type
-    const pointer_type2t &ptr_type = to_pointer_type(arr_ptr->type);
-    type2tc elem_type = ptr_type.subtype;
+    type2tc elem_type = to_pointer_type(arr_ptr->type).subtype;
     if (is_symbol_type(elem_type))
       elem_type = ns.follow(elem_type);
 
-    // Skip void, function, or pointer element types
     if (
       is_empty_type(elem_type) || is_code_type(elem_type) ||
       is_nil_type(elem_type) || is_pointer_type(elem_type))
       continue;
+
+    auto [it, fresh] =
+      group_of.emplace(to_symbol2t(arr_ptr).thename, groups.size());
+    if (fresh)
+      groups.push_back({arr_ptr, add.type, elem_type, {}});
+    groups[it->second].indices.push_back(idx_expr);
+  }
+
+  return groups;
+}
+} // namespace
+
+std::vector<code_contractst::arr_elem_snapshot_t>
+code_contractst::materialize_arr_elem_snapshots(
+  const frame_enforcert::classified_assignst &classified,
+  const std::vector<expr2tc> &assigns_targets,
+  goto_programt &wrapper,
+  const locationt &location,
+  const std::string &func_name,
+  const std::map<irep_idt, param_extentt> &param_extents)
+{
+  std::vector<arr_elem_snapshot_t> result;
+
+  if (assigns_targets.empty())
+    return result;
+
+  // One witness per array, not per target: N per-target assertions carrying the
+  // same exemption set are the same formula modulo witness renaming (#7184).
+  for (const auto &group :
+       group_arr_elem_targets(classified.pointer_targets, ns))
+  {
+    const expr2tc &arr_ptr = group.arr_ptr;
+    const type2tc &elem_type = group.elem_type;
+    const expr2tc &idx_expr = group.indices.front();
 
     type2tc j_type = idx_expr->type;
     std::string cnt_str = std::to_string(arr_elem_snap_counter);
@@ -3636,7 +3702,7 @@ code_contractst::materialize_arr_elem_snapshots(
     expr2tc snapshot_sym = symbol2tc(elem_type, snap_added->id);
 
     // arr + j (pointer arithmetic, same result type as arr + idx)
-    type2tc arr_add_type = add.type;
+    const type2tc &arr_add_type = group.arr_add_type;
     expr2tc arr_plus_j = add2tc(arr_add_type, arr_ptr, witness_j);
     expr2tc arr_at_j = dereference2tc(elem_type, arr_plus_j);
 
@@ -3654,7 +3720,7 @@ code_contractst::materialize_arr_elem_snapshots(
     entry.arr_ptr = arr_ptr;
     entry.arr_add_type = arr_add_type;
     entry.elem_type = elem_type;
-    entry.declared_idx = idx_expr;
+    entry.declared_indices = group.indices;
     entry.witness_idx = witness_j;
     entry.snapshot_sym = snapshot_sym;
     result.push_back(entry);
@@ -3677,10 +3743,15 @@ void code_contractst::emit_arr_elem_assertions(
       add2tc(snap.arr_add_type, snap.arr_ptr, snap.witness_idx);
     expr2tc arr_at_j_after = dereference2tc(snap.elem_type, arr_plus_j);
 
-    // Guard: (j == declared_idx) || (arr[j] == snap)
-    expr2tc eq_idx = equality2tc(snap.witness_idx, snap.declared_idx);
-    expr2tc eq_val = equality2tc(arr_at_j_after, snap.snapshot_sym);
-    expr2tc guard = or2tc(eq_idx, eq_val);
+    // Guard: arr[j] == snap, excused at every index the clause named.
+    // Compare the addresses rather than the index values: the indices of one
+    // clause need not share a type, and narrowing them to the witness's type
+    // could make a wide index alias a witnessed element and excuse it.
+    expr2tc guard = equality2tc(arr_at_j_after, snap.snapshot_sym);
+    for (const expr2tc &idx : snap.declared_indices)
+      guard = or2tc(
+        guard,
+        equality2tc(arr_plus_j, add2tc(snap.arr_add_type, snap.arr_ptr, idx)));
 
     goto_programt::targett t = wrapper.add_instruction(ASSERT);
     t->guard = guard;

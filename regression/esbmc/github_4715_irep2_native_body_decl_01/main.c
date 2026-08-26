@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body IREP2-native code_decl2t dispatcher (W1-loc
+// Exercises the IREP2-native code_decl2t dispatcher (W1-loc
 // spike Phase C, esbmc/esbmc#4715): compute()'s body declares trivial-type
 // locals with side-effect-free initializers, so goto_convert consumes each
 // code_decl2t natively (DECL + side-effect-free ASSIGN, no legacy round-trip)

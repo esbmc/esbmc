@@ -347,6 +347,19 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
+/* Once per type: this fires on every access, so a program that reads a packed
+ * struct in a loop otherwise buries its own output. */
+static void warn_unchecked_packed_alignment(const type2tc &structure)
+{
+  static std::set<irep_idt> reported;
+  irep_idt name = struct_union_name(structure);
+  if (reported.insert(name).second)
+    log_warning(
+      "not checking alignment for access to packed {} {}",
+      get_type_id(*structure),
+      name.as_string());
+}
+
 static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 {
   if (!is_member2t(expr))
@@ -495,10 +508,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
       !is_aligned_member(expr, ns))
     {
-      log_warning(
-        "not checking alignment for access to packed {} {}",
-        get_type_id(*structure->type),
-        struct_union_name(structure->type).as_string());
+      warn_unchecked_packed_alignment(structure->type);
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
@@ -2707,16 +2717,19 @@ void dereferencet::check_data_obj_access(
 
   BigInt data_sz = type_byte_size_bits(value->type);
   BigInt access_sz = type_byte_size_bits(type);
-  expr2tc data_sz_e = gen_long(offset->type, data_sz);
-  expr2tc access_sz_e = gen_long(offset->type, access_sz);
 
   // Only erroneous thing we check for right now is that the offset is out of
   // bounds, misaligned access happens elsewhere. The highest byte read is at
-  // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
-  // Lower bound not checked, instead we just treat everything as unsigned,
-  // which has the same effect.
-  expr2tc add = add2tc(access_sz_e->type, offset, access_sz_e);
-  expr2tc gt = greaterthan2tc(add, data_sz_e);
+  // offset+access_sz-1, so the access fails if offset+access_sz > data_sz.
+  // The lower bound is not checked separately: an offset below the object
+  // arrives here as a huge unsigned value. That relies on the sum not
+  // wrapping, so it is rearranged into offset > data_sz-access_sz, which is
+  // equivalent over the integers and cannot overflow. Adding instead let every
+  // offset in [-access_sz, 0) wrap back into range (R35).
+  expr2tc gt =
+    access_sz > data_sz
+      ? gen_true_expr()
+      : greaterthan2tc(offset, gen_long(offset->type, data_sz - access_sz));
 
   if (!options.get_bool_option("no-bounds-check"))
   {

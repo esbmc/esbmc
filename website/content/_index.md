@@ -17,6 +17,7 @@ requests landed in early August — Python function contracts, a user-facing
 {{< card link="https://github.com/esbmc/esbmc/releases/latest" title="Latest Release" icon="github" >}}
 {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/vscode-esbmc" title="VSCode Extension" icon="external-link" >}}
+{{< card link="https://github.com/esbmc/agent-marketplace" title="Claude Code Plugin" icon="external-link" >}}
 {{< card link="https://esbmc.github.io/esbmc-ai" title="ESBMC-AI" icon="external-link" >}}
 {{< /cards >}}
 

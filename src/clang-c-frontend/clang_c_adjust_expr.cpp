@@ -68,7 +68,7 @@ void clang_c_adjust::adjust_symbol(symbolt &symbol)
   if (
     symbol.get_type().is_code() &&
     has_prefix(symbol.id.as_string(), "c:@F@main"))
-    adjust_argc_argv(symbol);
+    declare_argc_argv(context, symbol);
 
   {
     typet t = symbol.get_type();
@@ -87,6 +87,18 @@ static bool is_shift_id(const irep_idt &id)
 
 void clang_c_adjust::adjust_expr(exprt &expr)
 {
+  // A derived->base conversion the frontend could not route through a
+  // "@base@" component; the displacement is only computable once the layout
+  // is padded, which is here. See clang_c_convertert::get_cast_expr (#7025).
+  const irep_idt dtb_base = expr.get("#derived_to_base");
+  if (!dtb_base.empty())
+  {
+    expr.remove("#derived_to_base");
+    adjust_expr(expr);
+    adjust_derived_to_base(expr, dtb_base);
+    return;
+  }
+
   adjust_type(expr.type());
 
   if (expr.id() == "sideeffect")
@@ -187,15 +199,11 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   {
     adjust_ptr_mem(expr);
   }
-  else if (expr.id() == "typecast" && expr.get_bool("#base_to_derived"))
-  {
-    adjust_operands(expr);
-    adjust_base_to_derived(expr);
-  }
   else
   {
     // Just check operands of everything else
     adjust_operands(expr);
+    adjust_base_to_derived(expr);
   }
 }
 
@@ -286,8 +294,194 @@ static bool base_subobject_offset(
   return false;
 }
 
+// get_base_components_methods copies a base's components into the derived
+// struct -- and stamps each with its declaring class -- only for the flattened
+// layout it falls back to when the hierarchy contains a virtual base.
+static bool uses_flattened_layout(const namespacet &ns, const typet &derived)
+{
+  const typet &d = ns.follow(derived);
+  if (!d.is_struct())
+    return false;
+
+  for (const auto &c : to_struct_type(d).components())
+    if (!c.get("#base_owner").empty())
+      return true;
+  return false;
+}
+
+// How far `c`, a component of the base, has moved in the derived struct.
+// Nothing if the derived has no such member: matching is on type and on which
+// class declared the member, not just on the name, because
+// is_duplicate_component merges by name alone -- two bases with a same-named
+// member share one slot, and a name-only match would confidently land in the
+// other base's storage. A member the base itself declares is owned by it.
+static std::optional<BigInt> member_delta(
+  const namespacet &ns,
+  const struct_typet &ds,
+  const type2tc &d2,
+  const type2tc &b2,
+  const struct_typet::componentt &c,
+  const irep_idt &base_id)
+{
+  const struct_typet::componentt &dc = ds.get_component(c.get_name());
+  const irep_idt owner =
+    c.get("#base_owner").empty() ? base_id : c.get("#base_owner");
+  if (dc.is_nil() || dc.type() != c.type() || dc.get("#base_owner") != owner)
+    return std::nullopt;
+
+  return member_offset(d2, c.get_name(), &ns) -
+         member_offset(b2, c.get_name(), &ns);
+}
+
+// Displacement of `base_id`'s members inside the flattened `derived` layout,
+// which get_base_components_methods produces for any hierarchy containing a
+// virtual base. Every member of the base must appear in the derived struct at
+// one common delta; a virtual base shared by two sibling bases has no such
+// delta, so the caller keeps the unadjusted pointer. Padding is already in
+// place here: adjust() completes every type symbol before any value.
+static bool flattened_base_offset(
+  const namespacet &ns,
+  const typet &derived,
+  const irep_idt &base_id,
+  BigInt &offset)
+{
+  const typet &d = ns.follow(derived);
+  const symbolt *base_sym = ns.lookup(base_id);
+  if (!d.is_struct() || !base_sym)
+    return false;
+
+  const typet &b = ns.follow(base_sym->get_type());
+  if (!b.is_struct())
+    return false;
+
+  const struct_typet &ds = to_struct_type(d);
+  const struct_typet &bs = to_struct_type(b);
+
+  // A base that keeps the nested layout reaches its own bases through an
+  // "@base@" component, yet get_base_components_methods *also* copies those
+  // ancestors' fields flat into the derived struct. The two copies alias only
+  // at displacement zero, which is what every other access assumes (the
+  // <ios>/<istream>/<ostream> models rely on it), so leave such a base alone.
+  for (const auto &c : bs.components())
+    if (c.get_bool("is_base_subobject"))
+      return false;
+
+  const type2tc d2 = migrate_type(ds);
+  const type2tc b2 = migrate_type(bs);
+
+  bool seen = false;
+  BigInt delta = 0;
+  for (const auto &c : bs.components())
+  {
+    if (c.get_is_padding() || c.get_is_unnamed_bitfield())
+      continue;
+
+    const std::optional<BigInt> d = member_delta(ns, ds, d2, b2, c, base_id);
+    if (!d)
+      return false;
+    if (seen && *d != delta)
+      return false;
+    delta = *d;
+    seen = true;
+  }
+
+  if (!seen || delta < 0)
+    return false;
+
+  offset = delta;
+  return true;
+}
+
+// Displacement of `base_id`'s subobject inside `derived`, from ESBMC's own
+// layout -- the only one the base-offset paths may use. Pick the oracle by
+// layout, never by whichever answers first: a flattened struct also carries
+// the "@base@" components it copied out of a nested-layout base, and walking
+// those lands on storage duplicated at displacement zero (the <ios> models
+// depend on that aliasing).
+static bool base_displacement(
+  const namespacet &ns,
+  const typet &derived,
+  const irep_idt &base_id,
+  BigInt &offset)
+{
+  return uses_flattened_layout(ns, derived)
+           ? flattened_base_offset(ns, derived, base_id, offset)
+           : base_subobject_offset(ns, derived, base_id, offset);
+}
+
+static bool has_side_effect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
+// Displace a derived->base pointer onto the base subobject under the legacy
+// flattened layout. See the marker set in clang_c_convertert::get_cast_expr
+// (#7025).
+void clang_c_adjust::adjust_derived_to_base(
+  exprt &expr,
+  const irep_idt &base_id)
+{
+  // Pointer form: (Base *)derived_ptr. Value form: the derived lvalue itself,
+  // which clang leaves in place for an implicit object argument.
+  const bool ptr_mode = expr.type().is_pointer();
+  const typet derived = ptr_mode ? expr.type().subtype() : expr.type();
+
+  BigInt offset = 0;
+  if (!base_displacement(ns, derived, base_id, offset) || offset == 0)
+    return;
+
+  // The null guard below names the operand twice, and side effects are not
+  // lifted out until remove_sideeffects; displacing `f()` would call f twice.
+  // Decline rather than duplicate.
+  if (has_side_effect(expr))
+  {
+    log_debug(
+      "c++",
+      "derived-to-base displacement onto {} skipped: side-effecting operand",
+      base_id);
+    return;
+  }
+
+  const typet base_ptr = pointer_typet(symbol_typet(base_id));
+  exprt src = expr;
+  if (!ptr_mode)
+    src = address_of_exprt(expr);
+
+  typet char_ptr = pointer_typet(char_type());
+  exprt adjusted = src;
+  gen_typecast(ns, adjusted, char_ptr);
+  // plus_exprt leaves the node's type nil, so set it before casting back.
+  adjusted = plus_exprt(adjusted, from_integer(offset, index_type()));
+  adjusted.type() = char_ptr;
+  gen_typecast(ns, adjusted, base_ptr);
+
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. A value-form operand is an lvalue
+  // and can never be null, so only the pointer form needs the guard.
+  if (ptr_mode)
+  {
+    exprt guarded = if_exprt(
+      equality_exprt(src, gen_zero(src.type())), gen_zero(base_ptr), adjusted);
+    guarded.location() = expr.location();
+    expr = guarded;
+    return;
+  }
+
+  // dereference_exprt takes the pointer type and uses its subtype.
+  dereference_exprt deref(adjusted, base_ptr);
+  deref.location() = expr.location();
+  expr = deref;
+}
+
 void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 {
+  if (!expr.get_bool("#base_to_derived"))
+    return;
   expr.remove("#base_to_derived");
 
   if (expr.operands().size() != 1)
@@ -301,14 +495,16 @@ void clang_c_adjust::adjust_base_to_derived(exprt &expr)
 
   const irep_idt base_id = src.type().subtype().identifier();
   BigInt offset = 0;
-  if (!base_subobject_offset(ns, expr.type().subtype(), base_id, offset))
+  if (!base_displacement(ns, expr.type().subtype(), base_id, offset))
   {
-    // The hierarchy kept the legacy flattened layout, so there is no @base@
-    // component to undo. Left as a plain typecast the result keeps pointing
-    // at the base subobject, which is only exact when the two coincide.
+    // Neither layout places the base at a single fixed displacement -- a
+    // virtual base shared by two sibling bases has none. Left as a plain
+    // typecast the result keeps pointing at the base subobject, which is only
+    // exact when the two coincide.
     log_debug(
       "c++",
-      "base-to-derived cast to {}: no @base@ path to {}, left unadjusted",
+      "base-to-derived cast to {} left unadjusted: no fixed displacement for "
+      "{} in ESBMC's layout",
       expr.type().subtype().identifier(),
       base_id);
     return;
@@ -1799,7 +1995,7 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
   gen_typecast_bool(ns, expr.op1());
 }
 
-void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
+void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 {
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.get_type()).arguments();

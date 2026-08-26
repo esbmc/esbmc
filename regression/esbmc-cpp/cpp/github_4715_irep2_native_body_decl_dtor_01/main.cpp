@@ -1,6 +1,6 @@
 // __ESBMC_assert is a built-in intrinsic; no include needed.
 
-// W1-loc Phase C (esbmc/esbmc#4715): under --irep2-native-body a declaration
+// W1-loc Phase C (esbmc/esbmc#4715): under native conversion a declaration
 // whose type has a destructor (`T t(base);`) or whose initializer needs
 // lowering (`T u = T(base + 5);`) is delegated to the legacy convert_decl,
 // rather than forcing a whole-function fallback, so the statements around it --

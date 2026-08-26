@@ -1856,6 +1856,29 @@ TEST_CASE("int->bool->int does not fold", "[typecast][bool]")
 
 // TODO: Tests that should be valid but... not yet!
 
+TEST_CASE("Boolean constants compare: true != false", "[relation][bool]")
+{
+  const expr2tc expr = notequal2tc(gen_true_expr(), gen_false_expr());
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value);
+}
+TEST_CASE("Boolean constants compare: true == false", "[relation][bool]")
+{
+  const expr2tc expr = equality2tc(gen_true_expr(), gen_false_expr());
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(!to_constant_bool2t(result).value);
+}
+TEST_CASE("A symbolic boolean comparison is left alone", "[relation][bool]")
+{
+  const expr2tc b = symbol2tc(get_bool_type(), "b");
+  const expr2tc expr = notequal2tc(b, gen_false_expr());
+  // simplify() returns nil when it changes nothing.
+  const expr2tc result = expr->simplify();
+  REQUIRE((is_nil_expr(result) || !is_constant_bool2t(result)));
+}
+
 #if 0
 TEST_CASE("Division simplification: 0 / x = 0", "[arithmetic][div]")
 {

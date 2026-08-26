@@ -59,11 +59,15 @@ void optionst::cmdline(cmdlinet &cmds)
     const auto option_name = it.first;
     if (cmds.isset(option_name.c_str()) && !it.second.defaulted())
     {
+      std::vector<std::string> &values = option_values[option_name];
       for (const auto &value : cmds.get_values(option_name.c_str()))
+      {
+        values.push_back(value);
         if (value.empty())
           set_option(option_name, true);
         else
           set_option(option_name, value);
+      }
     }
   }
 }

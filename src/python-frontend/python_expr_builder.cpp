@@ -246,6 +246,14 @@ exprt build_sub(const exprt &a, const exprt &b, const typet &t)
     });
 }
 
+exprt build_mul(const exprt &a, const exprt &b, const typet &t)
+{
+  return migrate_typed_binary(
+    a, b, t, [](const type2tc &ty, const expr2tc &x, const expr2tc &y) {
+      return mul2tc(ty, x, y);
+    });
+}
+
 exprt build_mod(const exprt &a, const exprt &b, const typet &t)
 {
   return migrate_typed_binary(

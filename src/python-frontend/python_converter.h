@@ -125,6 +125,12 @@ public:
     const nlohmann::json &element);
 
   std::string get_op(const std::string &op, const typet &type) const;
+  /// `Callable[[A, B], R]` as the function-pointer type `R (*)(A, B)`; the
+  /// generic `Callable` pointer when the signature is not spelled.
+  typet get_callable_type(
+    const nlohmann::json &annotation,
+    const nlohmann::json &stmt);
+
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
@@ -356,6 +362,20 @@ private:
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
 
+  /// The symbol for @p name in an enclosing function's scope, or null. Python
+  /// resolves a name a nested function only reads or mutates against the
+  /// enclosing scope; only a bare-name assignment binds a new local.
+  symbolt *find_symbol_in_enclosing_scopes(const std::string &name);
+
+  symbolt *resolve_subscript_base_symbol(
+    const nlohmann::json &target,
+    const std::string &name,
+    symbolt *found);
+
+  /// Stand the static bounds check down for a list rebound by `xs += [...]`,
+  /// whose declaring literal no longer describes it.
+  void mark_augassign_list_escaped(const exprt &lhs, const exprt &rhs);
+
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
@@ -534,6 +554,8 @@ private:
 
   bool is_coverage_mode() const;
 
+  bool is_assert_fold_disabled() const;
+
   bool is_pytest_generation_mode() const;
 
   bool is_model_file(const nlohmann::json &node) const;
@@ -557,7 +579,12 @@ private:
   // large function's own decision count from growing further; see
   // converter_funcall.cpp for the full rationale.
   std::optional<exprt>
-  try_get_numpy_pointer_view_len(const nlohmann::json &element) const;
+  try_get_numpy_pointer_view_len(const nlohmann::json &element);
+  std::optional<exprt>
+  try_get_numpy_named_pointer_view_len(const nlohmann::json &arg) const;
+  std::optional<exprt> try_get_numpy_subscript_pointer_view_len(
+    const nlohmann::json &arg,
+    const nlohmann::json &element);
 
   // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
   // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
@@ -647,6 +674,30 @@ private:
     const symbol_id &id,
     const locationt &location,
     bool is_keyword_only);
+
+  /// Give the nested function @p id its own static cell for each free variable
+  /// that resolves to a local of the enclosing function, and return the
+  /// statements that bind those cells where the `def` executes.
+  ///
+  /// A nested `def` becomes a standalone GOTO function, so a free variable it
+  /// reads resolves (converter_symbols.cpp's scope walk) to the enclosing
+  /// function's own local. Once the closure outlives that frame the read is
+  /// unconstrained, so `make_adder(5)(3) == 8` fails (#6256). The cell is
+  /// static, so it survives the frame; the binding poisons it with a nondet
+  /// value when a second instantiation disagrees, since a Python function
+  /// value is one static symbol here (#6640) and cannot hold per-closure state.
+  code_blockt create_capture_cells(
+    const nlohmann::json &function_node,
+    const symbol_id &id,
+    const locationt &location);
+
+  /// Cell bindings produced by the last nested `get_function_definition`,
+  /// drained by get_block where the `def` statement sits.
+  code_blockt pending_captures_;
+
+  /// The FunctionDef currently being converted, seen from a nested def as its
+  /// enclosing scope. Null at module level.
+  const nlohmann::json *enclosing_function_node_ = nullptr;
 
   /**
    * @brief Infer a numpy-array parameter's concrete array type by scanning
@@ -837,6 +888,21 @@ private:
     code_typet::argumentt &param_arg,
     const exprt &default_expr);
 
+  /// Refines one unannotated parameter to the list model where warranted.
+  void refine_any_param_to_list(
+    code_typet::argumentt &param_arg,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index);
+
+  /// Whether an unannotated parameter should be refined to the list model.
+  bool param_is_list_like(
+    const std::string &param_name,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index,
+    typet &elem_type) const;
+
   /// Records a list-annotated parameter's element type for subscript reads.
   void seed_list_param_element_type(
     const nlohmann::json &element,
@@ -956,6 +1022,13 @@ private:
 
   bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
 
+  // True for a transpose()/reshape()/ravel()/diagonal() Attribute-call node
+  // (module or method form), independent of whether its root array name can
+  // be resolved. Shared by is_numpy_view_copy_expr and
+  // root_name_from_numpy_view_copy_expr so the view_functions set and the
+  // Call/Attribute shape check live in one place.
+  bool is_numpy_view_copy_call_node(const nlohmann::json &node) const;
+
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
 
   bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
@@ -975,7 +1048,87 @@ private:
     const nlohmann::json &ast_node,
     const std::set<std::string> &container_types);
 
+  nlohmann::json
+  get_ravel_receiver_node(const nlohmann::json &ravel_call) const;
   bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
+  nlohmann::json
+  flat_subscript_receiver_node(const nlohmann::json &subscript_node) const;
+  bool try_handle_flat_index_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+  std::optional<exprt> try_build_flat_index_read(const nlohmann::json &element);
+
+  // ExpressionType::SUBSCRIPT's handler, split out of get_expr into its own
+  // function plus these sub-dispatch helpers -- each phase of a[...]'s
+  // handling (base resolution, dict/tuple pointer unwrap, and one dispatch
+  // per index shape: tuple, dict, bool-mask-rows, multi-axis tuple, fancy
+  // list, bool-mask variable, __getitem__) is independently a return early
+  // or fall-through step, so extracting them keeps every one individually
+  // simple instead of one function accumulating get_expr's own decision
+  // count as ADR-NP-003 etapa 2 adds more index shapes.
+  exprt handle_subscript_expr(const nlohmann::json &element);
+  std::optional<exprt>
+  resolve_subscript_base(const nlohmann::json &element, exprt &array);
+  std::optional<exprt> try_fold_constant_string_slice(
+    const nlohmann::json &element,
+    const exprt &array);
+  void unwrap_subscript_base_types(
+    exprt &array,
+    typet &array_type,
+    typet &array_type_for_dict,
+    bool &array_is_dict_pointer,
+    const nlohmann::json &element);
+  std::optional<exprt> try_dispatch_tuple_subscript(
+    const exprt &array,
+    const typet &array_type,
+    const nlohmann::json &slice,
+    const nlohmann::json &element);
+  std::optional<exprt> try_dispatch_dict_subscript(
+    exprt &array,
+    const typet &array_type_for_dict,
+    bool array_is_dict_pointer,
+    const nlohmann::json &slice);
+  bool subscript_targets_list_model(
+    const typet &array_type,
+    const typet &list_type) const;
+  std::optional<exprt> try_dispatch_multidim_tuple_index(
+    const exprt &array,
+    const typet &array_type,
+    const nlohmann::json &slice,
+    const nlohmann::json &element,
+    bool tuple_index_targets_list_model,
+    const typet &list_type);
+  std::optional<exprt> try_dispatch_multidim_tuple_axes(
+    const exprt &array,
+    const nlohmann::json &element,
+    const std::vector<nlohmann::json> &idx_nodes);
+  std::optional<exprt> try_dispatch_chained_axis_index(
+    const exprt &array,
+    const nlohmann::json &element,
+    const std::vector<nlohmann::json> &idx_nodes,
+    const typet &list_type);
+  std::optional<exprt> try_dispatch_fancy_list_index(
+    const exprt &array,
+    const nlohmann::json &slice,
+    const nlohmann::json &element,
+    bool tuple_index_targets_list_model);
+  std::optional<exprt> try_dispatch_bool_mask_variable_index(
+    const exprt &array,
+    const typet &array_type,
+    const nlohmann::json &slice,
+    const nlohmann::json &element,
+    bool tuple_index_targets_list_model);
+  std::optional<exprt> try_dispatch_fancy_index_via_list_variable(
+    const exprt &array,
+    const nlohmann::json &slice,
+    const nlohmann::json &element);
+  std::optional<exprt> try_dispatch_dunder_getitem(
+    const nlohmann::json &element,
+    const nlohmann::json &slice);
+  void reject_scalar_subscript(
+    const typet &array_type,
+    const nlohmann::json &element) const;
 
   std::optional<nlohmann::json>
   select_return_value_for_call(const nlohmann::json &call_node) const;
@@ -989,6 +1142,9 @@ private:
     const nlohmann::json &call_node) const;
 
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
+  void reject_unsafe_numpy_view_write_to(const std::string &root_id);
+
+  void reject_numpy_view_slice_assignment(const nlohmann::json &target);
 
   /// Raise Python's TypeError for item assignment on an immutable container,
   /// reporting whether `container_type` is one.
@@ -1003,6 +1159,22 @@ private:
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
 
+  bool record_numpy_view_copy_from_returned_argument(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node);
+
+  void clear_numpy_array_storage_aliases_for(const std::string &symbol_id);
+
+  void bind_numpy_array_storage_alias(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  symbolt *resolve_numpy_array_storage_alias(symbolt *symbol) const;
+
+  std::string
+  resolve_numpy_array_storage_alias_id(const std::string &symbol_id) const;
+
   /// Detach every live pointer-backed view (ADR-NP-003 etapa 2) of
   /// @p rebound_id from its storage, right before a plain `Name = ...`
   /// assignment rebinds that symbol to a new value. Real NumPy rebind
@@ -1014,8 +1186,21 @@ private:
     const locationt &location,
     codet &target_block);
 
+  bool should_rebuild_cached_numpy_row_subscript_rhs(
+    const nlohmann::json &rhs_node) const;
+
+  bool is_tracked_2d_numpy_array_symbol(const std::string &source_id) const;
+
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+
+  // get_var_assign's RHS preprocessing step: rewrites `a.T` into
+  // `np.transpose(a)` (numpy's own Attribute-shaped transpose sugar, with
+  // no method-call node to reach rewrite_numpy_method_call_node through),
+  // or else defers to rewrite_numpy_method_call_node for any other numpy
+  // method-call RHS. Split out to keep get_var_assign's own decision count
+  // from growing as more special-cased RHS rewrites land there.
+  nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node) const;
 
   // Classifies a Call node as a numpy method call: (is_a_method_call,
   // method_name, method_base, is_a_supported_copy_method,
@@ -1115,6 +1300,15 @@ private:
   // =========================================================================
   // RHS processing helper methods
   // =========================================================================
+
+  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
+  /// reordering builtin (sorted/reversed/list), else nullptr.
+  static const nlohmann::json *
+  reordering_builtin_arg(const nlohmann::json &ast_node);
+
+  void copy_elem_types_from_reordering_builtin(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_id);
 
   /**
    * @brief Handles function call RHS assignment.
@@ -1475,14 +1669,29 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
-  // A pointer-backed numpy view's element count (ADR-NP-003 etapa 2, 1-D
-  // slice views): __ESBMC_get_object_size on a pointer reports the base
-  // object's remaining size from that offset, not the view's own logical
-  // length (which may be shorter, e.g. an empty view still points at a
-  // valid position), so len() looks the value up here instead for a
-  // tracked view symbol -- see list_access.cpp's handle_range_slice and
+  std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
+  // A pointer-backed numpy view's logical shape (ADR-NP-003 etapa 2 scalar
+  // strided views: 1-D unit-stride slices, 2-D row views, column views,
+  // stepped/reversed 1-D slices, diagonal views, ravel/.flat). `length` is
+  // the number of logical elements: __ESBMC_get_object_size on the pointer
+  // reports the base object's remaining size from that offset, not this
+  // (which may be shorter -- e.g. an empty view still points at a valid
+  // position), so len() looks the value up here instead for a tracked view
+  // symbol. `stride` is the step, in elements, between consecutive logical
+  // indices (1 for unit-stride slices and row views, num_cols for column
+  // views, num_cols+1 for the main diagonal, an explicit step for a
+  // stepped slice). `readonly` rejects writing through the view (the
+  // diagonal view NumPy itself treats as read-only); false for every other
+  // kind. See list_access.cpp's handle_range_slice/handle_index_access and
   // converter_funcall.cpp's len() dispatch.
-  std::unordered_map<std::string, std::size_t> numpy_pointer_view_lengths_;
+  struct numpy_scalar_pointer_view_infot
+  {
+    std::size_t length;
+    long long stride;
+    bool readonly;
+  };
+  std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
+    numpy_pointer_view_info_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

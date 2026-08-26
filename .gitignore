@@ -37,5 +37,9 @@ src/CPackSourceConfig.cmake
 *.dSYM/
 regression/**/test
 
+# CTest's output directory, created wherever ctest is invoked. Committing one
+# under regression/<suite>/ turns it into a phantom always-failing test case.
+**/Testing/
+
 # Generated doxygen API reference (see .config/Doxyfile)
 docs/html/
