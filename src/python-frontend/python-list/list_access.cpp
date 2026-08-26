@@ -88,7 +88,10 @@ exprt python_list::build_list_at_call(
   // execution step purely to prove what the index's type already guarantees.
   const bool index_may_be_negative = !index.type().is_unsignedbv();
 
-  if (!index_may_be_negative)
+  // A discarded type probe only reads this call's type, and the real RHS
+  // build re-emits the whole check; normalizing here would emit a second
+  // __ESBMC_list_size call and IndexError guard per subscript assignment.
+  if (!index_may_be_negative || converter_.in_rhs_type_probe_)
   {
     exprt index_as_size = build_typecast(index, size_type());
     exprt list_at_call = build_call_expr(
