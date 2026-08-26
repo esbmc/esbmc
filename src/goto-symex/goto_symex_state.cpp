@@ -107,8 +107,9 @@ static constexpr unsigned multidim_propagation_bound = 256;
 static std::optional<BigInt> array_element_count(const type2tc &t)
 {
   const array_type2t &arr = to_array_type(t);
-  if (arr.size_is_infinite || is_nil_expr(arr.array_size) ||
-      !is_constant_int2t(arr.array_size))
+  if (
+    arr.size_is_infinite || is_nil_expr(arr.array_size) ||
+    !is_constant_int2t(arr.array_size))
     return {};
 
   BigInt n = to_constant_int2t(arr.array_size).value;
