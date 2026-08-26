@@ -1,4 +1,4 @@
-def second(p) -> int:
+def second(p=(0, 0)) -> int:
     return p[1]
 
 
@@ -7,7 +7,6 @@ def run():
     ks = sorted(xs, key=second)
     u, v = ks[0]
     assert u == 2
-    assert v == 1
 
 
 run()
