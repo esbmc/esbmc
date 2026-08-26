@@ -318,6 +318,12 @@ dynamic_type_handler::tagged_symbol_id(const std::string &name) const
   return alias != aliases_.end() ? alias->second : tag_id;
 }
 
+bool dynamic_type_handler::tagged_binop_result_may_be_tagged(
+  const std::string &op) const
+{
+  return op == "Add";
+}
+
 std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   symbolt &tag_symbol,
   const exprt &rhs,
@@ -623,16 +629,12 @@ exprt dynamic_type_handler::handle_arithmetic(
   // arithmetic cannot, since it needs the concrete type to pick an operation.
   if (lhs_tagged && rhs_tagged)
   {
-    // '+' could be str concatenation, which needs a runtime size on both
-    // sides -- left unsupported. '-'/'/' never apply to str in Python.
+    if (op == "Add")
+      return build_add_tagged(lhs, rhs);
     if (op == "Sub")
       return build_sub_tagged(lhs, rhs);
-    if (op == "Div")
-      return build_div_tagged(lhs, rhs, location);
-    throw std::runtime_error(
-      "'" + op +
-      "' between two dynamically-typed variables directly is "
-      "not yet supported");
+    assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
+    return build_div_tagged(lhs, rhs, location);
   }
 
   if (op == "Add")
@@ -646,6 +648,40 @@ exprt dynamic_type_handler::handle_arithmetic(
   assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
   return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
                     : build_div_literal(rhs, lhs, false, location);
+}
+
+exprt dynamic_type_handler::build_add_tagged(const exprt &lhs, const exprt &rhs)
+{
+  const symbolt *add_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_obj_dyn");
+  assert(add_func && "__python_scalar_add_obj_dyn not found in symbol table");
+
+  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
+  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
+  exprt str_type_id =
+    type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
+  exprt lhs_is_num = build_typecast(
+    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type()),
+    int_type());
+  exprt rhs_is_num = build_typecast(
+    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type()),
+    int_type());
+  exprt lhs_is_str =
+    build_typecast(build_equal(lhs_type_id, str_type_id), int_type());
+  exprt rhs_is_str =
+    build_typecast(build_equal(rhs_type_id, str_type_id), int_type());
+
+  return build_call_expr(
+    *add_func,
+    type_handler_.get_tagged_object_type(),
+    {build_address_of(lhs),
+     lhs_is_num,
+     lhs_is_str,
+     build_address_of(rhs),
+     rhs_is_num,
+     rhs_is_str,
+     type_handler_.tagged_scalar_type_id(long_long_int_type()),
+     str_type_id});
 }
 
 exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)

@@ -291,7 +291,9 @@ inline bool simplify(expr2tc &expr)
   expr2tc tmp = expr->simplify();
   if (!is_nil_expr(tmp))
   {
-    simplification_check::verify_rewrite(expr, tmp);
+    // No verify_rewrite() here: simplify() now checks each rewrite where it is
+    // made, so a whole-expression claim would restate what is already proved,
+    // in the widest and most decline-prone query of the run (esbmc/esbmc#7260).
     expr = tmp;
     return true;
   }
@@ -414,6 +416,8 @@ distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
       // store nil into the member slot — keep new_op so the lane
       // expression survives unsimplified for the SMT layer.
       auto folded = new_op->do_simplify();
+      if (!is_nil_expr(folded))
+        simplification_check::verify_rewrite(new_op, folded);
       datatype_member = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
