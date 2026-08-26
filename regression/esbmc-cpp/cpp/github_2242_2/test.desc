@@ -1,4 +1,5 @@
 CORE
 main.cpp
 --no-abstracted-cpp-includes
+REQUIRES host_cxx_headers
 ^VERIFICATION FAILED$

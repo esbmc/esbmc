@@ -1,4 +1,5 @@
 CORE
 main.cpp
 --no-library --unwind 10 --no-unwinding-assertions  --data-races-check --timeout 900
+REQUIRES host_cxx_headers
 ^VERIFICATION SUCCESSFUL$
