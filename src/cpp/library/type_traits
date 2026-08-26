@@ -1256,8 +1256,8 @@ struct remove_all_extents<T[]>
 {
   typedef typename remove_all_extents<T>::type type;
 };
-template <class T, size_t N>
-struct remove_all_extents<T[N]>
+template <class T, size_t _Np>
+struct remove_all_extents<T[_Np]>
 {
   typedef typename remove_all_extents<T>::type type;
 };
