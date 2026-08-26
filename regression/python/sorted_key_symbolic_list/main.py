@@ -3,12 +3,11 @@ def neg(x: int) -> int:
 
 
 def run(a: int):
-    xs = [a, a + 1]
-    # key=neg reverses the order, so ks[0] is the larger value. The runtime
-    # sort model has no key parameter, so this must be refused rather than
-    # sorted by natural order and reported as a spurious counterexample.
+    xs = [a, a + 1, a + 2]
     ks = sorted(xs, key=neg)
-    assert ks[0] == a + 1
+    assert ks[0] == a + 2
+    assert ks[2] == a
+    assert xs[0] == a
 
 
 run(3)
