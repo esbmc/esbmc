@@ -185,11 +185,13 @@ bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
   return bound_ptr_param_offset(target, bound_vars);
 }
 
-static void
-lift_old_over_bound_index(exprt &expr, const std::set<irep_idt> &bound_vars)
+static void lift_old_over_bound_index(
+  exprt &expr,
+  const std::set<irep_idt> &bound_vars,
+  const namespacet &ns)
 {
   Forall_operands (it, expr)
-    lift_old_over_bound_index(*it, bound_vars);
+    lift_old_over_bound_index(*it, bound_vars, ns);
 
   exprt *call = old_raw_call_under(expr);
   if (!call)
@@ -219,8 +221,15 @@ lift_old_over_bound_index(exprt &expr, const std::set<irep_idt> &bound_vars)
     whole_snapshot.op1().operands()[0] = address_of_exprt(base);
 
     // target->type() is the *pointer* type here (target is the "+" node,
-    // not an index_exprt) -- its subtype is the element type.
-    const typet &elem_type = target->type().subtype();
+    // not an index_exprt) -- its subtype is the element type. A struct
+    // element's subtype is an unfollowed symbol_typet referencing its tag;
+    // the dereference layer requires the concrete struct_typet to resolve
+    // a member access, and this construction has no later chance to follow
+    // it (unlike contracts.cpp's own copy of the extent-aware snapshot,
+    // this raw shape also survives, unused, as dead residual code in the
+    // renamed original function body, where it still gets symbolically
+    // evaluated) (#7057).
+    const typet &elem_type = ns.follow(target->type().subtype());
 
     typet elem_ptr_type("pointer");
     elem_ptr_type.subtype() = elem_type; // T*
@@ -1194,7 +1203,7 @@ void goto_convertt::convert_quantifier_calls(exprt &expr)
       convert_quantifier_calls(args[1]);
       const irep_idt bound = quantifier_bound_var_id(args[0]);
       if (!bound.empty())
-        lift_old_over_bound_index(args[1], {bound});
+        lift_old_over_bound_index(args[1], {bound}, ns);
       inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
       if (!has_sideeffect(args[1]))
       {

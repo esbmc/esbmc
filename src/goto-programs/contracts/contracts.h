@@ -430,7 +430,8 @@ private:
   static expr2tc try_replace_ptr_region_old(
     const type2tc &result_type,
     const expr2tc &ptr_expr,
-    const std::vector<old_snapshot_t> &snapshots);
+    const std::vector<old_snapshot_t> &snapshots,
+    const namespacet &ns);
 
   /// \brief Replace __ESBMC_old() calls with snapshot variables
   /// \param expr Expression containing old() calls
@@ -579,6 +580,30 @@ private:
     const std::vector<arr_elem_snapshot_t> &snapshots,
     goto_programt &wrapper,
     const locationt &location);
+
+  /// \brief Materialize one __ESBMC_old(ptr[j]) region snapshot: since there
+  /// is no array rvalue to read through the pointer in one whole-value
+  /// ASSIGN, this declares a new array-typed temp sized by ptr's
+  /// __ESBMC_is_fresh extent and fills it with a hand-built element-wise
+  /// copy loop. Extracted out of materialize_old_snapshots_at_wrapper's
+  /// region branch (#7057).
+  /// \param original_expr The pointer parameter symbol being snapshotted
+  /// \param region_elem_type The element type (possibly an unfollowed
+  ///   struct symbol reference; followed internally before use)
+  /// \param wrapper GOTO program to append the DECLs and copy loop to
+  /// \param func_name Function name for unique variable naming
+  /// \param location Source location for generated instructions
+  /// \param param_extents Byte extent of each is_fresh'd pointer parameter
+  /// \param snap_idx Index for unique naming among this function's snapshots
+  /// \return The new array-typed snapshot variable symbol
+  expr2tc materialize_ptr_region_old_snapshot(
+    const expr2tc &original_expr,
+    const type2tc &region_elem_type,
+    goto_programt &wrapper,
+    const std::string &func_name,
+    const locationt &location,
+    const std::map<irep_idt, param_extentt> &param_extents,
+    size_t snap_idx) const;
 
   /// \brief Materialize old snapshots in wrapper function (enforce-contract
   /// mode) Creates DECL and ASSIGN instructions for snapshot variables before
