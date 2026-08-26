@@ -299,6 +299,9 @@ optionst checker_options(const optionst &run_options)
   for (const char *opt : {"int-encoding", "ir", "ir-ieee", "smtlib", "output"})
     opts.set_option(opt, "");
   opts.set_option("fixedbv", false);
+  // check() pushes a frame per query, and boolector only accepts
+  // boolector_push once it was created incremental (boolector_conv.cpp).
+  opts.set_option("smt-during-symex", true);
   return opts;
 }
 } // namespace
