@@ -765,6 +765,15 @@ SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
 `--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
 implicitly, and NeuroSym rejects `--ir` and incremental strategies.
 
+Floating-point arithmetic is encoded with the SMT floating-point theory
+(`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
+CVC4/CVC5 — and lowered to bit-vectors elsewhere. `--fp2bv` forces the
+bit-vector lowering on any backend, which is the encoding to reach for when a
+property depends on the sign of a NaN: the theory cannot represent it
+([#7021](https://github.com/esbmc/esbmc/issues/7021)). `fmod`, `remainder` and
+`remquo` are always lowered through a bit-vector round-trip, since the theory's
+`fp.rem` is far slower to solve.
+
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
 environment variable. The `CMD` for the SMTLIB backend is interpreted by the

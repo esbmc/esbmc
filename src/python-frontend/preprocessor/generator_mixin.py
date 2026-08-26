@@ -1017,28 +1017,61 @@ class GeneratorMixin:
         if key_kw is None:
             return None
 
-        iterable_literal = self._resolve_list_literal_iterable(call_node.args[0])
-        if iterable_literal is None:
-            return None
-
-        key_values = self._eval_const_key_values(key_kw.value, iterable_literal.elts)
-        if key_values is None:
-            return None
+        folded = self._fold_dict_getitem_key(call_node.args[0], key_kw.value)
+        if folded is None:
+            iterable_literal = self._resolve_list_literal_iterable(call_node.args[0])
+            if iterable_literal is None:
+                return None
+            key_values = self._eval_const_key_values(key_kw.value, iterable_literal.elts)
+            if key_values is None:
+                return None
+            folded = iterable_literal.elts, key_values
+        elts, key_values = folded
 
         try:
-            order = sorted(range(len(iterable_literal.elts)), key=lambda i: key_values[i])
+            order = sorted(range(len(elts)), key=lambda i: key_values[i])
         except TypeError:
             # Mutually incomparable key values (e.g. mixed str/int) — CPython
             # raises at runtime; bail to the existing key-drop fallback rather
             # than crashing the preprocessor.
             return None
-        folded_sorted = ast.List(
-            elts=[copy.deepcopy(iterable_literal.elts[i]) for i in order],
-            ctx=ast.Load(),
-        )
+        folded_sorted = ast.List(elts=[copy.deepcopy(elts[i]) for i in order], ctx=ast.Load())
         self.ensure_all_locations(folded_sorted, call_node)
         ast.fix_missing_locations(folded_sorted)
         return [], folded_sorted
+
+    def _fold_dict_getitem_key(self, iterable, key_node):
+        """For ``sorted(d, key=d.__getitem__)`` (or ``d.keys()``) over a tracked
+        constant dict literal, return ``(key_nodes, value_list)`` so the keys
+        are ordered by their values; None when the pattern does not apply."""
+        receiver = self._dict_getitem_key_receiver(iterable, key_node)
+        literal = self.dict_literal_values.get(receiver) if receiver else None
+        if literal is None or None in literal.keys:
+            return None
+        key_consts = [self._const_element_value(k) for k in literal.keys]
+        values = [self._const_scalar_value(v) for v in literal.values]
+        if None in key_consts or None in values or len(set(key_consts)) != len(key_consts):
+            return None
+        return literal.keys, values
+
+    @staticmethod
+    def _dict_getitem_key_receiver(iterable, key_node):
+        """Name ``d`` when the call is ``sorted(d | d.keys(), key=d.__getitem__)``."""
+        if (isinstance(iterable, ast.Call) and isinstance(iterable.func, ast.Attribute)
+                and iterable.func.attr == "keys" and not iterable.args):
+            iterable = iterable.func.value
+        if (isinstance(iterable, ast.Name) and isinstance(key_node, ast.Attribute)
+                and key_node.attr == "__getitem__" and isinstance(key_node.value, ast.Name)
+                and key_node.value.id == iterable.id):
+            return iterable.id
+        return None
+
+    def _const_element_value(self, node):
+        """Constant value of a scalar or tuple-of-scalars element, else None."""
+        if isinstance(node, ast.Tuple):
+            members = [self._const_scalar_value(e) for e in node.elts]
+            return None if None in members else tuple(members)
+        return self._const_scalar_value(node)
 
     def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
         """Lower min/max(iterable, key=...) for literal-list iterables with a
@@ -1127,6 +1160,9 @@ class GeneratorMixin:
             if len(key_node.args.args) != 1:
                 return None
             return self._eval_key_body(key_node.body, key_node.args.args[0].arg, element)
+        if isinstance(key_node, ast.Name) and key_node.id in self._single_return_funcs:
+            param, body = self._single_return_funcs[key_node.id]
+            return self._eval_key_body(body, param, element)
         # Matched by name: assumes abs/len are the builtins (ESBMC does not model
         # user code shadowing them, consistent with the rest of the frontend).
         if isinstance(key_node, ast.Name) and key_node.id in ("abs", "len"):
