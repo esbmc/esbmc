@@ -685,6 +685,12 @@ set(_slow_regression_tests
     # against the 120s cap and timed out on the DebugOpt Linux runner in
     # #7073 CI -- a comment-only change that cannot reach its code path.
     "regression/esbmc/github_4634"
+    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
+    # over the 120s cap on aarch64, where the whole floats-regression suite runs
+    # ~3x slower while the rest of the suite matches x86 to within 5%. The
+    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
+    # armv8 leg green meanwhile.
+    "regression/floats-regression/nn-tanh_5_unsafe"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
