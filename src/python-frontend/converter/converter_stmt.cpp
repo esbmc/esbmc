@@ -3751,11 +3751,33 @@ bool python_converter::try_tagged_var_assign(
   symbol_id tag_sid = create_symbol_id();
   tag_sid.set_object(name);
   const std::string tag_key = tag_sid.to_string();
+  bool is_tagged_already = dynamic_type_handler_.is_tagged(name);
+
+  // A binop between two already-tagged names may produce a result whose
+  // type isn't known until conversion, so an untagged target may need to
+  // become tagged too. Checked by name to avoid converting the operands
+  // twice on the common path where this doesn't apply.
+  auto is_tagged_name = [&](const nlohmann::json &operand) {
+    return operand.is_object() && operand.value("_type", "") == "Name" &&
+           dynamic_type_handler_.is_tagged(operand["id"].get<std::string>());
+  };
+  bool value_may_tag = false;
+  if (!is_tagged_already && ast_node.contains("value"))
+  {
+    const auto &value = ast_node["value"];
+    value_may_tag = value.is_object() && value.value("_type", "") == "BinOp" &&
+                    value.contains("op") &&
+                    dynamic_type_handler_.tagged_binop_result_may_be_tagged(
+                      value["op"].value("_type", "")) &&
+                    value.contains("left") && value.contains("right") &&
+                    is_tagged_name(value["left"]) &&
+                    is_tagged_name(value["right"]);
+  }
 
   // A rebind that already retyped the name away from its tagged slot wins: the
   // live value is in the retype target, so this is an ordinary assignment to
   // that symbol (#7075).
-  if (retype_aliases_.count(tag_key) || !dynamic_type_handler_.is_tagged(name))
+  if (retype_aliases_.count(tag_key) || (!is_tagged_already && !value_may_tag))
     return false;
 
   if (ast_node.contains("value") && !ast_node["value"].is_null())
@@ -3764,10 +3786,14 @@ bool python_converter::try_tagged_var_assign(
     exprt rhs = get_expr(ast_node["value"]);
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
+      if (value_may_tag)
+        dynamic_type_handler_.declare_dynamic_type_names({name}, ast_node);
       dynamic_type_handler_.assign_tagged_object(
         rhs, location, name, target_block);
       return true;
     }
+    assert(
+      !value_may_tag && "tagged 'x + y' always converts to a tagged result");
     if (
       type_handler_.is_numeric_scalar_type(rhs.type()) ||
       type_handler_.is_string_type(rhs.type()))
