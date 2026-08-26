@@ -158,9 +158,12 @@ static bool native_admits(const typet &src, const typet &dest)
   return !check_c_implicit_typecast(migrate_type(src), migrate_type(dest));
 }
 
-static const std::vector<std::pair<std::string, typet>> &scalar_types()
+// Rebuilt per call: the floating entries are spelled floatbv or fixedbv
+// depending on config.ansi_c.use_fixed_for_float, which test cases toggle --
+// a cached table would freeze whichever mode was built first.
+static std::vector<std::pair<std::string, typet>> scalar_types()
 {
-  static const std::vector<std::pair<std::string, typet>> types = {
+  return {
     {"bool", bool_type()},
     {"signed char", signed_char_type()},
     {"unsigned char", unsigned_char_type()},
@@ -179,8 +182,22 @@ static const std::vector<std::pair<std::string, typet>> &scalar_types()
     {"double", double_type()},
     {"long double", long_double_type()},
   };
-  return types;
 }
+
+// ESBMC represents C floats as fixedbv under --fixedbv: build_float_type
+// switches spelling on this flag for both IRs (c_types.cpp). Scoped so a
+// failing assertion cannot leak the mode into later test cases.
+struct fixedbv_modet
+{
+  fixedbv_modet()
+  {
+    config.ansi_c.use_fixed_for_float = true;
+  }
+  ~fixedbv_modet()
+  {
+    config.ansi_c.use_fixed_for_float = false;
+  }
+};
 
 TEST_CASE(
   "admission parity: every scalar pair agrees across the two copies",
@@ -286,6 +303,34 @@ TEST_CASE(
     INFO("src: void* dest: " + src_name);
     require_ns_parity(void_ptr, src);
   }
+}
+
+// The same matrix under the --fixedbv representation: with
+// use_fixed_for_float set, the scalar table's floating entries are spelled
+// fixedbv (build_float_type switches both IRs on the flag), so the float
+// rows and columns become the fixedbv cases. get_c_type ranks fixedbv beside
+// floatbv by width and both check_c_implicit_typecast copies admit it in
+// every scalar branch; the matrix pins that the two spellings stay in
+// lockstep.
+TEST_CASE(
+  "admission parity: the scalar matrix under the fixedbv representation",
+  "[c_typecast]")
+{
+  fixedbv_modet fixedbv;
+  contextt ctx;
+  namespacet ns(ctx);
+
+  for (const auto &[src_name, src] : scalar_types())
+    for (const auto &[dest_name, dest] : scalar_types())
+    {
+      INFO("src: " + src_name + " dest: " + dest_name);
+      REQUIRE(legacy_admits(src, dest) == native_admits(src, dest));
+
+      const bool legacy_failed = check_c_implicit_typecast(src, dest, ns);
+      const bool native_failed =
+        check_c_implicit_typecast(migrate_type(src), migrate_type(dest), ns);
+      REQUIRE(legacy_failed == native_failed);
+    }
 }
 
 // Differential harness. implicit_typecast_followed also exists twice, and the
@@ -599,5 +644,51 @@ TEST_CASE(
     migrate_expr(legacy_w, legacy_w_migrated);
     REQUIRE(legacy_p_migrated == native_p);
     REQUIRE(legacy_w_migrated == native_w);
+  }
+}
+
+TEST_CASE(
+  "both c_implicit_typecast overloads agree under the fixedbv representation",
+  "[c_typecast]")
+{
+  fixedbv_modet fixedbv;
+  contextt ctx;
+  namespacet ns(ctx);
+
+  // float_type()/double_type() are fixedbv-spelled in this mode, so these
+  // are the fixedbv cases; the expected common types stay C17 6.3.1.8's.
+  SECTION("fixedbv and int promote to the fixedbv")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("f", float_type()),
+      symbol_exprt("i", int_type()),
+      float_type());
+  }
+  SECTION("narrow and wide fixedbv promote to the wide one")
+  {
+    require_arith_result(
+      ns,
+      symbol_exprt("f", float_type()),
+      symbol_exprt("d", double_type()),
+      double_type());
+  }
+  SECTION("fixedbv and __int128 promote to the fixedbv")
+  {
+    // INT128 ranks below SINGLE after the enum reorder: integer rank,
+    // however wide, never outranks a floating type.
+    require_arith_result(
+      ns,
+      symbol_exprt("f", float_type()),
+      symbol_exprt("w", int128_type()),
+      float_type());
+  }
+  SECTION("int constant folds into a fixedbv destination")
+  {
+    require_overloads_agree(ns, from_integer(1, int_type()), double_type());
+  }
+  SECTION("fixedbv symbol converts to int")
+  {
+    require_overloads_agree(ns, symbol_exprt("f", float_type()), int_type());
   }
 }
