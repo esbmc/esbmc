@@ -771,6 +771,7 @@ exprt python_list::build_min_max_for_mixed_numeric(
     ite.cond() = condition;
     ite.then_case() = code_assignt(result, elem);
     ite.location() = loc;
+    ite.location().property("skipped");
     converter_.add_instruction(ite);
   }
 
@@ -882,6 +883,7 @@ exprt python_list::build_index_list_call(
   guard.cond() = not_found;
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
+  guard.location().property("skipped");
   converter_.add_instruction(guard);
 
   return build_symbol(idx);
@@ -950,6 +952,7 @@ exprt python_list::build_index_range_list_call(
   guard.cond() = not_found;
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
+  guard.location().property("skipped");
   converter_.add_instruction(guard);
 
   return build_symbol(idx);

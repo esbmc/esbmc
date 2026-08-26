@@ -1,6 +1,6 @@
 CORE
 main.cpp
 --branch-coverage-claims --unwind 3 --no-unwinding-assertions
-^Branch Coverage: 83\.33
+^Branch Coverage: 75%
 ^COVERAGE ANALYSIS INCOMPLETE
 reason: the unwinding bound cut off

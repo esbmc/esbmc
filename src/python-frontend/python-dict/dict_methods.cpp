@@ -272,6 +272,7 @@ exprt python_dict_handler::handle_dict_get(
   if_stmt.then_case() = then_block;
   if_stmt.else_case() = else_block;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(result_var);
@@ -584,6 +585,7 @@ exprt python_dict_handler::handle_dict_setdefault(
   if_stmt.then_case() = then_block;
   if_stmt.else_case() = else_block;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(result_var);
@@ -893,6 +895,7 @@ exprt python_dict_handler::handle_dict_pop(
   if_stmt.then_case() = then_block;
   if_stmt.else_case() = else_block;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(result_var);
@@ -1153,6 +1156,7 @@ exprt python_dict_handler::handle_dict_popitem(
   if_stmt.then_case() = empty_block;
   if_stmt.else_case() = nonempty_block;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(result_var);

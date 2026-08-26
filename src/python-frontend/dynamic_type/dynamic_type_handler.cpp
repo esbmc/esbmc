@@ -717,6 +717,7 @@ void dynamic_type_handler::guard_zero_division(
   guard.cond() = build_and(type_ok, is_zero);
   guard.then_case() = throw_code;
   guard.location() = location;
+  guard.location().property("skipped");
   converter_.add_instruction(guard);
 }
 
