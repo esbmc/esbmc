@@ -744,3 +744,25 @@ pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
       ops.insert(ops.begin() + i, gen_zero(st.members[i]));
   return ops;
 }
+
+static expr2tc strip_typecasts(const expr2tc &e)
+{
+  expr2tc r = e;
+  while (is_typecast2t(r))
+    r = to_typecast2t(r).from;
+  return r;
+}
+
+irep_idt quantifier_bound_name(const expr2tc &binder)
+{
+  expr2tc sym = strip_typecasts(binder);
+  if (is_address_of2t(sym))
+    sym = to_address_of2t(sym).ptr_obj;
+  return is_symbol2t(sym) ? to_symbol2t(sym).thename : irep_idt();
+}
+
+irep_idt quantifier_direct_bound_name(const expr2tc &binder)
+{
+  const expr2tc sym = strip_typecasts(binder);
+  return is_address_of2t(sym) ? quantifier_bound_name(sym) : irep_idt();
+}
