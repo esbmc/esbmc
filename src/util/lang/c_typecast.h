@@ -85,14 +85,17 @@ protected:
     ULONG,
     LONGLONG,
     ULONGLONG,
+    // Integer rank, however wide, sits below every floating type
+    // (C17 6.3.1.8) and below PTR: pointer arithmetic converts neither
+    // operand (6.5.6).
+    INT128,
+    UINT128,
     SINGLE,
     DOUBLE,
     LONGDOUBLE,
     VOIDPTR,
     PTR,
-    OTHER,
-    INT128,
-    UINT128
+    OTHER
   };
 
   c_typet get_c_type(const typet &type);

@@ -315,6 +315,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
       return LONG;
     else if (width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
+    if (width <= config.ansi_c.int_128_width)
+      return INT128;
   }
   else if (type.id() == "unsignedbv")
   {
@@ -326,6 +328,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
       return ULONG;
     else if (width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
+    if (width <= config.ansi_c.int_128_width)
+      return UINT128;
   }
   else if (type.is_bool())
     return BOOL;
