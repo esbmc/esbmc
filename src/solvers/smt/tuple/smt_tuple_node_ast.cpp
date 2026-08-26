@@ -165,6 +165,13 @@ smt_astt tuple_node_smt_ast::update(
     "Can't apply non-constant index update to "
     "structure");
 
+  // Populate our own fields before copying them across: an unpopulated source
+  // copies an empty vector, and make_free() below then invents fresh
+  // unconstrained variables for the fields the update does not touch, so
+  // member(with(s, a, v), b) loses its link to s.b. Pinned by
+  // unit/solvers/tuple_node_update.test.cpp.
+  const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
+
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
