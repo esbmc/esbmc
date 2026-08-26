@@ -1301,6 +1301,15 @@ private:
   // RHS processing helper methods
   // =========================================================================
 
+  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
+  /// reordering builtin (sorted/reversed/list), else nullptr.
+  static const nlohmann::json *
+  reordering_builtin_arg(const nlohmann::json &ast_node);
+
+  void copy_elem_types_from_reordering_builtin(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_id);
+
   /**
    * @brief Handles function call RHS assignment.
    *

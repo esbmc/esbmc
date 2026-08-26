@@ -1439,8 +1439,40 @@ class CoreVisitorsMixin:
         self.generic_visit(node)
         return node
 
+    _OPERATOR_DUNDERS = {"__getitem__": 1, "__len__": 0, "__contains__": 1}
+
+    def _maybe_rewrite_operator_dunder_call(self, node):
+        """Rewrite an explicit operator dunder call to the operator itself.
+
+        ``d.__getitem__(k)`` -> ``d[k]``, ``x.__len__()`` -> ``len(x)``,
+        ``x.__contains__(v)`` -> ``v in x``. The frontend models the operators
+        but not the method spelling, so the latter raised AttributeError and the
+        run failed on correct code. The two forms are equivalent in Python, and
+        for a user class defining the dunder the operator dispatches back to it.
+        """
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr in self._OPERATOR_DUNDERS
+                and not node.keywords and len(node.args) == self._OPERATOR_DUNDERS[node.func.attr]):
+            return None
+
+        receiver = node.func.value
+        if node.func.attr == "__getitem__":
+            rewritten = ast.Subscript(value=receiver, slice=node.args[0], ctx=ast.Load())
+        elif node.func.attr == "__len__":
+            rewritten = ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                 args=[receiver],
+                                 keywords=[])
+        else:
+            rewritten = ast.Compare(left=node.args[0], ops=[ast.In()], comparators=[receiver])
+
+        ast.copy_location(rewritten, node)
+        ast.fix_missing_locations(rewritten)
+        return self.visit(rewritten)
+
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         self._invalidate_list_literals_for_call(node)
+        rewritten_dunder = self._maybe_rewrite_operator_dunder_call(node)
+        if rewritten_dunder is not None:
+            return rewritten_dunder
         rewritten_dict_list = self._maybe_rewrite_dict_to_list_call(node)
         if rewritten_dict_list is not None:
             return rewritten_dict_list
