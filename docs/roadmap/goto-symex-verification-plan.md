@@ -6724,6 +6724,28 @@ Re-run alone it passes at 169 s, and the whole label passes at `-j6`.
 | `-L esbmc/` | `-j6` | 1931/1931 | — |
 | `github_2335_1` | standalone | 157.8 s patched vs 164.7 s control | — |
 
+**The bound has to honour `--no-vla-size-check`, and the benchexec run is what
+said so.** The first SV-COMP run of this patch turned 17 correct verdicts into
+**wrong** ones, every one of them
+`sv-benchmarks/c/array-multidimensional/*-3-*` — the three-dimensional members of
+that family and nothing else. The reason is the arch, not the size: those tasks
+run `--32`, where `max_object_size()` is 2 GiB, and `int A[1000][1000][1000]` is
+4 GB. Two dimensions is 4 MB and stays under; three does not, which is exactly
+why the 2-D siblings kept timing out while the 3-D ones flipped. The report is
+right on its own terms — that object cannot exist in a 32-bit address space —
+but the wrapper passes `--no-vla-size-check`, *"do not check whether the size of
+VLAs overflows the available address space"*, which is this check one pass later.
+The flag now reaches `bound_dynamic_object_size`, both arms: under it the
+declaration is neither reported nor assumed below the cap, which is master's
+behaviour exactly. Pinned by `regression/esbmc/vla_no_size_check` (the flag
+suppresses the report) and `vla_no_size_check_fail` (without it the report
+stands, so the pair cannot both pass if the bound is simply deleted); all nine
+tasks return to `TIMEOUT` under the competition command line.
+
+The general lesson is the row's own `needs-svcomp-run` label: a check whose
+threshold is derived from the target's pointer width is a different check on
+`--32`, and the regression suite runs almost nothing there.
+
 With R40 closed, every path that can size an object — `malloc`, `alloca`,
 `realloc` and a VLA declaration — is bounded at `PTRDIFF_MAX`, and the R34–R38
 family has no remaining spelling except R38's `--force-*-success` residual, which

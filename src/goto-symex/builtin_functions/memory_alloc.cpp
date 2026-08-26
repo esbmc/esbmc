@@ -630,6 +630,14 @@ void goto_symext::bound_dynamic_object_size(const code_assign2t &code)
   if (!is_dynamic_size2t(code.target))
     return;
 
+  // --no-vla-size-check is "do not check whether the size of VLAs overflows the
+  // available address space", which is what this bound does, one pass after the
+  // guards goto_convert emits at the declaration. Honour it here too: under
+  // --32 a three-dimensional VLA exceeds a 2 GiB PTRDIFF_MAX legitimately, and
+  // SV-COMP runs those tasks with this flag set (#7306).
+  if (options.get_bool_option("no-vla-size-check"))
+    return;
+
   expr2tc bound_on = code.source;
   cur_state->rename(bound_on);
   simplify(bound_on);
