@@ -4420,13 +4420,46 @@ static bool conditions_equivalent(const expr2tc &a, const expr2tc &b)
   return a_stripped == b_stripped;
 }
 
+/** Do the float constants in two expressions that already compare equal agree
+ *  on their signs? Callers rely on @p a and @p b having the same shape. */
+static bool float_signs_agree(const expr2tc &a, const expr2tc &b)
+{
+  if (is_constant_floatbv2t(a))
+    return to_constant_floatbv2t(a).value.get_sign() ==
+           to_constant_floatbv2t(b).value.get_sign();
+
+  for (unsigned int i = 0; i < a->get_num_sub_exprs(); i++)
+  {
+    const expr2tc *sa = a->get_sub_expr(i);
+    const expr2tc *sb = b->get_sub_expr(i);
+    if (is_nil_expr(*sa) != is_nil_expr(*sb))
+      return false;
+    if (!is_nil_expr(*sa) && !float_signs_agree(*sa, *sb))
+      return false;
+  }
+  return true;
+}
+
+/** Whether both select arms denote the same value, sign included.
+ *
+ *  expr2tc equality on constant floats is IEEE equality (ieee_float.cpp), and
+ *  under it -0.0 == +0.0 -- so plain equality would let if(c, -0.0, +0.0) fold
+ *  to the true arm and return the wrong sign whenever c is false, at any depth
+ *  inside an aggregate constant (esbmc/esbmc#7321). NaN needs no guard here:
+ *  IEEE equality already reports two NaNs as unequal, so the fold never fires
+ *  on them. */
+static bool arms_are_same_value(const expr2tc &a, const expr2tc &b)
+{
+  return a == b && float_signs_agree(a, b);
+}
+
 expr2tc if2t::do_simplify() const
 {
   // if(c, x, x) -> x. Sound for any type, including bool — moved here from
   // below the bool-arm so it fires for bool-typed selects whose branches
   // happen to be the same symbolic value (the bool arm previously short-
   // circuited to nil before this rule could be reached).
-  if (true_value == false_value)
+  if (arms_are_same_value(true_value, false_value))
     return typecast_check_return(type, true_value);
 
   // Constant-condition fold. expr2t::simplify already simplified `cond`.
