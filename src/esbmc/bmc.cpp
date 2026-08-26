@@ -415,6 +415,15 @@ smt_resultt bmct::run_decision_procedure(
 
 void bmct::report_success()
 {
+  // Wording deliberately avoids "unwinding assertion loop", which
+  // esbmc-wrapper.py's parse_result() matches on (docs/roadmap
+  // /goto-symex-verification-plan.md, R28).
+  if (saw_bounded_loop_truncation)
+    log_warning(
+      "the unwinding bound cut a loop short while unwinding checks were "
+      "disabled, so paths past the bound were assumed away rather than "
+      "verified; this result holds only up to that bound");
+
   log_success("\nVERIFICATION SUCCESSFUL");
 }
 
@@ -2165,6 +2174,8 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     eq =
       std::dynamic_pointer_cast<symex_target_equationt>(solver_result.target);
+
+    saw_bounded_loop_truncation |= solver_result.bounded_loop_truncations > 0;
 
     log_status(
       "Symex completed in: {}s ({} assignments)",
