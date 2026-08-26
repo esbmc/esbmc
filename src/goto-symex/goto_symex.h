@@ -764,13 +764,14 @@ protected:
     const expr2tc &over_cap);
 
   /**
-   *  Bound an object's size at PTRDIFF_MAX, reporting a constant request that
-   *  exceeds it rather than assuming it away. Called for every assignment to a
-   *  dynamic_size2t -- a VLA declaration is the only way a stack object's size
-   *  reaches symex, and renaming has exposed its constness by then. R40.
-   *  @param size The size the declaration records, unrenamed.
+   *  Bound at PTRDIFF_MAX the object size an assignment records, reporting a
+   *  constant request that exceeds it rather than assuming it away. Only an
+   *  assignment to a dynamic_size2t records one -- a VLA declaration is the
+   *  only way a stack object's size reaches symex, and renaming has exposed
+   *  its constness by then. R40.
+   *  @param code The assignment, unrenamed.
    */
-  void bound_dynamic_object_size(const expr2tc &size);
+  void bound_dynamic_object_size(const code_assign2t &code);
 
   /**
    *  Create result pointer from newly allocated array.

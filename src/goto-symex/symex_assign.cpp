@@ -376,8 +376,7 @@ void goto_symext::symex_assign(
 
   // A variable-length array's size reaches symex only here; bound it before the
   // object it sizes can put an offset above PTRDIFF_MAX in the comparator. R40.
-  if (is_dynamic_size2t(code.target))
-    bound_dynamic_object_size(code.source);
+  bound_dynamic_object_size(code);
 
   // Sanity check: if the target has zero size, then we've ended up assigning
   // to/from either a C++ POD class with no fields or an empty C struct or

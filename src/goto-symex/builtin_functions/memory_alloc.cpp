@@ -625,9 +625,12 @@ void goto_symext::offer_malloc_zero_null(
   rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
 }
 
-void goto_symext::bound_dynamic_object_size(const expr2tc &size)
+void goto_symext::bound_dynamic_object_size(const code_assign2t &code)
 {
-  expr2tc bound_on = size;
+  if (!is_dynamic_size2t(code.target))
+    return;
+
+  expr2tc bound_on = code.source;
   cur_state->rename(bound_on);
   simplify(bound_on);
 
