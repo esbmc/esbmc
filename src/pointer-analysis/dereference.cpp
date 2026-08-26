@@ -12,6 +12,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
@@ -143,19 +144,56 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 static expr2tc distribute_steps_over_if(const expr2tc &e);
 
-/// Base name of the variable a forall2t/exists2t binds (mirrors
-/// quantifier_bound_name in goto_symex_state.cpp), or an empty id when the
-/// binder is not the (typecast of) address_of(symbol) shape the solver
-/// expects.
-static irep_idt quantifier_binder_name(const expr2tc &binder)
+/// Records what a forall2t/exists2t binds while its body is walked, so the
+/// index fold in dereference_expr_nonscalar leaves the bound variable alone:
+/// the rename callback carries no quantifier context and would substitute the
+/// like-named program variable's SSA value (rename_quantified guards the same
+/// concern at the renaming layer, #7024). Constructing one over any other
+/// expression does nothing.
+class dereferencet::quantifier_scopet
 {
-  expr2tc sym = binder;
-  while (is_typecast2t(sym))
-    sym = to_typecast2t(sym).from;
-  if (is_address_of2t(sym))
-    sym = to_address_of2t(sym).ptr_obj;
-  return is_symbol2t(sym) ? to_symbol2t(sym).thename : irep_idt();
-}
+public:
+  quantifier_scopet(dereferencet &deref, const expr2tc &expr) : deref(deref)
+  {
+    if (!is_forall2t(expr) && !is_exists2t(expr))
+      return;
+
+    /* Reached through a pointer -- `void *q = &i; __ESBMC_forall(q, ...
+     * p->buf[i] ...)` -- the binder reads as `q` while binding `i`, so there
+     * is no name to exclude and the whole body has to stay out of the fold. */
+    name = quantifier_direct_bound_name(
+      is_forall2t(expr) ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1);
+    active = true;
+    if (name.empty())
+      deref.opaque_binders++;
+    else
+      deref.quantifier_bound_vars.insert(name);
+  }
+
+  quantifier_scopet(const quantifier_scopet &) = delete;
+  quantifier_scopet &operator=(const quantifier_scopet &) = delete;
+
+  ~quantifier_scopet()
+  {
+    if (!active)
+      return;
+    if (name.empty())
+    {
+      deref.opaque_binders--;
+      return;
+    }
+    // erase(iterator), not erase(key): an inner scope that rebound the same
+    // name must not drop the outer scope's entry too.
+    auto it = deref.quantifier_bound_vars.find(name);
+    if (it != deref.quantifier_bound_vars.end())
+      deref.quantifier_bound_vars.erase(it);
+  }
+
+private:
+  dereferencet &deref;
+  irep_idt name;
+  bool active = false;
+};
 
 bool dereferencet::mentions_bound_var(const expr2tc &expr) const
 {
@@ -164,13 +202,16 @@ bool dereferencet::mentions_bound_var(const expr2tc &expr) const
   if (is_symbol2t(expr))
     return quantifier_bound_vars.count(to_symbol2t(expr).thename) != 0;
   bool found = false;
-  expr->foreach_operand(
-    [this, &found](const expr2tc &e)
-    {
-      if (!found)
-        found = mentions_bound_var(e);
-    });
+  expr->foreach_operand([this, &found](const expr2tc &e) {
+    if (!found)
+      found = mentions_bound_var(e);
+  });
   return found;
+}
+
+bool dereferencet::may_fold_index(const expr2tc &index) const
+{
+  return opaque_binders == 0 && !mentions_bound_var(index);
 }
 
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
@@ -180,30 +221,6 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 
   switch (expr->expr_id)
   {
-  case expr2t::forall_id:
-  case expr2t::exists_id:
-  {
-    /* Descend with the bound variable tracked: the index-operand fold in
-     * dereference_expr_nonscalar must not substitute a quantifier-bound
-     * symbol with the like-named program variable's SSA value -- the rename
-     * hook has no quantifier context (rename_quantified handles the same
-     * concern at the renaming layer, #7024). */
-    const expr2tc &binder =
-      is_forall2t(expr) ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1;
-    const irep_idt bound = quantifier_binder_name(binder);
-    const bool tracked =
-      bound != irep_idt() && quantifier_bound_vars.insert(bound).second;
-    expr->Foreach_operand(
-      [this, &guard, &mode](expr2tc &e)
-      {
-        if (!is_nil_expr(e))
-          dereference_expr(e, guard, mode);
-      });
-    if (tracked)
-      quantifier_bound_vars.erase(bound);
-    break;
-  }
-
   case expr2t::and_id:
   case expr2t::or_id:
   case expr2t::if_id:
@@ -256,9 +273,12 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
     break;
   }
 
+  case expr2t::forall_id:
+  case expr2t::exists_id:
   default:
   {
     // Recurse over the operands
+    quantifier_scopet scope(*this, expr);
     expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
       if (is_nil_expr(e))
         return;
@@ -571,10 +591,10 @@ expr2tc dereferencet::dereference_expr_nonscalar(
      * the assignment drops the object's recorded constant, later guards over
      * it become undecidable and loops unwind to the bound (#7311).
      *
-     * Never substitute a symbol bound by an enclosing quantifier: the rename
-     * callback would replace it with the like-named program variable's SSA
+     * may_fold_index keeps quantified indices out: the rename callback would
+     * replace a bound symbol with the like-named program variable's SSA
      * value, collapsing the quantified body to a constant (#7024 shape). */
-    if (!is_constant_int2t(index.index) && !mentions_bound_var(index.index))
+    if (!is_constant_int2t(index.index) && may_fold_index(index.index))
     {
       dereference_callback.rename(index.index);
       simplify(index.index);

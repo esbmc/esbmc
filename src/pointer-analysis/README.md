@@ -694,9 +694,11 @@ still runs but the bounds assertion becomes reachable and reportable.
   symex override performs SSA renaming and constant substitution. It is
   invoked on index operands in `dereference_expr_nonscalar` so indices with
   symex-known values fold to constants and take the constant-offset
-  reference path (#7311); indices mentioning a symbol bound by an enclosing
-  quantifier are excluded, as the callback has no quantifier context. A
-  disabled block in `build_reference_to` notes a benchmarking task before
+  reference path (#7311). Indices mentioning a symbol bound by an enclosing
+  quantifier are excluded, as the callback has no quantifier context; a
+  quantifier whose binder is not `address_of(symbol)` names no such symbol,
+  so its whole body is excluded instead (`dereferencet::quantifier_scopet`).
+  A disabled block in `build_reference_to` notes a benchmarking task before
   doing the same for whole-access offsets.
 * `value_sett::object_numbering` is global state (per-thread). Cross-thread
   serialisation of value sets is not supported.

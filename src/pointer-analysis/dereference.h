@@ -131,8 +131,9 @@ public:
    *  their inner dereferences are resolved, so an index whose value symex
    *  knows folds to a constant and the access stays on the constant-offset
    *  path (see dereference_expr_nonscalar, #7311). Indices mentioning a
-   *  symbol bound by an enclosing quantifier are excluded: the callback has
-   *  no quantifier context and would substitute the like-named program
+   *  symbol bound by an enclosing quantifier are excluded, as is the whole
+   *  body of a quantifier whose binder names no symbol: the callback has no
+   *  quantifier context and would substitute the like-named program
    *  variable's value.
    *  @param expr An expression to be renamed
    */
@@ -582,12 +583,20 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
-  /** Variables bound by quantifiers enclosing the expression currently
-   *  being dereferenced. */
-  std::set<irep_idt> quantifier_bound_vars;
+  class quantifier_scopet;
+
+  /** Variables bound by quantifiers enclosing the expression currently being
+   *  dereferenced, and how many of those quantifiers bind through a shape
+   *  that names no variable we can identify. */
+  std::multiset<irep_idt> quantifier_bound_vars;
+  unsigned opaque_binders = 0;
 
   /** True when @p expr mentions a symbol bound by an enclosing quantifier. */
   bool mentions_bound_var(const expr2tc &expr) const;
+
+  /** True when the index fold may substitute the value symex holds for
+   *  @p index. */
+  bool may_fold_index(const expr2tc &index) const;
 
 public:
   void set_block_assertions(void)
