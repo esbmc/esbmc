@@ -1238,6 +1238,59 @@ public:
       return _pair;
     }
   }
+
+  bool operator==(const map &y) const
+  {
+    if (this->_size != y._size)
+      return false;
+    for (int i = 0; i < this->_size; i++)
+    {
+      if (!(this->_key[i] == y._key[i]) || !(this->_value[i] == y._value[i]))
+        return false;
+    }
+    return true;
+  }
+
+  bool operator!=(const map &y) const
+  {
+    return !(*this == y);
+  }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison over value_type --
+   * pair, so the key decides first and the mapped value breaks a tie.
+   * _key[0.._size) is kept sorted by insert(). */
+  bool operator<(const map &y) const
+  {
+    int n = this->_size < y._size ? this->_size : y._size;
+    for (int i = 0; i < n; i++)
+    {
+      if (key_compare()(this->_key[i], y._key[i]))
+        return true;
+      if (key_compare()(y._key[i], this->_key[i]))
+        return false;
+      if (this->_value[i] < y._value[i])
+        return true;
+      if (y._value[i] < this->_value[i])
+        return false;
+    }
+    return this->_size < y._size;
+  }
+
+  bool operator>(const map &y) const
+  {
+    return y < *this;
+  }
+
+  bool operator<=(const map &y) const
+  {
+    return !(y < *this);
+  }
+
+  bool operator>=(const map &y) const
+  {
+    return !(*this < y);
+  }
 };
 
 // [associative.reqmts]: the Allocator parameter completes the signature. The
@@ -2278,6 +2331,42 @@ public:
         return true;
     }
     return false;
+  }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison over value_type --
+   * pair, so the key decides first and the mapped value breaks a tie.
+   * _key[0.._size) is kept sorted by insert(). */
+  bool operator<(const multimap &y) const
+  {
+    int n = this->_size < y._size ? this->_size : y._size;
+    for (int i = 0; i < n; i++)
+    {
+      if (key_compare()(this->_key[i], y._key[i]))
+        return true;
+      if (key_compare()(y._key[i], this->_key[i]))
+        return false;
+      if (this->_value[i] < y._value[i])
+        return true;
+      if (y._value[i] < this->_value[i])
+        return false;
+    }
+    return this->_size < y._size;
+  }
+
+  bool operator>(const multimap &y) const
+  {
+    return y < *this;
+  }
+
+  bool operator<=(const multimap &y) const
+  {
+    return !(y < *this);
+  }
+
+  bool operator>=(const multimap &y) const
+  {
+    return !(*this < y);
   }
 };
 } // namespace std

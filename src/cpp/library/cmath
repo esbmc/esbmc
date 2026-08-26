@@ -126,6 +126,78 @@ CIMPORT2(copysign)
 CIMPORT2(remainder)
 CIMPORT2(nextafter)
 
+/* [cmath.syn]: the C99 functions whose return type or extra parameter does not
+ * fit CIMPORT1/CIMPORT2. math.h already declares the f/d/l triples. */
+#define CIMPORT1R(name, ret)                                                   \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline ret name(float num)                                                   \
+  {                                                                            \
+    return ::name##f(num);                                                     \
+  }                                                                            \
+  inline ret name(long double num)                                             \
+  {                                                                            \
+    return ::name##l(num);                                                     \
+  }
+
+CIMPORT1R(ilogb, int)
+CIMPORT1R(lround, long)
+CIMPORT1R(llround, long long)
+CIMPORT1R(lrint, long)
+CIMPORT1R(llrint, long long)
+
+#undef CIMPORT1R
+
+CIMPORT1(logb)
+
+#define CIMPORT2X(name, second)                                                \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float a, second b)                                         \
+  {                                                                            \
+    return ::name##f(a, b);                                                    \
+  }                                                                            \
+  inline long double name(long double a, second b)                             \
+  {                                                                            \
+    return ::name##l(a, b);                                                    \
+  }
+
+CIMPORT2X(scalbn, int)
+CIMPORT2X(scalbln, long)
+CIMPORT2X(nexttoward, long double)
+
+#undef CIMPORT2X
+
+using ::fmaf;
+using ::fma;
+using ::fmal;
+inline float fma(float a, float b, float c)
+{
+  return ::fmaf(a, b, c);
+}
+inline long double fma(long double a, long double b, long double c)
+{
+  return ::fmal(a, b, c);
+}
+
+using ::remquof;
+using ::remquo;
+using ::remquol;
+inline float remquo(float a, float b, int *quo)
+{
+  return ::remquof(a, b, quo);
+}
+inline long double remquo(long double a, long double b, int *quo)
+{
+  return ::remquol(a, b, quo);
+}
+
+using ::nanf;
+using ::nan;
+using ::nanl;
+
 using ::pow;
 #if !defined(__MATHCALL_VEC)
 using ::powf;

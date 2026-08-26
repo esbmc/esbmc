@@ -2429,6 +2429,7 @@ exprt string_handler::build_string_index_result(
   if_stmt.cond() = not_found;
   if_stmt.then_case() = raise_code;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(find_result);

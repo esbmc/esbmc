@@ -1391,5 +1391,6 @@ exprt python_list::build_remove_list_call(
   guard.cond() = migrate_expr_back(not2tc(rr2));
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
+  guard.location().property("skipped");
   return guard;
 }
