@@ -2,8 +2,8 @@
 
 int main(void)
 {
-  int c = 0;
-  double d = c ? -0.0 : 0.0;
-  assert(__builtin_signbit(d) != 0);
+  double arr[4] = {0.0, 0.0, 0.0, 0.0};
+  arr[2] = -0.0;
+  assert(__builtin_signbit(arr[2]) == 0);
   return 0;
 }
