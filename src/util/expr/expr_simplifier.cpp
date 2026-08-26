@@ -29,8 +29,8 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
   // It propagates unchanged into recursive simplify() calls below.
   try
   {
-    // Corner case! Don't even try to simplify address of's operands, might end up
-    // taking the address of some /completely/ arbitary pice of data, by
+    // Corner case! Don't even try to simplify address of's operands, might end
+    // up taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
     // The node's own do_simplify never touches source_value; it only rewrites
     // &base[c] to &base[0] + c, so a bound spelled &a[n] can meet one spelled
