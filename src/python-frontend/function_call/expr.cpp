@@ -4652,6 +4652,26 @@ std::optional<exprt> function_call_expr::try_handle_round(bool is_user_imported)
   return std::nullopt;
 }
 
+/// Reaching the runtime model means the preprocessor could not fold the call,
+/// and the model has no key parameter -- the key is dropped, which silently
+/// reorders the result (sorted([a, a + 1], key=lambda v: -v) then reports a
+/// spurious counterexample). Refuse instead of answering wrongly.
+static void reject_unfoldable_key(
+  const nlohmann::json &call,
+  const std::string &func_name,
+  bool is_sorted_min_max)
+{
+  if (!is_sorted_min_max || !call.contains("keywords"))
+    return;
+
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") == "key")
+      throw std::runtime_error(
+        func_name +
+        "() with key= is only supported over a constant iterable; here "
+        "the key function cannot be applied and would be ignored");
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -4769,6 +4789,8 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
           list_arg, list_id, func_name, comparison_op);
       }
     }
+    reject_unfoldable_key(call_, func_name, is_sorted_min_max);
+
     // Dispatch to typed builtin based on element type
     if (has_default_kwarg)
       actual_func_name += "_default";
