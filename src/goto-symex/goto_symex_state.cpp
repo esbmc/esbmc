@@ -4,6 +4,7 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
@@ -97,25 +98,59 @@ static bool type_has_constant_size(const type2tc &type)
   return true;
 }
 
+/* Above this many elements a multi-dimensional array is left symbolic; see
+ * constant_propagation() for the measurement behind the number. */
+static constexpr unsigned multidim_propagation_bound = 256;
+
+/* Total element count of a possibly nested array type, or nothing when any
+ * dimension is not a constant. */
+static std::optional<BigInt> array_element_count(const type2tc &t)
+{
+  const array_type2t &arr = to_array_type(t);
+  if (arr.size_is_infinite || is_nil_expr(arr.array_size) ||
+      !is_constant_int2t(arr.array_size))
+    return {};
+
+  BigInt n = to_constant_int2t(arr.array_size).value;
+  if (!is_array_type(arr.subtype))
+    return n;
+
+  std::optional<BigInt> sub = array_element_count(arr.subtype);
+  if (!sub)
+    return {};
+  return n * *sub;
+}
+
+/* Whether an array type is cheap enough to carry as a propagated constant. */
+static bool array_may_propagate(const type2tc &t)
+{
+  const array_type2t &arr = to_array_type(t);
+
+  // Infinite-size arrays are special modelling arrays needing their own
+  // handling at SMT or some other level, so optimising them is a Bad Plan (TM).
+  if (arr.size_is_infinite)
+    return false;
+
+  if (!is_array_type(arr.subtype))
+    return true;
+
+  // A multi-dimensional array propagates only while it stays small: every
+  // write rewrites the whole nested constant, so the cost grows superlinearly
+  // -- on an N x N array filled by a nested loop, 256 elements is at parity
+  // with not propagating and 4096 costs 11x. Below the bound the fold is what
+  // lets a loop bounded by t[i][j] terminate at all, which it otherwise never
+  // does (R42, docs/roadmap/goto-symex-verification-plan.md).
+  std::optional<BigInt> elems = array_element_count(t);
+  return elems && *elems <= multidim_propagation_bound;
+}
+
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   if (no_propagation)
     return false;
 
-  if (is_array_type(expr))
-  {
-    array_type2t arr = to_array_type(expr->type);
-
-    // Don't permit const propagation of infinite-size arrays. They're going to
-    // be special modelling arrays that require special handling either at SMT
-    // or some other level, so attempting to optimize them is a Bad Plan (TM).
-    if (arr.size_is_infinite)
-      return false;
-
-    // Don't propagate multi dimensional arrays
-    if (is_array_type(arr.subtype))
-      return false;
-  }
+  if (is_array_type(expr) && !array_may_propagate(expr->type))
+    return false;
 
   if (is_vector_type(expr))
     return true;
