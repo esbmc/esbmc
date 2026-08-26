@@ -31,8 +31,12 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     // Corner case! Don't even try to simplify address of's operands, might end up
     // taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
+    // The node's own do_simplify never touches source_value; it only rewrites
+    // &base[c] to &base[0] + c, so a bound spelled &a[n] can meet one spelled
+    // a + n. Skipping it left `p != &a[4]` unfoldable and the loop unbounded
+    // (R43, docs/roadmap/goto-symex-verification-plan.md).
     if (expr_id == address_of_id) // unlikely
-      return expr2tc();
+      return do_simplify();
 
     // And overflows too. We don't wish an add to distribute itself, for example,
     // when we're trying to work out whether or not it's going to overflow.
@@ -3445,9 +3449,9 @@ expr2tc nearbyint2t::do_simplify() const
 expr2tc address_of2t::do_simplify() const
 {
   // NB: address_of never has its operands simplified below its feet for
-  // sanity's sake — expr2t::simplify returns nil immediately for address_of_id
-  // (see line ~29). This do_simplify is invoked through try_simplification by
-  // other simplifiers, so we can't assume `ptr_obj` is already simplified.
+  // sanity's sake — expr2t::simplify runs this do_simplify but skips the
+  // operand walk for address_of_id. So `ptr_obj` is never already simplified,
+  // whichever way we were reached.
 
   // &(*p) -> p. The C standard guarantees this round-trip (no actual access
   // happens), and dereference2t's result type is the pointee type, so the
