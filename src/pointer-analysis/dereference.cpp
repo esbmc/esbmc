@@ -347,6 +347,19 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
+/* Once per type: this fires on every access, so a program that reads a packed
+ * struct in a loop otherwise buries its own output. */
+static void warn_unchecked_packed_alignment(const type2tc &structure)
+{
+  static std::set<irep_idt> reported;
+  irep_idt name = struct_union_name(structure);
+  if (reported.insert(name).second)
+    log_warning(
+      "not checking alignment for access to packed {} {}",
+      get_type_id(*structure),
+      name.as_string());
+}
+
 static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 {
   if (!is_member2t(expr))
@@ -495,10 +508,7 @@ expr2tc dereferencet::dereference_expr_nonscalar(
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
       !is_aligned_member(expr, ns))
     {
-      log_warning(
-        "not checking alignment for access to packed {} {}",
-        get_type_id(*structure->type),
-        struct_union_name(structure->type).as_string());
+      warn_unchecked_packed_alignment(structure->type);
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
