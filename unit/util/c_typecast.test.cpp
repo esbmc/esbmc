@@ -25,6 +25,23 @@
 #include <util/arith/arith_tools.h>
 #include <irep2/irep2_utils.h>
 
+// migrate_expr resolves symbol types through this thread-local, which only
+// language_ui sets in a real run. Restoring it matters: it would otherwise
+// outlive the TEST_CASE-local namespacet it points at.
+struct migrate_lookupt
+{
+  explicit migrate_lookupt(const namespacet &ns)
+    : saved(migrate_namespace_lookup)
+  {
+    migrate_namespace_lookup = &ns;
+  }
+  ~migrate_lookupt()
+  {
+    migrate_namespace_lookup = saved;
+  }
+  const namespacet *saved;
+};
+
 // Differential harness for the two-operand usual-arithmetic conversion. The
 // arithmetic sections are grounded in the standard, not in either copy: C17
 // 6.3.1.8 converts both operands to one common type, so each section asserts
@@ -35,31 +52,44 @@
 // operands OTHER until this change, escaping promotion entirely; a
 // drift-only check cannot say which side is wrong, the common-type
 // assertion can.
-static void require_arith_result(
+// The general form: each operand has its own expected type, so the pointer
+// cases (6.5.6 converts neither) share one harness with the arithmetic ones
+// (6.3.1.8 converts both to a common type).
+static void require_arith_operands(
   const namespacet &ns,
   const exprt &a,
   const exprt &b,
-  const typet &common_type)
+  const typet &expected_a,
+  const typet &expected_b)
 {
-  migrate_namespace_lookup = &ns;
+  migrate_lookupt lookup(ns);
 
   exprt legacy_a = a, legacy_b = b;
   REQUIRE_FALSE(c_implicit_typecast_arithmetic(legacy_a, legacy_b, ns));
-  REQUIRE(legacy_a.type() == common_type);
-  REQUIRE(legacy_b.type() == common_type);
+  REQUIRE(legacy_a.type() == expected_a);
+  REQUIRE(legacy_b.type() == expected_b);
 
   expr2tc native_a, native_b;
   migrate_expr(a, native_a);
   migrate_expr(b, native_b);
   REQUIRE_FALSE(c_implicit_typecast_arithmetic(native_a, native_b, ns));
-  REQUIRE(native_a->type == migrate_type(common_type));
-  REQUIRE(native_b->type == migrate_type(common_type));
+  REQUIRE(native_a->type == migrate_type(expected_a));
+  REQUIRE(native_b->type == migrate_type(expected_b));
 
   expr2tc legacy_a_migrated, legacy_b_migrated;
   migrate_expr(legacy_a, legacy_a_migrated);
   migrate_expr(legacy_b, legacy_b_migrated);
   REQUIRE(legacy_a_migrated == native_a);
   REQUIRE(legacy_b_migrated == native_b);
+}
+
+static void require_arith_result(
+  const namespacet &ns,
+  const exprt &a,
+  const exprt &b,
+  const typet &common_type)
+{
+  require_arith_operands(ns, a, b, common_type, common_type);
 }
 
 // get_c_type ranks an operand against config.ansi_c, which is zero-initialised
@@ -189,14 +219,15 @@ static std::vector<std::pair<std::string, typet>> scalar_types()
 // failing assertion cannot leak the mode into later test cases.
 struct fixedbv_modet
 {
-  fixedbv_modet()
+  fixedbv_modet() : saved(config.ansi_c.use_fixed_for_float)
   {
     config.ansi_c.use_fixed_for_float = true;
   }
   ~fixedbv_modet()
   {
-    config.ansi_c.use_fixed_for_float = false;
+    config.ansi_c.use_fixed_for_float = saved;
   }
+  bool saved;
 };
 
 TEST_CASE(
@@ -211,25 +242,26 @@ TEST_CASE(
     }
 }
 
-TEST_CASE("admission parity: pointer shapes", "[c_typecast]")
+// Rebuilt per call for the same reason as scalar_types(): the `double` entry
+// is spelled fixedbv under --fixedbv.
+static std::vector<std::pair<std::string, typet>> pointer_shape_types()
 {
   const typet int_ptr = pointer_typet(int_type());
-  const typet void_ptr = pointer_typet(empty_typet());
-  const typet char_ptr = pointer_typet(char_type());
-  const typet int_ptr_ptr = pointer_typet(int_ptr);
-
-  const std::vector<std::pair<std::string, typet>> types = {
+  return {
     {"int*", int_ptr},
-    {"void*", void_ptr},
-    {"char*", char_ptr},
-    {"int**", int_ptr_ptr},
+    {"void*", pointer_typet(empty_typet())},
+    {"char*", pointer_typet(char_type())},
+    {"int**", pointer_typet(int_ptr)},
     {"int", int_type()},
     {"bool", bool_type()},
     {"double", double_type()},
   };
+}
 
-  for (const auto &[src_name, src] : types)
-    for (const auto &[dest_name, dest] : types)
+TEST_CASE("admission parity: pointer shapes", "[c_typecast]")
+{
+  for (const auto &[src_name, src] : pointer_shape_types())
+    for (const auto &[dest_name, dest] : pointer_shape_types())
     {
       INFO("src: " + src_name + " dest: " + dest_name);
       REQUIRE(legacy_admits(src, dest) == native_admits(src, dest));
@@ -320,16 +352,27 @@ TEST_CASE(
   contextt ctx;
   namespacet ns(ctx);
 
+  auto require_both_overloads = [&ns](const typet &src, const typet &dest) {
+    REQUIRE(legacy_admits(src, dest) == native_admits(src, dest));
+
+    const bool legacy_failed = check_c_implicit_typecast(src, dest, ns);
+    const bool native_failed =
+      check_c_implicit_typecast(migrate_type(src), migrate_type(dest), ns);
+    REQUIRE(legacy_failed == native_failed);
+  };
+
   for (const auto &[src_name, src] : scalar_types())
     for (const auto &[dest_name, dest] : scalar_types())
     {
       INFO("src: " + src_name + " dest: " + dest_name);
-      REQUIRE(legacy_admits(src, dest) == native_admits(src, dest));
+      require_both_overloads(src, dest);
+    }
 
-      const bool legacy_failed = check_c_implicit_typecast(src, dest, ns);
-      const bool native_failed =
-        check_c_implicit_typecast(migrate_type(src), migrate_type(dest), ns);
-      REQUIRE(legacy_failed == native_failed);
+  for (const auto &[src_name, src] : pointer_shape_types())
+    for (const auto &[dest_name, dest] : pointer_shape_types())
+    {
+      INFO("src: " + src_name + " dest: " + dest_name);
+      require_both_overloads(src, dest);
     }
 }
 
@@ -346,9 +389,7 @@ static void require_overloads_agree(
   const exprt &input,
   const typet &dest)
 {
-  // migrate_expr resolves symbol types through this thread-local, which only
-  // language_ui sets in a real run.
-  migrate_namespace_lookup = &ns;
+  migrate_lookupt lookup(ns);
 
   exprt legacy = input;
   const bool legacy_failed = c_implicit_typecast(legacy, dest, ns);
@@ -622,28 +663,9 @@ TEST_CASE(
     // C17 6.5.6: pointer arithmetic converts neither operand -- 6.3.1.8
     // covers arithmetic types only. (pointer, int) already gets this
     // treatment; a wider integer must not change it.
-    migrate_namespace_lookup = &ns;
-
     const exprt ptr = symbol_exprt("p", pointer_typet(int_type()));
     const exprt wide = symbol_exprt("w", int128_type());
-
-    exprt legacy_p = ptr, legacy_w = wide;
-    REQUIRE_FALSE(c_implicit_typecast_arithmetic(legacy_p, legacy_w, ns));
-    REQUIRE(legacy_p.type() == ptr.type());
-    REQUIRE(legacy_w.type() == wide.type());
-
-    expr2tc native_p, native_w;
-    migrate_expr(ptr, native_p);
-    migrate_expr(wide, native_w);
-    REQUIRE_FALSE(c_implicit_typecast_arithmetic(native_p, native_w, ns));
-    REQUIRE(native_p->type == migrate_type(ptr.type()));
-    REQUIRE(native_w->type == migrate_type(wide.type()));
-
-    expr2tc legacy_p_migrated, legacy_w_migrated;
-    migrate_expr(legacy_p, legacy_p_migrated);
-    migrate_expr(legacy_w, legacy_w_migrated);
-    REQUIRE(legacy_p_migrated == native_p);
-    REQUIRE(legacy_w_migrated == native_w);
+    require_arith_operands(ns, ptr, wide, ptr.type(), wide.type());
   }
 }
 
