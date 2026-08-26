@@ -36,6 +36,9 @@ This page is a reference of all Python language constructs, data structures, and
 - **Parameter type recovery**: A bare `list` annotation, or no annotation at all, does not stop the parameter being typed. A body that uses the parameter as a list (`len(x)`, `x[i]`, a list mutator, or an unpack such as `first, *rest = arr`) refines it to the list model — in an imported module as well as the entry file — and the *element* type is recovered from the statically resolvable call sites when they agree on one, so `x[i] + 1` behaves as it does under a `list[T]` annotation instead of reading as `Any`
 - **Default arguments**: A parameter whose default is a `list`, `dict` or `set` literal receives that container when the argument is omitted, rather than `None`. Defaults are also filled in for a call into an imported module and for an imported class's constructor
 - **Callables in containers**: A function name stored in a list decays to a function pointer, so a callable read back out of the list can be invoked
+- **Closures**: a nested `def` may read a scalar of the enclosing function and write through a captured list (`c[0] += 1`), provided nothing rebinds the captured name after the `def`; a nested `c = [9]` binds its own local rather than the enclosing list
+- **`Callable[[A], R]` annotations** on a return type or a variable carry the spelled signature, so a call through the value returns `R` rather than a nondeterministic value; a bare `Callable` takes its signature from the assigned function
+- **Dunder spellings of operators**: `d.__getitem__(k)`, `xs.__len__()` and `d.__contains__(k)` are rewritten to `d[k]`, `len(xs)` and `k in d`, and dispatch to a user class's own dunder as the operators do
 - **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly
 
 ## Object-Oriented Programming
@@ -325,7 +328,8 @@ if x > 0:
 
 ## Dynamic Typing
 
-A variable whose type diverges across an `if`/`else` — `x = 1` in one branch and
+A variable whose type diverges across an `if`/`else` — or an `if`/`elif`/`else`
+chain in which every branch assigns it — `x = 1` in one branch and
 `x = "hello"` in the other — is given a *tagged* representation carrying a
 runtime type tag alongside the value, instead of being forced to one branch's
 type. This covers a variable created inside the branches and one that already
@@ -353,7 +357,8 @@ Supported on a tagged variable:
 - **`==` between two tagged variables**, dispatched on the tag, with the numeric
   arm fixed-width and the `str` arm under a compile-time bound.
 - **`+`, `-`, `*`, `/` against a literal**, numeric, plus string concatenation
-  for `+`.
+  for `+`; **`-` and `/` between two tagged operands**, raising `TypeError`
+  when either turns out non-numeric.
 - **Rebinding to a container** — a list, tuple or class instance assigned to a
   tagged variable gets its own slot, as Python rebinds the name outright.
 - **Function return values**: a function whose `return` statements diverge in
@@ -393,10 +398,10 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `len` | Works on lists, sets, strings, tuples. On a class instance it dispatches to `__len__`, walking the ancestry so an inherited one is found; a class that defines none raises `TypeError` as CPython does, rather than measuring the struct with `strlen` and answering 0 |
 | `range` | Used in `for` loops |
 | `min(a, b)`, `max(a, b)` | Two-argument form only; promotes `int` to `float` |
-| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types. The `key=` argument is honoured over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms (the winning element is returned; ties break toward the first occurrence) |
+| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types. The `key=` argument is honoured over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms (the winning element is returned; ties break toward the first occurrence); any other `key=` is refused rather than dropped |
 | `sum([...])` | Sum of list elements; supports `int` and `float` |
 | `sum(range(EXPR))` | Single-arg `sum` of a single-arg `range` is rewritten to the Gauss closed form `EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0`, yielding an exact value (and `0` for `EXPR <= 0`) instead of a nondet result |
-| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements |
+| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements and homogeneous lists of tuples, whose element types are carried through (as `reversed()` and `list()` also do). `key=` is honoured only where the call constant-folds and is refused otherwise |
 | `any([...])` | List literals only; short-circuit OR logic |
 | `all([...])` | List literals only; short-circuit AND logic |
 | `enumerate(iterable, start=0)` | Tuple unpacking and single-variable forms; optional `start` |
@@ -562,7 +567,7 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 
 **Slicing**: bounded 1-D slicing `a[i:j]` on a list-backed array returns a new `list[T]` (bounded, open-ended `a[i:]`/`a[:j]`, and full-copy `a[:]` forms), with the slice typed as the element type rather than collapsing to a scalar. **2-D slicing** selects whole rows (`a[i, :]`) and whole columns (`a[:, j]`)
 
-**Views**: a 1-D, unit-stride slice with literal bounds assigned to a bare name (`v = a[1:3]`) is a real **view** — `v` points into `a`'s own buffer, so writes through either are observed by the other, and `len(v)`, `v.shape` and `v.ndim` report the view's own length rather than the base buffer's. Every other view-like expression, including a slice with a symbolic bound, still copies
+**Views**: a slice or selection with literal bounds assigned to a bare name is a real **view** onto `a`'s own buffer, so writes through either side are observed by the other, and `len(v)`, `v.shape` and `v.ndim` report the view's own extent: 1-D slices with any step (`a[1:3]`, `a[::2]`, `a[::-1]`), 2-D row views (`a[0]`, `a[-1]`) and column views (`a[:, j]`), `np.ravel(a)` / `a.ravel()` / `a.flat[i]` (writable, contiguous), and `np.diagonal(a, offset=k)` / `a.diagonal()` (read-only). `np.trace(a)` and `np.fill_diagonal(a, v)` reuse the same offset arithmetic as a reduction and an in-place write. Rebinding the base array detaches its live views. A slice with a symbolic bound still copies
 
 **Shape manipulation**: `np.reshape(a, shape)` (2-D and 3-D targets; an incompatible element count is rejected), `np.flatten(a)` / `np.ravel(a)` (row-major 1-D view), `np.squeeze(a)` (drop unit-length axes; a non-unit axis is rejected), `np.stack([a, b, ...])` (join arrays along a new leading axis, e.g. 1-D → 2-D), `np.concatenate([a, b, ...])` (join along the existing axis), and `a.astype(dtype)` (dtype conversion; `astype` to a complex dtype is rejected)
 
