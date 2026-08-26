@@ -233,6 +233,7 @@ class ExpressionRewriteMixin:
                     self.preprocessor._lower_sorted_with_key_call,
                     self.preprocessor._lower_min_max_with_key_call,
                     self.preprocessor._lower_min_max_key_scan,
+                    self.preprocessor._lower_sorted_key_scan,
                     self.preprocessor._lower_tuple_sorted_pair_call,
             ):
                 lowered = lower(node)
