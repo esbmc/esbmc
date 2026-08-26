@@ -17,6 +17,7 @@ class CoreVisitorsMixin:
         "reverse",
         "sort",
     }
+    _PURE_DICT_METHODS = {"__getitem__", "copy", "get", "items", "keys", "values"}
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -196,9 +197,9 @@ class CoreVisitorsMixin:
                     invalidate(elt)
             elif isinstance(target, ast.Starred):
                 invalidate(target.value)
-            elif (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
-                  and target.value.id in self.list_literal_values):
+            elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
                 self.list_literal_values.pop(target.value.id, None)
+                self.dict_literal_values.pop(target.value.id, None)
 
         for target in targets:
             invalidate(target)
@@ -517,10 +518,7 @@ class CoreVisitorsMixin:
             if isinstance(node.value, ast.Subscript):
                 self._subscript_inferred_vars.add(target_id)
 
-        if isinstance(node.value, ast.List):
-            self.list_literal_values[target_id] = copy.deepcopy(node.value)
-        else:
-            self.list_literal_values.pop(target_id, None)
+        self._track_literal_binding(target_id, node.value)
 
         if isinstance(node.value, ast.Dict):
             self.dict_literal_vars.add(target_id)
@@ -617,16 +615,29 @@ class CoreVisitorsMixin:
             assignments.append(individual_assign)
         return assignments
 
+    def _track_literal_binding(self, name, value):
+        for store, kind in ((self.list_literal_values, ast.List), (self.dict_literal_values,
+                                                                   ast.Dict)):
+            if isinstance(value, kind):
+                store[name] = copy.deepcopy(value)
+            else:
+                store.pop(name, None)
+            # ``alias = name`` lets later mutation through the alias go unseen.
+            if isinstance(value, ast.Name):
+                store.pop(value.id, None)
+
     def _invalidate_list_literals_for_call(self, node):
-        if (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
-                and node.func.attr in self._MUTATING_LIST_METHODS
-                and node.func.value.id in self.list_literal_values):
-            self.list_literal_values.pop(node.func.value.id, None)
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+            if node.func.attr in self._MUTATING_LIST_METHODS:
+                self.list_literal_values.pop(node.func.value.id, None)
+            if node.func.attr not in self._PURE_DICT_METHODS:
+                self.dict_literal_values.pop(node.func.value.id, None)
         if isinstance(node.func, ast.Name) and node.func.id in self._PURE_LIST_CONSUMERS:
             return
         for arg in list(node.args) + [kw.value for kw in node.keywords]:
-            if isinstance(arg, ast.Name) and arg.id in self.list_literal_values:
+            if isinstance(arg, ast.Name):
                 self.list_literal_values.pop(arg.id, None)
+                self.dict_literal_values.pop(arg.id, None)
 
     def _maybe_rewrite_newtype_call(self, node):
         if (isinstance(node.func, ast.Name) and node.func.id in self.newtype_vars
@@ -1294,10 +1305,10 @@ class CoreVisitorsMixin:
         # element values (the del lowers to list.pop(i) in the converter).
         node = self.generic_visit(node)
         for target in node.targets:
-            if isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
-                self.list_literal_values.pop(target.value.id, None)
-            elif isinstance(target, ast.Name):
-                self.list_literal_values.pop(target.id, None)
+            base = target.value if isinstance(target, ast.Subscript) else target
+            if isinstance(base, ast.Name):
+                self.list_literal_values.pop(base.id, None)
+                self.dict_literal_values.pop(base.id, None)
         return node
 
     def visit_Assign(self, node):
@@ -1532,13 +1543,14 @@ class CoreVisitorsMixin:
         walk(node.body)
         return bound - declared
 
-    def _restore_shadowed_literals(self, names, saved):
+    @staticmethod
+    def _restore_shadowed_literals(store, names, saved):
         """Undo inner-scope rebindings of `names`, keeping other changes."""
         for name in names:
             if name in saved:
-                self.list_literal_values[name] = saved[name]
+                store[name] = saved[name]
             else:
-                self.list_literal_values.pop(name, None)
+                store.pop(name, None)
 
     def visit_FunctionDef(self, node):  # pylint: disable=too-many-branches,too-many-statements
         # dict-literal bindings are local to a scope: snapshot on entry and
@@ -1558,7 +1570,14 @@ class CoreVisitorsMixin:
         # mutates the enclosing list, so its invalidation must survive --
         # restore only the names this scope binds.
         saved_list_literals = dict(self.list_literal_values)
+        saved_dict_literals = dict(self.dict_literal_values)
         shadowed_literals = self._locally_bound_names(node)
+        saved_key_funcs = self._single_return_funcs
+        self._single_return_funcs = {
+            name: body
+            for name, body in saved_key_funcs.items()
+            if not self._scope_locally_binds(node, {name})
+        }
         # Per-function scope for call-origin tracking and the eq-only set.
         saved_call_origins = dict(self._assignment_call_origins)
         self._assignment_call_origins.clear()
@@ -1599,7 +1618,11 @@ class CoreVisitorsMixin:
             self.dict_literal_vars = saved_dict_vars
             self.known_variable_types = saved_known_types
             self.variable_annotations = saved_var_anns
-            self._restore_shadowed_literals(shadowed_literals, saved_list_literals)
+            self._restore_shadowed_literals(self.list_literal_values, shadowed_literals,
+                                            saved_list_literals)
+            self._restore_shadowed_literals(self.dict_literal_values, shadowed_literals,
+                                            saved_dict_literals)
+            self._single_return_funcs = saved_key_funcs
             self._assignment_call_origins = saved_call_origins
             self._eq_only_items_view_targets = saved_eq_only
             self._exit_vararg_scope(node, saved_vararg_defs)

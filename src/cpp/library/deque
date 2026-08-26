@@ -158,6 +158,12 @@ public:
       pos = i.pos;
       vec_pos = i.vec_pos;
     }
+    const_iterator(const iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+    }
     const_iterator()
     {
     }
@@ -716,7 +722,7 @@ public:
     return buf[1];
   }
 
-  value_type back()
+  reference back()
   {
     return buf[_size];
   }
