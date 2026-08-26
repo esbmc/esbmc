@@ -2105,9 +2105,32 @@ bool python_converter::is_tracked_numpy_view_name_node(
 bool python_converter::is_basic_numpy_view_subscript_escape(
   const nlohmann::json &node)
 {
-  if (
-    !is_basic_numpy_view_subscript(node) ||
-    root_name_from_subscript(node["value"]).empty())
+  if (!is_basic_numpy_view_subscript(node))
+    return false;
+
+  const std::string root_name = root_name_from_subscript(node["value"]);
+  if (root_name.empty())
+    return false;
+
+  const std::string root_id = resolve_name_symbol_id(root_name);
+  if (root_id.empty())
+    return false;
+
+  bool root_is_numpy_view_source = numpy_array_symbols_.count(root_id) != 0 ||
+                                   is_tracked_numpy_view_id(root_id);
+  if (!root_is_numpy_view_source)
+  {
+    const symbolt *root_symbol = symbol_table_.find_symbol(root_id);
+    if (root_symbol != nullptr)
+    {
+      const namespacet ns(symbol_table_);
+      const typet root_type = ns.follow(root_symbol->get_type());
+      root_is_numpy_view_source =
+        root_type.is_array() ||
+        (root_type.is_pointer() && ns.follow(root_type.subtype()).is_array());
+    }
+  }
+  if (!root_is_numpy_view_source)
     return false;
 
   code_blockt scratch_block;
@@ -2305,6 +2328,32 @@ python_converter::build_numpy_descriptor_materialized_elements(
     return std::nullopt;
   if (shape->empty() || shape->size() > 2)
     throw std::runtime_error(unsupported_rank_error);
+
+  if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
+      pointer_it != numpy_pointer_view_info_.end())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(root_id);
+    if (symbol == nullptr)
+      return std::nullopt;
+
+    const namespacet ns(symbol_table_);
+    const typet pointer_type = ns.follow(symbol->get_type());
+    if (!pointer_type.is_pointer())
+      return std::nullopt;
+
+    const typet elem_type = ns.follow(pointer_type.subtype());
+    std::vector<exprt> elems;
+    elems.reserve(pointer_it->second.length);
+    for (std::size_t i = 0; i < pointer_it->second.length; ++i)
+    {
+      const long long offset =
+        static_cast<long long>(i) * pointer_it->second.stride;
+      exprt element_ptr = python_expr::build_add(
+        symbol_expr(*symbol), from_integer(offset, size_type()), pointer_type);
+      elems.push_back(python_expr::build_dereference(element_ptr, elem_type));
+    }
+    return std::make_pair(*shape, elems);
+  }
 
   std::optional<std::vector<nlohmann::json>> element_nodes =
     build_numpy_nditer_logical_elements(arg);
@@ -2972,8 +3021,10 @@ bool python_converter::record_numpy_transpose_view(
   swaps_axes = *axis_swaps;
 
   const std::string lhs_id = lhs.identifier().as_string();
+  const std::string view_source_id =
+    resolve_numpy_array_storage_alias_id(source_id);
   numpy_transpose_view_info_[lhs_id] = {
-    source_id, rank, swaps_axes && rank == 2};
+    view_source_id, rank, swaps_axes && rank == 2};
   numpy_array_symbols_.insert(lhs_id);
   return true;
 }
@@ -3286,12 +3337,16 @@ void python_converter::emit_numpy_transpose_mirror_assignment(
   if (!source_indices)
     return;
 
-  const std::string source_id =
-    resolve_numpy_array_storage_alias_id(view_it->second.source_id);
-  emit_numpy_view_cell_assignment(
+  const std::string source_id = view_it->second.source_id;
+  emit_numpy_transpose_mirror_assignment(
     source_id, *source_indices, rhs, location, target_block);
+  const std::string storage_source_id =
+    resolve_numpy_array_storage_alias_id(source_id);
+  if (storage_source_id != source_id)
+    emit_numpy_view_cell_assignment(
+      storage_source_id, *source_indices, rhs, location, target_block);
   mirror_numpy_source_write_to_views(
-    source_id, *source_indices, rhs, location, target_block, symbol_id);
+    storage_source_id, *source_indices, rhs, location, target_block, symbol_id);
 }
 
 void python_converter::mirror_numpy_transpose_assignment(
@@ -3326,12 +3381,13 @@ void python_converter::mirror_numpy_transpose_assignment(
         direct->second.rank, direct->second.swaps_axes, indices);
     if (cell_indices)
     {
-      const std::string source_id =
-        resolve_numpy_array_storage_alias_id(direct->second.source_id);
-      emit_numpy_view_cell_assignment(
+      const std::string source_id = direct->second.source_id;
+      emit_numpy_transpose_mirror_assignment(
         source_id, *cell_indices, rhs, location, target_block);
+      const std::string storage_source_id =
+        resolve_numpy_array_storage_alias_id(source_id);
       mirror_numpy_source_write_to_views(
-        source_id, *cell_indices, rhs, location, target_block, root_id);
+        storage_source_id, *cell_indices, rhs, location, target_block, root_id);
     }
     return;
   }

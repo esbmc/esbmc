@@ -3249,7 +3249,8 @@ static exprt reduce_numpy_descriptor_values(
   {
     exprt total = numpy_cast_to_double(elems.front());
     for (std::size_t i = 1; i < elems.size(); ++i)
-      total = plus_exprt(total, numpy_cast_to_double(elems[i]));
+      total = python_expr::build_add(
+        total, numpy_cast_to_double(elems[i]), double_type());
     return div_exprt(
       total, from_double(static_cast<double>(elems.size()), double_type()));
   }
@@ -3258,7 +3259,7 @@ static exprt reduce_numpy_descriptor_values(
   {
     exprt total = elems.front();
     for (std::size_t i = 1; i < elems.size(); ++i)
-      total = plus_exprt(total, elems[i]);
+      total = python_expr::build_add(total, elems[i], total.type());
     return total;
   }
 
