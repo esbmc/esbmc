@@ -249,15 +249,45 @@ STATIC_CAPABILITIES = {
 # match the one ESBMC's Clang is configured for -- a probe that disagreed would
 # silently skip tests on hosts that actually support them. Ask the tool under
 # test instead, by parsing a snippet that exercises the feature.
+# "source" is the probe; "suffix" (default .c) picks the frontend, and "args"
+# adds options the probe needs.
 DYNAMIC_CAPABILITY_PROBES = {
     # Clang caps _BitInt/_ExtInt width per target (128 bits on aarch64-darwin,
     # far higher on x86_64-linux), so this cannot be answered statically.
-    "bitint_wide": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    "bitint_wide": {
+        "source": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    },
     # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
-    # does not. A test spelling a char type in expected output ("signed char c",
-    # "signed char * [argc + 1]") pins one of the two and cannot hold on both.
-    "signed_char_host": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
-    "int main() { return 0; }\n",
+    # does not. Pins both tests spelling a char type in expected output
+    # ("signed char c") and tests whose verdict turns on the range: CHAR_MIN,
+    # and whether char arithmetic such as 100 + 100 overflows.
+    "signed_char_host": {
+        "source": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # wchar_t is `int`, as it is on x86-64 Linux. The AAPCS makes it
+    # `unsigned int`, so a source redeclaring it as int is rejected there.
+    "signed_wchar_host": {
+        "source": '_Static_assert((__WCHAR_TYPE__)-1 < 0, "wchar_t is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # `long double` is the x87 80-bit format (64-bit significand) rather than
+    # IEEE binary128. Exact floating-point identities hold in one and not the
+    # other, so a test asserting one cannot hold on both.
+    "x87_long_double": {
+        "source": '_Static_assert(__LDBL_MANT_DIG__ == 64, "x87 long double");\n'
+        "int main() { return 0; }\n",
+    },
+    # The host's C++ standard library headers are reachable, which is what the
+    # tests passing --no-abstracted-cpp-includes, --no-library or
+    # --mix-cpp-host-headers read instead of the bundled OMs. Installing
+    # libstdc++-dev is not enough: on aarch64 ESBMC's Clang fails to find the
+    # GCC C++ include tree even when it is present (#7308).
+    "host_cxx_headers": {
+        "source": "#include <cassert>\nint main() { return 0; }\n",
+        "suffix": ".cpp",
+        "args": ["--no-abstracted-cpp-includes"],
+    },
 }
 
 KNOWN_CAPABILITIES = STATIC_CAPABILITIES | set(DYNAMIC_CAPABILITY_PROBES)
@@ -271,13 +301,17 @@ def _probe_capability(name, executor_path):
     snippet, a crash, or a hang all mean "not supported", so the test is
     skipped rather than failing for a reason that is not about the test.
     """
+    probe = DYNAMIC_CAPABILITY_PROBES[name]
     with tempfile.TemporaryDirectory() as tmp_dir:
-        source = os.path.join(tmp_dir, "probe.c")
+        source = os.path.join(tmp_dir, "probe" + probe.get("suffix", ".c"))
         with open(source, "w") as fp:
-            fp.write(DYNAMIC_CAPABILITY_PROBES[name])
+            fp.write(probe["source"])
         try:
             completed = subprocess.run(
-                shlex.split(executor_path) + ["--parse-tree-only", source],
+                shlex.split(executor_path)
+                + ["--parse-tree-only"]
+                + probe.get("args", [])
+                + [source],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 timeout=120,
