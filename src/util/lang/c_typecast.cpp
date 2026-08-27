@@ -315,7 +315,13 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
       return LONG;
     else if (width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
-    if (width <= config.ansi_c.int_128_width)
+    // Exactly 128, not <=: a _BitInt(65..127) is a signedbv of its own width,
+    // and ranking it INT128 makes implicit_typecast_arithmetic widen it to 128
+    // bits, moving the overflow boundary --overflow-check tests. The #extint
+    // marker cannot gate this instead: migrate_type rebuilds signedbv from
+    // width alone (migrate.cpp), so the expr2tc copy below cannot see it and
+    // the two copies would diverge.
+    if (width == config.ansi_c.int_128_width)
       return INT128;
   }
   else if (type.id() == "unsignedbv")
@@ -328,7 +334,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
       return ULONG;
     else if (width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
-    if (width <= config.ansi_c.int_128_width)
+    if (width == config.ansi_c.int_128_width)
       return UINT128;
   }
   else if (type.is_bool())
@@ -377,7 +383,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
       return LONG;
     else if (width <= config.ansi_c.long_long_int_width)
       return LONGLONG;
-    if (width <= config.ansi_c.int_128_width)
+    if (width == config.ansi_c.int_128_width)
       return INT128;
   }
   else if (is_unsignedbv_type(type))
@@ -392,7 +398,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
       return ULONG;
     else if (width <= config.ansi_c.long_long_int_width)
       return ULONGLONG;
-    if (width <= config.ansi_c.int_128_width)
+    if (width == config.ansi_c.int_128_width)
       return UINT128;
   }
   else if (is_bool_type(type))
