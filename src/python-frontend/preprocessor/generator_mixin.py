@@ -1203,6 +1203,31 @@ class GeneratorMixin:
             return None
         return key_kw
 
+    def _key_indexes_element(self, key_value):
+        """True when applying ``key_value`` subscripts the element it is given.
+
+        A key bound by assignment rather than by a def reads as not indexing,
+        so such a call is still lowered to a scan.
+        """
+        if isinstance(key_value, ast.Lambda):
+            return self.subscripts_name(key_value.body, key_value.args.args[0].arg)
+        return isinstance(key_value, ast.Name) and key_value.id in self._param_subscripting_funcs
+
+    def _is_scan_supported(self, iterable_expr, key_value):
+        """True when a sort scan lowers to operations the frontend models.
+
+        The scan copies the iterable with a full slice and applies the key to
+        each element, and two shapes exceed what the frontend models: copying a
+        dict view does not terminate at the default unwind, and an element the
+        key subscripts raises a spurious IndexError. Declining leaves
+        reject_unfoldable_key to report the unsupported key, which beats a hang
+        or a wrong verdict.
+        """
+        if (isinstance(iterable_expr, ast.Call) and isinstance(iterable_expr.func, ast.Attribute)
+                and iterable_expr.func.attr in ("keys", "values", "items")):
+            return False
+        return not self._key_indexes_element(key_value)
+
     def _lower_sorted_key_scan(self, call_node):
         """Lower ``sorted(iterable, key=f)`` to an explicit insertion sort.
 
@@ -1218,7 +1243,7 @@ class GeneratorMixin:
         caller's list, and ``sorted`` must not.
         """
         key_kw = self._scan_key_argument(call_node, ("sorted", ))
-        if key_kw is None:
+        if key_kw is None or not self._is_scan_supported(call_node.args[0], key_kw.value):
             return None
 
         n = self.minmax_key_counter
