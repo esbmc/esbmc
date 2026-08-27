@@ -79,7 +79,8 @@ public:
     expr2tc obj;
     /** Guard when allocation occured. */
     guard2tc alloc_guard;
-    /** Record if the object is automatically desallocated (allocated with alloca). */
+    /** Record if the object is automatically desallocated (allocated with
+     * alloca). */
     bool auto_deallocd;
     /** The object name */
     std::string name;
@@ -598,11 +599,11 @@ protected:
   void intrinsic_kill_monitor(reachability_treet &art);
   /**
    * @brief Intrinsic call for C memset function call
-   * 
+   *
    * This will either invoke our operational model (at string.c)
    * or try to compute the resulting value directly
-   * 
-   * @param art 
+   *
+   * @param art
    * @param func_call memset function call
    */
   void intrinsic_memset(
@@ -672,7 +673,8 @@ protected:
     const code_function_call2t &func_call,
     const std::string &bump_name);
 
-  // Function to call a symname function, in case where were not able to optimize it
+  // Function to call a symname function, in case where were not able to
+  // optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
 
@@ -684,7 +686,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  /** Implements GCC's __builtin_object_size intrinsic for object size determination
+  /** Implements GCC's __builtin_object_size intrinsic for object size
+   * determination
    *
    * @param func_call Function call with 2 operands: pointer and type parameter
    * @param art Reachability tree (unused)
@@ -705,7 +708,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  /* Handles dereferencing between threads and is used only in data race checks. **/
+  /* Handles dereferencing between threads and is used only in data race checks.
+   * **/
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
@@ -756,7 +760,18 @@ protected:
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &over_cap);
+
+  /**
+   *  Bound at PTRDIFF_MAX the object size an assignment records, reporting a
+   *  constant request that exceeds it rather than assuming it away. Only an
+   *  assignment to a dynamic_size2t records one -- a VLA declaration is the
+   *  only way a stack object's size reaches symex, and renaming has exposed
+   *  its constness by then. R40.
+   *  @param code The assignment, unrenamed.
+   */
+  void bound_dynamic_object_size(const code_assign2t &code);
 
   /**
    *  Create result pointer from newly allocated array.
@@ -929,13 +944,13 @@ protected:
 
   /**
    * Handle side effects in the symbolic execution.
-   * 
+   *
    * @param lhs The left-hand side expression (target of the assignment).
    * @param effect The side effect expression to be handled, typically one of
    *        the `sideeffect2t` kinds like `malloc`, `realloc`, etc.
-   * 
-   * This function does not return any value; it modifies the symbolic execution state
-   * based on the side effect encountered.
+   *
+   * This function does not return any value; it modifies the symbolic execution
+   * state based on the side effect encountered.
    */
   void handle_sideeffect(
     const expr2tc &lhs,
@@ -944,11 +959,11 @@ protected:
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
-   * 
+   *
    * @param lhs The left-hand side expression (target of the assignment).
-   * @param if_effect The conditional expression (`if2t`) to be handled, containing
-   *        the condition, true branch, and false branch.
-   * 
+   * @param if_effect The conditional expression (`if2t`) to be handled,
+   * containing the condition, true branch, and false branch.
+   *
    * This function returns true if there is a sideeffect.
    */
   bool handle_conditional(
@@ -1461,16 +1476,17 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
-  /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
+  /** Cached from --validate-violation-witness; checked on every
+   * branch/intrinsic. */
   bool validate_witness;
 
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
-  /** Analyze the shared varables in a function call, this is because an argumemt
-   *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
   friend void build_goto_symex_classes();
 };
@@ -1511,7 +1527,8 @@ protected:
 namespace goto_symex_utils
 {
 /**
- * Computes the equivalent object value when considering a memcpy operation on it.
+ * Computes the equivalent object value when considering a memcpy operation on
+ * it.
  *
  * @param src The source expression from which bytes are copied.
  * @param dst The destination expression to which bytes are copied.
@@ -1519,7 +1536,8 @@ namespace goto_symex_utils
  * @param src_offset The offset in src from which the bytes start.
  * @param dst_offset The offset in dst at which the bytes are written.
  *
- * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
+ * @returns A new expr2tc representing the result of the memcpy operation, or an
+ * empty expr2tc if unable construct the object
  *
  * Usage Examples:
  * @code
@@ -1529,7 +1547,8 @@ namespace goto_symex_utils
  * size_t src_offset = 1;
  * size_t dst_offset = 2;
  *
- * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+ * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset,
+ * dst_offset);
  * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
  * @endcode
  */

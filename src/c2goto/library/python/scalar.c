@@ -219,3 +219,67 @@ __ESBMC_HIDE:;
   return (double)(*(const long long *)lhs->value) /
          (double)(*(const long long *)rhs->value);
 }
+
+// Both operands tagged, so the result's own type is only known at runtime --
+// it comes back as a tagged object, not a raw scalar. The str buffer's
+// __ESBMC_alloca storage survives past this call, like
+// __python_scalar_tag_copy.
+PyObject __python_scalar_add_obj_dyn(
+  const PyObject *lhs,
+  int lhs_is_num,
+  int lhs_is_str,
+  const PyObject *rhs,
+  int rhs_is_num,
+  int rhs_is_str,
+  size_t num_type_id,
+  size_t str_type_id)
+{
+__ESBMC_HIDE:;
+  int both_num = lhs && rhs && lhs_is_num && rhs_is_num;
+  int both_str = lhs && rhs && lhs_is_str && rhs_is_str;
+  __ESBMC_assert(
+    both_num || both_str, "TypeError: unsupported operand type(s) for +");
+
+  PyObject result;
+  result.float_idx = 0;
+
+  if (both_num)
+  {
+    long long *sum = __ESBMC_alloca(sizeof(long long));
+    *sum = *(const long long *)lhs->value + *(const long long *)rhs->value;
+    result.value = sum;
+    result.type_id = num_type_id;
+    result.size = sizeof(long long);
+    return result;
+  }
+
+  // both_str. `.size` includes the trailing '\0' on each side, stripped so
+  // the result ends up with exactly one, at the end. Lengths are only known
+  // at runtime, so the copy loops below use a compile-time bound instead of
+  // memcpy, whose loop bound would be symbolic and never unwind fully.
+  size_t lhs_len = both_str ? lhs->size - 1 : 0;
+  size_t rhs_len = both_str ? rhs->size - 1 : 0;
+  __ESBMC_assert(
+    lhs_len <= ESBMC_PY_STRNLEN_BOUND && rhs_len <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged str exceeds the modelled bound");
+
+  char *buffer = __ESBMC_alloca(lhs_len + rhs_len + 1);
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= lhs_len)
+      break;
+    buffer[i] = ((const char *)lhs->value)[i];
+  }
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= rhs_len)
+      break;
+    buffer[lhs_len + i] = ((const char *)rhs->value)[i];
+  }
+  buffer[lhs_len + rhs_len] = '\0';
+
+  result.value = buffer;
+  result.type_id = str_type_id;
+  result.size = lhs_len + rhs_len + 1;
+  return result;
+}

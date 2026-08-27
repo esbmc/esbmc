@@ -1,8 +1,8 @@
 # CPROVER (CBMC) Support — Roadmap
 
 **Status:** IN PROGRESS
-**Branch:** `cbmc-goto-frontend` (foundation landed; not yet merged to `master`)
-**Date:** 2026-06-10
+**Branch:** merged to `master` — the reader and adapter live in `src/goto-programs/`
+**Date:** 2026-06-10 (last re-measured against the corpus 2026-08-26)
 **Related:** PR #2443 (CPROVER migration compatibility), the `verify-rust-std` / Kani initiative
 
 ---
@@ -61,7 +61,7 @@ and the symbol/function table layout.
 
 ---
 
-## 3. Current state (landed on `cbmc-goto-frontend`)
+## 3. Current state (landed on `master`, originally `cbmc-goto-frontend`)
 
 | Area | Status | Where |
 |------|--------|-------|
@@ -1320,16 +1320,19 @@ reproduce** (76/76 crashes, 3/3 mismatches), so the numbers below are not parall
 |---|---|---|
 | **Parses (GOTO built)** | **1375 / 1375 (100 %)** | reader → adapter → migrate never fails |
 | Matches CBMC — **Yes** | 1110 | **99.7 % of the 1113 both tools decided** |
-| Matches CBMC — **No** | 3 | all one root cause (alignment), all false alarms — ✅ fixed 2026-07-17, PR #6138; the CBMC baseline behind this row does not reproduce, see below |
+| Matches CBMC — **No** | 3 | ❌ **not** alignment and **not** fixed — these are `ptr::unique`, still open; see the 2026-08-26 sweep, which resolves the baseline question below |
 | Matches CBMC — **Crashes** | 76 | 53 × rc=134 abort, 23 × rc=139 segfault |
 | N/A (either side timed out/errored) | 186 | ESBMC 140 timeouts; CBMC 35 timeouts + 68 errors |
 
 **The 87 % rc=139 parse-crash baseline is gone.** No binary fails to load: all 76 crashes
 occur *during verification*, after a GOTO program was built successfully. Where both tools
 reach a verdict they agree 1110/1113, and **there is not a single unsound miss in the corpus**
-— ESBMC never reports SUCCESSFUL where CBMC reports FAILED. (The 3 disagreements are since
-fixed — PR #6138 — so a re-sweep should show 1113/1113; all three were false alarms, i.e. in
-the safe direction, so the no-unsound-miss result is unaffected either way.)
+— ESBMC never reports SUCCESSFUL where CBMC reports FAILED. (All three disagreements are
+false alarms, i.e. in the safe direction, so the no-unsound-miss result is unaffected. ❌ The
+claim that PR #6138 fixed them, and that a re-sweep would show 1113/1113, is **wrong** — the
+2026-08-26 re-sweep still finds exactly 3, and identifies them as
+`ptr::unique::verify::{check_cast, check_as_ref, check_as_mut}`, whose cause is not
+alignment.)
 
 **Per module** (Yes / No / Crashes / N/A): `ptr` 323/3/19/31 · `intrinsics` 291/0/0/22 ·
 `convert` 190/0/0/0 · `num` 189/0/14/29 · `slice` 85/0/32/84 · `time` 20/0/0/4 ·
@@ -1424,6 +1427,169 @@ filename; run `esbmc --binary <file>.out --function <symbol>` against
 wraps the boilerplate main and reports a vacuous SUCCESSFUL). A `Yes` means *ESBMC agrees
 with CBMC*, not *the harness proved clean* — most FAILEDs on both sides are Kani
 `reachability_check` coverage markers (see UMBRELLA #1/#2).
+
+---
+
+## Global corpus sweep — 2026-08-26 (re-measured on a regenerated corpus)
+
+A re-run of the 2026-07-16 sweep against **ESBMC `master`** (`b432979746`) with the corpus
+**regenerated from scratch** rather than reused: `verify-rust-std` @ `43bd3b1` (2026-08-25,
+"Challenge 12: NonZero"), Kani 0.67.0 built from the pinned `tool_config/kani-version.toml`
+commit `d4df833c`, corpus produced by `kani verify-std --only-codegen --keep-temps`. That
+yields **1,747** `.out` goto-binaries (`core` 1,745, `alloc` 2) — **372 more than July's
+1,375**, nearly all in `num`, from the NonZero challenge. Counts are therefore not directly
+comparable to July's per-module table; rates are.
+
+⚠️ **The oracle version differs from July's.** The pinned Kani requires **CBMC 6.8.0**, so
+that is what this sweep used; July used 6.10.0. Any verdict difference from July must be
+checked against that bump before being attributed to ESBMC.
+
+Method unchanged: `esbmc --binary <file> --function <symbol>` (40 s cap) against
+`cbmc <file> --function <symbol> --object-bits 12` (30 s cap). Wall clock **22 min** at
+16-way parallelism. Every harness flagged as a crash or a mismatch was **re-run serially**;
+all 79 reproduce, so none of the figures below is a parallelism artefact.
+
+| | 2026-08-26 | 2026-07-16 |
+|---|---|---|
+| **Parses (GOTO built)** | **1747 / 1747 (100 %)** | 1375 / 1375 (100 %) |
+| Matches CBMC — **Yes** | **1440** — 99.79 % of the 1443 both decided | 1110 — 99.7 % of 1113 |
+| Matches CBMC — **No** | **3** | 3 |
+| Matches CBMC — **Crashes** | **76** (56 × rc=134, 20 × rc=139) | 76 (53 × rc=134, 23 × rc=139) |
+| N/A (either side timed out/errored) | 228 | 186 |
+| **Unsound misses** | **0** | 0 |
+
+Every one of ESBMC's **211 `VERIFICATION SUCCESSFUL`** verdicts is corroborated by CBMC on
+the same binary — agreement splits 211 SUCCESS/SUCCESS + 1229 FAILED/FAILED — so there is
+still **not a single unsound miss** in the corpus. On 17 harnesses ESBMC returns a verdict
+where **CBMC cannot**, aborting with `array too large for flattening`.
+
+### The 2026-07-16 "unreproducible CBMC baseline" is resolved: two harness sets were conflated
+
+The July section flags an unexplained discrepancy — it recorded CBMC *proving*
+`check_cast` / `check_as_ref` / `check_as_mut` SUCCESSFUL at `0 of 2826 failed`, but a later
+re-run found CBMC reporting `VERIFICATION FAILED` at `1 of 85` / `4 of 123`. **Both records
+are correct; they are different harnesses with near-identical names.**
+
+| Harness | CBMC 6.8.0 today | Matches which July record |
+|---|---|---|
+| `ptr::non_null::verify::non_null_check_cast` | `1 of 86 failed` — FAILED | the re-run's "1 of 85 failed" |
+| `ptr::non_null::verify::non_null_check_as_ref` | `4 of 124 failed` — FAILED | the re-run's "4 of 123 failed" |
+| `ptr::unique::verify::check_cast` | **`0 of 2609 failed` — SUCCESSFUL** | the original "0 of 2826 failed" |
+| `ptr::unique::verify::check_as_ref` | **`0 of 2618 failed` — SUCCESSFUL** | " |
+
+`ptr::unique::verify` defines its harnesses as the bare names `check_cast` / `check_as_ref` /
+`check_as_mut`, while `ptr::non_null::verify` prefixes its own with `non_null_`. The bare
+names in the original sweep resolved to the **`unique`** harnesses; the re-run resolved them
+to the **`non_null`** ones. (`ptr::unique::verify` already carried these three bare-named
+harnesses well before the July sweep — they are present at `28ab0a2a`, 2025-10-09.)
+
+**Consequence: the corpus's 3 verdict mismatches were never closed.** They are
+`ptr::unique::verify::{check_cast, check_as_ref, check_as_mut}`, they still mismatch on
+`master` today, and **their root cause is not alignment** — so PR #6138 did not resolve them,
+contrary to what §4.3/UMBRELLA #3 and the July section state. What PR #6138 did fix is real
+and independently regression-tested; it simply was not these. The `non_null_check_*` trio
+that the July re-run measured agrees with CBMC today.
+
+**The residual `unique` false alarm.** All three are the same shape — read a value back out
+through a `Unique` and compare it to the original:
+
+```rust
+let mut x: i32 = kani::any();
+let unique = Unique::new_unchecked(&mut x as *mut i32);
+assert_eq!(*unique.cast::<u32>().as_ref(), x as u32);   // check_cast
+```
+
+ESBMC reports the `assert_eq!` violated (`panicking::assert_failed_inner.assertion.4`); CBMC
+proves it. **ESBMC is definitively the one at fault, and its own counterexample proves it** —
+the trace is internally inconsistent. For `check_as_ref` with `x = -2`, `assert_eq!` lowers to
+`*left_val == *right_val` where `left_val` is `&*unique.as_ref()` and `right_val` is `&x`;
+**both point at the same object `x`**, yet the trace reads different values from them in the
+same state:
+
+```
+State  4  unique.rs:278   x        = -2            <- kani::any::<i32>
+State  6  unique.rs:281   unique   = { .={ .=&x }, .={} }
+State  8  non_null.rs:431 var_0    = byte_extract_little_endian({ .=&x }, 0)   <- as_ptr
+State 18  macros/mod.rs:44 var_5   = { .=var_6?1!0&0#2, .=&…::x?1!0 }          <- (left_val, right_val)
+State 23  macros/mod.rs:46 var_12  = -1            <- *left_val   ✗ should be -2
+State 25  macros/mod.rs:46 var_13  = -2            <- *right_val  ✓
+State 26  macros/mod.rs:46 var_11  =  0            <- compare fails, panic reached
+```
+
+Two reads of the same location in one state cannot legitimately yield `-1` and `-2`, so the
+counterexample is **spurious**: no such execution exists. The dereference of the pointer
+*recovered from the aggregate* (`byte_extract_little_endian({ .=&x }, 0)` in `NonNull::as_ptr`)
+loses its link to `x` and yields an unconstrained value, while the direct read of `x` keeps
+it. That points at the `byte_extract` → dereference path rather than at arithmetic or
+alignment — note `f2df960d08` ([pointer-analysis] *Resolve pointers an aggregate holds at an
+offset*, #6981) is already on `master` and does **not** cover this shape.
+
+**Solver-independent** — `--z3` and `--bitwuzla` both report `1 of 16 properties failed`, so
+the defect is in the encoding/symex layer, not in a solver. Precision-losing, never unsound:
+ESBMC only over-reports.
+
+### The three crash root causes are unchanged, in identity and in count
+
+| Root cause | 2026-08-26 | 2026-07-16 | Where (now) |
+|---|---|---|---|
+| `ERROR: Can't construct rvalue reference to array type during dereference` (rc=134) | **44** | 41 | `slice` 32, `ptr` 7, `num` 5 |
+| silent segfault, no diagnostic (rc=139) | **20** | 23 | `num` 12, `layout` 5, `char` 2, `collections` 1 |
+| `ERROR: Bitwuzla error encountered` (rc=134) | **12** | 12 | `ptr` 12 |
+
+Not one of the three has been fixed. This is consistent with the commit history: the 49
+commits touching `cbmc_adapter.cpp` / `read_cbmc_goto_object.cpp` since 2026-07-01 are
+breadth work — `__CPROVER_array_set`/`array_equal`/`havoc_object`, computed goto, `_Complex`,
+JBMC ingestion — and none targets `dereference.cpp:988` or the Bitwuzla path. The
+`rvalue reference to array` cluster remains **the largest single item in the corpus**, still
+led by the `align_offset` / `align_to` / `align_to_mut` family, exactly as UMBRELLA #3 records.
+
+**Per module** (Yes / No / Crashes / N/A), 2026-08-26:
+
+| Module | Yes | No | Crashes | N/A | Total | July |
+|---|---|---|---|---|---|---|
+| `num` | 517 | 0 | 17 | 70 | 604 | 189/0/14/29 |
+| `ptr` | 323 | 3 | 19 | 30 | 375 | 323/3/19/31 |
+| `intrinsics` | 289 | 0 | 0 | 24 | 313 | 291/0/0/22 |
+| `slice` | 86 | 0 | 32 | 83 | 201 | 85/0/32/84 |
+| `convert` | 190 | 0 | 0 | 0 | 190 | 190/0/0/0 |
+| `time` | 20 | 0 | 0 | 4 | 24 | 20/0/0/4 |
+| `layout` | 9 | 0 | 5 | 0 | 14 | (in "other") |
+| others (`ffi`, `str`, `ops`, `mem`, `char`, `vec`, `option`, `collections`, `array`) | 6 | 0 | 3 | 17 | 26 | 6/0/11/12 |
+
+`ptr`, `slice`, `convert` and `time` are **numerically identical to July** on every column
+but a timeout or two — the modules did not change, and neither did ESBMC's behaviour on them.
+`num` more than tripled in size and its crash count barely moved (14 → 17): 12 ×
+`nonzero_check_cmp_for_*` (silent segfault), 3 × `nonzero_check_isqrt_*` and 2 shift
+harnesses (`rvalue reference to array`). Never the multiply family.
+
+**UMBRELLA #1 and #2 are confirmed clean at full-sweep scale.** All **313** `intrinsics`
+harnesses — the transmute family — build a GOTO program and none crashes or mismatches
+(289 agree, 24 time out). The multiply family is 17/18 agreeing with one timeout and no
+crashes. Both umbrellas can be closed.
+
+### Where the effort should go
+
+**Axis 3 (solver performance) has grown into the largest bucket.** ESBMC timed out on 155
+harnesses at a 40 s cap against CBMC's 67, still concentrated in `slice` (83 N/A). Combined
+with the 76 crashes, **231 of 1,747 (13.2 %)** never reach a comparable verdict, versus
+**3 (0.17 %)** that reach a wrong one. Verdict *correctness* is not the bottleneck; reaching
+a verdict at all is.
+
+Ranked by harnesses recovered per fix:
+1. **`rvalue reference to array` in `dereference.cpp`** — 44 crashes, one dereference
+   limitation, the whole `align_offset`/`align_to` family.
+2. **Solver performance on `slice`** — 83 N/A in one module.
+3. **The `nonzero_*` silent segfault** — 12 crashes with no diagnostic at all, so the first
+   task is making it fail loudly.
+4. **`Bitwuzla error encountered`** — 12 crashes, all `non_null_check_write_unaligned_*`;
+   worth checking against Z3 to establish whether it is solver-specific.
+5. **The `ptr::unique` false alarm** — only 3 harnesses, but it is the corpus's *only*
+   remaining correctness defect.
+
+**Reproduce:** as before, the symbol is `_` + the text after `__` in the `.out` filename;
+`esbmc --binary <file>.out --function <symbol>` against
+`cbmc <file>.out --function <symbol> --object-bits 12`. Beware the bare-name collision
+documented above: always match the *full* mangled symbol, never the trailing `check_*` text.
 
 ---
 
@@ -1641,7 +1807,7 @@ _RNvNtNtCsfemxtvIyyHd_4core3num6verify15widening_mul_u8
 
 ## UMBRELLA #3: Pointer Operations Crash
 
-**Status**: 🟠 PARTIAL — parses 100 %, 323/346 decided harnesses match CBMC; the 3 false alarms are ✅ fixed (alignment, PR #6138), residual = **19 crashes**, led by the `rvalue reference to array` dereference limitation (see the global sweep above)
+**Status**: 🟠 PARTIAL — parses 100 %, 323/326 decided harnesses match CBMC (2026-08-26); the 3 false alarms are ❌ **still open** (`ptr::unique`, not alignment — the PR #6138 attribution was a harness-name conflation, see the 2026-08-26 sweep), residual = **19 crashes**, led by the `rvalue reference to array` dereference limitation
 **Impact**: ~60+ tests
 **Severity**: 🔴 CRITICAL
 **Exit Codes**: rc=139 → now **rc=134** for the `align_offset` family (clean abort, not a segfault); no parse-phase crash remains
@@ -1663,13 +1829,19 @@ width that happens to pass. What remains is three concrete items:
    family needs. This is an ESBMC dereference limitation, unrelated to alignment modelling
    (see below) — and it is the largest single crash cluster left in the corpus.
 2. **`Bitwuzla error encountered`** on `non_null_check_write_unaligned_*` (12, all `ptr`).
-3. **Alignment modelling — ✅ done (2026-07-17, PR #6138).** ESBMC left object base addresses
-   unconstrained; it now constrains them to the type's alignment, which resolved all 3
-   corpus-wide false alarms (`check_cast`/`check_as_ref`/`check_as_mut`) to per-property
-   parity with CBMC. Note this was **not** `--binary`-specific — scalars were unconstrained
-   on every path, including the plain C frontend. It also did **not** fix the
-   `align_offset`/`align_to` cluster, contrary to this section's earlier claim: the two are
-   independent, and item 1 above is what that family actually needs. See the global sweep.
+3. **Alignment modelling — ✅ done (2026-07-17, PR #6138), but it closed nothing in this
+   corpus.** ESBMC left object base addresses unconstrained; it now constrains them to the
+   type's alignment. This was **not** `--binary`-specific — scalars were unconstrained on
+   every path, including the plain C frontend — and the fix is real and regression-tested.
+   ❌ But it did **not** resolve the 3 corpus false alarms, contrary to this section's
+   earlier claim. Those are `ptr::unique::verify::{check_cast, check_as_ref, check_as_mut}`;
+   they still mismatch on `master` as of 2026-08-26, and the failing property is an
+   `assert_eq!` reading a value back through `Unique`, not an alignment assertion. The
+   earlier attribution came from resolving those bare harness names to the `non_null_check_*`
+   harnesses — see the 2026-08-26 sweep. It also did not fix the `align_offset`/`align_to`
+   cluster: item 1 above is what that family needs.
+4. **The `ptr::unique` false alarm — open.** 3 harnesses, the corpus's only remaining
+   correctness defect.
 
 **Affected Operations**:
 - `*const T::read()` / `*mut T::read()` - unsafe pointer dereference

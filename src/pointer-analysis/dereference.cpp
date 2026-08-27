@@ -12,6 +12,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
@@ -143,6 +144,76 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 static expr2tc distribute_steps_over_if(const expr2tc &e);
 
+/// Records what a forall2t/exists2t binds while its body is walked, so the
+/// index fold in dereference_expr_nonscalar leaves the bound variable alone:
+/// the rename callback carries no quantifier context and would substitute the
+/// like-named program variable's SSA value (rename_quantified guards the same
+/// concern at the renaming layer, #7024). Constructing one over any other
+/// expression does nothing.
+class dereferencet::quantifier_scopet
+{
+public:
+  quantifier_scopet(dereferencet &deref, const expr2tc &expr) : deref(deref)
+  {
+    if (!is_forall2t(expr) && !is_exists2t(expr))
+      return;
+
+    /* Reached through a pointer -- `void *q = &i; __ESBMC_forall(q, ...
+     * p->buf[i] ...)` -- the binder reads as `q` while binding `i`, so there
+     * is no name to exclude and the whole body has to stay out of the fold. */
+    name = quantifier_direct_bound_name(
+      is_forall2t(expr) ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1);
+    active = true;
+    if (name.empty())
+      deref.opaque_binders++;
+    else
+      deref.quantifier_bound_vars.insert(name);
+  }
+
+  quantifier_scopet(const quantifier_scopet &) = delete;
+  quantifier_scopet &operator=(const quantifier_scopet &) = delete;
+
+  ~quantifier_scopet()
+  {
+    if (!active)
+      return;
+    if (name.empty())
+    {
+      deref.opaque_binders--;
+      return;
+    }
+    // erase(iterator), not erase(key): an inner scope that rebound the same
+    // name must not drop the outer scope's entry too.
+    auto it = deref.quantifier_bound_vars.find(name);
+    if (it != deref.quantifier_bound_vars.end())
+      deref.quantifier_bound_vars.erase(it);
+  }
+
+private:
+  dereferencet &deref;
+  irep_idt name;
+  bool active = false;
+};
+
+bool dereferencet::mentions_bound_var(const expr2tc &expr) const
+{
+  if (quantifier_bound_vars.empty() || is_nil_expr(expr))
+    return false;
+  if (is_symbol2t(expr))
+    return quantifier_bound_vars.count(to_symbol2t(expr).thename) != 0;
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &e) {
+    if (!found)
+      found = mentions_bound_var(e);
+  });
+  return found;
+}
+
+bool dereferencet::may_fold_index(const expr2tc &index) const
+{
+  return opaque_binders == 0 && !mentions_bound_var(index);
+}
+
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
@@ -202,9 +273,12 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
     break;
   }
 
+  case expr2t::forall_id:
+  case expr2t::exists_id:
   default:
   {
     // Recurse over the operands
+    quantifier_scopet scope(*this, expr);
     expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
       if (is_nil_expr(e))
         return;
@@ -518,6 +592,23 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
+
+    /* Now free of dereferences, fold in any value symex already knows for
+     * the index (e.g. an array index stored in a struct field): a constant
+     * index keeps this access on the constant-offset path, which produces a
+     * member/index reference. A symbolic index degenerates to a whole-object
+     * byte_extract/byte_update that constant propagation cannot see through:
+     * the assignment drops the object's recorded constant, later guards over
+     * it become undecidable and loops unwind to the bound (#7311).
+     *
+     * may_fold_index keeps quantified indices out: the rename callback would
+     * replace a bound symbol with the like-named program variable's SSA
+     * value, collapsing the quantified body to a constant (#7024 shape). */
+    if (!is_constant_int2t(index.index) && may_fold_index(index.index))
+    {
+      dereference_callback.rename(index.index);
+      simplify(index.index);
+    }
     return dereference_expr_nonscalar(index.source_value, guard, mode, base);
   }
 

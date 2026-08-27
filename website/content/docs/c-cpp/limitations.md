@@ -44,9 +44,14 @@ should not, or vice versa.
 
 ## Inheritance and polymorphism
 
-Virtual dispatch through a non-first base under multiple inheritance relies on
-Clang's `ASTRecordLayout` in a way that is known to be brittle
-([#3894](https://github.com/esbmc/esbmc/issues/3894)). Some
+Base-subobject displacements — the override thunk adapting a `Base*` receiver,
+both arms of `dynamic_cast`, and derived-to-base conversions under a virtual
+base — are now taken from ESBMC's own class layout rather than Clang's
+`ASTRecordLayout`, which disagreed with it under the Itanium primary-base rule
+([#3894](https://github.com/esbmc/esbmc/issues/3894)). A hierarchy containing a
+virtual base keeps a flattened layout that cannot express every shape; the
+remaining ones are pinned as `KNOWNBUG` under
+`regression/esbmc-cpp/inheritance/`. Some
 inheritance/polymorphism regressions remain marked `KNOWNBUG`
 ([#4399](https://github.com/esbmc/esbmc/issues/4399)), as do some of the
 `gcc-template-tests` ([#4398](https://github.com/esbmc/esbmc/issues/4398)).

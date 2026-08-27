@@ -296,6 +296,7 @@ code_blockt python_converter::create_capture_cells(
     bind.then_case() = code_assignt(cell, nondet);
     bind.else_case() = code_assignt(cell, source_expr);
     bind.location() = location;
+    bind.location().property("skipped");
     bindings.copy_to_operands(bind);
 
     code_assignt mark(is_bound, gen_boolean(true));

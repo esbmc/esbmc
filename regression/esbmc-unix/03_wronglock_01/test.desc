@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 --context-bound 2 --32 -Wno-error=implicit-function-declaration
+REQUIRES arch32
 ^VERIFICATION FAILED$
