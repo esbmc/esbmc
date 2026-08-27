@@ -1,0 +1,6 @@
+CORE
+main.py
+--incremental-bmc --cex-output cex.txt
+^VERIFICATION FAILED$
+CHECK_FILE cex.txt absent Incorrect alignment when accessing data object
+CHECK_FILE cex.txt contains dereference failure: invalid pointer

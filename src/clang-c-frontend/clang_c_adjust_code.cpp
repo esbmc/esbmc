@@ -7,20 +7,23 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 
-// A base-subobject `this` -- a base destructor's, or a thunk's -- is the one
-// argument here that still needs expression adjustment: it carries a
-// base-adjustment marker, which only clang_c_adjust::adjust_expr resolves.
-// gen_typecast leaves it under the cast to the target pointer type.
-// See #7025, #3894.
+// A base-subobject `this` -- a base constructor's or destructor's, or a
+// thunk's -- is the one argument here that still needs expression adjustment:
+// it carries a base-adjustment marker, which only clang_c_adjust::adjust_expr
+// resolves. Search the whole argument rather than the typecast chain
+// gen_typecast happens to wrap today's producers in: an unresolved marker
+// leaves the pointer on the wrong subobject silently, so the test must not
+// depend on where in the expression it sits. See #7025, #3894.
 static bool carries_base_adjustment(const exprt &arg)
 {
-  for (const exprt *e = &arg;; e = &e->op0())
-  {
-    if (!e->get("#derived_to_base").empty() || e->get_bool("#base_to_derived"))
+  if (!arg.get("#derived_to_base").empty() || arg.get_bool("#base_to_derived"))
+    return true;
+
+  for (const exprt &op : arg.operands())
+    if (carries_base_adjustment(op))
       return true;
-    if (e->id() != "typecast" || e->operands().size() != 1)
-      return false;
-  }
+
+  return false;
 }
 
 void clang_c_adjust::adjust_call_argument(exprt &arg)

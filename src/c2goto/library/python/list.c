@@ -28,6 +28,23 @@ static PyType __ESBMC_list_type;
 static double __ESBMC_float_buf[__ESBMC_FLOAT_BUF_SIZE];
 static size_t __ESBMC_float_buf_idx = 0;
 
+/* An 8-byte read of an object whose declared type is not known here. A packed
+ * struct has alignment 1, so forming this pointer is defined whatever the
+ * object's alignment -- a plain `uint64_t *` cast is not (C23 6.3.2.3p7) --
+ * and may_alias lets the read see an object of any effective type, which
+ * C23 6.5.1p7 otherwise allows only for character types. ESBMC likewise drops
+ * its alignment claim on a packed member, and that claim used to fire ahead of
+ * the invalid-pointer dereference behind #4780 and hide it. */
+struct __attribute__((packed, may_alias)) __ESBMC_unaligned_u64
+{
+  uint64_t v;
+};
+
+static inline uint64_t __ESBMC_load_u64(const void *p)
+{
+  return ((const struct __ESBMC_unaligned_u64 *)p)->v;
+}
+
 // Optimized value comparison - avoids memcmp loop unrolling for common sizes
 static inline bool
 __ESBMC_values_equal(const void *a, const void *b, size_t size)
@@ -37,12 +54,13 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   // Direct comparison for common sizes - no loop needed
   // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
   if (size == 8)
-    return *(const uint64_t *)a == *(const uint64_t *)b;
+    return __ESBMC_load_u64(a) == __ESBMC_load_u64(b);
   if (size == 1)
-    return *(const uint8_t *)a == *(const uint8_t *)b;
+    return *(const unsigned char *)a == *(const unsigned char *)b;
   if (size == 16)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
+    return __ESBMC_load_u64(a) == __ESBMC_load_u64(b) &&
+           __ESBMC_load_u64((const unsigned char *)a + 8) ==
+             __ESBMC_load_u64((const unsigned char *)b + 8);
   // Fallback for larger/unusual sizes. A word-wise compare loop here would
   // unwind --unwind times on every symbolic-size comparison, with no benefit
   // to any converging test (large-struct compares only occur in tests that
