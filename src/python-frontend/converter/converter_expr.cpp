@@ -450,11 +450,13 @@ exprt python_converter::get_named_expr(const nlohmann::json &element)
   exprt *saved_lhs = current_lhs;
   bool saved_rhs = is_converting_rhs;
   bool saved_lhs_flag = is_converting_lhs;
+  const nlohmann::json *saved_store_target = lhs_store_target_;
   typet saved_elem_type = current_element_type;
   get_var_assign(assign, *current_block);
   current_lhs = saved_lhs;
   is_converting_rhs = saved_rhs;
   is_converting_lhs = saved_lhs_flag;
+  lhs_store_target_ = saved_store_target;
   current_element_type = saved_elem_type;
 
   return get_expr(target);

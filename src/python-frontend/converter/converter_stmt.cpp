@@ -156,6 +156,19 @@ void set_dict_literal_element_type(
     element_type = dict_handler.get_dict_struct_type();
 }
 
+// A `dp[i] = v` / `dp[i] += v` shape. Such an assignment writes an element,
+// not the container, so container-level bookkeeping must sit it out.
+bool assignment_target_is_subscript(const nlohmann::json &ast_node)
+{
+  auto is_subscript = [](const nlohmann::json &t) {
+    return t.is_object() && t.value("_type", "") == "Subscript";
+  };
+  return (ast_node.contains("targets") && ast_node["targets"].is_array() &&
+          !ast_node["targets"].empty() &&
+          is_subscript(ast_node["targets"][0])) ||
+         (ast_node.contains("target") && is_subscript(ast_node["target"]));
+}
+
 bool is_same_name_assignment(
   const nlohmann::json &target,
   const nlohmann::json &ast_node)
@@ -563,7 +576,10 @@ exprt python_converter::create_lhs_expression(
   if (target_type == "Attribute" || target_type == "Subscript")
   {
     is_converting_lhs = true;
+    const nlohmann::json *saved_store_target = lhs_store_target_;
+    lhs_store_target_ = &target;
     lhs = get_expr(target);
+    lhs_store_target_ = saved_store_target;
     is_converting_lhs = false;
   }
   else
@@ -584,18 +600,8 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
-  // For subscript targets (e.g. dp[i] = v).
-  // The rhs writes an element, not the container.
-  // Don't rewrite lhs_symbol's type.
-  auto is_subscript_target = [](const nlohmann::json &t) {
-    return t.is_object() && t.value("_type", "") == "Subscript";
-  };
-  const bool target_is_subscript =
-    (ast_node.contains("targets") && ast_node["targets"].is_array() &&
-     !ast_node["targets"].empty() &&
-     is_subscript_target(ast_node["targets"][0])) ||
-    (ast_node.contains("target") && is_subscript_target(ast_node["target"]));
-  if (target_is_subscript)
+  // Don't rewrite lhs_symbol's type for a subscript target.
+  if (assignment_target_is_subscript(ast_node))
     return;
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
@@ -4820,8 +4826,13 @@ void python_converter::get_var_assign(
 
     adjust_statement_types(lhs, rhs);
 
-    // Handle list type info propagation
-    if (lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type())
+    // Handle list type info propagation. A subscript store rebinds an element,
+    // not the container, and its lhs is an unnamed dereference -- propagating
+    // would write the element's entries into the empty-key bucket that
+    // attribute-rooted lists (self.xs) use as their map key (#7360).
+    if (
+      lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type() &&
+      !assignment_target_is_subscript(ast_node))
     {
       const std::string &lhs_identifier = lhs.identifier().as_string();
       const std::string &rhs_identifier = rhs.identifier().as_string();
@@ -5080,11 +5091,14 @@ void python_converter::get_compound_assign(
 
   // Set flags for LHS processing
   is_converting_lhs = true;
+  const nlohmann::json *saved_store_target = lhs_store_target_;
+  lhs_store_target_ = &ast_node["target"];
 
   // Get the target expression first
   exprt lhs = get_expr(ast_node["target"]);
 
   // Reset LHS flag and set RHS flag
+  lhs_store_target_ = saved_store_target;
   is_converting_lhs = false;
   is_converting_rhs = true;
 
