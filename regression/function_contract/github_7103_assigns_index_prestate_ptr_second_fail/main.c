@@ -1,7 +1,7 @@
-/* Moving `tail` first writes buf[tail + 1], which the clause never granted --
- * `head` is unconstrained against it, so it is not excused by the other named
- * index either. Must be caught even though the offending index is the second
- * one the clause names. */
+/* The moving index is the second one the clause names, so this is caught only
+ * if every index in the group is captured on entry, not just the first. Its
+ * in-frame counterpart is not a guard: that direction verifies whether or not
+ * the index was captured, so only the out-of-frame write discriminates. */
 int head;
 int tail;
 

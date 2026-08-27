@@ -3626,9 +3626,14 @@ code_contractst::materialize_arr_elem_snapshots(
     // grants the element `head` denoted on entry. Read back after the body, a
     // body that moves `head` -- itself in the clause, as the ring-buffer idiom
     // needs -- chooses after the fact which element it had been granted, so an
-    // off-by-one write verifies. Same defect as #7103 on the global-array path,
-    // which fixed it by mapping the index through `in_pre_state`; this path has
-    // no snapshot table to map through, so it captures each index itself.
+    // off-by-one write verifies. Same defect as #7103 on the global-array path.
+    //
+    // That path maps the index through `in_pre_state`, which resolves a symbol
+    // against `active_snapshots` -- the globals snapshotted at 3b-i. Not enough
+    // here: `collect_global_variables` skips pointer types, so an index reached
+    // through one (`__ESBMC_assigns(buf[*p], *p)`, the same idiom with the
+    // cursor passed in rather than global) resolves to nothing and is read back
+    // live. Capturing each index outright covers both.
     std::vector<expr2tc> declared_indices;
     for (const expr2tc &idx : group.indices)
     {

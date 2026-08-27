@@ -1,4 +1,0 @@
-CORE
-main.c
---enforce-contract push_tail --function push_tail
-^VERIFICATION SUCCESSFUL$
