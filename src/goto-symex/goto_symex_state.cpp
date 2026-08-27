@@ -123,10 +123,31 @@ static std::optional<BigInt> array_element_count(const type2tc &t)
   return n * *sub;
 }
 
-/* Whether an array type is cheap enough to carry as a propagated constant. */
-static bool array_may_propagate(const type2tc &t)
+/* A nested constant array whose leaves are all constants. */
+static bool is_constant_array_value(const expr2tc &e)
 {
-  const array_type2t &arr = to_array_type(t);
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_constant_array_of2t(e))
+    return is_constant_array_value(to_constant_array_of2t(e).initializer);
+
+  if (is_constant_array2t(e))
+  {
+    for (const expr2tc &m : to_constant_array2t(e).datatype_members)
+      if (!is_constant_array_value(m))
+        return false;
+    return true;
+  }
+
+  return is_constant_expr(e);
+}
+
+/* Whether an array value is cheap and well-formed enough to carry as a
+ * propagated constant. */
+static bool array_may_propagate(const expr2tc &e)
+{
+  const array_type2t &arr = to_array_type(e->type);
 
   // Infinite-size arrays are special modelling arrays needing their own
   // handling at SMT or some other level, so optimising them is a Bad Plan (TM).
@@ -136,13 +157,20 @@ static bool array_may_propagate(const type2tc &t)
   if (!is_array_type(arr.subtype))
     return true;
 
-  // A multi-dimensional array propagates only while it stays small: every
-  // write rewrites the whole nested constant, so the cost grows superlinearly
-  // -- on an N x N array filled by a nested loop, 256 elements is at parity
-  // with not propagating and 4096 costs 11x. Below the bound the fold is what
-  // lets a loop bounded by t[i][j] terminate at all, which it otherwise never
-  // does (R42, docs/roadmap/goto-symex-verification-plan.md).
-  std::optional<BigInt> elems = array_element_count(t);
+  // A multi-dimensional array propagates only as a whole constant. A `with`
+  // chain over one lets a second update land on an already-updated row, and
+  // the SMT flattening in convert_array_store()/decompose_store_chain() walks
+  // only the update-value spine: the earlier sibling store is dropped from the
+  // formula (silent wrong answers) or reaches mk_store()/mk_eq() with a row on
+  // one side and an element on the other. Folding the reads is what R42 needs;
+  // folding the writes is a separate, unfixed encoding gap.
+  if (!is_constant_array_value(e))
+    return false;
+
+  // And only while it stays small: a read at a symbolic index inlines the
+  // whole nested constant, so the cost grows with the element count. The cap
+  // is R42's (docs/roadmap/goto-symex-verification-plan.md).
+  std::optional<BigInt> elems = array_element_count(e->type);
   return elems && *elems <= multidim_propagation_bound;
 }
 
@@ -151,7 +179,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (no_propagation)
     return false;
 
-  if (is_array_type(expr) && !array_may_propagate(expr->type))
+  if (is_array_type(expr) && !array_may_propagate(expr))
     return false;
 
   if (is_vector_type(expr))
