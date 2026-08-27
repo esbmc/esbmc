@@ -1,6 +1,6 @@
 #include <ld-frontend/verify/ld_verify.h>
-#include <cstring>
 #include <sstream>
+#include <string_view>
 #include <vector>
 #include <cstdlib>
 
@@ -168,16 +168,15 @@ parse_violated_property(const std::string &output, LdVerifyResult &r)
 // which reads as a crash.
 static std::string no_verdict_description(const std::string &output)
 {
-  const char *prefix = "ERROR: ";
-  const size_t prefix_len = strlen(prefix);
+  static constexpr std::string_view prefix = "ERROR: ";
   std::istringstream ss(output);
   std::string line;
   while (std::getline(ss, line))
   {
     if (!line.empty() && line.back() == '\r')
       line.pop_back();
-    if (line.compare(0, prefix_len, prefix) == 0)
-      return line.substr(prefix_len);
+    if (std::string_view(line).starts_with(prefix))
+      return line.substr(prefix.size());
   }
   return "esbmc produced no verdict";
 }
