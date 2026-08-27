@@ -287,6 +287,58 @@ static std::vector<std::string> offset_paths(
                       : member_paths_of_type(type, target, ns);
 }
 
+/* The paths that alias @p suffix in @p type. A union's arms overlay one
+ * another, so a pointer stored under one arm is what a read through any other
+ * arm names, and the suffix the member2t arm spells for such a read need not
+ * fit the arm it names -- `u.b.q` on `union { struct A a; struct B b; }` is
+ * spelled ".a.q" for the `a` arm, which has no `q`. The walk therefore stops
+ * where the suffix stops fitting, and the offset reached there is where the
+ * read sits. Crossing no union means nothing aliases and the caller's own
+ * lookup is the whole answer. */
+static std::vector<std::string> union_alias_paths(
+  const type2tc &type_in,
+  const std::string &suffix,
+  const type2tc &target,
+  const namespacet &ns)
+{
+  type2tc type = ns.follow(type_in);
+  BigInt offset_bits = 0;
+  bool crossed_union = false;
+  std::string rest = suffix;
+
+  while (!rest.empty() && rest[0] == '.' &&
+         (is_struct_type(type) || is_union_type(type)))
+  {
+    const std::vector<irep_idt> names = struct_union_member_names(type);
+    auto comp = match_leading_component(names, rest.substr(1));
+    if (!comp)
+      break;
+
+    try
+    {
+      if (is_union_type(type))
+        crossed_union = true;
+      else
+        offset_bits += member_offset_bits(type, names[comp->first], &ns);
+    }
+    /* A member of no constant size leaves the offset unplaceable, as it does
+     * for the forward walk this inverts. */
+    catch (const array_type2t::array_size_excp &)
+    {
+      return {};
+    }
+
+    type = ns.follow(struct_union_members(type)[comp->first]);
+    rest = rest.substr(1 + comp->second);
+  }
+
+  /* A bitfield is not addressable, so no pointer sits at a bit offset. */
+  if (!crossed_union || offset_bits % 8 != 0)
+    return {};
+
+  return member_paths_at_offset(type_in, offset_bits / 8, target, ns);
+}
+
 void value_sett::get_constant_value_set(
   const expr2tc &expr,
   object_mapt &dest,
@@ -877,11 +929,11 @@ void value_sett::get_value_set_rec(
     // For level2_global symbols (global variables renamed during symbolic
     // execution), use the base name for lookup since the value set is indexed
     // by the level0/level1_global name, not the level2 name.
-    std::string lookup_name =
+    std::string base_name =
       (sym.rlevel == symbol2t::renaming_level::level2_global)
-        ? sym.thename.as_string() + suffix
-        : sym.get_symbol_name() + suffix;
-    valuest::const_iterator v_it = values.find(lookup_name);
+        ? sym.thename.as_string()
+        : sym.get_symbol_name();
+    valuest::const_iterator v_it = values.find(base_name + suffix);
 
     if (sym.rlevel == symbol2t::renaming_level::level1_global)
       assert(sym.level1_num == 0);
@@ -899,6 +951,26 @@ void value_sett::get_value_set_rec(
       make_union(dest, v_it->second.object_map);
       return;
     }
+
+    /* Nothing is keyed under the path the read spells, but a union arm the path
+     * crosses may hold the pointer under a path of its own -- writing `u.s.p`
+     * and reading `u.q` keys the one and asks for the other, leaving the read
+     * unknown and its dereference unconstrained. Ask again under the paths that
+     * alias this one. Looking up rather than recursing keeps the aliases of an
+     * alias out of it, which would not terminate. */
+    bool aliased = false;
+    for (const std::string &path :
+         union_alias_paths(expr->type, suffix, original_type, ns))
+    {
+      valuest::const_iterator a_it = values.find(base_name + path);
+      if (a_it != values.end())
+      {
+        make_union(dest, a_it->second.object_map);
+        aliased = true;
+      }
+    }
+    if (aliased)
+      return;
   }
 
   if (is_add2t(expr) || is_sub2t(expr))
