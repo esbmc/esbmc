@@ -1565,9 +1565,17 @@ class LoopMixin:
         return (isinstance(ann_node, ast.Subscript)
                 and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
 
+    # Member types the C++ list subscript read can size. A str member reaches
+    # the solver as a mismatched bitvector width, a tuple member emits a bare
+    # inner `tuple` -- the very #5444 erosion this annotation avoids -- and a
+    # bool member mismatches the tuple AST, so anything outside this set leaves
+    # the literal unannotated and the unpack refused.
+    _SIZABLE_TUPLE_MEMBER_TYPES = frozenset({"int", "float"})
+
     def _literal_tuple_annotation_node(self, iterable_node):
         """tuple[A, B, ...] element annotation of a list literal whose elements
-        are all same-arity tuples of one inferable type per position, else None.
+        are all same-arity tuples of one sizable scalar type per position, else
+        None.
 
         A key'd sorted() over a constant dict of tuple keys folds to such a
         literal, which carries no annotation of its own to read (#5444).
@@ -1581,7 +1589,7 @@ class LoopMixin:
         members = []
         for position in range(arity):
             names = {self._infer_type_from_value(elt.elts[position]) for elt in iterable_node.elts}
-            if len(names) != 1 or "Any" in names:
+            if len(names) != 1 or not names <= self._SIZABLE_TUPLE_MEMBER_TYPES:
                 return None
             members.append(ast.Name(id=names.pop(), ctx=ast.Load()))
         return ast.Subscript(value=ast.Name(id="tuple", ctx=ast.Load()),
