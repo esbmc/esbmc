@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--enforce-contract w --function w
+^VERIFICATION FAILED$
