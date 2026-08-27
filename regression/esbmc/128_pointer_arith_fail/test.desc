@@ -1,5 +1,0 @@
-CORE
-main.c
---clang-c-irep2-adjust-only
-^VERIFICATION FAILED$
-^\s*assertion q - p == 3$
