@@ -1169,6 +1169,30 @@ class GeneratorMixin:
                                  ctx=ast.Load())
         return ast.Call(func=copy.deepcopy(key_value), args=[arg_expr], keywords=[])
 
+    @staticmethod
+    def _single_key_keyword(call_node):
+        key_kw = None
+        for kw in call_node.keywords:
+            if kw.arg == "key" and key_kw is None:
+                key_kw = kw
+            else:
+                return None
+        return key_kw
+
+    @staticmethod
+    def _literal_contains_tuple(literal):
+        return any(isinstance(elt, ast.Tuple) for elt in literal.elts)
+
+    def _const_scalar_list_literal(self, literal):
+        return all(self._const_scalar_value(elt) is not None for elt in literal.elts)
+
+    def _sorted_scan_key_supported(self, key_value, literal):
+        if isinstance(key_value, ast.Attribute):
+            return False
+        if literal is not None and self._literal_contains_tuple(literal):
+            return False
+        return True
+
     def _scan_key_argument(self, call_node, func_names):
         """Return the ``key=`` keyword a scan lowering should apply, else None.
 
@@ -1185,12 +1209,7 @@ class GeneratorMixin:
                 and call_node.func.id in func_names and len(call_node.args) == 1):
             return None
 
-        key_kw = None
-        for kw in call_node.keywords:
-            if kw.arg == "key" and key_kw is None:
-                key_kw = kw
-            else:
-                return None
+        key_kw = self._single_key_keyword(call_node)
         if key_kw is None:
             return None
 
@@ -1198,10 +1217,37 @@ class GeneratorMixin:
             return None
 
         literal = self._resolve_list_literal_iterable(call_node.args[0])
-        if literal is not None and all(
-                self._const_scalar_value(elt) is not None for elt in literal.elts):
+        if call_node.func.id == "sorted" and not self._sorted_scan_key_supported(
+                key_kw.value, literal):
+            return None
+        if literal is not None and self._const_scalar_list_literal(literal):
             return None
         return key_kw
+
+    def _key_indexes_element(self, key_value):
+        """True when applying ``key_value`` subscripts the element it is given.
+
+        A key bound by assignment rather than by a def reads as not indexing,
+        so such a call is still lowered to a scan.
+        """
+        if isinstance(key_value, ast.Lambda):
+            return self.subscripts_name(key_value.body, key_value.args.args[0].arg)
+        return isinstance(key_value, ast.Name) and key_value.id in self._param_subscripting_funcs
+
+    def _is_scan_supported(self, iterable_expr, key_value):
+        """True when a sort scan lowers to operations the frontend models.
+
+        The scan copies the iterable with a full slice and applies the key to
+        each element, and two shapes exceed what the frontend models: copying a
+        dict view does not terminate at the default unwind, and an element the
+        key subscripts raises a spurious IndexError. Declining leaves
+        reject_unfoldable_key to report the unsupported key, which beats a hang
+        or a wrong verdict.
+        """
+        if (isinstance(iterable_expr, ast.Call) and isinstance(iterable_expr.func, ast.Attribute)
+                and iterable_expr.func.attr in ("keys", "values", "items")):
+            return False
+        return not self._key_indexes_element(key_value)
 
     def _lower_sorted_key_scan(self, call_node):
         """Lower ``sorted(iterable, key=f)`` to an explicit insertion sort.
@@ -1218,7 +1264,7 @@ class GeneratorMixin:
         caller's list, and ``sorted`` must not.
         """
         key_kw = self._scan_key_argument(call_node, ("sorted", ))
-        if key_kw is None:
+        if key_kw is None or not self._is_scan_supported(call_node.args[0], key_kw.value):
             return None
 
         n = self.minmax_key_counter

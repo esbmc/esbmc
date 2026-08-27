@@ -4013,6 +4013,9 @@ exprt function_call_expr::handle_general_function_call()
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
+  if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
+    return *materialized;
+
   // Fast-path: sorted() over a concrete int/tuple list can be materialized
   // directly in the frontend (see try_fold_sorted), avoiding the runtime
   // list sort/equality model.
@@ -4122,6 +4125,63 @@ exprt function_call_expr::handle_general_function_call()
 // Each helper is an extracted, behaviour-preserving slice. A returned value
 // is what the caller must return immediately; std::nullopt means "fall
 // through", reproducing the original sequential control flow exactly.
+
+std::optional<exprt> function_call_expr::try_materialize_numpy_tolist()
+{
+  if (
+    function_id_.get_function() != "tolist" ||
+    call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
+    return std::nullopt;
+
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (
+    std::optional<exprt> materialized =
+      converter_.build_numpy_descriptor_materialized_list(receiver, true))
+    return materialized;
+
+  exprt receiver_expr = converter_.get_expr(receiver);
+  if (type_handler_.get_array_type_shape(receiver_expr.type()).size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.tolist() currently supports rank 1 or 2 "
+      "arrays");
+
+  return std::nullopt;
+}
+
+std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
+{
+  const std::string &func_name = function_id_.get_function();
+  if (
+    (func_name != "any" && func_name != "all") ||
+    call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    call_["func"]["value"],
+    "TypeError: numpy.ndarray." + func_name +
+      "() currently supports rank 1 or 2 arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray." + func_name +
+      "() does not support axis, keepdims, where or out arguments yet");
+
+  const std::vector<exprt> &elems = materialized->second;
+  if (elems.empty())
+    return func_name == "all" ? migrate_expr_back(gen_true_expr())
+                              : migrate_expr_back(gen_false_expr());
+
+  const ReduceOp op = func_name == "any" ? ReduceOp::Any : ReduceOp::All;
+  exprt result = compute_element_truthiness(elems.front());
+  for (std::size_t i = 1; i < elems.size(); ++i)
+    result =
+      combine_truthiness(result, compute_element_truthiness(elems[i]), op);
+  return result;
+}
 
 std::optional<exprt> function_call_expr::try_fold_sorted()
 {

@@ -230,6 +230,12 @@ private:
   /// not emit one table per k.
   bool reports_final_verdict(smt_resultt res) const;
 
+  /// Set when exploration cut a loop short at the unwinding bound while
+  /// unwinding assertions were disabled, so the paths past the bound were
+  /// assumed away rather than checked. Read by report_success(), which is
+  /// otherwise the only place a user learns the run proved anything.
+  bool saw_bounded_loop_truncation = false;
+
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the
   /// path through report_result() that reaches report_success().

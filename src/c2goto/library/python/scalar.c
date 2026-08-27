@@ -104,6 +104,57 @@ __ESBMC_HIDE:;
   return __python_scalar_bytes_equal(tagged->value, value, size);
 }
 
+// Three-way compare against a numeric literal (-1/0/1). Shared by
+// Lt/LtE/Gt/GtE -- the frontend composes the boolean from this against 0.
+int __python_scalar_cmp_num(
+  const PyObject *tagged,
+  int type_matches,
+  long long value)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && type_matches,
+    "TypeError: comparison not supported between these types");
+  if (!tagged || !type_matches)
+    return 0;
+  long long tagged_val = *(const long long *)tagged->value;
+  if (tagged_val < value)
+    return -1;
+  if (tagged_val > value)
+    return 1;
+  return 0;
+}
+
+// Lexicographic three-way compare against a literal str (-1/0/1). The loop
+// bound (`value_size`) is the literal's own compile-time length, not a
+// symbolic memcmp-style n. `.size`/`value_size` include the trailing '\0',
+// so the `i >= tagged->size` guard (stopping the read there) already gives
+// the correct prefix ordering ("ab" < "abc") for free.
+int __python_scalar_cmp_str(
+  const PyObject *tagged,
+  size_t type_id,
+  const char *value,
+  size_t value_size)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    tagged && tagged->type_id == type_id,
+    "TypeError: comparison not supported between these types");
+  if (!tagged || tagged->type_id != type_id)
+    return 0;
+
+  for (size_t i = 0; i < value_size; ++i)
+  {
+    if (i >= tagged->size)
+      return -1;
+    unsigned char a = ((const unsigned char *)tagged->value)[i];
+    unsigned char b = (unsigned char)value[i];
+    if (a != b)
+      return a < b ? -1 : 1;
+  }
+  return tagged->size > value_size ? 1 : 0;
+}
+
 // Models a runtime type mismatch (e.g. `x + 1` where `x` holds a str) as a
 // Python TypeError, the same way IndexError/KeyError are modeled elsewhere
 // in this library: an assert on the path that would have raised.
