@@ -329,6 +329,23 @@ class ModuleRewriteMixin:
             if len(params) == 1
         }
 
+    def _collect_param_subscripting_funcs(self, module_node):
+        """Names that may index the first argument they are called with.
+
+        Covers defs whose body subscripts their first parameter, plus every
+        imported name, whose body this scan cannot see. Keyed on name alone, so
+        a nested or rebound def of the same name counts too: over-refusing
+        costs a clear error, under-refusing costs a verdict.
+        """
+        names = set()
+        for stmt in ast.walk(module_node):
+            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                names.update(alias.asname or alias.name for alias in stmt.names)
+            elif (isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.args.args
+                  and self.subscripts_name(stmt, stmt.args.args[0].arg)):
+                names.add(stmt.name)
+        return names
+
     @staticmethod
     def collect_range_wrappers(module_node):
         """Collect trivial def f(p): return range(...) wrappers at module scope."""
@@ -423,6 +440,7 @@ class ModuleRewriteMixin:
         self._scan_sequence_iterators(node)
         self._scan_module_vararg_defs(node)
         self._single_return_funcs = self._collect_single_return_funcs(node)
+        self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
 
     def _scan_dict_literal_bindings_and_calls(self, node):

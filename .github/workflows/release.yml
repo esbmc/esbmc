@@ -18,19 +18,32 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
+            arch: x86_64
+            flags: '-b RelWithDebInfo -e OFF'
+          - os: ubuntu-24.04
+            arch: armv8
             flags: '-b RelWithDebInfo -e OFF'
           - os: windows-latest
+            arch: x86_64
             flags: '-b RelWithDebInfo -e OFF'
           - os: macos-latest
+            arch: x86_64
             flags: '-b RelWithDebInfo -e OFF -c 21'
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ${{ matrix.os }}
+      architecture: ${{ matrix.arch }}
       build-flags: ${{ matrix.flags }}
       testing: false
       canon-names: true
 
+  # The armv8 matrix leg above covers ARM64 with the bundled LLVM; this covers
+  # the distinct axis Homebrew actually uses -- a system-installed, shared LLVM 22.
+  # That is a slow drift check against Homebrew's LLVM bumps (#5252), not a
+  # release gate, so it runs on the weekly cron only and not on v* tags or
+  # manual dispatches.
   build-linux-arm64:
+    if: ${{ github.event_name == 'schedule' }}
     name: Homebrew compatibility check (Linux ARM64, LLVM 22)
     runs-on: ubuntu-24.04-arm
     steps:
@@ -58,6 +71,11 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: esbmc-linux
+          path: .
+      - name: Download Linux ARMv8 Build
+        uses: actions/download-artifact@v8
+        with:
+          name: esbmc-linux-armv8
           path: .
       - name: Download Windows Build
         uses: actions/download-artifact@v8
@@ -93,6 +111,7 @@ jobs:
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
           files: |
             esbmc-linux.zip
+            esbmc-linux-armv8.zip
             esbmc-windows.zip
             esbmc-macos.zip
             esbmc.info

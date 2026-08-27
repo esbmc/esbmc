@@ -374,6 +374,10 @@ void goto_symext::symex_assign(
 {
   const code_assign2t &code = to_code_assign2t(code_assign);
 
+  // A variable-length array's size reaches symex only here; bound it before the
+  // object it sizes can put an offset above PTRDIFF_MAX in the comparator. R40.
+  bound_dynamic_object_size(code);
+
   // Sanity check: if the target has zero size, then we've ended up assigning
   // to/from either a C++ POD class with no fields or an empty C struct or
   // union. The rest of the model checker isn't rated for dealing with this
