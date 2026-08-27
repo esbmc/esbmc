@@ -1177,27 +1177,24 @@ bool __ESBMC_list_remove(
   while (i < l->size)
   {
     const PyObject *elem = &l->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        /* Shift elements left to fill the gap */
-        size_t j = i;
-        while (j < l->size - 1)
-        {
-          l->items[j] = l->items[j + 1];
-          j++;
-        }
-        l->size--;
-        return true; /* found and removed */
-      }
-    }
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      break;
     i++;
   }
 
-  /* Item not found */
-  return false;
+  if (i == l->size)
+    return false;
+
+  size_t j = i;
+  while (j < l->size - 1)
+  {
+    l->items[j] = l->items[j + 1];
+    j++;
+  }
+  l->size--;
+  return true;
 }
 
 /* set.add(elem) — append elem to the underlying list iff it is not
