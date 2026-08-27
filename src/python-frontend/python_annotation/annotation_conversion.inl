@@ -670,6 +670,8 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         const bool is_slice =
           arg.contains("slice") && arg["slice"].value("_type", "") == "Slice";
 
+        // The trailing ']' is redundant against every current producer, and
+        // is kept only to hold the invariant the substr below relies on.
         if (base_type.rfind("list[", 0) == 0 && base_type.back() == ']')
           return is_slice ? base_type
                           : base_type.substr(5, base_type.size() - 6);
