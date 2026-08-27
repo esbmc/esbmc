@@ -20,7 +20,8 @@ typedef struct {
 
 void fib_reaction_timer(Fib *self) {
     __ESBMC_requires(self != NULL);
-    
+    __ESBMC_requires(__ESBMC_is_fresh(self, sizeof(Fib)));
+
     __ESBMC_assigns(self->result);
     // Pattern from Fibonacci.c - multiple __ESBMC_old in conditional
     __ESBMC_ensures(__ESBMC_old(self->N) >= 2 || self->result == 1);

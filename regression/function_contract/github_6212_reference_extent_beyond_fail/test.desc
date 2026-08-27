@@ -1,6 +1,5 @@
 CORE
-main.c
+main.cpp
 --function f --enforce-contract f
 ^VERIFICATION FAILED$
 ^.*dereference failure: Access to object out of bounds.*$
-^.*are assumed to address exactly one element.*$

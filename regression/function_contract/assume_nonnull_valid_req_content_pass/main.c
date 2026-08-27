@@ -15,6 +15,7 @@ typedef struct { int x; } S;
 
 void f(S *p)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(S)));
   __ESBMC_requires(p != NULL);
   __ESBMC_requires(p->x == 5);
   __ESBMC_ensures(p->x == 15);

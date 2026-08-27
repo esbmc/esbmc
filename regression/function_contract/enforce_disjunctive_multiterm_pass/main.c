@@ -15,6 +15,7 @@ typedef struct
 
 void f(S *s)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(s, sizeof(S)));
   __ESBMC_requires(s != NULL);
   __ESBMC_assigns(s->a, s->b);
   __ESBMC_ensures(

@@ -29,6 +29,7 @@ void init_nodes(Node* nodes) {
 }
 
 void process_message(Node* node, int value) {
+  __ESBMC_requires(__ESBMC_is_fresh(node, sizeof(Node)));
     __ESBMC_requires(node != ((void*)0));
     __ESBMC_assigns(node->pending_value, node->pending_time, node->has_pending, node->elected);
     __ESBMC_ensures(

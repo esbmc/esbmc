@@ -12,6 +12,7 @@ typedef struct { int x; } S;
 
 void f(S *p)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(S)));
   /* Intentionally no requires(p != NULL) — relies solely on the flag */
   __ESBMC_ensures(p->x == 99);
 

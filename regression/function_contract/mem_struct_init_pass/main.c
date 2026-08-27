@@ -10,6 +10,7 @@ typedef struct { int x; int y; int z; } Vec3;
 
 void vec3_init(Vec3 *v, int x, int y, int z)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(v, sizeof(Vec3)));
   __ESBMC_requires(v != NULL);
   __ESBMC_ensures(v->x == x && v->y == y && v->z == z);
   v->x = x;

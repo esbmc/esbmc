@@ -10,6 +10,11 @@
 typedef struct { int16_t coeffs[N]; } poly;
 void add(poly *r, const poly *b)
 {
+  /* Guarded: an unconditional is_fresh would also state r and b apart, and
+   * this test exists to run the frame check with r == b reachable. The _fail
+   * twin states the extent the same way. */
+  __ESBMC_requires(r == NULL || __ESBMC_is_fresh(r, sizeof(poly)));
+  __ESBMC_requires(b == NULL || __ESBMC_is_fresh(b, sizeof(poly)));
   __ESBMC_requires(r != NULL && b != NULL);
   __ESBMC_assigns(r->coeffs);
   __ESBMC_ensures(1);

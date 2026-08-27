@@ -10,6 +10,7 @@ typedef struct { int x; } S;
 
 void f(S *p, int mode)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(S)));
   __ESBMC_requires(p != NULL);
   __ESBMC_requires(mode == 0 || mode == 1);
   __ESBMC_ensures(mode != 0 || p->x == 100);

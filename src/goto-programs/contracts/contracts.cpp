@@ -1628,10 +1628,6 @@ goto_programt code_contractst::generate_checking_wrapper(
   // diagnostic, so the two producers below must keep agreeing on it.
   std::map<irep_idt, param_extentt> param_extents;
 
-  // is_fresh'd struct pointers, warned about only when the contract uses
-  // __ESBMC_old at all (#6483).
-  std::vector<std::string> is_fresh_struct_ptrs;
-
   // Sequence number for the retained-allocation symbols below. An is_fresh
   // lvalue may be indirect (a->p), so there is no parameter name to build a
   // unique symbol from.
@@ -1657,20 +1653,9 @@ goto_programt code_contractst::generate_checking_wrapper(
         original_func,
         location));
 
+      // The contract asked for this allocation, so its extent is justified.
       if (is_symbol2t(ptr_var) && is_pointer_type(ptr_var->type))
-      {
-        // The contract asked for this allocation, so its extent is justified.
         param_extents[to_symbol2t(ptr_var).thename] = {size_expr, true};
-
-        // A struct/union pointee bypasses the stack-backing carve-out and gets
-        // the heap object #6483 makes unsound. Only an __ESBMC_old over that
-        // pointer can trip it, so stay quiet otherwise rather than training
-        // users to ignore the warning.
-        if (is_structure_type(
-              ns.follow(to_pointer_type(ptr_var->type).subtype)))
-          is_fresh_struct_ptrs.push_back(
-            get_pretty_name(id2string(to_symbol2t(ptr_var).thename)));
-      }
 
       // Assume the pointer is non-null: __ESBMC_is_fresh guarantees a fresh,
       // valid memory block.  Without this, symex_mem's non-deterministic
@@ -1820,13 +1805,6 @@ goto_programt code_contractst::generate_checking_wrapper(
   //    safely dereference pointers that were set up above.
   std::vector<old_snapshot_t> old_snapshots =
     collect_old_snapshots_from_body(original_body);
-
-  if (!old_snapshots.empty() && !is_fresh_struct_ptrs.empty())
-    log_warning(
-      "{}: __ESBMC_is_fresh on struct pointer(s) {} heap-backs them, which can "
-      "silently discharge __ESBMC_old-based ensures clauses (#6483).",
-      location,
-      fmt::join(is_fresh_struct_ptrs, ", "));
 
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSUME) and ensures (ASSERT) clauses in enforce mode
@@ -3021,6 +2999,16 @@ void code_contractst::emit_ptr_field_assertions(
 // Phase 2C: pointer-parameter dereference assigns compliance
 // ---------------------------------------------------------------------------
 
+/// dereferencet pushes an if2t's condition onto the guard it attaches to
+/// dereference assertions, so a read wrapped here does not fail a bounds check
+/// on the paths where it is not taken.
+static expr2tc read_where(const expr2tc &readable, const expr2tc &value)
+{
+  if (is_nil_expr(readable))
+    return value;
+  return if2tc(value->type, readable, value, gen_zero(value->type, true));
+}
+
 void code_contractst::materialize_ptr_deref_array_field(
   const irep_idt &param_id,
   const irep_idt &field,
@@ -3028,6 +3016,7 @@ void code_contractst::materialize_ptr_deref_array_field(
   const type2tc &pointee,
   const expr2tc &ptr_sym,
   const expr2tc &deref_expr,
+  const expr2tc &readable,
   goto_programt &wrapper,
   const locationt &location,
   const std::string &func_name,
@@ -3109,8 +3098,8 @@ void code_contractst::materialize_ptr_deref_array_field(
 
   expr2tc field_arr = member2tc(ftype, deref_expr, field);
   goto_programt::targett s_asg = wrapper.add_instruction(ASSIGN);
-  s_asg->code =
-    code_assign2tc(snap_expr, index2tc(elem_type, field_arr, witness_k));
+  s_asg->code = code_assign2tc(
+    snap_expr, read_where(readable, index2tc(elem_type, field_arr, witness_k)));
   s_asg->location = location;
   s_asg->location.comment("frame: capture (ptr->field)[k] (Phase 2C)");
 
@@ -3122,6 +3111,7 @@ void code_contractst::materialize_ptr_deref_array_field(
   entry.snapshot_sym = snap_expr;
   entry.array_index = witness_k;
   entry.member_type = ftype; // array type, for member access at assert time
+  entry.readable = readable;
   result.push_back(entry);
 }
 
@@ -3201,14 +3191,6 @@ code_contractst::materialize_ptr_deref_snapshots(
 
     irep_idt param_id = param.get_identifier();
 
-    // The snapshot below reads *p. Against an unjustified backing that read is
-    // out of bounds, so the wrapper would report a violation in a parameter
-    // the contract never mentions and the body never touches. There is nothing
-    // to protect either: the body cannot validly dereference it.
-    auto extent_it = param_extents.find(param_id);
-    if (extent_it != param_extents.end() && !extent_it->second.justified)
-      continue;
-
     type2tc param_type = migrate_type(param.type());
     type2tc pointee = to_pointer_type(param_type).subtype;
     if (is_symbol_type(pointee))
@@ -3219,6 +3201,16 @@ code_contractst::materialize_ptr_deref_snapshots(
       is_empty_type(pointee) || is_code_type(pointee) || is_nil_type(pointee) ||
       is_pointer_type(pointee))
       continue;
+
+    // A nondet extent does not cover the pointee on every path, so the reads
+    // below are taken under it rather than dropped: the body cannot
+    // dereference p where it does not hold either. Declared ahead of the skip
+    // checks below, which jump past this point.
+    auto extent_it = param_extents.find(param_id);
+    expr2tc readable;
+    if (extent_it != param_extents.end() && !extent_it->second.justified)
+      readable = greaterthanequal2tc(
+        extent_it->second.bytes, type_byte_size_expr(pointee, &ns));
 
     expr2tc ptr_sym = symbol2tc(param_type, param_id);
 
@@ -3308,6 +3300,7 @@ code_contractst::materialize_ptr_deref_snapshots(
             pointee,
             ptr_sym,
             deref_expr,
+            readable,
             wrapper,
             location,
             func_name,
@@ -3336,7 +3329,8 @@ code_contractst::materialize_ptr_deref_snapshots(
 
         expr2tc field_expr = member2tc(ftype, deref_expr, field);
         goto_programt::targett assign_t = wrapper.add_instruction(ASSIGN);
-        assign_t->code = code_assign2tc(snap_expr, field_expr);
+        assign_t->code =
+          code_assign2tc(snap_expr, read_where(readable, field_expr));
         assign_t->location = location;
         assign_t->location.comment(
           "frame: capture ptr->field pre-state (Phase 2C)");
@@ -3347,6 +3341,7 @@ code_contractst::materialize_ptr_deref_snapshots(
         entry.field_name = field;
         entry.value_type = ftype;
         entry.snapshot_sym = snap_expr;
+        entry.readable = readable;
         result.push_back(entry);
       }
     }
@@ -3374,7 +3369,8 @@ code_contractst::materialize_ptr_deref_snapshots(
 
       expr2tc deref_expr = dereference2tc(pointee, ptr_sym);
       goto_programt::targett assign_t = wrapper.add_instruction(ASSIGN);
-      assign_t->code = code_assign2tc(snap_expr, deref_expr);
+      assign_t->code =
+        code_assign2tc(snap_expr, read_where(readable, deref_expr));
       assign_t->location = location;
       assign_t->location.comment("frame: capture *ptr pre-state (Phase 2C)");
 
@@ -3384,6 +3380,7 @@ code_contractst::materialize_ptr_deref_snapshots(
       // field_name left empty → scalar dereference
       entry.value_type = pointee;
       entry.snapshot_sym = snap_expr;
+      entry.readable = readable;
       result.push_back(entry);
     }
 
@@ -3515,7 +3512,10 @@ void code_contractst::emit_ptr_deref_assertions(
       }
     }
 
-    expr2tc guard = equality2tc(current_val, snap.snapshot_sym);
+    // Both sides read under snap.readable, so the assertion is trivially true
+    // wherever the extent does not cover what it reads.
+    expr2tc guard =
+      equality2tc(read_where(snap.readable, current_val), snap.snapshot_sym);
     if (!is_nil_expr(snap.alias_exemption))
       guard = or2tc(guard, snap.alias_exemption);
 
@@ -5284,26 +5284,6 @@ void code_contractst::generate_replacement_at_call(
 
 // ========== Pointer validity assumptions support ==========
 
-/// Report the one extent the harness still assumes without the contract saying
-/// so. Deliberately does not suggest __ESBMC_is_fresh: on a struct parameter
-/// that would silently discharge __ESBMC_old-based ensures clauses (#6483).
-static void warn_assumed_struct_extents(
-  const symbolt &func,
-  const locationt &location,
-  const std::vector<std::string> &params)
-{
-  if (params.empty())
-    return;
-
-  log_warning(
-    "{}: {}: struct pointer parameter(s) {} are assumed to address exactly one "
-    "element; the contract states no extent for them. Accesses beyond that are "
-    "caught, but the first element is admitted unjustified (#6212).",
-    location,
-    func.name,
-    fmt::join(params, ", "));
-}
-
 static bool contains_symbol(const expr2tc &e, const irep_idt &name)
 {
   if (is_nil_expr(e))
@@ -5382,8 +5362,7 @@ static void warn_unstated_extents(
 
   log_warning(
     "{}: {}: contract states no extent for pointer parameter(s) {}, so any "
-    "dereference will fail its bounds check and the values they point at are "
-    "not checked against the assigns clause. State one with "
+    "dereference will fail its bounds check. State one with "
     "__ESBMC_requires(__ESBMC_is_fresh(<param>, <bytes>)).",
     location,
     func.name,
@@ -5404,7 +5383,7 @@ void code_contractst::add_pointer_validity_assumptions(
 
   // Parameters whose extent the contract leaves unstated, collected so the
   // function gets one warning rather than one per parameter.
-  std::vector<std::string> nondet_extent, assumed_one_element;
+  std::vector<std::string> nondet_extent;
 
   // Pointer parameters this function backs itself, paired with their pretty
   // names. Each is given its own storage below, which would hand the callee a
@@ -5442,16 +5421,24 @@ void code_contractst::add_pointer_validity_assumptions(
 
     type2tc pointee = ns.follow(to_pointer_type(param_type).subtype);
 
-    // See emit_struct_stack_backing for why structs are carved out.
-    // Drop this branch once #6483 is fixed.
-    if (is_structure_type(pointee))
+    // C++ guarantees that both the implicit receiver and a reference parameter
+    // address one complete object, so one element is what the language already
+    // promises rather than an extent the contract failed to state.
+    // __ESBMC_is_fresh cannot state it either way: a reference gives the
+    // contract no pointer to name, and on `this` it would additionally assert
+    // separation from every other pointer parameter, which no contract states.
+    // `this` needs the mode test because it is a reserved word only in C++; a
+    // C parameter of that name carries no such guarantee. A function reference
+    // has no object to declare, so it keeps the pointer path.
+    if (
+      (is_reference(param.type()) ||
+       (func.mode == "C++" && param.get_base_name() == "this")) &&
+      !is_code_type(pointee) && !is_empty_type(pointee))
     {
-      emit_struct_stack_backing(wrapper, p, name, pointee, func, location);
-      // Real stack storage, so one element is genuinely dereferenceable even
-      // though the contract never asked for it.
+      emit_whole_object_stack_backing(
+        wrapper, p, name, pointee, func, location);
       param_extents[param.get_identifier()] = {
         type_byte_size_expr(pointee, &ns), true};
-      assumed_one_element.push_back(name);
       aliasable_params.emplace_back(p, name);
       continue;
     }
@@ -5471,7 +5458,6 @@ void code_contractst::add_pointer_validity_assumptions(
   emit_pointer_param_aliasing(wrapper, func, location, aliasable_params);
 
   warn_unstated_extents(func, location, nondet_extent);
-  warn_assumed_struct_extents(func, location, assumed_one_element);
 }
 
 expr2tc code_contractst::retain_allocation_for_free(
@@ -5601,7 +5587,7 @@ void code_contractst::emit_pointer_param_aliasing(
     fmt::join(may_alias, ", "));
 }
 
-void code_contractst::emit_struct_stack_backing(
+void code_contractst::emit_whole_object_stack_backing(
   goto_programt &wrapper,
   const expr2tc &p,
   const std::string &param_name,
@@ -5625,7 +5611,7 @@ void code_contractst::emit_struct_stack_backing(
   goto_programt::targett decl_inst = wrapper.add_instruction(DECL);
   decl_inst->code = code_decl2tc(pointee, harness_id);
   decl_inst->location = location;
-  decl_inst->location.comment("harness: stack backing for pointer parameter");
+  decl_inst->location.comment("harness: stack backing for whole object");
 
   // ESSENTIAL: symex needs initial SSA versions of all struct fields before
   // any conditional write can create a new version (ITE phi-node).
@@ -5640,12 +5626,11 @@ void code_contractst::emit_struct_stack_backing(
   assign_inst->code =
     code_assign2tc(p, address_of2tc(pointer_type2tc(pointee), harness_expr));
   assign_inst->location = location;
-  assign_inst->location.comment(
-    "harness: point parameter to stack-backed object");
+  assign_inst->location.comment("harness: point parameter at a whole object");
 
   log_debug(
     "contracts",
-    "emit_struct_stack_backing: stack backing for parameter {}",
+    "emit_whole_object_stack_backing: stack backing for {}",
     id2string(to_symbol2t(p).thename));
 }
 

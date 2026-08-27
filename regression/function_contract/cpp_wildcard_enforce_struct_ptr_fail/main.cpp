@@ -10,6 +10,7 @@ struct Point
 int sum_point(const Point *p)
 {
   __ESBMC_requires(p != nullptr);
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(Point)));
   __ESBMC_assigns();
   __ESBMC_ensures(__ESBMC_return_value == p->x + p->y + 1); // wrong
   return p->x + p->y;

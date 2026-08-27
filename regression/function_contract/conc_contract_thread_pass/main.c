@@ -19,6 +19,7 @@ typedef struct {
 
 void process_buffer(Buffer *b)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(b, sizeof(Buffer)));
   __ESBMC_requires(b != NULL);
   __ESBMC_requires(b->size > 0 && b->size <= 16);
   __ESBMC_ensures(b->data[0] == 0);

@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--function bump --enforce-contract bump
+^VERIFICATION FAILED$
+^.*dereference failure: Access to object out of bounds.*$
