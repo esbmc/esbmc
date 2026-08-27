@@ -15,6 +15,25 @@
 #include <vector>
 #include <algorithm>
 
+// Largest request malloc may succeed for. PTRDIFF_MAX, as glibc >= 2.30: above
+// it pointer subtraction overflows, and an object's offset -- stored in
+// ptraddr_type2() but read signed by the bounds checks, pointer subtraction and
+// the relational comparator -- becomes indistinguishable from a below-base
+// pointer (R37). alloca bounds a symbolic request by assumption and reports a
+// constant one; realloc joins the cap to its failure condition (R38, R39).
+static BigInt max_object_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
+}
+
+// Largest object smt_memspace.cpp can lay out at all: it places each object at
+// [start, start + size] over ptraddr_type2 and asserts the sum does not wrap.
+static BigInt max_layable_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width()) -
+         config.ansi_c.max_alignment();
+}
+
 // Collect the byte offset and class type of every (transitively) nested base
 // subobject of `t`, relative to the start of `t`.
 static void collect_base_subobject_offsets(
@@ -215,6 +234,26 @@ void goto_symext::symex_realloc(
   if (handle_realloc_zero_size(lhs, code, guard, realloc_size))
     return;
 
+  // Nil unless the request can exceed max_object_size(); see R38. Under
+  // --force-realloc-success the cap is not applied at all, for the reason the
+  // symbolic malloc arm gives: assuming it away would prune
+  // realloc(p, (size_t)negative) vacuously.
+  expr2tc over_cap;
+  if (
+    !options.get_bool_option("force-realloc-success") &&
+    is_unsignedbv_type(realloc_size->type) &&
+    realloc_size->type->get_width() >= ptraddr_type2()->get_width())
+  {
+    expr2tc fits = lessthanequal2tc(
+      realloc_size, constant_int2tc(realloc_size->type, max_object_size()));
+    over_cap = not2tc(fits);
+    // Zero size on the failing branch keeps the object layable; the request
+    // fails through alloc_fail below, leaving the old object untouched as
+    // C17 7.22.3.5 requires.
+    realloc_size = if2tc(
+      realloc_size->type, fits, realloc_size, gen_zero(realloc_size->type));
+  }
+
   // ===== determine element type and old object info =====
   type2tc elem_type;
   expr2tc old_base_array;
@@ -251,7 +290,7 @@ void goto_symext::symex_realloc(
 
   // create result and handle failure modelling
   expr2tc result = create_result_pointer(new_array, lhs->type);
-  result = model_allocation_failure(result, code.operand, guard);
+  result = model_allocation_failure(result, code.operand, guard, over_cap);
 
   // finalize assignment and tracking
   finalize_realloc_result(lhs, result, new_array, guard, realloc_size);
@@ -404,7 +443,8 @@ expr2tc goto_symext::create_result_pointer(
 expr2tc goto_symext::model_allocation_failure(
   const expr2tc &result,
   const expr2tc &old_ptr,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &over_cap)
 {
   if (!options.get_bool_option("force-realloc-success"))
   {
@@ -416,6 +456,13 @@ expr2tc goto_symext::model_allocation_failure(
       type2tc(),
       sideeffect2t::allockind::nondet);
     replace_nondet(alloc_fail);
+
+    // The cap joins the failure condition rather than nulling the result
+    // afterwards: update_pointer_validity keys the old object's validity on
+    // alloc_fail, so a result nulled past that point would leave the old
+    // object invalidated on a branch where the allocation failed.
+    if (!is_nil_expr(over_cap))
+      alloc_fail = or2tc(alloc_fail, over_cap);
 
     expr2tc null_ptr = symbol2tc(result->type, "NULL");
     expr2tc conditional_result =
@@ -578,6 +625,45 @@ void goto_symext::offer_malloc_zero_null(
   rhs = if2tc(rhs->type, choice, rhs, symbol2tc(rhs->type, "NULL"));
 }
 
+void goto_symext::bound_dynamic_object_size(const code_assign2t &code)
+{
+  if (!is_dynamic_size2t(code.target))
+    return;
+
+  // --no-vla-size-check is "do not check whether the size of VLAs overflows the
+  // available address space", which is what this bound does, one pass after the
+  // guards goto_convert emits at the declaration. Honour it here too: under
+  // --32 a three-dimensional VLA exceeds a 2 GiB PTRDIFF_MAX legitimately, and
+  // SV-COMP runs those tasks with this flag set (#7306).
+  if (options.get_bool_option("no-vla-size-check"))
+    return;
+
+  expr2tc bound_on = code.source;
+  cur_state->rename(bound_on);
+  simplify(bound_on);
+
+  if (
+    !is_unsignedbv_type(bound_on->type) ||
+    bound_on->type->get_width() < ptraddr_type2()->get_width())
+    return;
+
+  if (is_constant_int2t(bound_on))
+  {
+    // An assumption would be identically false here and would prove the whole
+    // program rather than bound it, so report the declaration instead. R39's
+    // principle at R40's site.
+    if (to_constant_int2t(bound_on).value > max_object_size())
+      claim(gen_false_expr(), "object size exceeds PTRDIFF_MAX");
+    return;
+  }
+
+  // Above the cap the object's upper offsets read negative in the pointer
+  // comparator (R37). A declaration has no failure outcome to report, so the
+  // bound is an assumption, as alloca's is. R40.
+  assume(lessthanequal2tc(
+    bound_on, constant_int2tc(bound_on->type, max_object_size())));
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
@@ -591,7 +677,7 @@ expr2tc goto_symext::symex_mem(
   type2tc type = code.alloctype;
   expr2tc size = code.size;
   bool size_is_one = false;
-  // Nil unless a symbolic size needs bounding to the address space.
+  // Nil unless a symbolic size needs bounding at max_object_size().
   expr2tc fits;
 
   if (is_nil_type(type))
@@ -608,11 +694,11 @@ expr2tc goto_symext::symex_mem(
     // reaches the address-space model is encoded as a contradiction rather
     // than as a failed allocation, which silently proves the whole program.
     bool is_negative_size = false;
-    if (is_malloc && is_typecast2t(size))
+    if (is_typecast2t(size))
     {
-      // Detect malloc(-N) before the fold to typecast(size_t, -N) erases the
-      // sign; to_uint64() below discards it, so malloc(-1) would otherwise be
-      // mistaken for a 1-byte allocation.
+      // Detect a negative request before the fold to typecast(size_t, -N)
+      // erases the sign; to_uint64() below discards it, so malloc(-1) would
+      // otherwise be mistaken for a 1-byte allocation.
       expr2tc inner = to_typecast2t(size).from;
       simplify(inner);
       is_negative_size = is_constant_int2t(inner) &&
@@ -622,18 +708,17 @@ expr2tc goto_symext::symex_mem(
     expr2tc folded = size;
     simplify(folded);
 
-    if (is_malloc && is_constant_int2t(folded))
+    if (is_constant_int2t(folded))
     {
       const BigInt &val = to_constant_int2t(folded).value;
-      // smt_memspace.cpp lays each object out as [start, start + size] over
-      // ptraddr_type2, with start past the NULL object and aligned to
-      // max_alignment(), and asserts that the sum does not wrap. A larger
-      // request cannot be laid out at all, so it must fail here; real
-      // allocators return NULL for it too.
-      const BigInt max_size = BigInt::power2m1(ptraddr_type2()->get_width()) -
-                              config.ansi_c.max_alignment();
-      if (is_negative_size || val.is_negative() || val > max_size)
+      if (is_negative_size || val.is_negative() || val > max_object_size())
       {
+        // A constant request cannot be bounded by assumption the way a symbolic
+        // one is: the assumption is identically false, so every execution is
+        // pruned and the whole program is proved. Report the request instead --
+        // an over-large alloca is undefined, not a failure C defines. R39.
+        if (!is_malloc)
+          claim(gen_false_expr(), "alloca: size exceeds PTRDIFF_MAX");
         // Return NULL even under --force-malloc-success, matching real OS
         // behaviour.
         expr2tc null_sym = symbol2tc(pointer_type2tc(type), "NULL");
@@ -651,30 +736,34 @@ expr2tc goto_symext::symex_mem(
         size_is_one = true;
     }
     else if (
-      is_malloc && is_unsignedbv_type(size->type) &&
+      is_unsignedbv_type(size->type) &&
       size->type->get_width() >= ptraddr_type2()->get_width())
     {
-      // A symbolic request can exceed the address space too, and the layout
-      // constraints are asserted unconditionally, so leaving it unbounded makes
-      // the formula UNSAT — silently pruning the executions the program asked
-      // about instead of failing the allocation.
-      const BigInt lim = BigInt::power2m1(ptraddr_type2()->get_width()) -
-                         config.ansi_c.max_alignment();
-      fits = lessthanequal2tc(size, constant_int2tc(size->type, lim));
-
-      if (options.get_bool_option("force-malloc-success"))
-      {
-        // Branching to NULL here would reintroduce exactly the case split this
-        // flag exists to remove, at a cost measured in minutes on
-        // allocation-heavy inputs. State the bound as an assumption instead:
-        // the same executions are excluded as before, but visibly.
-        assume(fits);
-        fits = expr2tc();
-      }
+      // A symbolic request can exceed the bound too, and the layout constraints
+      // are asserted unconditionally, so leaving it unbounded makes the formula
+      // UNSAT — silently pruning the executions the program asked about instead
+      // of failing the allocation.
+      if (!is_malloc)
+        // alloca has no failure outcome to report -- C leaves an over-large
+        // request undefined, and stdlib.c's getenv writes through the result
+        // without checking it -- so bound it by assumption. R38.
+        assume(lessthanequal2tc(
+          size, constant_int2tc(size->type, max_object_size())));
+      else if (options.get_bool_option("force-malloc-success"))
+        // Only layability, and by assumption: branching to NULL costs
+        // 21 s -> >400 s on github_1352-success-32bit, and assuming
+        // max_object_size() instead would prune malloc((size_t)negative)
+        // vacuously (github_1631_nondet_compact). R38 covers the gap.
+        assume(lessthanequal2tc(
+          size, constant_int2tc(size->type, max_layable_size())));
       else
-        // Give the object size zero on the failing branch so it is always
-        // representable, and hand back NULL for it below.
+      {
+        fits = lessthanequal2tc(
+          size, constant_int2tc(size->type, max_object_size()));
+        // Zero size on the failing branch keeps the object layable; NULL is
+        // handed back below.
         size = if2tc(size->type, fits, size, gen_zero(size->type));
+      }
     }
   }
 
