@@ -35,7 +35,9 @@ solver.
 {{< tabs >}}
 
 {{< tab name="Linux" >}} {{< cards >}}
-{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux.zip" title="Download" icon="download" >}}
+{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux.zip" title="Download (x86_64)" icon="download" >}}
+{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux-armv8.zip" title="Download (ARMv8)" icon="download" >}}
+{{< card link="docs/setup#arm64-builds" title="ARM64 Limitations" icon="warning" >}}
 {{< card link="docs/development/building" title="Build Guide" icon="cog" >}}
 {{< /cards >}} {{< /tab >}}
 

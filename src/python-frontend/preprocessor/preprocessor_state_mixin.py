@@ -81,6 +81,7 @@ class PreprocessorStateMixin:
         self.dict_literal_values = {}
         # Module-level ``def f(p): return <expr>``: name -> (param, expr).
         self._single_return_funcs = {}
+        self._param_subscripting_funcs = set()
         # Map var -> RHS Call node; used by _apply_assert_eq_rewrites to
         # substitute the Name back to its defining call.
         self._assignment_call_origins = {}
