@@ -1,4 +1,5 @@
 #include "python_list_internal.h"
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/numpy/ndarray_descriptor.h>
 #include <algorithm>
 #include <optional>
@@ -88,7 +89,10 @@ exprt python_list::build_list_at_call(
   // execution step purely to prove what the index's type already guarantees.
   const bool index_may_be_negative = !index.type().is_unsignedbv();
 
-  if (!index_may_be_negative)
+  // A discarded type probe only reads this call's type, and the real RHS
+  // build re-emits the whole check; normalizing here would emit a second
+  // __ESBMC_list_size call and IndexError guard per subscript assignment.
+  if (!index_may_be_negative || converter_.in_rhs_type_probe_)
   {
     exprt index_as_size = build_typecast(index, size_type());
     exprt list_at_call = build_call_expr(
@@ -161,6 +165,7 @@ exprt python_list::build_list_at_call(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -619,6 +624,7 @@ exprt python_list::index_bool_mask_rows(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -1088,6 +1094,7 @@ exprt python_list::resolve_fixed_axis_index(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -2152,6 +2159,7 @@ exprt python_list::normalize_and_scale_index(
   normalize_guard.cond() = idx_lt_zero;
   normalize_guard.then_case() = normalize;
   normalize_guard.location() = loc;
+  normalize_guard.location().property("skipped");
   converter_.add_instruction(normalize_guard);
 
   const type2tc ll_type2 = migrate_type(ll_type);
@@ -2171,6 +2179,7 @@ exprt python_list::normalize_and_scale_index(
   oob_guard.cond() = migrate_expr_back(or2tc(still_negative, past_end));
   oob_guard.then_case() = throw_code;
   oob_guard.location() = loc;
+  oob_guard.location().property("skipped");
   converter_.add_instruction(oob_guard);
 
   exprt scaled =
@@ -2254,6 +2263,40 @@ exprt python_list::normalize_negative_slice_bound(
   migrate_expr(clamped, clamped2);
   return migrate_expr_back(
     if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
+}
+
+/// A dict view (d.keys()[:] / d.values()[:]) is a member expression, so
+/// handle_range_slice's element-by-element copy never runs and its id-keyed
+/// fallbacks cannot reach it: the entries live under the dict's internal list
+/// id. Without this the slice result is untyped and a tuple element reads back
+/// as a bare pointer, which unpacking then rejects.
+void python_list::copy_dict_view_elem_types(
+  const exprt &array,
+  const std::string &sliced_id)
+{
+  if (!list_type_map[sliced_id].empty() || array.id() != exprt::member)
+    return;
+
+  const exprt &dict_sym = array.op0();
+  const std::string component =
+    to_member_expr(array).get_component_name().as_string();
+  if (!dict_sym.is_symbol() || (component != "keys" && component != "values"))
+    return;
+
+  const std::string &src = python_dict_handler::get_internal_list_id(
+    dict_sym.identifier().as_string(), component == "keys");
+  if (!src.empty())
+    copy_type_info(src, sliced_id);
+
+  // Tuple values are recorded under $dict_value_types$ rather than the
+  // values-list id, so the copy above is a no-op for them.
+  if (component == "values" && list_type_map[sliced_id].empty())
+  {
+    const typet tuple_t =
+      converter_.get_dict_handler()->recorded_tuple_value_type(dict_sym);
+    if (!tuple_t.is_nil() && !tuple_t.is_empty())
+      add_type_info_entry(sliced_id, std::string(), tuple_t);
+  }
 }
 
 exprt python_list::handle_range_slice(
@@ -2892,6 +2935,9 @@ exprt python_list::handle_range_slice(
   // numbers[:-1]), or where the source is a function parameter rather than a
   // locally constructed list, so list_type_map has no entries for it.
   const std::string &sliced_id = sliced_list.id.as_string();
+
+  copy_dict_view_elem_types(array, sliced_id);
+
   if (list_type_map[sliced_id].empty())
   {
     if (
@@ -4057,6 +4103,7 @@ exprt python_list::handle_index_access(
     norm_guard.cond() = idx_lt_zero;
     norm_guard.then_case() = normalize;
     norm_guard.location() = loc;
+    norm_guard.location().property("skipped");
     converter_.add_instruction(norm_guard);
 
     // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
@@ -4077,6 +4124,7 @@ exprt python_list::handle_index_access(
     oob_guard.cond() = migrate_expr_back(or2tc(still_neg, idx_ge_len));
     oob_guard.then_case() = throw_code;
     oob_guard.location() = loc;
+    oob_guard.location().property("skipped");
     converter_.add_instruction(oob_guard);
 
     // --- 5. __python_str_slice(array, idx, idx+1, 1) ---

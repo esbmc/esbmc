@@ -125,6 +125,12 @@ public:
     const nlohmann::json &element);
 
   std::string get_op(const std::string &op, const typet &type) const;
+  /// `Callable[[A, B], R]` as the function-pointer type `R (*)(A, B)`; the
+  /// generic `Callable` pointer when the signature is not spelled.
+  typet get_callable_type(
+    const nlohmann::json &annotation,
+    const nlohmann::json &stmt);
+
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
@@ -668,6 +674,30 @@ private:
     const symbol_id &id,
     const locationt &location,
     bool is_keyword_only);
+
+  /// Give the nested function @p id its own static cell for each free variable
+  /// that resolves to a local of the enclosing function, and return the
+  /// statements that bind those cells where the `def` executes.
+  ///
+  /// A nested `def` becomes a standalone GOTO function, so a free variable it
+  /// reads resolves (converter_symbols.cpp's scope walk) to the enclosing
+  /// function's own local. Once the closure outlives that frame the read is
+  /// unconstrained, so `make_adder(5)(3) == 8` fails (#6256). The cell is
+  /// static, so it survives the frame; the binding poisons it with a nondet
+  /// value when a second instantiation disagrees, since a Python function
+  /// value is one static symbol here (#6640) and cannot hold per-closure state.
+  code_blockt create_capture_cells(
+    const nlohmann::json &function_node,
+    const symbol_id &id,
+    const locationt &location);
+
+  /// Cell bindings produced by the last nested `get_function_definition`,
+  /// drained by get_block where the `def` statement sits.
+  code_blockt pending_captures_;
+
+  /// The FunctionDef currently being converted, seen from a nested def as its
+  /// enclosing scope. Null at module level.
+  const nlohmann::json *enclosing_function_node_ = nullptr;
 
   /**
    * @brief Infer a numpy-array parameter's concrete array type by scanning
@@ -1270,6 +1300,15 @@ private:
   // =========================================================================
   // RHS processing helper methods
   // =========================================================================
+
+  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
+  /// reordering builtin (sorted/reversed/list), else nullptr.
+  static const nlohmann::json *
+  reordering_builtin_arg(const nlohmann::json &ast_node);
+
+  void copy_elem_types_from_reordering_builtin(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_id);
 
   /**
    * @brief Handles function call RHS assignment.

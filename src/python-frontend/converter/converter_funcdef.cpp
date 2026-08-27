@@ -23,9 +23,289 @@
 #include <util/expr/symbolic_types.h>
 
 #include <functional>
+#include <map>
 #include <set>
 
 using namespace json_utils;
+
+namespace
+{
+/// @p node's @p key, or JSON null when absent — a synthesised AST node need
+/// not carry every field CPython's grammar does.
+const nlohmann::json &field(const nlohmann::json &node, const char *key)
+{
+  static const nlohmann::json absent;
+  const auto it = node.find(key);
+  return it == node.end() ? absent : *it;
+}
+
+/// Adds @p name to @p out when it is a JSON string.
+void insert_name(const nlohmann::json &name, std::set<std::string> &out)
+{
+  if (name.is_string())
+    out.insert(name.get<std::string>());
+}
+
+/// Names @p target binds when used as an assignment/loop/with/except target.
+void collect_bound_target(
+  const nlohmann::json &target,
+  std::set<std::string> &bound)
+{
+  if (!target.is_object())
+  {
+    insert_name(target, bound);
+    return;
+  }
+
+  const std::string kind = target.value("_type", "");
+  if (kind == "Name")
+    insert_name(field(target, "id"), bound);
+  else if (kind == "Starred")
+    collect_bound_target(field(target, "value"), bound);
+  else if (kind == "Tuple" || kind == "List")
+  {
+    for (const auto &elt : field(target, "elts"))
+      collect_bound_target(elt, bound);
+  }
+}
+
+/// AST node kinds that open a scope of their own.
+const std::set<std::string> scope_kinds =
+  {"FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef"};
+
+/// Node kinds carrying a single binding target under "target".
+const std::set<std::string> target_kinds =
+  {"AugAssign", "AnnAssign", "NamedExpr", "For", "AsyncFor", "comprehension"};
+
+/// Records what @p node binds in the scope being walked, or re-binds in an
+/// outer one via `global`/`nonlocal` (@p rebound).
+void collect_bindings(
+  const std::string &kind,
+  const nlohmann::json &node,
+  std::set<std::string> &bound,
+  std::set<std::string> &rebound)
+{
+  if (kind == "Global" || kind == "Nonlocal")
+  {
+    for (const auto &name : field(node, "names"))
+      insert_name(name, rebound);
+  }
+  else if (kind == "Assign")
+  {
+    for (const auto &target : field(node, "targets"))
+      collect_bound_target(target, bound);
+  }
+  else if (target_kinds.count(kind))
+    collect_bound_target(field(node, "target"), bound);
+  else if (kind == "ExceptHandler")
+    collect_bound_target(field(node, "name"), bound);
+  else if (kind == "alias")
+    collect_bound_target(
+      field(node, "asname").is_null() ? field(node, "name")
+                                      : field(node, "asname"),
+      bound);
+  else if (kind == "arg")
+    collect_bound_target(field(node, "arg"), bound);
+}
+
+/// Walks @p node accumulating every name it reads (@p loads), every name it
+/// binds itself (@p bound), and the names it re-binds in an outer scope via
+/// `global`/`nonlocal` (@p rebound). A nested scope is walked separately so
+/// its own bindings do not mask an outer free name; only the names it leaves
+/// free propagate into @p loads.
+void collect_scope_names(
+  const nlohmann::json &node,
+  std::set<std::string> &loads,
+  std::set<std::string> &bound,
+  std::set<std::string> &rebound,
+  bool is_scope_root = false);
+
+void collect_nested_scope(
+  const nlohmann::json &node,
+  std::set<std::string> &loads)
+{
+  std::set<std::string> inner_loads, inner_bound, inner_rebound;
+  collect_scope_names(node, inner_loads, inner_bound, inner_rebound, true);
+  for (const std::string &name : inner_loads)
+    if (inner_bound.count(name) == 0)
+      loads.insert(name);
+}
+
+void collect_scope_names(
+  const nlohmann::json &node,
+  std::set<std::string> &loads,
+  std::set<std::string> &bound,
+  std::set<std::string> &rebound,
+  bool is_scope_root)
+{
+  if (node.is_array())
+  {
+    for (const auto &item : node)
+      collect_scope_names(item, loads, bound, rebound);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  const std::string kind = node.value("_type", "");
+
+  if (!is_scope_root && scope_kinds.count(kind))
+  {
+    insert_name(field(node, "name"), bound);
+    collect_nested_scope(node, loads);
+    return;
+  }
+
+  if (kind == "Name")
+    insert_name(field(node, "id"), loads);
+  else
+    collect_bindings(kind, node, bound, rebound);
+
+  for (const auto &child : node.items())
+    collect_scope_names(child.value(), loads, bound, rebound);
+}
+
+/// Names @p function_node reads from an enclosing scope.
+std::set<std::string> free_variables(const nlohmann::json &function_node)
+{
+  std::set<std::string> loads, bound, rebound;
+  collect_scope_names(function_node, loads, bound, rebound, true);
+
+  std::set<std::string> free;
+  for (const std::string &name : loads)
+  {
+    // A `global`/`nonlocal` name writes through to the outer binding; a
+    // capture cell would fork it, so those keep the existing scope walk.
+    if (bound.count(name) == 0 && rebound.count(name) == 0)
+      free.insert(name);
+  }
+  return free;
+}
+
+/// How many times @p node's subtree writes each name, as an upper bound on the
+/// writes an enclosing function performs. Inside a nested scope (@p nested)
+/// only a `global`/`nonlocal` declaration counts: everything else a nested
+/// scope binds -- its parameters above all -- is its own storage, not the
+/// enclosing local a capture cell would freeze.
+void count_bindings(
+  const nlohmann::json &node,
+  std::map<std::string, std::size_t> &writes,
+  bool nested = false)
+{
+  if (node.is_array())
+  {
+    for (const auto &item : node)
+      count_bindings(item, writes, nested);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  const std::string kind = node.value("_type", "");
+  std::set<std::string> bound, rebound;
+  collect_bindings(kind, node, bound, rebound);
+  for (const std::string &name : nested ? rebound : bound)
+    ++writes[name];
+
+  const bool enters_scope = scope_kinds.count(kind) != 0;
+  for (const auto &child : node.items())
+    count_bindings(child.value(), writes, nested || enters_scope);
+}
+} // namespace
+
+code_blockt python_converter::create_capture_cells(
+  const nlohmann::json &function_node,
+  const symbol_id &id,
+  const locationt &location)
+{
+  code_blockt bindings;
+
+  // Only a function nested directly in another function has an enclosing frame
+  // to capture from. A top-level function would cut back to the module scope
+  // (its globals need no cell), and a method's id carries an @C@ component the
+  // cut would mis-split.
+  if (
+    current_func_name_.find("@F@") == std::string::npos ||
+    !current_class_name_.empty())
+    return bindings;
+
+  const std::string func_id = id.to_string();
+  const std::string enclosing_scope = func_id.substr(0, func_id.rfind("@F@"));
+
+  // A Python closure reads the enclosing binding, not a def-time copy, so the
+  // cell is only faithful while nothing rebinds the name after the `def`. The
+  // enclosing body may bind a local once (necessarily before the def -- a
+  // later-only binding has no symbol yet, so the loop below skips it) and a
+  // parameter not at all; anything more keeps the scope walk.
+  std::map<std::string, std::size_t> writes;
+  if (enclosing_function_node_ != nullptr)
+    count_bindings(field(*enclosing_function_node_, "body"), writes);
+
+  auto add_static = [&](
+                      const std::string &sym_id,
+                      const std::string &name,
+                      const typet &type,
+                      const exprt &init) {
+    if (symbolt *existing = symbol_table_.find_symbol(sym_id))
+      return symbol_expr(*existing);
+
+    symbolt symbol =
+      create_symbol(current_python_file, name, sym_id, location, type);
+    symbol.lvalue = true;
+    symbol.file_local = true;
+    symbol.static_lifetime = true;
+    symbol.set_value(init);
+    symbol_table_.add(symbol);
+    return symbol_expr(*symbol_table_.find_symbol(sym_id));
+  };
+
+  for (const std::string &name : free_variables(function_node))
+  {
+    symbolt *source = symbol_table_.find_symbol(enclosing_scope + "@" + name);
+    if (source == nullptr || writes[name] > (source->is_parameter ? 0u : 1u))
+      continue;
+
+    // Scalars only. A container (list/dict/str/instance) carries per-symbol
+    // element-type metadata keyed by its own id, which a differently-named
+    // cell would not inherit -- `c[0] += 1` over a captured list would then be
+    // typed list+int and raise TypeError (regression/python/
+    // closure_subscript_write). Those keep the scope walk, which already models
+    // the common case of a closure called inside the defining frame.
+    const typet &cell_type = source->get_type();
+    if (!(cell_type.is_bool() || cell_type.is_signedbv() ||
+          cell_type.is_unsignedbv() || cell_type.is_floatbv() ||
+          cell_type.is_fixedbv()))
+      continue;
+
+    const std::string cell_id = func_id + "@" + name;
+    const exprt cell =
+      add_static(cell_id, name, cell_type, gen_zero(cell_type));
+    const exprt is_bound = add_static(
+      cell_id + "$bound", name + "$bound", bool_type(), gen_boolean(false));
+    const exprt source_expr = symbol_expr(*source);
+
+    exprt nondet("sideeffect", cell_type);
+    nondet.statement("nondet");
+
+    // A second instantiation that disagrees with the first must not overwrite
+    // the cell: `a5 = make_adder(5); a7 = make_adder(7)` share one static
+    // symbol, so proving a5(3) == 10 off a7's binding would be unsound.
+    code_ifthenelset bind;
+    bind.cond() =
+      and_exprt(is_bound, not_exprt(equality_exprt(cell, source_expr)));
+    bind.then_case() = code_assignt(cell, nondet);
+    bind.else_case() = code_assignt(cell, source_expr);
+    bind.location() = location;
+    bind.location().property("skipped");
+    bindings.copy_to_operands(bind);
+
+    code_assignt mark(is_bound, gen_boolean(true));
+    mark.location() = location;
+    bindings.copy_to_operands(mark);
+  }
+
+  return bindings;
+}
 
 size_t python_converter::get_type_size(const nlohmann::json &ast_node)
 {
@@ -436,6 +716,20 @@ bool body_returns_list_value(const nlohmann::json &body)
 
 // Return true if 'param_name' has any attribute written (x.attr = ...)
 // anywhere in 'body' (recursive scan over nested blocks).
+/// A subscripted annotation spelled with either of @p name or @p alt, e.g.
+/// `Tuple[int, str]` -- the form that carries arguments, as opposed to a bare
+/// `Tuple`.
+static bool is_subscripted_as(
+  const nlohmann::json &return_type,
+  const nlohmann::json &node,
+  const char *name,
+  const char *alt = nullptr)
+{
+  if (node["_type"] != "Subscript")
+    return false;
+  return return_type == name || (alt && return_type == alt);
+}
+
 static bool param_is_mutated_in_body(
   const std::string &param_name,
   const nlohmann::json &body)
@@ -1653,14 +1947,20 @@ void python_converter::get_function_definition(
       // String return types should be pointers, not arrays
       type.return_type() = gen_pointer_type(char_type());
     }
-    else if (
-      (return_type == "Tuple" || return_type == "tuple") &&
-      return_node["_type"] == "Subscript")
+    else if (is_subscripted_as(return_type, return_node, "Tuple", "tuple"))
     {
       type.return_type() =
         tuple_handler_->get_tuple_type_from_annotation(return_node);
     }
-    else if (return_type == "Optional" && return_node["_type"] == "Subscript")
+    else if (is_subscripted_as(return_type, return_node, "Callable"))
+    {
+      // A function returning a callable is the general shape of #6640: the
+      // caller binds the result to a variable and calls through it, so the
+      // return type has to carry the signature. The generic `Callable`
+      // pointer has an empty return type, which leaves every such call nondet.
+      type.return_type() = get_callable_type(return_node, function_node);
+    }
+    else if (is_subscripted_as(return_type, return_node, "Optional"))
     {
       // Optional[T]: delegate to the annotation handler, which builds either
       // an Optional<T> struct (for primitive T) or a T* pointer (for str /
@@ -1738,6 +2038,14 @@ void python_converter::get_function_definition(
 
   // Process function arguments
   process_function_arguments(function_node, type, id, location);
+
+  // Closure capture (#6256): the cells must exist before the body is
+  // converted, so a free variable resolves to the cell rather than walking out
+  // to the enclosing frame's local.
+  code_blockt captures = create_capture_cells(function_node, id, location);
+
+  const nlohmann::json *enclosing_node = enclosing_function_node_;
+  enclosing_function_node_ = &function_node;
 
   // Stage 1 object-model migration (#3067): a function returning a user-defined
   // class instance returns a *reference* (pointer) to the heap object, matching
@@ -2044,6 +2352,9 @@ void python_converter::get_function_definition(
   validate_return_paths(function_node, type, function_body);
 
   added_symbol->set_value(function_body);
+
+  pending_captures_ = std::move(captures);
+  enclosing_function_node_ = enclosing_node;
 
   scope_stack_.pop_back();
 

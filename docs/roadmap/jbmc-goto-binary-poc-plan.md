@@ -971,6 +971,32 @@ programs that *use* strings, not to every program that merely links
 to fail and JBMC does not. That is a known pointer-model difference (§5), not a
 JVM-semantics gap.
 
+#### 4.1.8 The `<clinit>` recursion was a simplifier gap (Run 10)
+
+**Resolved: both fixtures now verify with no `--unwind` at all.** The
+recursion was never unbounded in the program. `clinit_wrapper` guards its
+body with `clinit_already_run == 0` and sets the flag to 1 before calling
+`<clinit>`, which calls the wrapper back, so one round trip ends it. Symex
+propagated the flag correctly -- `--symex-trace` shows the guard renaming to
+`1 != 0` -- but `do_simplify` left that constant comparison standing, so
+neither branch was decided and symex re-entered the body ~1000 times.
+
+The cause is in `simplify_relations` (`src/util/expr/expr_simplifier.cpp`):
+it dispatches the constant-vs-constant fold on the *operand* type and had
+cases for bv, fixedbv, floatbv and pointer, but none for `bool`. Two
+`constant_bool` operands therefore fell through unfolded. Java reaches this
+where C does not, because C's `_Bool b; b == 0` widens `b` to an integer
+first, making the comparison a bv one; CBMC's Java lowering compares two
+booleans directly.
+
+With the `bool` case added, `T4Virtual` verifies SUCCESSFUL in 0.7 s with no
+bound and unwinding assertions on, and `T4VirtualFail` still reports FAILED.
+The §4.1.7 caveat above is therefore discharged: the SUCCESSFUL verdict is no
+longer "ESBMC agrees with JBMC at this bound". Note the caveat was real --
+recursion truncation is silent, since ESBMC's unwinding assertions cover
+loops, not recursive calls, so the old `--unwind 6` verdict would not have
+announced a too-small bound.
+
 > **Fixture caveat found in passing.** A `symtab2gb` binary has no
 > `__CPROVER__start`, so ESBMC wraps the *boilerplate* main and the fixture's
 > own `main` is never called — the warning at `goto_program.cpp:262` says so,

@@ -1,8 +1,5 @@
 # A closure that escapes its defining scope: make_adder returns add, which
-# captures n. Calling it must yield 8. ESBMC currently leaves the call
-# unconstrained -- n is not bound -- so both `== 8` and `== 3` are refutable
-# (#6256). Same root cause as #6640: function values are static aliases, so
-# there is no environment to carry n out of make_adder.
+# captures n. Calling it must yield 8 (#6256).
 
 
 def make_adder(n):

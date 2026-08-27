@@ -33,6 +33,8 @@ size_t goto_coveraget::total_kpath_spanning = 0;
 std::set<std::pair<std::string, std::string>>
   goto_coveraget::k_path_spanning_redundant;
 std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
+std::map<std::pair<std::string, std::string>, std::string>
+  goto_coveraget::claim_negation;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -905,6 +907,9 @@ std::set<std::pair<std::string, std::string>>
 goto_coveraget::get_total_cond_assert() const
 {
   std::set<std::pair<std::string, std::string>> total_cond_assert = {};
+  // Rebuilt in lockstep with the returned claim set: every call site assigns
+  // it to all_claims, which report_dead_code indexes this map by.
+  claim_negation.clear();
   forall_goto_functions (f_it, goto_functions)
   {
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
@@ -923,6 +928,8 @@ goto_coveraget::get_total_cond_assert() const
           std::pair<std::string, std::string> claim_pair = std::make_pair(
             it->location.comment().as_string(), it->location.as_string());
           total_cond_assert.insert(claim_pair);
+          claim_negation[claim_pair] =
+            from_expr(ns, "", gen_not_expr(it->guard));
         }
       }
     }
@@ -1212,7 +1219,7 @@ expr2tc goto_coveraget::gen_and_expr(const expr2tc &lhs, const expr2tc &rhs)
   return and2tc(_lhs, _rhs);
 }
 
-expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
+expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard) const
 {
   if (is_not2t(guard))
     return to_not2t(guard).value;

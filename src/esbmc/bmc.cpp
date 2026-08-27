@@ -1024,13 +1024,15 @@ static bool is_kpath_maximal(const std::string &claim_sig)
 
 // Advisory dead-code reporter for --dead-code-check (CWE-561, issue #4495).
 //
-// Reuses the branch-coverage instrumentation: a probe (an instrumented
-// assertion over a branch guard) that multi_property_check never violated is
-// unreachable under all inputs up to the current unwinding bound — i.e. that
-// branch direction is dead. The dead set is therefore
-// `all_claims \ reached_claims`. Findings are advisory: they are printed as a
-// separate [Dead code] section and, when --sarif-output is set, emitted at
-// SARIF note level. They never flip the verdict (see report_result).
+// Reuses the branch-coverage instrumentation: a probe `assert(c)` (an
+// instrumented assertion over a branch guard) that multi_property_check never
+// violated proves `!c` infeasible up to the current unwinding bound — so `!c`
+// is the dead direction, and the advisory names goto_coveraget::claim_negation
+// rather than the claim's own comment. claim_negation is keyed by, and rebuilt
+// with, goto_coveraget::all_claims, so the dead set is exactly the entries
+// below that reached_claims does not hold. Findings are advisory: they are
+// printed as a separate [Dead code] section and, when --sarif-output is set,
+// emitted at SARIF note level. They never flip the verdict (see report_result).
 static void report_dead_code(
   const optionst &options,
   const std::unordered_set<std::string> &reached_claims,
@@ -1038,19 +1040,19 @@ static void report_dead_code(
 {
   std::vector<dead_code_finding_t> findings;
 
-  for (const auto &[comment, loc] : goto_coveraget::all_claims)
+  for (const auto &[claim, dead_guard] : goto_coveraget::claim_negation)
   {
-    const std::string claim_sig = comment + "\t" + loc;
-    if (reached_claims.count(claim_sig))
+    const auto &[comment, loc] = claim;
+    if (reached_claims.count(comment + "\t" + loc))
       continue; // reachable branch direction — live code
 
     nlohmann::json parsed = parse_claim_location(loc);
     dead_code_finding_t f;
     f.file = parsed["file"].get<std::string>();
     f.line = static_cast<unsigned>(parsed["line"].get<int>());
-    f.message = comment.empty()
+    f.message = dead_guard.empty()
                   ? "dead code: unreachable branch"
-                  : "dead code: unreachable branch [guard: " + comment + "]";
+                  : "dead code: unreachable branch [guard: " + dead_guard + "]";
     findings.push_back(std::move(f));
   }
 
@@ -1084,6 +1086,20 @@ static void report_dead_code(
   // document: they share the one output path, so a second write would truncate
   // these findings away.
   sarif_dead_code(options, findings, dead_stores);
+}
+
+/// Coverage numerator over the branch instrumentation. reached_claims records
+/// every claim symex refuted, including ones outside the instrumentation (an
+/// uncaught exception, say), so its raw size can exceed the goal count and
+/// report over 100% (#7296). all_claims is the instrumented set.
+static size_t
+count_reached_goals(const std::unordered_set<std::string> &reached_claims)
+{
+  size_t reached = 0;
+  for (const auto &[comment, loc] : goto_coveraget::all_claims)
+    if (reached_claims.count(comment + "\t" + loc))
+      ++reached;
+  return reached;
 }
 
 void report_coverage(
@@ -1303,9 +1319,7 @@ void report_coverage(
   else if (is_branch_cov)
   {
     const size_t total = goto_coveraget::total_branch;
-    // this also included the non-unwinding-assertions
-    // which is not what we want
-    const size_t tracked_instance = reached_claims.size();
+    const size_t tracked_instance = count_reached_goals(reached_claims);
     log_success("\n[Coverage]\n");
     log_result("Branches : {}", total);
     log_result("Reached : {}", tracked_instance);
@@ -1329,9 +1343,7 @@ void report_coverage(
     //! Might got incorrect total number when using --k-induction
     //! due to that the symex->goto_functions has been simplified
     const size_t total = goto_coveraget::total_func_branch;
-    // this also included the non-unwinding-assertions
-    // which is not what we want
-    const size_t tracked_instance = reached_claims.size();
+    const size_t tracked_instance = count_reached_goals(reached_claims);
     log_success("\n[Coverage]\n");
     log_result("Function Entry Points & Branches : {}", total);
     log_result("Reached : {}", tracked_instance);

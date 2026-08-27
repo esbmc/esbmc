@@ -5,7 +5,6 @@ def make_multiplier(k):
 
 
 times3 = make_multiplier(3)
-# Two calls through the same escaped closure: both read k from the dead
-# enclosing frame, so neither product is constrained (#6256).
+# Two calls through the same escaped closure, both reading k == 3 (#6256).
 assert times3(4) == 12
 assert times3(5) == 15

@@ -181,8 +181,41 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   if (is_code_for2t(expr))
     hoist_for_init(expr);
 
+  if (is_code_expression2t(expr))
+    adjust_expression_statement(expr);
+
+  adjust_sole_arms_tail(expr);
+}
+
+/// The tail of adjust_sole_arms. Split only to keep either half under
+/// the complexity gate; the two run back to back and the arms below are
+/// order-independent of the ones above.
+void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
+{
+  // A comma expression takes its right operand's type (C11 6.5.17p2). Clang
+  // hands it the *decayed* type when the right operand is an array, so leaving
+  // it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
+  // the named array-bounds check for the generic dereference one. Same rewrite
+  // as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
+  if (is_code_comma2t(expr))
+  {
+    const code_comma2t &c = to_code_comma2t(expr);
+    if (expr->type != c.side_2->type)
+      expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
+  }
+  if (is_constant_struct2t(expr))
+    adjust_struct(expr);
+  if (is_constant_array2t(expr))
+    adjust_array_subtype(expr);
+  if (is_code_decl2t(expr))
+    adjust_decl_init(expr);
+  if (is_dereference2t(expr))
+    adjust_dereference(expr);
+
   if (is_complex_unary(expr))
     adjust_complex_unary(expr);
+  else if (is_neg2t(expr) || is_bitnot2t(expr))
+    promote_unary_bool_operand(expr);
 
   if (is_relational(expr))
     adjust_relational(expr);
@@ -456,6 +489,85 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   expr = address_of2tc(elem, idx, a.implicit);
 }
 
+/// IREP2 form of clang_c_adjust::adjust_struct's insertion loop. A struct
+/// literal reaches this pass with an operand per *declared* member, while
+/// add_padding has given the type its synthetic ones; unpadded, the value is
+/// short a component and a downstream member read resolves by position onto the
+/// wrong field. pad_struct_operands is the shared helper the Python adjuster
+/// already uses for the same job (irep2/irep2_utils.h).
+void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
+{
+  // The literal's own type is an inline copy the converter recorded before
+  // add_padding ran, so ns.follow leaves it short the synthetic members. The
+  // padded layout lives on the tag symbol; resolve by name to reach it. Legacy
+  // adjust_struct needs no such step -- there the value's type is a
+  // symbol_typet, which follow resolves for it.
+  const type2tc t = ns.follow(expr->type);
+  if (!is_struct_type(t))
+    return;
+
+  const symbolt *tag =
+    context.find_symbol("tag-" + to_struct_type(t).name.as_string());
+  if (tag == nullptr || !tag->is_type)
+    return;
+
+  const type2tc padded = migrate_type(tag->get_type());
+  if (!is_struct_type(padded))
+    return;
+
+  const struct_type2t &st = to_struct_type(padded);
+  std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
+  if (ops.size() == st.members.size())
+    return;
+
+  ops = pad_struct_operands(st, ops);
+  // A residual mismatch is not this pass's to guess at: leave the literal as
+  // it stands rather than build one the type cannot describe.
+  if (ops.size() == st.members.size())
+    expr = constant_struct2tc(padded, ops);
+}
+
+/// adjust_struct retypes an element to its tag's padded layout, which leaves
+/// an enclosing array literal still naming the unpadded element type. The
+/// operands are walked before the node itself, so the retyped elements are
+/// already in place here; value_sett::assign's base_type_eq rejects the pair
+/// otherwise.
+void clang_c_adjust_irep2::adjust_array_subtype(expr2tc &expr)
+{
+  const constant_array2t &a = to_constant_array2t(expr);
+  if (a.datatype_members.empty())
+    return;
+
+  const array_type2t &at = to_array_type(expr->type);
+  const type2tc &elem = a.datatype_members.front()->type;
+  if (
+    !is_struct_type(at.subtype) || !is_struct_type(elem) || at.subtype == elem)
+    return;
+
+  expr = constant_array2tc(
+    array_type2tc(elem, at.array_size, at.size_is_infinite),
+    a.datatype_members);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_decl's trailing `gen_typecast`: a
+/// declaration's initialiser converts to the declared type. Distinct from
+/// adjust_plain_assignment, which handles the *expression* form
+/// (`sideeffect_assign2t`). Without it a narrower declared type keeps the
+/// promoted operand type -- `_ExtInt(10) z = x + y` initialises from an `int`
+/// -- and the solver is handed mismatching sorts.
+void clang_c_adjust_irep2::adjust_decl_init(expr2tc &expr)
+{
+  const code_decl2t &d = to_code_decl2t(expr);
+  if (is_nil_expr(d.init))
+    return;
+
+  expr2tc init = d.init;
+  c_implicit_typecast(init, expr->type, ns);
+
+  if (init != d.init)
+    expr = code_decl2tc(expr->type, d.value, init, d.location);
+}
+
 void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
 {
   const code_for2t &f = to_code_for2t(expr);
@@ -471,8 +583,11 @@ void clang_c_adjust_irep2::hoist_for_init(expr2tc &expr)
   else
     end_location.make_nil();
 
-  const expr2tc bare =
-    code_for2tc(expr2tc(), f.cond, f.iter, f.body, f.location);
+  // pragma_unroll_count is excluded from code_for2t::fields, so it does not
+  // participate in equality and a rebuild that drops it compares equal to one
+  // that keeps it. Every loop rebuild in this pass has to carry it explicitly.
+  const expr2tc bare = code_for2tc(
+    expr2tc(), f.cond, f.iter, f.body, f.location, f.pragma_unroll_count);
 
   // Splice a block-shaped init rather than nesting it: an inner block would end
   // the declaration's scope at its own closing brace, so the variable would be
@@ -602,17 +717,18 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
   else if (is_code_while2t(expr))
   {
     const code_while2t &w = to_code_while2t(expr);
-    expr = code_while2tc(cond, w.body, w.location);
+    expr = code_while2tc(cond, w.body, w.location, w.pragma_unroll_count);
   }
   else if (is_code_dowhile2t(expr))
   {
     const code_dowhile2t &w = to_code_dowhile2t(expr);
-    expr = code_dowhile2tc(cond, w.body, w.location);
+    expr = code_dowhile2tc(cond, w.body, w.location, w.pragma_unroll_count);
   }
   else
   {
     const code_for2t &f = to_code_for2t(expr);
-    expr = code_for2tc(f.init, cond, f.iter, f.body, f.location);
+    expr = code_for2tc(
+      f.init, cond, f.iter, f.body, f.location, f.pragma_unroll_count);
   }
 }
 
@@ -781,6 +897,50 @@ static bool contains_sideeffect(const expr2tc &expr)
   return found;
 }
 
+/// An expression statement whose value has array type -- `y->ss;` where `y`
+/// points at a struct with an array member -- is rewritten to `&y->ss[0]`.
+/// clang_c_adjust does this because the dereference code does not assume such
+/// an object exists; the statement's value is unused, so taking the first
+/// element's address is free (clang_c_adjust_code.cpp:57-74).
+///
+/// An assignment operand is exempt there and here: the array is the assignment
+/// target, not a value being discarded.
+void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
+{
+  const code_expression2t &stmt = to_code_expression2t(expr);
+  const expr2tc &op = stmt.operand;
+  if (is_nil_expr(op) || is_sideeffect_assign2t(op) || is_code_assign2t(op))
+    return;
+
+  const type2tc t = ns.follow(op->type);
+  if (!is_array_type(t) && !is_vector_type(t))
+    return;
+
+  const type2tc &elem =
+    is_array_type(t) ? to_array_type(t).subtype : to_vector_type(t).subtype;
+  expr = code_expression2tc(
+    address_of2tc(
+      elem, index2tc(elem, op, gen_zero(migrate_type(index_type())))),
+    stmt.location);
+}
+
+/// Dereferencing a pointer to a function yields a function designator, which
+/// converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`, and
+/// `******f` too. clang_c_adjust::adjust_dereference re-takes the address for
+/// exactly this case; left bare, the code-typed dereference reaches a consumer
+/// that wants a pointer.
+///
+/// Only that arm is ported: the array and pointer-subtype arms above it
+/// retype a node the migration already builds with the right type, so no
+/// corpus input distinguishes them.
+void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
+{
+  if (!is_code_type(expr->type))
+    return;
+
+  expr = address_of2tc(expr->type, expr, true);
+}
+
 /// IREP2 form of clang_c_adjust::lower_complex_compound_assignment. `a op= b`
 /// over a complex operand becomes `a = a op b`, with the binary node handed to
 /// adjust_complex_arith for the component-level decomposition. goto_convert's
@@ -797,15 +957,24 @@ void clang_c_adjust_irep2::lower_complex_compound_assignment(expr2tc &expr)
     return;
 
   const type2tc &ct = a.lhs->type;
+
+  // `a *= 2.0f` leaves the scalar as-is, and the arithmetic node's consistency
+  // check rejects an operand narrower than its type before adjust_complex_arith
+  // gets to promote it. Promote here, the same way that function does.
+  expr2tc rhs = a.rhs;
+  if (!is_complex_type(rhs->type))
+    rhs = constant_struct2tc(
+      ct, std::vector<expr2tc>{rhs, gen_zero(to_complex_type(ct).subtype)});
+
   expr2tc binop;
   if (a.op == "assign+")
-    binop = add2tc(ct, a.lhs, a.rhs);
+    binop = add2tc(ct, a.lhs, rhs);
   else if (a.op == "assign-")
-    binop = sub2tc(ct, a.lhs, a.rhs);
+    binop = sub2tc(ct, a.lhs, rhs);
   else if (a.op == "assign*")
-    binop = mul2tc(ct, a.lhs, a.rhs);
+    binop = mul2tc(ct, a.lhs, rhs);
   else if (a.op == "assign_div")
-    binop = div2tc(ct, a.lhs, a.rhs);
+    binop = div2tc(ct, a.lhs, rhs);
   else
     return;
 
@@ -936,6 +1105,24 @@ void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
   }
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+/// C11 6.5.3.3: the operand of unary `-` and `~` undergoes integer promotion,
+/// so a boolean one -- a comparison, `||` or `&&` -- becomes int. Left boolean
+/// it reaches the solver where a bitvector is wanted (#4078).
+void clang_c_adjust_irep2::promote_unary_bool_operand(expr2tc &expr)
+{
+  const expr2tc &op = *expr->get_sub_expr(0);
+  if (is_nil_expr(op) || !is_bool_type(op->type) || is_bool_type(expr->type))
+    return;
+
+  expr2tc promoted = op;
+  c_implicit_typecast(promoted, expr->type, ns);
+  if (promoted == op)
+    return;
+
+  expr = is_neg2t(expr) ? expr2tc(neg2tc(expr->type, promoted))
+                        : expr2tc(bitnot2tc(expr->type, promoted));
 }
 
 void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)

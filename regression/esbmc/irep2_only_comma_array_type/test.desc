@@ -1,0 +1,4 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --goto-functions-only
+IF !\(g\[\(signed long (long )?int\)i\]\[0\] != 0\) THEN GOTO

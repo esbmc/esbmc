@@ -101,7 +101,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       get_overriden_methods(*md, cxxmethods_overriden);
 
       for (const auto &overriden_md_entry : cxxmethods_overriden)
-        add_thunk_method(cxxrd, overriden_md_entry.second, comp, type);
+        add_thunk_method(overriden_md_entry.second, comp, type);
     }
   }
 
@@ -122,12 +122,6 @@ static bool is_pure_virtual(const clang::CXXMethodDecl &md)
   return md.isPureVirtual();
 #endif
 }
-
-// Defined further down; used by add_thunk_method to size the this-adjustment.
-static std::optional<uint64_t> offset_of_subobject(
-  const clang::ASTContext &ctx,
-  const clang::CXXRecordDecl *D,
-  const clang::CXXRecordDecl *S);
 
 /**
  * @brief Returns the ultimate overridden method for a given CXXMethodDecl.
@@ -336,7 +330,6 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXRecordDecl &derived_rd,
   const clang::CXXMethodDecl &md,
   const struct_typet::componentt &component,
   struct_typet &type)
@@ -375,18 +368,6 @@ void clang_cpp_convertert::add_thunk_method(
   std::string base_class_id, base_class_name;
   get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
-  // Byte offset of the base sub-object within the derived class. For non-first
-  // base classes in multiple inheritance this is non-zero, and the thunk must
-  // subtract it from its Base* this to recover Derived*. offset_of_subobject
-  // sums the offset along the full inheritance path, so an *indirect* non-first
-  // base (e.g. Derived : Middle, Middle : First, B) gets its cumulative offset
-  // rather than 0 (#6288). A path crossing a virtual base yields nullopt (its
-  // dynamic offset cannot be statically subtracted); fall back to 0 there,
-  // unchanged from before (tracked separately, #940).
-  const clang::CXXRecordDecl *base_rd = md.getParent();
-  const uint64_t base_offset =
-    offset_of_subobject(*ASTContext, &derived_rd, base_rd).value_or(0);
-
   // Create the thunk method symbol
   symbolt thunk_func_symb;
   thunk_func_symb.id =
@@ -412,7 +393,7 @@ void clang_cpp_convertert::add_thunk_method(
   add_thunk_method_arguments(thunk_func_symb);
 
   // add thunk function body
-  add_thunk_method_body(thunk_func_symb, component, base_offset);
+  add_thunk_method_body(thunk_func_symb, component);
 
   // add thunk function symbol to the symbol table
   symbolt &added_thunk_symbol =
@@ -525,32 +506,25 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
 
 void clang_cpp_convertert::add_thunk_method_body(
   symbolt &thunk_func_symb,
-  const struct_typet::componentt &component,
-  uint64_t base_offset)
+  const struct_typet::componentt &component)
 {
   const code_typet &code_type = to_code_type(thunk_func_symb.get_type());
   const code_typet::argumentst &args = code_type.arguments();
 
-  // Build the adjusted 'this' to pass to the overriding method.
-  // The thunk receives a Base*, but the overriding method expects Derived*.
-  // For non-first base classes, subtract the byte offset of the Base
-  // sub-object within Derived so that the overriding method's 'this' points
-  // to the start of the Derived object, not the Base sub-object.
+  // The thunk receives a Base*, but the overriding method expects Derived*,
+  // so `this` must be re-based off the base subobject. Mark the conversion and
+  // let clang_c_adjust::adjust_base_to_derived take the displacement from the
+  // "@base@" components -- the same layout member access and the base ctor use.
+  // Deriving it from clang's ASTRecordLayout instead put the thunk on a
+  // different object than the rest of the model whenever the two disagree,
+  // which the primary-base rule makes routine: for `D : A, B` with B the only
+  // polymorphic base, clang places B at offset 0 and ESBMC does not (#3894).
   typet derived_ptr_type = to_code_type(component.type()).arguments()[0].type();
   exprt base_this =
     symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
 
-  exprt adjusted_this;
-  if (base_offset > 0)
-  {
-    typet char_ptr = pointer_typet(char_type());
-    typecast_exprt to_char(base_this, char_ptr);
-    minus_exprt sub(to_char, from_integer(base_offset, index_type()));
-    sub.type() = char_ptr;
-    adjusted_this = typecast_exprt(sub, derived_ptr_type);
-  }
-  else
-    adjusted_this = typecast_exprt(base_this, derived_ptr_type);
+  exprt adjusted_this = typecast_exprt(base_this, derived_ptr_type);
+  adjusted_this.set("#base_to_derived", true);
 
   if (
     code_type.return_type().id() != "empty" &&
@@ -812,44 +786,6 @@ void clang_cpp_convertert::get_overriden_methods(
   }
 }
 
-// Compute the byte offset of subobject S inside D. Returns std::nullopt if
-// S isn't reachable from D via non-virtual inheritance (virtual base on the
-// path, or S not a base of D at all): callers fall back to a structural
-// typecast in that case.
-static std::optional<uint64_t> offset_of_subobject(
-  const clang::ASTContext &ctx,
-  const clang::CXXRecordDecl *D,
-  const clang::CXXRecordDecl *S)
-{
-  if (D == S)
-    return 0;
-
-  clang::CXXBasePaths paths(
-    /*FindAmbiguities=*/false,
-    /*RecordPaths=*/true,
-    /*DetectVirtual=*/true);
-  if (!D->isDerivedFrom(S, paths))
-    return std::nullopt;
-  if (paths.getDetectedVirtual() != nullptr)
-    return std::nullopt;
-
-  // Sum base-class offsets along the first recorded path. Multiple paths
-  // can exist under repeated non-virtual inheritance, but they refer to
-  // distinct subobjects; picking the first matches the behaviour of the
-  // previous primary-base walk.
-  uint64_t offset = 0;
-  const clang::CXXRecordDecl *cur = D;
-  for (const clang::CXXBasePathElement &elem : paths.front())
-  {
-    const clang::CXXRecordDecl *base =
-      elem.Base->getType()->getAsCXXRecordDecl();
-    offset +=
-      ctx.getASTRecordLayout(cur).getBaseClassOffset(base).getQuantity();
-    cur = base;
-  }
-  return offset;
-}
-
 void clang_cpp_convertert::pre_register_inherited_vtables(
   const clang::CXXRecordDecl &cxxrd)
 {
@@ -1037,66 +973,24 @@ bool clang_cpp_convertert::build_dynamic_cast(
       exprt vt_addr =
         address_of_exprt(symbol_exprt(vt_var_id, vptr_type.subtype()));
 
-      exprt result;
-      if (to_void)
+      // Re-base src off its S subobject onto the start of the runtime type D,
+      // then, for a T* target, onto D's T subobject. Both displacements are
+      // marked and resolved by clang_c_adjust from ESBMC's own layout, which
+      // is what the rest of the model uses; clang's ASTRecordLayout disagrees
+      // with it whenever the primary-base rule moves a polymorphic base to
+      // offset 0 (#3894).
+      exprt to_derived =
+        typecast_exprt(src_pointer, pointer_typet(symbol_typet(D_id)));
+      to_derived.set("#base_to_derived", true);
+
+      exprt result = to_derived;
+      if (!to_void)
       {
-        // (void*)((char*)src - off(S inside D))
-        auto off = offset_of_subobject(*ASTContext, D, S);
-        if (!off)
-          continue;
-        typet char_ptr = pointer_typet(char_type());
-        exprt adj = src_pointer;
-        gen_typecast(ns, adj, char_ptr);
-        if (*off > 0)
-        {
-          adj = minus_exprt(adj, from_integer(*off, index_type()));
-          adj.type() = char_ptr;
-        }
-        gen_typecast(ns, adj, target_type);
-        result = adj;
+        std::string T_id, T_name;
+        get_decl_name(*T, T_name, T_id);
+        result.set("#derived_to_base", T_id);
       }
-      else
-      {
-        // For T* the result must point to the T sub-object inside D:
-        //   result = (T*)((char*)src - off(S inside D) + off(T inside D))
-        // When both offsets are zero (single inheritance with S and T at
-        // the start of D) the structural typecast is exact; otherwise the
-        // pointer is re-based through char* byte arithmetic, mirroring the
-        // (void*) arm above.
-        auto off_S = offset_of_subobject(*ASTContext, D, S);
-        auto off_T = offset_of_subobject(*ASTContext, D, T);
-        if (!off_S || !off_T)
-        {
-          log_error(
-            "dynamic_cast: virtual base between runtime type `{}` and "
-            "source/target is not supported",
-            D->getNameAsString());
-          abort();
-        }
-        exprt adj = src_pointer;
-        if (*off_S == 0 && *off_T == 0)
-        {
-          // S and T both start at D: the structural typecast is exact.
-          gen_typecast(ns, adj, target_type);
-        }
-        else
-        {
-          typet char_ptr = pointer_typet(char_type());
-          gen_typecast(ns, adj, char_ptr);
-          if (*off_S > 0)
-          {
-            adj = minus_exprt(adj, from_integer(*off_S, index_type()));
-            adj.type() = char_ptr;
-          }
-          if (*off_T > 0)
-          {
-            adj = plus_exprt(adj, from_integer(*off_T, index_type()));
-            adj.type() = char_ptr;
-          }
-          gen_typecast(ns, adj, target_type);
-        }
-        result = adj;
-      }
+      gen_typecast(ns, result, target_type);
       arms.push_back({vt_addr, result});
     }
   }
