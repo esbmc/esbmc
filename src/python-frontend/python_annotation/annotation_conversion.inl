@@ -583,6 +583,27 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
 template <class Json>
 std::string python_annotation<Json>::get_argument_type(const Json &arg)
 {
+  // Name/Subscript/List arms resolve a name to its bound value and recurse,
+  // and find_var_node_for_inference is flow-insensitive, so a self-referential
+  // binding (`a = b[0]; b = [a]`) has no ordering that breaks the cycle.
+  // Bound the depth rather than the shape: a legitimate annotation nests far
+  // shallower than this.
+  static constexpr unsigned max_depth = 32;
+  if (arg_type_depth_ >= max_depth)
+    return "";
+  struct depth_guardt
+  {
+    unsigned &d;
+    explicit depth_guardt(unsigned &depth) : d(depth)
+    {
+      ++d;
+    }
+    ~depth_guardt()
+    {
+      --d;
+    }
+  } guard(arg_type_depth_);
+
   // A `**` unpack inside a dict literal (e.g. {**m}) serialises its key as a
   // null entry — there is no AST node and hence no inferable type. Returning a
   // safe default keeps the annotation pass from dereferencing a null json
@@ -599,6 +620,13 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
     if (val["_type"] == "Name")
     {
       std::string var_name = val["id"].template get<std::string>();
+
+      // find_var_node_for_inference resolves to the first textual binding, so
+      // on a rebound name every arm below would type the element from a dead
+      // one. Decline instead -- no inference is what shipped before #7359.
+      if (is_rebound_in_scope(var_name))
+        return "";
+
       Json var_node = find_var_node_for_inference(var_name);
 
       if (has_annotation(var_node))
@@ -2871,6 +2899,24 @@ InferResult python_annotation<Json>::infer_type(
 
 // ---------- AST walkers and lookup ----------
 
+/// Whether @p var_name is assigned more than once in the scopes
+/// find_var_node_for_inference searches. That lookup returns the first
+/// textual binding, so a rebound name must not be typed from it.
+template <class Json>
+bool python_annotation<Json>::is_rebound_in_scope(const std::string &var_name)
+{
+  // has_multiple_assignments_in_block takes the enclosing *node*, not its
+  // body array -- it reads block["body"] itself.
+  const Json func =
+    json_utils::try_find_function(ast_["body"], get_current_func_name());
+  if (
+    !func.empty() &&
+    json_utils::has_multiple_assignments_in_block(var_name, func))
+    return true;
+
+  return json_utils::has_multiple_assignments_in_block(var_name, ast_);
+}
+
 template <class Json>
 Json python_annotation<Json>::find_var_node_for_inference(
   const std::string &var_name)
@@ -3710,6 +3756,14 @@ std::string python_annotation<Json>::infer_parameter_type_from_calls(
           std::string common = find_common_ancestor(inferred_type, arg_type);
           if (!common.empty())
             inferred_type = common;
+          // Tuples of differing shape have no common spelling, but "Any" is
+          // the wrong retreat: it is exactly the type refine_any_param_to_list
+          // retypes to the list model, which reports a spurious IndexError on
+          // a tuple. The bare spelling keeps the parameter out of that path.
+          else if (
+            inferred_type.rfind("tuple", 0) == 0 &&
+            arg_type.rfind("tuple", 0) == 0)
+            inferred_type = "tuple";
           else
             return "Any";
         }

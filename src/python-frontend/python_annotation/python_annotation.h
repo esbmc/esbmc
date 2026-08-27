@@ -113,6 +113,8 @@ private:
 
   // ----- type inspectors -----
   std::string get_current_func_name();
+  bool is_rebound_in_scope(const std::string &var_name);
+  unsigned arg_type_depth_ = 0;
   std::string get_type_from_constant(const Json &element);
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
