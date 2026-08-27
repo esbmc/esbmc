@@ -69,11 +69,19 @@ if(ESBMC_HAVE_UCHAR_H)
     list(APPEND ESBMC_TEST_CAPABILITIES uchar_h)
 endif()
 
-# --32 needs multi-arch headers whose type model agrees with the frontend's
-# under -m32. That holds on x86 hosts carrying the 32-bit headers; on aarch64
-# it does not, which is the case issue #1400 was filed about.
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+# --32 reads the bundled 32-bit libc that c2goto builds, not the host's own
+# headers, so the capability follows that build option rather than the host
+# CPU. Apple Silicon keeps it on and runs the --32 tests; the aarch64 Linux
+# build turns it off (scripts/build.sh), which is the case #1400 was filed
+# about.
+if(ESBMC_BUNDLE_LIBC AND ESBMC_BUNDLE_LIBC_32BIT)
     list(APPEND ESBMC_TEST_CAPABILITIES arch32)
+endif()
+
+# A test whose input is x86-only: clang's SSE/MMX intrinsic headers reject any
+# other target, and x86 asm register constraints do not compile there.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+    list(APPEND ESBMC_TEST_CAPABILITIES arch_x86)
 endif()
 
 if(ESBMC_BUNDLE_LIBC)
@@ -682,6 +690,12 @@ set(_slow_regression_tests
     # against the 120s cap and timed out on the DebugOpt Linux runner in
     # #7073 CI -- a comment-only change that cannot reach its code path.
     "regression/esbmc/github_4634"
+    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
+    # over the 120s cap on aarch64, where the whole floats-regression suite runs
+    # ~3x slower while the rest of the suite matches x86 to within 5%. The
+    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
+    # armv8 leg green meanwhile.
+    "regression/floats-regression/nn-tanh_5_unsafe"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")
