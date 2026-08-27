@@ -6397,6 +6397,48 @@ every shape that hangs. Above the bound the timings are the pre-patch ones
 exactly (0.22 s vs 0.22 s at 4096). The number is a measurement, not a
 principle, and it is stated as one where it is used.
 
+**The bound is not enough: the writes have to stay out.** CI on the bounded
+patch reported four `regression/numpy` tasks turning `SUCCESSFUL` into
+`FAILED`, and `overflow_11_matmul_new` and
+`function_contract/github_7056_assigns_global_2d` aborting inside Bitwuzla's
+`mk_store`/`mk_eq` on a width mismatch. Nine lines reproduce the first:
+
+```c
+int r[2][2];
+_Bool c = nondet_bool();
+__ESBMC_assume(c);
+if (c) { r[0][0] = 1; r[0][1] = 2; }
+assert(r[0][0] == 1);   /* FAILED with the array propagated */
+```
+
+Propagating `r` merges what symex would have kept as two SSA steps into one
+expression, `r#1 WITH [0 := r#1[0] WITH [0:=1] WITH [1:=2]]`.
+`decompose_store_chain` walks only the update-value spine of such a chain and
+takes `src` from the *outer* store's source, so the inner `WITH [0:=1]` — a
+sibling of the update it follows, not a dimension below it — never reaches the
+formula. The first write is silently dropped. Where the dropped operand is
+array-typed instead, the same walk hands `mk_store`/`mk_eq` a row on one side
+and an element on the other and the solver aborts.
+
+Without the gate this shape was unreachable, which is the rest of what the 2017
+gate was protecting. So the restriction is not only the element count: a
+multi-dimensional array propagates only while its value is a whole constant
+array, never a `with` chain over one. That is exactly what the census needs —
+it folds *reads* of `t[i][j]` — and it leaves every write on the pre-patch
+path. Folding multi-dimensional writes needs `decompose_store_chain` fixed
+first, and that is its own finding.
+
+**A second gap the propagation made visible.** With the array constant, the
+frame checker's element-wise form compares `m[k]` against its snapshot for a
+2-D global — an array-typed rvalue on one side and a folded row constant on the
+other. `frame_enforcer.cpp` already records that reading an array-typed rvalue
+fails on every solver (#7057) and refuses the shape on its whole-array path;
+the element-wise path did not, and on master the two sides degraded to the same
+wrong scalar select so the mismatch stayed silent. `emit_array_elem_frame` now
+descends to the scalar leaves, with the element-wise budget measured over the
+leaves rather than the outer extent. The check is strictly stronger: it
+compares all of row `k` where it previously compared one flattened element.
+
 **One test changed, and it is the interesting part of the review.**
 `github_1520_witness_no_aggregate` pins that no brace initialiser reaches a
 GraphML witness assumption (#1520, #1471), and guards against vacuity by also
@@ -6418,10 +6460,13 @@ cited reproducer that discharges it implicitly.
 
 | Artefact | Invocation | Verdict |
 |---|---|---|
-| `regression/esbmc/multidim_const_array_bound` | `--unwind 6` | `CORE`, `SUCCESSFUL` and `Generated 1 VCC(s), 0 remaining` — identical to the 1-D program. On an unpatched control the same run leaves **2 VCCs, 2 remaining**, so the pin is a VCC count rather than a timeout: the unbounded form hangs, and a `KNOWNBUG` on a hang is satisfied by any timeout |
+| `regression/esbmc/multidim_const_array_bound` | `--unwind 6` | `CORE`, `SUCCESSFUL` and `0 remaining after simplification` — identical to the 1-D program. On an unpatched control the same run leaves **2 VCCs, 2 remaining**, so the pin is the residual count rather than a timeout: the unbounded form hangs, and a `KNOWNBUG` on a hang is satisfied by any timeout. The generated count itself is not pinned: MSVC's `assert` lowering folds the user assertion away too, so Windows reports 0 generated where the other targets report 1 |
 | `regression/esbmc/multidim_const_array_bound_fail` | `--unwind 6` | `CORE`, `FAILED` — the folded bound is the real one |
 | `regression/esbmc/github_1520_witness_no_aggregate` | as recorded | `CORE`, unchanged verdict; identical witness on both binaries |
-| `-L esbmc/`, `-L floats` | `-j6` | 1915/1917 and 171/171. The two are `bundled_headers_from_vfs` and `github_2572_2`, both failing identically on a control; the second is R41, fixed on its own branch |
+| `regression/esbmc/multidim_const_array_write_kept` | default | `CORE`, `SUCCESSFUL`; **FAILED** on a control carrying the size-bounded-only patch, and `SUCCESSFUL` on master, so it pins the dropped write and nothing else |
+| `regression/esbmc/multidim_const_array_write_kept_fail` | default | `CORE`, `FAILED` — the surviving write carries the value it wrote |
+| `regression/function_contract/github_7056_assigns_global_2d_fail` | `--enforce-contract f --function f` | `CORE`, `FAILED` naming `c:@m[0][3]`. On master the same program verifies `SUCCESSFUL` with all five properties passed: the row comparison it emitted read one flattened element, so a write to another column of an unnamed row was invisible |
+| `-L esbmc/`, `-L numpy/`, `-L floats/`, `-L python-contracts/`, `function_contract` | `-j6` | 1946/1947, then 100% on each of the rest (108, 68 and 415/415). The one is `bundled_headers_from_vfs`, failing identically on a control |
 | corpus wall-clock | `-L esbmc/ -j6` | 75.3 / 80.0 s patched against 70.9 / 76.7 s control — the within-arm spread exceeds the between-arm gap, so no difference is resolvable here and the microbenchmark above is the measurement that counts |
 
 ### M9 (R28 diagnostic) — 2026-08-26, the proof that says nothing and looks the same
