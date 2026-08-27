@@ -4228,16 +4228,7 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
   }
 
   const size_t map_size = python_list::get_list_type_map_size(list_id);
-  if (map_size == 0)
-  {
-    nlohmann::json empty_list{
-      {"_type", "List"}, {"elts", nlohmann::json::array()}};
-    converter_.copy_location_fields_from_decl(call_, empty_list);
-    python_list sorted_list_expr(converter_, empty_list);
-    return sorted_list_expr.build_list_from_exprs({});
-  }
-
-  if (map_size > 32)
+  if (map_size == 0 || map_size > 32)
     return std::nullopt;
 
   if (auto r = fold_sorted_int_list(list_id, map_size, fast_path_reverse))
