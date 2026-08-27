@@ -1565,6 +1565,29 @@ class LoopMixin:
         return (isinstance(ann_node, ast.Subscript)
                 and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
 
+    def _literal_tuple_annotation_node(self, iterable_node):
+        """tuple[A, B, ...] element annotation of a list literal whose elements
+        are all same-arity tuples of one inferable type per position, else None.
+
+        A key'd sorted() over a constant dict of tuple keys folds to such a
+        literal, which carries no annotation of its own to read (#5444).
+        """
+        if not (isinstance(iterable_node, ast.List) and iterable_node.elts
+                and all(isinstance(elt, ast.Tuple) for elt in iterable_node.elts)):
+            return None
+        arity = len(iterable_node.elts[0].elts)
+        if arity == 0 or any(len(elt.elts) != arity for elt in iterable_node.elts):
+            return None
+        members = []
+        for position in range(arity):
+            names = {self._infer_type_from_value(elt.elts[position]) for elt in iterable_node.elts}
+            if len(names) != 1 or "Any" in names:
+                return None
+            members.append(ast.Name(id=names.pop(), ctx=ast.Load()))
+        return ast.Subscript(value=ast.Name(id="tuple", ctx=ast.Load()),
+                             slice=ast.Tuple(elts=members, ctx=ast.Load()),
+                             ctx=ast.Load())
+
     def _full_tuple_annotation_node(self, iterable_node):
         """Return the full tuple[A, B, ...] element annotation of a
         list[tuple[...]]-annotated Name iterable, or None if unavailable.
@@ -1578,6 +1601,9 @@ class LoopMixin:
         typed as tuple[str, str] instead of eroding to bare tuple, whose
         element_0/element_1 members the C++ converter cannot size (#5444).
         """
+        literal_ann = self._literal_tuple_annotation_node(iterable_node)
+        if literal_ann is not None:
+            return literal_ann
         if not (isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations")):
             return None
         annotation = self.variable_annotations.get(iterable_node.id)
@@ -1804,7 +1830,7 @@ class LoopMixin:
         # after the pass that lowers one, so the call would otherwise reach the
         # frontend with its key= dropped, and be refused.
         setup = []
-        lowered = self._lower_sorted_key_scan(seq)
+        lowered = self._lower_sorted_key_iterable(seq)
         if lowered is not None:
             setup, seq = lowered
 
@@ -2049,20 +2075,22 @@ class LoopMixin:
         # Handle the target variable name
         target_var_name = self._name_id_or_none(node.target) or "ESBMC_loop_var"
 
+        # A key'd sorted() has to be lowered here: this loop's iterable
+        # assignment is built after the pass that lowers one, so the call would
+        # otherwise reach the frontend with its key= dropped, and be refused.
+        # Lowered before the annotation is read, so the annotation describes
+        # what the loop actually iterates -- a constant fold yields a list
+        # literal, whose element type the sorted() call does not carry.
+        scan_setup = []
+        lowered = self._lower_sorted_key_iterable(node.iter)
+        if lowered is not None:
+            scan_setup, node.iter = lowered
+
         # Determine annotation type based on the iterable value
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
         # Get element type for proper annotation
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
-
-        # A tuple-unpacking target over a list[tuple[...]] iterable (e.g. the
-        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
-        # variable) needs the full tuple[A, B, ...] annotation, not the bare
-        # "tuple" name element_type collapses to -- otherwise the per-index
-        # element assignment can't size element_0/element_1 (#5444).
-        full_element_ann = None
-        if isinstance(node.target, (ast.Tuple, ast.List)) and element_type in ("tuple", "Tuple"):
-            full_element_ann = self._full_tuple_annotation_node(node.iter)
 
         # Tuple-unpacking iteration over a dict's keys (for u, v in d): the keys
         # are tuples, so materialize d.keys() into an annotated
@@ -2079,6 +2107,16 @@ class LoopMixin:
         target_destructured = (isinstance(node.target, (ast.Tuple, ast.List))
                                or self._body_destructures_name(node.body,
                                                                self._name_id_or_none(node.target)))
+
+        # A destructured target over a list[tuple[...]] iterable (e.g. the
+        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
+        # variable) needs the full tuple[A, B, ...] annotation, not the bare
+        # "tuple" name element_type collapses to -- otherwise the per-index
+        # element assignment can't size element_0/element_1 (#5444).
+        full_element_ann = None
+        if target_destructured and element_type in ("tuple", "Tuple"):
+            full_element_ann = self._full_tuple_annotation_node(node.iter)
+
         if (annotation_id in ["dict", "Dict"] and target_destructured
                 and isinstance(node.iter, ast.Name)):
             key_ann, _ = self._get_dict_kv_types(node.iter.id)
@@ -2119,14 +2157,6 @@ class LoopMixin:
                 node.iter = keys_call
                 annotation_id = "list"  # d.keys() returns list
 
-        # A key'd sorted() has to be lowered here: this assignment is built
-        # after the pass that lowers one, so the call would otherwise reach the
-        # frontend with its key= dropped, and be refused.
-        scan_setup = []
-        lowered = self._lower_sorted_key_scan(node.iter)
-        if lowered is not None:
-            scan_setup, node.iter = lowered
-
         # Determine iterator variable name and whether to create ESBMC_iter
         if isinstance(node.iter, ast.Name):
             # For any Name reference (parameter or variable), use it directly
@@ -2137,7 +2167,7 @@ class LoopMixin:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f"{iter_var_base}_{loop_id}"
             iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name,
-                                                       element_type)
+                                                       element_type, full_element_ann)
             setup_statements = scan_setup + [iter_assign]
 
         # Create common setup statements (index and length) with unique names
@@ -2165,14 +2195,32 @@ class LoopMixin:
 
         return result
 
-    def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
-        """Create assignment for iterator variable with proper type annotation."""
+    def _create_iter_assignment(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self,
+            node,
+            annotation_id,
+            iter_var_name,
+            element_type,
+            full_element_ann=None):
+        """Create assignment for iterator variable with proper type annotation.
+
+        ``full_element_ann`` carries the concrete tuple[A, B, ...] element
+        annotation when one is known: the C++ list subscript read sizes the
+        tuple from this list annotation, and the bare "tuple" name erases it to
+        void* (#5444).
+        """
         # str iterables (`for c in str(x)`, `for c in some_str_var`) must be
         # annotated as str so the converter lowers loop bounds via strlen
         # rather than the list-style get_object_size, which overshoots and
         # trips IndexError.
         if annotation_id == "str":
             iter_annotation = ast.Name(id="str", ctx=ast.Load())
+        elif full_element_ann is not None:
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id="list", ctx=ast.Load()),
+                slice=copy.deepcopy(full_element_ann),
+                ctx=ast.Load(),
+            )
         # Create proper list[T] annotation instead of just 'list'
         elif element_type and element_type != "Any":
             # Create Subscript: list[element_type]
