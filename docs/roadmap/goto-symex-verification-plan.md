@@ -716,14 +716,17 @@ this document** — each is a prioritised target for the cited harness.
 | **R17** | **High (false SUCCESSFUL, default configuration)** — found by H-C2, §15 M5 (H-C2); **FIXED**, §15 M5 (R17 root cause) | **An allocation the address space cannot lay out is encoded as a contradiction instead of a failed allocation, so the whole formula goes UNSAT and every assertion is discharged vacuously.** Found as `void *b = malloc(-4); assert(0);` returning **`VERIFICATION SUCCESSFUL`** under `--no-simplify --no-slice`, and first recorded as a flag-*composition* defect. It is not one, and the sign is not the trigger: `malloc(0xFFFFFFFFFFFFFFFCUL)` reproduces it under `--no-slice` alone. `--no-simplify` merely disabled the pre-existing negative-size guard (`do_simplify` is a no-op under it, so the guard never saw a constant) and `--no-slice` merely kept the otherwise-dead allocation in the equation. The real boundary is a layout limit and is exact: `1UL<<63` is fine, every size `>= 2^64 - 16` is vacuous, because `init_pointer_obj` asserts `end == start + size` **and** `end >= start` while `start` is past the NULL object at address 0 and aligned to `max_alignment()` (16). Reached in the corpus via `github_1631_compact`, whose `--compact-trace` sets `no-slice` implicitly (`command_line_options.cpp:410`). **No flag is needed at all**: an underflowing size such as `malloc(len - 4)` with `len < 4` widens to a huge `size_t`, and when the result is *used* the slicer keeps the allocation, so plain `esbmc file.c` goes vacuous. `default_underflow_malloc` pins that. | `smt_memspace.cpp` `init_pointer_obj`; fixed in `symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`. `regression/esbmc/no_simplify_no_slice_huge_malloc` (KNOWNBUG → **CORE**), `default_underflow_malloc` (CORE, default flags), `no_slice_unrepresentable_malloc` (CORE, positive literal), `..._malloc` (CORE control) | **H-C2** | Fixed: classify the request on an unconditionally simplified copy so `--no-simplify` cannot blind it, and fail any allocation the address space cannot lay out by returning NULL, as real allocators do. Residual **R25** covers the symbolic-size form. |
 | **R23** | **High (false SUCCESSFUL *and* false FAILED, default configuration)** — **confirmed with a two-line reproducer** by M8 triage, §15 M8 (cont. 7); filed as **#6589** | **Compound assignment narrows the right operand to the left operand's type before the operation.** C11 **6.5.16.2p3**: "A compound assignment of the form E1 op= E2 is equivalent to the simple assignment expression E1 = E1 op (E2), except that the lvalue E1 is evaluated only once". ESBMC violates that equivalence for every left operand narrower than `int`. `char b; b += a;` emits `!overflow("+", (signed int)b, (signed int)((signed char)a))` — the right operand cast to `char` — where `b = b + a` correctly emits `!overflow("+", (signed int)b, a)`. Both directions are reachable and both are wrong: with `b = 3, a = INT_MAX`, `b += a` reports **SUCCESSFUL** (the overflow claim is unfalsifiable, a **missed bug**) while `b = b + a` reports FAILED; and with `char b = 100; int a = 256`, `b /= a` reports **FAILED "division by zero"** because the divisor narrows to `(char)256 == 0`, where C gives `100 / 256 == 0` and gcc/UBSan agree. Not bitfield-specific — `char`, `short`, struct members and bitfields all reproduce; the discriminator is *narrower than the promoted type*, not the member/bitfield spelling. `github_162_fail` is where it was found, and its claim is vacuous for exactly this reason — but that entry is a *wrong test* independently of R23, see §15 M8 (cont. 8). **Frontend, not goto-symex**, so it is outside §2.3's scope, but it is a soundness defect in extremely common C. **Fixed, §15 M8 (cont. 8).** | `clang_c_convertert::get_compound_assign_expr`, `clang_c_convert.cpp:4258-4343`, specifically the unconditional `gen_typecast(ns, rhs, lhs.type())`, together with `goto_convertt::remove_assignment`, `goto_sideeffects.cpp:1714-1870`, which took the operation's type from `expr.op0()`. `regression/esbmc/compound_assign_narrow_overflow`, `..._explicit` (control) and `compound_assign_narrow_divzero`, all CORE | M8 triage | Done. The frontend records clang's `getComputationResultType()` on the side effect; `remove_assignment` performs the operation there and converts the result back on assignment. |
 | **R24** | **Medium (spurious counterexample, default configuration)** — **confirmed with a reproducer** by M8 triage, §15 M8 (cont. 10); **FIXED**, §15 M8 (R24) | **`memset` does not constrain a struct's bitfield padding bits, so a type-punned read of the object is partly nondeterministic.** For `struct { int x : 12, y : 8; } s;`, `memset(&s, 0, sizeof s); s.x = -1; s.y = -1;` then reading `*(int *)&s` gives a value whose low 20 bits are correct — `(v & 0xFFFFF) == 0xFFFFF` verifies — but whose 12 padding bits are unconstrained: `(v >> 20) == 0` **fails**. gcc gives `0x000fffff` exactly, so the declared fields are laid out right and only the `memset`'s effect on the bits above them is lost. This is the direction an over-approximation produces (a false alarm, never a missed bug), and it is reachable with **no flags at all**, which is what separates it from the four flag-inadequacy entries triaged alongside it. Explains `github_732-1-1`, whose `sizeof(s) == 4` and `s.y == -1` assertions both hold and only whose type-punned assertion fails. | `regression/esbmc/bitfield_padding_memset`, `..._fields`, `..._fill` and `..._fail`, and `regression/esbmc/github_732-1-1` — all CORE, the first and last flipped from KNOWNBUG by the fix | M8 triage | Fixed: the optimised `memset` charged each member `type_byte_size()` bytes, which over-counts a bitfield, so a 4-byte struct's trailing member was written with zero bytes and kept its old value. `gen_value_by_byte` now declines any struct with a sub-byte member and leaves it to `__memset_impl`, whose byte-wise model gets the padding right. |
-| **R25** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R25) | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG, residual) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. Under `--force-malloc-success` the bound is stated as an assumption instead — branching to NULL reintroduces the case split that flag exists to remove, and cost 22 s → >200 s on `github_1352-*-32bit`. That leaves the residual pinned above. |
+| **R25** | **High (false SUCCESSFUL, default configuration)** — found while root-causing R17, §15 M5 (R17 root cause); **FIXED**, §15 M5 (R25); its `--force-malloc-success` residual is **still open** — §15 M9 (R37) first claimed to close it, then retracted that on measurement; now R38 | **The R17 vacuity is also reachable through a *symbolic* allocation size, and no flag is needed.** `size_t n = nondet_size(); __ESBMC_assume(n >= 0xFFFFFFFFFFFFFFF0UL); char *b = malloc(n); if (b) b[0] = 1; assert(0);` reported **`VERIFICATION SUCCESSFUL`** on default flags — the pointer is used, so the slicer keeps the allocation. The R17 fix could not see it: no constant is available at symex time. Worse than R17's shape, because the address-space constraint does not merely kill the path — `end == start + n` with `end >= start` silently *constrains the program variable `n`*, so **every** symbolic allocation quietly discarded its top 16 sizes, not just ones an assumption forced there. | `smt_memspace.cpp` `init_pointer_obj:409-421`; fixed in `symex_mem`. `regression/esbmc/symbolic_unrepresentable_malloc` and `no_slice_symbolic_unrepresentable_malloc` (CORE), `symbolic_malloc_bounds_preserved` (CORE, anti-vacuity), `force_malloc_success_unrepresentable` (KNOWNBUG — the residual is still open; see R38) | R17 root-causing | Fixed: give the object size zero on the branch where the request does not fit, so it is always layable, and return NULL there. `--force-malloc-success` is exempted, stating the bound as an assumption to avoid a case split. §15 M9 (R37) removed that exemption and had to put it back: the branch costs 21 s → >400 s on `github_1352-success-32bit`, and ablation shows the `fits` machinery is only cheap when absent entirely. What changed is *which* bound is assumed — layability, not the cap — which is enough to keep `github_1631_nondet_compact` honest. |
 | **R31** | **High (false SUCCESSFUL, default configuration)** — found by extending the H-A6 census immediately after R29's fix closed it at 21/21, §15 M9 (H-A6 re-census) | **An `address_of` in front of the aggregate step defeats MPOR's access resolution.** `int **pp = &s.p; **pp = 1;` against a concurrent `g = 2` reports **SUCCESSFUL** by default and **FAILED** under `--no-por`, both under Bitwuzla and Z3. This is **not** punning: `&s.p` is a well-defined `int **`, so the false SUCCESSFUL is on ordinary C. The boundary is syntactic in R29's way — copying the pointer to a local first (`int *lp = *pp;`) restores detection — which places the gate in the resolution, not the value set. `record_aggregate_held_target` *is* entered (the inner `dereference2t` is not a `symbol2t`), so the loss is further down. `--show-symex-value-sets` pins it exactly: `c:@pp = { <s, 0, 8, struct S { signed int * p; }> }` names the **struct symbol**, with the suffix erased into a byte offset, while the entry that holds the answer — `c:@s.p = { <g, 0, 1, signed int> }` — is present and correct. Resolving `**pp` therefore needs the descriptor's constant offset mapped back to `.p` before the second lookup can find it. The information is not missing, only unaddressable. **The component this row first named was wrong**, and instructively: it read the local-copy boundary as placing the gate "in the resolution, not the value set" and pointed at `mpor_lock_array_key` as the precedent. The local copy works because symex's dereference pass has already rewritten `*pp` into the `member2t` `s.p` by the time `value_sett::assign` records `lp`, so the member arm keys `c:@s.p` directly; MPOR hands the value set a *synthetic* `dereference2t` it built itself, which never passed through that rewrite and so lands in the dereference arm, where the member survives only as a byte offset. The boundary separates *rewritten by symex* from *raw*, not MPOR from the value set, and the fault was in the value set on both sides. A struct-to-struct punning shape (`((struct B *)&a)->q`) prunes identically but is strict-aliasing UB and carries no soundness claim | `regression/esbmc-unix/mpor_aggregate_ptr_race_addrof` (KNOWNBUG → **CORE**) with `..._addrof_local` (CORE control), the pairing R29 was filed under, joined by `..._addrof_offset`, `..._addrof_nested`, `..._addrof_union`, `..._array_decay` and `..._addrof_merged`, one per arm of the descent and each pinned by its own mutant, plus `..._addrof_locked` (CORE, the passing direction) and `mpor_aggregate_ptr_zero_size_element` (CORE, pinning the `esize > 0` guard against a `BigInt` abort), both added when the coverage gate blocked the first cut | H-A6 | **Fixed**, §15 M9 (R31 fix): `get_value_set_rec`'s dereference arm now walks the descriptor's constant byte offset back into a field path and asks again under it, accumulating in bits as `member_offset_bits` does so the walk inverts the one that built the descriptor. The unrefined lookup stays, so the change only ever adds objects to a value set. The cheap alternative the first diagnosis suggested — a `simplify()` in `resolve_pointer_target` — was built and measured, and fixes **none** of the six shapes in either placement: there is no constant to fold, because the member was erased before the pointer's value set was ever written |
 | **R32** | **High (false SUCCESSFUL, default configuration)** — found by probing the one gap R31's fix section had just declared witnessless, §15 M9 (R32) | **A symbolic offset erases the aggregate step exactly as a constant one did, and R31's walk has nothing to spell back out.** `int *a[2] = {&g, &g}; ap = &a[i];` with `i` nondeterministic and assumed in bounds, then `**ap = 1` against a concurrent `g = 2`, reports **SUCCESSFUL** by default under both Bitwuzla and Z3 and **FAILED** under `--no-por`. Replacing `a[i]` with `a[1]` reports FAILED, so the symbolic index is the whole discriminator. Well-defined C — the index is assumed in range — so unlike the punning shape this carries a full soundness claim. `--show-symex-value-sets`: `c:@ap = { <a, *, 8, signed int * [2]> }`, the `*` being the unset offset, against `c:@a[] = { <g, 0, 1, signed int> }` which holds the answer. R31's `offset_paths` requires `offset_is_set` and skips, so the unrefined lookup of `c:@a` misses `c:@a[]` and returns empty — read by every consumer as "points at nothing" | `regression/esbmc-unix/mpor_aggregate_ptr_race_symbolic_offset` and `..._symbolic_struct_member` (CORE, one per arm of the unknown route), `..._symbolic_offset_locked` (CORE, the passing direction) and `..._array_decay` the constant-index control | H-A6 | **Fixed**, §15 M9 (R32 fix): a second walk, `collect_typed_paths`, takes every path of the dereferenced type instead of the one an offset selects, and `offset_paths` dispatches on whether the descriptor carries an offset. No size is consulted there, there being no offset to place -- which incidentally keeps a target inside a variable-length element reachable, where the offset walk has to drop it. Monotone for the same reason R31's walk is, and measured at +1.1% worst case on a verdict-matched comparison. The array arm alone did not pin it: a mutant descending into member 0 only left all 21 tests passing |
 | **R33** | **High (false SUCCESSFUL, default configuration)** — found by code review of R31's fix, not by the census, §15 M9 (R33) | **A constant member offset and a constant element offset would not compose, so the descriptor arrived with no offset at all.** `struct S { long pad; int *v[2]; }; int **pp = &s.v[1];` then `**pp = 1` against `g = 2` reported **SUCCESSFUL** by default, **FAILED** under `--no-por`. Each half works alone — `&s.v[0]` (base 8, index 0) and a member at a nonzero offset both detect the race — and only the composition failed, which is what makes it a distinct defect from R31 rather than another shape of it. The index arm of `get_reference_set_rec` added a constant element offset only when the base offset was **zero**, and otherwise fell to the unknown-offset branch and cleared `offset_is_set`; R31's walk then had nothing to spell back out. Reaching byte offset 16 by two members instead (`&s.v.b`) detects the race, which pins the route rather than the offset as the discriminator. The member arm one screen below already composed with `o.offset += offset_in_bytes` | `regression/esbmc-unix/mpor_aggregate_ptr_race_member_index` (CORE), with `..._addrof_offset` and `..._array_decay` the two halves that always worked | code review of R31 | **Fixed**: the index arm composes when the base offset is set (`o.offset += index_offset`) instead of requiring it to be zero. Identical on the old domain — `offset_is_zero()` already implied `offset_is_set`, and adding to a zero offset is assignment — so only the previously-abandoned case changes. Increases precision rather than widening: the descriptor gains a definite offset where it used to carry none |
 | **R34** | **High (missed bug, default configuration)** — found by #7126's attempt to remove `offsetof`'s expansion, §15 M9 (R34) | **Subtracting a constant from a `void *` moved the value set *forwards*.** `void *p = &s.f2; *(int *)(p - 8) = 42;` wrote at offset 16, not 0, so `s.f0 == 0` held and `s.f4 == 0` failed. The pointer model was right the whole time — ESBMC proves `__ESBMC_POINTER_OFFSET(p - 8) == 0` for the same expression — and only the dereference address was wrong, which is why the GOTO is byte-identical to the working `char *` spelling. `get_value_set_rec`'s add/sub arm applies the sign inside its `try` block, but a `void *` never reaches that line: an empty subtype throws `symbolic_type_excp` at the element-size step, and the handler that recovers the byte offset assigned the magnitude and stopped. Where the flipped address stays inside the object the store is silently misdirected; where it leaves, it surfaces as a spurious out-of-bounds instead | `value_sett::get_value_set_rec`'s add/sub arm, `src/pointer-analysis/value_set.cpp`; issue #7127 | `regression/esbmc/github_7127{,_fail}` | **Fixed**: the sign is applied once, after the handlers, so both arms share it. The issue's "base is a member address" clause is **withdrawn** — `void *p = (char *)&s + 8` fails identically; a member base only keeps the wrong address in bounds |
 | **R35** | **High (missed bug, default configuration)** — found by R34's controls, §15 M9 (R34); **FIXED**, §15 M9 (R35) | **A write below an object's base is neither performed nor flagged.** `char *base = (char *)&s; *(int *)(base - 4) = 42;` on a 16-byte stack struct reports `VERIFICATION SUCCESSFUL`: the `object-out-of-bounds` claim **passes**, the struct is unchanged, and a neighbouring local is unchanged — the store lands nowhere. The symmetric overflow `*(int *)(base + 16) = 42` **is** caught, so the bound is checked on one side only. Independent of R34: it reproduces through `char *`, which never had the sign defect, and the pointer model again disagrees with the check — `__ESBMC_POINTER_OFFSET` is `-4` and `__ESBMC_same_object` holds | the sign is discarded by `value_sett::to_expr`'s `gen_ulong`, but the wrapped constant is not flagged either; probes in the §15 M9 (R34) entry | `regression/esbmc/deref_negative_offset{,_fail}` (both CORE) | **Fixed**: the check is rearranged to `offset > data_sz - access_sz`, equivalent over the integers and free of the wrap. The unsigned reading is kept — a negative offset stays "a huge address", it is simply now compared without an addition that can carry it back into range. The pre-fix symptom was LP64-only — the wrap needed a 64-bit `unsigned long` — so the pin no longer needs `REQUIRES lp64_host` |
 | **R36** | **High (no verdict, then spurious counterexample, default configuration)** — found by code review of R35's fix, §15 M9 (R36) | **Relational comparison read pointer offsets unsigned, so a pointer below its object sorted above the base.** `char *b = a; char *below = b - 1;` gives `below >= b` — `assert(!(below >= b))` fails while `__ESBMC_POINTER_OFFSET(below) == -1` verifies on the same expression. The consequence is that `for (p = end; p >= begin; p--)` **never terminates**: the guard stays true below the base, so the loop exhausts its unwinding bound and then dereferences out of bounds — one unwinding-assertion failure and one spurious out-of-bounds report on a program gcc runs clean. `convert_ptr_cmp` did `typecast2tc(uint, pointer_offset2tc(sint, side))`; the stated reason was that an object larger than half the address space would flip the sign of its upper offsets, but that object is already unrepresentable in the signed `pointer_offset2t` every other consumer reads | `src/solvers/smt/smt_memspace.cpp`, `convert_ptr_cmp`; the cast dates to `79c621ff20` (#1537), which changed the cross-object arm and carried the unsigned reading in unremarked | `regression/esbmc/ptr_rel_below_base{,_fail}` | **Fixed**: drop the two typecasts and compare the signed offsets. The lexicographic object-id step is untouched, so cross-object ordering — the only thing #1537 was about — is unchanged, and it is still a total order |
-| **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (KNOWNBUG) | Open: capping allocations at `PTRDIFF_MAX` would make the signed reading exact — C11 6.5.6p9 already requires `ptrdiff_t` to represent any in-object difference, and the model computes that difference signed. Verify the glibc precedent before citing it |
+| **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
+| **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both now CORE), `ptr_rel_huge_object_force_success` (KNOWNBUG), `force_malloc_success_negative_indirect` | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual, measured and left open**, §15 M9 (R38 residual): under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously. Exempting that case by inspecting the argument's syntax was built and **refuted** — one intervening assignment (`size_t n = a; malloc(n)`) hides the typecast, the cap is assumed anyway, and a reachable `assert(0)` becomes a false SUCCESSFUL. Every other cut is worse or costs the >400 s M9 (R37) measured. The defect stays confined to allocations at or above 8 EiB |
+| **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
+| **R40** | **Low (spurious counterexample, default configuration; the same 8 EiB floor as R37)** — found by R39's probes, §15 M9 (R39); **FIXED**, §15 M9 (R40) | **A VLA declaration is never bounded at `PTRDIFF_MAX`.** `uint64_t n = nondet_uint64(); char a[n]; char *q = a + n; assert(q >= a);` reports `FAILED` — R37's witness through a fourth allocation path. `goto_convertt::generate_dynamic_size_vla` asserts only that the *size computation* does not overflow the address space and that the dimension is positive, so an object between `PTRDIFF_MAX` and `2^64` is declared and its upper offsets read negative in the comparator. Unlike R39 there is no vacuity: a reachable `assert(0)` under a 2^64-16 VLA is still reported, the stack object not being subject to the address-space layout constraint. The bounds check reads the same size signed — `0 < (signed long int)tmp$1` — and invents an out-of-bounds at index 0 | `goto_convertt::generate_dynamic_size_vla`, `src/goto-programs/goto_convert.cpp:612-690` | `regression/esbmc/ptr_rel_huge_object_vla` (now CORE), `vla_above_ptrdiff_max`, `vla_ptrdiff_max`, `vla_bounds_preserved` (all CORE) | **Fixed**, §15 M9 (R40): bound the size at the `DYNAMIC_SIZE` assignment — the only place a VLA's size reaches symex, and renaming has exposed its constness by then. Symbolic sizes are assumed below the cap as `alloca`'s are; a constant one is reported, per R39. The predicted obstacle held: an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may constant-fold to a violating value, which is R39's vacuity through a different door, so the site could not be the lowering. Carries `needs-svcomp-run`: every VLA program passes through it |
 | **R12** | **Info (bounded by design)** | With `--no-unwinding-assertions`, `loop_bound_exceeded` emits an *assumption* that truncates the path; a `VERIFICATION SUCCESSFUL` then covers only the truncated prefix. This is intended BMC behaviour, but the repo has already been bitten by it in *verification harnesses* (`CLAUDE.md` bans pairing it with reachability checks). | `goto_symext::loop_bound_exceeded`, `symex_goto.cpp:497-523` | H-A5 | No code change; encode as an acceptance criterion (§11.3) so no harness in this plan ever uses that flag. |
 
 ---
@@ -2045,6 +2048,13 @@ assumption instead. The same executions are excluded as before the fix, so
 *visibly*, in the equation, rather than as an emergent property of an
 unsatisfiable layout constraint. Post-fix the pair runs in 23.8 s and 29.2 s.
 
+**Superseded by §15 M9 (R37).** The assumption was removed once the bound was
+tightened to `PTRDIFF_MAX`: an assume that excluded only unlayable requests
+excludes every `malloc((size_t)negative)` at the tighter bound, which prunes the
+path and proves the program vacuously. The flag now returns NULL like every
+other arm, and the cost predicted here did not materialise — 284 allocation
+tests in 2m55s. `force_malloc_success_unrepresentable` is CORE.
+
 **Anti-vacuity.** `symbolic_malloc_bounds_preserved` pins the direction the fix
 could most plausibly have broken: with `10 <= n <= 100`, `b[n]` must still be
 caught out of bounds. Clamping a size that *does* fit would silently weaken
@@ -2445,7 +2455,8 @@ and R17 does affect it (still SUCCESSFUL at `--unwind 1` without the fix), but
 its current `--unwind 5` configuration no longer discriminates, so R17's own
 claim is pinned by `default_underflow_malloc` instead. One pin replaces them:
 `force_malloc_success_unrepresentable` (SUCCESSFUL), the residual R25's fix
-leaves under `--force-malloc-success`. The inventory's point survives the churn
+leaves under `--force-malloc-success` — itself closed later, in §15 M9 (R37),
+where the test becomes CORE and FAILED. The inventory's point survives the churn
 — the masking is what generalises, not the count.
 
 **One hypothesis tested and rejected.** `03_circular_reduce` is a concurrency test
@@ -6239,7 +6250,7 @@ is `SUCCESSFUL`, because `bvuge(2^63, 0)` is a tautology. So this fix is a
 **trade, not a strict improvement**, and the honest statement of it is: the
 unsigned reading mis-ordered every below-base pointer — a common idiom — while
 the signed reading mis-orders only offsets at or above 8 EiB. Registered as
-**R37** and pinned KNOWNBUG so the residual cannot go quiet.
+**R37** — and closed the same day by capping allocation, §15 M9 (R37).
 
 The cast itself arrived in `79c621ff20` (#1537), whose subject was the
 *cross-object* arm; the sign reading came along unremarked.
@@ -6313,6 +6324,482 @@ What is *not* fixed is R28's unbounded form: with no `--unwind` at all the same
 lost trip count makes the loop fail to terminate rather than truncate, and no
 warning helps that. R28 stays open on that half.
 
+
+### M9 (R37) — 2026-08-21, the residual closed by removing the ambiguity
+
+R37 — the offset at or above `2^63` that R36 knowingly mis-orders — is fixed,
+and the fix is not in the comparator.
+
+**The encoding is genuinely ambiguous, so no comparator can be right.** An
+object's offset lives in `pointer_struct`'s `ptraddr_type2()` member: `W` bits,
+unsigned. A pointer below its base is stored as the two's-complement wrap, and a
+pointer at offset `2^63` is stored as *the same bit pattern*. Reading signed
+gets below-base right and huge-positive wrong; reading unsigned does the
+reverse. R36 chose the first because below-base pointers are common and 8 EiB
+objects are not — but choosing better is not available while both live in one
+`W`-bit field.
+
+**So constrain the domain instead.** `max_object_size()` is now
+`PTRDIFF_MAX` (`power2m1(W - 1)`), down from `2^W - 1 - max_alignment()`. Every
+*defined* offset — `[0, size]` for a live object — is then below `2^63`, the two
+readings can no longer collide, and the signed reading is exact rather than
+merely preferable.
+
+**The standard argument runs the opposite way from the one R36's row first
+gave, and it is worth stating correctly.** I wrote that C "already requires
+`ptrdiff_t` to represent any in-object difference". It does not. C23 6.5.6p9
+(N3220) says the result of pointer subtraction "is the difference of the
+subscripts… If the result is not representable in an object of that type, the
+behavior is undefined" — the standard *permits* an implementation to have
+objects whose internal differences it cannot represent, and simply declines to
+define subtraction on them. Relational comparison, meanwhile, is defined for
+pointers into the same object with no size proviso at all (6.5.9). So nothing in
+the standard forces this cap.
+
+**What justifies it is fidelity, which is the rationale the surrounding code
+already used.** glibc has failed `malloc` above `PTRDIFF_MAX` since 2.30, for
+this exact reason — a larger object makes later pointer subtraction overflow.
+The existing cap's own comment says "real allocators return NULL for it too";
+this tightens the same cap to where real allocators actually put it. Returning
+NULL is a legitimate allocator outcome, so nothing sound is lost: the model
+declines an allocation that glibc also declines.
+
+**Tightening the bound alone was a false SUCCESSFUL, and the corpus caught
+it.** The symbolic-size arm handled `--force-malloc-success` by *assuming* the
+bound rather than failing the allocation, on the stated grounds that the case
+split costs minutes and that "the same executions are excluded as before, but
+visibly". That reasoning held only while the bound sat at the very top of the
+address space. At `PTRDIFF_MAX` it stops holding: `malloc((size_t)negative)`
+always exceeds the bound, so the assumption is unsatisfiable, the path is
+pruned, and a reachable `assert(0)` after it is proved vacuously.
+`regression/esbmc/github_1631_nondet_compact` — a CORE test since #1631 — flipped
+from `FAILED` to `SUCCESSFUL` and is what exposed this.
+
+So the flag now takes the same treatment as everything else: an oversize request
+yields NULL and execution continues. The constant-size arm already did exactly
+this, commented "Return NULL even under `--force-malloc-success`, matching real
+OS behaviour"; the two arms had simply disagreed.
+
+**RETRACTED — the predicted cost is real, and this entry originally denied it.**
+The claim was "284 allocation-related tests run in 2m55s wall at `-j4`, with no
+test regressing into minutes". That sweep did not discriminate: the affected
+test is `THOROUGH`, and the measurement never compared against a pre-patch
+control. Timed properly, with the flags its own `test.desc` uses:
+
+| test | pre-R37 | branching to NULL | assuming (final) |
+|---|---|---|---|
+| `github_1352-success-32bit` | **21.0 s** `SUCCESSFUL` | **>400 s**, times out | **19.8 s** `SUCCESSFUL` |
+| `github_1352-fail-32bit` | ~29 s | **88 s** | passes |
+| `github_1352-32bit` | ~22 s | **36 s** | passes |
+
+So the comment this commit deleted — "branching to NULL reintroduces exactly the
+case split this flag exists to remove, at a cost measured in minutes on
+allocation-heavy inputs" — was right, and deleting it on the strength of a
+non-discriminating sweep was the error.
+
+**Where the cost actually is, by ablation.** Six variants were built and timed
+on that one test. The result is not the one the retraction first guessed:
+
+| variant | time |
+|---|---|
+| loose bound, ITE structure kept | >150 s |
+| no conditional *size* (`if2tc` dropped) | >150 s |
+| no conditional *pointer* | >150 s |
+| no `alloc_guard.add(fits)` | >150 s |
+| bound restated on the *clamped* size (implied, prunes nothing) | >150 s |
+| `assume` + no ITEs at all (pre-R37 shape, tight cap) | **20.7 s** |
+
+Two things follow. **The bound's tightness is irrelevant** — the loose bound with
+the same structure is just as slow, so the "32-bit halves the range" story an
+earlier draft of this entry told is *wrong*. And **no single construct is
+responsible**: dropping any one of the three still times out, while dropping all
+three is fast. The `fits` machinery is only cheap when it is absent altogether.
+Encoding time is flat at 1.4 s throughout; the blow-up is entirely in the solver.
+
+**So the trade is irreducible, and the resolution is to assume the *layability*
+bound under this flag rather than the cap.** Under `--force-malloc-success` a
+symbolic size is now bounded by `assume(size <= max_layable_size())` — the
+`2^W - 1 - max_alignment()` limit `smt_memspace.cpp` actually needs — instead of
+branching to NULL at `PTRDIFF_MAX`. That restores the performance (19.8 s, a
+shade faster than pre-R37) and keeps `github_1631_nondet_compact` `FAILED`,
+because the looser bound does not exclude `malloc((size_t)negative)` the way the
+cap did. The cap is unchanged for constant sizes and on the default path, so R37
+stays fixed where the register records it.
+
+**The price, stated plainly: R25's residual does not close after all.**
+`force_malloc_success_unrepresentable` returns to `KNOWNBUG` — a size the address
+space cannot lay out is still excluded by assumption rather than failed. That is
+exactly where it stood before this branch, so nothing regresses against master;
+the "bonus" this commit claimed is simply withdrawn. Together with the `alloca`
+and `realloc` gaps it is folded into **R38**.
+
+**A 32-bit test the cap genuinely invalidates, and a sibling it quietly made
+vacuous.** `github_785-1` allocated two 2 GiB objects on a 32-bit target to pin
+that exhausting the address space proves the program vacuously. At `--32` the
+cap is `PTRDIFF_MAX` = 2 GiB − 1, so the *first* request now returns NULL and the
+test never reached the exhaustion it was written for: it asserts
+`__ESBMC_get_object_size(a) == n` without checking `a`, so it failed. Updated to
+two `PTRDIFF_MAX`-sized objects, which still exhaust the space, and it verifies
+again for the original reason. A single cap-sized object remains allocatable
+(checked: `assert(0)` after one is reachable), so the cap is not over-tight.
+
+Its sibling `github_785-2` — `if (malloc(2*GiB)) assert(!malloc(2*GiB));` — still
+passes, but **its guarded assertion is now unreachable**, so it passes without
+evaluating anything. Rewriting it at `PTRDIFF_MAX` does not help and makes it
+worse: the second allocation's layout constraints are asserted *unconditionally*,
+so two cap-sized objects render the whole formula UNSAT even on the path where
+the first returned NULL. That is the S3 shape — the per-object bound says nothing
+about `finalize_pointer_chain`'s pairwise disjointness — and it was true of the
+2 GiB spelling before this branch too. Left as it is, and recorded here rather
+than papered over; it belongs to **R38**, not to a test edit.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object` | default | `SUCCESSFUL`, promoted from the `KNOWNBUG` R36 left it at — `malloc(n); q = p + n; assert(q >= p)` now holds for every `n` |
+| `regression/esbmc/alloc_ptrdiff_max` | `--force-malloc-success` | `SUCCESSFUL` — the at-cap half: `malloc(PTRDIFF_MAX)` still succeeds, so the cap is the largest request that works rather than the first that fails. The flag matters: without it `malloc` may fail for the ordinary reason and this proves nothing |
+| `regression/esbmc/alloc_above_ptrdiff_max` | `--force-malloc-success` | `SUCCESSFUL` — the above-cap half: `malloc(PTRDIFF_MAX + 1)` returns NULL |
+| `regression/esbmc/alloc_ptrdiff_max_fail` | `--force-malloc-success` | `FAILED` — the pre-cap reading asserted directly |
+| `regression/esbmc/github_1631_nondet_compact` | `--force-malloc-success --compact-trace` | `FAILED` — pre-existing CORE test; it is what caught the vacuous proof the first cut of this fix introduced |
+| `regression/esbmc/force_malloc_success_unrepresentable` | `--force-malloc-success` | `KNOWNBUG`, unchanged — the promotion to CORE was retracted with the cost measurement above |
+| `regression/esbmc/github_1352-{,success-,fail-}32bit` | as recorded | pass; 19.8 s on the `-success-` case, vs >400 s for the branch-to-NULL cut |
+| `regression/esbmc/github_785-1` | `--32 --force-malloc-success` | `SUCCESSFUL` — updated to cap-sized objects; the 2 GiB spelling the cap invalidated |
+| `-L esbmc/` | as recorded | **1852/1852** |
+| `-L esbmc-unix/` | as recorded | 438/438 (`github_595` exceeds the 120 s cap only under `-j4`; 96.5 s alone) |
+| `cbmc/`, `goto-transcoder/` | as recorded | 477/477 |
+| `bitwuzla/`, `csmith/`, `incremental-smt/`, `nonz3/`, `llvm/`, `cstd/` | as recorded | 290/290 |
+
+### M9 (R38) — 2026-08-21, the two allocation paths the cap does not reach
+
+R37's fix is narrower than R37's row first claimed, and code review of that fix
+found it. The `PTRDIFF_MAX` cap is gated on `is_malloc`, and `symex_realloc`
+hands its size straight to `create_dynamic_memory_symbol` without bounding it at
+all. So the witness R37 records still reproduces, verbatim:
+
+| spelling | verdict | witness |
+|---|---|---|
+| `char *p = malloc(n); char *q = p + n; assert(q >= p);` | `SUCCESSFUL` | fixed by R37 |
+| the same with `alloca(n)` | `FAILED` | `n = 0x8000000000000000` |
+| the same with `realloc(p, n)` | `FAILED` | `n = 0xFFFFFFFFFFFFFFDF` |
+
+Three allocation paths now disagree about one property. Registered as **R38** and
+pinned by `ptr_rel_huge_object_alloca` and `ptr_rel_huge_object_realloc`, both
+`KNOWNBUG`. Both pins were checked to fail on the *assertion* rather than by
+timing out — `KNOWNBUG` is satisfied by a timeout, so a pin of this shape is
+worth nothing until that is confirmed.
+
+**A first attempt at the extension was made and reverted; these are its two
+obstacles, recorded so the next attempt does not rediscover them.** Dropping the
+`is_malloc` gates and bounding `realloc_size` does fix all three spellings — all
+three verify, and the fixed shapes are non-vacuous under an `assert(0)` probe.
+It is what that costs elsewhere that stopped it:
+
+1. **`getenv`'s operational model breaks.** `src/c2goto/library/stdlib.c:405-409`
+   allocates a nondeterministic, *unbounded* `buf_size` with `__ESBMC_alloca`
+   and immediately writes `buffer[buf_size - 1]`. Once `alloca` can fail, that
+   write is a NULL dereference, and `getenv`, `getenv3` and `getenv_success`
+   turn `FAILED`. The model has to either bound the length or check the result;
+   both are modelling decisions, not mechanical fixes.
+2. **A pure-`malloc` test blows up in the solver.**
+   `github_1352-success-32bit` goes from ~22 s to **over 400 s** — and it
+   contains no `alloca` and no `realloc`, so the cause is not the new gate but
+   something in the refactor that shares one bounding helper between the paths.
+   That is unexplained and must be understood before the change lands; the
+   cost the original `--force-malloc-success` comment predicted may be real
+   after all, just not where it claimed.
+
+`realloc` additionally needs more than a size bound. Its result is built by
+`model_allocation_failure`, whose `alloc_fail` nondet drives
+`update_pointer_validity`; nulling the result *after* that call leaves the old
+object invalidated on a branch where the allocation failed, so
+`realloc17`'s `test_realloc_failure` — which does `if (!q) free(p);` — reports
+`invalidated dynamic object freed`. The cap has to join the failure *condition*,
+not post-process its result. C17 7.22.3.5 is the governing sentence: on failure
+the old object is unchanged.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_alloca` | default | `KNOWNBUG` — `FAILED` on `assertion q >= p`, confirmed not a timeout |
+| `regression/esbmc/ptr_rel_huge_object_realloc` | default | `KNOWNBUG` — same, at `n = 0xFFFFFFFFFFFFFFDF` |
+| `regression/esbmc/symbolic_malloc_cap` | `--force-malloc-success` | `SUCCESSFUL` — pins the cap on the *symbolic-size* arm, which no constant-size test reaches |
+| `-L esbmc/` | as recorded | 1852/1852 |
+
+
+### M9 (R38 fix) — 2026-08-25, both obstacles dissolved by not sharing a helper
+
+R38 is fixed, and neither obstacle the reverted attempt recorded survived
+contact with a change that treats the three allocation paths as three
+different things rather than routing them through one bounding helper.
+
+**Obstacle 1 dissolves because `alloca` must not fail.** C gives `alloca` no
+failure outcome — an over-large request is undefined, not `NULL` — so the bound
+belongs in an assumption, not a branch. `getenv`'s model writes
+`buffer[buf_size - 1]` without checking the result precisely because a real
+`alloca` cannot hand it one to check. Bounding by assumption leaves all six
+`getenv` tests green; the modelling decision the obstacle called for turns out
+to be *not* making `alloca` fail.
+
+**Obstacle 2 does not reproduce.** `github_1352-success-32bit` measures
+**8.7 s** with the cap extended, against a **9.6 s** baseline on the same
+binary and machine. The blow-up therefore belonged to the reverted attempt's
+shared helper — which necessarily changed the `malloc` path, the only path that
+test exercises — and not to capping `alloca` or `realloc`. Nothing about the
+cap costs anything here.
+
+**`realloc` needed exactly what the previous entry prescribed, and one thing it
+did not.** Joining the cap to `alloc_fail` rather than post-processing the
+result works first time: `update_pointer_validity` keys the old object's
+validity on that same condition, so failure leaves the old object untouched and
+`realloc17`'s `test_realloc_failure` stays green. The unrecorded hazard is
+*ordering*. The size rewrite `if (fits) size else 0` must follow
+`handle_realloc_zero_size`; ahead of it an over-cap request folds to `0`, is
+mistaken for `realloc(p, 0)`, and frees the old object — so the caller's
+`if (!q) free(p);` double-frees. That is what `invalidated dynamic object
+freed` reports, and it is a *different* defect from the one the previous entry
+predicted at the same test: it arrives through the zero-size path, not through
+`update_pointer_validity`.
+
+**Under `--force-realloc-success` the cap is not applied at all**, for the
+reason the symbolic `malloc` arm already gives: assuming it away would prune
+`realloc(p, (size_t)negative)` vacuously. That residual, and the matching
+`--force-malloc-success` one, are what is left of R38's row.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_alloca` | default | `CORE`, was `KNOWNBUG` — `SUCCESSFUL`; `FAILED` on the pre-patch control |
+| `regression/esbmc/ptr_rel_huge_object_realloc` | default | `CORE`, was `KNOWNBUG` — same |
+| `regression/esbmc/realloc_above_ptrdiff_max` | default | `SUCCESSFUL` — pins the C17 7.22.3.5 contract directly: `q == NULL` *and* `p[0] == 7` after the failed request. Kills both mutants — dropping the `alloc_fail` join (`q != NULL`) and moving the rewrite ahead of `handle_realloc_zero_size` (`p[0]` reads freed memory) |
+| `regression/esbmc/getenv{,1,2,3,4,_success}` | default | 6/6, unchanged — obstacle 1 |
+| `github_1352-success-32bit` | as recorded | 8.7 s vs 9.6 s baseline — obstacle 2 |
+| `-L esbmc/` | as recorded | 1909/1909; unit suite 716/716 |
+
+---
+
+### M9 (R38 residual) — 2026-08-25, the exemption a single assignment defeats
+
+R38's residual is measured, pinned, and **deliberately left open**: the obvious
+fix was built and it trades a Low-severity spurious counterexample for a
+**false SUCCESSFUL**.
+
+The residual reproduces exactly as the row predicts. `ptr_rel_huge_object`'s
+program — `p = malloc(n); q = p + n; assert(q >= p)` — verifies on the default
+path, where the cap applies, and reports `VERIFICATION FAILED` under
+`--force-malloc-success`, where a symbolic size is bounded only at
+`max_layable_size()`. Pinned by `regression/esbmc/ptr_rel_huge_object_force_success`
+(`KNOWNBUG`), which is `ptr_rel_huge_object` with the flag and nothing else
+changed.
+
+**The candidate fix.** Assume the cap under the flag as well, exempting the one
+case the previous entry names — a size that is huge only because a negative
+signed value was widened — by testing whether the argument is syntactically a
+typecast from a signed type. Built and measured against a control binary of the
+same tree:
+
+| shape | control | candidate |
+|---|---|---|
+| `ptr_rel_huge_object` + `--force-malloc-success` | `FAILED` | `SUCCESSFUL` — residual closed |
+| `github_1631_nondet_compact` (`malloc(a)`, `a < 0`) | `FAILED` | `FAILED` — exemption holds |
+| the same laundered: `size_t n = a; malloc(n)` | `FAILED` | **`SUCCESSFUL`** |
+| `force_malloc_success_unrepresentable` | `SUCCESSFUL` | `SUCCESSFUL` — unchanged |
+
+Row 3 is the refutation. **One intervening assignment defeats the exemption.**
+`cur_state->rename(size)` hands `symex_mem` the L2 expression, which for
+`malloc(n)` is the plain symbol `n` — the `(unsigned long)a` typecast is on the
+*assignment to* `n`, not on the argument — so the exemption does not fire, the
+cap is assumed, `a < 0` contradicts it, and a reachable `assert(0)` is proved
+vacuously. The verdict moves in the false-SUCCESSFUL direction, and
+`github_1631_nondet_compact` does not catch it: it uses the direct spelling,
+which is exactly the one the exemption covers.
+
+The exemption cannot be repaired by looking harder. It is a syntactic test on an
+expression the SSA is free to re-shape, and `n = a + 0`, a helper's return value
+or a struct field would each defeat a deeper version of it. Every hole is a false
+SUCCESSFUL, so the fix is only as sound as the completeness of a heuristic that
+cannot be complete. **Pinned by `regression/esbmc/force_malloc_success_negative_indirect`**
+(`CORE`, expects `FAILED`), which is `github_1631_nondet_compact` with the size
+laundered through a `size_t` variable and nothing else changed; it is
+mutation-killing — it passes on the tree and fails on the candidate.
+
+**The three other cuts are worse, and none is available cheaply.** Branching to
+NULL under the flag is correct and costs 21 s → >400 s on
+`github_1352-success-32bit`, measured in M9 (R37); every one of the six variants
+that ablation timed carried a `fits` ITE and every one was slow, so clamping the
+size to the cap is unlikely to be cheap either — though that exact variant was
+not among the six. Clamping would also invent out-of-bounds reports on a program
+that asked for `n` bytes and got fewer. Asserting the bound instead of assuming
+it prunes nothing, but would report a failed property on `malloc(nondet_size_t())`
+under a flag whose whole purpose is to make that program verify (reasoned, not
+measured). Leaving the loose bound keeps the defect confined to allocations at or
+above 8 EiB.
+
+**The principled fix is out of scope and unbuilt.** Every cut above is forced by
+one W-bit `pointer_struct` offset field, in which a below-base pointer and an
+offset at or above `2^63` are the same bit pattern — the ambiguity M9 (R37)
+identifies. A field one bit wider would separate them and make the whole R34–R38
+family disappear without any cap. That is a hypothesis, not a result: it touches
+every pointer encoding and its cost is unmeasured, and R31/R33's lesson is that a
+causal story is refuted by *building* the alternative, not by describing it.
+
+**A measurement trap that invalidated a full round of results, worth more than
+the finding.** The first pass concluded the residual did *not* reproduce — the
+witness verified under the flag, and the satisfiable/unsatisfiable boundary sat
+at exactly `PTRDIFF_MAX`, which read convincingly as a property of the
+address-space layout. All of it was wrong. `build/src/esbmc/esbmc` had been built
+from the working tree *with* the candidate patch applied; `git stash` then
+reverted the source but not the binary, so the "control" was the patch. It
+surfaced only when a `--show-vcc` dump showed an assumption
+(`addr2 < 0 || (unsigned long)addr2 <= 9223372036854775807`) that exists nowhere
+in the checked-out source. This is the mirror image of the stale-binary trap: the
+binary was *ahead* of the source, not behind, so checking that the fix commit is
+an ancestor of the built tree would not have caught it. **Verify a control binary
+against the source it is supposed to embody — a VCC dump or a `--verbosity` probe
+naming the constraint — not against the commit it was built at.**
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_force_success` | `--force-malloc-success` | `KNOWNBUG` — pins the residual; XPASSes if it is ever closed. Weak by construction, as M9 (R36)'s note records: a timeout also satisfies `KNOWNBUG` |
+| `regression/esbmc/force_malloc_success_negative_indirect` | `--force-malloc-success` | `CORE`, `FAILED` — pins the trap; `SUCCESSFUL` on the candidate |
+| `-L esbmc/` | as recorded | 1912/1912 |
+
+### M9 (R39) — 2026-08-25, the arm the un-gating missed, and what it was proving
+
+R38's fix removed the `is_malloc` gate from the *symbolic* size arm of
+`symex_mem`. Code review of it found the **constant** arm twenty lines above,
+still `malloc`-only — and there the gate is not a spurious counterexample but a
+**false SUCCESSFUL on default flags**:
+
+```c
+char *p = __builtin_alloca(-1);
+p[0] = 1;
+assert(0);            /* VERIFICATION SUCCESSFUL */
+```
+
+The request exceeds `max_layable_size()`, `smt_memspace.cpp` asserts the object's
+`start + size` does not wrap, the constraint is unsatisfiable, and every
+execution of the program — including the one that reaches `assert(0)` — is
+pruned. This is R25's mechanism exactly. **#6660 fixed it for `malloc` only**,
+by classifying a constant request and returning NULL; `alloca` was never part of
+that classification, so the vacuity has been reachable through this spelling
+since. Between `PTRDIFF_MAX` and the layable bound the same gate reproduces
+R38's witness verbatim at a *constant* size, where `alloca(0x8000000000000000)`
+fails `assert(q >= p)`. The `malloc` spelling of both programs is correct today.
+
+**A constant cannot be bounded the way R38 bounds a symbolic size.** R38's
+argument — `alloca` has no failure outcome, so state the bound as an assumption
+— produces `assume(false)` here, which prunes not *some* executions but all of
+them. That is the whole difference between a bound and a vacuous proof, and it
+is the principle the fix encodes: classify the constant request for either path,
+and for `alloca` **report** it (`alloca: size exceeds PTRDIFF_MAX`). NULL is
+handed back afterwards so that no unrepresentable object is laid out — it is not
+modelling a failure C defines, the claim has already reported the program, and
+NULL is the only continuation that neither prunes the path nor lays out an object
+whose upper offsets alias a below-base pointer. A request *at* `PTRDIFF_MAX` is
+allocated, not reported.
+
+**`--multi-property` hides this defect completely.** The same program is
+`SUCCESSFUL` by default and `FAILED` under `--multi-property`, because per-claim
+slicing drops the allocation from the `assertion 0` claim's formula and the
+layout contradiction never enters it. Any sweep run under `--multi-property`
+would walk past a whole class of vacuity, which is worth remembering next to the
+counts the earlier M9 sweeps report.
+
+**A fourth allocation path, found by the same probes and left open as R40.** A
+VLA is bounded nowhere: `uint64_t n = nondet_uint64(); char a[n]; assert(a + n
+>= a);` fails, constant or symbolic. `generate_dynamic_size_vla` checks that the
+size *computation* does not overflow and that the dimension is positive, neither
+of which is `PTRDIFF_MAX`. It is not vacuous — a stack object escapes the
+address-space constraint, so a reachable `assert(0)` under a 2^64-16 VLA is still
+reported — so it is R37's severity, not R39's. R38's treatment does not port:
+an `ASSUME` emitted in `goto_convert` is stated on a symbol symex may
+constant-fold to a violating value, which is R39's vacuity through a different
+door. Pinned `KNOWNBUG`, failing on the assertion rather than by timing out.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/alloca_const_above_layable` | default | `CORE` — `FAILED`, reported at the `alloca`. **`SUCCESSFUL` on the pre-patch tree**: the soundness pin |
+| `regression/esbmc/ptr_rel_huge_object_alloca_const` | default | `CORE` — the request is reported; pre-patch it was a spurious `assertion q >= p` |
+| `regression/esbmc/alloca_ptrdiff_max` | default | `CORE`, `SUCCESSFUL` — the boundary: exactly `PTRDIFF_MAX` is allocated, not reported |
+| `regression/esbmc/ptr_rel_huge_object_vla` | default | `KNOWNBUG` — R40's pin |
+| `regression/esbmc/getenv{,1,2,3,4,_success}` | default | 6/6 — R38's obstacle 1 stays dissolved; the size there is symbolic |
+| `github_1352-success-32bit` | as recorded | 8.5 s, against R38's 8.7 s and the 9.6 s baseline |
+| `-L esbmc/` | as recorded | 1925/1925; unit suite 716/716 |
+
+Reachability of the added branch is discharged by the two pins whose expected
+output is the claim's own message, which is a stronger witness than a Mode C
+run over a model of the same code.
+### M9 (R40) — 2026-08-25, the bound that could not go where the branch is
+
+R40 is fixed, and the obstacle its row predicted is the whole reason the fix
+looks the way it does. `generate_dynamic_size_vla` is where a VLA acquires its
+size, and it already emits two guards there — a positive dimension and a size
+computation that does not overflow the address space. Adding `PTRDIFF_MAX` as a
+third looks obvious and is wrong twice over. As an `ASSERT` it reports every
+`char a[n]` whose `n` is unbounded, on a check the existing overflow guard
+already makes for every element type wider than a byte, so it would be new noise
+on programs nothing else objects to. As an `ASSUME` it is stated on `tmp$2`, a
+symbol symex may later constant-fold to a violating value — and an assumption
+that folds to false proves the program. That is R39, one week old, arriving
+through a different door.
+
+**The site has to be where constness is visible, which is symex.** A VLA never
+reaches `symex_mem`: it is a `DECL`ed local plus one `ASSIGN DYNAMIC_SIZE(&a) =
+size`, and `generate_dynamic_size_vla` is that assignment's only producer for
+VLAs. Bounding at that assignment gets renaming for free — the same
+`cur_state->rename(size)` that lets `symex_mem` tell a constant request from a
+symbolic one. Symbolic sizes are assumed below the cap, exactly as `alloca`'s
+are and for the same reason (a declaration has no failure outcome to report);
+a constant one is reported.
+
+**What the fix does not do.** The report leaves the oversized object in place —
+unlike R39, where returning NULL kept an unrepresentable object from being laid
+out, the `DECL` has already happened by the time the size is seen. A
+constant-size violation therefore reports its own claim *and* whatever the
+oversized object then makes fail. That is noise on a run already reported as
+failing, and it is preferable to the alternatives: nulling nothing and assuming
+false is the vacuity, and clamping the size would invent out-of-bounds reports.
+
+**Measured, with a control for the one failure that appeared.**
+`github_2335_1` timed out at `-j8` in the first post-patch sweep. It contains
+**zero** `DYNAMIC_SIZE` instructions, so the new code cannot execute for it, and
+a control binary of the same tree without the patch runs it in **164.7 s**
+against the patched binary's **157.8 s** — the test is simply slower than its
+50 s historical mean on this tree, and 240 s is not enough for it at 8-way load.
+Re-run alone it passes at 169 s, and the whole label passes at `-j6`.
+
+| Artefact | Invocation | Verdict | Mutation it kills |
+|---|---|---|---|
+| `regression/esbmc/ptr_rel_huge_object_vla` | default | `CORE`, was `KNOWNBUG` — `SUCCESSFUL` | cap loosened to `max_layable_size()` |
+| `regression/esbmc/vla_above_ptrdiff_max` | default | `CORE`, `FAILED` — reports the declaration | the constant report dropped |
+| `regression/esbmc/vla_ptrdiff_max` | default | `CORE`, `SUCCESSFUL` — the boundary is allocated, not reported | `>` widened to `>=` |
+| `regression/esbmc/vla_bounds_preserved` | default | `CORE`, `FAILED` — anti-vacuity twin: a reachable `assert(0)` under a symbolic VLA | the assumption strengthened past the cap (also caught by `mpor_aggregate_ptr_race_vla_element`) |
+| `-L esbmc/` | `-j6` | 1931/1931 | — |
+| `github_2335_1` | standalone | 157.8 s patched vs 164.7 s control | — |
+
+**The bound has to honour `--no-vla-size-check`, and the benchexec run is what
+said so.** The first SV-COMP run of this patch turned 17 correct verdicts into
+**wrong** ones, every one of them
+`sv-benchmarks/c/array-multidimensional/*-3-*` — the three-dimensional members of
+that family and nothing else. The reason is the arch, not the size: those tasks
+run `--32`, where `max_object_size()` is 2 GiB, and `int A[1000][1000][1000]` is
+4 GB. Two dimensions is 4 MB and stays under; three does not, which is exactly
+why the 2-D siblings kept timing out while the 3-D ones flipped. The report is
+right on its own terms — that object cannot exist in a 32-bit address space —
+but the wrapper passes `--no-vla-size-check`, *"do not check whether the size of
+VLAs overflows the available address space"*, which is this check one pass later.
+The flag now reaches `bound_dynamic_object_size`, both arms: under it the
+declaration is neither reported nor assumed below the cap, which is master's
+behaviour exactly. Pinned by `regression/esbmc/vla_no_size_check` (the flag
+suppresses the report) and `vla_no_size_check_fail` (without it the report
+stands, so the pair cannot both pass if the bound is simply deleted); all nine
+tasks return to `TIMEOUT` under the competition command line.
+
+The general lesson is the row's own `needs-svcomp-run` label: a check whose
+threshold is derived from the target's pointer width is a different check on
+`--32`, and the regression suite runs almost nothing there.
+
+With R40 closed, every path that can size an object — `malloc`, `alloca`,
+`realloc` and a VLA declaration — is bounded at `PTRDIFF_MAX`, and the R34–R38
+family has no remaining spelling except R38's `--force-*-success` residual, which
+is open by decision rather than by omission.
 ---
 
 ## Appendix A — Methodological basis

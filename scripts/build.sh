@@ -194,6 +194,11 @@ prepare_platform_config() {
           "-DENABLE_CVC5=Off"
         )
         BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
+        # c2goto stubs sol64 out on ARM64, where clang has no _BitInt > 128
+        # (src/c2goto/CMakeLists.txt), so the frontend would build against an
+        # empty model and every esbmc-solidity test would abort. Off here also
+        # unregisters that suite in regression/CMakeLists.txt.
+        BASE_ARGS+=("-DENABLE_SOLIDITY_FRONTEND=OFF")
       fi
       ;;
 
@@ -260,7 +265,11 @@ collect_ubuntu_packages() {
   if [[ "$ARCH" != "aarch64" ]]; then
     UBUNTU_PACKAGES+=(g++-multilib)
   else
-    log "Skipping g++-multilib on aarch64"
+    # No multilib on aarch64, but plain g++ still has to be there: the tests
+    # passing --no-abstracted-cpp-includes reach for the system <cctype>,
+    # <cassert> and friends, which only libstdc++-dev provides.
+    log "Skipping g++-multilib on aarch64; installing g++ for libstdc++ headers"
+    UBUNTU_PACKAGES+=(g++)
   fi
 
   if [[ "$COVERAGE" == "ON" ]]; then
@@ -272,6 +281,8 @@ collect_ubuntu_packages() {
       "llvm-$CLANG_VERSION-dev"
       "libclang-$CLANG_VERSION-dev"
       "libclang-cpp${CLANG_VERSION}-dev"
+      # Ships /usr/lib/cmake/clang-N (ClangConfig.cmake); no -dev package has it.
+      "clang-$CLANG_VERSION"
       libz3-dev
     )
   fi
