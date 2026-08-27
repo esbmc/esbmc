@@ -551,6 +551,75 @@ std::string get_annotation_type_name(const JsonType &annotation)
   return "";
 }
 
+/// Split a rendered parameter list on commas that are not inside brackets,
+/// trimming each part. "str, list[int, int]" -> {"str", "list[int, int]"}.
+inline std::vector<std::string> split_top_level_params(const std::string &s)
+{
+  std::vector<std::string> parts;
+  int depth = 0;
+  size_t start = 0;
+  for (size_t i = 0; i <= s.size(); ++i)
+  {
+    if (i == s.size() || (s[i] == ',' && depth == 0))
+    {
+      std::string part = s.substr(start, i - start);
+      const size_t b = part.find_first_not_of(" \t");
+      if (b != std::string::npos)
+        parts.push_back(part.substr(b, part.find_last_not_of(" \t") - b + 1));
+      start = i + 1;
+    }
+    else if (s[i] == '[')
+      ++depth;
+    else if (s[i] == ']')
+      --depth;
+  }
+  return parts;
+}
+
+/// The full generic spelling of an annotation node, e.g. "int",
+/// "list[tuple[int, int]]". Unlike get_annotation_type_name, which flattens a
+/// parameterized slice to its base, this recurses, so an element type that is
+/// itself a generic survives round-tripping through
+/// python_annotation::create_annotation_from_type. Empty when the node is not
+/// an annotation this renderer understands.
+template <typename JsonType>
+std::string render_annotation_type(const JsonType &annotation)
+{
+  if (!annotation.is_object())
+    return "";
+
+  if (annotation.contains("id") && annotation["id"].is_string())
+    return annotation["id"];
+
+  if (annotation.value("_type", "") != "Subscript")
+    return "";
+
+  const std::string base = render_annotation_type(annotation["value"]);
+  if (base.empty() || !annotation.contains("slice"))
+    return base;
+
+  const auto &slice = annotation["slice"];
+
+  // tuple[A, B] and dict[K, V] carry their parameters in a Tuple slice.
+  if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+  {
+    std::string params;
+    for (const auto &elt : slice["elts"])
+    {
+      const std::string rendered = render_annotation_type(elt);
+      if (rendered.empty())
+        return "";
+      if (!params.empty())
+        params += ", ";
+      params += rendered;
+    }
+    return params.empty() ? base : base + "[" + params + "]";
+  }
+
+  const std::string param = render_annotation_type(slice);
+  return param.empty() ? "" : base + "[" + param + "]";
+}
+
 template <typename JsonType>
 const JsonType get_var_value(
   const std::string &var_name,

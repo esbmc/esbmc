@@ -610,33 +610,41 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
           annot.contains("value") && annot["value"].contains("id") &&
           annot["value"]["id"] == "list")
         {
+          // Render the element type in full: a nested generic (list[list[int]],
+          // list[tuple[int, int]]) has no "id" to read, and reporting "Any" for
+          // it leaves the parameter unannotated, which the converter then
+          // guesses is a list (GitHub #7359).
+          const std::string elem =
+            annot.contains("slice")
+              ? json_utils::render_annotation_type(annot["slice"])
+              : std::string();
+
           if (
             arg.contains("slice") && arg["slice"].contains("_type") &&
             arg["slice"]["_type"] == "Slice")
-          {
-            if (
-              annot.contains("slice") && annot["slice"].contains("id") &&
-              annot["slice"]["id"].is_string())
-              return "list[" +
-                     annot["slice"]["id"].template get<std::string>() + "]";
-            return "list";
-          }
+            return elem.empty() ? "list" : "list[" + elem + "]";
 
-          if (annot.contains("slice"))
-          {
-            const auto &slice = annot["slice"];
-            if (slice.contains("id"))
-              return slice["id"];
-            else if (
-              slice.contains("_type") && slice["_type"] == "Name" &&
-              slice.contains("id"))
-              return slice["id"];
-          }
-          return "Any";
+          return elem.empty() ? "Any" : elem;
         }
         // Simple name annotation (e.g., list without subtype)
         if (annot.contains("id") && annot["id"] == "list")
           return "Any";
+      }
+
+      // No annotation yet: this pass runs before plain assignments are
+      // rewritten to annotated ones, so recover the element type from the
+      // bound value the way the Name arm below does (GitHub #7359).
+      if (
+        !var_node.empty() && var_node.contains("value") &&
+        !var_node["value"].is_null())
+      {
+        const std::string base_type = get_argument_type(var_node["value"]);
+        const bool is_slice =
+          arg.contains("slice") && arg["slice"].value("_type", "") == "Slice";
+
+        if (base_type.rfind("list[", 0) == 0 && base_type.back() == ']')
+          return is_slice ? base_type
+                          : base_type.substr(5, base_type.size() - 6);
       }
     }
     return "";
@@ -778,7 +786,30 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   else if (arg["_type"] == "Set")
     return "set";
   else if (arg["_type"] == "Tuple")
+  {
+    // Spell out the element types when every one of them is known. A bare
+    // "tuple" leaves a parameter that receives this value unannotated, and
+    // the converter then guesses it is a list (GitHub #7359).
+    if (arg.contains("elts") && arg["elts"].is_array() && !arg["elts"].empty())
+    {
+      std::string params;
+      for (const auto &elt : arg["elts"])
+      {
+        const std::string elt_type = get_argument_type(elt);
+        if (elt_type.empty() || elt_type == "Any")
+        {
+          params.clear();
+          break;
+        }
+        if (!params.empty())
+          params += ", ";
+        params += elt_type;
+      }
+      if (!params.empty())
+        return "tuple[" + params + "]";
+    }
     return "tuple";
+  }
   else if (arg["_type"] == "BoolOp")
   {
     if (arg.contains("values") && arg["values"].is_array())
@@ -925,6 +956,14 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
     if (current_type != element_type)
     {
       mixed = true;
+      // Tuples of differing shape have no common element type: unlike a list
+      // element, a tuple parameter is a concrete struct, so neither widening
+      // the spelling nor the int fallback below would match what the caller
+      // passes. Report no inference instead (GitHub #7359).
+      if (
+        element_type.rfind("tuple", 0) == 0 ||
+        current_type.rfind("tuple", 0) == 0)
+        return "";
       // Non-numeric heterogeneity (e.g. str vs int) has no common element
       // type we can represent, so keep the historical int fallback.
       if (!all_numeric)
