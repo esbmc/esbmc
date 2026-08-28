@@ -3029,30 +3029,6 @@ exprt string_handler::handle_string_attribute_call(
     }
   }
 
-  // subject.replace(old, new[, count]) over compile-time constant operands.
-  // Without this the call reaches __python_str_replace with every argument a
-  // constant array, and its bounded scan-and-copy loops unwind against
-  // --unwind rather than the (known) string length.
-  if (method_name == "replace")
-  {
-    exprt recv = get_receiver_expr();
-    if (recv.is_symbol())
-    {
-      const symbolt *sym = converter_.find_symbol(
-        to_symbol_expr(recv).get_identifier().as_string());
-      if (sym && !sym->get_value().is_nil())
-        recv = sym->get_value();
-    }
-    // bytes are modelled as an int array; folding one through the char-array
-    // string builder would retype it.
-    const typet &rt = recv.type();
-    std::string folded;
-    if (
-      rt.is_array() && rt.subtype() == char_type() &&
-      extract_constant_string(call_json, converter_, folded))
-      return string_builder_->build_string_literal(folded);
-  }
-
   std::optional<locationt> cached_location;
   auto get_location = [&]() -> locationt {
     if (!cached_location.has_value())
@@ -3176,6 +3152,7 @@ exprt string_handler::handle_string_attribute_call(
       string_method_dispatch::dispatch_replace_method(
         *this,
         method_name,
+        call_json,
         args,
         keyword_values,
         get_receiver_expr,
