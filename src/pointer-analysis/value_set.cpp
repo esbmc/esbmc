@@ -557,6 +557,49 @@ void value_sett::offset_pointer_arith_objects(
   }
 }
 
+/* What @p sym points at, looked up under the path the read spells and -- when
+ * nothing is keyed there -- under the paths a union arm it crosses aliases.
+ * Writing `u.s.p` and reading `u.q` keys the one and asks for the other, which
+ * would otherwise leave the read unknown and its dereference unconstrained.
+ * Looking the aliases up rather than recursing keeps the aliases of an alias
+ * out of it, which would not terminate. Returns whether anything was found. */
+bool value_sett::get_symbol_value_set(
+  const symbol2t &sym,
+  const expr2tc &expr,
+  const std::string &suffix,
+  const type2tc &original_type,
+  object_mapt &dest) const
+{
+  /* For level2_global symbols (global variables renamed during symbolic
+   * execution) the value set is indexed by the level0/level1_global name, so
+   * the lookup uses the base name rather than the level2 one. The suffix
+   * distinguishes any arrays or members picked out at a higher level. */
+  const std::string base_name =
+    (sym.rlevel == symbol2t::renaming_level::level2_global)
+      ? sym.thename.as_string()
+      : sym.get_symbol_name();
+
+  valuest::const_iterator v_it = values.find(base_name + suffix);
+  if (v_it != values.end())
+  {
+    make_union(dest, v_it->second.object_map);
+    return true;
+  }
+
+  bool aliased = false;
+  for (const std::string &path :
+       union_alias_paths(expr->type, suffix, original_type, ns))
+  {
+    valuest::const_iterator a_it = values.find(base_name + path);
+    if (a_it != values.end())
+    {
+      make_union(dest, a_it->second.object_map);
+      aliased = true;
+    }
+  }
+  return aliased;
+}
+
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
@@ -924,17 +967,6 @@ void value_sett::get_value_set_rec(
       return;
     }
 
-    // Look up this symbol, with the given suffix to distinguish any arrays or
-    // members we've picked out of it at a higher level.
-    // For level2_global symbols (global variables renamed during symbolic
-    // execution), use the base name for lookup since the value set is indexed
-    // by the level0/level1_global name, not the level2 name.
-    std::string base_name =
-      (sym.rlevel == symbol2t::renaming_level::level2_global)
-        ? sym.thename.as_string()
-        : sym.get_symbol_name();
-    valuest::const_iterator v_it = values.find(base_name + suffix);
-
     if (sym.rlevel == symbol2t::renaming_level::level1_global)
       assert(sym.level1_num == 0);
     /* These assertions do not hold during value_sett::assign():
@@ -945,31 +977,7 @@ void value_sett::get_value_set_rec(
     // assert(sym.rlevel != symbol2t::renaming_level::level2_global);
      */
 
-    // If it points at things, put those things into the destination object map.
-    if (v_it != values.end())
-    {
-      make_union(dest, v_it->second.object_map);
-      return;
-    }
-
-    /* Nothing is keyed under the path the read spells, but a union arm the path
-     * crosses may hold the pointer under a path of its own -- writing `u.s.p`
-     * and reading `u.q` keys the one and asks for the other, leaving the read
-     * unknown and its dereference unconstrained. Ask again under the paths that
-     * alias this one. Looking up rather than recursing keeps the aliases of an
-     * alias out of it, which would not terminate. */
-    bool aliased = false;
-    for (const std::string &path :
-         union_alias_paths(expr->type, suffix, original_type, ns))
-    {
-      valuest::const_iterator a_it = values.find(base_name + path);
-      if (a_it != values.end())
-      {
-        make_union(dest, a_it->second.object_map);
-        aliased = true;
-      }
-    }
-    if (aliased)
+    if (get_symbol_value_set(sym, expr, suffix, original_type, dest))
       return;
   }
 
