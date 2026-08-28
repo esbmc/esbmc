@@ -922,7 +922,8 @@ static std::optional<exprt> fold_constant_search(
   std::string haystack, needle;
   if (
     args.size() != 1 ||
-    !string_handler::extract_constant_string(receiver_json, converter, haystack) ||
+    !string_handler::extract_constant_string(
+      receiver_json, converter, haystack) ||
     !string_handler::extract_constant_string(args[0], converter, needle))
     return std::nullopt;
 
