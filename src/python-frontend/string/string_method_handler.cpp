@@ -891,10 +891,60 @@ static search_args_parsedt parse_string_search_args(
   return parsed;
 }
 
+// Fold subject.find/rfind/index/rindex(sub) when both operands are
+// compile-time constant str. Otherwise the call reaches __python_str_find with
+// two constant arrays and the model's bounded scan loops unwind against
+// --unwind rather than the known length.
+//
+// index/rindex raise ValueError when the needle is absent, so a miss falls
+// through to the model rather than being folded to a value here.
+static std::optional<exprt> fold_constant_search(
+  const std::string &method_name,
+  const nlohmann::json &receiver_json,
+  const nlohmann::json &args,
+  const exprt &receiver,
+  python_converter &converter)
+{
+  exprt recv = receiver;
+  if (recv.is_symbol())
+  {
+    const symbolt *sym =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (sym && !sym->get_value().is_nil())
+      recv = sym->get_value();
+  }
+
+  // bytes are an int array and carry their own literal fold; only str here.
+  const typet &recv_type = recv.type();
+  if (!recv_type.is_array() || recv_type.subtype() != char_type())
+    return std::nullopt;
+
+  std::string haystack, needle;
+  if (
+    args.size() != 1 ||
+    !string_handler::extract_constant_string(receiver_json, converter, haystack) ||
+    !string_handler::extract_constant_string(args[0], converter, needle))
+    return std::nullopt;
+
+  const bool reverse = (method_name == "rfind" || method_name == "rindex");
+  const std::size_t hit =
+    reverse ? haystack.rfind(needle) : haystack.find(needle);
+
+  if (hit == std::string::npos)
+  {
+    if (method_name == "index" || method_name == "rindex")
+      return std::nullopt;
+    return from_integer(-1, int_type());
+  }
+
+  return from_integer(static_cast<long long>(hit), int_type());
+}
+
 std::optional<exprt> dispatch_search_string_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
+  const nlohmann::json &receiver_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,
@@ -907,6 +957,11 @@ std::optional<exprt> dispatch_search_string_methods(
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
+
+  if (
+    std::optional<exprt> folded = fold_constant_search(
+      method_name, receiver_json, args, obj_expr, converter))
+    return folded;
   search_args_parsedt parsed =
     parse_string_search_args(method_name, args, keyword_values, converter);
 
