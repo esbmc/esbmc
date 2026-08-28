@@ -22,6 +22,7 @@ goto_symext::goto_symext(
   : options(opts),
     guard_identifier_s("goto_symex::guard"),
     first_loop(0),
+    multiple_loops_seen(false),
     total_claims(0),
     remaining_claims(0),
     simplified_claims(0),
@@ -46,8 +47,7 @@ goto_symext::goto_symext(
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
     inductive_step(options.get_bool_option("inductive-step")),
-    validate_witness(options.get_bool_option("validate-violation-witness")),
-    multiple_loops_seen(false)
+    validate_witness(options.get_bool_option("validate-violation-witness"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();

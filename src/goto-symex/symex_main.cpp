@@ -128,36 +128,17 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
-  // Convert asserts into assumes, if it's not the last loop iteration.
-  // This is a common technique in k-induction to strengthen the induction
-  // hypothesis. Also, don't convert assertions added by the bidirectional
-  // search.
-  //
-  // This must happen *before* the claim is recorded. Emitting the assertion
-  // and then assuming it leaves the claim as a live proof obligation on every
-  // unwinding, so the inductive step degenerates into BMC from an arbitrary
-  // state: a havoc'd pre-state that violates the property fails the step no
-  // matter how large k is, and raising k adds obligations to discharge rather
-  // than hypotheses to use. Properties that are k-inductive but not
-  // 1-inductive were reported UNKNOWN at every k as a result.
-  //
-  // A claim that has simplified to `false` is never converted. Assuming it
-  // would be `assume(false)`, which kills the path: every later claim then
-  // simplifies away and the step discharges vacuously without reaching the
-  // solver, so an `assert(0)` inside a loop would be reported SUCCESSFUL.
-  // Keeping it as an assertion costs nothing -- a claim that is constant
-  // false is exactly the one worth checking.
-  // Only when a single loop has been entered on this path. The guard below
-  // selects assertions using `first_loop`'s iteration counter, which
-  // describes the assertion's own loop only when there is no other loop to
-  // confuse it with. `loop_iterations` gains an entry on every loop entry,
-  // so a size of one means any enclosing loop must be `first_loop` itself.
-  // In a multi-loop program an assertion in a later loop would otherwise be
-  // assumed on the strength of an unrelated loop's depth, assuming away real
-  // violations (esbmc/esbmc#6443).
+  // Convert asserts into assumes on all but the last unwinding of the inductive
+  // step, which is what supplies the induction hypothesis. This must run before
+  // the claim is recorded, or the claim stays a live proof obligation and the
+  // step degenerates into BMC from an arbitrary state (esbmc/esbmc#6443).
   if (
-    inductive_step && first_loop && !is_false(new_expr) &&
+    inductive_step && first_loop &&
+    // a claim simplified to false would become assume(false), killing the path
+    !is_false(new_expr) &&
+    // first_loop names the assertion's own loop only while no other is in play
     !multiple_loops_seen && cur_state->loop_iterations.size() <= 1 &&
+    // assertions added by the bidirectional search are not converted
     !cur_state->source.pc->inductive_assertion)
   {
     // Fetch the current loop iteration count

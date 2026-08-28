@@ -1263,16 +1263,13 @@ protected:
   irep_idt guard_identifier_s;
   /** Loop numbers. */
   unsigned first_loop;
-  /** True once symbolic execution has had more than one loop in play on this
-   *  path -- either a second loop was entered, or the loop that `first_loop`
-   *  named was exited and `first_loop` reassigned.
-   *
-   *  The inductive step's assert-to-assume conversion selects assertions by
-   *  `first_loop`'s iteration counter, which only describes the assertion's
-   *  own loop while that naming stays stable. Once it does not, an assertion
-   *  in one loop can be assumed on the strength of another loop's depth,
-   *  which assumes away real violations (esbmc/esbmc#6443). The conversion is
-   *  therefore restricted to paths where this flag is still false. */
+  /** Set when the loop named by `first_loop` exits, because the next loop to
+   *  take that name is a different one. Latched: never cleared, and copied
+   *  with the symex object, so one exit disables the assert-to-assume
+   *  conversion for the remainder of that execution. Conservative on purpose;
+   *  declining to convert costs the induction hypothesis and nothing else.
+   *  Loops nested concurrently are excluded by `loop_iterations.size()` in
+   *  claim() instead. See esbmc/esbmc#6443. */
   bool multiple_loops_seen;
   /** Number of assertions executed. */
   unsigned total_claims;
