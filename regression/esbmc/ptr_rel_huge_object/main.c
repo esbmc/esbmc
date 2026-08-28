@@ -1,8 +1,7 @@
-/* R37: pointer_struct's offset member is ptraddr_type2() -- full unsigned
-   width -- so an offset at or above 2^63 reads negative under the signed
-   comparison and one-past-the-end sorts below the base. Reaching it needs an
-   8 EiB allocation, which is why R36 takes the signed reading anyway. The
-   width is fixed: `unsigned long` is 32-bit on LLP64 and never reaches 2^63. */
+/* An offset at or above 2^63 would read negative under the signed comparison,
+   so one-past-the-end would sort below the base. Allocation is capped at
+   PTRDIFF_MAX, which puts every defined offset below that line. The width is
+   fixed: `unsigned long` is 32-bit on LLP64 and never reaches 2^63. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdlib.h>

@@ -254,6 +254,14 @@ VERIFICATION SUCCESSFUL
   `if`/loop guard. Canonical CWE-561 shapes with no branch guard — statements
   after an unconditional `return`/`abort`, or entirely unreferenced functions —
   are *not* detected; they simply report no dead code.
+- **Only user-written branches are probed.** A guard already folded to a
+  constant (`if (1)`) is not probed, and neither are the branches the Python
+  frontend inserts on its own behalf — the `IndexError` / `KeyError` /
+  `ValueError` / `ZeroDivisionError` guards and the exception-propagation edge
+  after each call — so a clean program reports no dead code. The
+  constant-evaluation fold that replaces a provable Python `assert` with
+  `assert True` is disabled under this flag, so code reachable only through a
+  call inside that assertion is still explored.
 - **Bounded, and beyond-bound branches read as dead.** A branch that becomes
   reachable only past the unwinding bound is cut like any other beyond-bound
   path and is therefore listed as unreachable — the report is explicitly scoped

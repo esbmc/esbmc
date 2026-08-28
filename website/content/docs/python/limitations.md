@@ -32,10 +32,10 @@ weight: 4
 
 ## Built-in Functions
 
-- `min()` and `max()` support two-argument form and single-list form only (`default` is supported). The `key` keyword argument is honoured only over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms; any other key (symbolic elements, a user function, a non-constant key) silently falls back to ignoring `key`.
+- `min()` and `max()` support two-argument form and single-list form only (`default` is supported). The `key` keyword argument is honoured only over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms; any other key (symbolic elements, a user function, a non-constant key) is refused with a named error rather than silently answered in natural order.
 - `any()` and `all()` currently support only list literals as arguments. `any()` rejects other iterables with a parse-time error; `all()` may trigger a dereference failure on non-list iterables.
 - `sum()` supports `int` and `float` element types only.
-- `sorted()` supports `int`, `float`, and `str` element types only; the `key` keyword argument is not supported (`reverse` is supported).
+- `sorted()` supports `int`, `float`, and `str` element types, plus a homogeneous list of tuples (the element types are carried through, so `for u, v in sorted(pairs)` unpacks). `reverse=` is supported; a `key=` is honoured only where the preprocessor can constant-fold the call, and is otherwise refused with a named error.
 - `input()` is modelled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 - `print()` evaluates each argument expression once (so safety checks and call side effects reach the GOTO program) but produces no actual output during verification.
 - `enumerate()` supports the iterable + `start` keyword forms; nested or unusually-shaped iterables are not exercised by the regression suite and may surface edge cases.
@@ -69,7 +69,8 @@ value (see [Supported Features — Dynamic Typing](./supported-features#dynamic-
 within these bounds:
 
 - A tag holds one of `bool`, `int`, `float` or `str`. `isinstance` against an aggregate or a user class is therefore answered `False`, not consulted.
-- Arithmetic (`+`, `-`, `*`, `/`) is supported against a **literal** operand; `+` additionally concatenates strings.
+- Arithmetic (`+`, `-`, `*`, `/`) is supported against a **literal** operand, and `-` and `/` between two tagged operands; `+` additionally concatenates strings. A non-numeric operand raises `TypeError`.
+- Divergence is detected across an `if`/`elif`/`else` chain only when every branch assigns the name; a chain with a branch that leaves it unassigned is not tagged.
 - `x is None` is folded only against a literal `None`. A computed operand is not folded, since that would drop its side effects.
 - Rebinding a tagged variable to a list, tuple or class instance is refused inside a loop or a conditional body, where the join of the retyped aliases is not modelled.
 
@@ -130,7 +131,7 @@ within these bounds:
 - Only the NumPy functions listed in [Supported Features — NumPy](./supported-features#numpy-module-numpy) have executable support.
 - The reductions (`sum`/`prod`/`min`/`max`/`mean`/`argmin`/`argmax`), comparison/logical ufuncs (`greater`/`less`/`equal`/`logical_*`/`where`), and constructors (`arange`/`full`/`eye`/`identity`/`linspace`) are constant-folded over list-backed (1D/2D) inputs and constant shapes; runtime-constructed inputs and higher-rank shapes are rejected with deterministic frontend errors.
 - `np.arange()` materialises its result at conversion time, so its arguments must be constant — a name bound to a literal is resolved first, but a function parameter is rejected with `TypeError: numpy.arange() currently supports constant numeric inputs only` rather than routed through the operational model's while loop, which did not terminate in practice. A range past 10000 elements is declined for the same reason, and `step=0` raises `ValueError`.
-- Only a 1-D, unit-stride slice with literal bounds, assigned to a bare name, becomes a real view onto the base array. A symbolic bound, a non-unit stride, or a higher-rank slice still produces an independent copy, so a write through one is not observed by the other.
+- A view onto the base array needs literal bounds and a fixed-shape 1-D or 2-D source: 1-D slices (any step, including reversed), 2-D row and column views, `np.diagonal`, `np.ravel` and `a.flat[i]` alias the buffer; a symbolic bound or index, or a 3-D source, still produces an independent copy. `np.diagonal` is read-only, and a diagonal used inline (`np.diagonal(a)[i]`) rather than bound to a name is declined. `np.fill_diagonal` requires a value whose length matches the diagonal exactly.
 - `np.arccos`, `np.fmod`, `np.transpose`, `np.dot`, and `np.matmul` now lower to executable models (they were previously type-inference-only stubs), each under a stated restriction: `np.arccos` rejects runtime 2D arrays; `np.fmod` rejects `np.array(...)`-wrapped operands (`Unsupported operation: numpy.fmod on array operands`); `np.transpose` is limited to 2D and rejects higher rank; `np.dot`/`np.matmul` cover 1D/2D integer and float inputs.
 - `numpy.linalg.det` supports constant numeric 2x2 and 3x3 matrices. Other `numpy.linalg` operations, complex determinants, runtime-constructed matrices, and larger matrix sizes are not supported.
 

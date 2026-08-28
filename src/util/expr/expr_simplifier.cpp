@@ -8,6 +8,7 @@
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
+#include <irep2/simplification_check.h>
 #include <util/expr/type_byte_size.h>
 
 expr2tc expr2t::do_simplify() const
@@ -56,6 +57,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       expr2tc shortcut = do_simplify();
       if (!is_nil_expr(shortcut))
       {
+        simplification_check::verify_node_rewrite(*this, shortcut);
         expr2tc resimp = shortcut->simplify(suppress_reassoc);
         return is_nil_expr(resimp) ? shortcut : resimp;
       }
@@ -133,6 +135,8 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     expr2tc top = changed ? current->do_simplify() : do_simplify();
     if (!is_nil_expr(top))
     {
+      simplification_check::verify_rewrite_or_node(current, *this, top);
+
       // Pass our own suppress_reassoc through: if a peephole rewrote an
       // add into a sub (or vice versa), that result is still subject to
       // whatever suppression we were given.
@@ -168,6 +172,9 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       if (is_arith_chain || is_other_chain)
       {
         expr2tc canonical = is_nil_expr(result) ? clone() : result;
+        // The reassociators replace the container rather than mutating through
+        // it, so this keeps the pre-rewrite tree without a clone.
+        const expr2tc before_reassoc = canonical;
         bool rewrote = false;
         if (is_arith_chain)
           rewrote = reassociate_arith(canonical);
@@ -181,6 +188,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
           rewrote = reassociate_bitxor(canonical);
         if (rewrote)
         {
+          simplification_check::verify_rewrite(before_reassoc, canonical);
           // Run peepholes on the rebuilt tree so add(x, neg(y)) -> sub(x, y)
           // and friends collapse. simplify_no_reassoc forces
           // suppress_reassoc=true throughout to avoid re-entering the
@@ -207,7 +215,8 @@ static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
   if (is_nil_expr(to_simplify))
-    to_simplify = expr;
+    return expr;
+  simplification_check::verify_rewrite(expr, to_simplify);
   return to_simplify;
 }
 
@@ -1206,6 +1215,36 @@ expr2tc abs2t::do_simplify() const
   return simplify_arith_1op<abstor, abs2t>(type, value);
 }
 
+/** Do the float constants in two expressions that already compare equal agree
+ *  on their signs? Callers rely on @p a and @p b having the same shape. */
+static bool float_signs_agree(const expr2tc &a, const expr2tc &b)
+{
+  if (is_nil_expr(a) || is_nil_expr(b))
+    return true;
+
+  if (is_constant_floatbv2t(a))
+    return to_constant_floatbv2t(a).value.get_sign() ==
+           to_constant_floatbv2t(b).value.get_sign();
+
+  for (unsigned int i = 0; i < a->get_num_sub_exprs(); i++)
+    if (!float_signs_agree(*a->get_sub_expr(i), *b->get_sub_expr(i)))
+      return false;
+  return true;
+}
+
+/** Whether two expressions denote the same value, sign included.
+ *
+ *  expr2tc equality on constant floats is IEEE equality (ieee_float.cpp), and
+ *  under it -0.0 == +0.0. A rewrite that drops one of two "equal" operands --
+ *  if(c, x, y) -> x, or with(s, f, v) -> s -- therefore returns the wrong sign
+ *  whenever they disagree on it, at any depth inside an aggregate constant
+ *  (esbmc/esbmc#7321). NaN needs no guard here: IEEE equality already reports
+ *  two NaNs as unequal, so those rewrites never fire on them. */
+static bool same_value_and_sign(const expr2tc &a, const expr2tc &b)
+{
+  return a == b && float_signs_agree(a, b);
+}
+
 expr2tc with2t::do_simplify() const
 {
   // with(with(s, f, v_old), f, v_new) -> with(s, f, v_new). Two writes to
@@ -1227,7 +1266,7 @@ expr2tc with2t::do_simplify() const
     unsigned no = struct_union_get_component_number(type, memb.value).value();
     assert(no < c_struct.datatype_members.size());
 
-    if (c_struct.datatype_members[no] == update_value)
+    if (same_value_and_sign(c_struct.datatype_members[no], update_value))
       return source_value;
 
     // Clone constant struct, update its field according to this "with".
@@ -1253,7 +1292,7 @@ expr2tc with2t::do_simplify() const
     if (
       c_union.init_field == thetype.member_names[no] &&
       !c_union.datatype_members.empty() &&
-      c_union.datatype_members[0] == update_value)
+      same_value_and_sign(c_union.datatype_members[0], update_value))
       return source_value;
 
     std::vector<expr2tc> newmembers = {update_value};
@@ -1272,7 +1311,8 @@ expr2tc with2t::do_simplify() const
     if (index.value >= array.datatype_members.size())
       return expr2tc();
 
-    if (array.datatype_members[index.as_ulong()] == update_value)
+    if (same_value_and_sign(
+          array.datatype_members[index.as_ulong()], update_value))
       return source_value;
 
     constant_array2t arr = array; // copy
@@ -1292,7 +1332,8 @@ expr2tc with2t::do_simplify() const
     if (index.value >= vec.datatype_members.size())
       return expr2tc();
 
-    if (vec.datatype_members[index.as_ulong()] == update_value)
+    if (same_value_and_sign(
+          vec.datatype_members[index.as_ulong()], update_value))
       return source_value;
 
     constant_vector2t vec2 = vec; // copy
@@ -1312,7 +1353,7 @@ expr2tc with2t::do_simplify() const
       return expr2tc();
 
     // Eliminate this operation if the update value matches the initializer.
-    if (update_value == array.initializer)
+    if (same_value_and_sign(update_value, array.initializer))
       return source_value;
 
     return expr2tc();
@@ -4417,7 +4458,7 @@ expr2tc if2t::do_simplify() const
   // below the bool-arm so it fires for bool-typed selects whose branches
   // happen to be the same symbolic value (the bool arm previously short-
   // circuited to nil before this rule could be reached).
-  if (true_value == false_value)
+  if (same_value_and_sign(true_value, false_value))
     return typecast_check_return(type, true_value);
 
   // Constant-condition fold. expr2t::simplify already simplified `cond`.

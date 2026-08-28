@@ -2,13 +2,17 @@ name: Simplifier equivalence
 
 # Builds ESBMC with -DENABLE_SIMPLIFIER_EQUIVALENCE_CHECK=ON and runs a slice
 # of the CORE regression suite under it (esbmc/esbmc#4625). Every simplify()
-# rewrite is proved equivalent by an SMT solver; a rewrite that changes meaning
-# logs both expressions plus a witness and exits non-zero, so a failure here is
-# a simplifier soundness bug, not a verdict change. A rewrite whose operand
-# sorts stop agreeing is reported the same way -- it would abort any backend's
-# mk_eq, so it is a defect whichever way it goes (esbmc/esbmc#7220). Shapes the
-# check cannot state are declined, and counted in the "N declined (M
-# ill-sorted)" line the run prints.
+# rewrite is proved equivalent by an SMT solver -- each per-node peephole,
+# where it is made, since esbmc/esbmc#7260; before that the hook saw only whole
+# expressions and a deliberately wrong fold passed unreported. A rewrite that
+# changes meaning logs both expressions plus a witness and exits non-zero, so a
+# failure here is a simplifier soundness bug, not a verdict change. A rewrite
+# whose operand sorts stop agreeing is reported the same way -- it would abort
+# any backend's mk_eq, so it is a defect whichever way it goes
+# (esbmc/esbmc#7220). Shapes the check cannot state are declined, as are
+# rewrites of expressions past a node budget -- one query per fold is quadratic
+# on a long chain. Both are counted in the "N declined (M ill-sorted)" line the
+# run prints, so a job that proved little says so.
 #
 # The check is compiled out of every other build, so without this job the
 # enabled path is never built and would bit-rot. It runs on a schedule and on
@@ -24,8 +28,14 @@ on:
     branches: [master]
     paths:
       - 'src/util/expr/expr_simplifier.cpp'
+      - 'src/irep2/irep2_utils.h'
       - 'src/irep2/simplification_check.*'
       - 'src/solvers/smt/simplification_equivalence.*'
+      - 'src/esbmc/parseoptions/driver.cpp'
+      - 'unit/irep2/simplification_hook.test.cpp'
+      - 'unit/solvers/simplification_equivalence.test.cpp'
+      - 'regression/esbmc/simplifier_unsound_fold_probe/**'
+      - 'scripts/plant_unsound_fold.py'
       - '.github/workflows/simplifier-equivalence.yml'
 
 jobs:
@@ -49,10 +59,60 @@ jobs:
       - name: Unit tests
         run: ctest --test-dir build -j2 -LE regression --output-on-failure
 
+      # The slice below passes just as happily when the check proves nothing,
+      # which is the state esbmc/esbmc#7260 found it in. So break the simplifier
+      # on purpose and require the check to say so -- before the slice, which is
+      # what the job's time budget cuts off first.
+      - name: Prove the check would catch an unsound fold
+        run: |
+          set -eu
+          python3 scripts/plant_unsound_fold.py plant src/util/expr/expr_simplifier.cpp
+          cmake --build build -j2
+          set +e
+          ./build/src/esbmc/esbmc regression/esbmc/simplifier_unsound_fold_probe/main.c \
+            > mutation.log 2>&1
+          status=$?
+          set -e
+          python3 scripts/plant_unsound_fold.py remove src/util/expr/expr_simplifier.cpp
+          # Before the rebuild, which runs under set -e: this log is the whole
+          # output of the step and a failing rebuild must not swallow it.
+          cat mutation.log
+          # Removing the fold from the source leaves it in the binary, and every
+          # later step uses that binary. The slice below reported 23 mul
+          # rewrites as unsound when this rebuild was missing, all of them the
+          # planted fold (esbmc/esbmc#7327).
+          cmake --build build -j2
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the planted unsound fold did not fail the run"
+            exit 1
+          fi
+          grep -q 'simplifier changed the meaning of an expression' mutation.log \
+            || { echo "::error::run failed, but not via the equivalence check"; exit 1; }
+
       - name: Regression slice under the equivalence check
         run: |
           cd build
-          # A slice, not the whole suite: an SMT query per rewrite makes a full
-          # run far past any sensible CI budget. Any single failing test is a
-          # real finding, so coverage breadth matters less than running at all.
-          ctest -j2 --output-on-failure -L '^esbmc/$' -I 1,200
+          # Bounded, and the bound is a finding rather than a budget. Shortly
+          # past it github_1210-2-array reports a disagreement the check cannot
+          # arbitrate -- a `member` over a bitcast/byte_update chain -- and
+          # github_1600 further on costs 1201s against 8s uninstrumented. Both
+          # are esbmc/esbmc#7326; raise this when they close, one test at a
+          # time: the three between the bound and -2-array (github_1210-1-struct
+          # and -1-union, then -2-array itself) have not been measured under the
+          # check. A violation exits the run, so one unscreened shape would end
+          # the job before it reached anything after it.
+          # 12_lms_new, inside the slice, is that same cost finding: 0.3s
+          # uninstrumented, and past the 1200s per-test cap once every peephole
+          # costs a query. Excluding it and dropping the bound to 499 leaves the
+          # slice ending exactly where it did.
+          ctest -j2 --output-on-failure -L '^esbmc/$' \
+            -E 'regression/esbmc/12_lms_new$' -I 1,499
+
+      # Not run here either: regression/floats/ and regression/floats-regression/.
+      # The check finds a real simplifier bug there -- isnormal(+INFINITY)
+      # folding to true (esbmc/esbmc#7320). Add both suites when it closes;
+      # until then the bug is tracked rather than watched, and this comment is
+      # the record of it. Its sibling esbmc/esbmc#7321 is fixed, but only its
+      # if2t half is watched here: the with2t half rewrites an aggregate, and
+      # is_checkable_type() declines every aggregate-typed rewrite, so
+      # regression/esbmc/github_7321 is what pins it rather than this job.

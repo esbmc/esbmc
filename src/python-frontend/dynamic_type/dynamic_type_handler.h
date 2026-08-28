@@ -51,6 +51,13 @@ public:
   std::string tagged_symbol_id(const std::string &name) const;
 
   /**
+   * @brief True if `op` on two tagged operands can produce either scalar
+   * type at runtime (only '+' today); an untagged assignment target then
+   * needs to become tagged too
+   */
+  bool tagged_binop_result_may_be_tagged(const std::string &op) const;
+
+  /**
    * @brief Fills in the tagged-object fields for `name` from an
    * already-converted value
    */
@@ -67,8 +74,8 @@ public:
   void resolve_read(symbolt *&symbol) const;
 
   /**
-   * @brief Dispatches Eq/NotEq between a tagged-scalar operand and the
-   * other side
+   * @brief Dispatches Eq/NotEq/Lt/LtE/Gt/GtE between a tagged-scalar
+   * operand and the other side
    */
   exprt
   handle_comparison(const std::string &op, const exprt &lhs, const exprt &rhs);
@@ -157,7 +164,22 @@ private:
    */
   symbolt *find_tag_symbol(const std::string &name) const;
 
+  /**
+   * @brief Calls the num/str helper matching `literal`'s type (dispatch and
+   * argument-building shared by every tagged-vs-literal Eq/ordered compare)
+   * and returns its raw int result, undecoded
+   */
+  exprt build_literal_compare_call(
+    const std::string &num_func_name,
+    const std::string &str_func_name,
+    const exprt &tagged,
+    const exprt &literal);
+
   exprt build_eq_literal(const exprt &tagged, const exprt &literal);
+  exprt build_ordered_literal(
+    const std::string &op,
+    const exprt &tagged,
+    const exprt &literal);
   exprt build_add_literal(
     const exprt &tagged,
     const exprt &literal,
@@ -171,6 +193,7 @@ private:
     const exprt &literal,
     bool tagged_is_left,
     const locationt &location);
+  exprt build_add_tagged(const exprt &lhs, const exprt &rhs);
   exprt build_sub_tagged(const exprt &lhs, const exprt &rhs);
   exprt build_div_tagged(
     const exprt &lhs,
