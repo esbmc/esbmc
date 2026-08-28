@@ -32,12 +32,14 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     // Corner case! Don't even try to simplify address of's operands, might end
     // up taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
-    // The node's own do_simplify never touches source_value; it only rewrites
-    // &base[c] to &base[0] + c, so a bound spelled &a[n] can meet one spelled
-    // a + n. Skipping it left `p != &a[4]` unfoldable and the loop unbounded
-    // (R43, docs/roadmap/goto-symex-verification-plan.md).
+    // Running the node's own do_simplify here is not safe either: rewriting
+    // every &base[c] to &base[0] + c costs the value-set analysis the concrete
+    // offset and k-induction stops converging
+    // (regression/incremental-smt/incremental-24). The comparisons that need
+    // the two forms to meet normalize their own operands instead — see
+    // normalize_addressof_index.
     if (expr_id == address_of_id) // unlikely
-      return do_simplify();
+      return expr2tc();
 
     // And overflows too. We don't wish an add to distribute itself, for example,
     // when we're trying to work out whether or not it's going to overflow.
@@ -3490,9 +3492,9 @@ expr2tc nearbyint2t::do_simplify() const
 expr2tc address_of2t::do_simplify() const
 {
   // NB: address_of never has its operands simplified below its feet for
-  // sanity's sake — expr2t::simplify runs this do_simplify but skips the
-  // operand walk for address_of_id. So `ptr_obj` is never already simplified,
-  // whichever way we were reached.
+  // sanity's sake — expr2t::simplify returns nil immediately for address_of_id
+  // (see line ~29). This do_simplify is invoked through try_simplification by
+  // other simplifiers, so we can't assume `ptr_obj` is already simplified.
 
   // &(*p) -> p. The C standard guarantees this round-trip (no actual access
   // happens), and dereference2t's result type is the pointee type, so the
@@ -3876,6 +3878,114 @@ fold_const_across_addsub(const expr2tc &side_1, const expr2tc &side_2)
   return expr2tc();
 }
 
+/// Rewrite `&base[c]` to `&base[0] + c` for one comparison operand.
+///
+/// A loop exit spelled `&a[4]` must meet an induction variable built from
+/// increments off `a`, which carries the `&a[0] + k` shape; without a common
+/// form the guard stays a comparison symex cannot decide and the loop never
+/// exits (#6778). The rewrite is applied here rather than in expr2t::simplify
+/// because folding every address_of loses the concrete offset the value-set
+/// analysis needs (regression/incremental-smt/incremental-24).
+static expr2tc normalize_addressof_index(const expr2tc &e)
+{
+  if (!is_address_of2t(e) || !is_index2t(to_address_of2t(e).ptr_obj))
+    return e;
+
+  expr2tc folded = to_address_of2t(e).do_simplify();
+  return is_nil_expr(folded) ? e : folded;
+}
+
+/// Put both operands of a pointer comparison into `&base[0] + c` form, and
+/// return the rebuilt comparison when either changed. @p rebuild re-emits the
+/// node so the common-addend cancellation in the caller can decide it.
+template <typename Rebuild>
+static expr2tc normalize_addressof_operands(
+  const expr2tc &a,
+  const expr2tc &b,
+  Rebuild rebuild)
+{
+  expr2tc na = normalize_addressof_index(a);
+  expr2tc nb = normalize_addressof_index(b);
+  if (na == a && nb == b)
+    return expr2tc();
+
+  expr2tc rebuilt = rebuild(na, nb);
+  expr2tc simplified = rebuilt->simplify();
+  return is_nil_expr(simplified) ? rebuilt : simplified;
+}
+
+/// Re-emit a comparison over @p a_in and @p b_in after coercing them to a
+/// common type; nil when they have none. Pointer-arith chains reach the
+/// cancellations below with mixed-width integer offsets (`(int)c` against
+/// `(long)e`), so the coercion is not optional.
+template <typename Rebuild>
+static expr2tc
+coerce_and_rebuild(const expr2tc &a_in, const expr2tc &b_in, Rebuild rebuild)
+{
+  expr2tc a = a_in, b = b_in;
+  if (!coerce_to_common_type(a, b))
+    return expr2tc();
+  return rebuild(a, b);
+}
+
+/// `d + c ~ d + e -> c ~ e` and `(d - c) ~ (d - e) -> c ~ e`: cancel the addend
+/// or minuend the two sides share.
+///
+/// Shared by equality2t and notequal2t: `!= x y` holds iff `== x y` doesn't, so
+/// a rewrite that preserves equality preserves inequality too.
+template <typename Rebuild>
+static expr2tc cancel_common_addend_operand(
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  Rebuild rebuild)
+{
+  if (is_add2t(side_1) && is_add2t(side_2))
+  {
+    const add2t &a1 = to_add2t(side_1);
+    const add2t &a2 = to_add2t(side_2);
+    // {addend to match, its counterpart} then {the two survivors}.
+    const expr2tc *const combinations[][4] = {
+      {&a1.side_1, &a2.side_1, &a1.side_2, &a2.side_2},
+      {&a1.side_1, &a2.side_2, &a1.side_2, &a2.side_1},
+      {&a1.side_2, &a2.side_1, &a1.side_1, &a2.side_2},
+      {&a1.side_2, &a2.side_2, &a1.side_1, &a2.side_1}};
+
+    for (const auto &c : combinations)
+      if (*c[0] == *c[1])
+        if (expr2tc r = coerce_and_rebuild(*c[2], *c[3], rebuild);
+            !is_nil_expr(r))
+          return r;
+  }
+
+  if (is_sub2t(side_1) && is_sub2t(side_2))
+  {
+    const sub2t &s1 = to_sub2t(side_1);
+    const sub2t &s2 = to_sub2t(side_2);
+    if (s1.side_1 == s2.side_1)
+      return coerce_and_rebuild(s1.side_2, s2.side_2, rebuild);
+  }
+
+  return expr2tc();
+}
+
+/// `(-x) ~ (-y)` and `(~x) ~ (~y)`: cancel the wrapper both sides share.
+template <typename Rebuild>
+static expr2tc cancel_common_unary_operand(
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  Rebuild rebuild)
+{
+  if (is_neg2t(side_1) && is_neg2t(side_2))
+    return coerce_and_rebuild(
+      to_neg2t(side_1).value, to_neg2t(side_2).value, rebuild);
+
+  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
+    return coerce_and_rebuild(
+      to_bitnot2t(side_1).value, to_bitnot2t(side_2).value, rebuild);
+
+  return expr2tc();
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
@@ -3893,6 +4003,14 @@ expr2tc equality2t::do_simplify() const
     return not2tc(b);
 
   if (expr2tc r = fold_const_across_addsub<equality2t>(side_1, side_2);
+      !is_nil_expr(r))
+    return r;
+
+  auto rebuild_eq = [](const expr2tc &a, const expr2tc &b) {
+    return equality2tc(a, b);
+  };
+
+  if (expr2tc r = normalize_addressof_operands(side_1, side_2, rebuild_eq);
       !is_nil_expr(r))
     return r;
 
@@ -3935,64 +4053,13 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
-  // d + c == d + e -> c == e (cancel common addend). When the surviving
-  // operands have differing concrete types (pointer-arith chains often mix
-  // `(int)c` with `(long)e`), coerce both to a common type so the rebuilt
-  // equality is well-formed.
-  auto cancel_eq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-    expr2tc a = a_in, b = b_in;
-    if (!coerce_to_common_type(a, b))
-      return expr2tc();
-    return equality2tc(a, b);
-  };
+  if (expr2tc r = cancel_common_addend_operand(side_1, side_2, rebuild_eq);
+      !is_nil_expr(r))
+    return r;
 
-  if (is_add2t(side_1) && is_add2t(side_2))
-  {
-    const add2t &add1 = to_add2t(side_1);
-    const add2t &add2 = to_add2t(side_2);
-    expr2tc r;
-    if (add1.side_1 == add2.side_1)
-      if (!is_nil_expr(r = cancel_eq(add1.side_2, add2.side_2)))
-        return r;
-    if (add1.side_1 == add2.side_2)
-      if (!is_nil_expr(r = cancel_eq(add1.side_2, add2.side_1)))
-        return r;
-    if (add1.side_2 == add2.side_1)
-      if (!is_nil_expr(r = cancel_eq(add1.side_1, add2.side_2)))
-        return r;
-    if (add1.side_2 == add2.side_2)
-      if (!is_nil_expr(r = cancel_eq(add1.side_1, add2.side_1)))
-        return r;
-  }
-
-  // (d - c) == (d - e) -> c == e (cancel common minuend)
-  if (is_sub2t(side_1) && is_sub2t(side_2))
-  {
-    const sub2t &sub1 = to_sub2t(side_1);
-    const sub2t &sub2 = to_sub2t(side_2);
-    if (sub1.side_1 == sub2.side_1)
-    {
-      expr2tc r = cancel_eq(sub1.side_2, sub2.side_2);
-      if (!is_nil_expr(r))
-        return r;
-    }
-  }
-
-  // (-x) == (-y) -> x == y
-  if (is_neg2t(side_1) && is_neg2t(side_2))
-  {
-    expr2tc r = cancel_eq(to_neg2t(side_1).value, to_neg2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
-
-  // (~x) == (~y) -> x == y
-  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
-  {
-    expr2tc r = cancel_eq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
+  if (expr2tc r = cancel_common_unary_operand(side_1, side_2, rebuild_eq);
+      !is_nil_expr(r))
+    return r;
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
@@ -4067,63 +4134,21 @@ expr2tc notequal2t::do_simplify() const
       !is_nil_expr(r))
     return r;
 
-  // d + c != d + e -> c != e (cancel common addend). Coerce surviving
-  // operands to a common type when their concrete types differ.
-  auto cancel_neq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-    expr2tc a = a_in, b = b_in;
-    if (!coerce_to_common_type(a, b))
-      return expr2tc();
+  auto rebuild_neq = [](const expr2tc &a, const expr2tc &b) {
     return notequal2tc(a, b);
   };
 
-  if (is_add2t(side_1) && is_add2t(side_2))
-  {
-    const add2t &add1 = to_add2t(side_1);
-    const add2t &add2 = to_add2t(side_2);
-    expr2tc r;
-    if (add1.side_1 == add2.side_1)
-      if (!is_nil_expr(r = cancel_neq(add1.side_2, add2.side_2)))
-        return r;
-    if (add1.side_1 == add2.side_2)
-      if (!is_nil_expr(r = cancel_neq(add1.side_2, add2.side_1)))
-        return r;
-    if (add1.side_2 == add2.side_1)
-      if (!is_nil_expr(r = cancel_neq(add1.side_1, add2.side_2)))
-        return r;
-    if (add1.side_2 == add2.side_2)
-      if (!is_nil_expr(r = cancel_neq(add1.side_1, add2.side_1)))
-        return r;
-  }
+  if (expr2tc r = normalize_addressof_operands(side_1, side_2, rebuild_neq);
+      !is_nil_expr(r))
+    return r;
 
-  // (d - c) != (d - e) -> c != e (cancel common minuend)
-  if (is_sub2t(side_1) && is_sub2t(side_2))
-  {
-    const sub2t &sub1 = to_sub2t(side_1);
-    const sub2t &sub2 = to_sub2t(side_2);
-    if (sub1.side_1 == sub2.side_1)
-    {
-      expr2tc r = cancel_neq(sub1.side_2, sub2.side_2);
-      if (!is_nil_expr(r))
-        return r;
-    }
-  }
+  if (expr2tc r = cancel_common_addend_operand(side_1, side_2, rebuild_neq);
+      !is_nil_expr(r))
+    return r;
 
-  // (-x) != (-y) -> x != y
-  if (is_neg2t(side_1) && is_neg2t(side_2))
-  {
-    expr2tc r = cancel_neq(to_neg2t(side_1).value, to_neg2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
-
-  // (~x) != (~y) -> x != y
-  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
-  {
-    expr2tc r =
-      cancel_neq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
+  if (expr2tc r = cancel_common_unary_operand(side_1, side_2, rebuild_neq);
+      !is_nil_expr(r))
+    return r;
 
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
