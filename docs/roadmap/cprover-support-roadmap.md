@@ -1586,6 +1586,24 @@ Ranked by harnesses recovered per fix:
 5. **The `ptr::unique` false alarm** — only 3 harnesses, but it is the corpus's *only*
    remaining correctness defect.
 
+**Item 5's family reproduces on plain C, no Kani binary needed.** Both siblings lose a
+pointer's identity when it travels through raw bytes:
+
+- A pointer stored through one union arm was invisible to a read through another —
+  `value_sett::get_value_set_rec` keyed the object under the path the *write* spelled and
+  looked up the path the *read* spelled. PR #7369.
+- `memcpy` between a pointer object and a one-pointer struct fell back to `__memcpy_impl`'s
+  byte loop, which drops the pointer to an INVALID value. The structural graft that should
+  have caught it matched sub-objects by *depth* rather than by *type*: `extract_subobject`
+  stopped at the shallowest byte-range match (the whole struct) and `replace_subobject` then
+  rejected it against the destination's pointer leaf. Fixed in `memory_ops.cpp`;
+  `regression/esbmc/memcpy_pointer_subobject{,_fail}`.
+
+The corpus's own shape — `byte_extract_little_endian({ .=&x }, 0)` in `NonNull::as_ptr` — has
+no local producer: `migrate.cpp:1647` is the only path that builds it and `goto-cc` does not
+persist `byte_extract`. Building the Kani corpus locally therefore remains the enabler for
+items 2-4 as well as for the last leg of item 5.
+
 **Reproduce:** as before, the symbol is `_` + the text after `__` in the `.out` filename;
 `esbmc --binary <file>.out --function <symbol>` against
 `cbmc <file>.out --function <symbol> --object-bits 12`. Beware the bare-name collision
