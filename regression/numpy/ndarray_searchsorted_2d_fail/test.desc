@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.ndarray.searchsorted\(\) currently supports 1-D arrays only
