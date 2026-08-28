@@ -725,6 +725,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R36** | **High (no verdict, then spurious counterexample, default configuration)** — found by code review of R35's fix, §15 M9 (R36) | **Relational comparison read pointer offsets unsigned, so a pointer below its object sorted above the base.** `char *b = a; char *below = b - 1;` gives `below >= b` — `assert(!(below >= b))` fails while `__ESBMC_POINTER_OFFSET(below) == -1` verifies on the same expression. The consequence is that `for (p = end; p >= begin; p--)` **never terminates**: the guard stays true below the base, so the loop exhausts its unwinding bound and then dereferences out of bounds — one unwinding-assertion failure and one spurious out-of-bounds report on a program gcc runs clean. `convert_ptr_cmp` did `typecast2tc(uint, pointer_offset2tc(sint, side))`; the stated reason was that an object larger than half the address space would flip the sign of its upper offsets, but that object is already unrepresentable in the signed `pointer_offset2t` every other consumer reads | `src/solvers/smt/smt_memspace.cpp`, `convert_ptr_cmp`; the cast dates to `79c621ff20` (#1537), which changed the cross-object arm and carried the unsigned reading in unremarked | `regression/esbmc/ptr_rel_below_base{,_fail}` | **Fixed**: drop the two typecasts and compare the signed offsets. The lexicographic object-id step is untouched, so cross-object ordering — the only thing #1537 was about — is unchanged, and it is still a total order |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (KNOWNBUG) | Open: capping allocations at `PTRDIFF_MAX` would make the signed reading exact — C11 6.5.6p9 already requires `ptrdiff_t` to represent any in-object difference, and the model computes that difference signed. Verify the glibc precedent before citing it |
 | **R43** | **Medium–High (no verdict, default configuration)** — found by a loop-bound spelling census, §15 M9 (R43); **FIXED**, same entry | **A loop whose end is spelled `&a[n]` never terminates.** `for (int *p = a; p != &a[4]; ++p)` unwinds forever under default flags: `expr2t::simplify` returned nil for every `address_of`, so `&a[4]` never became `&a[0] + 4` and the guard was never decided against the `a + k` the induction variable carries. Spelling the same bound `a + 4` folds, which is why the shape survived — one spelling of the idiom works and the other hangs | `expr2t::simplify`'s `address_of_id` early return, `src/util/expr/expr_simplifier.cpp`; the skipped fold is `address_of2t::do_simplify` in the same file | `regression/esbmc/addressof_index_bound{,_fail}` | **Fixed**: run the node's own `do_simplify` while still skipping the operand walk. The 2006 comment guards against simplifying *operands* — `do_simplify` never touches `source_value`, so the guard and the fold were never in conflict |
+| **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
 | **R38** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R37's fix, §15 M9 (R38); **FIXED**, §15 M9 (R38 fix) | **R37 survives through `alloca` and `realloc`.** The `PTRDIFF_MAX` cap R37 installs is gated on `is_malloc`, and `symex_realloc` never bounds its size at all, so both still lay out an object whose upper offsets alias the below-base encoding. `char *p = alloca(n); char *q = p + n; assert(q >= p);` reports `FAILED` at `n = 0x8000000000000000` — the same witness value R37's row records — and the `realloc` spelling fails at `0xFFFFFFFFFFFFFFDF`. The `malloc` spelling of the same program verifies, so the three allocation paths now disagree about the same property | the `is_malloc` gates on the size guards in `src/goto-symex/builtin_functions/memory_alloc.cpp`; `goto_symext::symex_realloc`, which hands its size straight to `create_dynamic_memory_symbol` | `regression/esbmc/ptr_rel_huge_object_alloca`, `ptr_rel_huge_object_realloc` (both now CORE), `ptr_rel_huge_object_force_success` (KNOWNBUG), `force_malloc_success_negative_indirect` | **FIXED**, §15 M9 (R38 fix): `alloca` bounds by assumption (it has no failure outcome to report), `realloc` joins the cap to its failure condition after the zero-size check. Both recorded obstacles dissolved — `getenv` never needed changing, and the 400 s blow-up belonged to the reverted attempt's shared helper. **Residual, measured and left open**, §15 M9 (R38 residual): under `--force-malloc-success` and `--force-realloc-success` the cap is not applied, since assuming it away would prune a negative-size request vacuously. Exempting that case by inspecting the argument's syntax was built and **refuted** — one intervening assignment (`size_t n = a; malloc(n)`) hides the typecast, the cap is assumed anyway, and a reachable `assert(0)` becomes a false SUCCESSFUL. Every other cut is worse or costs the >400 s M9 (R37) measured. The defect stays confined to allocations at or above 8 EiB |
 | **R39** | **High (false SUCCESSFUL, default configuration)** — found by code review of R38's fix, §15 M9 (R39); **FIXED**, same entry | **The cap's *constant* arm is still gated on `is_malloc`, and above the layable bound that is a vacuous proof.** R38 un-gated the symbolic arm; the constant classification at `memory_alloc.cpp:671` — #6660's, which returns NULL for a request `malloc` cannot serve — was left `malloc`-only. `char *p = __builtin_alloca(-1); p[0] = 1; assert(0);` reports **`VERIFICATION SUCCESSFUL`**: the request exceeds `max_layable_size()`, the address-space constraint is unsatisfiable, and every execution is pruned — R25's mechanism, surviving in the path #6660 did not classify. Between `PTRDIFF_MAX` and that bound the same gate reproduces R38's witness verbatim, at a *constant* size. The `malloc` spelling of both programs is correct | the `is_malloc` gate on the constant arm of `goto_symext::symex_mem`, `src/goto-symex/builtin_functions/memory_alloc.cpp`; pre-existing since **#6660** | `regression/esbmc/alloca_const_above_layable`, `ptr_rel_huge_object_alloca_const`, `alloca_ptrdiff_max` (all CORE) | **Fixed**: classify a constant request for either path, and report it for `alloca` (`alloca: size exceeds PTRDIFF_MAX`) rather than bounding it by assumption. The asymmetry with R38's symbolic arm is the principle — an assumption that prunes *some* UB executions is a bound, one that prunes *all* of them is a vacuous proof. NULL is handed back so no unrepresentable object is laid out; it does not model a failure C defines, the claim has already reported the program. **`--multi-property` masks the whole defect** — per-claim slicing drops the allocation, so the same program is `FAILED` under it and `SUCCESSFUL` by default |
@@ -4297,6 +4298,9 @@ produces a non-zero result from an exactly-zero real, and is not attempted here.
 **Caveat.** This is measured on macOS only. The enclosure code is
 platform-independent, but the test is CORE and presumably green in CI, so either
 CI does not run it or something upstream differs by platform. Not resolved.
+**Resolved and the mechanism above corrected — see §15 M9 (R41).** The
+enclosure is not the cause; the caveat's "something upstream differs by
+platform" was the right instinct, and it is `math.h`.
 
 ### M9 (corpus sweep closed) — 2026-08-06, 1652 tests, three failures, all explained
 
@@ -6335,6 +6339,68 @@ models on darwin), 40 Python string-split and humaneval cases, two `termination`
 |---|---|---|
 | `regression/esbmc/addressof_index_bound` | `--unwind 6` | `SUCCESSFUL`, pinned on `Generated 9 VCC(s), 1 remaining after simplification`. The verdict alone is vacuous here — the control also verifies, having discharged the extra VCCs through the solver instead. `assert(sum == 4)` keeps the four iterations load-bearing |
 | `regression/esbmc/addressof_index_bound_fail` | `--unwind 6` | `FAILED` on `array bounds violated`, the bound spelled `&a[5]`. Anti-vacuity for the fold itself: a rewrite that discarded the symbol — the 2006 comment's hazard — would lose this check. It fails on the control too, so it is a guard, not a mutation pin |
+### M9 (R41) — 2026-08-26, the value the model reported was the value it denied
+
+M9 left `--ir-ieee` unable to prove `0*f == 0` and blamed the RNE enclosure's
+unconditional `eps_abs`. **That diagnosis is wrong**, and one line of the
+counterexample says so: it reports `r = 0.000000` and violates `r == 0` in the
+same breath. A model whose printed witness satisfies the property is not a
+value problem — the comparison is not reading the value.
+
+**The pattern names the term.** Seven probes under `--z3 --ir-ieee` with
+`!isnan(f)` and `!isinf(f)` assumed:
+
+| assertion | verdict |
+|---|---|
+| `0*f == 0`, `f*0 == 0`, `f-f == 0`, `!isnan(0*f)` | **FAILED** |
+| `f*1 == f`, `f+0 == f`, `f*2` finite, `isfinite(f)` | SUCCESSFUL |
+
+The failures are exactly the operations whose `invalid_op_nan` term reduces to
+`is_inf_real(f)` — `encode_ieee_mul`'s `0 × ±∞` arm when one side is the
+constant zero, and `encode_ieee_sub`'s `∞ − ∞` arm when both sides are `f`.
+Where that term is identically false (`f+0`, `f*1`, `f*2`) the identity holds.
+So the product carries a spurious NaN predicate and `apply_nan_cmp` returns
+`false` for any comparison, whatever the real value is.
+
+**Why `!isinf(f)` does not stop it.** `assert(isfinite(f))` proves SUCCESSFUL
+while `assert(f <= DBL_MAX)` **fails** — in one model, `f` is finite and above
+`DBL_MAX`. Infinity is encoded as a *single* real sentinel
+(`get_double_inf_sentinel`, one above max_normal), so an equality-based
+finiteness test excludes one point, while every consumer inside the encoder
+tests `|x| > max_normal`. Everything strictly between is simultaneously not
+infinite (by `==`) and infinite (by `>`).
+
+**That is why the test is green on Linux and red here, and it is not the
+solver.** Z3 differs too — 4.8.12 in CI against 4.16.0 locally — but the
+operative difference is `math.h`. Apple's expands `isinf(f)` to a
+`sizeof`-dispatched `__inline_isinfd`, whose body is `abs(__x) == +INFINITY`;
+glibc's reaches ESBMC's `isinf2t`, which `convert_is_inf` lowers to
+`|f| > max_normal` and which therefore does bound `f`. Both spellings are
+ordinary C, and a user writing `x != INFINITY` gets the macOS behaviour on
+either platform.
+
+**Fix: assert the missing half of representability.** `convert_terminal`
+already constrains a nondet float out of the sub-subnormal gap; the same
+branch now also asserts `|x| <= max_normal ∨ |x| == sentinel`. That the
+sentinel is the only representable magnitude above max_normal is not an
+assumption — arithmetic saturates there, measured: `DBL_MAX*2` and `DBL_MAX +
+DBL_MAX` both prove `== INFINITY`.
+
+**Direction is incompleteness (P1).** The enclosure over-approximates and the
+spurious NaN produces a counterexample, never a proof. Probed for the unsound
+direction — an assume made false by the spurious NaN, verifying the program
+vacuously — and did not find one: an assumption constrains the model rather
+than having to hold for every `f`, so the solver picks an in-range witness and
+`assert(0)` still fails, patched and unpatched alike.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/floats/ir_ieee_symbol_magnitude` | `--ir-ieee --z3` | `CORE`, `SUCCESSFUL`; **FAILED** on an unpatched control binary. Uses `f == f` and `f != ±INF` rather than `isinf`, so it pins the defect on glibc as well — the `isinf` spelling would already pass there and pin nothing |
+| `regression/floats/ir_ieee_symbol_magnitude_fail` | `--ir-ieee --z3` | `CORE`, `FAILED` both patched and unpatched — the preconditions leave `f` free, so the test above is not vacuous |
+| `regression/esbmc/github_2572_2` | `--z3 --ir-ieee` | `SUCCESSFUL`, was FAILED here; green on Linux throughout |
+| `-L floats`, `-L esbmc/` | `-j6` | 171/171 and 1914/1915; `bundled_headers_from_vfs` fails identically on an unpatched control |
+
+Registered as **R41**.
 
 ### M9 (R28 diagnostic) — 2026-08-26, the proof that says nothing and looks the same
 
