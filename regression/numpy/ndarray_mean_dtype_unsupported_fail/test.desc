@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.ndarray.mean\(\) does not support keepdims, where, out, initial or dtype arguments yet
+^ERROR: TypeError: numpy.ndarray.mean\(\) does not support keepdims, where, out or dtype arguments yet
