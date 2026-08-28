@@ -505,6 +505,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
+  reject_unknown_numpy_view_call(element);
+
   // A callable instance: `c(args)` where c is an object whose class defines
   // __call__. Calling the instance directly treats it as a function and aborts
   // in to_code_type (the receiver's type is a class struct, not code). Rewrite
