@@ -85,18 +85,26 @@ protected:
     ULONG,
     LONGLONG,
     ULONGLONG,
+    // Integer rank, however wide, sits below every floating type
+    // (C17 6.3.1.8) and below PTR: pointer arithmetic converts neither
+    // operand (6.5.6).
+    INT128,
+    UINT128,
     SINGLE,
     DOUBLE,
     LONGDOUBLE,
     VOIDPTR,
     PTR,
-    OTHER,
-    INT128,
-    UINT128
+    OTHER
   };
 
   c_typet get_c_type(const typet &type);
   c_typet get_c_type(const type2tc &type);
+
+  // Shared by both get_c_type overloads so the two copies cannot drift on the
+  // width buckets, which is the divergence unit/util/c_typecast.test.cpp pins.
+  static c_typet rank_integer(unsigned width, bool is_signed);
+  static c_typet rank_floating(unsigned width);
 
   void implicit_typecast_arithmetic(exprt &expr, c_typet c_type);
 
