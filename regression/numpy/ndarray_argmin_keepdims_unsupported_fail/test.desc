@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.ndarray.argmin\(\) does not support out or keepdims arguments yet
+^ERROR: TypeError: numpy.argmin\(\) does not support axis, keepdims, where, out, initial or dtype arguments yet
