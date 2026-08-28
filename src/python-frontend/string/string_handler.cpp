@@ -3112,6 +3112,7 @@ exprt string_handler::handle_string_attribute_call(
         *this,
         method_name,
         call_json,
+        receiver_json,
         args,
         keyword_values,
         get_receiver_expr,

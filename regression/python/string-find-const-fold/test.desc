@@ -1,0 +1,5 @@
+CORE
+main.py
+--goto-functions-only
+^ *ASSIGN i=6;$
+^ *ASSIGN j=7;$
