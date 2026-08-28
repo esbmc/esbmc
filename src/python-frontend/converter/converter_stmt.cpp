@@ -1951,7 +1951,9 @@ python_converter::classify_numpy_method_call(
     "prod",
     "std",
     "var",
-    "diagonal"};
+    "diagonal",
+    "argmin",
+    "argmax"};
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
   const bool supported_copy_method =
@@ -2448,20 +2450,46 @@ python_converter::get_numpy_nditer_logical_shape(
       reshape_it != numpy_reshape_view_info_.end())
     return reshape_it->second.view_shape;
 
-  auto transpose_it = numpy_transpose_view_info_.find(root_id);
-  if (transpose_it == numpy_transpose_view_info_.end())
+  if (auto transpose_it = numpy_transpose_view_info_.find(root_id);
+      transpose_it != numpy_transpose_view_info_.end())
+  {
+    const symbolt *source = symbol_table_.find_symbol(
+      resolve_numpy_array_storage_alias_id(transpose_it->second.source_id));
+    if (source == nullptr)
+      return std::nullopt;
+
+    const namespacet ns(symbol_table_);
+    std::vector<std::size_t> shape =
+      numpy_shape_from_type(ns, ns.follow(source->get_type()));
+    if (transpose_it->second.rank == 2 && transpose_it->second.swaps_axes)
+      std::reverse(shape.begin(), shape.end());
+    return shape;
+  }
+
+  // Fallback: no registered pointer/reshape/transpose view entry for this
+  // id (this also covers a plain ndarray and a view-copy tracked only via
+  // numpy_view_copy_sources_, both of which still carry their own concrete
+  // array_typet). Derive shape straight from that type, the same way every
+  // view branch above eventually does for its source. This is what lets
+  // .tolist()/.any()/.all() reuse the exact same descriptor materialization
+  // path for a bare `np.array(...)` instead of needing one of their own.
+  // Rank is capped at 2 to match that path's own scope -- without it, a
+  // 3-D+ array would get a shape here instead of declining, and reach the
+  // descriptor path's "rank 1 or 2" rejection instead of this family's own
+  // "constant numeric inputs only" one (regression/numpy/
+  // sum_constructor_non_numeric_fail pins the latter).
+  if (numpy_array_symbols_.count(root_id) == 0)
     return std::nullopt;
 
-  const symbolt *source = symbol_table_.find_symbol(
-    resolve_numpy_array_storage_alias_id(transpose_it->second.source_id));
-  if (source == nullptr)
+  const symbolt *plain = symbol_table_.find_symbol(root_id);
+  if (plain == nullptr)
     return std::nullopt;
 
   const namespacet ns(symbol_table_);
   std::vector<std::size_t> shape =
-    numpy_shape_from_type(ns, ns.follow(source->get_type()));
-  if (transpose_it->second.rank == 2 && transpose_it->second.swaps_axes)
-    std::reverse(shape.begin(), shape.end());
+    numpy_shape_from_type(ns, ns.follow(plain->get_type()));
+  if (shape.empty() || shape.size() > 2)
+    return std::nullopt;
   return shape;
 }
 

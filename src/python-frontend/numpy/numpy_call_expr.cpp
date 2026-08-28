@@ -3373,6 +3373,24 @@ void numpy_call_expr::reject_unsupported_transpose_axes_rank(
   }
 }
 
+// try_reduce_descriptor_call already rejects unsupported keywords for
+// sum/mean/min/max when the argument is a tracked array/view; this covers
+// the flattened fallback path for those (a genuine inline literal, not a
+// tracked symbol) and the only path argmin/argmax ever take (they have no
+// descriptor-call fast path). Without it, a keyword here (e.g.
+// a.sum(initial=10), rewritten to np.sum(a, initial=10)) was silently
+// dropped by the extraction that follows instead of being honoured or
+// rejected (ADR-NP-003 principle 3).
+void numpy_call_expr::reject_unsupported_flattened_reducer_keywords(
+  const std::string &function) const
+{
+  if (numpy_reducer_has_unsupported_keywords(call_) || call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support axis, keepdims, where, out, initial or dtype "
+      "arguments yet");
+}
+
 template <typename T>
 static auto create_list(int size, T default_value)
 {
@@ -6178,6 +6196,8 @@ exprt numpy_call_expr::get()
     };
     if (function == "arange")
       return get_arange_expr();
+
+    reject_unsupported_flattened_reducer_keywords(function);
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);

@@ -71,4 +71,11 @@ private:
   std::optional<exprt> try_reduce_descriptor_call(const std::string &function);
   void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
   void reject_unsupported_transpose_axes_rank(const std::string &function);
+
+  // sum/prod/min/max/mean/argmin/argmax's flattened fallback path (a
+  // genuine inline literal, or argmin/argmax, which never go through
+  // try_reduce_descriptor_call's own keyword check). Split out of get() for
+  // the same reason as get_arange_expr()/try_get_pointer_view_call_result().
+  void reject_unsupported_flattened_reducer_keywords(
+    const std::string &function) const;
 };
