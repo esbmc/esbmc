@@ -2183,6 +2183,14 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
       assert_ast(
         mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+      // The other half of representability: a magnitude strictly between
+      // max_normal and the infinity sentinel is a value no operation can
+      // produce, and the two readings of "infinite" disagree there --
+      // encode_ieee_mul's invalid-operation term tests |x| > max_normal
+      // while a math.h isinf() that compares against INFINITY tests
+      // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
+      ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
     }
 
     return sym_ast;
