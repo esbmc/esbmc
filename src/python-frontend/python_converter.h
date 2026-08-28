@@ -956,6 +956,20 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  /// Carries the list element-type map from @p rhs to @p lhs on a
+  /// container-level list assignment, resolving dict `.keys`/`.values`
+  /// members to the dict's internal list symbol.
+  void propagate_list_type_info(
+    const exprt &lhs,
+    const exprt &rhs,
+    symbolt *lhs_symbol);
+
+  /// Propagates the element-type map of the list backing a dict's `.keys` /
+  /// `.values` member expression @p rhs onto @p lhs_identifier.
+  void propagate_dict_member_list_type_info(
+    const exprt &rhs,
+    const std::string &lhs_identifier);
+
   // =========================================================================
   // Dictionary assignment helper methods
   // =========================================================================

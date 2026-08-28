@@ -5196,6 +5196,67 @@ python_converter::rewrite_assign_rhs_node(const nlohmann::json &ast_node) const
   return effective_ast_node;
 }
 
+void python_converter::propagate_dict_member_list_type_info(
+  const exprt &rhs,
+  const std::string &lhs_identifier)
+{
+  const exprt &dict_sym = rhs.op0();
+  // get_component_name() returns an irep_idt by value; bind the string
+  // by value so it is copied out before that temporary is destroyed
+  // (GCC -Wdangling-reference under -Werror).
+  const std::string component =
+    to_member_expr(rhs).get_component_name().as_string();
+  if (!dict_sym.is_symbol() || (component != "keys" && component != "values"))
+    return;
+
+  const std::string &dict_id = dict_sym.identifier().as_string();
+  const std::string &src =
+    python_dict_handler::get_internal_list_id(dict_id, component == "keys");
+  if (src.empty())
+    return;
+
+  python_list::copy_type_info(src, lhs_identifier);
+
+  // Tuple values are recorded under the $dict_value_types$ key, not the
+  // values-list id (github_3719_4), so the copy above is a no-op for them.
+  // Propagate the stored tuple struct type so the generic list tuple-element
+  // read resolves it.
+  if (component != "values")
+    return;
+
+  typet tuple_t = dict_handler_->recorded_tuple_value_type(dict_sym);
+  if (
+    !tuple_t.is_nil() && !tuple_t.is_empty() &&
+    python_list::get_list_type_map_size(lhs_identifier) == 0)
+    python_list::add_type_info_entry(lhs_identifier, std::string(), tuple_t);
+}
+
+void python_converter::propagate_list_type_info(
+  const exprt &lhs,
+  const exprt &rhs,
+  symbolt *lhs_symbol)
+{
+  const std::string &lhs_identifier = lhs.identifier().as_string();
+  const std::string &rhs_identifier = rhs.identifier().as_string();
+  python_list::copy_type_info(rhs_identifier, lhs_identifier);
+
+  // When rhs is dict_sym.keys / dict_sym.values (a member expression
+  // rather than a list symbol), rhs_identifier is empty and
+  // copy_type_info above is a no-op.  Look up the dict's internal
+  // keys-list or values-list symbol and propagate from there instead.
+  if (rhs_identifier.empty() && rhs.id() == exprt::member)
+    propagate_dict_member_list_type_info(rhs, lhs_identifier);
+
+  if (lhs_symbol)
+  {
+    const symbolt *rhs_symbol = nullptr;
+    if (rhs.is_symbol())
+      rhs_symbol = find_symbol(rhs.identifier().as_string());
+    if (rhs_symbol && rhs_symbol->is_set)
+      lhs_symbol->is_set = true;
+  }
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6143,60 +6204,7 @@ void python_converter::get_var_assign(
     if (
       lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type() &&
       !assignment_target_is_subscript(ast_node))
-    {
-      const std::string &lhs_identifier = lhs.identifier().as_string();
-      const std::string &rhs_identifier = rhs.identifier().as_string();
-      python_list::copy_type_info(rhs_identifier, lhs_identifier);
-
-      // When rhs is dict_sym.keys / dict_sym.values (a member expression
-      // rather than a list symbol), rhs_identifier is empty and
-      // copy_type_info above is a no-op.  Look up the dict's internal
-      // keys-list or values-list symbol and propagate from there instead.
-      if (rhs_identifier.empty() && rhs.id() == exprt::member)
-      {
-        const exprt &dict_sym = rhs.op0();
-        // get_component_name() returns an irep_idt by value; bind the string
-        // by value so it is copied out before that temporary is destroyed
-        // (GCC -Wdangling-reference under -Werror).
-        const std::string component =
-          to_member_expr(rhs).get_component_name().as_string();
-        if (
-          dict_sym.is_symbol() &&
-          (component == "keys" || component == "values"))
-        {
-          const std::string &dict_id = dict_sym.identifier().as_string();
-          const std::string &src = python_dict_handler::get_internal_list_id(
-            dict_id, component == "keys");
-          if (!src.empty())
-          {
-            python_list::copy_type_info(src, lhs_identifier);
-            // Tuple values are recorded under the $dict_value_types$ key,
-            // not the values-list id (github_3719_4), so the copy above is
-            // a no-op for them. Propagate the stored tuple struct type so
-            // the generic list tuple-element read resolves it.
-            if (component == "values")
-            {
-              typet tuple_t =
-                dict_handler_->recorded_tuple_value_type(dict_sym);
-              if (
-                !tuple_t.is_nil() && !tuple_t.is_empty() &&
-                python_list::get_list_type_map_size(lhs_identifier) == 0)
-                python_list::add_type_info_entry(
-                  lhs_identifier, std::string(), tuple_t);
-            }
-          }
-        }
-      }
-
-      if (lhs_symbol)
-      {
-        const symbolt *rhs_symbol = nullptr;
-        if (rhs.is_symbol())
-          rhs_symbol = find_symbol(rhs.identifier().as_string());
-        if (rhs_symbol && rhs_symbol->is_set)
-          lhs_symbol->is_set = true;
-      }
-    }
+      propagate_list_type_info(lhs, rhs, lhs_symbol);
     else if (
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
