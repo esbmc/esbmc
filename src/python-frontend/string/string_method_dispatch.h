@@ -55,6 +55,7 @@ std::optional<exprt> dispatch_spacing_and_padding_methods(
 std::optional<exprt> dispatch_replace_method(
   string_handler &self,
   const std::string &method_name,
+  const nlohmann::json &call_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,

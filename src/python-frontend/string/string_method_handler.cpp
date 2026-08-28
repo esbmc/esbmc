@@ -470,9 +470,41 @@ using string_call_utils::required_arg_node_or_throw;
 using string_call_utils::required_constant_int_arg;
 using string_call_utils::resolve_positional_or_keyword_arg;
 
+// Fold subject.replace(old, new[, count]) when every operand is a
+// compile-time constant str. Without it the call reaches
+// __python_str_replace with all arguments constant and the model's bounded
+// scan-and-copy loops unwind against --unwind rather than the known length.
+static std::optional<exprt> fold_constant_replace(
+  const nlohmann::json &call_json,
+  const std::function<exprt()> &get_receiver_expr,
+  python_converter &converter)
+{
+  exprt recv = get_receiver_expr();
+  if (recv.is_symbol())
+  {
+    const symbolt *sym =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (sym && !sym->get_value().is_nil())
+      recv = sym->get_value();
+  }
+
+  // bytes are modelled as an int array; folding one through the char-array
+  // string builder would retype it.
+  const typet &recv_type = recv.type();
+  if (!recv_type.is_array() || recv_type.subtype() != char_type())
+    return std::nullopt;
+
+  std::string folded;
+  if (!string_handler::extract_constant_string(call_json, converter, folded))
+    return std::nullopt;
+
+  return converter.get_string_builder().build_string_literal(folded);
+}
+
 std::optional<exprt> dispatch_replace_method(
   string_handler &self,
   const std::string &method_name,
+  const nlohmann::json &call_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,
@@ -481,6 +513,11 @@ std::optional<exprt> dispatch_replace_method(
 {
   if (method_name != "replace")
     return std::nullopt;
+
+  if (
+    std::optional<exprt> folded =
+      fold_constant_replace(call_json, get_receiver_expr, converter))
+    return folded;
 
   ensure_allowed_keywords(method_name, keyword_values, {"old", "new", "count"});
   if (args.size() > 3)
