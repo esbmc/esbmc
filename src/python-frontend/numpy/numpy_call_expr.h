@@ -61,4 +61,14 @@ private:
   exprt handle_trace_call();
   exprt handle_fill_diagonal_call();
   std::optional<exprt> handle_ravel_pointer_view_attempt();
+  exprt handle_axis_permutation_view_call(const std::string &function);
+  exprt handle_broadcast_to_call();
+  std::optional<exprt>
+  try_build_nditer_descriptor_list(const nlohmann::json &arg);
+  std::optional<exprt> try_materialize_descriptor_copy_call();
+  std::optional<exprt>
+  try_materialize_descriptor_array_call(nlohmann::json &array_arg);
+  std::optional<exprt> try_reduce_descriptor_call(const std::string &function);
+  void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
+  void reject_unsupported_transpose_axes_rank(const std::string &function);
 };

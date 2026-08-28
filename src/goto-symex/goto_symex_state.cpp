@@ -8,6 +8,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 
 goto_symex_statet::goto_symex_statet(
@@ -413,19 +414,6 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   }
 }
 
-/// Base name of the variable a forall2t/exists2t binds, or an empty id when
-/// @p binder is not the (typecast of) address_of(symbol) shape the solver
-/// expects.
-static irep_idt quantifier_bound_name(const expr2tc &binder)
-{
-  expr2tc sym = binder;
-  while (is_typecast2t(sym))
-    sym = to_typecast2t(sym).from;
-  if (is_address_of2t(sym))
-    sym = to_address_of2t(sym).ptr_obj;
-  return is_symbol2t(sym) ? to_symbol2t(sym).thename : irep_idt();
-}
-
 void goto_symex_statet::rename_quantified(
   expr2tc &expr,
   const std::set<irep_idt> &bound)
@@ -465,7 +453,8 @@ void goto_symex_statet::rename_quantified(
     rename(binder);
 
     std::set<irep_idt> inner = bound;
-    inner.insert(quantifier_bound_name(binder));
+    if (irep_idt name = quantifier_bound_name(binder); !name.empty())
+      inner.insert(name);
     rename_quantified(body, inner);
     return;
   }

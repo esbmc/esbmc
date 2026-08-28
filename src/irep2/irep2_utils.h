@@ -464,4 +464,17 @@ void get_symbols(
 std::vector<expr2tc>
 pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops);
 
+/** Base name of the variable a forall2t/exists2t binds, or an empty id when
+ *  @p binder holds no symbol at all. Strips typecasts, then the address_of
+ *  the solver expects around a binder that names a variable directly.
+ *
+ *  A binder of any other shape yields the name of whatever symbol it does
+ *  hold: `void *q = &i; __ESBMC_forall(q, ...)` binds `i` but reads as `q`.
+ *  Callers that must not confuse the two want the strict form below. */
+irep_idt quantifier_bound_name(const expr2tc &binder);
+
+/** As quantifier_bound_name, but empty unless @p binder is (a typecast of)
+ *  address_of(symbol), i.e. unless it names the bound variable directly. */
+irep_idt quantifier_direct_bound_name(const expr2tc &binder);
+
 #endif /* UTIL_IREP2_UTILS_H_ */
