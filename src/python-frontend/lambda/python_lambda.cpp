@@ -1,5 +1,6 @@
 #include <python-frontend/lambda/python_lambda.h>
 #include <optional>
+#include <set>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
@@ -254,9 +255,9 @@ bool same_position(const nlohmann::json &a, const nlohmann::json &b)
          a.value("col_offset", -1) == b.value("col_offset", -2);
 }
 
-// The statement list holding `lambda_node`'s binding, plus the name it binds.
-// A lambda is lowered eagerly at its assignment, so this is the only place a
-// later call through that name is still visible (#7328).
+// A lambda is lowered eagerly at its assignment, so the statement list holding
+// that assignment is the only place a later call through the bound name is
+// still visible (#7328).
 const nlohmann::json *find_binding_scope(
   const nlohmann::json &node,
   const nlohmann::json &lambda_node,
@@ -303,12 +304,24 @@ struct call_argument_scan
   bool foreign_scope_call = false;
 };
 
+// Python opens a new binding scope at each of these, so `name`'s argument
+// inside one may denote a different object than the enclosing prefix builds.
+bool opens_binding_scope(const std::string &kind)
+{
+  static const std::set<std::string> kinds = {
+    "FunctionDef",
+    "AsyncFunctionDef",
+    "Lambda",
+    "ListComp",
+    "SetComp",
+    "DictComp",
+    "GeneratorExp"};
+  return kinds.count(kind) != 0;
+}
+
 // Argument `index` of every call to `name` under `node`. All of them, not just
 // the first: a lambda called with two different types has one frozen signature,
 // so committing to the first call's type would mistype the rest (#7328).
-// A call inside a nested `def` is recorded but not collected: `name`'s argument
-// there may bind to a different object than the enclosing prefix resolves to,
-// so the scan is abandoned rather than answered wrongly.
 void collect_call_arguments(
   const nlohmann::json &node,
   const std::string &name,
@@ -320,9 +333,10 @@ void collect_call_arguments(
 
   if (kind == "Call")
   {
-    const nlohmann::json &func = node.value("func", nlohmann::json::object());
+    const auto func = node.find("func");
     if (
-      func.value("_type", "") == "Name" && func.value("id", "") == name &&
+      func != node.end() && func->is_object() &&
+      func->value("_type", "") == "Name" && func->value("id", "") == name &&
       node.contains("args") && node["args"].is_array() &&
       node["args"].size() > index)
     {
@@ -336,50 +350,94 @@ void collect_call_arguments(
   if (!node.is_structured())
     return;
 
-  const bool child_nested =
-    nested || kind == "FunctionDef" || kind == "AsyncFunctionDef";
+  const bool child_nested = nested || opens_binding_scope(kind);
 
   for (const auto &child : node.items())
     collect_call_arguments(child.value(), name, index, child_nested, out);
 }
 
-// The element type a `name[k]` argument selects, or nil when it cannot be
+// Only a list literal materialises each element into a symbol whose type is
+// what `name[k]` yields. Every other builder -- concatenation above all --
+// records the source expression's type while the list object stores something
+// else, so typing a parameter from that entry aborts the frontend on the
+// argument check ("got struct, expected struct") (#7328).
+bool binds_list_literal(const nlohmann::json &scope, const std::string &name)
+{
+  bool found = false;
+  for (const auto &stmt : scope)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    // The frontend annotates a plain `x = [...]` into an AnnAssign, so both
+    // spellings have to be recognised here.
+    const std::string kind = stmt.value("_type", "");
+    const nlohmann::json *target = nullptr;
+    if (
+      kind == "Assign" && stmt.contains("targets") &&
+      stmt["targets"].is_array() && stmt["targets"].size() == 1)
+      target = &stmt["targets"][0];
+    else if (kind == "AnnAssign" && stmt.contains("target"))
+      target = &stmt["target"];
+
+    if (
+      target == nullptr || !target->is_object() ||
+      target->value("id", "") != name)
+      continue;
+
+    if (!stmt.contains("value") || stmt["value"].value("_type", "") != "List")
+      return false;
+    found = true;
+  }
+  return found;
+}
+
+// The element type a `name[k]` argument selects, or nothing when it cannot be
 // pinned down. A non-literal index names no single element type, and a
 // list-valued element is left alone: the list object pointer is not usable as
 // a parameter type here, and typing it as one makes the solver reject the
 // formula (#7328).
-typet subscript_element_type(
+std::optional<typet> subscript_element_type(
   const nlohmann::json &arg,
+  const nlohmann::json &scope,
   const std::string &prefix,
   const typet &list_type)
 {
-  typet result;
-  result.make_nil();
-
   if (
     arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
     !arg["value"].is_object() || arg["value"].value("_type", "") != "Name" ||
     !arg.contains("slice"))
-    return result;
+    return std::nullopt;
 
   const nlohmann::json &slice = arg["slice"];
   if (
     !slice.is_object() || slice.value("_type", "") != "Constant" ||
     !slice.contains("value") || !slice["value"].is_number_unsigned())
-    return result;
+    return std::nullopt;
 
-  const typet elem = python_list::get_list_element_type(
-    prefix + arg["value"].value("id", ""), slice["value"].get<size_t>());
-  if (elem != typet() && elem != empty_typet() && elem != list_type)
-    result = elem;
-  return result;
+  const std::string base_name = arg["value"].value("id", "");
+  if (!binds_list_literal(scope, base_name))
+    return std::nullopt;
+
+  const std::string list_id = prefix + base_name;
+  const size_t index = slice["value"].get<size_t>();
+
+  // get_list_element_type() clamps an out-of-range index to element 0, so the
+  // recorded element id is what says the index names a real element.
+  if (python_list::get_list_element_id(list_id, index).empty())
+    return std::nullopt;
+
+  const typet elem = python_list::get_list_element_type(list_id, index);
+  if (elem == typet() || elem == empty_typet() || elem == list_type)
+    return std::nullopt;
+  return elem;
 }
 } // namespace
 
-std::vector<typet>
+std::vector<std::optional<typet>>
 python_lambda::call_site_argument_types(const nlohmann::json &element) const
 {
-  std::vector<typet> types;
+  std::vector<std::optional<typet>> types;
   if (
     !element.contains("args") || !element["args"].contains("args") ||
     !element["args"]["args"].is_array())
@@ -398,24 +456,26 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
   const size_t count = element["args"]["args"].size();
   for (size_t i = 0; i < count; ++i)
   {
-    typet resolved;
-    resolved.make_nil();
+    std::optional<typet> resolved;
 
     call_argument_scan scan;
     collect_call_arguments(*scope, bound_name, i, false, scan);
+    if (scan.foreign_scope_call)
+    {
+      types.push_back(std::nullopt);
+      continue;
+    }
 
     for (const nlohmann::json *arg : scan.args)
     {
-      const typet from_arg =
-        subscript_element_type(*arg, prefix, type_handler_.get_list_type());
+      const std::optional<typet> from_arg = subscript_element_type(
+        *arg, *scope, prefix, type_handler_.get_list_type());
 
       // Every call has to agree: one disagreeing call means the single frozen
       // signature cannot serve them all, so leave the parameter as it was.
-      if (
-        scan.foreign_scope_call || from_arg.is_nil() ||
-        (resolved.is_not_nil() && resolved != from_arg))
+      if (!from_arg || (resolved && *resolved != *from_arg))
       {
-        resolved.make_nil();
+        resolved.reset();
         break;
       }
       resolved = from_arg;
@@ -425,14 +485,14 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
   return types;
 }
 
-// A lambda parameter is typed by its annotation, else by string usage in the
-// body, else by the value the call site passes -- the `double` default rejects
-// any body that indexes its parameter (#7328).
+// The `double` default rejects any body that indexes its parameter (#7328), so
+// the call site is consulted when neither an annotation nor string usage says
+// otherwise.
 static typet lambda_parameter_type(
   const nlohmann::json &arg,
   const nlohmann::json &body_node,
   const std::string &arg_name,
-  const typet &from_call_site)
+  const std::optional<typet> &from_call_site)
 {
   if (arg.contains("annotation") && !arg["annotation"].is_null())
     return arg["annotation"].get<std::string>() == "str"
@@ -442,8 +502,8 @@ static typet lambda_parameter_type(
   if (is_param_used_as_string(body_node, arg_name))
     return gen_pointer_type(signed_char_type());
 
-  if (from_call_site.is_not_nil() && from_call_site.id() != irep_idt())
-    return from_call_site;
+  if (from_call_site)
+    return *from_call_site;
 
   return double_type();
 }
@@ -455,7 +515,7 @@ void python_lambda::process_lambda_parameters(
   const std::string &param_scope_id,
   const locationt &location,
   const nlohmann::json &body_node,
-  const std::vector<typet> &call_site_types)
+  const std::vector<std::optional<typet>> &call_site_types)
 {
   if (!args_node.contains("args") || !args_node["args"].is_array())
     return;
@@ -475,7 +535,7 @@ void python_lambda::process_lambda_parameters(
       body_node,
       arg_name,
       this_index < call_site_types.size() ? call_site_types[this_index]
-                                          : typet());
+                                          : std::nullopt);
 
     // Each lambda parameter is modelled as two symbols:
     //
@@ -603,7 +663,8 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
 
   // Resolve call-site argument types while the enclosing scope is still
   // current: the names they mention are invisible from the lambda's own scope.
-  const std::vector<typet> call_site_types = call_site_argument_types(element);
+  const std::vector<std::optional<typet>> call_site_types =
+    call_site_argument_types(element);
 
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);
