@@ -3735,6 +3735,48 @@ static expr2tc normalize_addressof_operands(
   return is_nil_expr(simplified) ? rebuilt : simplified;
 }
 
+/// `(&x + c1) ~ (&x + c2)` reduces to `c1 ~ c2`: when the bases match,
+/// comparing addresses is comparing offsets. Split out of simplify_relations
+/// to keep its decision count off the complexity gate.
+template <typename constructor>
+static expr2tc cancel_shared_pointer_base(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (
+    !is_add2t(side_1) || !is_add2t(side_2) || !is_pointer_type(side_1) ||
+    !is_pointer_type(side_2))
+    return expr2tc();
+
+  const add2t &lhs = to_add2t(side_1);
+  const add2t &rhs = to_add2t(side_2);
+
+  // Coerce both offsets to a common type so the rebuilt node is well-formed
+  // even when they carry different concrete bv widths — `arr + (int)c` vs
+  // `arr + (long)c` from a p++ chain.
+  auto cancel = [&type](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc a = a_in, b = b_in;
+    if (!coerce_to_common_type(a, b))
+      return expr2tc();
+    return typecast_check_return(type, make_irep<constructor>(a, b));
+  };
+
+  // {base to match, its counterpart} then {the two surviving offsets}.
+  const expr2tc *const combinations[][4] = {
+    {&lhs.side_1, &rhs.side_1, &lhs.side_2, &rhs.side_2},
+    {&lhs.side_2, &rhs.side_2, &lhs.side_1, &rhs.side_1},
+    {&lhs.side_1, &rhs.side_2, &lhs.side_2, &rhs.side_1},
+    {&lhs.side_2, &rhs.side_1, &lhs.side_1, &rhs.side_2}};
+
+  for (const auto &c : combinations)
+    if (*c[0] == *c[1] && is_constant(*c[2]) && is_constant(*c[3]))
+      if (expr2tc r = cancel(*c[2], *c[3]); !is_nil_expr(r))
+        return r;
+
+  return expr2tc();
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_relations(
   const type2tc &type,
@@ -3764,61 +3806,10 @@ static expr2tc simplify_relations(
         !is_nil_expr(r))
       return r;
 
-    // Pointer comparison with a shared base: (&x + 1 == &x + 2) => (1 == 2).
-    // address = pointer + offset; when the bases match, comparing addresses
-    // reduces to comparing offsets.
-    if (
-      is_add2t(simplified_side_1) && is_add2t(simplified_side_2) &&
-      is_pointer_type(simplified_side_1) && is_pointer_type(simplified_side_2))
-    {
-      const add2t &lhs = to_add2t(simplified_side_1);
-      const add2t &rhs = to_add2t(simplified_side_2);
-
-      // Shared-base pointer cancellation reduces to a relation between the
-      // two surviving offsets. Coerce both to a common type so the rebuilt
-      // node is well-formed even when the offsets carry different concrete
-      // bv widths — `arr + (int)c` vs `arr + (long)c` from a p++ chain.
-      auto cancel = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-        expr2tc a = a_in, b = b_in;
-        if (!coerce_to_common_type(a, b))
-          return expr2tc();
-        expr2tc rel = make_irep<constructor>(a, b);
-        return typecast_check_return(type, rel);
-      };
-
-      if (
-        lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_2))
-      {
-        expr2tc r = cancel(lhs.side_2, rhs.side_2);
-        if (!is_nil_expr(r))
-          return r;
-      }
-      if (
-        lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_1))
-      {
-        expr2tc r = cancel(lhs.side_1, rhs.side_1);
-        if (!is_nil_expr(r))
-          return r;
-      }
-      if (
-        lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_1))
-      {
-        expr2tc r = cancel(lhs.side_2, rhs.side_1);
-        if (!is_nil_expr(r))
-          return r;
-      }
-      if (
-        lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_2))
-      {
-        expr2tc r = cancel(lhs.side_1, rhs.side_2);
-        if (!is_nil_expr(r))
-          return r;
-      }
-    }
+    if (expr2tc r = cancel_shared_pointer_base<constructor>(
+          type, simplified_side_1, simplified_side_2);
+        !is_nil_expr(r))
+      return r;
 
     return expr2tc();
   }
