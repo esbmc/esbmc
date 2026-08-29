@@ -291,11 +291,14 @@ const nlohmann::json *find_binding_scope(
   return nullptr;
 }
 
-// Argument `index` of the first call to `name` found under `node`.
-const nlohmann::json *find_call_argument(
+// Argument `index` of every call to `name` under `node`. All of them, not just
+// the first: a lambda called with two different types has one frozen signature,
+// so committing to the first call's type would mistype the rest (#7328).
+void collect_call_arguments(
   const nlohmann::json &node,
   const std::string &name,
-  size_t index)
+  size_t index,
+  std::vector<const nlohmann::json *> &out)
 {
   if (node.is_object() && node.value("_type", "") == "Call")
   {
@@ -304,20 +307,14 @@ const nlohmann::json *find_call_argument(
       func.value("_type", "") == "Name" && func.value("id", "") == name &&
       node.contains("args") && node["args"].is_array() &&
       node["args"].size() > index)
-      return &node["args"][index];
+      out.push_back(&node["args"][index]);
   }
 
   if (!node.is_structured())
-    return nullptr;
+    return;
 
   for (const auto &child : node.items())
-  {
-    const nlohmann::json *found =
-      find_call_argument(child.value(), name, index);
-    if (found != nullptr)
-      return found;
-  }
-  return nullptr;
+    collect_call_arguments(child.value(), name, index, out);
 }
 } // namespace
 
@@ -345,17 +342,21 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
   {
     typet resolved;
     resolved.make_nil();
-    const nlohmann::json *arg = find_call_argument(*scope, bound_name, i);
-    if (arg != nullptr)
+
+    std::vector<const nlohmann::json *> args;
+    collect_call_arguments(*scope, bound_name, i, args);
+
+    for (const nlohmann::json *arg : args)
     {
-      const std::string arg_kind = arg->value("_type", "");
+      typet from_arg;
+      from_arg.make_nil();
 
       // A subscript yields an element, whose registered type list_type_map
       // recorded when the list literal was converted. A list-valued element is
       // left alone: the list object pointer is not usable as a parameter type
       // here, and typing it as one makes the solver reject the formula.
       if (
-        arg_kind == "Subscript" && arg->contains("value") &&
+        arg->value("_type", "") == "Subscript" && arg->contains("value") &&
         (*arg)["value"].value("_type", "") == "Name")
       {
         typet elem = python_list::get_list_element_type(
@@ -363,8 +364,17 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
         if (
           elem != typet() && elem != empty_typet() &&
           elem != type_handler_.get_list_type())
-          resolved = elem;
+          from_arg = elem;
       }
+
+      // Every call has to agree: one disagreeing call means the single frozen
+      // signature cannot serve them all, so leave the parameter as it was.
+      if (from_arg.is_nil() || (resolved.is_not_nil() && resolved != from_arg))
+      {
+        resolved.make_nil();
+        break;
+      }
+      resolved = from_arg;
     }
     types.push_back(resolved);
   }
