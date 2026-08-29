@@ -111,6 +111,14 @@ private:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  /// The GCC `__sync_*` / C11 `__c11_atomic_*` half of
+  /// clang_c_adjust::adjust_side_effect_function_call: clang hands these
+  /// builtins over body-less, so the concrete instance has to be declared and
+  /// the callee repointed at it. A symbol-table side effect, so it ports
+  /// independently of the rest of that arm, exactly as declare_implicit_callee
+  /// does (§130).
+  void declare_polymorphic_builtin(expr2tc &expr);
+
   void adjust_expression_statement(expr2tc &expr);
   void promote_unary_bool_operand(expr2tc &expr);
   void adjust_struct(expr2tc &expr);
@@ -172,6 +180,9 @@ private:
 
   contextt &context;
   const bool sole_adjuster;
+  /// Location of the innermost enclosing statement, for the nodes that carry
+  /// none of their own.
+  locationt enclosing_location;
   namespacet ns{context};
 };
 

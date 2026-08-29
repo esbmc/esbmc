@@ -2,6 +2,7 @@
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/prefix.h>
+#include <util/expr/type2name.h>
 
 exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   const irep_idt &identifier,
@@ -314,7 +315,8 @@ static void convert_expression_to_code(exprt &expr)
 
 code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   const irep_idt &identifier,
-  const symbol_exprt &function_symbol)
+  const symbol_exprt &function_symbol,
+  contextt &context)
 {
   const irep_idt &identifier_with_type = function_symbol.get_identifier();
   const code_typet &code_type = to_code_type(function_symbol.type());
@@ -697,4 +699,76 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
 
   return block;
+}
+
+exprt clang_c_adjust::declare_gcc_polymorphic_builtin(
+  const symbol_exprt &callee,
+  const exprt::operandst &arguments,
+  const locationt &call_location,
+  contextt &context)
+{
+  const irep_idt &identifier = callee.identifier();
+  // The prefix these names are matched on is not reserved to the builtin, so
+  // an ordinary user function reaches here. Every arm binds arguments.front()
+  // and treats it as a pointer, which such a call need not supply: with no
+  // argument this segfaulted, and with a non-pointer one it tripped
+  // to_pointer_type's assertion -- and under NDEBUG cast a non-pointer instead.
+  if (arguments.empty() || !arguments.front().type().is_pointer())
+    return nil_exprt();
+
+  exprt poly = is_gcc_polymorphic_builtin(identifier, arguments);
+  if (poly.is_nil())
+    return nil_exprt();
+
+  auto &poly_args = to_code_type(poly.type()).arguments();
+
+  // For all atomic/sync polymorphic built-ins (which are the ones handled
+  // by typecheck_gcc_polymorphic_builtin), looking at the first parameter
+  // suffices to distinguish different implementations.
+  const typet &selector = poly_args.front().type();
+  const irep_idt identifier_with_type =
+    id2string(identifier) + "_" +
+    type2name(
+      selector.is_pointer() ? to_pointer_type(selector).subtype() : selector);
+
+  poly.identifier(identifier_with_type);
+  poly.name(callee.name());
+  poly.location() = call_location;
+
+  if (!context.find_symbol(identifier_with_type))
+  {
+    for (std::size_t i = 0; i < poly_args.size(); ++i)
+    {
+      const std::string param_name = "p_" + std::to_string(i);
+
+      // TODO: Just like the function parameter symbols in
+      // clang_c_convertert::get_function_param, adding this symbol to the
+      // context is only necessary for the migrate code.
+      symbolt param_symbol;
+      param_symbol.id = id2string(identifier_with_type) + "::" + param_name;
+      param_symbol.name = param_name;
+      param_symbol.location = callee.location();
+      param_symbol.set_type(poly_args[i].type());
+      param_symbol.lvalue = true;
+      param_symbol.is_parameter = true;
+      param_symbol.file_local = true;
+
+      poly_args[i].cmt_identifier(param_symbol.id);
+      poly_args[i].cmt_base_name(param_symbol.name);
+
+      context.add(param_symbol);
+    }
+
+    symbolt new_symbol;
+    new_symbol.id = identifier_with_type;
+    new_symbol.name = callee.name();
+    new_symbol.location = call_location;
+    new_symbol.set_type(poly.type());
+    new_symbol.set_value(instantiate_gcc_polymorphic_builtin(
+      identifier, to_symbol_expr(poly), context));
+
+    context.add(new_symbol);
+  }
+
+  return poly;
 }
