@@ -1,3 +1,4 @@
+#include <boost/algorithm/string/predicate.hpp>
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
@@ -3938,6 +3939,71 @@ typet python_converter::resolve_call_argument_array_type(
   return probed_type;
 }
 
+typet python_converter::resolve_numpy_reducer_call_array_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type)
+{
+  if (ast_node["value"].is_null())
+    return current_type;
+
+  const nlohmann::json &call_node = ast_node["value"];
+  if (
+    call_node.value("_type", "") != "Call" ||
+    call_node["func"].value("_type", "") != "Attribute" ||
+    call_node["func"]["value"].value("_type", "") != "Name")
+    return current_type;
+
+  // sum/mean/min/max/argmin/argmax's numpy.py signature necessarily declares
+  // -> Any (its real shape is data-dependent: scalar when flattened, array
+  // along an axis), so the static annotator's guess for a np.<reducer>(...)
+  // call carrying axis= is unreliable -- sometimes Any (void*), sometimes a
+  // plain scalar type inferred from the input literal's element type -- and
+  // either one boxes/truncates the genuinely concrete array numpy_call_expr's
+  // axis-aware fast paths compute. An axis= keyword is only ever legal on
+  // these functions and only ever produces (on success) a 1-D array result,
+  // so it is safe to always trust a probe of the real call over the guess.
+  static const std::set<std::string> axis_aware_reducers = {
+    "sum", "prod", "mean", "min", "max", "argmin", "argmax"};
+  if (axis_aware_reducers.count(call_node["func"].value("attr", "")) == 0)
+    return current_type;
+
+  bool has_axis_keyword = false;
+  for (const auto &kw : call_node.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "axis")
+      has_axis_keyword = true;
+  if (!has_axis_keyword)
+    return current_type;
+
+  // imported_modules maps an alias ("np") to the resolved operational-model
+  // file it was imported from, not the bare module name -- mirrors
+  // function_call_builder::is_numpy_call's own filename check.
+  const std::string module_alias =
+    call_node["func"]["value"]["id"].get<std::string>();
+  auto module_it = imported_modules.find(module_alias);
+  if (
+    module_it == imported_modules.end() ||
+    !boost::algorithm::ends_with(module_it->second, "/models/numpy.py"))
+    return current_type;
+
+  is_converting_rhs = true;
+  in_rhs_type_probe_ = true;
+  exprt call_probe = get_expr(call_node);
+  in_rhs_type_probe_ = false;
+  is_converting_rhs = false;
+  if (contains_cpp_throw(call_probe))
+    return current_type;
+
+  const typet probed_type = ns.follow(call_probe.type());
+  if (probed_type.is_empty() || probed_type == any_type())
+    return current_type;
+
+  any_subscript_array_needs_copy_ = !call_probe.is_symbol();
+  cached_any_subscript_rhs_ = call_probe;
+  has_cached_any_subscript_rhs_ = true;
+
+  return probed_type;
+}
+
 bool python_converter::handle_unpacking_assignment(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -5656,6 +5722,8 @@ void python_converter::get_var_assign(
       resolve_any_subscript_array_type(ast_node, current_element_type);
     current_element_type =
       resolve_call_argument_array_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_numpy_reducer_call_array_type(ast_node, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);

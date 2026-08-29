@@ -3235,10 +3235,40 @@ static bool numpy_reducer_has_unsupported_keywords(const nlohmann::json &call)
   return call.contains("keywords") && !call["keywords"].empty();
 }
 
+// Same check, but tolerating a single "axis" keyword -- used once an axis=
+// value has already been accepted, to still reject keepdims/where/out/
+// initial/dtype alongside it.
+static bool
+numpy_reducer_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
+{
+  if (!call.contains("keywords"))
+    return false;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") != "axis")
+      return true;
+  return false;
+}
+
 static exprt numpy_cast_to_double(const exprt &value)
 {
   return value.type() == double_type() ? value
                                        : typecast_exprt(value, double_type());
+}
+
+// Builds a 1-D array_typet value from already-converted elements, the same
+// way build_numpy_descriptor_array_value (converter_stmt.cpp) does for its
+// own rank-1 case -- that helper has internal linkage in a different
+// translation unit, so this is a small, rank-1-only local counterpart
+// rather than a shared one.
+static exprt build_1d_numpy_array_value(
+  const std::vector<exprt> &elems,
+  const type_handler &th)
+{
+  typet result_type = th.build_array(elems.front().type(), elems.size());
+  exprt value = gen_zero(result_type);
+  for (std::size_t i = 0; i < elems.size(); ++i)
+    value.operands().at(i) = elems[i];
+  return value;
 }
 
 static exprt reduce_numpy_descriptor_values(
@@ -3251,8 +3281,15 @@ static exprt reduce_numpy_descriptor_values(
     for (std::size_t i = 1; i < elems.size(); ++i)
       total = python_expr::build_add(
         total, numpy_cast_to_double(elems[i]), double_type());
-    return div_exprt(
+    // div_exprt's 2-arg constructor leaves .type() nil -- the scalar (no
+    // axis) caller relies on current_lhs retyping to fix that up
+    // downstream, but the axis-aware caller above consumes this result
+    // directly to build an array element type from it, so it needs a real
+    // type here.
+    exprt mean = div_exprt(
       total, from_double(static_cast<double>(elems.size()), double_type()));
+    mean.type() = double_type();
+    return mean;
   }
 
   if (function == "sum")
@@ -3278,6 +3315,232 @@ static exprt reduce_numpy_descriptor_values(
   throw std::runtime_error("unsupported numpy descriptor reducer");
 }
 
+// axis=0 reduces each column (one result per column, walking down rows);
+// axis=1 reduces each row (one result per row, walking across columns).
+// elems is row-major flat, matching
+// build_numpy_descriptor_materialized_elements's own iteration order, so a row
+// is a contiguous run and a column is a fixed-stride walk.
+static exprt reduce_numpy_descriptor_values_along_axis(
+  const std::string &function,
+  const std::vector<std::size_t> &shape,
+  const std::vector<exprt> &elems,
+  long long axis,
+  const type_handler &th)
+{
+  const std::size_t rows = shape[0];
+  const std::size_t cols = shape[1];
+  const std::size_t out_len = axis == 0 ? cols : rows;
+
+  std::vector<exprt> results;
+  results.reserve(out_len);
+  for (std::size_t k = 0; k < out_len; ++k)
+  {
+    std::vector<exprt> slice;
+    if (axis == 0)
+    {
+      slice.reserve(rows);
+      for (std::size_t row = 0; row < rows; ++row)
+        slice.push_back(elems[(row * cols) + k]);
+    }
+    else
+    {
+      slice.reserve(cols);
+      for (std::size_t col = 0; col < cols; ++col)
+        slice.push_back(elems[(k * cols) + col]);
+    }
+    results.push_back(reduce_numpy_descriptor_values(function, slice));
+  }
+  return build_1d_numpy_array_value(results, th);
+}
+
+// Literal axis= keyword only (Commit 6's recut: no positional axis, no
+// symbolic axis). Returns nullopt when absent or explicitly None -- both
+// mean "flatten", falling through to the existing no-axis path. Throws for
+// a present-but-non-literal axis.
+static std::optional<long long> extract_literal_axis_keyword(
+  const nlohmann::json *axis_kw,
+  const std::string &function)
+{
+  if (axis_kw == nullptr || axis_kw->is_null())
+    return std::nullopt;
+
+  numeric_value axis_value;
+  if (!try_extract_numeric_constant(*axis_kw, axis_value) || !axis_value.is_int)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() requires a literal axis");
+  return axis_value.int_value;
+}
+
+// Normalizes a literal axis against a known rank and validates it lands in
+// range, throwing AxisError (matching handle_axis_permutation_view_call's
+// own wording) otherwise.
+static long long normalize_reducer_axis(long long axis, std::size_t rank)
+{
+  const long long normalized =
+    axis < 0 ? axis + static_cast<long long>(rank) : axis;
+  if (normalized < 0 || normalized >= static_cast<long long>(rank))
+    throw std::runtime_error(
+      "AxisError: axis " + std::to_string(axis) +
+      " is out of bounds for array of dimension " + std::to_string(rank));
+  return normalized;
+}
+
+// Split out of try_reduce_descriptor_call to keep that function's own
+// decision count low: returns nullopt when no axis= keyword is given (or
+// it's explicitly None), meaning the caller should fall through to its own
+// flattened reduction unchanged.
+std::optional<exprt> numpy_call_expr::try_reduce_descriptor_call_along_axis(
+  const std::string &function,
+  const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized)
+{
+  std::optional<long long> axis =
+    extract_literal_axis_keyword(find_keyword_arg("axis"), function);
+  if (!axis)
+    return std::nullopt;
+
+  if (
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_) ||
+    call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support keepdims, where, out, initial or dtype "
+      "arguments yet");
+
+  if (materialized.first.size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() axis requires a 2-D array");
+
+  if (materialized.first[0] == 0 || materialized.first[1] == 0)
+    throw std::runtime_error(
+      "ValueError: zero-size array to numpy." + function +
+      "() reduction has no identity");
+
+  const long long normalized =
+    normalize_reducer_axis(*axis, materialized.first.size());
+  return reduce_numpy_descriptor_values_along_axis(
+    function,
+    materialized.first,
+    materialized.second,
+    normalized,
+    type_handler_);
+}
+
+// argmin/argmax have no descriptor-call fast path (try_reduce_descriptor_call
+// only covers sum/mean/min/max), so this is checked directly against the
+// already-resolved array node from get()'s own flattened extraction, ahead
+// of reject_unsupported_flattened_reducer_keywords's generic rejection.
+// Scans the k-th output slot's inner_len-long run (a column when reducing
+// along axis 0, a row along axis 1) and returns the local index of its
+// best element. Split out of try_argmin_argmax_along_axis to keep that
+// function's own decision count down -- same reasoning as
+// get_arange_expr()/try_get_pointer_view_call_result().
+static std::size_t argmin_argmax_axis_best_index(
+  const std::string &function,
+  const std::vector<std::vector<numeric_value>> &values_2d,
+  long long normalized_axis,
+  std::size_t k,
+  std::size_t inner_len)
+{
+  std::size_t best_idx = 0;
+  double best =
+    to_double(normalized_axis == 0 ? values_2d[0][k] : values_2d[k][0]);
+  for (std::size_t i = 1; i < inner_len; ++i)
+  {
+    const double current =
+      to_double(normalized_axis == 0 ? values_2d[i][k] : values_2d[k][i]);
+    if (
+      (function == "argmin" && current < best) ||
+      (function == "argmax" && current > best))
+    {
+      best = current;
+      best_idx = i;
+    }
+  }
+  return best_idx;
+}
+
+std::optional<exprt> numpy_call_expr::try_argmin_argmax_along_axis(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  std::optional<long long> axis =
+    extract_literal_axis_keyword(find_keyword_arg("axis"), function);
+  if (!axis)
+    return std::nullopt;
+
+  if (
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_) ||
+    call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support keepdims, out, where, initial or dtype "
+      "arguments yet");
+
+  std::vector<std::vector<numeric_value>> values_2d;
+  if (
+    !try_extract_numeric_2d_list(arg, values_2d) || values_2d.empty() ||
+    values_2d.front().empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() axis requires a 2-D array");
+
+  const long long normalized = normalize_reducer_axis(*axis, 2);
+  const std::size_t rows = values_2d.size();
+  const std::size_t cols = values_2d.front().size();
+  const std::size_t out_len = normalized == 0 ? cols : rows;
+  const std::size_t inner_len = normalized == 0 ? rows : cols;
+
+  std::vector<exprt> results;
+  results.reserve(out_len);
+  for (std::size_t k = 0; k < out_len; ++k)
+  {
+    const std::size_t best_idx = argmin_argmax_axis_best_index(
+      function, values_2d, normalized, k, inner_len);
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = static_cast<int64_t>(best_idx);
+    results.push_back(converter_.get_expr(out));
+  }
+  return build_1d_numpy_array_value(results, type_handler_);
+}
+
+std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  if (function != "argmin" && function != "argmax")
+    return std::nullopt;
+  return try_argmin_argmax_along_axis(function, arg);
+}
+
+std::optional<exprt>
+numpy_call_expr::try_any_all_result(const std::string &function)
+{
+  if (function != "any" && function != "all")
+    return std::nullopt;
+  return function == "any" ? handle_any() : handle_all();
+}
+
+exprt numpy_call_expr::empty_reducer_identity_result(
+  const std::string &function) const
+{
+  if (function == "sum")
+  {
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = 0;
+    return converter_.get_expr(out);
+  }
+  if (function == "prod")
+  {
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = 1;
+    return converter_.get_expr(out);
+  }
+  throw std::runtime_error(
+    "ValueError: numpy." + function + "() arg is an empty sequence");
+}
+
 std::optional<exprt>
 numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
 {
@@ -3295,6 +3558,11 @@ numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
     "arrays");
   if (!materialized)
     return std::nullopt;
+
+  if (
+    std::optional<exprt> axis_result =
+      try_reduce_descriptor_call_along_axis(function, *materialized))
+    return axis_result;
 
   if (numpy_reducer_has_unsupported_keywords(call_) || call_["args"].size() > 1)
     throw std::runtime_error(
@@ -6151,6 +6419,9 @@ exprt numpy_call_expr::get()
   reject_symbolic_transpose_axes(function, call_);
   reject_unsupported_transpose_axes_rank(function);
 
+  if (std::optional<exprt> any_all_result = try_any_all_result(function))
+    return *any_all_result;
+
   static const std::set<std::string> reducer_and_arange_functions = {
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
   if (reducer_and_arange_functions.count(function))
@@ -6197,8 +6468,6 @@ exprt numpy_call_expr::get()
     if (function == "arange")
       return get_arange_expr();
 
-    reject_unsupported_flattened_reducer_keywords(function);
-
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
@@ -6206,6 +6475,13 @@ exprt numpy_call_expr::get()
       std::optional<nlohmann::json> row_view =
         resolve_literal_numpy_row_view(arg, converter_))
       arg = std::move(*row_view);
+
+    if (
+      std::optional<exprt> axis_result =
+        try_argmin_argmax_axis_result(function, arg))
+      return *axis_result;
+
+    reject_unsupported_flattened_reducer_keywords(function);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -6228,24 +6504,7 @@ exprt numpy_call_expr::get()
     }
 
     if (values.empty())
-    {
-      if (function == "sum")
-      {
-        nlohmann::json out;
-        out["_type"] = "Constant";
-        out["value"] = 0;
-        return converter_.get_expr(out);
-      }
-      if (function == "prod")
-      {
-        nlohmann::json out;
-        out["_type"] = "Constant";
-        out["value"] = 1;
-        return converter_.get_expr(out);
-      }
-      throw std::runtime_error(
-        "ValueError: numpy." + function + "() arg is an empty sequence");
-    }
+      return empty_reducer_identity_result(function);
 
     if (function == "argmin" || function == "argmax")
     {

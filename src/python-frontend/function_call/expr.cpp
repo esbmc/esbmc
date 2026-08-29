@@ -4148,6 +4148,171 @@ std::optional<exprt> function_call_expr::try_materialize_numpy_tolist()
   return std::nullopt;
 }
 
+// Literal axis= only (matches every other axis-aware reducer's own recut):
+// no positional axis, no symbolic axis. A plain Constant int or a UnaryOp
+// USub over one (for axis=-1/-2) resolves; anything else is a caller error.
+static std::optional<long long>
+extract_any_all_axis_literal(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return node["value"].get<long long>();
+  if (
+    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+    node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+    node["operand"].value("_type", "") == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<long long>();
+  return std::nullopt;
+}
+
+static const nlohmann::json *
+find_any_all_axis_keyword(const nlohmann::json &call)
+{
+  if (!call.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") == "axis")
+      return &kw["value"];
+  return nullptr;
+}
+
+static bool
+numpy_any_all_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
+{
+  if (!call.contains("keywords"))
+    return false;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") != "axis")
+      return true;
+  return false;
+}
+
+// Normalizes a literal axis against a known rank and validates it lands in
+// range, throwing AxisError (matching numpy_call_expr's own wording for the
+// other reducers) otherwise.
+static long long normalize_any_all_axis(long long axis, std::size_t rank)
+{
+  const long long normalized =
+    axis < 0 ? axis + static_cast<long long>(rank) : axis;
+  if (normalized < 0 || normalized >= static_cast<long long>(rank))
+    throw std::runtime_error(
+      "AxisError: axis " + std::to_string(axis) +
+      " is out of bounds for array of dimension " + std::to_string(rank));
+  return normalized;
+}
+
+// Builds a 1-D array_typet value from already-converted elements, the same
+// way numpy_call_expr.cpp's own build_1d_numpy_array_value does -- that
+// helper has internal linkage in a different translation unit, so this is a
+// small local counterpart rather than a shared one.
+static exprt build_1d_any_all_array_value(
+  const std::vector<exprt> &elems,
+  const type_handler &th)
+{
+  typet result_type = th.build_array(elems.front().type(), elems.size());
+  exprt value = gen_zero(result_type);
+  for (std::size_t i = 0; i < elems.size(); ++i)
+    value.operands().at(i) = elems[i];
+  return value;
+}
+
+exprt function_call_expr::reduce_any_all_axis_slice(
+  const std::vector<exprt> &elems,
+  const std::vector<std::size_t> &shape,
+  long long normalized_axis,
+  std::size_t k,
+  ReduceOp op) const
+{
+  const std::size_t cols = shape[1];
+  const std::size_t count = normalized_axis == 0 ? shape[0] : cols;
+  const std::size_t first_idx = normalized_axis == 0 ? k : k * cols;
+  const std::size_t stride = normalized_axis == 0 ? cols : 1;
+
+  exprt result = compute_element_truthiness(elems[first_idx]);
+  for (std::size_t i = 1; i < count; ++i)
+    result = combine_truthiness(
+      result, compute_element_truthiness(elems[first_idx + (i * stride)]), op);
+  return result;
+}
+
+std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
+  const std::string &func_name,
+  const std::string &qualifier,
+  const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized,
+  std::size_t positional_offset)
+{
+  const nlohmann::json *axis_kw = find_any_all_axis_keyword(call_);
+  if (axis_kw == nullptr || axis_kw->is_null())
+    return std::nullopt;
+
+  std::optional<long long> axis = extract_any_all_axis_literal(*axis_kw);
+  if (!axis)
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name + "() requires a literal axis");
+
+  if (
+    call_["args"].size() > positional_offset ||
+    numpy_any_all_has_unsupported_keywords_besides_axis(call_))
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name +
+      "() does not support keepdims, where or out arguments yet");
+
+  if (materialized.first.size() != 2)
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name + "() axis requires a 2-D array");
+
+  if (materialized.first[0] == 0 || materialized.first[1] == 0)
+    throw std::runtime_error(
+      "ValueError: zero-size array to " + qualifier + func_name +
+      "() reduction has no identity");
+
+  const long long normalized =
+    normalize_any_all_axis(*axis, materialized.first.size());
+  const std::size_t out_len =
+    normalized == 0 ? materialized.first[1] : materialized.first[0];
+  const ReduceOp op = func_name == "any" ? ReduceOp::Any : ReduceOp::All;
+
+  std::vector<exprt> results;
+  results.reserve(out_len);
+  for (std::size_t k = 0; k < out_len; ++k)
+    results.push_back(reduce_any_all_axis_slice(
+      materialized.second, materialized.first, normalized, k, op));
+
+  return build_1d_any_all_array_value(results, type_handler_);
+}
+
+std::optional<function_call_expr::any_all_receiver>
+function_call_expr::resolve_any_all_receiver(const std::string &func_name)
+{
+  // Method form `a.any(...)`: the receiver is the Attribute's own base and
+  // any real argument arrives via keywords (any/all are not in
+  // dispatch_rewrite_methods, so unlike sum/mean/..., this call is never
+  // normalized into the free-function shape first).
+  if (
+    auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+      call_["func"]["value"],
+      "TypeError: numpy.ndarray." + func_name +
+        "() currently supports rank 1 or 2 arrays"))
+    return any_all_receiver{std::move(*materialized), "numpy.ndarray.", 0};
+
+  // Free-function form `np.any(a, ...)`: the array is the first positional
+  // argument instead.
+  if (call_["args"].empty())
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    call_["args"][0],
+    "TypeError: numpy." + func_name +
+      "() currently supports rank 1 or 2 arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  return any_all_receiver{std::move(*materialized), "numpy.", 1};
+}
+
 std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
 {
   const std::string &func_name = function_id_.get_function();
@@ -4156,21 +4321,27 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
     return std::nullopt;
 
-  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
-    call_["func"]["value"],
-    "TypeError: numpy.ndarray." + func_name +
-      "() currently supports rank 1 or 2 arrays");
-  if (!materialized)
+  std::optional<any_all_receiver> receiver =
+    resolve_any_all_receiver(func_name);
+  if (!receiver)
     return std::nullopt;
+  const std::string &qualifier = receiver->qualifier;
+  const std::size_t positional_offset = receiver->positional_offset;
+  const auto &materialized = receiver->materialized;
 
   if (
-    !call_["args"].empty() ||
+    std::optional<exprt> axis_result = try_reduce_any_all_along_axis(
+      func_name, qualifier, materialized, positional_offset))
+    return axis_result;
+
+  if (
+    call_["args"].size() > positional_offset ||
     (call_.contains("keywords") && !call_["keywords"].empty()))
     throw std::runtime_error(
-      "TypeError: numpy.ndarray." + func_name +
+      "TypeError: " + qualifier + func_name +
       "() does not support axis, keepdims, where or out arguments yet");
 
-  const std::vector<exprt> &elems = materialized->second;
+  const std::vector<exprt> &elems = materialized.second;
   if (elems.empty())
     return func_name == "all" ? migrate_expr_back(gen_true_expr())
                               : migrate_expr_back(gen_false_expr());

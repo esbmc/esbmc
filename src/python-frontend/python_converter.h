@@ -1034,6 +1034,35 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
+  /**
+   * @brief Preserves the concrete result type of a np.<reducer>(a, axis=...)
+   * RHS instead of trusting the static annotator's guess.
+   *
+   * numpy.py necessarily declares sum/prod/mean/min/max/argmin/argmax's
+   * return type as `Any`, since their real shape is data-dependent (a scalar
+   * when flattened, an array along an axis); the static annotator resolves
+   * that ambiguity either to `Any` (void*) or, for some of these, to a plain
+   * scalar type guessed from the argument literal -- both wrong once axis=
+   * makes the real result a concrete array, and both would box/truncate the
+   * array numpy_call_expr's axis-aware fast paths actually produce, which
+   * can't be indexed afterwards. Unlike resolve_any_subscript_array_type,
+   * this does NOT gate on current_type being any_type() first: a wrong
+   * scalar guess needs overriding too. It is instead scoped narrowly by
+   * shape: a `Call` RHS whose callee is an attribute access on a name
+   * resolving to the imported numpy module, naming one of the functions
+   * above, and carrying a literal `axis=` keyword -- a shape that, on
+   * success, only ever produces a 1-D array result, so trusting a probe of
+   * the real call over the static guess is always correct here.
+   *
+   * @param ast_node The assignment AST node.
+   * @param current_type The current LHS type.
+   * @return The probed call result type, or the unmodified `current_type`
+   *   when the RHS does not match that shape.
+   */
+  typet resolve_numpy_reducer_call_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
   std::string resolve_name_symbol_id(const std::string &name) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;

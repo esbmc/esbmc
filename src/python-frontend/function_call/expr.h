@@ -455,9 +455,7 @@ private:
   exprt validate_re_module_args() const;
 
   bool is_any_call() const;
-  exprt handle_any();
   bool is_all_call() const;
-  exprt handle_all();
 
   // Convert an IR expression to its Python truthiness value.
   // Handles None, bool, int, float, complex, pointer types.
@@ -590,6 +588,50 @@ private:
   std::optional<exprt> try_fold_sorted();
   std::optional<exprt> try_materialize_numpy_tolist();
   std::optional<exprt> try_reduce_numpy_descriptor_method();
+
+  // axis= handling for any()/all(), covering both call shapes
+  // try_reduce_numpy_descriptor_method() resolves a receiver for. Returns
+  // nullopt (no axis given) so the caller falls through to its own
+  // flattened reduction unchanged. Split out to keep that function's own
+  // decision count down.
+  std::optional<exprt> try_reduce_any_all_along_axis(
+    const std::string &func_name,
+    const std::string &qualifier,
+    const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized,
+    std::size_t positional_offset);
+
+  // The k-th output slot's inner run (a column when axis==0, a row when
+  // axis==1), combined via the same truthiness reduction the flattened path
+  // uses. Split out of try_reduce_any_all_along_axis for the same reason.
+  exprt reduce_any_all_axis_slice(
+    const std::vector<exprt> &elems,
+    const std::vector<std::size_t> &shape,
+    long long normalized_axis,
+    std::size_t k,
+    ReduceOp op) const;
+
+  // Who any()/all()'s array operand is, and how the rest of
+  // try_reduce_numpy_descriptor_method must read the call: the method
+  // form's own error-message qualifier ("numpy.ndarray.") and a
+  // positional_offset of 0 (any real argument arrives via keywords only), or
+  // the free-function form's ("numpy.") and an offset of 1 (the array is
+  // call_["args"][0], so exactly one positional argument is expected).
+  struct any_all_receiver
+  {
+    std::pair<std::vector<std::size_t>, std::vector<exprt>> materialized;
+    std::string qualifier;
+    std::size_t positional_offset;
+  };
+
+  // Resolves the receiver above, trying the method form first and the
+  // free-function form second. nullopt means neither call_["func"]["value"]
+  // nor (if present) call_["args"][0] is a materializable numpy descriptor,
+  // so the caller should decline entirely. Split out of
+  // try_reduce_numpy_descriptor_method to keep that function's own decision
+  // count down.
+  std::optional<any_all_receiver>
+  resolve_any_all_receiver(const std::string &func_name);
+
   /// Internal keys-list symbol id behind a `<name>.keys()` argument.
   std::string dict_keys_list_id_for_call(const nlohmann::json &arg) const;
 
@@ -685,6 +727,14 @@ private:
   const symbolt *cached_find_symbol(const std::string &id) const;
 
 protected:
+  // any/all's np.<f>(a, ...) free-function form is dispatched entirely
+  // through numpy_call_expr::get() (is_numpy_call() routes it there before
+  // this class's own table-driven dispatch ever runs), so that subclass
+  // needs to reach these directly rather than through is_any_call()'s
+  // table entry.
+  exprt handle_any();
+  exprt handle_all();
+
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;

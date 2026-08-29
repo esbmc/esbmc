@@ -3,6 +3,8 @@
 #include <python-frontend/function_call/expr.h>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <utility>
+#include <vector>
 
 class symbol_id;
 class exprt;
@@ -69,6 +71,10 @@ private:
   std::optional<exprt>
   try_materialize_descriptor_array_call(nlohmann::json &array_arg);
   std::optional<exprt> try_reduce_descriptor_call(const std::string &function);
+  std::optional<exprt> try_reduce_descriptor_call_along_axis(
+    const std::string &function,
+    const std::pair<std::vector<std::size_t>, std::vector<exprt>>
+      &materialized);
   void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
   void reject_unsupported_transpose_axes_rank(const std::string &function);
 
@@ -78,4 +84,34 @@ private:
   // the same reason as get_arange_expr()/try_get_pointer_view_call_result().
   void reject_unsupported_flattened_reducer_keywords(
     const std::string &function) const;
+
+  // argmin/argmax's own axis= handling: they have no descriptor-call fast
+  // path (try_reduce_descriptor_call only covers sum/mean/min/max), so this
+  // is checked directly against the already-resolved array node, ahead of
+  // reject_unsupported_flattened_reducer_keywords's generic "no keywords at
+  // all" rejection. Returns nullopt (no axis given) to fall through to that
+  // existing flattened path unchanged.
+  std::optional<exprt> try_argmin_argmax_along_axis(
+    const std::string &function,
+    const nlohmann::json &arg);
+
+  // One-line dispatch guard so adding argmin/argmax's axis fast path does not
+  // grow get()'s own decision count -- same reasoning as get_arange_expr()/
+  // try_get_pointer_view_call_result().
+  std::optional<exprt> try_argmin_argmax_axis_result(
+    const std::string &function,
+    const nlohmann::json &arg);
+
+  // sum/prod have a defined identity result over zero elements; every other
+  // flattened reducer must reject instead. Split out of get() to keep that
+  // function's own decision count from growing further.
+  exprt empty_reducer_identity_result(const std::string &function) const;
+
+  // np.any(a, ...)/np.all(a, ...) are dispatched here (is_numpy_call()
+  // routes any np.<attr>(...) call through numpy_call_expr::get() before
+  // function_call_expr's own table-driven dispatch -- the one that would
+  // otherwise reach handle_any()/handle_all() -- ever runs). One-line
+  // dispatch guard for the same reason as get_arange_expr()/
+  // try_get_pointer_view_call_result().
+  std::optional<exprt> try_any_all_result(const std::string &function);
 };
