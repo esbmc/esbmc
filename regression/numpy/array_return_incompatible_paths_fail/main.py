@@ -8,5 +8,6 @@ def f(cond):
         return "hello"
 
 
-y = f(True)
+c = nondet_bool()
+y = f(c)
 assert y[0] == 1
