@@ -1,5 +1,6 @@
 #include <limits>
 #include <type_traits>
+#include <vector>
 
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -3618,6 +3619,122 @@ static expr2tc simplify_constant_relation(
   return typecast_check_return(type, simpl_res);
 }
 
+/// Flatten `&a[i][j]` to `&a[0][0] + (i * N + j)`, N the row length.
+///
+/// address_of2t::do_simplify rewrites only the innermost subscript, so two
+/// addresses in different rows of one array keep different bases and the
+/// cancellation below cannot reach them: a flat walk from `&a[0][0]` to
+/// `&a[1][2]` never exits. Row-major layout makes the offset exact, and only
+/// the comparison's own operands are rewritten, so no dereference is built
+/// from the flattened form (#6778, the 2-D residual of #7346).
+static expr2tc flatten_nested_index_address(const address_of2t &ao)
+{
+  std::vector<const index2t *> chain;
+  const expr2tc *root = &ao.ptr_obj;
+  while (is_index2t(*root))
+  {
+    chain.push_back(&to_index2t(*root));
+    root = &to_index2t(*root).source_value;
+  }
+
+  // One subscript is address_of2t::do_simplify's own case; leave it there.
+  if (chain.size() < 2)
+    return expr2tc();
+
+  const type2tc &offset_t = index_type2();
+  expr2tc offset = constant_int2tc(offset_t, BigInt(0));
+  BigInt stride(1);
+  for (size_t i = 0; i < chain.size(); i++)
+  {
+    expr2tc sub = chain[i]->index;
+    if (sub->type != offset_t)
+      sub = typecast2tc(offset_t, sub);
+    if (stride != 1)
+      offset = add2tc(
+        offset_t,
+        offset,
+        mul2tc(offset_t, sub, constant_int2tc(offset_t, stride)));
+    else
+      offset = add2tc(offset_t, offset, sub);
+
+    if (i + 1 == chain.size())
+      break;
+    const type2tc &row = chain[i]->source_value->type;
+    if (!is_array_type(row) || is_nil_expr(to_array_type(row).array_size))
+      return expr2tc();
+    const expr2tc &len = to_array_type(row).array_size;
+    if (!is_constant_int2t(len))
+      return expr2tc();
+    stride *= to_constant_int2t(len).value;
+  }
+
+  expr2tc base = *root;
+  for (size_t i = chain.size(); i-- > 0;)
+    base = index2tc(chain[i]->type, base, constant_int2tc(offset_t, BigInt(0)));
+
+  expr2tc flat = add2tc(
+    ao.type,
+    address_of2tc(to_pointer_type(ao.type).subtype, base),
+    try_simplification(offset));
+  expr2tc simplified = flat->simplify();
+  return is_nil_expr(simplified) ? flat : simplified;
+}
+
+/// Reach the address_of under pointer arithmetic: an induction variable
+/// started at `&a[1][0]` arrives here as `&a[1][0] + k` and has to be put on
+/// the same base as the bound it is compared against. Nil when nothing nested
+/// was found, so the single-subscript path below stays as it was.
+static expr2tc flatten_addressof_under_add(const expr2tc &e)
+{
+  if (is_address_of2t(e))
+    return flatten_nested_index_address(to_address_of2t(e));
+
+  if (!is_add2t(e))
+    return expr2tc();
+
+  const add2t &a = to_add2t(e);
+  expr2tc f1 = flatten_addressof_under_add(a.side_1);
+  expr2tc f2 = flatten_addressof_under_add(a.side_2);
+  if (is_nil_expr(f1) && is_nil_expr(f2))
+    return expr2tc();
+
+  expr2tc rebuilt = add2tc(
+    e->type, is_nil_expr(f1) ? a.side_1 : f1, is_nil_expr(f2) ? a.side_2 : f2);
+  expr2tc simplified = rebuilt->simplify();
+  return is_nil_expr(simplified) ? rebuilt : simplified;
+}
+
+static expr2tc normalize_addressof_index(const expr2tc &e)
+{
+  if (expr2tc flat = flatten_addressof_under_add(e); !is_nil_expr(flat))
+    return flat;
+
+  if (!is_address_of2t(e) || !is_index2t(to_address_of2t(e).ptr_obj))
+    return e;
+
+  expr2tc folded = to_address_of2t(e).do_simplify();
+  return is_nil_expr(folded) ? e : folded;
+}
+
+/// Put both operands of a pointer comparison into `&base[0] + c` form, and
+/// return the rebuilt comparison when either changed. @p rebuild re-emits the
+/// node so the common-addend cancellation in the caller can decide it.
+template <typename Rebuild>
+static expr2tc normalize_addressof_operands(
+  const expr2tc &a,
+  const expr2tc &b,
+  Rebuild rebuild)
+{
+  expr2tc na = normalize_addressof_index(a);
+  expr2tc nb = normalize_addressof_index(b);
+  if (na == a && nb == b)
+    return expr2tc();
+
+  expr2tc rebuilt = rebuild(na, nb);
+  expr2tc simplified = rebuilt->simplify();
+  return is_nil_expr(simplified) ? rebuilt : simplified;
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_relations(
   const type2tc &type,
@@ -3634,6 +3751,19 @@ static expr2tc simplify_relations(
 
   if (!is_constant(simplified_side_1) || !is_constant(simplified_side_2))
   {
+    // Put both sides on a common base first; the cancellation below can only
+    // see a shared base once `&a[c]` has become `&a[0] + c`. Equality and
+    // inequality do this for themselves before they get here, so this is what
+    // gives the ordered relations the same reach — a walk bounded by
+    // `p < &a[4]` folds where before only `p != &a[4]` did (#6778).
+    auto rebuild = [&type](const expr2tc &a, const expr2tc &b) {
+      return typecast_check_return(type, make_irep<constructor>(a, b));
+    };
+    if (expr2tc r = normalize_addressof_operands(
+          simplified_side_1, simplified_side_2, rebuild);
+        !is_nil_expr(r))
+      return r;
+
     // Pointer comparison with a shared base: (&x + 1 == &x + 2) => (1 == 2).
     // address = pointer + offset; when the bases match, comparing addresses
     // reduces to comparing offsets.
@@ -3886,34 +4016,6 @@ fold_const_across_addsub(const expr2tc &side_1, const expr2tc &side_2)
 /// exits (#6778). The rewrite is applied here rather than in expr2t::simplify
 /// because folding every address_of loses the concrete offset the value-set
 /// analysis needs (regression/incremental-smt/incremental-24).
-static expr2tc normalize_addressof_index(const expr2tc &e)
-{
-  if (!is_address_of2t(e) || !is_index2t(to_address_of2t(e).ptr_obj))
-    return e;
-
-  expr2tc folded = to_address_of2t(e).do_simplify();
-  return is_nil_expr(folded) ? e : folded;
-}
-
-/// Put both operands of a pointer comparison into `&base[0] + c` form, and
-/// return the rebuilt comparison when either changed. @p rebuild re-emits the
-/// node so the common-addend cancellation in the caller can decide it.
-template <typename Rebuild>
-static expr2tc normalize_addressof_operands(
-  const expr2tc &a,
-  const expr2tc &b,
-  Rebuild rebuild)
-{
-  expr2tc na = normalize_addressof_index(a);
-  expr2tc nb = normalize_addressof_index(b);
-  if (na == a && nb == b)
-    return expr2tc();
-
-  expr2tc rebuilt = rebuild(na, nb);
-  expr2tc simplified = rebuilt->simplify();
-  return is_nil_expr(simplified) ? rebuilt : simplified;
-}
-
 /// Re-emit a comparison over @p a_in and @p b_in after coercing them to a
 /// common type; nil when they have none. Pointer-arith chains reach the
 /// cancellations below with mixed-width integer offsets (`(int)c` against
