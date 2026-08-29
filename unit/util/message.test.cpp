@@ -7,6 +7,8 @@ Module: Unit tests for util/message/message.h
 #include <util/config/config.h>
 #include <util/message/message.h>
 
+#include <array>
+#include <cerrno>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -69,9 +71,19 @@ TEST_CASE("concurrent writers cannot splice a line", "[util][message]")
   close(fds[1]);
 
   std::string all;
-  char chunk[4096];
-  for (ssize_t n; (n = read(fds[0], chunk, sizeof(chunk))) > 0;)
-    all.append(chunk, n);
+  std::array<char, 4096> chunk;
+  for (ssize_t n; (n = read(fds[0], chunk.data(), chunk.size())) != 0;)
+  {
+    // A SIGCHLD from a finishing writer interrupts the read; treating that as
+    // end-of-stream would truncate `all` and fail the count below.
+    if (n < 0)
+    {
+      if (errno == EINTR)
+        continue;
+      FAIL("read from the pipe failed");
+    }
+    all.append(chunk.data(), static_cast<size_t>(n));
+  }
   close(fds[0]);
 
   for (pid_t pid : kids)
