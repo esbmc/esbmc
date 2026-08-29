@@ -114,4 +114,18 @@ private:
   // dispatch guard for the same reason as get_arange_expr()/
   // try_get_pointer_view_call_result().
   std::optional<exprt> try_any_all_result(const std::string &function);
+
+  // Resolves median/percentile/argsort/searchsorted's array argument to a
+  // literal List node: a List stays as-is; a Name is followed to its own
+  // declaration's value only when inline_only is false AND the name has a
+  // single assignment in scope (find_var_decl() otherwise returns the first
+  // textual assignment, not the one reaching this call -- see
+  // argsort_reassigned_array_fail). Throws when the (possibly resolved)
+  // argument still isn't a literal List. A member function rather than a
+  // lambda local to get() so its own decision count is attributed here
+  // instead of inflating get()'s.
+  nlohmann::json resolve_literal_numpy_array_input(
+    nlohmann::json arr_arg,
+    const std::string &function_name,
+    bool inline_only = false);
 };

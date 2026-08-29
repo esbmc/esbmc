@@ -2447,6 +2447,40 @@ exprt function_call_expr::handle_set_method() const
     *set_symbol, other, call_, method_name);
 }
 
+// True when the receiver is a Name resolving to a tracked numpy view
+// (a copied row/column/diagonal, a transpose, or a reshape) rather than a
+// genuine list/other object. Split out of is_list_method_call() to keep
+// that already-large function's own decision count down.
+bool function_call_expr::receiver_is_tracked_numpy_view(
+  const std::string &recv_type) const
+{
+  if (recv_type != "Name")
+    return false;
+
+  const std::string root_id = converter_.resolve_name_symbol_id(
+    call_["func"]["value"]["id"].get<std::string>());
+  return !root_id.empty() && converter_.is_tracked_numpy_view_id(root_id);
+}
+
+// pop()/copy()/clear() are each shared between list and dict; disambiguate
+// by treating a BinOp receiver (dicts have no arithmetic operators) or one
+// resolving to a list-typed symbol as the list method, anything else as not
+// (falling through to handle_dict_method()). Split out of
+// is_list_method_call() -- shared by its three near-identical call sites --
+// to keep that function's own decision count down.
+bool function_call_expr::receiver_is_binop_or_list_symbol() const
+{
+  if (
+    call_["func"].contains("value") &&
+    call_["func"]["value"].contains("_type") &&
+    call_["func"]["value"]["_type"] == "BinOp")
+    return true;
+
+  std::string dummy;
+  const symbolt *sym = get_object_list_symbol(dummy);
+  return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -2480,64 +2514,16 @@ bool function_call_expr::is_list_method_call() const
     return sym != nullptr && sym->get_type() == list_type;
   }
 
-  // "pop" is shared between list and dict. Disambiguate using the actual
-  // symbol type: only treat as list.pop() when the receiver resolves to a
-  // symbol whose type is the list type.
-  if (method_name == "pop")
-  {
-    // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
-    // do not support arithmetic operators. handle_list_pop() already handles
-    // this case, so route it here before the symbol-type check.
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
-  }
-
-  // "copy" is shared between list and dict. Treat as list.copy() only when
-  // the receiver resolves to a list symbol; otherwise let dispatch fall
-  // through to handle_dict_method().
-  if (method_name == "copy")
-  {
-    // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
-    // not support arithmetic operators.
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
-  }
-
-  // "clear" is shared between list and dict. Treat as list.clear() only when
-  // the receiver resolves to a list symbol; otherwise fall through to
-  // handle_dict_method(). Without this guard a dict receiver was claimed by
+  // "pop"/"copy"/"clear" are each shared between list and dict; a BinOp
+  // receiver (e.g. (s1 - s2).pop()) is always list-like, since dicts do not
+  // support arithmetic operators, and otherwise only a receiver resolving to
+  // a list-typed symbol counts -- see receiver_is_binop_or_list_symbol().
+  // Without the "clear" case of this guard a dict receiver was claimed by
   // the catch-all below and passed to __ESBMC_list_clear, which dereferenced
   // the dict struct as a PyListObject and reported a spurious out-of-bounds
   // (VERIFICATION FAILED).
-  if (method_name == "clear")
-  {
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
-  }
+  if (method_name == "pop" || method_name == "copy" || method_name == "clear")
+    return receiver_is_binop_or_list_symbol();
 
   // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
   // mutators. The #6264 crash is specifically a *character array* (str/bytes)
@@ -2565,6 +2551,20 @@ bool function_call_expr::is_list_method_call() const
     // get_object_list_symbol() in the handler, so claim it without converting.
     if (contains_call(call_["func"]["value"]))
       return true;
+
+    // A numpy view (a copied row/column/diagonal, a transpose, or a reshape)
+    // is never a PyListObject*, whatever its own resolved type looks like --
+    // a copied view in particular is backed by the same array_typet as a
+    // plain array, so the is_array() check below would otherwise still
+    // claim it here. Decline so a mutating call like sort() falls through to
+    // try_numpy_inplace_sort()'s own correct rejection ("writing through a
+    // copied numpy view is not supported") instead of being misrouted into
+    // the list model, which dereferences the array as a PyListObject* and
+    // crashes (confirmed: `row = a[0]; row.sort()` used as a value). Split
+    // out to keep this already-large function's own decision count down.
+    if (receiver_is_tracked_numpy_view(recv_type))
+      return false;
+
     const exprt recv = converter_.get_expr(call_["func"]["value"]);
     return !converter_.ns.follow(recv.type()).is_array();
   }
@@ -4013,8 +4013,8 @@ exprt function_call_expr::handle_general_function_call()
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
-  if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
-    return *materialized;
+  if (std::optional<exprt> numpy_method = try_numpy_tolist_or_inplace_sort())
+    return *numpy_method;
 
   // Fast-path: sorted() over a concrete int/tuple list can be materialized
   // directly in the frontend (see try_fold_sorted), avoiding the runtime
@@ -4207,8 +4207,9 @@ static long long normalize_any_all_axis(long long axis, std::size_t rank)
 // Builds a 1-D array_typet value from already-converted elements, the same
 // way numpy_call_expr.cpp's own build_1d_numpy_array_value does -- that
 // helper has internal linkage in a different translation unit, so this is a
-// small local counterpart rather than a shared one.
-static exprt build_1d_any_all_array_value(
+// small local counterpart rather than a shared one. Shared by any()/all()'s
+// axis reduction and sort()'s in-place rebuild.
+static exprt build_1d_numpy_array_value_from_elems(
   const std::vector<exprt> &elems,
   const type_handler &th)
 {
@@ -4281,7 +4282,7 @@ std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
     results.push_back(reduce_any_all_axis_slice(
       materialized.second, materialized.first, normalized, k, op));
 
-  return build_1d_any_all_array_value(results, type_handler_);
+  return build_1d_numpy_array_value_from_elems(results, type_handler_);
 }
 
 std::optional<function_call_expr::any_all_receiver>
@@ -4352,6 +4353,102 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     result =
       combine_truthiness(result, compute_element_truthiness(elems[i]), op);
   return result;
+}
+
+// A conversion-time-unrolled bubble sort over already-converted elements,
+// swapping via if_exprt rather than extracting a C++ comparison key -- the
+// same style reduce_numpy_descriptor_values's own min/max branches use
+// (binary_relation_exprt directly on the elems), so this works uniformly
+// across every element type get_expr can produce here (int/float/bool),
+// concrete or symbolic alike, rather than only a literal-foldable one.
+static void bubble_sort_numpy_elems(std::vector<exprt> &elems)
+{
+  for (std::size_t pass = 0; pass + 1 < elems.size(); ++pass)
+  {
+    for (std::size_t j = 0; j + pass + 1 < elems.size(); ++j)
+    {
+      binary_relation_exprt out_of_order(elems[j], ">", elems[j + 1]);
+      exprt lo = if_exprt(out_of_order, elems[j + 1], elems[j]);
+      exprt hi = if_exprt(out_of_order, elems[j], elems[j + 1]);
+      elems[j] = lo;
+      elems[j + 1] = hi;
+    }
+  }
+}
+
+std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
+{
+  if (
+    function_id_.get_function() != "sort" ||
+    call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
+    return std::nullopt;
+
+  const nlohmann::json &receiver_node = call_["func"]["value"];
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    receiver_node,
+    "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
+  if (!materialized)
+    return std::nullopt;
+
+  // Writing through a copied view is rejected everywhere else this call
+  // shape mutates (fill()/the bare-statement form of sort() itself); this
+  // is the same check, reused so the assignment/expression-value form
+  // (`x = row.sort()`) is rejected identically instead of falling through
+  // to materialize and sort the copy's own storage.
+  converter_.reject_numpy_view_mutating_method_call(call_);
+
+  // reject_numpy_view_mutating_method_call above only covers a *copied*
+  // view; a transpose/reshape view is not a copy (writes to it are
+  // meaningful) but this method has no support for writing through one
+  // yet, so reject explicitly rather than silently sorting whatever was
+  // just materialized for reading.
+  if (receiver_node.value("_type", "") == "Name")
+  {
+    const std::string root_id =
+      converter_.resolve_name_symbol_id(receiver_node["id"].get<std::string>());
+    if (!root_id.empty() && converter_.is_tracked_numpy_view_id(root_id))
+      throw std::runtime_error(
+        "TypeError: numpy.ndarray.sort() does not support writing through a "
+        "numpy view yet");
+  }
+
+  // Keywords/positional args are rejected ahead of the shape check so a 2-D
+  // receiver called with an unsupported argument reports the argument
+  // error, matching argsort()/searchsorted()'s own validation order in
+  // this file.
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() does not support axis, kind or order "
+      "arguments yet");
+
+  if (materialized->first.size() != 1)
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
+
+  std::vector<exprt> elems = materialized->second;
+  bubble_sort_numpy_elems(elems);
+
+  exprt receiver = converter_.get_expr(receiver_node);
+  if (
+    !receiver.is_symbol() || !converter_.ns.follow(receiver.type()).is_array())
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() requires a named array variable");
+
+  code_assignt assign(
+    receiver, build_1d_numpy_array_value_from_elems(elems, type_handler_));
+  assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(assign);
+
+  return gen_zero(none_type()); // sort() mutates in place, returns None
+}
+
+std::optional<exprt> function_call_expr::try_numpy_tolist_or_inplace_sort()
+{
+  if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
+    return materialized;
+  return try_numpy_inplace_sort();
 }
 
 std::optional<exprt> function_call_expr::try_fold_sorted()

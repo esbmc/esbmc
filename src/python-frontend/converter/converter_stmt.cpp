@@ -1954,7 +1954,9 @@ python_converter::classify_numpy_method_call(
     "var",
     "diagonal",
     "argmin",
-    "argmax"};
+    "argmax",
+    "argsort",
+    "searchsorted"};
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
   const bool supported_copy_method =

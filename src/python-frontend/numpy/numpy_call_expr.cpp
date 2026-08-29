@@ -6412,6 +6412,30 @@ exprt numpy_call_expr::get_arange_expr()
     "only");
 }
 
+nlohmann::json numpy_call_expr::resolve_literal_numpy_array_input(
+  nlohmann::json arr_arg,
+  const std::string &function_name,
+  bool inline_only)
+{
+  if (
+    !inline_only && arr_arg.value("_type", std::string()) == "Name" &&
+    !json_utils::has_multiple_assignments_in_scope(
+      arr_arg["id"], converter_.current_function_name(), converter_.ast()))
+  {
+    nlohmann::json resolved = json_utils::find_var_decl(
+      arr_arg["id"], converter_.current_function_name(), converter_.ast());
+    if (resolved.contains("value") && resolved["value"].is_object())
+      arr_arg = resolved["value"];
+  }
+
+  auto literal_arg = get_literal_numpy_array_arg(arr_arg);
+  if (!literal_arg.has_value())
+    throw std::runtime_error(
+      "TypeError: numpy." + function_name + "() currently supports only " +
+      (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
+  return std::move(*literal_arg);
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
@@ -7350,26 +7374,6 @@ exprt numpy_call_expr::get()
     }
   };
 
-  auto resolve_literal_numpy_array_input = [this](
-                                             nlohmann::json arr_arg,
-                                             const std::string &function_name,
-                                             bool inline_only = false) {
-    if (!inline_only && arr_arg.value("_type", std::string()) == "Name")
-    {
-      nlohmann::json resolved = json_utils::find_var_decl(
-        arr_arg["id"], converter_.current_function_name(), converter_.ast());
-      if (resolved.contains("value") && resolved["value"].is_object())
-        arr_arg = resolved["value"];
-    }
-
-    auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-    if (!literal_arg.has_value())
-      throw std::runtime_error(
-        "TypeError: numpy." + function_name + "() currently supports only " +
-        (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
-    return std::move(*literal_arg);
-  };
-
   if (function == "median")
   {
     if (call_["args"].size() != 1)
@@ -7522,15 +7526,16 @@ exprt numpy_call_expr::get()
 
     if (call_.contains("keywords") && !call_["keywords"].empty())
       throw std::runtime_error(
-        "TypeError: numpy.argsort() keywords are not supported");
+        "TypeError: numpy.argsort() does not support axis, kind or order "
+        "arguments yet");
 
     nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
       throw std::runtime_error(
-        "TypeError: numpy.argsort() currently supports only 1-D arrays");
+        "TypeError: numpy.argsort() currently supports 1-D arrays only");
 
     const auto &elements = arr_arg["elts"];
     std::vector<std::size_t> indices(elements.size());
@@ -7596,26 +7601,26 @@ exprt numpy_call_expr::get()
     }
 
     nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
       throw std::runtime_error(
-        "TypeError: numpy.searchsorted() currently supports only 1-D arrays");
+        "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
 
     if (!is_sorted_numeric_list(
           arr_arg,
           "TypeError: numpy.searchsorted() array must contain finite numeric "
           "values"))
       throw std::runtime_error(
-        "TypeError: numpy.searchsorted() requires a sorted 1-D array");
+        "ValueError: numpy.searchsorted() requires the input array to be "
+        "sorted");
 
     nlohmann::json position;
     position["_type"] = "Constant";
     nlohmann::json value_arg = call_["args"][1];
     numeric_to_key(
-      value_arg,
-      "TypeError: numpy.searchsorted() value must be a finite numeric literal");
+      value_arg, "TypeError: numpy.searchsorted() requires a literal value");
     position["value"] =
       static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
     return converter_.get_expr(position);

@@ -418,6 +418,8 @@ private:
   exprt handle_set_method() const;
 
   // List method detection and handling
+  bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
+  bool receiver_is_binop_or_list_symbol() const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;
@@ -588,6 +590,21 @@ private:
   std::optional<exprt> try_fold_sorted();
   std::optional<exprt> try_materialize_numpy_tolist();
   std::optional<exprt> try_reduce_numpy_descriptor_method();
+
+  // a.sort(): in-place ascending sort over a concrete 1-D ndarray. Unlike
+  // sum/mean/argmin/..., this mutates its receiver (np.sort(a) instead
+  // returns a new array), so it cannot be normalized into the
+  // dispatch_rewrite_methods free-function shape; it is handled here as its
+  // own method. Returns nullopt for anything but a `<array>.sort()` call, so
+  // an unrelated (e.g. list) receiver falls through to its own handler
+  // unchanged.
+  std::optional<exprt> try_numpy_inplace_sort();
+
+  // One-line dispatch guard combining the two numpy method fast paths above
+  // so handle_general_function_call()'s own decision count does not grow
+  // with each one -- same reasoning as numpy_call_expr.cpp's
+  // get_arange_expr()/try_get_pointer_view_call_result().
+  std::optional<exprt> try_numpy_tolist_or_inplace_sort();
 
   // axis= handling for any()/all(), covering both call shapes
   // try_reduce_numpy_descriptor_method() resolves a receiver for. Returns
