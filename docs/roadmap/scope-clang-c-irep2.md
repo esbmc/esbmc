@@ -6749,7 +6749,15 @@ comment saying the other two "retype a node the migration already builds with
 the right type, so no corpus input distinguishes them".
 
 `github_169` distinguishes them, and reducing it shows the difference is not a
-rendering:
+rendering. It has three symptoms, not one:
+
+| symptom | shapes |
+|---|---|
+| `ERROR: Unexpected type in int/ptr typecast`, exit 134 | 1-D, VLA, 2-D, struct and union member, typedef, compound literal, `extern`/`static`/`const` array, and `github_169`'s own `char *b[argc]` |
+| `ERROR: Can't construct rvalue reference to array type during dereference`, exit 134 | `*p->v` through a struct pointer, `**a` on an array-typed parameter |
+| `VERIFICATION FAILED` -- a **wrong verdict, no crash** | `*"abc"`, `&*a` |
+
+The loud one first:
 
 ```c
 int main(void) { int a[3]; *a = 7; __ESBMC_assert(a[0] == 7, "x"); }
@@ -6777,7 +6785,8 @@ incomplete_array`. Only the array half is ported:
   reaches the arm, so reproducing it would be dead instrumentation. Measured,
   not assumed.
 - **incomplete_array** -- needs no arm of its own: `migrate_type` turns it into
-  `array_type2t` with `size_is_infinite` (migrate.cpp:359), which
+  `array_type2t` with `size_is_infinite` (`util/irep/migrate.cpp`'s
+  `incomplete_array` arm), which
   `is_array_type` already admits.
 
 ### 132.3 Result
@@ -6790,9 +6799,20 @@ control binary built from this same tree:
 | `irep2_only_deref_array` | the rewrite on a fixed-size array |
 | `irep2_only_deref_array_fail` | `*a` writes `a[0]`, not `a[1]` -- names the property |
 | `irep2_only_deref_array_vla` | the variably-modified shape `github_169` reduced to |
+| `irep2_only_deref_array_strlit` | the **wrong-verdict** class, which the other three cannot reach |
 
-Unlike §131 these do move a verdict, because the unported arm aborted rather
-than diverging quietly: the control exits 134 on all three.
+The first three all fail on the control the same way -- the process aborts --
+so together they distinguish only "crashes" from "does not crash". That is not
+enough: `char c = *"abc"; assert(c == 'a');` is `SUCCESSFUL` on legacy and
+`FAILED` on the unpatched hop-off, with no crash at all. A regression that
+reintroduced only the quiet half would pass all three. `..._strlit` is the one
+that guards it, and it is the test this section nearly shipped without --
+the first draft asserted the arm "aborted rather than diverging quietly",
+which the reduction above refutes.
+
+The divergence is always in the safe direction: the unpatched hop-off reports
+`FAILED` where legacy reports `SUCCESSFUL`, never the reverse, so the cost was
+precision rather than soundness.
 
 ### 132.4 Next
 
