@@ -94,6 +94,66 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
+/// File named by the top-level `from <module> import <bound>` that binds
+/// @p bound, or empty when no import does. A bare `from m import B` leaves
+/// only the class name at the use site, so the module cannot be read off the
+/// base expression the way `m.B` spells it (#6745).
+static std::string
+from_import_module_path(const nlohmann::json &ast, const std::string &bound)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.value("_type", "") != "ImportFrom" || !stmt.contains("names") ||
+      !stmt.contains("full_path") || stmt["full_path"].is_null())
+      continue;
+
+    for (const auto &alias : stmt["names"])
+    {
+      const bool aliased =
+        alias.contains("asname") && !alias["asname"].is_null();
+      const std::string name =
+        aliased ? alias["asname"].get<std::string>() : alias.value("name", "");
+      if (name == bound)
+        return stmt["full_path"].get<std::string>();
+    }
+  }
+
+  return {};
+}
+
+/// A base reached through an import lives in that module's file, so an id
+/// rewritten against the current file cannot name it. Both spellings reach
+/// here: `module.Base` names its module at the use site, while
+/// `from module import Base` leaves only the bare name (#6745).
+symbolt *python_converter::find_method_in_imported_base(
+  const nlohmann::json &base_class_node,
+  const std::string &base_class,
+  const std::string &method_name,
+  bool is_ctor) const
+{
+  const bool qualified = base_class_node.contains("value") &&
+                         base_class_node["value"].is_object() &&
+                         base_class_node["value"].contains("id");
+  const std::string module_path =
+    qualified ? get_imported_module_path(
+                  base_class_node["value"]["id"].get<std::string>())
+              : from_import_module_path(*ast_json, base_class);
+
+  if (module_path.empty())
+    return nullptr;
+
+  // `from m import Base as B` binds the alias, but the module defines the
+  // original name. A qualified base already spells its own name.
+  const std::string defined_name =
+    qualified ? base_class
+              : json_utils::get_object_alias(*ast_json, base_class);
+
+  class symbol_id base_id(
+    module_path, defined_name, is_ctor ? defined_name : method_name);
+  return symbol_table_.find_symbol(base_id.to_string());
+}
+
 symbolt *python_converter::find_function_in_base_classes(
   const std::string &class_name,
   const std::string &symbol_id,
@@ -138,24 +198,10 @@ symbolt *python_converter::find_function_in_base_classes(
     if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
       return func;
 
-    /* A base reached through an import lives in that module's file, so the
-     * rewrite above -- which keeps the current file's prefix -- cannot name
-     * it. Rebuild the id against the imported module instead. */
     if (
-      base_class_node.contains("value") &&
-      base_class_node["value"].is_object() &&
-      base_class_node["value"].contains("id"))
-    {
-      const std::string module_name =
-        base_class_node["value"]["id"].get<std::string>();
-      const std::string &module_path = get_imported_module_path(module_name);
-      if (!module_path.empty())
-      {
-        class symbol_id base_id(module_path, base_class, base_func_name);
-        if (symbolt *func = symbol_table_.find_symbol(base_id.to_string()))
-          return func;
-      }
-    }
+      symbolt *func = find_method_in_imported_base(
+        base_class_node, base_class, method_name, is_ctor))
+      return func;
 
     // Not defined directly in this base: descend into its own bases so a
     // method inherited from a grandparent (or higher) still resolves.
