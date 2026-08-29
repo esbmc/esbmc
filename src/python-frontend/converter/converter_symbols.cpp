@@ -6,6 +6,7 @@
 #include <util/message/message.h>
 
 #include <regex>
+#include <utility>
 
 void python_converter::update_symbol(const exprt &expr) const
 {
@@ -94,32 +95,36 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
-/// File named by the top-level `from <module> import <bound>` that binds
-/// @p bound, or empty when no import does. A bare `from m import B` leaves
-/// only the class name at the use site, so the module cannot be read off the
-/// base expression the way `m.B` spells it (#6745).
-static std::string
-from_import_module_path(const nlohmann::json &ast, const std::string &bound)
+/// Module file and the name that module defines, for the top-level
+/// `from <module> import <bound>` binding @p bound; an empty path when none
+/// does. A bare `from m import B` leaves only the class name at the use site,
+/// so the module cannot be read off the base expression the way `m.B` spells
+/// it (#6745). Python binds the last import of a name, so later statements
+/// win, and an `as` alias hides the name the module really defines.
+static std::pair<std::string, std::string>
+from_import_binding(const nlohmann::json &ast, const std::string &bound)
 {
+  std::pair<std::string, std::string> binding;
+
   for (const auto &stmt : ast["body"])
   {
     if (
       stmt.value("_type", "") != "ImportFrom" || !stmt.contains("names") ||
-      !stmt.contains("full_path") || stmt["full_path"].is_null())
+      !stmt["names"].is_array() || !stmt.contains("full_path") ||
+      stmt["full_path"].is_null())
       continue;
 
     for (const auto &alias : stmt["names"])
     {
+      const std::string name = alias.value("name", "");
       const bool aliased =
         alias.contains("asname") && !alias["asname"].is_null();
-      const std::string name =
-        aliased ? alias["asname"].get<std::string>() : alias.value("name", "");
-      if (name == bound)
-        return stmt["full_path"].get<std::string>();
+      if ((aliased ? alias["asname"].get<std::string>() : name) == bound)
+        binding = {stmt["full_path"].get<std::string>(), name};
     }
   }
 
-  return {};
+  return binding;
 }
 
 /// A base reached through an import lives in that module's file, so an id
@@ -135,19 +140,25 @@ symbolt *python_converter::find_method_in_imported_base(
   const bool qualified = base_class_node.contains("value") &&
                          base_class_node["value"].is_object() &&
                          base_class_node["value"].contains("id");
-  const std::string module_path =
-    qualified ? get_imported_module_path(
-                  base_class_node["value"]["id"].get<std::string>())
-              : from_import_module_path(*ast_json, base_class);
+
+  std::string module_path;
+  std::string defined_name = base_class;
+
+  if (qualified)
+    module_path = get_imported_module_path(
+      base_class_node["value"]["id"].get<std::string>());
+  // A class this file defines itself shadows an import of the same name;
+  // reaching into the module would bind the method off an unrelated class.
+  else if (
+    json_utils::find_class((*ast_json)["body"], base_class) == nlohmann::json())
+  {
+    const auto binding = from_import_binding(*ast_json, base_class);
+    module_path = binding.first;
+    defined_name = binding.second;
+  }
 
   if (module_path.empty())
     return nullptr;
-
-  // `from m import Base as B` binds the alias, but the module defines the
-  // original name. A qualified base already spells its own name.
-  const std::string defined_name =
-    qualified ? base_class
-              : json_utils::get_object_alias(*ast_json, base_class);
 
   class symbol_id base_id(
     module_path, defined_name, is_ctor ? defined_name : method_name);
