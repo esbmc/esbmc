@@ -807,6 +807,20 @@ private:
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
   /**
+   * @brief Resolve @c array[pos_expr] when the element is itself a list.
+   *
+   * Sets @p elem_type to the statically recorded element type whenever one
+   * exists. Returns the element expression when the nested-list path applies,
+   * and nullopt when the caller must fall through to the generic
+   * element-type resolution.
+   */
+  std::optional<exprt> resolve_nested_list_element(
+    const exprt &array,
+    const exprt &pos_expr,
+    size_t index,
+    typet &elem_type);
+
+  /**
    * @brief Resolve an index expression against a compile-time-known axis
    * length, normalizing negative values and rejecting out-of-range indices.
    * A literal (constant, or negated constant) index is fully resolved and
