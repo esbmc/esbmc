@@ -726,6 +726,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (KNOWNBUG) | Open: capping allocations at `PTRDIFF_MAX` would make the signed reading exact — C11 6.5.6p9 already requires `ptrdiff_t` to represent any in-object difference, and the model computes that difference signed. Verify the glibc precedent before citing it |
 | **R43** | **Medium–High (no verdict, default configuration)** — found by a loop-bound spelling census, §15 M9 (R43); **FIXED**, same entry | **A loop whose end is spelled `&a[n]` never terminates.** `for (int *p = a; p != &a[4]; ++p)` unwinds forever under default flags: `expr2t::simplify` returned nil for every `address_of`, so `&a[4]` never became `&a[0] + 4` and the guard was never decided against the `a + k` the induction variable carries. Spelling the same bound `a + 4` folds, which is why the shape survived — one spelling of the idiom works and the other hangs | `expr2t::simplify`'s `address_of_id` early return, `src/util/expr/expr_simplifier.cpp`; the skipped fold is `address_of2t::do_simplify` in the same file | `regression/esbmc/addressof_index_bound{,_fail}` | **Fixed**: normalise `&base[c]` to `&base[0] + c` on the operands of `equality2t`/`notequal2t` only, so the two spellings of a bound meet at the comparison that has to decide them. The `address_of_id` early return stays — running the fold on *every* address_of costs the value-set analysis the concrete offset and k-induction stops converging, see the entry |
 | **R44** | **Medium–High (no verdict, default configuration)** — found by R43's own open census row, §15 M9 (R44); **FIXED**, same entry | **A flat walk across a 2-D array never terminates.** `address_of2t::do_simplify` rebases only the innermost subscript, so `&a[1][2]` becomes `&(a[1])[0] + 2` while a pointer started at `&a[0][0]` carries `&(a[0])[0] + k`; the two bases differ and the guard is never decided. Two addresses in the same row already met, which is what made the shape read as a rank problem. R43's `<` row (c08) was also unmeasured: the ordered relations never had the normalisation at all | `normalize_addressof_index` and `simplify_relations`, `src/util/expr/expr_simplifier.cpp`; R43's own c06 census row | `regression/esbmc/nested_index_bound{,_lt,_fail}`, `nested_member_index_bound{,_fail}` | **Fixed**: rebase both operands on a chain with every subscript zeroed, counting the offset in the pointer's own pointee type so member steps join the same rewrite; reach it through pointer arithmetic so both sides move together; and give the ordered relations the normalisation `equality2t`/`notequal2t` already had. Residual: a walk whose two ends reach *different* members does not share a base |
+| **R47** | **Medium (no verdict, default configuration)** — found by a guard-*shape* census rather than a bound one, §15 M9 (R47); **partially FIXED**, same entry | **Every descending pointer walk hangs; every ascending twin folds.** The guard is `add(&a[4], k) != &a[0]`: the add's base keeps its own subscript, so it never meets the bare bound beside it. A decrement also never reaches the `base + offset` shape an increment has. Four other mechanisms were measured and refuted first, including a real missing `sub2t` arm in `constant_propagation` that changes no verdict | 18-shape guard census; `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp` | `regression/esbmc/descending_pointer_walk{,_fail}` | **Partially fixed**: `p - c -> p + (-c)` for a signed constant closes the 2-D walk on top of R44's rebasing. Every 1-D descending walk still hangs — a single subscript is never rebased — and that is a change to the single-subscript path, not another rule here |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -6357,6 +6358,78 @@ fix broke. The `incremental-smt` suite is re-run for the narrowed fix with
 |---|---|---|
 | `regression/esbmc/addressof_index_bound` | `--unwind 6` | `SUCCESSFUL`, pinned on `Generated 9 VCC(s), 1 remaining after simplification`. The verdict alone is vacuous here — the control also verifies, having discharged the extra VCCs through the solver instead. `assert(sum == 4)` keeps the four iterations load-bearing |
 | `regression/esbmc/addressof_index_bound_fail` | `--unwind 6` | `FAILED` on `array bounds violated`, the bound spelled `&a[5]`. Anti-vacuity for the fold itself: a rewrite that discarded the symbol — the 2006 comment's hazard — would lose this check. It fails on the control too, so it is a guard, not a mutation pin |
+### M9 (R47) — 2026-08-29, the direction that never folded, and four wrong answers
+
+R44's census asked how a bound is *spelled*. This one asks how the loop *moves*:
+eighteen guards over the same array — `!=`, `<`, `<=`, `>`, a `do`/`while`, a
+`goto`, a bare `break`, stride 2, an integer counter — no flags, 15 s cap.
+
+Fourteen fold. The four that do not are every **descending** walk, and their
+ascending twins all fold:
+
+| # | loop | base | patched |
+|---|---|---|---|
+| q01/q02 | `while` / `do while`, `p++` | `SUCCESSFUL` | `SUCCESSFUL` |
+| q03 | `for (p = &a[4]; p != &a[0]; p--)` | **hangs** | **hangs** |
+| q04 | same with `p > &a[0]` | **hangs** | **hangs** |
+| q05–q12, q14 | `<=`, reversed operands, stride 2, `goto`, `break`, `while (n--)` | `SUCCESSFUL` | `SUCCESSFUL` |
+| q13 | 2-D flat, `p != &a[0][0]`, `p--` | **hangs** | `SUCCESSFUL` |
+| r01 | descending to a *non-zero* bound `&a[1]` | **hangs** | **hangs** |
+| r03 | `p = p - 1` spelled out | **hangs** | **hangs** |
+| r04 | descending pointer, loop driven by an int counter | `SUCCESSFUL` | `SUCCESSFUL` |
+
+r04 is the control that matters: the decrement itself is fine. It is the
+comparison *against* a decremented pointer that never decides.
+
+**Four hypotheses were refuted before the fifth was measured**, and the entry
+records them because each cost a build and each was plausible:
+
+1. *"The bound is the bare base `&a[0]`."* Half true — it is what q03 and q13
+   hit — but r01 compares against `&a[1]`, shows `add != add`, and hangs anyway.
+2. *"`p--` yields a `sub2t` the cancellations miss, so propagation drops it."*
+   `constant_propagation` does lack a `sub2t` arm beside its `add2t` one, and
+   adding it flips the probe from `CP NO` to `CP YES` on 23007 assignments —
+   and changes no verdict. It was ablated back out.
+3. *"The offsets nest as `add(add(base, c1), c2)`."* They do not:
+   `simplify_pointer_add_const` fires 37767 times and the sums stay flat.
+4. *"`(B + c) ~ B` needs its own cancellation rule."* Written, measured, no
+   verdict change; ablated back out.
+
+**What it actually was.** The guard is `add(&a[4], k) != address_of(&a[0])` —
+the add's base still carries its *own* subscript 4, unnormalised, so it never
+matches the bare `&a[0]` beside it. R44's `flatten_addressof_under_add` is what
+rebases an address under pointer arithmetic, and on top of it the missing piece
+is one rule: `p - c` -> `p + (-c)` for a signed constant, so a descending walk
+arrives in the same `base + offset` shape an ascending one already had. An
+unsigned `c` is left alone; negating it is a wrap the fold has no reason to
+commit to.
+
+**Ablation, because three plausible changes is two too many.** All three were
+applied together first and q13 flipped. Removing the propagation arm: still
+flips. Removing the bare-base rule: still flips. Removing the `p - c` rewrite:
+stops flipping. The shipped change is that one rule; the other two are recorded
+above as measured-but-inert rather than carried along.
+
+**The residual is most of the row.** q03, q04, r01 and r03 — every *1-D*
+descending walk — still hang. Only the 2-D one is closed, because it is the
+shape whose base R44's flattening rebases. A 1-D `&a[4]` is a single subscript,
+which `address_of2t::do_simplify` handles and `flatten_addressof_under_add`
+deliberately leaves alone, so its base is never rebased and the guard never
+meets its bound. Widening that is the next entry's work, and it is a change to
+the single-subscript path rather than another rule here.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/descending_pointer_walk` | `--unwind 8` | `SUCCESSFUL`, pinned on `Generated 1 VCC(s), 1 remaining after simplification`; the base reports 2/2, the second VCC being the unwinding assertion the unfolded guard needs |
+| `regression/esbmc/descending_pointer_walk_fail` | `--unwind 8` | `FAILED`, naming its own assertion text, so a fold that miscounted the walk by one step would not satisfy it |
+| `regression/esbmc` | `ctest -j8`, 120 s cap | 1959 tests, 1 failure: `bundled_headers_from_vfs`, environmental and identical on the base build |
+
+A `github_1175_13` failure in an earlier sweep was **not** a fallout: the log
+records `FileNotFoundError` on the esbmc path, because a rebuild relinked the
+binary while that ctest run was in flight. Do not rebuild during a background
+sweep; the run is void, not informative.
+
+
 ### M9 (R44) — 2026-08-29, the row boundary the flattening never crossed
 
 R43 closed the `&a[c]` spelling of a loop bound and left one row of its census
