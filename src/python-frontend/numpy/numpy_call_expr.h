@@ -128,4 +128,15 @@ private:
     nlohmann::json arr_arg,
     const std::string &function_name,
     bool inline_only = false);
+
+  // np.sum(identity(x))/np.argmin(identity(x)): a reducer's argument reaches
+  // get() as a raw Call node when it is itself a nested call, never through
+  // function_call_expr's own dispatch (where try_fold_identity_array_return
+  // handles the equivalent `y = identity(x)` case). Reuses the same
+  // converter-level substitution for a pure, argument-only return (e.g.
+  // `def identity(a): return a`), inlining it to that substituted
+  // expression -- typically a bare Name the caller's own resolve_var can
+  // then resolve as usual -- so it is left unchanged for anything else
+  // (multi-statement bodies, non-argument locals, keyword calls).
+  nlohmann::json try_inline_pure_call_arg(nlohmann::json arg) const;
 };

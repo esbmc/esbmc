@@ -4173,10 +4173,19 @@ exprt numpy_call_expr::create_expr_from_call()
   auto resolve_var = [this](nlohmann::json &var) {
     if (var["_type"] == "Name")
     {
-      var = json_utils::find_var_decl(
+      // A function parameter has no Assign declaration, so find_var_decl()
+      // returns its own "arg" AST node (no "value" field) rather than
+      // nlohmann::json{}. Resolve into a local first and only commit it to
+      // var on success: overwriting var unconditionally left a parameter
+      // permanently corrupted to that "arg" node once this early-outs,
+      // which get_expr() then rejects as an unsupported expression instead
+      // of converting the parameter's own (already correctly bound) symbol
+      // (regression: array_return_descriptor_success).
+      nlohmann::json decl = json_utils::find_var_decl(
         var["id"], converter_.current_function_name(), converter_.ast());
-      if (!var.contains("value") || !var["value"].is_object())
+      if (!decl.contains("value") || !decl["value"].is_object())
         return;
+      var = std::move(decl);
 
       if (var["value"]["_type"] == "Call")
       {
@@ -5221,6 +5230,35 @@ exprt numpy_call_expr::create_expr_from_call()
           }
 
           typet base_type = t.subtype().subtype();
+
+          // The C-call path below writes its result through *current_lhs
+          // (built as an output-buffer pointer, not a return value), so it
+          // requires a real assignment target to already exist. A type-only
+          // probe of this same call (e.g. resolve_call_argument_array_type,
+          // run before the target symbol is even created) has none yet;
+          // build the transposed value directly instead, the same
+          // current_lhs-free way handle_axis_permutation_view_call's own
+          // general axis swap already does (regression:
+          // array_return_descriptor_success crashed dereferencing a null
+          // current_lhs here).
+          if (!converter_.current_lhs)
+          {
+            // Materialize into a named temporary rather than returning the
+            // raw nested-literal value directly: an un-symbol'd 2-D literal
+            // read straight back through a subscript (any_subscript_array_
+            // needs_copy_'s row-by-row copy, triggered by a non-symbol RHS)
+            // tripped a bitwuzla array-store width assertion downstream.
+            exprt transposed =
+              build_numpy_axis_swapped_2d_expr(type_handler_, arg_expr, shape);
+            symbolt &tmp = converter_.create_tmp_symbol(
+              call_, "$compound-literal$", transposed.type(), transposed);
+            exprt tmp_expr = symbol_expr(tmp);
+            code_declt decl(tmp_expr);
+            decl.operands().push_back(transposed);
+            converter_.add_instruction(decl);
+            return tmp_expr;
+          }
+
           const bool is_float = base_type.is_floatbv();
           function_id_.set_function(
             is_float ? "transpose_double" : "transpose");
@@ -5232,11 +5270,8 @@ exprt numpy_call_expr::create_expr_from_call()
             type_handler_.build_array(base_type, shape[0]);
           typet result_type =
             type_handler_.build_array(result_row_type, shape[1]);
-          if (converter_.current_lhs)
-          {
-            converter_.current_lhs->type() = result_type;
-            converter_.update_symbol(*converter_.current_lhs);
-          }
+          converter_.current_lhs->type() = result_type;
+          converter_.update_symbol(*converter_.current_lhs);
 
           auto &args = call.arguments();
           typet flat_ptr_type =
@@ -6436,6 +6471,20 @@ nlohmann::json numpy_call_expr::resolve_literal_numpy_array_input(
   return std::move(*literal_arg);
 }
 
+nlohmann::json
+numpy_call_expr::try_inline_pure_call_arg(nlohmann::json arg) const
+{
+  if (arg.value("_type", "") != "Call")
+    return arg;
+
+  std::optional<nlohmann::json> ret_val =
+    converter_.select_return_value_for_call(arg);
+  if (!ret_val || !converter_.return_value_uses_call_argument(*ret_val, arg))
+    return arg;
+
+  return converter_.substitute_call_arguments(*ret_val, arg);
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
@@ -6456,10 +6505,14 @@ exprt numpy_call_expr::get()
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
-        var = json_utils::find_var_decl(
+        // See create_expr_from_call()'s own resolve_var for why var is not
+        // overwritten until decl is confirmed to have a real declaration
+        // (a function parameter has none).
+        nlohmann::json decl = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
-        if (!var.contains("value") || !var["value"].is_object())
+        if (!decl.contains("value") || !decl["value"].is_object())
           return;
+        var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
           if (auto numpy_call = try_build_numpy_arange_list(var["value"]))
@@ -6492,7 +6545,7 @@ exprt numpy_call_expr::get()
     if (function == "arange")
       return get_arange_expr();
 
-    nlohmann::json arg = call_["args"][0];
+    nlohmann::json arg = try_inline_pure_call_arg(call_["args"][0]);
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
@@ -6609,10 +6662,14 @@ exprt numpy_call_expr::get()
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
-        var = json_utils::find_var_decl(
+        // See create_expr_from_call()'s own resolve_var for why var is not
+        // overwritten until decl is confirmed to have a real declaration
+        // (a function parameter has none).
+        nlohmann::json decl = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
-        if (!var.contains("value") || !var["value"].is_object())
+        if (!decl.contains("value") || !decl["value"].is_object())
           return;
+        var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
           if (
@@ -6702,10 +6759,14 @@ exprt numpy_call_expr::get()
               converter_.current_function_name(),
               converter_.ast()))
           return;
-        var = json_utils::find_var_decl(
+        // See create_expr_from_call()'s own resolve_var for why var is not
+        // overwritten until decl is confirmed to have a real declaration
+        // (a function parameter has none).
+        nlohmann::json decl = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
-        if (!var.contains("value") || !var["value"].is_object())
+        if (!decl.contains("value") || !decl["value"].is_object())
           return;
+        var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
           if (auto numpy_call = try_build_numpy_arange_list(var["value"]))

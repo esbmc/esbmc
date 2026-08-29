@@ -2817,23 +2817,67 @@ nlohmann::json python_converter::substitute_call_arguments(
   return node;
 }
 
-bool python_converter::return_value_uses_call_argument(
-  const nlohmann::json &return_value,
-  const nlohmann::json &call_node) const
+// Recursively checks that every Name leaf in `node` satisfies `name_is_safe`
+// -- used to decide whether a return expression built around a call (e.g.
+// `np.transpose(a)`) is safe to substitute wholesale: substitute_call_arguments
+// only ever rewrites a Name matching a parameter, so anything else it would
+// leave untouched (a module alias, a literal) must resolve correctly in the
+// caller's own scope for the substituted tree to mean the same thing there.
+static bool expr_only_references_safe_names(
+  const nlohmann::json &node,
+  const std::function<bool(const std::string &)> &name_is_safe)
+{
+  if (node.is_object())
+  {
+    if (node.value("_type", "") == "Name" && node.contains("id"))
+      return name_is_safe(node["id"].get<std::string>());
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (!expr_only_references_safe_names(it.value(), name_is_safe))
+        return false;
+    return true;
+  }
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (!expr_only_references_safe_names(elem, name_is_safe))
+        return false;
+  }
+  return true;
+}
+
+// Resolves call_node to its callee's FunctionDef node, or an empty json when
+// it isn't a plain `name(...)` call to a locally-defined function with a
+// concrete parameter list. Split out of return_value_uses_call_argument to
+// keep that function's own decision count down.
+static nlohmann::json resolve_func_node_with_params(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_body)
 {
   if (
     !call_node.is_object() || call_node.value("_type", "") != "Call" ||
     !call_node.contains("func") ||
     call_node["func"].value("_type", "") != "Name")
-    return false;
+    return nlohmann::json();
 
   const std::string func_name = call_node["func"]["id"].get<std::string>();
   const nlohmann::json func_node =
-    json_utils::try_find_function((*ast_json)["body"], func_name);
+    json_utils::try_find_function(ast_body, func_name);
   if (
     func_node.empty() || !func_node.contains("args") ||
     !func_node["args"].contains("args") ||
     !func_node["args"]["args"].is_array())
+    return nlohmann::json();
+
+  return func_node;
+}
+
+bool python_converter::return_value_uses_call_argument(
+  const nlohmann::json &return_value,
+  const nlohmann::json &call_node) const
+{
+  const nlohmann::json func_node =
+    resolve_func_node_with_params(call_node, (*ast_json)["body"]);
+  if (func_node.empty())
     return false;
 
   auto is_param_name = [&](const nlohmann::json &node) {
@@ -2849,8 +2893,39 @@ bool python_converter::return_value_uses_call_argument(
   if (is_param_name(return_value))
     return true;
 
-  return return_value.value("_type", "") == "Subscript" &&
-         return_value.contains("value") && is_param_name(return_value["value"]);
+  if (
+    return_value.value("_type", "") == "Subscript" &&
+    return_value.contains("value") && is_param_name(return_value["value"]))
+    return true;
+
+  // return <call>(<param>, ...): e.g. `def transposed(a): return
+  // np.transpose(a)`. Split out to keep this function's own decision count
+  // down; see that method for why this shape is safe to substitute too.
+  if (return_value.value("_type", "") == "Call")
+    return return_call_only_references_params_or_modules(
+      return_value, func_node["args"]["args"]);
+
+  return false;
+}
+
+bool python_converter::return_call_only_references_params_or_modules(
+  const nlohmann::json &return_value,
+  const nlohmann::json &params) const
+{
+  // Safe to substitute under the same reasoning as the bare-param/subscript
+  // cases in return_value_uses_call_argument as long as every Name the call
+  // expression references is either a parameter (substituted) or an
+  // imported module alias (left as-is, and resolved identically in the
+  // caller's own scope).
+  auto name_is_safe = [&](const std::string &name) {
+    if (imported_modules.find(name) != imported_modules.end())
+      return true;
+    for (const auto &param : params)
+      if (param.value("arg", "") == name)
+        return true;
+    return false;
+  };
+  return expr_only_references_safe_names(return_value, name_is_safe);
 }
 
 /// Item assignment on an immutable container is a TypeError. A string that is
@@ -7508,6 +7583,14 @@ void python_converter::get_return_statements(
     target_block.copy_to_operands(return_code);
     return;
   }
+
+  // Same check Assign already applies to its RHS: a numpy view (copied,
+  // transpose, or reshape) stashed inside a list/tuple/dict escapes into a
+  // container get_expr cannot build a valid GOTO reference for, crashing
+  // deep in irep migration instead of raising a clean diagnostic. `return
+  // [a[0]]` is exactly Assign's own `y = [a[0]]` case, just via a Return
+  // instead of an Assign target.
+  reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
   bool is_user_defined_function = false;
   if (

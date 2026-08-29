@@ -1194,6 +1194,15 @@ private:
     const nlohmann::json &return_value,
     const nlohmann::json &call_node) const;
 
+  // return <call>(<param>, ...), e.g. `def transposed(a): return
+  // np.transpose(a)`: true when every Name the call expression references is
+  // either one of `params` or an imported module alias. Split out of
+  // return_value_uses_call_argument to keep that function's own decision
+  // count down.
+  bool return_call_only_references_params_or_modules(
+    const nlohmann::json &return_value,
+    const nlohmann::json &params) const;
+
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
   void reject_unsafe_numpy_view_write_to(const std::string &root_id);
 
