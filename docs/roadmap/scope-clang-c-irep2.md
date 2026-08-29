@@ -6544,3 +6544,179 @@ Read rather than tallied, per §104.2:
 
 The abort is the one worth taking next: it is not a spelling difference but a
 hard stop, and it puts two tests beyond measurement rather than merely differing.
+
+## 130. The polymorphic builtins were never declared on the hop-off (2026-08-28)
+
+clang hands the GCC `__sync_*` / `__atomic_*` and the C11 `__c11_atomic_*`
+builtins over as declarations with no body; the concrete instance is synthesised
+by the frontend. That synthesis lives in one arm of
+`clang_c_adjust::adjust_side_effect_function_call`, and
+`--clang-c-irep2-adjust-only` *replaces* `clang_c_adjust` rather than shadowing
+it, so on the hop-off the arm was simply absent.
+
+The consequence is not a spelling difference. With the declaration body-less,
+symex has nothing to execute: an atomic load returns nondet, a store is dropped,
+and the memory-safety obligations of the access the builtin performs — the null
+check, the alignment check — are never generated. A program whose only
+dereference is inside an atomic verifies clean.
+
+### 130.1 The arm is a symbol-table side effect, so it ports on its own
+
+`declare_gcc_polymorphic_builtin` is lifted out of the legacy arm into a public
+`static` member of `clang_c_adjust` that both adjusters call. This is the same
+shape as `declare_implicit_callee` (§110.3): the work is an insertion into
+`contextt` plus a repointed callee, not an expression rewrite, so it does not
+wait on the rest of that arm being ported.
+
+The two helpers it calls become `static` for the same reason — neither reads
+member state beyond `context`, which is now a parameter — but keep their
+`clang_c_adjust::` qualification. Making them free functions is the obvious
+move and is wrong for a measurable reason: `ccn_report.py` keys a function on
+its qualified name, so dropping the class name presents two 49- and 68-CCN
+functions as *new* and fails the complexity gate on a rename. The repo-wide
+count says otherwise — `core` 564 → 564 — but the gate reads the per-function
+table, not the total. Keeping the qualification also keeps the machinery under
+the class that owns it, and costs nothing.
+
+### 130.2 The seam carries types, and it is lossy
+
+The IREP2 caller must hand the matcher legacy `exprt` arguments. It hands it
+`nil` operands carrying only the migrated type. No arm reads a value: across
+the matcher's 283 lines the parameter is touched only as `arguments.front()`,
+bound 16 times to a `const exprt &ptr_arg`, and all 37 uses of `ptr_arg` are
+`ptr_arg.type()` — no arm reads a value, an index other than the first, or the
+argument count. The choice is deliberately fragile in the safe direction: an
+arm added later that reads a *value* gets `nil` and fails where it can be seen.
+
+That is necessary and **not sufficient**, and an earlier draft of this section
+claimed otherwise. The type is not merely a selector. `type2name` of the first
+parameter becomes the instance's mangled name, the name is the memoisation key
+(`context.find_symbol(identifier_with_type)`), and the parameter types become
+the synthesised body's. So the obligation is that the type *round-trips*, and
+across this seam it does not: IREP2 has no representation for the C qualifiers,
+so `migrate_type_back` drops `const`, `volatile` and `_Atomic`. This is not
+specific to the builtins — `dead_store_analysis.cpp:157` already records that
+`migrate_type`/`get_type2()` lose `#volatile`.
+
+The visible consequence is that qualified and unqualified call sites collapse
+onto one instance where `clang_c_adjust` builds two:
+
+```c
+volatile int vi; int pi;
+__sync_fetch_and_add(&vi, 1);
+__sync_fetch_and_add(&pi, 1);
+```
+
+| path | instances |
+|---|---|
+| `clang_c_adjust` | `__sync_fetch_and_add_4_vS32` **and** `..._4_S32` |
+| `--clang-c-irep2-adjust-only` | `..._4_S32` only |
+
+No verdict or claim-set difference follows from it on anything measured — the
+`_Atomic` body split lives inside the builtin's own `ATOMIC_BEGIN`/`ATOMIC_END`,
+so no extra interleaving is admitted — and `irep2_only_polymorphic_builtin_qualified`
+pins that the shared instance still performs each call site's own arithmetic.
+It is recorded here as a known residual of the hop-off, in the same class as the
+357 symbol-table lines of §130.4, not as a discharged obligation. Recovering the
+qualifiers needs them to survive `migrate_type`, which is not this section's
+work.
+
+### 130.3 The call's location, which §110.3 left open in a second place
+
+`sideeffect2t` carries no location, so a builtin call appearing as a bare
+statement had none to give the symbol it declares. §110.3 settled the position
+for `declare_implicit_callee`: the statement's location is the call's when the
+call is the whole statement, and that is the one place it may be taken from.
+The same rule applies here, so `adjust_expr` now tracks the innermost enclosing
+statement's location in `enclosing_location` and the `sideeffect2t` branch reads
+it. §110.3's conclusion is unchanged: closing the narrower shapes needs a
+`locationt` field on `sideeffect2t`, and that is still not done here.
+
+### 130.4 Result
+
+Over the 30 corpus tests that call one of these builtins, the symbol table the
+hop-off produces and the one `clang_c_adjust` produces differ by **1991 lines
+before the port and 357 after** — 82 % closed. Eleven tests move; none acquires
+a difference it did not have.
+
+| test | before | after |
+|---|---:|---:|
+| `esbmc/github_2174` | 616 | 112 |
+| `esbmc-unix/github_4435_atomic_fetch_add` | 323 | 61 |
+| `esbmc-unix/github_4436` | 207 | 53 |
+| `esbmc-unix/github_2174` | 152 | 18 |
+| `esbmc-unix/github_2174_fail`, `esbmc/github_2174_fail` | 139 | 18 |
+| `clang_builtins/atomic_load` | 99 | 12 |
+| `clang_builtins/atomic_store` | 96 | 12 |
+| `esbmc/github_2142` | 83 | 10 |
+| `clang_builtins/sync_fetch_and_add_0_{true,false}` | 53 | 6 |
+
+### 130.5 The mutants
+
+| mutant | killed by |
+|---|---|
+| `declare_polymorphic_builtin` not called | all three (SUCCESSFUL → FAILED, and both `_fail` → SUCCESSFUL) |
+| same, on the safety obligation | `irep2_only_polymorphic_builtin_fail` (FAILED → SUCCESSFUL, 0 VCCs) |
+| `enclosing_location` not read — `loc = locationt()` | both `_fail` tests (line 9 → line 0) |
+| `code_dowhile_id` and `code_switch_id` arms dropped from `statement_location` | `..._dowhile_fail` and `..._switch_fail`, and only those two |
+
+The negative tests are the ones that matter. A `_fail` descriptor pinning only
+`^VERIFICATION FAILED$` pins nothing — every mutant fails too, just on another
+property — so both name the claim: `__c11_atomic_store.null-pointer-dereference.1`
+and `__c11_atomic_load.null-pointer-dereference.1`. Unported, the first is not
+merely satisfied but never generated — the run reports 0 VCCs.
+
+Each names a *line* as well, which is what makes them the gate on §130.3 rather
+than on §130.1 alone: with `enclosing_location` left unread the claim still
+fires, but at line 0 with no file. They differ in the statement kind that
+supplies that location — `code_expression2t` for the bare call in `..._fail`,
+`code_while2t` for the loop condition in `..._cond_fail`, `code_dowhile2t` and
+`code_switch2t` for `..._dowhile_fail` and `..._switch_fail` — so each pins a
+different arm of `statement_location`, and dropping a single arm reddens only
+its own test. `..._stmt_kinds` is their passing counterpart: it puts a call in
+a do-while condition and a switch selector in one program and asserts the
+arithmetic, which a location mutant cannot reach but §130.1's can.
+
+`..._cond_fail`'s loop is unbounded, and its descriptor carries
+`--incremental-bmc` for that reason: the violation is found at k = 1 in 0.5 s,
+where the default flags never terminate and CI's 120 s per-test cap would score
+the test as a timeout rather than a verdict.
+
+### 130.6 `symtab_sweep.sh` cannot sweep an `irep2_only_*` test
+
+The sweep appends the hop-off flag to whatever line 3 of `test.desc` already
+carries, and an `irep2_only_*` descriptor carries it by construction. esbmc
+rejects the duplicate (`option '--clang-c-irep2-adjust-only' cannot be specified
+more than once`, exit 64), the "on" dump comes back empty, and the pair scores
+as a difference the size of the whole symbol table. The two tests added here
+read 6388 and 6336 lines of difference for that reason alone and are excluded
+from §130.4's figures. Any corpus handed to the sweep must exclude them.
+
+### 130.7 A crash the extraction exposed, and fixes
+
+Lifting the arm out surfaced a defect that predates it. `is_gcc_polymorphic_builtin`
+matches on a name *prefix* — `has_prefix(identifier, "c:@F@__sync_fetch_and_add")`
+and twelve siblings — and every arm it selects immediately binds
+`arguments.front()`. The prefix is not reserved to the builtin: an ordinary
+user function called `__sync_fetch_and_add_mine` matches it, and called with no
+arguments there is no `front()` to bind. The extracted
+`declare_gcc_polymorphic_builtin` therefore guards on `arguments.empty()`
+before the matcher runs, which is the only place the check can go and still
+cover both callers.
+
+A non-pointer first argument is the same defect one step along: the thirteen
+arms that destructure the pointer trip `to_pointer_type`'s assertion, and the
+three that only copy `ptr_arg.type()` build an instance around a type no arm
+meant to accept. Under `NDEBUG` — the configuration CI builds — the assertion
+is gone and the cast proceeds instead, which is worse than the abort. The guard
+therefore covers both shapes, and declining leaves the body-less declaration,
+which is what a non-builtin of that name should have had all along.
+
+The fix is on the legacy path as much as the hop-off, so
+`polymorphic_builtin_prefix_{no_args,nonptr}{,_fail}` pin it with a blank flags
+line rather than `--clang-c-irep2-adjust-only`, and
+`polymorphic_builtin_prefix_irep2_only` pins the second caller. Dropping the
+whole guard kills all five; dropping only the pointer half kills the three that
+exercise it, so each half is separately load-bearing. This is the same family as §110's
+base-name defect: the matcher's name test is a prefix where it means an exact
+name, and each shape that reaches it wrongly has to be closed as it is found.
