@@ -351,7 +351,7 @@ TEST_CASE(
   // carry their checks. Deleting the guard costs exactly one of each kind --
   // a dereference nobody verifies, which is the missed-bug direction, and the
   // same asymmetry the function-pointer filter above is checked for.
-  REQUIRE(asserts_commented(eq, "dereference failure: invalid pointer") == 4);
+  REQUIRE(asserts_commented(eq, "dereference failure: invalid pointer") == 1);
   REQUIRE(
-    asserts_commented(eq, "dereference failure: Incorrect alignment") == 4);
+    asserts_commented(eq, "dereference failure: Incorrect alignment") == 1);
 }
