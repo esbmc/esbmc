@@ -3619,63 +3619,101 @@ static expr2tc simplify_constant_relation(
   return typecast_check_return(type, simpl_res);
 }
 
-/// Flatten `&a[i][j]` to `&a[0][0] + (i * N + j)`, N the row length.
+/// Sum a chain's subscripts, each scaled into @p pointee-sized units; nil when
+/// a step is not a whole number of them or cannot be measured at all.
+///
+/// Members contribute nothing: the rebuilt base keeps the member path as it
+/// is, so their offset is already in there. Counting it here too only shows up
+/// once the struct has padding before the member
+/// (`struct { char c; int v[3]; } s[2]`).
+static expr2tc subscript_offset_in_units(
+  const std::vector<const expr2tc *> &chain,
+  const type2tc &pointee,
+  const type2tc &offset_t)
+{
+  try
+  {
+    const BigInt unit = type_byte_size(pointee, migrate_namespace_lookup);
+    if (unit == 0)
+      return expr2tc();
+
+    expr2tc offset = constant_int2tc(offset_t, BigInt(0));
+    for (const expr2tc *step : chain)
+    {
+      if (is_member2t(*step))
+        continue;
+
+      const index2t &idx = to_index2t(*step);
+      const BigInt size = type_byte_size(idx.type, migrate_namespace_lookup);
+      if (size % unit != 0)
+        return expr2tc();
+
+      expr2tc sub = idx.index;
+      if (sub->type != offset_t)
+        sub = typecast2tc(offset_t, sub);
+      const BigInt scale = size / unit;
+      if (scale != 1)
+        sub = mul2tc(offset_t, sub, constant_int2tc(offset_t, scale));
+      offset = add2tc(offset_t, offset, sub);
+    }
+    return offset;
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return expr2tc();
+  }
+}
+
+/// Flatten `&a[i][j]` to `&a[0][0] + (i * N + j)`, and `&s[i].v[j]` likewise,
+/// with the offset counted in the pointer's own pointee type.
 ///
 /// address_of2t::do_simplify rewrites only the innermost subscript, so two
-/// addresses in different rows of one array keep different bases and the
+/// addresses that differ in an outer one keep different bases and the
 /// cancellation below cannot reach them: a flat walk from `&a[0][0]` to
-/// `&a[1][2]` never exits. Row-major layout makes the offset exact, and only
-/// the comparison's own operands are rewritten, so no dereference is built
-/// from the flattened form (#6778, the 2-D residual of #7346).
+/// `&a[1][2]` never exits. Zeroing every subscript gives them a base to share;
+/// members are kept as they are and contribute their own constant offset, so
+/// an array of structs walked as flat memory is the same rewrite rather than a
+/// second one. Only the comparison's operands are rewritten, so no dereference
+/// is built from the flattened form (#6778).
+///
+/// A subscript contributes `subscript * (sizeof(element) / unit)`, which keeps
+/// a symbolic subscript symbolic.
 static expr2tc flatten_nested_index_address(const address_of2t &ao)
 {
-  std::vector<const index2t *> chain;
+  const type2tc &pointee = to_pointer_type(ao.type).subtype;
+  if (is_empty_type(pointee))
+    return expr2tc();
+
+  std::vector<const expr2tc *> chain;
   const expr2tc *root = &ao.ptr_obj;
-  while (is_index2t(*root))
+  while (is_index2t(*root) || is_member2t(*root))
   {
-    chain.push_back(&to_index2t(*root));
-    root = &to_index2t(*root).source_value;
+    chain.push_back(root);
+    root = is_index2t(*root) ? &to_index2t(*root).source_value
+                             : &to_member2t(*root).source_value;
   }
 
-  // One subscript is address_of2t::do_simplify's own case; leave it there.
+  // A single subscript is address_of2t::do_simplify's own case; leave it there
+  // so this only ever widens what already folded.
   if (chain.size() < 2)
     return expr2tc();
 
   const type2tc &offset_t = index_type2();
-  expr2tc offset = constant_int2tc(offset_t, BigInt(0));
-  BigInt stride(1);
-  for (size_t i = 0; i < chain.size(); i++)
-  {
-    expr2tc sub = chain[i]->index;
-    if (sub->type != offset_t)
-      sub = typecast2tc(offset_t, sub);
-    if (stride != 1)
-      offset = add2tc(
-        offset_t,
-        offset,
-        mul2tc(offset_t, sub, constant_int2tc(offset_t, stride)));
-    else
-      offset = add2tc(offset_t, offset, sub);
-
-    if (i + 1 == chain.size())
-      break;
-    const type2tc &row = chain[i]->source_value->type;
-    if (!is_array_type(row) || is_nil_expr(to_array_type(row).array_size))
-      return expr2tc();
-    const expr2tc &len = to_array_type(row).array_size;
-    if (!is_constant_int2t(len))
-      return expr2tc();
-    stride *= to_constant_int2t(len).value;
-  }
+  expr2tc offset = subscript_offset_in_units(chain, pointee, offset_t);
+  if (is_nil_expr(offset))
+    return expr2tc();
 
   expr2tc base = *root;
   for (size_t i = chain.size(); i-- > 0;)
-    base = index2tc(chain[i]->type, base, constant_int2tc(offset_t, BigInt(0)));
+  {
+    const expr2tc &step = *chain[i];
+    base = is_index2t(step)
+             ? index2tc(step->type, base, constant_int2tc(offset_t, BigInt(0)))
+             : member2tc(step->type, base, to_member2t(step).member);
+  }
 
-  expr2tc flat = add2tc(
-    ao.type,
-    address_of2tc(to_pointer_type(ao.type).subtype, base),
-    try_simplification(offset));
+  expr2tc flat =
+    add2tc(ao.type, address_of2tc(pointee, base), try_simplification(offset));
   expr2tc simplified = flat->simplify();
   return is_nil_expr(simplified) ? flat : simplified;
 }
