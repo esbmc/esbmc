@@ -44,7 +44,13 @@ private:
     const std::string &lambda_id,
     const std::string &param_scope_id,
     const locationt &location,
-    const nlohmann::json &body_node);
+    const nlohmann::json &body_node,
+    const std::vector<typet> &call_site_types);
+
+  // Per-parameter type taken from a call through the name this lambda is bound
+  // to; an entry is nil when no such call supplies that argument (#7328).
+  std::vector<typet>
+  call_site_argument_types(const nlohmann::json &element) const;
 
   exprt process_lambda_body(
     const nlohmann::json &body_node,

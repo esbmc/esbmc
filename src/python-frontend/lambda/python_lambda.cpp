@@ -1,4 +1,5 @@
 #include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_handler.h>
@@ -244,40 +245,183 @@ symbolt python_lambda::create_symbol(
   return symbol;
 }
 
+namespace
+{
+bool same_position(const nlohmann::json &a, const nlohmann::json &b)
+{
+  return a.value("lineno", -1) == b.value("lineno", -2) &&
+         a.value("col_offset", -1) == b.value("col_offset", -2);
+}
+
+// The statement list holding `lambda_node`'s binding, plus the name it binds.
+// A lambda is lowered eagerly at its assignment, so this is the only place a
+// later call through that name is still visible (#7328).
+const nlohmann::json *find_binding_scope(
+  const nlohmann::json &node,
+  const nlohmann::json &lambda_node,
+  std::string &bound_name)
+{
+  if (node.is_array())
+  {
+    for (const auto &stmt : node)
+    {
+      if (
+        stmt.value("_type", "") == "Assign" && stmt.contains("value") &&
+        stmt["value"].value("_type", "") == "Lambda" &&
+        same_position(stmt["value"], lambda_node) && stmt.contains("targets") &&
+        stmt["targets"].is_array() && stmt["targets"].size() == 1 &&
+        stmt["targets"][0].value("_type", "") == "Name")
+      {
+        bound_name = stmt["targets"][0].value("id", "");
+        return &node;
+      }
+    }
+  }
+
+  if (!node.is_structured())
+    return nullptr;
+
+  for (const auto &child : node.items())
+  {
+    const nlohmann::json *found =
+      find_binding_scope(child.value(), lambda_node, bound_name);
+    if (found != nullptr)
+      return found;
+  }
+  return nullptr;
+}
+
+// Argument `index` of the first call to `name` found under `node`.
+const nlohmann::json *find_call_argument(
+  const nlohmann::json &node,
+  const std::string &name,
+  size_t index)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    if (
+      func.value("_type", "") == "Name" && func.value("id", "") == name &&
+      node.contains("args") && node["args"].is_array() &&
+      node["args"].size() > index)
+      return &node["args"][index];
+  }
+
+  if (!node.is_structured())
+    return nullptr;
+
+  for (const auto &child : node.items())
+  {
+    const nlohmann::json *found =
+      find_call_argument(child.value(), name, index);
+    if (found != nullptr)
+      return found;
+  }
+  return nullptr;
+}
+} // namespace
+
+std::vector<typet>
+python_lambda::call_site_argument_types(const nlohmann::json &element) const
+{
+  std::vector<typet> types;
+  if (
+    !element.contains("args") || !element["args"].contains("args") ||
+    !element["args"]["args"].is_array())
+    return types;
+
+  std::string bound_name;
+  const nlohmann::json *scope =
+    find_binding_scope(converter_.ast(), element, bound_name);
+  if (scope == nullptr || bound_name.empty())
+    return types;
+
+  const locationt location = converter_.get_location_from_decl(element);
+  const std::string prefix = "py:" + location.get_file().as_string() + "@F@" +
+                             converter_.get_current_func_name() + "@";
+
+  const size_t count = element["args"]["args"].size();
+  for (size_t i = 0; i < count; ++i)
+  {
+    typet resolved;
+    resolved.make_nil();
+    const nlohmann::json *arg = find_call_argument(*scope, bound_name, i);
+    if (arg != nullptr)
+    {
+      const std::string arg_kind = arg->value("_type", "");
+
+      // A subscript yields an element, whose registered type list_type_map
+      // recorded when the list literal was converted. A list-valued element is
+      // left alone: the list object pointer is not usable as a parameter type
+      // here, and typing it as one makes the solver reject the formula.
+      if (
+        arg_kind == "Subscript" && arg->contains("value") &&
+        (*arg)["value"].value("_type", "") == "Name")
+      {
+        typet elem = python_list::get_list_element_type(
+          prefix + (*arg)["value"].value("id", ""), 0);
+        if (
+          elem != typet() && elem != empty_typet() &&
+          elem != type_handler_.get_list_type())
+          resolved = elem;
+      }
+    }
+    types.push_back(resolved);
+  }
+  return types;
+}
+
+// A lambda parameter is typed by its annotation, else by string usage in the
+// body, else by the value the call site passes -- the `double` default rejects
+// any body that indexes its parameter (#7328).
+static typet lambda_parameter_type(
+  const nlohmann::json &arg,
+  const nlohmann::json &body_node,
+  const std::string &arg_name,
+  const typet &from_call_site)
+{
+  if (arg.contains("annotation") && !arg["annotation"].is_null())
+    return arg["annotation"].get<std::string>() == "str"
+             ? gen_pointer_type(signed_char_type())
+             : double_type();
+
+  if (is_param_used_as_string(body_node, arg_name))
+    return gen_pointer_type(signed_char_type());
+
+  if (from_call_site.is_not_nil() && from_call_site.id() != irep_idt())
+    return from_call_site;
+
+  return double_type();
+}
+
 void python_lambda::process_lambda_parameters(
   const nlohmann::json &args_node,
   code_typet &lambda_type,
   [[maybe_unused]] const std::string &lambda_id,
   const std::string &param_scope_id,
   const locationt &location,
-  const nlohmann::json &body_node)
+  const nlohmann::json &body_node,
+  const std::vector<typet> &call_site_types)
 {
   if (!args_node.contains("args") || !args_node["args"].is_array())
     return;
 
   std::string module_name = location.get_file().as_string();
 
+  size_t arg_index = 0;
   for (const auto &arg : args_node["args"])
   {
+    const size_t this_index = arg_index++;
     std::string arg_name = arg["arg"].get<std::string>();
 
     refuse_called_lambda_parameter(body_node, arg_name);
 
-    // Determine parameter type from annotation or infer from usage
-    typet param_type = double_type();
-
-    // Check for type annotation
-    if (arg.contains("annotation") && !arg["annotation"].is_null())
-    {
-      std::string annotation = arg["annotation"].get<std::string>();
-      if (annotation == "str")
-        param_type = gen_pointer_type(signed_char_type());
-    }
-    // Infer from usage in lambda body
-    else if (is_param_used_as_string(body_node, arg_name))
-    {
-      param_type = gen_pointer_type(signed_char_type());
-    }
+    const typet param_type = lambda_parameter_type(
+      arg,
+      body_node,
+      arg_name,
+      this_index < call_site_types.size() ? call_site_types[this_index]
+                                          : typet());
 
     // Each lambda parameter is modelled as two symbols:
     //
@@ -403,6 +547,10 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   // Save the original function context
   std::string old_func = converter_.get_current_func_name();
 
+  // Resolve call-site argument types while the enclosing scope is still
+  // current: the names they mention are invisible from the lambda's own scope.
+  const std::vector<typet> call_site_types = call_site_argument_types(element);
+
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);
 
@@ -446,7 +594,8 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
       lambda_id,
       param_scope_id,
       location,
-      element.contains("body") ? element["body"] : nlohmann::json());
+      element.contains("body") ? element["body"] : nlohmann::json(),
+      call_site_types);
 
   // Create lambda function symbol
   symbolt lambda_symbol = create_symbol(
