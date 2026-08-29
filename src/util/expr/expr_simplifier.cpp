@@ -3762,7 +3762,17 @@ static expr2tc flatten_nested_index_address(const address_of2t &ao)
 static expr2tc flatten_addressof_under_add(const expr2tc &e)
 {
   if (is_address_of2t(e))
-    return flatten_nested_index_address(to_address_of2t(e));
+  {
+    const address_of2t &ao = to_address_of2t(e);
+    if (expr2tc flat = flatten_nested_index_address(ao); !is_nil_expr(flat))
+      return flat;
+
+    // A single subscript is address_of2t::do_simplify's case, and the
+    // top-level operand already gets it; an address under pointer arithmetic
+    // did not, so `&a[4] + k` kept a base its bare `&a[0]` bound could never
+    // meet and a 1-D descending walk never exited (#6779).
+    return is_index2t(ao.ptr_obj) ? ao.do_simplify() : expr2tc();
+  }
 
   if (!is_add2t(e))
     return expr2tc();
