@@ -1528,6 +1528,33 @@ offset*, #6981) is already on `master` and does **not** cover this shape.
 the defect is in the encoding/symex layer, not in a solver. Precision-losing, never unsound:
 ESBMC only over-reports.
 
+### The same family reproduces on ordinary C: a pointer read back through a union arm
+
+Read as "a pointer held in an aggregate loses its object when it is recovered by a
+byte-identical reinterpretation", the defect is testable without a Kani binary. Three plain-C
+shapes of that reading are false alarms on `master` (`d1abfc8201`), under both solvers, over
+`union { struct S { int *p; } s; int *q; }`:
+
+| Written | Read | Verdict before |
+|---|---|---|
+| `u.s.p = &x` | `*u.q` | FAILED |
+| `u.q = &x` | `*u.s.p` | FAILED |
+| `u.a.p = &x` (two struct arms) | `*u.b.q` | FAILED |
+
+A union's arms overlay, so every one of these reads back the pointer that was written. The
+value set keys it under the path the write spelled, the read asks under its own, finds nothing,
+and hands the dereference an unconstrained value — the corpus trace's end state exactly.
+Closed by asking again under the paths that alias the one the read spells, with
+`regression/esbmc/union_pun_pointer{,_fail}` pinning it.
+
+**This is not the corpus harnesses.** Those recover the pointer through
+`byte_extract_little_endian({ .=&x }, 0)`, which `get_value_set_rec` follows into the constant
+struct under the read's own suffix rather than the one the byte offset names. CBMC binaries are
+the only local producer of that shape — `goto-cc` does not persist `byte_extract` — so it stays
+unmeasured here. ESBMC's own C path has a second, adjacent producer that is also still open:
+`int *q; memcpy(&q, &s, sizeof q)` over a struct holding `&x` yields `q = INVALID`, that one
+through the byte-loop write rather than the read.
+
 ### The three crash root causes are unchanged, in identity and in count
 
 | Root cause | 2026-08-26 | 2026-07-16 | Where (now) |
@@ -1584,7 +1611,8 @@ Ranked by harnesses recovered per fix:
 4. **`Bitwuzla error encountered`** — 12 crashes, all `non_null_check_write_unaligned_*`;
    worth checking against Z3 to establish whether it is solver-specific.
 5. **The `ptr::unique` false alarm** — only 3 harnesses, but it is the corpus's *only*
-   remaining correctness defect.
+   remaining correctness defect. Its union-punning sibling on ordinary C is closed (see above);
+   the corpus shape, which comes back through a `byte_extract` over a constant struct, is not.
 
 **Reproduce:** as before, the symbol is `_` + the text after `__` in the `.out` filename;
 `esbmc --binary <file>.out --function <symbol>` against

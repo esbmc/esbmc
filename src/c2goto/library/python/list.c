@@ -1165,14 +1165,16 @@ bool __ESBMC_list_slice_assign(
   return true;
 }
 
-bool __ESBMC_list_remove(
+/* Find the first element equal to item and shift the tail left over it.
+ * Search and shift are kept in separate loops: nesting them makes symex
+ * emit one full shift per candidate index, which is quadratic in the list
+ * length (see #7361). */
+static bool __ESBMC_list_remove_first(
   PyListObject *l,
   const void *item,
   size_t item_type_id,
   size_t item_size)
 {
-  __ESBMC_assert(l != NULL, "ValueError: list is null");
-
   size_t i = 0;
   while (i < l->size)
   {
@@ -1195,6 +1197,17 @@ bool __ESBMC_list_remove(
   }
   l->size--;
   return true;
+}
+
+bool __ESBMC_list_remove(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  __ESBMC_assert(l != NULL, "ValueError: list is null");
+
+  return __ESBMC_list_remove_first(l, item, item_type_id, item_size);
 }
 
 /* set.add(elem) — append elem to the underlying list iff it is not
@@ -1221,7 +1234,9 @@ bool __ESBMC_set_discard(
   size_t item_type_id,
   size_t item_size)
 {
-  return __ESBMC_list_remove(s, item, item_type_id, item_size);
+  __ESBMC_assert(s != NULL, "ValueError: set is null");
+
+  return __ESBMC_list_remove_first(s, item, item_type_id, item_size);
 }
 
 void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
