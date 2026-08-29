@@ -690,7 +690,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // Replaces the concise reporter installed at startup. SA_ONSTACK keeps the
     // alternate stack that reporter set up, without which a stack-exhaustion
     // fault cannot run a handler at all.
-    struct sigaction act;
+    struct sigaction act = {};
     act.sa_handler = segfault_handler;
     act.sa_flags = SA_ONSTACK;
     sigemptyset(&(act.sa_mask));

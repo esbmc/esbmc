@@ -95,7 +95,7 @@ void install_fatal_signal_reporter()
   ss.ss_flags = 0;
   sigaltstack(&ss, nullptr);
 
-  struct sigaction act;
+  struct sigaction act = {};
   act.sa_handler = fatal_signal_reporter;
   act.sa_flags = SA_ONSTACK;
   sigemptyset(&(act.sa_mask));
