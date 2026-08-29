@@ -8,7 +8,6 @@ Module: Unit tests for util/message/message.h
 #include <util/message/message.h>
 
 #include <array>
-#include <cerrno>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -29,9 +28,9 @@ TEST_CASE("logln keeps the prefix on the message's own line", "[util][message]")
   st.logln(nullptr, VerbosityLevel::Warning, nullptr, 0, FMT_STRING("body"));
 
   rewind(f);
-  char got[64] = {};
-  REQUIRE(fgets(got, sizeof(got), f) != nullptr);
-  REQUIRE(std::string(got) == "WARNING: body\n");
+  std::array<char, 64> got{};
+  REQUIRE(fgets(got.data(), got.size(), f) != nullptr);
+  REQUIRE(std::string(got.data()) == "WARNING: body\n");
   fclose(f);
 }
 
@@ -70,21 +69,17 @@ TEST_CASE("concurrent writers cannot splice a line", "[util][message]")
   }
   close(fds[1]);
 
+  FILE *in = fdopen(fds[0], "r");
+  REQUIRE(in != nullptr);
+
   std::string all;
   std::array<char, 4096> chunk;
-  for (ssize_t n; (n = read(fds[0], chunk.data(), chunk.size())) != 0;)
-  {
-    // A SIGCHLD from a finishing writer interrupts the read; treating that as
-    // end-of-stream would truncate `all` and fail the count below.
-    if (n < 0)
-    {
-      if (errno == EINTR)
-        continue;
-      FAIL("read from the pipe failed");
-    }
-    all.append(chunk.data(), static_cast<size_t>(n));
-  }
-  close(fds[0]);
+  for (size_t n; (n = fread(chunk.data(), 1, chunk.size(), in)) > 0;)
+    all.append(chunk.data(), n);
+  // A short read would truncate `all` and fail the count below for the wrong
+  // reason.
+  REQUIRE(ferror(in) == 0);
+  fclose(in);
 
   for (pid_t pid : kids)
     waitpid(pid, nullptr, 0);
