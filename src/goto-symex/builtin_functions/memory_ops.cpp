@@ -501,6 +501,50 @@ static void collect_subobjects(
   }
 }
 
+static expr2tc replace_subobject(
+  const expr2tc &root,
+  uint64_t offset,
+  uint64_t n,
+  const expr2tc &value);
+
+// The struct arm of replace_subobject: the sole member whose byte range
+// contains [offset, offset+n) is descended into, and the `with` naming it
+// wraps whatever that returns.
+static expr2tc replace_in_struct(
+  const expr2tc &root,
+  uint64_t offset,
+  uint64_t n,
+  const expr2tc &value)
+{
+  const struct_type2t &st = to_struct_type(root->type);
+  for (size_t i = 0; i < st.members.size(); i++)
+  {
+    uint64_t moff, msize;
+    if (!member_byte_range(st, root->type, i, moff, msize))
+      continue;
+    if (offset < moff || offset + n > moff + msize)
+      continue;
+
+    expr2tc updated = replace_subobject(
+      member2tc(st.members[i], root, st.member_names[i]),
+      offset - moff,
+      n,
+      value);
+    if (!updated)
+      return expr2tc();
+
+    const irep_idt &name = st.member_names[i];
+    type2tc str_type = array_type2tc(
+      get_uint8_type(), gen_ulong(name.as_string().size() + 1), false);
+    return with2tc(
+      root->type,
+      root,
+      constant_string2tc(str_type, name, constant_string_kindt::DEFAULT),
+      updated);
+  }
+  return expr2tc();
+}
+
 // @p root with the sub-object at [offset, offset+n) replaced by @p value,
 // built as a chain of `with` updates; null when the range does not land on a
 // whole-byte sub-object of value's type.
@@ -516,34 +560,7 @@ static expr2tc replace_subobject(
       return value;
 
     if (is_struct_type(root->type))
-    {
-      const struct_type2t &st = to_struct_type(root->type);
-      for (size_t i = 0; i < st.members.size(); i++)
-      {
-        uint64_t moff, msize;
-        if (!member_byte_range(st, root->type, i, moff, msize))
-          continue;
-        if (offset >= moff && offset + n <= moff + msize)
-        {
-          expr2tc updated = replace_subobject(
-            member2tc(st.members[i], root, st.member_names[i]),
-            offset - moff,
-            n,
-            value);
-          if (!updated)
-            return expr2tc();
-          const irep_idt &name = st.member_names[i];
-          type2tc str_type = array_type2tc(
-            get_uint8_type(), gen_ulong(name.as_string().size() + 1), false);
-          return with2tc(
-            root->type,
-            root,
-            constant_string2tc(str_type, name, constant_string_kindt::DEFAULT),
-            updated);
-        }
-      }
-      return expr2tc();
-    }
+      return replace_in_struct(root, offset, n, value);
 
     if (is_array_type(root->type))
     {
