@@ -68,6 +68,6 @@ int parseoptions_baset::main()
   }
   // install signal catcher
   install_signal_catcher();
-  install_fatal_signal_reporter();
+  install_fatal_signal_reporter(fatal_signal_advice());
   return doit();
 }
