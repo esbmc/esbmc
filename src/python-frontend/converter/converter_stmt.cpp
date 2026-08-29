@@ -2908,6 +2908,29 @@ bool python_converter::return_value_uses_call_argument(
   return false;
 }
 
+// True when `alias` is bound by a top-level `import ... as alias` (or a bare
+// `import alias`) in the module's own body. imported_modules is a single
+// flat, program-wide map -- it also holds aliases bound by an import nested
+// inside some OTHER function's body (convert_module_imports hoists those
+// into the same map), which are not actually in scope wherever a substituted
+// return value ends up spliced into. Restricting to module-level imports
+// matches the idiomatic `import numpy as np` at the top of the file, which
+// is visible everywhere.
+static bool is_module_level_import_alias(
+  const nlohmann::json &ast_body,
+  const std::string &alias)
+{
+  for (const auto &stmt : ast_body)
+  {
+    if (stmt.value("_type", "") != "Import" || !stmt.contains("names"))
+      continue;
+    for (const auto &name : stmt["names"])
+      if (name.value("asname", name.value("name", "")) == alias)
+        return true;
+  }
+  return false;
+}
+
 bool python_converter::return_call_only_references_params_or_modules(
   const nlohmann::json &return_value,
   const nlohmann::json &params) const
@@ -2918,7 +2941,9 @@ bool python_converter::return_call_only_references_params_or_modules(
   // imported module alias (left as-is, and resolved identically in the
   // caller's own scope).
   auto name_is_safe = [&](const std::string &name) {
-    if (imported_modules.find(name) != imported_modules.end())
+    if (
+      imported_modules.find(name) != imported_modules.end() &&
+      is_module_level_import_alias((*ast_json)["body"], name))
       return true;
     for (const auto &param : params)
       if (param.value("arg", "") == name)
