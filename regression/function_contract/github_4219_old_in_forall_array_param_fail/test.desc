@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --function bump --enforce-contract bump --unwind 8
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
