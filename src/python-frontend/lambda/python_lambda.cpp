@@ -1,4 +1,5 @@
 #include <python-frontend/lambda/python_lambda.h>
+#include <optional>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
@@ -265,6 +266,11 @@ const nlohmann::json *find_binding_scope(
   {
     for (const auto &stmt : node)
     {
+      // Not every ast2json array holds objects: Global/Nonlocal carry raw
+      // strings in `names`, and value() throws on those (#7328).
+      if (!stmt.is_object())
+        continue;
+
       if (
         stmt.value("_type", "") == "Assign" && stmt.contains("value") &&
         stmt["value"].value("_type", "") == "Lambda" &&
@@ -291,30 +297,82 @@ const nlohmann::json *find_binding_scope(
   return nullptr;
 }
 
+struct call_argument_scan
+{
+  std::vector<const nlohmann::json *> args;
+  bool foreign_scope_call = false;
+};
+
 // Argument `index` of every call to `name` under `node`. All of them, not just
 // the first: a lambda called with two different types has one frozen signature,
 // so committing to the first call's type would mistype the rest (#7328).
+// A call inside a nested `def` is recorded but not collected: `name`'s argument
+// there may bind to a different object than the enclosing prefix resolves to,
+// so the scan is abandoned rather than answered wrongly.
 void collect_call_arguments(
   const nlohmann::json &node,
   const std::string &name,
   size_t index,
-  std::vector<const nlohmann::json *> &out)
+  bool nested,
+  call_argument_scan &out)
 {
-  if (node.is_object() && node.value("_type", "") == "Call")
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+
+  if (kind == "Call")
   {
-    const nlohmann::json &func = node["func"];
+    const nlohmann::json &func = node.value("func", nlohmann::json::object());
     if (
       func.value("_type", "") == "Name" && func.value("id", "") == name &&
       node.contains("args") && node["args"].is_array() &&
       node["args"].size() > index)
-      out.push_back(&node["args"][index]);
+    {
+      if (nested)
+        out.foreign_scope_call = true;
+      else
+        out.args.push_back(&node["args"][index]);
+    }
   }
 
   if (!node.is_structured())
     return;
 
+  const bool child_nested =
+    nested || kind == "FunctionDef" || kind == "AsyncFunctionDef";
+
   for (const auto &child : node.items())
-    collect_call_arguments(child.value(), name, index, out);
+    collect_call_arguments(child.value(), name, index, child_nested, out);
+}
+
+// The element type a `name[k]` argument selects, or nil when it cannot be
+// pinned down. A non-literal index names no single element type, and a
+// list-valued element is left alone: the list object pointer is not usable as
+// a parameter type here, and typing it as one makes the solver reject the
+// formula (#7328).
+typet subscript_element_type(
+  const nlohmann::json &arg,
+  const std::string &prefix,
+  const typet &list_type)
+{
+  typet result;
+  result.make_nil();
+
+  if (
+    arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
+    !arg["value"].is_object() || arg["value"].value("_type", "") != "Name" ||
+    !arg.contains("slice"))
+    return result;
+
+  const nlohmann::json &slice = arg["slice"];
+  if (
+    !slice.is_object() || slice.value("_type", "") != "Constant" ||
+    !slice.contains("value") || !slice["value"].is_number_unsigned())
+    return result;
+
+  const typet elem = python_list::get_list_element_type(
+    prefix + arg["value"].value("id", ""), slice["value"].get<size_t>());
+  if (elem != typet() && elem != empty_typet() && elem != list_type)
+    result = elem;
+  return result;
 }
 } // namespace
 
@@ -343,33 +401,19 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
     typet resolved;
     resolved.make_nil();
 
-    std::vector<const nlohmann::json *> args;
-    collect_call_arguments(*scope, bound_name, i, args);
+    call_argument_scan scan;
+    collect_call_arguments(*scope, bound_name, i, false, scan);
 
-    for (const nlohmann::json *arg : args)
+    for (const nlohmann::json *arg : scan.args)
     {
-      typet from_arg;
-      from_arg.make_nil();
-
-      // A subscript yields an element, whose registered type list_type_map
-      // recorded when the list literal was converted. A list-valued element is
-      // left alone: the list object pointer is not usable as a parameter type
-      // here, and typing it as one makes the solver reject the formula.
-      if (
-        arg->value("_type", "") == "Subscript" && arg->contains("value") &&
-        (*arg)["value"].value("_type", "") == "Name")
-      {
-        typet elem = python_list::get_list_element_type(
-          prefix + (*arg)["value"].value("id", ""), 0);
-        if (
-          elem != typet() && elem != empty_typet() &&
-          elem != type_handler_.get_list_type())
-          from_arg = elem;
-      }
+      const typet from_arg =
+        subscript_element_type(*arg, prefix, type_handler_.get_list_type());
 
       // Every call has to agree: one disagreeing call means the single frozen
       // signature cannot serve them all, so leave the parameter as it was.
-      if (from_arg.is_nil() || (resolved.is_not_nil() && resolved != from_arg))
+      if (
+        scan.foreign_scope_call || from_arg.is_nil() ||
+        (resolved.is_not_nil() && resolved != from_arg))
       {
         resolved.make_nil();
         break;
