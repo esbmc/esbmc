@@ -3,6 +3,6 @@ helper.c
 main.c --branch-coverage --generate-ctest-testcase
 ^Branch Coverage: 100%$
 ^Generated 4 CTest test case\(s\) with CMakeLists\.txt
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$
 CHECK_FILE esbmc-ctest/CMakeLists.txt contains ^add_executable\(test_case_1 [^ ]*/main\.c [^ ]*/helper\.c test_case_1\.c\)$
 CHECK_FILE esbmc-ctest/CMakeLists.txt contains ^add_executable\(test_case_4 [^ ]*/main\.c [^ ]*/helper\.c test_case_4\.c\)$

@@ -65,6 +65,10 @@ public:
   std::string claim_loc;
   std::string claim_cstr;
   std::string claim_property;
+  /// The kept claim's description and source position, for the property
+  /// report.
+  std::string claim_comment;
+  locationt claim_location;
   bool show_slice_info;
   bool is_goto_cov;
   namespacet ns;

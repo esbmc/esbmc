@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^\s*Tuple index out of range$
+^VERIFICATION FAILED$

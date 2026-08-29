@@ -30,6 +30,8 @@ irep2_canon() {
     -e '/^GOTO program creation time:/d' \
     -e '/^GOTO program processing time:/d' \
     -e '/ time: [0-9.]*s$/d' \
+    -e '/^operational-model library (clib):/d' \
+    -e 's|0x[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*|0xADDR|g' \
     -e 's|^\([[:space:]]*//\) [0-9][0-9]* file |\1 file |' \
     -e "s|${repo}|REPO_ROOT|g" \
     -e 's|/var/folders/[^/ ]*/[^/ ]*/T/esbmc[._-][0-9A-Za-z-]*|HDR|g' \
@@ -64,6 +66,35 @@ irep2_goto_dump() {
   # non-zero on some inputs, but the (deterministic) dumped text is what we diff.
   ( "$esbmc" "${argv[@]}" --goto-functions-only "$dir/$src" 2>&1 || true ) \
     | irep2_canon "$repo"
+}
+
+# Produce the canonical *symbol table* dump for one test.desc into stdout.
+# Same argument construction as irep2_goto_dump; returns 1 on an unusable desc.
+#
+# Prefer this over irep2_goto_dump when the question is what an adjust pass does.
+# The symbol table IS the adjuster's output; a goto program is two stages
+# downstream (goto_convert plus its native/round-trip routing), so a goto diff
+# mixes the adjuster's effect with everything after it. Diagnosing an adjuster
+# from goto dumps cost docs/roadmap/scope-clang-c-irep2.md three iterations and
+# one wrong published conclusion (§98 vs §100).
+# $4 (optional) is an extra flag added to the run, e.g. the hop-off under test.
+irep2_symtab_dump() {
+  local esbmc="$1" desc="$2" repo="$3" extra="${4:-}"
+  local dir src args tok
+  dir="$(dirname "$desc")"
+  src="$(sed -n '2p' "$desc" | tr -d '[:space:]')"
+  args="$(sed -n '3p' "$desc")"
+  [ -n "$src" ] && [ -f "$dir/$src" ] || return 1
+
+  local argv=()
+  for tok in $args; do
+    if [ -f "$dir/$tok" ]; then argv+=("$dir/$tok"); else argv+=("$tok"); fi
+  done
+
+  [ -n "$extra" ] && argv+=("$extra")
+
+  ( "$esbmc" ${argv[@]+"${argv[@]}"} --symbol-table-only "$dir/$src" 2>&1 \
+    || true ) | irep2_canon "$repo"
 }
 
 # Remove per-run header temp dirs (CLAUDE.md hygiene rule).

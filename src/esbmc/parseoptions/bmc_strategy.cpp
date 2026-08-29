@@ -251,8 +251,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // have continued past an earlier violation, so we must return 1 even when
   // the closing step (FC/IS) itself succeeds.
   auto conclude = [&]() -> int {
-    // In coverage mode violations are expected; always report success.
-    if (any_violation_found && !is_coverage)
+    // A coverage run measures reachability; it neither proved nor refuted
+    // anything about the program, so it emits no verdict and always exits 0.
+    // report_coverage has already printed the completeness line.
+    if (is_coverage)
+      return 0;
+    if (any_violation_found)
     {
       log_fail("\nVERIFICATION FAILED");
       return 1;
@@ -458,8 +462,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // falsification
     if (options.get_bool_option("falsification"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true())
+      const bool violated =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (violated && !is_coverage)
         return 1;
+      // A coverage run has no verdict to falsify, so nothing would ever stop
+      // the escalation: without this it re-solves every goal at each bound and
+      // prints one [Coverage] block per k step. One pass is what falsification
+      // did here before the verdict was removed. multi_property_check has
+      // already reported that pass, so return rather than fall through to the
+      // max-k-step exit, whose reason would not apply.
+      if (is_coverage)
+        return 0;
     }
   }
 
@@ -468,16 +482,24 @@ int esbmc_parseoptionst::do_bmc_strategy(
     options.get_bool_option("k-induction"))
     diagnose_unknown_properties(options, goto_functions, last_k_step);
 
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
   if (is_coverage)
+  {
+    // Exhausting the k steps bounds how much of the program was explored, so
+    // goals that were never reached may simply lie beyond the last unwinding.
+    note_cov_incomplete(
+      "the run ended at the maximum k step without proving the program fully "
+      "unwound; goals beyond that bound may never have been explored");
     report_coverage(
       options,
       goto_functions.reached_claims,
       goto_functions.reached_mul_claims,
       pytest_gen,
       ctest_gen);
+    return 0;
+  }
+
+  log_status("Unable to prove or falsify the program, giving up.");
+  log_fail("VERIFICATION UNKNOWN");
   return 0;
 }
 
@@ -494,6 +516,155 @@ int esbmc_parseoptionst::do_bmc_strategy(
 //  1) GOTO program,
 //  2) verification options.
 //  3) program context,
+// Iterative deepening on the context bound (issue #6480): unbounded DFS can
+// strand a counterexample that needs few switches but sits deep in DFS order.
+//
+// Each round under-approximates the schedule space, so a violation at any bound
+// is genuine. The converse needs cs_bound_pruned: "no violation at bound k" is
+// a proof only once a round completes without the bound cutting anything.
+int esbmc_parseoptionst::do_context_bound_deepening(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  const int max_cb = atoi(options.get_option("max-context-bound").c_str());
+
+  if (max_cb < 1)
+  {
+    log_error("--max-context-bound ({}) must be at least 1.", max_cb);
+    return 6;
+  }
+
+  options.set_option("suppress-bounded-success", true);
+
+  for (int cb = 1; cb <= max_cb; ++cb)
+  {
+    options.set_option("context-bound", std::to_string(cb));
+
+    bmct bmc(goto_functions, options, context);
+    log_progress("Checking with context bound {}", cb);
+
+    const int res = do_bmc(bmc);
+
+    if (res == P_SATISFIABLE)
+      return 1;
+
+    // A solver failure or SMT-LIB-only emission says nothing about deeper
+    // bounds, so stop rather than deepen.
+    if (res != P_UNSATISFIABLE)
+      return res;
+
+    if (!bmc.cs_bound_pruned)
+    {
+      log_status(
+        "Context bound {} covered every interleaving; result is not bounded by "
+        "it",
+        cb);
+      options.set_option("suppress-bounded-success", false);
+      log_success("\nVERIFICATION SUCCESSFUL");
+      return 0;
+    }
+  }
+
+  log_status(
+    "Reached --max-context-bound ({}) with the schedule space still truncated; "
+    "the program is safe only up to that many context switches",
+    max_cb);
+  log_fail("VERIFICATION UNKNOWN");
+  return 0;
+}
+
+// Falsification-only pre-pass over a deepening context bound (issue #6831, W4).
+//
+// --incremental-context-bound cannot compose with the unwinding strategies
+// because both would own the verdict (driver.cpp, #6480). This composes by
+// giving up the half that collides: every round here under-approximates -- the
+// context bound truncates the schedule space and the unwind bound truncates the
+// loops -- so a violation is genuine, while finding none is not evidence of
+// anything and is not reported. The chosen strategy then runs untouched.
+// Returns an exit code when the pre-pass concluded the run, or -1 to hand over
+// to the chosen strategy.
+int esbmc_parseoptionst::falsify_with_bounded_schedules(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  const int max_cb = atoi(options.get_option("falsify-context-bound").c_str());
+  if (max_cb == 0)
+    return -1;
+
+  if (max_cb < 0)
+  {
+    log_error("--falsify-context-bound ({}) cannot be negative.", max_cb);
+    return 6;
+  }
+
+  // A round of the pre-pass is a base-case BMC run, so it composes only with a
+  // verdict read off the base case. Under --forward-condition or
+  // --inductive-step a SAT round means "unable to prove", not a violation;
+  // --termination
+  // inverts it further, since its markers make reaching an assert evidence that
+  // the loop *does* terminate. A --multi-property round owns the property table
+  // and would report the truncated pre-pass as the whole result, and the two
+  // emission modes would dump their formulas once per bound.
+  for (const char *incompatible :
+       {"termination",
+        "forward-condition",
+        "inductive-step",
+        "multi-property",
+        "incremental-context-bound",
+        "show-vcc",
+        "smt-formula-only",
+        "smt-formula-too"})
+    if (options.get_bool_option(incompatible))
+    {
+      log_error(
+        "--falsify-context-bound cannot be combined with --{}", incompatible);
+      return 1;
+    }
+
+  // Each round reaches its own set of claims and a coverage run reports the
+  // union, so the pre-pass would print a [Coverage] block per bound and fold
+  // its truncated rounds into the figure the strategy reports.
+  if (is_coverage)
+  {
+    log_warning("--falsify-context-bound is ignored on a coverage run");
+    return -1;
+  }
+
+  const optionst::option_mapt saved = options.option_map;
+
+  options.set_option("suppress-bounded-success", true);
+  options.set_option("no-unwinding-assertions", true);
+  // Without this the forced unwind bound cuts loops with no constraint at all
+  // (symex_goto.cpp, loop_bound_exceeded), and paths that never satisfy the
+  // exit condition would flow on into the code after the loop -- which is an
+  // over-approximation, and would make a "violation" here not a violation.
+  options.set_option("partial-loops", false);
+  if (options.get_option("unwind").empty())
+    options.set_option("unwind", "1");
+
+  int result = -1;
+  for (int cb = 1; cb <= max_cb; ++cb)
+  {
+    options.set_option("context-bound", std::to_string(cb));
+    bmct bmc(goto_functions, options, context);
+    log_progress("Falsifying with context bound {}", cb);
+
+    const int res = do_bmc(bmc);
+    if (res == P_SATISFIABLE)
+    {
+      result = 1;
+      break;
+    }
+    // A solver failure says nothing about deeper bounds, and the strategy is
+    // entitled to its own attempt, so stop the pre-pass rather than deepen.
+    if (res != P_UNSATISFIABLE)
+      break;
+  }
+
+  options.option_map = saved;
+  return result;
+}
+
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
@@ -524,7 +695,11 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     // via (get-value). Report a clean failure rather than let the exception
     // reach std::terminate.
     log_error("SMT solver process failed: {}", e.what());
-    res = P_ERROR;
+    // A violation already found and printed is not retracted by a later
+    // interleaving whose solver then died (--multi-property explores past the
+    // first violation).
+    res = goto_functionst::property_verdicts.has_violation() ? P_SATISFIABLE
+                                                             : P_ERROR;
   }
 
 #ifdef HAVE_SENDFILE_ESBMC

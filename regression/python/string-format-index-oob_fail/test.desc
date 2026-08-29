@@ -1,3 +1,4 @@
 CORE
 main.py
-^VERIFICATION FAILED$
+
+^ERROR: format\(\) argument index out of range$

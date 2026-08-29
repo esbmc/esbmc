@@ -92,17 +92,8 @@ struct tuple_element<I, tuple<Head, Tail...>>
   using type = typename tuple_element<I - 1, tuple<Tail...>>::type;
 };
 
-// std::pair is a 2-tuple for tuple_element purposes ([pair.astuple]).
-template <typename T1, typename T2>
-struct tuple_element<0, std::pair<T1, T2>>
-{
-  using type = T1;
-};
-template <typename T1, typename T2>
-struct tuple_element<1, std::pair<T1, T2>>
-{
-  using type = T2;
-};
+// pair's tuple-protocol specialisations live in <utility>, which this header
+// includes: [pair.astuple] requires them to work without <tuple> (issue #5868).
 
 template <std::size_t I, typename Tuple>
 using tuple_element_t = typename tuple_element<I, Tuple>::type;
@@ -115,6 +106,11 @@ struct tuple_size<tuple<Types...>>
   : std::integral_constant<std::size_t, sizeof...(Types)>
 {
 };
+
+#if __cplusplus >= 201703L
+template <typename Tuple>
+inline constexpr std::size_t tuple_size_v = tuple_size<Tuple>::value;
+#endif
 
 template <std::size_t I, typename... Types>
 constexpr typename tuple_element<I, tuple<Types...>>::type &
@@ -217,29 +213,6 @@ constexpr bool operator>=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
 {
   return !(lhs < rhs);
 }
-
-// Minimal reference_wrapper needed by unwrap_refwrapper below.
-// The full implementation lives in <functional>; this stub is sufficient
-// for make_tuple to strip reference_wrapper<T> → T& at compile time.
-template <class T>
-class reference_wrapper
-{
-  T *ptr_;
-
-public:
-  using type = T;
-  reference_wrapper(T &ref) noexcept : ptr_(&ref)
-  {
-  }
-  operator T &() const noexcept
-  {
-    return *ptr_;
-  }
-  T &get() const noexcept
-  {
-    return *ptr_;
-  }
-};
 
 template <class T>
 struct unwrap_refwrapper

@@ -2,7 +2,7 @@
 
 message(STATUS "ESBMC will be built in static mode")
 if(NOT APPLE)
-    if(CMAKE_BUILD_TYPE STREQUAL "Sanitizer")
+    if(ESBMC_SANITIZERS_ENABLED)
         # Sanitizer runtimes (ASan especially) cannot be fully statically
         # linked: -static drops the dynamic section that libclang_rt.asan
         # needs, producing "undefined reference to _DYNAMIC" at link time.

@@ -115,7 +115,7 @@ solidity_convertert::solidity_convertert(
 
   bool_t = bool_type();
   set_sol_type(bool_t, SolidityGrammar::SolType::BOOL);
-  bool_t.set("#cpp_type", "bool");
+  bool_t.cpp_type("bool");
 
   byte_dynamic_t = symbol_typet(lib_prefix + "BytesDynamic");
   set_sol_type(byte_dynamic_t, SolidityGrammar::SolType::BYTES_DYN);

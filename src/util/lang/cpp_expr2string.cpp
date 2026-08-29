@@ -135,9 +135,9 @@ std::string cpp_expr2stringt::convert_rec(
   {
     return new_qualifiers.as_string() + convert(src.subtype()) + " &&" + d;
   }
-  else if (src.get("#cpp_type") != "")
+  else if (src.cpp_type() != "")
   {
-    const irep_idt cpp_type = src.get("#cpp_type");
+    const irep_idt cpp_type = src.cpp_type();
 
     if (cpp_type == "signed_char")
       return new_qualifiers.as_string() + "signed char" + d;

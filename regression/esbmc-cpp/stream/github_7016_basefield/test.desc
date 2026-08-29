@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 16 --timeout 120
+^VERIFICATION SUCCESSFUL$

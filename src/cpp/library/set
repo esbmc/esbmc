@@ -4,17 +4,22 @@
 #define MAX 500
 
 #include "definitions.h"
+#include "memory" /* std::allocator, for the Allocator parameter */
 #include "utility"
 #include "iterator"
 #include "iostream"
 #include "algorithm"
 #include "functional"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 namespace std
 {
 template <
   class Key,
-  class Compare = less<Key> /*,class Allocator = allocator<Key> */>
+  class Compare = less<Key>,
+  class Allocator = allocator<Key> >
 class multiset
 {
 public:
@@ -30,7 +35,7 @@ public:
   typedef Compare key_compare;
   typedef Compare value_compare;
 
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
 
   class iterator
@@ -70,12 +75,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -162,12 +167,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -247,12 +252,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -331,12 +336,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -432,6 +437,14 @@ public:
   {
     _size = 0;
   }
+
+#if __cplusplus >= 201103L
+  multiset(std::initializer_list<value_type> init) : _size(0)
+  {
+    for (const value_type *it = init.begin(); it != init.end(); ++it)
+      this->insert(*it);
+  }
+#endif
 
   ~multiset()
   {
@@ -764,9 +777,59 @@ public:
   {
     return make_pair(lower_bound(x), upper_bound(x));
   }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison -- the first
+   * differing element decides it, and the sizes matter only when one range is
+   * a prefix of the other. buf[0.._size) is kept sorted by insert(). */
+  bool operator==(const multiset &rhv) const
+  {
+    if (_size != rhv._size)
+      return false;
+    for (size_t i = 0; i < _size; i++)
+      if (!(buf[i] == rhv.buf[i]))
+        return false;
+    return true;
+  }
+
+  bool operator!=(const multiset &rhv) const
+  {
+    return !(*this == rhv);
+  }
+
+  bool operator<(const multiset &rhv) const
+  {
+    size_t n = _size < rhv._size ? _size : rhv._size;
+    for (size_t i = 0; i < n; i++)
+    {
+      if (buf[i] < rhv.buf[i])
+        return true;
+      if (rhv.buf[i] < buf[i])
+        return false;
+    }
+    return _size < rhv._size;
+  }
+
+  bool operator>(const multiset &rhv) const
+  {
+    return rhv < *this;
+  }
+
+  bool operator<=(const multiset &rhv) const
+  {
+    return !(rhv < *this);
+  }
+
+  bool operator>=(const multiset &rhv) const
+  {
+    return !(*this < rhv);
+  }
 };
 
-template <class Key, class Compare = less<Key> >
+template <
+  class Key,
+  class Compare = less<Key>,
+  class Allocator = allocator<Key> >
 class set
 {
 public:
@@ -782,7 +845,7 @@ public:
   typedef Compare key_compare;
   typedef Compare value_compare;
 
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
 
   class iterator
@@ -818,12 +881,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -910,12 +973,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -994,12 +1057,12 @@ public:
       return *this;
     }
 
-    value_type *operator->()
+    value_type *operator->() const
     {
       return &base[pos];
     }
 
-    value_type &operator*()
+    value_type &operator*() const
     {
       return base[pos];
     }
@@ -1078,12 +1141,12 @@ public:
       return *this;
     }
 
-    const value_type *operator->()
+    const value_type *operator->() const
     {
       return &base[pos];
     }
 
-    const value_type &operator*()
+    const value_type &operator*() const
     {
       return base[pos];
     }
@@ -1174,6 +1237,14 @@ public:
   set() : _size(0), rule(Compare())
   {
   }
+
+#if __cplusplus >= 201103L
+  set(std::initializer_list<value_type> init) : _size(0), rule(Compare())
+  {
+    for (const value_type *it = init.begin(); it != init.end(); ++it)
+      this->insert(*it);
+  }
+#endif
 
   ~set()
   {
@@ -1510,6 +1581,53 @@ public:
   pair<const_iterator, const_iterator> equal_range(const key_type &x) const
   {
     return make_pair(lower_bound(x), upper_bound(x));
+  }
+
+  /* [container.requirements]: equality is element-wise over the two ranges,
+   * and the ordering is their lexicographical comparison -- the first
+   * differing element decides it, and the sizes matter only when one range is
+   * a prefix of the other. buf[0.._size) is kept sorted by insert(). */
+  bool operator==(const set &rhv) const
+  {
+    if (_size != rhv._size)
+      return false;
+    for (size_t i = 0; i < _size; i++)
+      if (!(buf[i] == rhv.buf[i]))
+        return false;
+    return true;
+  }
+
+  bool operator!=(const set &rhv) const
+  {
+    return !(*this == rhv);
+  }
+
+  bool operator<(const set &rhv) const
+  {
+    size_t n = _size < rhv._size ? _size : rhv._size;
+    for (size_t i = 0; i < n; i++)
+    {
+      if (buf[i] < rhv.buf[i])
+        return true;
+      if (rhv.buf[i] < buf[i])
+        return false;
+    }
+    return _size < rhv._size;
+  }
+
+  bool operator>(const set &rhv) const
+  {
+    return rhv < *this;
+  }
+
+  bool operator<=(const set &rhv) const
+  {
+    return !(rhv < *this);
+  }
+
+  bool operator>=(const set &rhv) const
+  {
+    return !(*this < rhv);
   }
 };
 

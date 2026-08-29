@@ -22,6 +22,7 @@
 #include <util/expr/type_byte_size.h>
 #include <util/message/message.h>
 
+#include <map>
 #include <vector>
 
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
@@ -79,17 +80,13 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (is_true(new_expr))
   {
-    if (options.get_bool_option("multi-property"))
-    {
-      // Log that this assertion was trivially verified
-      log_success(
-        "✓ PASSED: '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
+    // A claim the simplifier discharged holds in every mode, not only under
+    // --multi-property, so record it either way (discussion #7023).
+    record_property_verdict(msg, property_verdictt::Passed);
 
+    if (options.get_bool_option("multi-property"))
       // Track trivially verified claims
       ++simplified_claims;
-    }
 
     // Strengthen the claim by assuming it when trivially true
     assume(claim_expr);
@@ -109,14 +106,10 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
       claim_expr, *interval_domain_state)
       .is_true())
   {
+    record_property_verdict(msg, property_verdictt::Passed, "interval");
+
     if (options.get_bool_option("multi-property"))
-    {
-      log_success(
-        "✓ PASSED (interval): '{}' at {}",
-        msg,
-        cur_state->source.pc->location.as_string());
       ++simplified_claims;
-    }
 
     assume(claim_expr);
     return;
@@ -154,6 +147,19 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   // add assertion to the target equation
   assertion(new_expr, msg);
+}
+
+void goto_symext::record_property_verdict(
+  const std::string &msg,
+  property_verdictt verdict,
+  const std::string &note)
+{
+  const locationt &location = cur_state->source.pc->location;
+  goto_functionst::property_verdicts.record(
+    msg + " at " + location.as_string(),
+    verdict,
+    property_location(location, msg),
+    note);
 }
 
 void goto_symext::assertion(
@@ -255,7 +261,11 @@ void goto_symext::assume(const expr2tc &the_assumption)
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
-    target, total_claims, remaining_claims, simplified_claims);
+    target,
+    total_claims,
+    remaining_claims,
+    simplified_claims,
+    bounded_loop_truncations);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -510,6 +520,27 @@ void goto_symext::symex_assert()
   simplify_python_builtins(tmp);
 
   claim(tmp, msg);
+}
+
+/* The frontend must bind __ESBMC_new_object's result to a pointer; a
+ * non-pointer lvalue is a frontend bug, not a property of the program. Report
+ * it rather than letting to_pointer_type() surface it as an irep2 cast error
+ * with no source location (esbmc/esbmc#7083). Checked unconditionally: an
+ * assert is compiled out of release builds, which is exactly where the
+ * unintelligible failure was observed. */
+static void
+require_new_object_pointer_lvalue(const code_function_call2t &func_call)
+{
+  if (is_pointer_type(func_call.ret->type))
+    return;
+
+  const std::string loc = func_call.location.as_string();
+  log_error(
+    "__ESBMC_new_object bound to a non-pointer lvalue of type {}{}; the "
+    "frontend must allocate class instances through a pointer",
+    get_type_id(func_call.ret->type),
+    loc.empty() ? "" : (" at " + loc));
+  abort();
 }
 
 void goto_symext::run_intrinsic(
@@ -1066,8 +1097,7 @@ void goto_symext::run_intrinsic(
   // size-1 dynamic object.
   if (has_prefix(symname, "c:@F@__ESBMC_new_object"))
   {
-    assert(
-      is_pointer_type(func_call.ret->type) && "object ref must be pointer");
+    require_new_object_pointer_lvalue(func_call);
     const expr2tc &lhs = func_call.ret;
     const type2tc base = to_pointer_type(lhs->type).subtype;
     const guard2tc &guard = cur_state->guard;
@@ -1279,26 +1309,21 @@ void goto_symext::add_memory_leak_checks()
 
     value_set_analysist va(ns);
 
-    /* List of sets of all globally reachable symbols (encoded as a list of
-     * value-set entries), each together with an expression denoting a condition
-     * under which this set is valid.
+    /* The value-set entries of all global symbols; these are the roots of the
+     * "points-to" graph explored below.
      *
-     * When looking at the "points-to" relation as a graph, this condition
-     * encodes whether the symbol S, whose value-set is under consideration, is
-     * globally reachable, i.e. whether in this graph there is a path from a
-     * globally defined symbol to S.
+     * Every symbol S in that graph gets a condition encoding whether S is
+     * globally reachable, i.e. whether the graph has a path from a globally
+     * defined symbol to S. Throughout, an empty expression stands for 'true'.
      *
      * Crucially, this condition is later used in negated form as a constraint
      * for the solver, that is, "there is no path starting from global symbols
      * to the dynamic object and it is still allocated". For structures and
      * constant-size arrays this is not a big deal since the possible neighbours
      * can statically be encoded, but it poses problems for arrays with dynamic
-     * size, see the comments about it when handling the split suffix below.
-     *
-     * Initially, as an optimization, the expression is empty (which stands for
-     * 'true'). */
-    std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> globals(1);
-    va.get_globals(globals[0].second);
+     * size, see the comments about it when handling the split suffix below. */
+    std::list<value_sett::entryt> globals;
+    va.get_globals(globals);
 
     /* A dynamic object reachable only through an in-scope automatic variable of
      * an active call frame is NOT a leak: when __ESBMC_memory_leak_checks() is
@@ -1514,281 +1539,319 @@ void goto_symext::add_memory_leak_checks()
       }
     }
 
-    /* In order to handle every globally reachable symbol just once even in case
-     * the user code has constructed circular data structures, maintain a set
-     * of visited symbols. */
+    /* Reachability is computed in two phases.
+     *
+     * Phase 1 expands every (symbol, value-set suffix) entry exactly once and
+     * records the points-to graph. An edge S -> T carries only the *local*
+     * condition "some pointer sub-component of S currently holds T's address",
+     * which is independent of how S itself was reached.
+     *
+     * Phase 2 then solves the reachability conditions on that graph as a least
+     * fixpoint. Deriving a symbol's condition in place, from the single path
+     * that happened to discover it first, gives its outgoing edges a condition
+     * that is false on the executions reaching it by a longer route; a list
+     * node behind a concurrently inserted predecessor was then reported as
+     * forgotten memory (#6594). Merging the incoming paths of one frontier
+     * level, as the previous fix for #2335 did, only covers routes of equal
+     * length. */
+    using edge_listt = std::vector<std::pair<std::string, expr2tc>>;
+    /* Ordered so that the shape of the conditions built below does not depend
+     * on the standard library's hashing. */
+    std::map<std::string, edge_listt> out_edges;
+    std::map<std::string, expr2tc> node_adr;
+
+    std::unordered_set<std::string> roots;
+    for (const value_sett::entryt &e : globals)
+      roots.insert(e.identifier);
+
+    /* Visiting each entry only once also keeps phase 1 terminating on circular
+     * data structures. */
     std::unordered_set<std::string> visited;
-    for (int i = 0; !globals.empty(); i++)
+    while (!globals.empty())
     {
-      std::vector<std::pair<expr2tc, std::list<value_sett::entryt>>> tmp;
-      /* A symbol can be reached at this frontier level through several pointers
-       * with different preconditions (e.g. a node inserted into a list chosen
-       * by a non-deterministic index is, in the value-set, reachable from every
-       * list head). Merge those entries by symbol, OR-ing their path conditions,
-       * before expanding each symbol once. Expanding under only the first
-       * incoming path — as the old per-symbol 'visited' cull did — gives the
-       * symbol's outgoing edges a guard that is false on the executions taking
-       * the other paths, under-approximating reachability and producing spurious
-       * "forgotten memory" leaks (#2335). The single expansion per symbol keeps
-       * termination on circular data structures. */
-      std::unordered_map<std::string, std::pair<expr2tc, value_sett::entryt>>
-        merged;
-      std::vector<std::string> order;
-      for (const auto &[path_to_e, g] : globals)
-        for (const value_sett::entryt &e : g)
+      const value_sett::entryt e = std::move(globals.front());
+      globals.pop_front();
+      if (!visited.emplace(e.identifier + e.suffix).second)
+        continue;
+
+      /* Unfortunately, we just have the symbol id and a suffix that's only
+       * meaningful to the value-set analysis, but no type. However, we
+       * need a type. So reconstruct the current state's version of a
+       * symbol-expr referring to this symbol. */
+      symbol_exprt sym_expr(e.identifier);
+      expr2tc sym_expr2;
+      migrate_expr(sym_expr, sym_expr2);
+
+      /* Now obtain the type. */
+      const symbolt *sym = ns.lookup(to_symbol2t(sym_expr2).thename);
+
+      /* By "global" only user-defined symbols are meant. Internally used ones
+       * we can ignore. */
+      if (e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
+        continue;
+      log_debug(
+        "memcleanup",
+        "memcleanup: obtaining value-set for global '{}' suffix '{}'",
+        e.identifier,
+        e.suffix);
+      sym_expr2 = sym_expr2->with_type(migrate_symbol_type(*sym));
+
+      /* Rename so that it reflects the current state. */
+      assert(cur_state->call_stack.size() >= 1);
+      cur_state->rename(sym_expr2);
+
+      /* Further below we'll look at the value-set of (the L1 version of)
+       * sym_expr2 and compare the root-objects in it (via same_object2t) to
+       * something in this symbol that is of pointer type. The symbol could
+       * well be an array or a structure.
+       *
+       * The suffix from the value-set entry says to which sub-component(s)
+       * (if any) of the object referred to by sym_expr2 this entry belongs.
+       * Those sub-components are of pointer type and could point to objects
+       * reachable further out. Construct expressions that refer into the
+       * symbol based on the suffix so that we catch all the pointers. If
+       * the suffix is empty, sym_expr2 already has pointer type. Otherwise
+       * the symbol has a compound type. */
+      std::vector<expr2tc> sub_exprs = {sym_expr2};
+      for (const suffix_componentt &c : split_suffix_components(e.suffix))
+      {
+        /* The suffix consists of a sequence of components, which are either
+         * "[]" or ".name" where name is the name of some member of a
+         * structure type. */
+        if (c.is_member())
         {
-          std::string key = e.identifier + e.suffix;
-          auto [mit, ins] = merged.emplace(key, std::make_pair(path_to_e, e));
-          if (ins)
-            order.push_back(std::move(key));
-          else
+          for (expr2tc &p : sub_exprs)
           {
-            /* An empty path stands for 'true' and absorbs everything. */
-            expr2tc &p = mit->second.first;
-            if (p)
-              p = path_to_e ? or2tc(p, path_to_e) : path_to_e;
+            assert(is_structure_type(p));
+            unsigned n =
+              struct_union_get_component_number(p->type, c.member_name).value();
+            p = member2tc(struct_union_members(p->type)[n], p, c.member_name);
           }
+          continue;
         }
 
-      for (const std::string &key : order)
-      {
-        const auto &[path_to_e, e] = merged.at(key);
+        assert(c.is_index());
+        const type2tc &type = sub_exprs[0]->type;
+        assert(is_array_type(type));
+        const array_type2t &array_type = to_array_type(type);
+        const expr2tc &size = array_type.array_size;
+        if (!size)
         {
-          /* Each globally reachable symbol is expanded only once, even for
-           * circular data structures. */
-          if (!visited.emplace(key).second)
-            continue;
+          /* The user is doing evil things like pointing to infinite-size
+           * arrays. Bad user. Those arrays are not "global symbols" in the
+           * sense of --no-reachable-memory-leak; ignore those. */
+          sub_exprs.clear();
+          break;
+        }
 
-          /* Unfortunately, we just have the symbol id and a suffix that's only
-           * meaningful to the value-set analysis, but no type. However, we
-           * need a type. So reconstruct the current state's version of a
-           * symbol-expr referring to this symbol. */
-          symbol_exprt sym_expr(e.identifier);
-          expr2tc sym_expr2;
-          migrate_expr(sym_expr, sym_expr2);
+        if (is_constant_int2t(size))
+        {
+          /* This could be huge. TODO: switch to the case below. */
+          uint64_t n = to_constant_int2t(size).value.to_uint64();
+          std::vector<expr2tc> new_sub_exprs;
+          new_sub_exprs.reserve(n * sub_exprs.size());
+          for (const expr2tc &p : sub_exprs)
+            for (uint64_t i = 0; i < n; i++)
+              new_sub_exprs.emplace_back(
+                index2tc(array_type.subtype, p, gen_long(size->type, i)));
+          sub_exprs = std::move(new_sub_exprs);
+          continue;
+        }
 
-          /* Now obtain the type. */
-          const symbolt *sym = ns.lookup(to_symbol2t(sym_expr2).thename);
+        /* TODO: Missing implementation.
+         *
+         * We cannot just use a new symbol for the index since this
+         * expression is used in a negated context. I.e. we will need to
+         * encode a condition whose negation is true if and only if the
+         * target 'adr' is *not* reachable from this array.
+         * Exists index, s.t. "array[index] is the same object as 'adr'"
+         * does not satisfy this requirement: solvers are free to choose an
+         * 'index' where the same-object condition is false. Instead, the
+         * counter-example needs to include a witness that 'adr' is *not*
+         * reachable from the array.
+         *
+         * XXX fbrausse: Can we use the inductive counting construction from
+         *   Immerman and Szelepcsényi proving co-NL = NL here?
+         *   Alternatively, we might be able to use Savitch's theorem to
+         *   construct a deterministic expression for reachability and
+         *   negate that. Might even be faster since the expression
+         *   constructed in DSPACE(log^2(n)) should be handled faster than
+         *   the time it takes to solve a formula constructed in DTIME(n^2).
+         */
 
-          /* By "global" only user-defined symbols are meant. Internally used ones
-           * we can ignore. */
-          if (e.identifier == "argv'" || has_prefix(sym->name, "__ESBMC_"))
-            continue;
-          log_debug(
-            "memcleanup",
-            "memcleanup: itr {}, obtaining value-set for global '{}' suffix "
-            "'{}'",
-            i,
-            e.identifier,
-            e.suffix);
-          sym_expr2 = sym_expr2->with_type(migrate_symbol_type(*sym));
+        // this is a workaround because there is no implementation, yet
+        sub_exprs.clear();
+        break;
+      }
+      if (sub_exprs.empty()) /* this target is not to be handled */
+        continue;
 
-          /* Rename so that it reflects the current state. */
-          assert(cur_state->call_stack.size() >= 1);
-          cur_state->rename(sym_expr2);
-
-          /* Further below we'll look at the value-set of (the L1 version of)
-           * sym_expr2 and compare the root-objects in it (via same_object2t) to
-           * something in this symbol that is of pointer type. The symbol could
-           * well be an array or a structure.
-           *
-           * The suffix from the value-set entry says to which sub-component(s)
-           * (if any) of the object referred to by sym_expr2 this entry belongs.
-           * Those sub-components are of pointer type and could point to objects
-           * reachable further out. Construct expressions that refer into the
-           * symbol based on the suffix so that we catch all the pointers. If
-           * the suffix is empty, sym_expr2 already has pointer type. Otherwise
-           * the symbol has a compound type. */
-          std::vector<expr2tc> sub_exprs = {sym_expr2};
-          for (const suffix_componentt &c : split_suffix_components(e.suffix))
-          {
-            /* The suffix consists of a sequence of components, which are either
-             * "[]" or ".name" where name is the name of some member of a
-             * structure type. */
-            if (c.is_member())
-            {
-              for (expr2tc &p : sub_exprs)
-              {
-                assert(is_structure_type(p));
-                unsigned n =
-                  struct_union_get_component_number(p->type, c.member_name)
-                    .value();
-                p =
-                  member2tc(struct_union_members(p->type)[n], p, c.member_name);
-              }
-              continue;
-            }
-
-            assert(c.is_index());
-            const type2tc &type = sub_exprs[0]->type;
-            assert(is_array_type(type));
-            const array_type2t &array_type = to_array_type(type);
-            const expr2tc &size = array_type.array_size;
-            if (!size)
-            {
-              /* The user is doing evil things like pointing to infinite-size
-               * arrays. Bad user. Those arrays are not "global symbols" in the
-               * sense of --no-reachable-memory-leak; ignore those. */
-              sub_exprs.clear();
-              break;
-            }
-
-            if (is_constant_int2t(size))
-            {
-              /* This could be huge. TODO: switch to the case below. */
-              uint64_t n = to_constant_int2t(size).value.to_uint64();
-              std::vector<expr2tc> new_sub_exprs;
-              new_sub_exprs.reserve(n * sub_exprs.size());
-              for (const expr2tc &p : sub_exprs)
-                for (uint64_t i = 0; i < n; i++)
-                  new_sub_exprs.emplace_back(
-                    index2tc(array_type.subtype, p, gen_long(size->type, i)));
-              sub_exprs = std::move(new_sub_exprs);
-              continue;
-            }
-
-            /* TODO: Missing implementation.
-             *
-             * We cannot just use a new symbol for the index since this
-             * expression is used in a negated context. I.e. we will need to
-             * encode a condition whose negation is true if and only if the
-             * target 'adr' is *not* reachable from this array.
-             * Exists index, s.t. "array[index] is the same object as 'adr'"
-             * does not satisfy this requirement: solvers are free to choose an
-             * 'index' where the same-object condition is false. Instead, the
-             * counter-example needs to include a witness that 'adr' is *not*
-             * reachable from the array.
-             *
-             * XXX fbrausse: Can we use the inductive counting construction from
-             *   Immerman and Szelepcsényi proving co-NL = NL here?
-             *   Alternatively, we might be able to use Savitch's theorem to
-             *   construct a deterministic expression for reachability and
-             *   negate that. Might even be faster since the expression
-             *   constructed in DSPACE(log^2(n)) should be handled faster than
-             *   the time it takes to solve a formula constructed in DTIME(n^2).
-             */
-
-            // this is a workaround because there is no implementation, yet
-            sub_exprs.clear();
-            break;
-          }
-          if (sub_exprs.empty()) /* this target is not to be handled */
-            continue;
-
-          if (is_symbol2t(sym_expr2))
-          {
-            symbol2t &s = to_symbol2t(sym_expr2);
-            if (s.rlevel == symbol2t::renaming_level::level2_global)
-            {
-              /* value-set assumes L1 symbols */
-              s.rlevel = symbol2t::renaming_level::level1_global;
-            }
-          }
-
-          /* Collect all objects reachable from 'globals' in 'points_to'. */
-          value_sett::object_mapt points_to;
-          /* Collect its value-set into 'points_to'. Since that's a map, this
-           * will only add targets that are not already in there. */
-          cur_state->value_set.get_value_set_rec(
-            sym_expr2, points_to, e.suffix, sym_expr2->type);
-
-          /* Now add the new found symbols to 'globals_point_to' and also record
-           * them in 'globals'. If they were known already, we don't need to handle
-           * them again. */
-          for (auto it = points_to.begin(); it != points_to.end(); ++it)
-          {
-            expr2tc target = cur_state->value_set.to_expr(it);
-            /* A value-set entry can be unknown, invalid or a descriptor of an
-             * object. */
-            if (is_unknown2t(target))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target unknown2t");
-              /* Treating 'unknown' as "could potentially point anywhere" generates
-               * too many false positives. It will basically make the memory-leak
-               * check useless since all dynamic objects could potentially still
-               * be referenced. We ignore it for now and pretend that's OK because
-               * dereference() with INTERNAL mode would also do that.
-              has_unknown = true;
-              globals.clear();
-              break;
-               */
-              continue;
-            }
-            /* invalid targets are not objects, ignore those */
-            if (is_invalid2t(target))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target invalid2t");
-              continue;
-            }
-
-            assert(is_object_descriptor2t(target));
-            expr2tc root_object =
-              to_object_descriptor2t(target).get_root_object();
-
-            /* null-objects, constant strings and functions are interesting for
-             * neither the memory-leak check nor for finding more pointers to
-             * enlarge the set of reachable objects */
-            if (is_null_object2t(root_object))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target null-object");
-              continue;
-            }
-            if (is_constant_string2t(root_object))
-            {
-              log_debug(
-                "memcleanup-skip",
-                "memcleanup: skipping target constant-string");
-              continue;
-            }
-            if (is_code_type(root_object))
-            {
-              log_debug(
-                "memcleanup-skip", "memcleanup: skipping target of code type");
-              continue;
-            }
-
-            log_debug(
-              "memcleanup-skip",
-              "memcleanup: found target '{}' of {} type",
-              to_symbol2t(root_object).get_symbol_name(),
-              get_type_id(root_object->type));
-
-            /* Record and, if new, obtain all the "entries" interesting for the
-             * value-set analysis. An entry is interesting basically if its type
-             * contains a pointer type. Those are also exactly the ones interesting
-             * for the building the set of reachable objects. */
-            expr2tc adr = address_of2tc(root_object->type, root_object);
-
-            expr2tc same_as_e;
-            for (const expr2tc &sub_expr : sub_exprs)
-            {
-              assert(is_pointer_type(sub_expr));
-              expr2tc same = same_object2tc(sub_expr, adr);
-              same_as_e = same_as_e ? or2tc(same_as_e, same) : same;
-            }
-            assert(same_as_e);
-            expr2tc is_e = path_to_e ? and2tc(path_to_e, same_as_e) : same_as_e;
-            expr2tc &pts = globals_point_to[adr];
-            pts = pts ? or2tc(pts, is_e) : is_e;
-
-            /* Check the contents of a valid root object of this target for more
-             * pointers reaching out further */
-            assert(is_symbol2t(root_object));
-            std::list<value_sett::entryt> root_points_to;
-            va.get_entries_rec(
-              to_symbol2t(root_object).get_symbol_name(),
-              "",
-              migrate_type_back(root_object->type),
-              root_points_to);
-
-            tmp.emplace_back(is_e, std::move(root_points_to));
-          }
+      if (is_symbol2t(sym_expr2))
+      {
+        symbol2t &s = to_symbol2t(sym_expr2);
+        if (s.rlevel == symbol2t::renaming_level::level2_global)
+        {
+          /* value-set assumes L1 symbols */
+          s.rlevel = symbol2t::renaming_level::level1_global;
         }
       }
-      globals = std::move(tmp);
+
+      /* Collect all objects reachable from 'globals' in 'points_to'. */
+      value_sett::object_mapt points_to;
+      /* Collect its value-set into 'points_to'. Since that's a map, this
+       * will only add targets that are not already in there. */
+      cur_state->value_set.get_value_set_rec(
+        sym_expr2, points_to, e.suffix, sym_expr2->type);
+
+      /* Now add the new found symbols to 'globals_point_to' and also record
+       * them in 'globals'. If they were known already, we don't need to handle
+       * them again. */
+      for (auto it = points_to.begin(); it != points_to.end(); ++it)
+      {
+        expr2tc target = cur_state->value_set.to_expr(it);
+        /* A value-set entry can be unknown, invalid or a descriptor of an
+         * object. */
+        if (is_unknown2t(target))
+        {
+          log_debug("memcleanup-skip", "memcleanup: skipping target unknown2t");
+          /* Treating 'unknown' as "could potentially point anywhere" generates
+           * too many false positives. It will basically make the memory-leak
+           * check useless since all dynamic objects could potentially still
+           * be referenced. We ignore it for now and pretend that's OK because
+           * dereference() with INTERNAL mode would also do that.
+          has_unknown = true;
+          globals.clear();
+          break;
+           */
+          continue;
+        }
+        /* invalid targets are not objects, ignore those */
+        if (is_invalid2t(target))
+        {
+          log_debug("memcleanup-skip", "memcleanup: skipping target invalid2t");
+          continue;
+        }
+
+        assert(is_object_descriptor2t(target));
+        expr2tc root_object = to_object_descriptor2t(target).get_root_object();
+
+        /* null-objects, constant strings and functions are interesting for
+         * neither the memory-leak check nor for finding more pointers to
+         * enlarge the set of reachable objects */
+        if (is_null_object2t(root_object))
+        {
+          log_debug(
+            "memcleanup-skip", "memcleanup: skipping target null-object");
+          continue;
+        }
+        if (is_constant_string2t(root_object))
+        {
+          log_debug(
+            "memcleanup-skip", "memcleanup: skipping target constant-string");
+          continue;
+        }
+        if (is_code_type(root_object))
+        {
+          log_debug(
+            "memcleanup-skip", "memcleanup: skipping target of code type");
+          continue;
+        }
+
+        log_debug(
+          "memcleanup-skip",
+          "memcleanup: found target '{}' of {} type",
+          to_symbol2t(root_object).get_symbol_name(),
+          get_type_id(root_object->type));
+
+        /* Record the edge and, if new, obtain all the "entries" interesting
+         * for the value-set analysis. An entry is interesting basically if
+         * its type contains a pointer type. Those are also exactly the ones
+         * interesting for the building the set of reachable objects. */
+        expr2tc adr = address_of2tc(root_object->type, root_object);
+
+        expr2tc same_as_e;
+        for (const expr2tc &sub_expr : sub_exprs)
+        {
+          assert(is_pointer_type(sub_expr));
+          expr2tc same = same_object2tc(sub_expr, adr);
+          same_as_e = same_as_e ? or2tc(same_as_e, same) : same;
+        }
+        assert(same_as_e);
+
+        assert(is_symbol2t(root_object));
+        const std::string dst = to_symbol2t(root_object).get_symbol_name();
+        out_edges[e.identifier].emplace_back(dst, same_as_e);
+        node_adr.emplace(dst, adr);
+
+        /* Check the contents of a valid root object of this target for more
+         * pointers reaching out further */
+        va.get_entries_rec(
+          dst, "", migrate_type_back(root_object->type), globals);
+      }
+    }
+
+    /* Phase 2: least fixpoint of the reachability conditions. Global symbols
+     * are unconditionally reachable; every other symbol is reachable under the
+     * disjunction, over its incoming edges, of (source reachable) and (edge
+     * condition). Propagating only the disjuncts added by the previous round
+     * keeps each round's formula linear in the number of edges.
+     *
+     * A symbol reachable in some execution is reachable there along a simple
+     * path, and a simple path leaves its root once and thereafter only visits
+     * pointed-at symbols, so `node_adr.size()` rounds cover every one of them.
+     * On an acyclic heap the rounds run dry well before that; on a cyclic one
+     * they do not, and the later rounds only re-derive disjuncts that the
+     * simple-path ones already imply. */
+    std::map<std::string, expr2tc> reach, delta;
+    for (const std::string &r : roots)
+      reach.emplace(r, expr2tc());
+    delta = reach;
+
+    for (size_t round = 0; round < node_adr.size() && !delta.empty(); round++)
+    {
+      std::map<std::string, expr2tc> contrib;
+      for (const auto &[src, g_src] : delta)
+      {
+        auto eit = out_edges.find(src);
+        if (eit == out_edges.end())
+          continue;
+        for (const auto &[dst, cond] : eit->second)
+        {
+          expr2tc g = g_src ? and2tc(g_src, cond) : cond;
+          auto [cit, ins] = contrib.emplace(dst, g);
+          if (!ins)
+            cit->second = or2tc(cit->second, g);
+        }
+      }
+
+      for (auto it = contrib.begin(); it != contrib.end();)
+      {
+        auto [rit, ins] = reach.emplace(it->first, it->second);
+        if (!ins)
+        {
+          if (!rit->second)
+          {
+            /* Already unconditionally reachable, nothing left to propagate. */
+            it = contrib.erase(it);
+            continue;
+          }
+          rit->second = or2tc(rit->second, it->second);
+        }
+        ++it;
+      }
+      delta = std::move(contrib);
+    }
+
+    /* The fixpoint above ran enough rounds to reach every recorded target, so
+     * each of them has a condition. A global symbol reachable from another
+     * global carries the nil condition; 'maybe_global_target' below requires a
+     * non-null one. */
+    for (const auto &[k, adr] : node_adr)
+    {
+      const expr2tc &r = reach.at(k);
+      expr2tc g = r ? r : gen_true_expr();
+      expr2tc &pts = globals_point_to[adr];
+      pts = pts ? or2tc(pts, g) : g;
     }
 
     if (log_debug(

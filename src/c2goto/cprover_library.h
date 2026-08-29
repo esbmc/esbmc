@@ -6,6 +6,10 @@
 class languaget;
 class contextt;
 
+/* Registers the bundled internal libc headers and sources with
+ * file_operations. */
+void register_bundled_libc();
+
 /* Returns the path the headers of the internal libc have been extracted to
  * or NULL if no library is configured (either via config.ansi_c.lib or during
  * build time). */

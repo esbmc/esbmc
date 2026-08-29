@@ -1,5 +1,5 @@
 // Pins the do/while condition branch's source location under
-// --irep2-native-body (W1-loc spike Phase C, esbmc/esbmc#4715).
+// native conversion (W1-loc spike Phase C, esbmc/esbmc#4715).
 //
 // convert_dowhile reads that location off the condition *operand*
 // (code.op0().find_location()), which the legacy path populates via

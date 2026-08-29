@@ -53,7 +53,8 @@ class CTest1(ParseTest):
     def _argument_list_checks(self, test_obj):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         self.assertEqual(argument_list[0], "__test__")
-        self.assertEqual(argument_list[-1], "./esbmc-unix/00_bbuf_02/main.c")
+        self.assertEqual(argument_list[-1],
+                         os.path.abspath("./esbmc-unix/00_bbuf_02/main.c"))
         self.assertEqual(argument_list[1], "--unwind")
 
 
@@ -94,9 +95,11 @@ class CTest3(ParseTest):
 
     def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
+        base = os.path.abspath("./esbmc-unix/00_account_01")
         expected = ['__test__',
-                    './esbmc-unix/00_account_01/account.c',
-                    '--no-slice', '--context-bound', '1', '--depth', '150', './esbmc-unix/00_account_01/test.c']
+                    os.path.join(base, 'account.c'),
+                    '--no-slice', '--context-bound', '1', '--depth', '150',
+                    os.path.join(base, 'test.c')]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -119,7 +122,8 @@ class CTest4(ParseTest):
     def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         expected = ['__test__',
-                    '--overflow-check', '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
+                    '--overflow-check', '--unwind', '3', '--32',
+                    os.path.abspath('./nonz3/29_exStbHwAcc/main.c')]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -130,8 +134,8 @@ class ToolTest1(CTest4):
         argument_list = self.test_case.generate_run_argument_list(
             "__tool_contains_spaces__ --param 1 __test__")
         expected = ['__tool_contains_spaces__ --param 1 __test__',
-                    '--overflow-check',
-                    '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c',]
+                    '--overflow-check', '--unwind', '3', '--32',
+                    os.path.abspath('./nonz3/29_exStbHwAcc/main.c')]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -142,9 +146,66 @@ class ToolTest2(CTest4):
         argument_list = self.test_case.generate_run_argument_list(
             '__tool_contains_no_spaces__', '--param', '1', '__test__')
         expected = ['__tool_contains_no_spaces__', '--param', '1', '__test__',
-                    '--overflow-check',
-                    '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
+                    '--overflow-check', '--unwind', '3', '--32',
+                    os.path.abspath('./nonz3/29_exStbHwAcc/main.c')]
         self.assertEqual(argument_list, expected, str(argument_list))
+
+
+class RelativeTestDirTest(unittest.TestCase):
+    """A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
+    temporary cwd, so every path the runner hands ESBMC must be absolute
+    however the test directory was spelled (esbmc/esbmc#4331)."""
+
+    def test_paths_survive_a_chdir(self):
+        test_case = TestCase("./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
+        source = test_case.generate_run_argument_list("__test__")[-1]
+        self.assertTrue(os.path.isabs(source), source)
+        with tempfile.TemporaryDirectory() as elsewhere:
+            cwd = os.getcwd()
+            try:
+                os.chdir(elsewhere)
+                self.assertTrue(os.path.exists(source), source)
+            finally:
+                os.chdir(cwd)
+
+
+class TimeoutReapsProcessGroupTest(unittest.TestCase):
+    """A timed-out run must leave nothing behind. ESBMC does not necessarily
+    die on SIGTERM -- orphans have been observed still running 34 hours after
+    their harness gave up -- so the cleanup has to escalate to SIGKILL."""
+
+    def test_sigterm_ignoring_child_is_reaped(self):
+        if os.name != "posix":
+            self.skipTest("process-group cleanup is posix-only")
+        with tempfile.TemporaryDirectory() as tmp:
+            # Stand-in for ESBMC: ignores SIGTERM, then sleeps past the timeout.
+            tool = os.path.join(tmp, "ignores_sigterm.py")
+            with open(tool, "w", encoding="utf-8") as f:
+                f.write(
+                    "import os, signal, sys, time\n"
+                    "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                    "sys.stderr.write('CHILDPID=' + str(os.getpid()) + '\\n')\n"
+                    "sys.stderr.flush()\n"
+                    "time.sleep(600)\n"
+                )
+            test_dir = os.path.join(tmp, "hangs")
+            os.mkdir(test_dir)
+            open(os.path.join(test_dir, "main.c"), "w").close()
+            with open(os.path.join(test_dir, "test.desc"), "w",
+                      encoding="utf-8") as f:
+                f.write("CORE\nmain.c\n\n^VERIFICATION SUCCESSFUL$\n")
+
+            executor = Executor("{} {}".format(sys.executable, tool))
+            executor.timeout = 2
+            stdout, stderr, _ = executor.run(TestCase(test_dir, "hangs"))
+
+            self.assertIsNone(stdout, "run should report a timeout")
+            marker = re.search(r"CHILDPID=(\d+)", stderr.decode())
+            self.assertIsNotNone(marker, stderr.decode())
+            child_pid = int(marker.group(1))
+            # A reaped pid may be recycled, but not within this test's lifetime.
+            with self.assertRaises(OSError):
+                os.kill(child_pid, 0)
 
 
 if __name__ == '__main__':

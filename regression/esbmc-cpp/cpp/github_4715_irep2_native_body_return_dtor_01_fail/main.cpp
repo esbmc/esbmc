@@ -1,6 +1,6 @@
 // __ESBMC_assert is a built-in intrinsic; no include needed.
 
-// W1-loc Phase C (esbmc/esbmc#4715): under --irep2-native-body a `return` that
+// W1-loc Phase C (esbmc/esbmc#4715): under native conversion a `return` that
 // runs while a local object's destructor is still on the stack is delegated to
 // the legacy convert_return, which captures the value into a temporary, runs the
 // destructor (C++ [stmt.return]: after the value is computed, before the jump)

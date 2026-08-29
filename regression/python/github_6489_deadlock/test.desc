@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 2 --deadlock-check
+^VERIFICATION FAILED$
+^.*Deadlocked state.*$

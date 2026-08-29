@@ -1,23 +1,10 @@
-// KNOWNBUG (github #6338): std::string::at does not throw std::out_of_range.
-//
-// src/cpp/library/string still carries a pre-try-catch placeholder in
-// basic_string::at -- `__ESBMC_assert(0, ...)` where the throw should be -- so
-// correct exception-handling code is reported as VERIFICATION FAILED.
-// std::vector::at throws correctly, which is the control below.
-//
-// The fix is blocked on a <string>/<stdexcept> include cycle: <stdexcept>
-// includes <string> solely for the `const std::string &` constructor overloads
-// of its exception classes, so out_of_range is incomplete at the point
-// basic_string::at is parsed and a direct throw does not compile. Routing the
-// throw through a helper compiles but defeats ESBMC's throw analysis, which
-// only marks a function as throwing when the throw is directly in its body --
-// that would make an *uncaught* string::at OOB verify SUCCESSFUL, which is
-// unsound and worse than the current assert. See the issue for both directions.
+// github #6338: std::string::at must throw a catchable std::out_of_range.
 //
 // Verified against clang++ -std=c++17 -fsanitize=address,undefined: exits 0.
 #include <string>
 #include <vector>
 #include <stdexcept>
+#include <exception>
 #include <cassert>
 
 int main()
@@ -36,18 +23,57 @@ int main()
   }
   assert(caught_vector);
 
-  // string::at should behave the same way.
+  // string::at behaves the same way.
   std::string s = "ab";
   bool caught_string = false;
+  bool fell_through = false;
   try
   {
     s.at(5);
+    fell_through = true;
   }
   catch (const std::out_of_range &)
   {
     caught_string = true;
   }
   assert(caught_string);
+  assert(!fell_through);
+
+  // The exception is catchable by each of its bases.
+  bool caught_logic = false;
+  try
+  {
+    s.at(2);
+  }
+  catch (const std::logic_error &)
+  {
+    caught_logic = true;
+  }
+  assert(caught_logic);
+
+  bool caught_base = false;
+  try
+  {
+    s.at(2);
+  }
+  catch (const std::exception &)
+  {
+    caught_base = true;
+  }
+  assert(caught_base);
+
+  // In-range access does not throw.
+  bool caught_in_range = false;
+  try
+  {
+    assert(s.at(0) == 'a');
+    assert(s.at(1) == 'b');
+  }
+  catch (const std::out_of_range &)
+  {
+    caught_in_range = true;
+  }
+  assert(!caught_in_range);
 
   return 0;
 }

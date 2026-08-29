@@ -1,0 +1,130 @@
+name: Complexity
+
+# Measures the cyclomatic complexity a pull request introduces and reports it on
+# the PR. The metric is *modified* CCN (a switch counts as one decision point),
+# and the check is a delta, not an absolute: ESBMC's median function sits at CCN
+# 3 but ~11% are above 15, so a repo-wide gate would be permanently red and would
+# only ever nag about AST dispatch tables nobody intends to refactor. The rules
+# and partitioning are documented in scripts/complexity/ccn_report.py.
+#
+# Files the PR touches under `regression/` and `unit/` are measured and reported
+# but never gated: a creduce-reduced witness is supposed to be pathological.
+#
+# Bring-up note: `continue-on-error: true` mirrors sanitizers.yml — this runs
+# advisory-only while the artifacts accumulate enough merged-PR data to
+# calibrate the thresholds in ccn_report.py. A follow-up PR drops the flag,
+# adds .config/complexity-allow.txt for deliberate exceptions, and promotes the
+# job to a required check. That PR must also run the *base* branch's copy of
+# ccn_report.py: the script is checked out from the PR head, so while it is
+# advisory a PR may edit its own thresholds, which a required check cannot allow.
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly whole-tree snapshot on master, to chart the trend.
+    - cron: "0 4 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  complexity:
+    name: Cyclomatic complexity
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout PR head (not the merge ref)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+
+      # Pinned: an unpinned parser is an unpinned metric.
+      - name: Install lizard
+        run: pip install lizard==1.23.0
+
+      - name: Self-test the report script
+        run: python3 scripts/complexity/test_ccn_report.py
+
+      - name: Report complexity introduced by this PR
+        if: ${{ github.event_name == 'pull_request' }}
+        # base_ref goes through the environment, not string interpolation: a
+        # refname may contain shell metacharacters.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # The checkout above brings down the head ref alone, so a PR stacked
+          # on another branch has no remote-tracking ref for its base and
+          # merge-base aborts -- failing the gate for a reason that has nothing
+          # to do with complexity. Fetch the base, and fall back to master when
+          # it is gone (a stacked base is often deleted once it merges).
+          for ref in "$BASE_REF" master; do
+            git fetch --no-tags --quiet origin \
+              "+refs/heads/$ref:refs/remotes/origin/$ref" 2>/dev/null || true
+          done
+          base=$(git merge-base "origin/$BASE_REF" HEAD 2>/dev/null) \
+            || base=$(git merge-base origin/master HEAD)
+          echo "merge base: $base"
+          python3 scripts/complexity/ccn_report.py \
+            --base "$base" --gate \
+            --json complexity.json --markdown complexity.md
+
+      - name: Snapshot the whole tree
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          python3 scripts/complexity/ccn_report.py --snapshot \
+            --json complexity.json --markdown complexity.md
+
+      # Always available, including on fork PRs whose token cannot comment.
+      # Guarded on the file: when an earlier step dies there is no report, and
+      # three more red steps would only bury the real error.
+      - name: Publish to the job summary
+        if: ${{ always() && hashFiles('complexity.md') != '' }}
+        run: cat complexity.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The calibration input for promoting this job to a required check.
+      - name: Upload the full report
+        if: ${{ always() && hashFiles('complexity.md') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: complexity-${{ github.run_number }}
+          path: |
+            complexity.json
+            complexity.md
+          retention-days: 30
+
+      - name: Comment on the PR
+        # Forks get a read-only token; the job summary above is their report.
+        if: ${{ always() && github.event_name == 'pull_request' &&
+                hashFiles('complexity.md') != '' &&
+                github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            // Update one comment rather than posting per push: unlike the
+            // code-style check this is advisory, so repeated comments are spam.
+            const marker = '<!-- esbmc-complexity-report -->';
+            const body = marker + '\n' + fs.readFileSync('complexity.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { owner, repo, issue_number });
+            const mine = comments.find(c => c.body && c.body.includes(marker));
+            if (mine) {
+              await github.rest.issues.updateComment(
+                { owner, repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment(
+                { owner, repo, issue_number, body });
+            }

@@ -1,0 +1,5 @@
+CORE
+preset.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^warning: LD: variable 'PV' has an unrecognised initial value 'notanumber'; using 0\.$
+^VERIFICATION SUCCESSFUL$

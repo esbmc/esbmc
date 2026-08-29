@@ -1,6 +1,7 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
+#include "initializer_list" /* [algorithm.syn] opens with this include */
 #include "iterator" /* std::iterator_traits, used by the heap helpers below */
 #include "definitions.h"
 #include <utility>
@@ -465,26 +466,6 @@ FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2, Pr pred)
   return last1;
 }
 
-template <class InputIterator, class Distance>
-void advance(InputIterator &i, Distance n)
-{
-  i = i + n;
-}
-
-template <class InputIterator>
-int distance(InputIterator first, InputIterator last)
-{
-  int i = 0;
-  int koef = first < last ? 1 : -1;
-  InputIterator pilgrim = first < last ? first : last;
-  while (pilgrim != last)
-  {
-    pilgrim = pilgrim + koef;
-    i++;
-  }
-  return i;
-}
-
 template <class FwdIt, class Diff, class Ty>
 FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty &value)
 {
@@ -557,6 +538,17 @@ BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
     *(--dest) = *(--last);
   return dest;
 }
+
+#if __cplusplus >= 201103L
+// [alg.move]: the moving counterpart of copy_backward.
+template <class BidIt1, class BidIt2>
+BidIt2 move_backward(BidIt1 first, BidIt1 last, BidIt2 dest)
+{
+  while (last != first)
+    *(--dest) = ::std::move(*(--last));
+  return dest;
+}
+#endif
 
 /* swap is provided by <utility> (included above) for both C++03 and C++11+;
    defining it here as well caused a redefinition error under -std=c++03. */
@@ -1337,52 +1329,25 @@ RanIt partial_sort_copy(
   return pilgrim2;
 }
 
+/* [alg.nth.element]: the element at nth ends up where it would be if the
+ * range were sorted, and nothing before nth compares greater than it.
+ * Sorting the whole range establishes that. It also fixes one of the
+ * permutations the standard leaves unspecified, so a program reading the
+ * order of the *other* elements sees more than it is entitled to. */
 template <class RanIt>
 void nth_element(RanIt first, RanIt nth, RanIt last)
 {
-  RanIt pilgrim, pos;
-  swap(*first, *nth);
-  nth = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
-  {
-    if (*pilgrim < *nth)
-    {
-      swap(*pilgrim, *nth);
-      nth = pilgrim;
-      while (nth != first)
-      {
-        pos = nth - 1;
-        if (!(*nth < *pos))
-          break;
-        swap(*nth, *pos);
-        nth = pos;
-      }
-    }
-  }
+  if (nth == last)
+    return;
+  sort(first, last);
 }
 
 template <class RanIt, class Pr>
 void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred)
 {
-  RanIt pilgrim, pos;
-  swap(*first, *nth);
-  nth = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
-  {
-    if (pred(*pilgrim, *nth))
-    {
-      swap(*pilgrim, *nth);
-      nth = pilgrim;
-      while (nth != first)
-      {
-        pos = nth - 1;
-        if (!pred(*nth, *pos))
-          break;
-        swap(*nth, *pos);
-        nth = pos;
-      }
-    }
-  }
+  if (nth == last)
+    return;
+  sort(first, last, pred);
 }
 
 template <class FwdIt, class Ty>

@@ -1,0 +1,5 @@
+CORE
+main.c
+--deadlock-check --incremental-context-bound
+^Context bound \d+ covered every interleaving
+^VERIFICATION SUCCESSFUL$

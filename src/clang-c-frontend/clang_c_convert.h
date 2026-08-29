@@ -18,6 +18,7 @@ class ASTContext;
 class SourceManager;
 class FunctionDecl;
 class Decl;
+class LabelDecl;
 class VarDecl;
 class ParmVarDecl;
 class RecordDecl;
@@ -48,16 +49,6 @@ class InitListExpr;
 
 std::string
 getFullyQualifiedName(const clang::QualType &, const clang::ASTContext &);
-
-// Name of the nested base-subobject component added to a derived struct for a
-// direct base whose class_id is `class_id`. Inherited member access, upcasts
-// and base ctor/dtor `this` are routed through this component. Must agree
-// between the storage site (get_base_components_methods) and the
-// derived->base cast handler. See esbmc/esbmc#1866, #3894.
-inline std::string base_subobject_name(const std::string &class_id)
-{
-  return "@base@" + class_id;
-}
 
 class clang_c_convertert
 {
@@ -121,6 +112,17 @@ protected:
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
+
+  /** Address-taken labels of the function being converted, in the order the
+   *  addresses appear. A label has no storage, so `&&L` lowers to its 1-based
+   *  position cast to a pointer and `goto *p` to an equality chain over those
+   *  positions. Collected up front because a label's address may be taken
+   *  after the indirect goto that jumps to it. A vector, not a map keyed on
+   *  the decl: pointer order varies per run, and the chain it emits has to be
+   *  reproducible (GCC computed goto, issue #4083). */
+  std::vector<const clang::LabelDecl *> address_taken_labels;
+
+  void collect_address_taken_labels(const clang::Stmt &body);
 
   bool convert_builtin_types();
   virtual bool convert_top_level_decl();
@@ -313,6 +315,15 @@ protected:
    */
   bool
   process_aligned_attribute(const clang::AlignedAttr &aattr, typet &t) const;
+
+  /*
+   * Apply a record's packing and alignment attributes to its type
+   * Arguments:
+   *   rd: the record definition whose attributes to inspect
+   *   t: the struct/union type to annotate
+   */
+  bool
+  process_record_layout_attributes(const clang::RecordDecl &rd, typet &t) const;
 
   /*
    * add additional annotations if a class/struct/union field has alignment attribute

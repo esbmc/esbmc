@@ -59,14 +59,40 @@ symbolt *python_converter::find_dunder_method(
     return nullptr;
 
   symbol_id sid(file, class_name, dunder_name);
-  return find_symbol(sid.to_string());
+  if (symbolt *sym = find_symbol(sid.to_string()))
+    return sym;
+
+  return find_function_in_base_classes(
+    class_name, sid.to_string(), dunder_name, false);
+}
+
+std::string
+python_converter::instance_class_name(const nlohmann::json &value_node)
+{
+  std::string class_name = type_handler_.get_var_classname(value_node);
+
+  // get_var_classname resolves Name nodes only, so a constructor temporary --
+  // len(C()) rather than len(c) -- found no class and the dunder dispatch was
+  // skipped: len then fell through to the builtin path, which measures the
+  // struct rather than calling __len__. The call itself names the class.
+  if (
+    class_name.empty() && value_node.value("_type", "") == "Call" &&
+    type_handler_.is_constructor_call(value_node))
+  {
+    const auto &func = value_node["func"];
+    if (func.is_object() && func.value("_type", "") == "Name")
+      class_name = func.value("id", "");
+  }
+
+  return class_name;
 }
 
 bool python_converter::has_dunder_method(
   const nlohmann::json &value_node,
   const std::string &dunder_name)
 {
-  const std::string class_name = type_handler_.get_var_classname(value_node);
+  const std::string class_name = instance_class_name(value_node);
+
   if (class_name.empty())
     return false;
 
@@ -200,6 +226,59 @@ bool python_converter::is_user_class_struct_type(const typet &t)
 bool python_converter::is_user_class_pointer(const typet &t)
 {
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
+}
+
+bool python_converter::is_class_instance(const nlohmann::json &value_node)
+{
+  const std::string node_type = value_node.value("_type", "");
+  if (node_type == "Call")
+    return type_handler_.is_constructor_call(value_node);
+
+  if (node_type != "Name")
+    return false;
+
+  // The bound type decides, not the annotation's name: `a: List[int]` resolves
+  // to a class named List, but its struct is a model container that owns its
+  // own operator and length paths (#7085).
+  symbol_id sid(python_file(), current_classname(), current_function_name());
+  sid.set_object(value_node.value("id", ""));
+
+  symbolt *sym = find_symbol(sid.to_string());
+  if (!sym)
+    sym = find_symbol(sid.global_to_string());
+  if (!sym)
+    return false;
+
+  const typet &t = sym->get_type();
+  return is_user_class_pointer(t) || is_user_class_struct_type(t);
+}
+
+// move_symbol_to_context() only overwrites an existing symbol's type when
+// completing a forward declaration, so a variable rebound to a new value keeps
+// its stale type. Left alone, function_call_expr sizes the new instance from
+// that type and the constructor's field writes overrun it (#6243).
+//
+// The widening set is an ALLOWLIST, not a denylist of unsafe types: any
+// struct-shaped existing type (tuple, dict, a migrated class instance) is
+// excluded even when its class differs, because an earlier statement may
+// already have built an expression against that struct's layout (`x = t[0]`
+// after `t = (1, 2)`) and retyping in place corrupts it. Denylisting only
+// existing class pointers was tried first and missed that case.
+void python_converter::retype_placeholder_to_class(
+  symbolt &sym,
+  const typet &new_type)
+{
+  const typet &existing = sym.get_type();
+  const bool existing_is_safe_placeholder =
+    existing == none_type() ||
+    (existing.is_pointer() && existing.subtype().id() == "empty") ||
+    existing.is_signedbv() || existing.is_unsignedbv() ||
+    existing.is_floatbv() || existing.is_bool();
+
+  if (
+    is_user_class_pointer(new_type) && existing_is_safe_placeholder &&
+    existing != new_type)
+    sym.set_type(new_type);
 }
 
 exprt python_converter::dispatch_dunder_operator(

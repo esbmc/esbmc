@@ -47,6 +47,14 @@ public:
     smt_astt sym_ast,
     const symbol2t &sym);
 
+  /** Assert that a float symbol's real value is representable: every finite
+   *  value has magnitude at most max_normal, and the only magnitude above it
+   *  is the infinity sentinel that arithmetic saturates to on overflow.
+   *  Called from smt_solver_baset::convert_terminal for symbol_id. */
+  void assert_representable_magnitude(
+    smt_astt sym_ast,
+    const floatbv_type2t &fbv_type);
+
   /** Look up the tracked interval for t; fall back to the point interval {t, t}.
    *  Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp. */
   ra_interval_t get_interval(smt_astt t) const;
@@ -69,6 +77,11 @@ public:
 
   /** Integer-encoding path for ieee_fma (fused multiply-add). */
   smt_astt encode_ieee_fma(const expr2tc &expr);
+
+  /** Encode ieee_rem2t (IEEE 754 remainder, C's remainder()). Exact, so no
+   *  rounding, enclosure or flush; r is pinned as x - n*y through a fresh
+   *  integer n nearest x/y, even on ties. */
+  smt_astt encode_ieee_rem(const expr2tc &expr);
 
   /** Record that the SMT AST t may be NaN; nan_pred is a boolean SMT term
    *  that is true iff t holds a NaN value (e.g. not(operand >= 0) for
@@ -96,20 +109,28 @@ public:
    *  mk_or(a, b) if both are set. */
   smt_astt combine_nan_preds(smt_astt a, smt_astt b) const;
 
-  /** Record that the SMT AST t is a real zero produced by flushing a
-   *  negative subnormal-range result (smt_solver_baset::mk_subnormal_flush).
-   *  neg_zero_pred is a boolean SMT term that is true iff t stands for
-   *  IEEE 754 -0.0. This tracks only the negative-zero case arising from
-   *  subnormal flushing, not general signed-zero semantics. */
+  /** Record a predicate that is true iff the SMT AST t represents
+   *  IEEE 754 -0.0. Such predicates originate when a negative
+   *  subnormal-range result is flushed to zero and when a literal
+   *  negative-zero float constant is converted, and may subsequently
+   *  be propagated through assignments or wrapper terms. This does not
+   *  implement general signed-zero semantics. */
   void store_neg_zero_pred(smt_astt t, smt_astt neg_zero_pred);
 
-  /** Return the stored negative-zero predicate for t, or nullptr if t is
-   *  not known to be a flushed negative zero. */
+  /** Return the stored negative-zero predicate for t, or nullptr if no
+   *  negative-zero metadata is recorded for t. */
   smt_astt get_neg_zero_pred(smt_astt t) const;
 
   /** Propagate a negative-zero predicate from rhs to lhs after an SSA
    *  assignment. Called from smt_solver_baset::convert_assign alongside
-   *  propagate_interval and propagate_nan_pred. */
+   *  propagate_interval and propagate_nan_pred.
+   *
+   *  One-way: if rhs carries no predicate, any existing entry already
+   *  recorded for lhs is left in place rather than cleared. This is
+   *  harmless under SSA, where each assignment gives lhs a fresh AST
+   *  with no prior entry of its own, but callers reusing an AST across
+   *  more than one assignment should not assume this clears stale
+   *  metadata. */
   void propagate_neg_zero_pred(smt_astt lhs, smt_astt rhs);
 
   /** Re-attach inner's negative-zero predicate (if any) to outer, guarded
@@ -175,10 +196,24 @@ private:
   std::unordered_map<const smt_ast *, smt_astt> ir_ieee_nan_map;
 
   /** Map from AST pointer to its negative-zero predicate (a boolean SMT
-   *  term that is true iff the value is a real zero produced by flushing
-   *  a negative subnormal-range result). Populated only by
-   *  smt_solver_baset::mk_subnormal_flush; an absent entry means that no
-   *  flushed-negative-zero metadata is recorded for the value. */
+   *  term that is true iff the value stands for IEEE 754 -0.0). Predicates
+   *  originate when a negative subnormal-range result is flushed to zero
+   *  (smt_solver_baset::mk_subnormal_flush) and when a literal
+   *  negative-zero float constant is converted
+   *  (smt_solver_baset::convert_terminal's constant_floatbv_id case), and
+   *  may subsequently be propagated through assignments or wrapper terms;
+   *  an absent entry means that no negative-zero metadata is recorded for
+   *  the value.
+   *
+   *  Lifetime: keyed on raw AST pointers and never pruned, but
+   *  smt_solver_baset::pop_ctx() deletes every AST created since the
+   *  matching push_ctx(). A pop can therefore leave both a key and its
+   *  stored predicate value dangling; a later lookup that hits such an
+   *  entry would hand a freed AST to a consumer. This exposure predates
+   *  this map (ir_ieee_nan_map above has the same shape and is subject
+   *  to the same limitation) and is not specific to negative-zero
+   *  tracking, but is noted here since this map's population grows with
+   *  every literal negative-zero constant converted. */
   std::unordered_map<const smt_ast *, smt_astt> ir_ieee_neg_zero_map;
 
   /** Set of symbol names that have already received integer range assertions,

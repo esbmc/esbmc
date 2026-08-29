@@ -1,0 +1,81 @@
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.0"
+    uuid: "b415ab57-449a-4cd5-b10a-6d19bf39ad10"
+    creation_time: "2026-08-11T21:05:32+01:00"
+    producer:
+      name: "ESBMC"
+      version: "8.4.0"
+    task:
+      input_files:
+        - "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+      input_file_hashes:
+        "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i": "755bf560712fd0232a53bb1af33e4bcce1bc8ac6be8e9b7062735a7ca6770b38"
+      specification: "G valid-memcleanup"
+      data_model: "LP64"
+      language: "C"
+  content:
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+              line: 0
+              column: 0
+              function: ""
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+              line: 0
+              column: 0
+              function: ""
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+              line: 207
+              column: 3
+              function: "printLine"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "false"
+            location:
+              file_name: "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+              line: 813
+              column: 3
+              function: "CWE401_Memory_Leak__int64_t_calloc_45_bad"
+    - segment:
+        - waypoint:
+            type: "branching"
+            action: "follow"
+            constraint:
+              value: "true"
+            location:
+              file_name: "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+              line: 207
+              column: 3
+              function: "printLine"
+    - segment:
+        - waypoint:
+            type: "target"
+            action: "follow"
+            location:
+              file_name: "/Users/user/esbmc/regression/esbmc/github_1257-memcleanup/CWE401_Memory_Leak---s01---CWE401_Memory_Leak__int64_t_calloc_45_bad.i"
+              line: 852
+              column: 1
+              function: "main"

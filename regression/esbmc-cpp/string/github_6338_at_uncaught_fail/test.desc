@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --incremental-bmc
+^VERIFICATION FAILED$
+^\s*uncaught exception: (class )?std::out_of_range$

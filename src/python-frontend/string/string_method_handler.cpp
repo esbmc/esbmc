@@ -470,9 +470,41 @@ using string_call_utils::required_arg_node_or_throw;
 using string_call_utils::required_constant_int_arg;
 using string_call_utils::resolve_positional_or_keyword_arg;
 
+// Fold subject.replace(old, new[, count]) when every operand is a
+// compile-time constant str. Without it the call reaches
+// __python_str_replace with all arguments constant and the model's bounded
+// scan-and-copy loops unwind against --unwind rather than the known length.
+static std::optional<exprt> fold_constant_replace(
+  const nlohmann::json &call_json,
+  const std::function<exprt()> &get_receiver_expr,
+  python_converter &converter)
+{
+  exprt recv = get_receiver_expr();
+  if (recv.is_symbol())
+  {
+    const symbolt *sym =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (sym && !sym->get_value().is_nil())
+      recv = sym->get_value();
+  }
+
+  // bytes are modelled as an int array; folding one through the char-array
+  // string builder would retype it.
+  const typet &recv_type = recv.type();
+  if (!recv_type.is_array() || recv_type.subtype() != char_type())
+    return std::nullopt;
+
+  std::string folded;
+  if (!string_handler::extract_constant_string(call_json, converter, folded))
+    return std::nullopt;
+
+  return converter.get_string_builder().build_string_literal(folded);
+}
+
 std::optional<exprt> dispatch_replace_method(
   string_handler &self,
   const std::string &method_name,
+  const nlohmann::json &call_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,
@@ -481,6 +513,11 @@ std::optional<exprt> dispatch_replace_method(
 {
   if (method_name != "replace")
     return std::nullopt;
+
+  if (
+    std::optional<exprt> folded =
+      fold_constant_replace(call_json, get_receiver_expr, converter))
+    return folded;
 
   ensure_allowed_keywords(method_name, keyword_values, {"old", "new", "count"});
   if (args.size() > 3)
@@ -891,10 +928,61 @@ static search_args_parsedt parse_string_search_args(
   return parsed;
 }
 
+// Fold subject.find/rfind/index/rindex(sub) when both operands are
+// compile-time constant str. Otherwise the call reaches __python_str_find with
+// two constant arrays and the model's bounded scan loops unwind against
+// --unwind rather than the known length.
+//
+// index/rindex raise ValueError when the needle is absent, so a miss falls
+// through to the model rather than being folded to a value here.
+static std::optional<exprt> fold_constant_search(
+  const std::string &method_name,
+  const nlohmann::json &receiver_json,
+  const nlohmann::json &args,
+  const exprt &receiver,
+  python_converter &converter)
+{
+  exprt recv = receiver;
+  if (recv.is_symbol())
+  {
+    const symbolt *sym =
+      converter.find_symbol(to_symbol_expr(recv).get_identifier().as_string());
+    if (sym && !sym->get_value().is_nil())
+      recv = sym->get_value();
+  }
+
+  // bytes are an int array and carry their own literal fold; only str here.
+  const typet &recv_type = recv.type();
+  if (!recv_type.is_array() || recv_type.subtype() != char_type())
+    return std::nullopt;
+
+  std::string haystack, needle;
+  if (
+    args.size() != 1 ||
+    !string_handler::extract_constant_string(
+      receiver_json, converter, haystack) ||
+    !string_handler::extract_constant_string(args[0], converter, needle))
+    return std::nullopt;
+
+  const bool reverse = (method_name == "rfind" || method_name == "rindex");
+  const std::size_t hit =
+    reverse ? haystack.rfind(needle) : haystack.find(needle);
+
+  if (hit == std::string::npos)
+  {
+    if (method_name == "index" || method_name == "rindex")
+      return std::nullopt;
+    return from_integer(-1, int_type());
+  }
+
+  return from_integer(static_cast<long long>(hit), int_type());
+}
+
 std::optional<exprt> dispatch_search_string_methods(
   string_handler &self,
   const std::string &method_name,
   const nlohmann::json &call_json,
+  const nlohmann::json &receiver_json,
   const nlohmann::json &args,
   const keyword_valuest &keyword_values,
   const std::function<exprt()> &get_receiver_expr,
@@ -907,6 +995,11 @@ std::optional<exprt> dispatch_search_string_methods(
     return std::nullopt;
 
   exprt obj_expr = get_receiver_expr();
+
+  if (
+    std::optional<exprt> folded = fold_constant_search(
+      method_name, receiver_json, args, obj_expr, converter))
+    return folded;
   search_args_parsedt parsed =
     parse_string_search_args(method_name, args, keyword_values, converter);
 
@@ -1145,9 +1238,14 @@ std::optional<exprt> dispatch_decode_join_method(
 
   if (method_name == "join")
   {
-    ensure_allowed_keywords(method_name, keyword_values, {});
+    // str.join takes exactly one iterable, so any other arity is not a string
+    // method at all. Decline instead of throwing, or an object with its own
+    // join() -- queue.Queue.join(), threading's Thread.join() -- never reaches
+    // instance dispatch, because every attribute call is offered to the string
+    // handler first (#6639).
     if (args.size() != 1)
-      throw std::runtime_error("join() takes exactly one argument");
+      return std::nullopt;
+    ensure_allowed_keywords(method_name, keyword_values, {});
     return self.handle_str_join(call_json);
   }
 
@@ -2424,6 +2522,7 @@ exprt string_handler::build_string_index_result(
   if_stmt.cond() = not_found;
   if_stmt.then_case() = raise_code;
   if_stmt.location() = location;
+  if_stmt.location().property("skipped");
   converter_.add_instruction(if_stmt);
 
   return build_symbol(find_result);

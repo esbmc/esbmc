@@ -1,6 +1,9 @@
 #ifndef ESBMC_SOURCE_LOCATION
 #define ESBMC_SOURCE_LOCATION
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "cstdint"
 
 // Minimal C++20 <source_location> operational model: enough for code that
@@ -62,4 +65,5 @@ private:
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif

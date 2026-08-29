@@ -2,6 +2,13 @@
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <util/message/message.h>
+#include <util/config/config.h>
+
+language_idt configured_language()
+{
+  return config.language.lid == language_idt::NONE ? language_idt::C
+                                                   : config.language.lid;
+}
 
 static language_idt language_id_from_mode(irep_idt mode)
 {
@@ -25,6 +32,11 @@ languages_from_symbol_id(const namespacet &ns, const irep_idt &id)
   if (!id.empty())
     if (const symbolt *s = ns.lookup(id))
       lang = language_id_from_mode(s->mode);
+  // A goto binary can carry symbols in a language ESBMC has no frontend for
+  // (CBMC's `java` mode). Print those in C syntax: new_language() yields
+  // nullptr for NONE, which every from_expr/from_type caller would deref.
+  if (lang == language_idt::NONE)
+    lang = language_idt::C;
   return languagest(ns, lang);
 }
 

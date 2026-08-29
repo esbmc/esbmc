@@ -1,0 +1,4 @@
+CORE
+cbmc_array_equal_extent.goto
+--binary
+^ERROR: CBMC adapter: 'array_equal' whole-object operations are not yet supported

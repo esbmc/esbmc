@@ -481,6 +481,10 @@ namespace
 // supported would silently fail to instantiate at the make_irep call
 // inside `rebuild_with_type_impl`; the trait pushes the failure to a
 // readable "kind unsupported" path instead.
+//
+// Neither check sees address_of2t, whose constructor accepts a leading
+// `type2tc` and means the pointee by it; an explicit specialization of
+// rebuild_with_type below overrides the generic rebuild for that kind.
 template <class K, std::size_t... Is>
 constexpr bool ctor_takes_type_first(std::index_sequence<Is...>)
 {
@@ -539,6 +543,19 @@ expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
 {
   constexpr std::size_t N = std::tuple_size_v<decltype(K::fields)>;
   return rebuild_with_type_impl(k, new_type, std::make_index_sequence<N - 1>{});
+}
+
+// address_of2t passes both gates but means the *pointee* type by the type2tc
+// its primary constructor takes, building the pointer itself; the generic
+// rebuild would wrap new_type a second time. pointer_type2t::carry_provenance
+// is re-defaulted to false, as it is at every other address_of2t construction
+// (migrate.cpp), and no with_type caller derives a provenance-carrying type.
+template <>
+expr2tc
+rebuild_with_type<address_of2t>(const address_of2t &k, const type2tc &new_type)
+{
+  return address_of2tc(
+    to_pointer_type(new_type).subtype, k.ptr_obj, k.implicit);
 }
 
 [[noreturn]] void with_type_unsupported(const expr2t &e)
@@ -767,6 +784,8 @@ std::string ieee_mul2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_div2t::field_names[esbmct::num_type_fields] =
   {"rounding_mode", "side_1", "side_2", "", "", ""};
+std::string ieee_rem2t::field_names[esbmct::num_type_fields] =
+  {"rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names[esbmct::num_type_fields] =
   {"value_1", "value_2", "value_3", "rounding_mode", "", ""};
 std::string ieee_sqrt2t::field_names[esbmct::num_type_fields] =
@@ -786,7 +805,7 @@ std::string pointer_object2t::field_names[esbmct::num_type_fields] =
 std::string pointer_capability2t::field_names[esbmct::num_type_fields] =
   {"pointer_obj", "", "", "", ""};
 std::string address_of2t::field_names[esbmct::num_type_fields] =
-  {"pointer_obj", "", "", "", ""};
+  {"pointer_obj", "implicit", "", "", ""};
 std::string byte_extract2t::field_names[esbmct::num_type_fields] =
   {"source_value", "source_offset", "big_endian", "", ""};
 std::string byte_update2t::field_names[esbmct::num_type_fields] =

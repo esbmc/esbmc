@@ -9,7 +9,7 @@
 #include <string>
 
 // Process function contracts if enabled
-void esbmc_parseoptionst::process_function_contracts(
+bool esbmc_parseoptionst::process_function_contracts(
   goto_functionst &goto_functions,
   bool has_replace,
   bool has_enforce,
@@ -59,61 +59,6 @@ void esbmc_parseoptionst::process_function_contracts(
       return result;
     };
 
-  // Lambda function to process function list (handles "*" wildcard)
-  auto process_function_list = [&collect_functions_with_contracts](
-                                 const std::list<std::string> &func_list) {
-    std::set<std::string> result;
-    for (const auto &func : func_list)
-    {
-      if (func == "*")
-      {
-        // "*" means all functions with contracts
-        result = collect_functions_with_contracts();
-        break; // "*" means all, so we can break after collecting
-      }
-      else
-      {
-        result.insert(func);
-      }
-    }
-    return result;
-  };
-
-  // Process enforce-contract option
-  if (has_enforce)
-  {
-    const std::list<std::string> &enforce_list =
-      cmdline.get_values("enforce-contract");
-    std::set<std::string> to_enforce = process_function_list(enforce_list);
-
-    if (!to_enforce.empty())
-    {
-      log_status("Enforcing contracts for {} function(s)", to_enforce.size());
-      // Pass --function entry point so the enforce wrapper allocates fresh
-      // backing storage for pointer params (harness receives nil args).
-      std::string entry_function =
-        cmdline.isset("function") ? cmdline.getval("function") : "";
-      // Assigns compliance check is always enabled: without it, functions can
-      // lie about their assigns clause, causing false VERIFICATION SUCCESSFUL.
-      contracts.enforce_contracts(to_enforce, entry_function, true);
-    }
-  }
-
-  // Process replace-call-with-contract option
-  if (has_replace)
-  {
-    const std::list<std::string> &replace_list =
-      cmdline.get_values("replace-call-with-contract");
-    std::set<std::string> to_replace = process_function_list(replace_list);
-
-    if (!to_replace.empty())
-    {
-      log_status(
-        "Replacing calls with contracts for {} function(s)", to_replace.size());
-      contracts.replace_calls(to_replace);
-    }
-  }
-
   // Lambda to collect ONLY functions with __ESBMC_contract annotation
   auto collect_annotated_contract_functions =
     [&contracts, &goto_functions, &ctx]() {
@@ -132,29 +77,137 @@ void esbmc_parseoptionst::process_function_contracts(
       return result;
     };
 
-  // Process --enforce-all-contracts
-  if (has_enforce_all)
-  {
-    std::set<std::string> to_enforce = collect_annotated_contract_functions();
-    if (!to_enforce.empty())
+  // Lambda function to process function list (handles "*" wildcard).
+  // \p named receives the names the user spelled out; "*" leaves it empty and
+  // discards any name spelled alongside it. Those names cannot be checked
+  // individually once "*" is in play: the wildcard resolves to full symbol IDs
+  // while the user spells short names, so comparing the two would reject every
+  // legitimate spelling. A misspelling next to "*" is therefore not diagnosed.
+  auto process_function_list = [&collect_functions_with_contracts](
+                                 const std::list<std::string> &func_list,
+                                 std::set<std::string> &named) {
+    std::set<std::string> result;
+    for (const auto &func : func_list)
     {
-      log_status(
-        "Enforcing annotated contracts for {} function(s)", to_enforce.size());
-      std::string entry_function =
-        cmdline.isset("function") ? cmdline.getval("function") : "";
-      contracts.enforce_contracts(to_enforce, entry_function, true);
+      if (func == "*")
+      {
+        // "*" means all functions with contracts
+        named.clear();
+        return collect_functions_with_contracts();
+      }
+      result.insert(func);
+      named.insert(func);
     }
-  }
+    return result;
+  };
 
-  // Process --replace-all-contracts
-  if (has_replace_all)
-  {
-    std::set<std::string> to_replace = collect_annotated_contract_functions();
-    if (!to_replace.empty())
+  // Reject a name no pass can act on, and treat selecting nothing at all as an
+  // error too. The reason comes from code_contractst::diagnose_contract_target,
+  // which is where both passes' eligibility rules live, so this cannot drift
+  // from what they will do -- and it is asked per option, because the two rules
+  // genuinely differ (a C++ id with parameters satisfies enforce and not
+  // replace).
+  auto check = [&contracts](
+                 const char *opt,
+                 const std::set<std::string> &named,
+                 const std::set<std::string> &resolved,
+                 bool for_replace,
+                 const char *nothing_selected) {
+    if (named.empty())
     {
-      log_status(
-        "Replacing annotated calls for {} function(s)", to_replace.size());
-      contracts.replace_calls(to_replace);
+      if (!resolved.empty())
+        return false;
+      log_error("--{}: {}", opt, nothing_selected);
+      return true;
     }
-  }
+
+    bool failed = false;
+    for (const auto &name : named)
+    {
+      std::string reason =
+        contracts.diagnose_contract_target(name, for_replace);
+      if (reason.empty())
+        continue;
+      log_error(
+        "--{}: cannot use '{}': {}{}",
+        opt,
+        name,
+        reason,
+        name.find(',') != std::string::npos
+          ? " (names are not comma-separated; repeat the flag once per "
+            "function, or use \"*\")"
+          : "");
+      failed = true;
+    }
+    return failed;
+  };
+
+  // Resolve every requested list first and validate all of them before any
+  // pass runs. enforce_contracts rewrites the functions it acts on into
+  // wrappers that carry no contract, so a check made afterwards would call a
+  // name that was used unusable, and would reject
+  // `--enforce-contract f --replace-call-with-contract "*"`, which is how four
+  // existing tests enforce one function and abstract the rest.
+  std::set<std::string> enforce_named, replace_named;
+  std::set<std::string> to_enforce, to_replace, annotated;
+
+  if (has_enforce)
+    to_enforce = process_function_list(
+      cmdline.get_values("enforce-contract"), enforce_named);
+  if (has_replace)
+    to_replace = process_function_list(
+      cmdline.get_values("replace-call-with-contract"), replace_named);
+  if (has_enforce_all || has_replace_all)
+    annotated = collect_annotated_contract_functions();
+
+  static const char *const no_contract =
+    "no function with a contract to act on";
+  static const char *const no_annotation =
+    "no function carries the __ESBMC_contract annotation";
+
+  bool failed = false;
+  if (has_enforce)
+    failed |=
+      check("enforce-contract", enforce_named, to_enforce, false, no_contract);
+  if (has_replace)
+    failed |= check(
+      "replace-call-with-contract",
+      replace_named,
+      to_replace,
+      true,
+      no_contract);
+  if (has_enforce_all)
+    failed |=
+      check("enforce-all-contracts", {}, annotated, false, no_annotation);
+  if (has_replace_all)
+    failed |=
+      check("replace-all-contracts", {}, annotated, true, no_annotation);
+
+  if (failed)
+    return true;
+
+  // Pass --function entry point so the enforce wrapper allocates fresh backing
+  // storage for pointer params (harness receives nil args).
+  const std::string entry_function =
+    cmdline.isset("function") ? cmdline.getval("function") : "";
+
+  // Assigns compliance check is always enabled: without it, functions can lie
+  // about their assigns clause, causing false VERIFICATION SUCCESSFUL.
+  if (has_enforce)
+    log_status(
+      "Enforcing contracts for {} function(s)",
+      contracts.enforce_contracts(to_enforce, entry_function, true).size());
+
+  if (has_replace)
+    contracts.replace_calls(to_replace);
+
+  if (has_enforce_all)
+    log_status(
+      "Enforcing annotated contracts for {} function(s)",
+      contracts.enforce_contracts(annotated, entry_function, true).size());
+
+  if (has_replace_all)
+    contracts.replace_calls(annotated);
+
+  return false;
 }

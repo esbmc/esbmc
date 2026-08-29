@@ -54,6 +54,9 @@ public:
   clang_c_languaget();
   ~clang_c_languaget();
 
+  /** @brief Registers the bundled clang headers with file_operations. */
+  static void register_bundled();
+
 protected:
   virtual std::string internal_additions();
 

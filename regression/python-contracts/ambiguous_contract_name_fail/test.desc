@@ -1,0 +1,4 @@
+CORE
+main.py
+--enforce-contract bump
+^ERROR: Ambiguous function name .bump.; use a full symbol ID to disambiguate

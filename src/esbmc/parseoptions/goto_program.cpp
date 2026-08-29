@@ -16,6 +16,9 @@
 #include <util/base/filesystem.h>
 #include <csignal>
 #include <cstdlib>
+#ifdef __GLIBC__
+#  include <malloc.h>
+#endif
 #include <limits>
 #include <util/expr/expr_util.h>
 #include <iostream>
@@ -130,6 +133,15 @@ bool esbmc_parseoptionst::get_goto_program(
       "GOTO program creation time: {}s",
       time2string(create_stop - create_start));
 
+#ifdef __GLIBC__
+    /* Building the GOTO program allocates and frees the whole
+     * operational-model library, and with one arena (see main.cpp) those blocks
+     * are in the arena everything after this point allocates from. Handing them
+     * back here is what keeps encoding from paying for them (esbmc/esbmc#6831).
+     */
+    malloc_trim(0);
+#endif
+
     fine_timet process_start = current_time();
     if (process_goto_program(options, goto_functions))
       return true;
@@ -168,12 +180,21 @@ bool esbmc_parseoptionst::get_goto_program(
 // __CPROVER__start, or a user-selected --function harness. Without this,
 // __ESBMC_main would run the empty boilerplate main and report a verdict over
 // essentially no program. No-op if __ESBMC_main was not synthesised.
-static void
+// Returns true when `target` names no function in the program, so the caller
+// reports it instead of the inliner aborting on the dangling call.
+static bool
 retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
 {
   auto entry = goto_functions.function_map.find("__ESBMC_main");
   if (entry == goto_functions.function_map.end())
-    return;
+    return false;
+
+  if (!goto_functions.function_map.count(target))
+  {
+    log_error(
+      "entry point `{}' not found in the goto binary", id2string(target));
+    return true;
+  }
 
   Forall_goto_program_instructions (it, entry->second.body)
   {
@@ -186,6 +207,33 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
       to_symbol2t(call.function).thename == "c:@F@main")
       call.function = symbol2tc(get_empty_type(), target);
   }
+
+  return false;
+}
+
+// Bridge the synthesised __ESBMC_main, which wraps the boilerplate c:@F@main,
+// onto the program's real entry. An explicit --function wins; otherwise a CBMC
+// binary dispatches into __CPROVER__start (it runs __CPROVER_initialize and
+// calls the program's main/harness). Without this, a CBMC binary verifies the
+// empty boilerplate main and may report a spurious SUCCESSFUL. Returns true if
+// the run cannot continue.
+static bool bridge_binary_entry_point(
+  const cmdlinet &cmdline,
+  goto_functionst &goto_functions,
+  bool cbmc_additions)
+{
+  if (cmdline.isset("function"))
+    return retarget_esbmc_main(goto_functions, cmdline.getval("function"));
+
+  if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
+    retarget_esbmc_main(goto_functions, "__CPROVER__start");
+  else if (cbmc_additions)
+    log_warning(
+      "CBMC goto-binary support is experimental: no entry point to bridge "
+      "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
+      "boilerplate main and the verdict may be unsound.");
+
+  return false;
 }
 
 // This method creates a GOTO program from the source specified by the
@@ -248,22 +296,8 @@ bool esbmc_parseoptionst::create_goto_program(
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
-      // Bridge the synthesised __ESBMC_main, which wraps the boilerplate
-      // c:@F@main, onto the program's real entry. An explicit --function wins;
-      // otherwise a CBMC binary dispatches into __CPROVER__start (it runs
-      // __CPROVER_initialize and calls the program's main/harness). Without
-      // this, a CBMC binary verifies the empty boilerplate main and may report
-      // a spurious SUCCESSFUL.
-      if (cmdline.isset("function"))
-        retarget_esbmc_main(goto_functions, cmdline.getval("function"));
-      else if (
-        cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
-        retarget_esbmc_main(goto_functions, "__CPROVER__start");
-      else if (cbmc_additions)
-        log_warning(
-          "CBMC goto-binary support is experimental: no entry point to bridge "
-          "(no __CPROVER__start and no --function), so __ESBMC_main wraps the "
-          "boilerplate main and the verdict may be unsound.");
+      if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
+        return true;
 
       goto_functions.update();
     }
@@ -479,6 +513,51 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   return failed;
 }
 
+/* A call to a bodyless function is reported ("no body for function", see
+ * symex_function.cpp), but an undefined external variable was silently havoc'd,
+ * leaving no trace that the run covered less than the user believed
+ * (esbmc/esbmc#1424). c_link clears is_extern once a definition is linked in,
+ * so what survives final() is exactly the undefined set. */
+static void warn_undefined_external_symbols(const contextt &context)
+{
+  std::vector<const symbolt *> undefined;
+  context.foreach_operand([&undefined](const symbolt &s) {
+    if (s.is_extern && !s.is_type && !s.get_type().is_code())
+      undefined.push_back(&s);
+  });
+
+  std::sort(
+    undefined.begin(), undefined.end(), [](const symbolt *a, const symbolt *b) {
+      return a->id < b->id;
+    });
+
+  for (const symbolt *s : undefined)
+    log_warning(
+      "no definition for external symbol {} declared at {}",
+      s->name,
+      s->location);
+}
+
+// Expand --no-standard-checks into the individual checks it stands for. Must
+// run before goto_convert, because VLA size checks are generated during goto
+// conversion.
+static void
+expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
+{
+  if (
+    !cmdline.isset("no-standard-checks") &&
+    !options.get_bool_option("no-standard-checks"))
+    return;
+
+  options.set_option("no-pointer-check", true);
+  options.set_option("no-div-by-zero-check", true);
+  options.set_option("no-pointer-relation-check", true);
+  options.set_option("no-unlimited-scanf-check", true);
+  options.set_option("no-vla-size-check", true);
+  options.set_option("no-align-check", true);
+  options.set_option("no-bounds-check", true);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -508,6 +587,8 @@ bool esbmc_parseoptionst::parse_goto_program(
     if (final())
       return true;
 
+    warn_undefined_external_symbols(context);
+
     // we no longer need any parse trees or language files
     clear_parse();
 
@@ -520,20 +601,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Expand --no-standard-checks into individual options before goto_convert,
-    // because VLA size checks are generated during goto conversion.
-    if (
-      cmdline.isset("no-standard-checks") ||
-      options.get_bool_option("no-standard-checks"))
-    {
-      options.set_option("no-pointer-check", true);
-      options.set_option("no-div-by-zero-check", true);
-      options.set_option("no-pointer-relation-check", true);
-      options.set_option("no-unlimited-scanf-check", true);
-      options.set_option("no-vla-size-check", true);
-      options.set_option("no-align-check", true);
-      options.set_option("no-bounds-check", true);
-    }
+    expand_no_standard_checks(cmdline, options);
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
@@ -554,6 +622,16 @@ bool esbmc_parseoptionst::parse_goto_program(
   catch (std::bad_alloc &)
   {
     log_error("Out of memory");
+    return true;
+  }
+
+  // Frontends report unconvertible input by throwing (e.g. the Python
+  // converter's unresolvable-attribute paths). Without this the exception
+  // escapes to std::terminate and the process dies on SIGABRT -- the failure
+  // mode that replacing abort() with a throw was meant to remove.
+  catch (const std::exception &e)
+  {
+    log_error("{}", e.what());
     return true;
   }
 
@@ -750,7 +828,7 @@ void esbmc_parseoptionst::preprocessing()
     }
 #ifdef ENABLE_OLD_FRONTEND
     std::ostringstream oss;
-    if (c_preprocess(filename, oss, false))
+    if (c_preprocess(filename, oss))
       log_error("PREPROCESSING ERROR");
     log_status("{}", oss.str());
 #endif

@@ -6,6 +6,7 @@ class PreprocessorStateMixin:
     def _init_preprocessor_state(self, module_name):  # pylint: disable=too-many-statements
         self.target_name = ""
         self.functionDefaults = {}
+        self.hoisted_default_names = set()
         self.functionParams = {}
         self.module_name = module_name
         self.is_range_loop = False
@@ -16,7 +17,16 @@ class PreprocessorStateMixin:
         self.nondet_expand_counter = 0
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
+        self.functionVarargs = set()
+        self._vararg_func_defs = {}
+        self._vararg_module_defs = set()
+        self._vararg_specializations = {}
+        self._vararg_dropped_defs = set()
+        self._vararg_scope_stack = []
+        self._vararg_def_owners = {}
+        self._vararg_owner_specs = {}
         self.listcomp_counter = 0
+        self.minmax_key_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
         self.class_attr_annotations = {}
@@ -66,6 +76,12 @@ class PreprocessorStateMixin:
         self.bound_method_vars = {}
         self.called_names = set()
         self.list_literal_values = {}
+        # Names bound to a dict literal, mapped to that literal; invalidated on
+        # any mutation, scoped like list_literal_values.
+        self.dict_literal_values = {}
+        # Module-level ``def f(p): return <expr>``: name -> (param, expr).
+        self._single_return_funcs = {}
+        self._param_subscripting_funcs = set()
         # Map var -> RHS Call node; used by _apply_assert_eq_rewrites to
         # substitute the Name back to its defining call.
         self._assignment_call_origins = {}

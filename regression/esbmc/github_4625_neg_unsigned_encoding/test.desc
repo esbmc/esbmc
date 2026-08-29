@@ -1,0 +1,6 @@
+CORE
+main.c
+--64 --smt-formula-only --output neg.smt2
+^SMT formula dumped to file
+CHECK_FILE neg.smt2 contains bvneg
+CHECK_FILE neg.smt2 absent bvurem

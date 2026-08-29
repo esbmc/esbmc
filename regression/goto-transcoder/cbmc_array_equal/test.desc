@@ -1,0 +1,4 @@
+CORE
+cbmc_array_equal.goto
+--binary
+^VERIFICATION SUCCESSFUL$

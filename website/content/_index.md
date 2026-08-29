@@ -3,8 +3,10 @@ title: ESBMC
 toc: false
 ---
 
-{{< callout type="important" icon="sparkles" >}} **NEW:** We have rewritten and
-cleaned up the docs, read more [here](/news/docs-page-improvement).
+{{< callout type="important" icon="sparkles" >}} **NEW:** Around 80 pull
+requests landed in early August — Python function contracts, a user-facing
+`esbmc.h`, concurrency soundness fixes and more. Read the
+[development update](/news/development-update-august-2026).
 {{< /callout >}}
 
 {{< cards >}}
@@ -15,6 +17,7 @@ cleaned up the docs, read more [here](/news/docs-page-improvement).
 {{< card link="https://github.com/esbmc/esbmc/releases/latest" title="Latest Release" icon="github" >}}
 {{< card link="https://github.com/esbmc/esbmc-web" title="Web Interface" icon="external-link" >}}
 {{< card link="https://github.com/esbmc/vscode-esbmc" title="VSCode Extension" icon="external-link" >}}
+{{< card link="https://github.com/esbmc/agent-marketplace" title="Claude Code Plugin" icon="external-link" >}}
 {{< card link="https://esbmc.github.io/esbmc-ai" title="ESBMC-AI" icon="external-link" >}}
 {{< /cards >}}
 
@@ -32,7 +35,9 @@ solver.
 {{< tabs >}}
 
 {{< tab name="Linux" >}} {{< cards >}}
-{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux.zip" title="Download" icon="download" >}}
+{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux.zip" title="Download (x86_64)" icon="download" >}}
+{{< card link="https://github.com/esbmc/esbmc/releases/latest/download/esbmc-linux-armv8.zip" title="Download (ARMv8)" icon="download" >}}
+{{< card link="docs/setup#arm64-builds" title="ARM64 Limitations" icon="warning" >}}
 {{< card link="docs/development/building" title="Build Guide" icon="cog" >}}
 {{< /cards >}} {{< /tab >}}
 

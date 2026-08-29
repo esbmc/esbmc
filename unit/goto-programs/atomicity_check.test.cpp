@@ -4,43 +4,44 @@
 #include "../testing-utils/goto_factory.h"
 #include <goto-programs/goto_atomicity_check.h>
 
-/// Returns true iff @p id names a user-defined function (not an ESBMC runtime
-/// or C library function).  User functions have IDs of the form c:@F@name
-/// where name does not begin with __ or come from a library source file.
-static bool is_user_function(const irep_idt &id)
+/// Path suffix of the file goto_factory writes the code under test to: its
+/// default test_name, under a fresh temporary directory.
+static const std::string test_file = "/test.c";
+
+/// Returns true iff @p instr came from the code under test rather than from a
+/// linked library.  Selecting on the source file rather than on the symbol name
+/// matters: the C library is always linked, several of its functions do touch
+/// globals and so are legitimately instrumented, and naming them is a moving
+/// target -- __ESBMC_*, __VERIFIER_* and __CPROVER_* all appear there today.
+static bool is_under_test(const goto_programt::instructiont &instr)
 {
-  const std::string &s = id.as_string();
-  return s.rfind("c:@F@", 0) == 0 && s.find("__ESBMC") == std::string::npos &&
-         s.find("__VERIFIER") == std::string::npos;
+  const std::string &f = instr.location.get_file().as_string();
+  return f.size() >= test_file.size() &&
+         f.compare(f.size() - test_file.size(), test_file.size(), test_file) ==
+           0;
 }
 
 /// Counts ASSERT instructions whose property tag is "atomicity"
-/// in user-defined functions only (excludes runtime/library functions).
+/// in the code under test only (excludes runtime/library functions).
 static unsigned count_atomicity_asserts(const goto_functionst &functions)
 {
   unsigned n = 0;
   for (const auto &kv : functions.function_map)
-  {
-    if (!is_user_function(kv.first))
-      continue;
     for (const auto &instr : kv.second.body.instructions)
-      if (instr.is_assert() && instr.location.property() == "atomicity")
+      if (
+        instr.is_assert() && instr.location.property() == "atomicity" &&
+        is_under_test(instr))
         n++;
-  }
   return n;
 }
 
-/// Returns true iff any user-defined function body contains an ATOMIC_BEGIN.
+/// Returns true iff the code under test contains an ATOMIC_BEGIN.
 static bool has_atomic_begin(const goto_functionst &functions)
 {
   for (const auto &kv : functions.function_map)
-  {
-    if (!is_user_function(kv.first))
-      continue;
     for (const auto &instr : kv.second.body.instructions)
-      if (instr.is_atomic_begin())
+      if (instr.is_atomic_begin() && is_under_test(instr))
         return true;
-  }
   return false;
 }
 

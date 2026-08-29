@@ -2,6 +2,7 @@
 #define ESBMC_JIMPLE_METHOD_BODY_H
 
 #include <jimple-frontend/AST/jimple_ast.h>
+#include <util/irep/migrate.h>
 #include <util/irep/std_code.h>
 
 /**
@@ -18,6 +19,24 @@ public:
     exprt dummy;
     return dummy;
   }
+
+  /**
+   * @brief The IREP2 form of the body, for symbolt::set_value(const expr2tc &).
+   *
+   * K.1 of docs/roadmap/scope-jimple-irep2.md. The default migrates whatever
+   * to_exprt built, so a subclass that has not been converted yet keeps
+   * working; each override that lands removes one migration rather than adding
+   * one, which is why this migration runs from the seam downwards.
+   */
+  virtual expr2tc to_code2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const
+  {
+    expr2tc body;
+    migrate_expr(to_exprt(ctx, class_name, function_name), body);
+    return body;
+  }
 };
 
 /**
@@ -33,6 +52,32 @@ public:
   {
     code_skipt dummy;
     return dummy;
+  }
+
+  /**
+   * @brief The IREP2 form of this statement, located at @p loc.
+   *
+   * K.2 of docs/roadmap/scope-jimple-irep2.md. The location is a parameter
+   * rather than something the caller stamps afterwards: a code_*2t holds it in
+   * a non-reflected field, so it has to be set while the node is still a legacy
+   * exprt. As in jimple_method_body, the default migrates whatever to_exprt
+   * built, so each override that lands removes a migration instead of adding
+   * one.
+   */
+  virtual expr2tc to_code2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name,
+    const locationt &loc) const
+  {
+    exprt e = to_exprt(ctx, class_name, function_name);
+    // A nil location means "leave whatever to_exprt produced": jimple_label
+    // does not stamp its members, where jimple_full_method_body does.
+    if (!loc.is_nil())
+      e.location() = loc;
+    expr2tc stmt;
+    migrate_expr(e, stmt);
+    return stmt;
   }
 };
 
@@ -56,6 +101,11 @@ public:
   virtual void from_json(const json &j) override;
   virtual std::string to_string() const override;
   virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
+
+  virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
     const std::string &function_name) const override;

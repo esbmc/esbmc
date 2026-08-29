@@ -1,4 +1,8 @@
 #include "python_list_internal.h"
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/numpy/ndarray_descriptor.h>
+#include <algorithm>
+#include <optional>
 
 using namespace python_expr;
 using namespace python_list_detail;
@@ -85,7 +89,10 @@ exprt python_list::build_list_at_call(
   // execution step purely to prove what the index's type already guarantees.
   const bool index_may_be_negative = !index.type().is_unsignedbv();
 
-  if (!index_may_be_negative)
+  // A discarded type probe only reads this call's type, and the real RHS
+  // build re-emits the whole check; normalizing here would emit a second
+  // __ESBMC_list_size call and IndexError guard per subscript assignment.
+  if (!index_may_be_negative || converter_.in_rhs_type_probe_)
   {
     exprt index_as_size = build_typecast(index, size_type());
     exprt list_at_call = build_call_expr(
@@ -158,6 +165,7 @@ exprt python_list::build_list_at_call(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -616,6 +624,7 @@ exprt python_list::index_bool_mask_rows(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -652,6 +661,373 @@ bool try_get_literal_int(const nlohmann::json &node, BigInt &out)
     return true;
   }
   return false;
+}
+
+// Resolves literal lower/upper bounds (or their step-dependent defaults)
+// into raw, negative-index-adjusted start/stop values -- not yet clamped to
+// the source length, that is literal_slice_length's job below. nullopt when
+// either given bound is present but not a compile-time literal.
+std::optional<std::pair<long long, long long>> resolve_literal_slice_bounds(
+  const nlohmann::json &slice_node,
+  long long source_len,
+  long long step)
+{
+  auto bound = [&](const char *name) -> std::optional<long long> {
+    if (!slice_node.contains(name) || slice_node[name].is_null())
+      return std::nullopt;
+
+    BigInt value;
+    if (!try_get_literal_int(slice_node[name], value))
+      return std::nullopt;
+    return value.to_int64();
+  };
+
+  std::optional<long long> lower = bound("lower");
+  std::optional<long long> upper = bound("upper");
+  const bool has_lower =
+    slice_node.contains("lower") && !slice_node["lower"].is_null();
+  const bool has_upper =
+    slice_node.contains("upper") && !slice_node["upper"].is_null();
+  if ((has_lower && !lower) || (has_upper && !upper))
+    return std::nullopt;
+
+  long long start = lower.value_or(step < 0 ? source_len - 1 : 0);
+  long long stop = upper.value_or(step < 0 ? -1 : source_len);
+
+  if (has_lower && start < 0)
+    start += source_len;
+  if (has_upper && stop < 0)
+    stop += source_len;
+
+  return std::make_pair(start, stop);
+}
+
+// out_start, when non-null, receives the normalized (negative-index-adjusted,
+// clamped) literal start offset -- the same value used to compute the
+// length below, exposed for callers that need the actual byte/element
+// offset into the source (e.g. building a pointer view), not just the
+// resulting slice length.
+std::optional<long long> literal_slice_length(
+  const nlohmann::json &slice_node,
+  long long source_len,
+  long long step,
+  long long *out_start = nullptr)
+{
+  std::optional<std::pair<long long, long long>> bounds =
+    resolve_literal_slice_bounds(slice_node, source_len, step);
+  if (!bounds)
+    return std::nullopt;
+  long long start = bounds->first;
+  long long stop = bounds->second;
+
+  if (step < 0)
+  {
+    start = std::min(std::max(start, -1LL), source_len - 1);
+    stop = std::min(std::max(stop, -1LL), source_len - 1);
+    if (out_start)
+      *out_start = start;
+    if (start <= stop)
+      return 0;
+    return ((start - stop - 1) / -step) + 1;
+  }
+
+  start = std::min(std::max(start, 0LL), source_len);
+  stop = std::min(std::max(stop, 0LL), source_len);
+  if (out_start)
+    *out_start = start;
+  if (start >= stop)
+    return 0;
+  return ((stop - start - 1) / step) + 1;
+}
+
+// Real identity of a numpy array's source symbol (ADR-NP-003's canonical
+// buffer_id), 0 for a non-symbol source. See docs/roadmap/
+// numpy-support-assessment.md, "Definitive view descriptor model", for why
+// nothing consults this yet.
+std::size_t numpy_symbol_buffer_id(const exprt &array)
+{
+  return array.is_symbol()
+           ? std::hash<std::string>{}(array.identifier().as_string())
+           : 0;
+}
+
+void append_array_shape(const typet &type, std::vector<long long> &shape)
+{
+  if (!type.is_array())
+    return;
+
+  const array_typet &array_type = to_array_type(type);
+  if (array_type.size().is_nil() || !array_type.size().is_constant())
+    return;
+  shape.push_back(
+    binary2integer(array_type.size().value().c_str(), false).to_int64());
+  append_array_shape(array_type.subtype(), shape);
+}
+
+struct row_pointer_view_info
+{
+  typet elem_type;
+  long long row_index;
+  long long col_count;
+};
+
+struct slice_step_info
+{
+  long long value;
+  bool literal_zero;
+  bool literal;
+};
+
+slice_step_info get_slice_step_info(const nlohmann::json &slice_node)
+{
+  slice_step_info info{1, false, true};
+  if (!slice_node.contains("step") || slice_node["step"].is_null())
+    return info;
+
+  const auto &step_node = slice_node["step"];
+  BigInt literal_value;
+  if (!try_get_literal_int(step_node, literal_value))
+  {
+    info.literal = false;
+    return info;
+  }
+
+  info.value = literal_value.to_int64();
+  if (info.value == 0)
+  {
+    info.literal_zero = true;
+    info.value = 1;
+  }
+  return info;
+}
+
+bool can_build_scalar_pointer_view(
+  const exprt &array,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  return array.is_symbol() && current_lhs && current_lhs->is_symbol() &&
+         is_numpy_array;
+}
+
+struct fixed_2d_shape_info
+{
+  typet elem_type;
+  long long row_count;
+  long long col_count;
+  typet row_type;
+};
+
+// Resolves array's compile-time-known 2-D shape (row_count x col_count) and
+// scalar element type, or nullopt when array is not a fixed-shape 2-D
+// array (including 3-D+, where elem_type itself would still be an array).
+// Shared by every producer that addresses a row or column of a 2-D numpy
+// array (try_build_row_pointer_view, try_build_column_pointer_view).
+std::optional<fixed_2d_shape_info>
+get_fixed_2d_shape_info(const exprt &array, const contextt &symbol_table)
+{
+  const namespacet ns(symbol_table);
+  const typet array_type = ns.follow(array.type());
+  if (!array_type.is_array())
+    return std::nullopt;
+
+  const array_typet &outer_array = to_array_type(array_type);
+  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+    return std::nullopt;
+
+  const typet row_type = ns.follow(outer_array.subtype());
+  if (!row_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_array = to_array_type(row_type);
+  if (row_array.size().is_nil() || !row_array.size().is_constant())
+    return std::nullopt;
+
+  const typet elem_type = ns.follow(row_array.subtype());
+  if (elem_type.is_array())
+    return std::nullopt;
+
+  const long long row_count =
+    binary2integer(outer_array.size().value().c_str(), false).to_int64();
+  const long long col_count =
+    binary2integer(row_array.size().value().c_str(), false).to_int64();
+  if (row_count < 0 || col_count < 0)
+    return std::nullopt;
+
+  return fixed_2d_shape_info{elem_type, row_count, col_count, row_type};
+}
+
+std::optional<row_pointer_view_info> get_row_pointer_view_info(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const contextt &symbol_table,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  if (!can_build_scalar_pointer_view(array, current_lhs, is_numpy_array))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(slice_node, literal_index))
+    return std::nullopt;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, symbol_table);
+  if (!shape)
+    return std::nullopt;
+
+  row_pointer_view_info info{
+    shape->elem_type, literal_index.to_int64(), shape->col_count};
+  if (info.row_index < 0)
+    info.row_index += shape->row_count;
+  if (info.row_index < 0 || info.row_index >= shape->row_count)
+    return std::nullopt;
+
+  return info;
+}
+
+struct column_pointer_view_info
+{
+  typet elem_type;
+  long long col_index;
+  long long num_cols;
+  long long num_rows;
+};
+
+std::optional<column_pointer_view_info> get_column_pointer_view_info(
+  const exprt &array,
+  const nlohmann::json &col_index_node,
+  const contextt &symbol_table,
+  exprt *current_lhs,
+  bool is_numpy_array)
+{
+  if (!can_build_scalar_pointer_view(array, current_lhs, is_numpy_array))
+    return std::nullopt;
+
+  BigInt literal_index;
+  if (!try_get_literal_int(col_index_node, literal_index))
+    return std::nullopt;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, symbol_table);
+  if (!shape)
+    return std::nullopt;
+
+  column_pointer_view_info info{
+    shape->elem_type,
+    literal_index.to_int64(),
+    shape->col_count,
+    shape->row_count};
+  if (info.col_index < 0)
+    info.col_index += shape->col_count;
+  if (info.col_index < 0 || info.col_index >= shape->col_count)
+    return std::nullopt;
+
+  return info;
+}
+
+struct diagonal_pointer_view_info
+{
+  typet elem_type;
+  long long offset;
+  long long length;
+  long long stride;
+};
+
+// np.diagonal(a[, offset=k]): the main diagonal (k=0) or a parallel one.
+// k >= 0 starts at a[0][k] (flat offset k); k < 0 starts at a[-k][0] (flat
+// offset (-k)*num_cols); either way the diagonal steps num_cols+1 flat
+// elements per logical index, and its length is clamped to whichever axis
+// runs out first (0 when the offset itself is already past every row or
+// column, e.g. k >= num_cols). Structural eligibility only (fixed 2-D
+// shape) -- deliberately independent of current_lhs, unlike
+// get_row_pointer_view_info/get_column_pointer_view_info, because a Call
+// RHS (unlike a Subscript) gets a genuine second, current_lhs-correct
+// conversion pass with no cached-reuse trap to work around; see
+// try_build_diagonal_pointer_view for why current_lhs is checked there
+// instead.
+std::optional<diagonal_pointer_view_info> get_diagonal_pointer_view_info(
+  const exprt &array,
+  long long k,
+  const contextt &symbol_table)
+{
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, symbol_table);
+  if (!shape)
+    return std::nullopt;
+
+  long long offset;
+  long long length;
+  if (k >= 0)
+  {
+    offset = k;
+    length = std::min(shape->row_count, shape->col_count - k);
+  }
+  else
+  {
+    offset = (-k) * shape->col_count;
+    length = std::min(shape->row_count + k, shape->col_count);
+  }
+  if (length <= 0)
+  {
+    // An out-of-range offset (e.g. k <= -row_count or k >= col_count) still
+    // computes a flat offset above, but with no elements to index through
+    // it, that offset can run arbitrarily far past the buffer (k=-100 on a
+    // 3x3 array gives offset=300). Forming that pointer at all -- even
+    // though never dereferenced, since length is 0 -- is undefined behaviour
+    // past one-past-the-end (C 6.5.6p8), so clamp it to the buffer's own
+    // one-past-the-end instead.
+    length = 0;
+    offset = shape->row_count * shape->col_count;
+  }
+
+  return diagonal_pointer_view_info{
+    shape->elem_type, offset, length, shape->col_count + 1};
+}
+
+struct flat_array_shape_info
+{
+  typet elem_type;
+  long long total_length;
+};
+
+// Resolves array's compile-time-known total element count for a fixed-shape
+// 1-D or 2-D array, or nullopt for anything else (including 3-D+, which
+// np.ravel()'s pointer-view aliasing does not cover -- it keeps using the
+// existing copy path there).
+std::optional<flat_array_shape_info>
+get_flat_1d_or_2d_shape_info(const exprt &array, const contextt &symbol_table)
+{
+  const namespacet ns(symbol_table);
+  const typet outer_type = ns.follow(array.type());
+  if (!outer_type.is_array())
+    return std::nullopt;
+
+  const array_typet &outer_array = to_array_type(outer_type);
+  if (outer_array.size().is_nil() || !outer_array.size().is_constant())
+    return std::nullopt;
+  const long long outer_count =
+    binary2integer(outer_array.size().value().c_str(), false).to_int64();
+  if (outer_count < 0)
+    return std::nullopt;
+
+  const typet inner_type = ns.follow(outer_array.subtype());
+  if (!inner_type.is_array())
+    return flat_array_shape_info{inner_type, outer_count};
+
+  const array_typet &inner_array = to_array_type(inner_type);
+  if (inner_array.size().is_nil() || !inner_array.size().is_constant())
+    return std::nullopt;
+  const long long inner_count =
+    binary2integer(inner_array.size().value().c_str(), false).to_int64();
+  if (inner_count < 0)
+    return std::nullopt;
+
+  const typet elem_type = ns.follow(inner_array.subtype());
+  if (elem_type.is_array())
+    return std::nullopt;
+
+  return flat_array_shape_info{elem_type, outer_count * inner_count};
 }
 } // namespace
 
@@ -718,6 +1094,7 @@ exprt python_list::resolve_fixed_axis_index(
     guard.cond() = migrate_expr_back(oob);
     guard.then_case() = throw_code;
     guard.location() = location;
+    guard.location().property("skipped");
     converter_.add_instruction(guard);
   }
 
@@ -729,6 +1106,17 @@ exprt python_list::build_column_select(
   const nlohmann::json &col_index_node,
   const nlohmann::json &element)
 {
+  // ADR-NP-003 etapa 2: a literal, in-range column of a fixed 2-D numpy
+  // array assigned directly to a bare name aliases the source's buffer via
+  // a strided pointer instead of the element-by-element copy below.
+  // Declines for every case this function's own validation below still
+  // needs to run (non-2-D, 3-D+, out-of-range column, symbolic column,
+  // non-numpy source, ...), so those diagnostics are unaffected.
+  if (
+    std::optional<exprt> view =
+      try_build_column_pointer_view(array, col_index_node))
+    return *view;
+
   const namespacet ns(converter_.symbol_table());
   const typet resolved_array_type = ns.follow(array.type());
   const locationt location = converter_.get_location_from_decl(element);
@@ -1224,7 +1612,8 @@ exprt python_list::remove_function_calls_recursive(
   exprt &e,
   const nlohmann::json &node)
 {
-  // Bounds might generate intermediate calls, we need to add lhs to all of them.
+  // Bounds might generate intermediate calls, we need to add lhs to all of
+  // them.
   const auto add_lhs_var_bound = [&](exprt &foo) -> exprt {
     if (!foo.is_function_call())
       return foo;
@@ -1273,6 +1662,643 @@ const symbolt &python_list::get_str_slice_sym()
   return *sym;
 }
 
+// Shared core of every ADR-NP-003 scalar pointer view producer (1-D slice,
+// row, column, diagonal, ravel/.flat): builds a pointer_typet(elem_type)
+// into array's own flat buffer at element offset `offset`, retypes
+// current_lhs to it (its DECL has not been emitted yet at this point --
+// see try_build_1d_pointer_view's comment below), and tracks
+// {length, stride, readonly} for later consultation (len()/.shape/.ndim,
+// indexed reads/writes, detach_numpy_pointer_views_of on source rebind).
+// Callers have already validated eligibility; this function only
+// assembles the result.
+//
+// Declines (returns std::nullopt, falling back to whichever copy path the
+// caller's own caller uses) if current_lhs's symbol id is *already*
+// registered: the map is a single, frontend-only table with no per-branch
+// state, so `if c: b = np.ravel(a)` else `b = np.ravel(x)` would otherwise
+// have the textually-later branch's {length, stride} silently overwrite
+// the other's and apply to both control-flow paths regardless of which one
+// actually ran. This is conservative even for a plain, unconditional
+// re-assignment of the same name to a second pointer-view-eligible RHS
+// (which is unambiguous at runtime and could in principle re-register
+// safely) -- there is no cheap way here to distinguish that case from the
+// unsafe branch-merge one, so both fall back to an independent copy.
+std::optional<exprt> python_list::build_scalar_pointer_view(
+  const exprt &array,
+  const typet &elem_type,
+  long long offset,
+  std::size_t length,
+  long long stride,
+  bool readonly)
+{
+  const std::string lhs_id = converter_.current_lhs->identifier().as_string();
+  if (converter_.numpy_pointer_view_info_.count(lhs_id) != 0)
+    return std::nullopt;
+
+  const typet view_ptr_type = pointer_typet(elem_type);
+  // Pointer arithmetic, not build_index(array, offset, elem_type): an
+  // empty view whose offset lands exactly at the source's element count
+  // computes a one-past-the-end address, legal to form but not to
+  // dereference (C 6.5.6p8). index2tc would route it through the array
+  // bounds checker as an out-of-bounds subscript; add2tc over the decayed
+  // pointer is checked under pointer, not array-index, rules.
+  exprt base_ptr = build_typecast(build_address_of(array), view_ptr_type);
+  exprt view_ptr =
+    build_add(base_ptr, from_integer(offset, size_type()), view_ptr_type);
+  converter_.current_lhs->type() = view_ptr_type;
+  converter_.update_symbol(*converter_.current_lhs);
+  converter_.numpy_pointer_view_info_[lhs_id] = {length, stride, readonly};
+  return view_ptr;
+}
+
+// ADR-NP-003 etapa 2: a literal-bound, literal-step 1-D slice assigned
+// directly to a bare name (current_lhs set) becomes a strided pointer into
+// the base array's own storage instead of an independent copy -- unit
+// stride (v = a[1:3]), a larger step (v = a[::2]), or a negative step
+// (v = a[::-1]), in which case literal_start (from literal_slice_length)
+// is already the first element the slice visits, so stride is simply
+// step_val, positive or negative. Reads/writes through either the view or
+// the base then observe each other automatically via ordinary pointer
+// semantics -- no manual synchronization needed. Declines (returns
+// std::nullopt) for: step == 0 (a ValueError, not a view), char/string
+// slices (own null-terminator semantics), a source element type that is
+// itself an array (row/column views), a non-symbol base, any slice not
+// the direct RHS of a plain assignment (current_lhs unset), and a source
+// that is not a tracked numpy array -- `handle_range_slice` is shared by
+// numpy arrays, plain Python lists, and bytes/str, and this ADR is
+// numpy-scoped: a `bytes`/list slice must keep the existing copy
+// semantics (github PR review, bytes_slice_len regression) -- the caller
+// falls through to the existing copy for all of these.
+std::optional<exprt> python_list::try_build_1d_pointer_view(
+  const exprt &array,
+  const typet &elem_type,
+  long long step_val,
+  bool needs_null_term,
+  long long literal_start,
+  long long static_slice_len)
+{
+  const namespacet ns(converter_.symbol_table());
+  if (
+    step_val == 0 || needs_null_term || ns.follow(elem_type).is_array() ||
+    !array.is_symbol() || !converter_.current_lhs ||
+    !converter_.current_lhs->is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) ==
+      0 ||
+    // literal_start < 0 only happens for an out-of-range negative-step
+    // slice that resolves to zero elements (e.g. a[-10:1:-1]):
+    // literal_slice_length clamps start to -1 as its "no elements" sentinel
+    // for that case. Unlike one-past-the-end (legal to form, C 6.5.6p8),
+    // &array[-1] forms a pointer *before* the object, which has no such
+    // exemption -- always undefined behaviour, dereferenced or not. Fall
+    // through to the existing copy path for this rather than form it.
+    literal_start < 0)
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    elem_type,
+    literal_start,
+    static_cast<std::size_t>(static_slice_len),
+    step_val,
+    false);
+}
+
+std::optional<exprt> python_list::try_build_row_pointer_view(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  std::optional<row_pointer_view_info> info = get_row_pointer_view_info(
+    array,
+    slice_node,
+    converter_.symbol_table(),
+    converter_.current_lhs,
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) != 0);
+  if (!info)
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    info->elem_type,
+    info->row_index * info->col_count,
+    static_cast<std::size_t>(info->col_count),
+    1,
+    false);
+}
+
+// `col = a[:, j]` (single literal column of a fixed 2-D array): a pointer
+// into a's own buffer starting at element j, with stride num_cols so
+// col[i] lands on a[i][j]. Declines (returns std::nullopt, falls through
+// to build_column_select's existing element-by-element copy) for a
+// non-literal or out-of-range column index, a non-symbol/non-numpy-tracked
+// base, or when current_lhs is unset -- build_column_select's own
+// resolve_fixed_axis_index call still raises the correct IndexError for
+// the out-of-range case, so this function does not duplicate that check.
+std::optional<exprt> python_list::try_build_column_pointer_view(
+  const exprt &array,
+  const nlohmann::json &col_index_node)
+{
+  std::optional<column_pointer_view_info> info = get_column_pointer_view_info(
+    array,
+    col_index_node,
+    converter_.symbol_table(),
+    converter_.current_lhs,
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) != 0);
+  if (!info)
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    info->elem_type,
+    info->col_index,
+    static_cast<std::size_t>(info->num_rows),
+    info->num_cols,
+    false);
+}
+
+// np.diagonal(a[, offset=k])/a.diagonal([k]): a read-only strided pointer
+// into a's own buffer (see get_diagonal_pointer_view_info for the
+// offset/length/stride math). Read-only because NumPy's own diagonal() is
+// -- callers needing a mutable diagonal are expected to use
+// np.fill_diagonal() instead, which mutates the source array directly.
+std::optional<exprt>
+python_list::try_build_diagonal_pointer_view(const exprt &array, long long k)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<diagonal_pointer_view_info> info =
+    get_diagonal_pointer_view_info(array, k, converter_.symbol_table());
+  if (!info)
+    return std::nullopt;
+
+  if (converter_.in_rhs_type_probe_)
+  {
+    // create_symbol_for_unannotated_assign's type-inference pre-pass
+    // converts a fresh `d = np.diagonal(a)`'s RHS once, before the real
+    // `d` symbol (and current_lhs) exist, purely to learn its type -- the
+    // exprt itself is discarded right after (only .type() is read), and a
+    // real, current_lhs-correct second pass follows unconditionally for a
+    // Call RHS (no cached-reuse trap the way a Subscript RHS has). Return
+    // a same-typed placeholder rather than the actual view so that pass
+    // succeeds instead of throwing "not assigned to a variable" for a
+    // case that no longer applies by the second pass. Gated on the probe
+    // flag specifically (not just current_lhs being unset), because a
+    // genuinely nested use such as `np.diagonal(a)[i]` also has current_lhs
+    // unset (Subscript nulls it while converting its base) but is never
+    // re-converted with a valid target -- there the placeholder's raw,
+    // unoffset pointer would silently stand in as the final value instead
+    // of the correct strided one, so that case must fall through and
+    // decline below instead.
+    return build_typecast(
+      build_address_of(array), pointer_typet(info->elem_type));
+  }
+
+  if (!converter_.current_lhs || !converter_.current_lhs->is_symbol())
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    info->elem_type,
+    info->offset,
+    static_cast<std::size_t>(info->length),
+    info->stride,
+    /*readonly=*/true);
+}
+
+// np.trace(a, offset=k): sum of the same elements np.diagonal(a, k) would
+// view, without building a view -- a scalar reduction, not aliasing.
+std::optional<exprt>
+python_list::build_trace_reduction(const exprt &array, long long k)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  std::optional<diagonal_pointer_view_info> info =
+    get_diagonal_pointer_view_info(array, k, converter_.symbol_table());
+  if (!info)
+    return std::nullopt;
+
+  // NumPy promotes a bool or narrower-than-default-int element type to the
+  // default int accumulator for trace (confirmed against NumPy 2.5.2:
+  // trace() of a bool or int8 matrix returns int64, summing without
+  // wrapping/truncating), while a float or already-default-width-or-wider
+  // int element type keeps its own type.
+  typet accumulator_type = shape->elem_type;
+  if (
+    accumulator_type.is_bool() ||
+    ((accumulator_type.is_signedbv() || accumulator_type.is_unsignedbv()) &&
+     bv_width(accumulator_type) < bv_width(long_long_int_type())))
+    accumulator_type = long_long_int_type();
+
+  if (info->length <= 0)
+    return from_integer(0, accumulator_type);
+
+  long long row = k >= 0 ? 0 : -k;
+  long long col = k >= 0 ? k : 0;
+
+  exprt sum;
+  for (long long i = 0; i < info->length; ++i, ++row, ++col)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(row, size_type()), shape->row_type);
+    exprt elem_expr =
+      build_index(row_expr, from_integer(col, size_type()), shape->elem_type);
+    if (elem_expr.type() != accumulator_type)
+      elem_expr = build_typecast(elem_expr, accumulator_type);
+    sum = i == 0 ? elem_expr : build_add(sum, elem_expr, accumulator_type);
+  }
+  return sum;
+}
+
+namespace
+{
+// fill_diagonal accepts a scalar or a 1-D literal of scalars; an array/
+// pointer-typed value (e.g. another ndarray passed by name) would otherwise
+// be silently reinterpreted as an integer by code_assignt.
+void reject_non_scalar_fill_diagonal_value(const typet &value_type)
+{
+  if (value_type.is_array() || value_type.is_pointer())
+    throw std::runtime_error(
+      "TypeError: numpy fill_diagonal value must be a scalar or 1-D "
+      "literal");
+}
+} // namespace
+
+// Evaluates value_node once and snapshots it into a fresh temporary, rather
+// than letting the caller re-embed the same expression at multiple write
+// sites: if it reads the array being mutated (e.g. a[0][0] + a[1][1]),
+// re-evaluating it after earlier positions are already overwritten would
+// observe partially-mutated state instead of the single, pre-mutation value
+// NumPy computes once. Throws if the value isn't scalar-typed.
+exprt python_list::snapshot_scalar_value(const nlohmann::json &value_node)
+{
+  exprt raw_value = converter_.get_expr(value_node);
+  reject_non_scalar_fill_diagonal_value(raw_value.type());
+
+  symbolt &tmp = converter_.create_tmp_symbol(
+    value_node, "$fill_diagonal_value$", raw_value.type(), exprt());
+  locationt location = converter_.get_location_from_decl(value_node);
+  code_declt decl(build_symbol(tmp));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt init(build_symbol(tmp), raw_value);
+  init.location() = location;
+  converter_.add_instruction(init);
+  return build_symbol(tmp);
+}
+
+// np.fill_diagonal(a, value): mutates a's main diagonal in place, using the
+// same offset/stride math as np.diagonal(a)/np.trace(a) with k=0. `value` is
+// either a single scalar (snapshotted once and reused for every position) or
+// a List literal, repeated (shorter than the diagonal) or truncated (longer)
+// to fill it -- confirmed against NumPy 2.5.2: fill_diagonal(a, [10, 20]) on
+// a 3-long diagonal writes [10, 20, 10], never raising for a length
+// mismatch. Every literal element is still evaluated exactly once (Python
+// itself evaluates the whole list literal up front to construct it, whether
+// or not every element ends up used) and snapshotted before any position is
+// written, both to honour that once-each evaluation and, for elements that
+// do repeat, to avoid re-reading an element expression that depends on `a`
+// against already-mutated state.
+bool python_list::try_build_fill_diagonal_mutation(
+  const exprt &array,
+  const nlohmann::json &value_node)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return false;
+
+  std::optional<fixed_2d_shape_info> shape =
+    get_fixed_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return false;
+
+  std::optional<diagonal_pointer_view_info> info =
+    get_diagonal_pointer_view_info(array, /*k=*/0, converter_.symbol_table());
+  if (!info || info->length <= 0)
+    return true;
+
+  const bool value_is_list_literal = value_node.value("_type", "") == "List";
+  const nlohmann::json *elts =
+    value_is_list_literal && value_node.contains("elts") ? &value_node["elts"]
+                                                         : nullptr;
+  if (value_is_list_literal && (!elts || elts->empty()))
+    return true;
+
+  std::vector<exprt> element_values;
+  if (value_is_list_literal)
+  {
+    element_values.reserve(elts->size());
+    for (const auto &elt_node : *elts)
+      element_values.push_back(snapshot_scalar_value(elt_node));
+  }
+  else
+    element_values.push_back(snapshot_scalar_value(value_node));
+
+  for (long long i = 0; i < info->length; ++i)
+  {
+    exprt row_expr =
+      build_index(array, from_integer(i, size_type()), shape->row_type);
+    exprt elem_lhs =
+      build_index(row_expr, from_integer(i, size_type()), shape->elem_type);
+    const exprt &value_expr =
+      element_values[static_cast<std::size_t>(i) % element_values.size()];
+    converter_.add_instruction(code_assignt(elem_lhs, value_expr));
+  }
+  return true;
+}
+
+// np.ravel(a)/a.ravel(): a writable, contiguous pointer view into a's own
+// buffer ({offset=0, length=total elements, stride=1}) for a fixed-shape
+// 1-D or 2-D array. 3-D+ declines (returns std::nullopt) and falls back to
+// the pre-existing copy path (see the shared ravel/flatten/nditer handling
+// in numpy_call_expr.cpp, tried only after this declines) -- flatten()
+// itself is a distinct dispatch and always stays a copy.
+std::optional<exprt>
+python_list::try_build_ravel_pointer_view(const exprt &array)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<flat_array_shape_info> shape =
+    get_flat_1d_or_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  if (converter_.in_rhs_type_probe_)
+    return build_typecast(
+      build_address_of(array), pointer_typet(shape->elem_type));
+
+  if (!converter_.current_lhs || !converter_.current_lhs->is_symbol())
+    return std::nullopt;
+
+  return build_scalar_pointer_view(
+    array,
+    shape->elem_type,
+    /*offset=*/0,
+    static_cast<std::size_t>(shape->total_length),
+    /*stride=*/1,
+    /*readonly=*/false);
+}
+
+std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
+  const exprt &array,
+  const typet &elem_type,
+  const nlohmann::json &slice_node,
+  long long step_val,
+  bool literal_step)
+{
+  if (!literal_step || !array.is_symbol())
+    return std::nullopt;
+
+  auto info_it =
+    converter_.numpy_pointer_view_info_.find(array.identifier().as_string());
+  if (info_it == converter_.numpy_pointer_view_info_.end())
+    return std::nullopt;
+  // Slicing a non-unit-stride view (column, stepped, diagonal) is outside
+  // this PR's scope: src_index below assumes the source's own logical
+  // indices map 1:1 onto pointer offsets, true only for stride 1. Declining
+  // here (instead of rejecting) would fall through to the generic
+  // array/list slicing path below, which does not recognise a pointer-typed
+  // operand and mishandles it as a runtime list, so reject explicitly.
+  if (info_it->second.stride != 1)
+    throw std::runtime_error(
+      "TypeError: slicing a strided numpy view is not supported");
+
+  long long literal_start = 0;
+  std::optional<long long> static_slice_len = literal_slice_length(
+    slice_node,
+    static_cast<long long>(info_it->second.length),
+    step_val,
+    &literal_start);
+  if (!static_slice_len)
+    return std::nullopt;
+
+  array_typet result_type(
+    elem_type, from_integer(*static_slice_len, size_type()));
+  symbolt &result = converter_.create_tmp_symbol(
+    slice_node, "$array_slice$", result_type, exprt());
+
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(result_decl);
+
+  for (long long idx = 0; idx < *static_slice_len; ++idx)
+  {
+    const long long src_index = literal_start + (idx * step_val);
+    exprt src =
+      build_index(array, from_integer(src_index, size_type()), elem_type);
+    exprt dst = build_index(
+      build_symbol(result), from_integer(idx, size_type()), elem_type);
+    converter_.add_instruction(code_assignt(dst, src));
+  }
+
+  return build_symbol(result);
+}
+
+void python_list::emit_slice_zero_step_raise(
+  const nlohmann::json &slice_node,
+  bool literal_zero_step)
+{
+  if (!literal_zero_step)
+    return;
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "slice step cannot be zero");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = converter_.get_location_from_decl(slice_node);
+  converter_.add_instruction(throw_code);
+}
+
+// Normalizes a logical (possibly negative) numpy-view index against
+// `length`, raises IndexError if still out of bounds after normalizing, and
+// scales the result by `stride` (a view's indices are logical (0..length),
+// but a non-unit-stride view's pointer offsets into the *source's* flat
+// buffer). Shared by guard_numpy_pointer_view_index (a registered view
+// symbol's own length/stride) and try_build_flat_index_assignment_target
+// (a.flat[i]'s length/stride computed on the fly, with no registered view
+// symbol involved).
+exprt python_list::normalize_and_scale_index(
+  const exprt &index,
+  long long length,
+  long long stride,
+  const nlohmann::json &slice_node)
+{
+  const typet ll_type = signedbv_typet(64);
+  const locationt loc = converter_.get_location_from_decl(slice_node);
+  symbolt &idx_sym = converter_.create_tmp_symbol(
+    slice_node, "$numpy_view_idx$", ll_type, gen_zero(ll_type));
+  code_declt idx_decl(build_symbol(idx_sym));
+  idx_decl.location() = loc;
+  converter_.add_instruction(idx_decl);
+
+  code_assignt idx_init(build_symbol(idx_sym), build_typecast(index, ll_type));
+  idx_init.location() = loc;
+  converter_.add_instruction(idx_init);
+
+  exprt view_len = from_integer(length, ll_type);
+  exprt idx_lt_zero =
+    build_less_than(build_symbol(idx_sym), from_integer(0, ll_type));
+  code_assignt normalize(
+    build_symbol(idx_sym), build_add(build_symbol(idx_sym), view_len, ll_type));
+  normalize.location() = loc;
+
+  code_ifthenelset normalize_guard;
+  normalize_guard.cond() = idx_lt_zero;
+  normalize_guard.then_case() = normalize;
+  normalize_guard.location() = loc;
+  normalize_guard.location().property("skipped");
+  converter_.add_instruction(normalize_guard);
+
+  const type2tc ll_type2 = migrate_type(ll_type);
+  expr2tc idx2, len2;
+  migrate_expr(build_symbol(idx_sym), idx2);
+  migrate_expr(view_len, len2);
+  expr2tc still_negative = lessthan2tc(idx2, gen_zero(ll_type2));
+  expr2tc past_end = greaterthanequal2tc(idx2, len2);
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "IndexError", "index is out of bounds for numpy view");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = loc;
+
+  code_ifthenelset oob_guard;
+  oob_guard.cond() = migrate_expr_back(or2tc(still_negative, past_end));
+  oob_guard.then_case() = throw_code;
+  oob_guard.location() = loc;
+  oob_guard.location().property("skipped");
+  converter_.add_instruction(oob_guard);
+
+  exprt scaled =
+    stride == 1
+      ? build_symbol(idx_sym)
+      : build_mul(
+          build_symbol(idx_sym), from_integer(stride, ll_type), ll_type);
+  return build_typecast(scaled, size_type());
+}
+
+exprt python_list::guard_numpy_pointer_view_index(
+  const exprt &array,
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  if (!array.is_symbol() || !array.type().is_pointer())
+    return index;
+
+  const std::string view_id = array.identifier().as_string();
+  auto info_it = converter_.numpy_pointer_view_info_.find(view_id);
+  if (info_it == converter_.numpy_pointer_view_info_.end())
+    return index;
+
+  return normalize_and_scale_index(
+    index, info_it->second.length, info_it->second.stride, slice_node);
+}
+
+std::optional<exprt> python_list::try_build_flat_index_assignment_target(
+  const exprt &array,
+  const nlohmann::json &index_node)
+{
+  if (
+    !array.is_symbol() ||
+    converter_.numpy_array_symbols_.count(array.identifier().as_string()) == 0)
+    return std::nullopt;
+
+  std::optional<flat_array_shape_info> shape =
+    get_flat_1d_or_2d_shape_info(array, converter_.symbol_table());
+  if (!shape)
+    return std::nullopt;
+
+  exprt index = converter_.get_expr(index_node);
+  exprt normalized_idx = normalize_and_scale_index(
+    index, shape->total_length, /*stride=*/1, index_node);
+
+  const typet ptr_type = pointer_typet(shape->elem_type);
+  exprt base_ptr = build_typecast(build_address_of(array), ptr_type);
+  exprt elem_ptr = build_add(base_ptr, normalized_idx, ptr_type);
+  return build_dereference(elem_ptr, shape->elem_type);
+}
+
+exprt python_list::normalize_negative_slice_bound(
+  const nlohmann::json &operand_node,
+  const exprt &logical_len,
+  bool negative_step)
+{
+  exprt abs_value = converter_.get_expr(operand_node);
+  if (abs_value.type() != size_type())
+    abs_value = build_typecast(abs_value, size_type());
+  // Called only for "upper" when !negative_step (see handle_range_slice's
+  // call sites), so a negative_step here always means this is the "lower"
+  // bound of a reverse slice. When abs_value exceeds logical_len, e.g.
+  // a[-10:1:-1] on a 3-element array, the clamp must match
+  // literal_slice_length's own -1 "before the start" sentinel (there is
+  // nothing left to reverse-iterate from), not 0 (the first element) -- 0
+  // would be wrong here since it makes the length computation below
+  // (lower_expr + 1) count one spurious element instead of zero.
+  // Represented as the unsigned size_type()'s two's-complement -1 (its max
+  // value) specifically so that + 1 wraps to exactly 0, matching a
+  // genuinely empty slice, the same way pointer-offset arithmetic
+  // elsewhere in this file relies on wraparound being well-defined for
+  // unsigned types. (V.3: built in IREP2.)
+  const type2tc size_t2 = migrate_type(size_type());
+  expr2tc abs2, len2, converted2;
+  migrate_expr(abs_value, abs2);
+  migrate_expr(logical_len, len2);
+  migrate_expr(build_sub(logical_len, abs_value, size_type()), converted2);
+  exprt clamped =
+    negative_step ? from_integer(-1, size_type()) : gen_zero(size_type());
+  expr2tc clamped2;
+  migrate_expr(clamped, clamped2);
+  return migrate_expr_back(
+    if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
+}
+
+/// A dict view (d.keys()[:] / d.values()[:]) is a member expression, so
+/// handle_range_slice's element-by-element copy never runs and its id-keyed
+/// fallbacks cannot reach it: the entries live under the dict's internal list
+/// id. Without this the slice result is untyped and a tuple element reads back
+/// as a bare pointer, which unpacking then rejects.
+void python_list::copy_dict_view_elem_types(
+  const exprt &array,
+  const std::string &sliced_id)
+{
+  if (!list_type_map[sliced_id].empty() || array.id() != exprt::member)
+    return;
+
+  const exprt &dict_sym = array.op0();
+  const std::string component =
+    to_member_expr(array).get_component_name().as_string();
+  if (!dict_sym.is_symbol() || (component != "keys" && component != "values"))
+    return;
+
+  const std::string &src = python_dict_handler::get_internal_list_id(
+    dict_sym.identifier().as_string(), component == "keys");
+  if (!src.empty())
+    copy_type_info(src, sliced_id);
+
+  // Tuple values are recorded under $dict_value_types$ rather than the
+  // values-list id, so the copy above is a no-op for them.
+  if (component == "values" && list_type_map[sliced_id].empty())
+  {
+    const typet tuple_t =
+      converter_.get_dict_handler()->recorded_tuple_value_type(dict_sym);
+    if (!tuple_t.is_nil() && !tuple_t.is_empty())
+      add_type_info_entry(sliced_id, std::string(), tuple_t);
+  }
+}
+
 exprt python_list::handle_range_slice(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -1283,47 +2309,31 @@ exprt python_list::handle_range_slice(
   const typet resolved_list_type = ns.follow(list_type);
 
   // Handle regular array/string slicing (not list slicing)
-  // String parameters come as pointer-to-char, so handle both arrays and char pointers
+  // String parameters come as pointer-to-char, so handle both arrays and char
+  // pointers
   bool is_string_slice = (resolved_array_type != resolved_list_type &&
                           resolved_array_type.is_array()) ||
                          (resolved_array_type.is_pointer() &&
                           resolved_array_type.subtype() == char_type());
 
   // Determine step value (default 1).
-  bool has_step = slice_node.contains("step") && !slice_node["step"].is_null();
-  long long step_val = 1;
-  bool literal_zero_step = false;
-  if (has_step)
-  {
-    const auto &step_node = slice_node["step"];
-    if (step_node["_type"] == "UnaryOp" && step_node["op"]["_type"] == "USub")
-    {
-      step_val = -(long long)step_node["operand"]["value"].get<std::int64_t>();
-    }
-    else if (step_node["_type"] == "Constant")
-    {
-      step_val = step_node["value"].get<std::int64_t>();
-    }
-    if (step_val == 0)
-    {
-      literal_zero_step = true;
-      step_val = 1; // continue with valid value to keep IR consistent
-    }
-  }
+  const slice_step_info step_info = get_slice_step_info(slice_node);
+  const long long step_val = step_info.value;
   // Python raises ValueError on step==0. Raise it from the frontend (a
   // cpp-throw) so try/except ValueError can catch it — a code_assert would be
   // an uncatchable property violation. The raise diverts control, so the rest
   // of the slice IR (kept consistent with step_val==1) is a dead path.
-  if (literal_zero_step)
-  {
-    exprt raise = converter_.get_exception_handler().gen_exception_raise(
-      "ValueError", "slice step cannot be zero");
-    codet throw_code("expression");
-    throw_code.operands().push_back(raise);
-    throw_code.location() = converter_.get_location_from_decl(slice_node);
-    converter_.add_instruction(throw_code);
-  }
+  emit_slice_zero_step_raise(slice_node, step_info.literal_zero);
   bool negative_step = (step_val < 0);
+
+  if (
+    std::optional<exprt> slice_copy = try_copy_numpy_pointer_view_slice(
+      array,
+      resolved_array_type.subtype(),
+      slice_node,
+      step_val,
+      step_info.literal))
+    return *slice_copy;
 
   if (is_string_slice)
   {
@@ -1358,8 +2368,9 @@ exprt python_list::handle_range_slice(
         return build_typecast(e, signedbv_typet(64));
       };
 
-      // Defaults: for positive step start=0,end=MAX; for negative step start=MAX,end=MIN
-      // We use large sentinel values; __python_str_slice clamps them
+      // Defaults: for positive step start=0,end=MAX; for negative step
+      // start=MAX,end=MIN We use large sentinel values; __python_str_slice
+      // clamps them
       long long start_default = negative_step ? 999999 : 0;
       long long end_default = negative_step ? -999999 : 999999;
 
@@ -1394,10 +2405,7 @@ exprt python_list::handle_range_slice(
       return build_sub(lhs, rhs, size_type());
     };
     auto size_mul = [](const exprt &lhs, const exprt &rhs) -> exprt {
-      expr2tc l, r;
-      migrate_expr(lhs, l);
-      migrate_expr(rhs, r);
-      return migrate_expr_back(mul2tc(migrate_type(size_type()), l, r));
+      return build_mul(lhs, rhs, size_type());
     };
     auto size_div = [](const exprt &lhs, const exprt &rhs) -> exprt {
       expr2tc l, r;
@@ -1421,6 +2429,10 @@ exprt python_list::handle_range_slice(
                       : array_len;
     }
 
+    if (!step_info.literal && elem_type != char_type())
+      throw std::runtime_error(
+        "TypeError: numpy view slicing requires a literal stride");
+
     // Process slice bounds (handles null, negative indices)
     auto process_bound =
       [&](const std::string &bound_name, const exprt &default_value) -> exprt {
@@ -1431,18 +2443,8 @@ exprt python_list::handle_range_slice(
 
       // Check if negative index
       if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
-      {
-        exprt abs_value = to_size_expr(converter_.get_expr(bound["operand"]));
-        // Clamp to 0 when abs_value > logical_len (avoids unsigned underflow).
-        // (V.3: built in IREP2.)
-        const type2tc size_t2 = migrate_type(size_type());
-        expr2tc abs2, len2, converted2;
-        migrate_expr(abs_value, abs2);
-        migrate_expr(logical_len, len2);
-        migrate_expr(size_sub(logical_len, abs_value), converted2);
-        return migrate_expr_back(if2tc(
-          size_t2, greaterthan2tc(abs2, len2), gen_zero(size_t2), converted2));
-      }
+        return normalize_negative_slice_bound(
+          bound["operand"], logical_len, negative_step);
 
       exprt e = converter_.get_expr(bound);
       return to_size_expr(remove_function_calls_recursive(e, slice_node));
@@ -1520,6 +2522,39 @@ exprt python_list::handle_range_slice(
     // over-count. Size the result accordingly.
     const bool needs_null_term = (elem_type == char_type());
     exprt result_size = slice_len;
+    if (step_info.literal)
+    {
+      const array_typet &src_type = to_array_type(resolved_array_type);
+      if (!src_type.size().is_nil() && src_type.size().is_constant())
+      {
+        const long long source_len =
+          binary2integer(src_type.size().value().c_str(), false).to_int64() -
+          (needs_null_term ? 1 : 0);
+        long long literal_start = 0;
+        if (
+          std::optional<long long> static_slice_len = literal_slice_length(
+            slice_node, source_len, step_val, &literal_start))
+        {
+          result_size = from_integer(*static_slice_len, size_type());
+          std::vector<long long> view_shape;
+          view_shape.push_back(*static_slice_len);
+          append_array_shape(ns.follow(elem_type), view_shape);
+          ndarray_descriptor descriptor(
+            view_shape, "", numpy_symbol_buffer_id(array));
+          descriptor.validate();
+
+          if (
+            std::optional<exprt> view_ptr = try_build_1d_pointer_view(
+              array,
+              elem_type,
+              step_val,
+              needs_null_term,
+              literal_start,
+              *static_slice_len))
+            return *view_ptr;
+        }
+      }
+    }
     if (needs_null_term)
     {
       // slice_len and the literal are both size_type (built above), so this is
@@ -1900,6 +2935,9 @@ exprt python_list::handle_range_slice(
   // numbers[:-1]), or where the source is a function parameter rather than a
   // locally constructed list, so list_type_map has no entries for it.
   const std::string &sliced_id = sliced_list.id.as_string();
+
+  copy_dict_view_elem_types(array, sliced_id);
+
   if (list_type_map[sliced_id].empty())
   {
     if (
@@ -2191,6 +3229,116 @@ void python_list::handle_slice_assignment(
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
 
+/// A bare `list` annotation names no element type, so the read would carry
+/// none and neither arithmetic nor equality on it would behave. Recover what
+/// the call sites told us about this parameter, seeded when the function was
+/// converted (#7187). Returns `annotated` unchanged when this is not a
+/// bare-`list` parameter, or nothing was inferred for it.
+typet python_list::bare_list_param_elem_type(
+  const nlohmann::json &param_node,
+  const std::string &param_id,
+  const typet &annotated)
+{
+  if (
+    !param_node.contains("annotation") || !param_node["annotation"].is_object())
+    return annotated;
+
+  const nlohmann::json &annotation = param_node["annotation"];
+  const std::string ann_id = annotation.value("id", "");
+  if (
+    annotation.value("_type", "") != "Name" ||
+    (ann_id != "list" && ann_id != "List"))
+    return annotated;
+
+  const typet inferred = get_list_element_type(param_id, 0);
+  return inferred.is_empty() ? annotated : inferred;
+}
+
+std::optional<exprt> python_list::resolve_nested_list_element(
+  const exprt &array,
+  const exprt &pos_expr,
+  size_t index,
+  typet &elem_type)
+{
+  // Check for nested list access
+  if (array.type() == converter_.get_type_handler().get_list_type())
+  {
+    const auto &key = array.identifier().as_string();
+    auto type_map_it = list_type_map.find(key);
+    if (type_map_it != list_type_map.end())
+    {
+      if (!type_map_it->second.empty())
+      {
+        // Homogeneous lists (e.g. list comprehensions) record a single
+        // element-type entry; ESBMC models lists as homogeneous, so reuse
+        // that entry for any in-structure index.  Without this, a constant
+        // outer index >= 1 into a comprehension-built nested list skips the
+        // nested-element handling below, the inner element type (float) is
+        // lost, and the value reaches the SMT FP encoder as a non-FP sort
+        // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
+        // lists record one entry per element, so for an in-bounds index
+        // eff_index == index and behaviour is unchanged.  The runtime value
+        // is still read at pos_expr below, so only the static type is taken
+        // from the homogeneous entry.
+        const size_t eff_index = index < type_map_it->second.size()
+                                   ? index
+                                   : type_map_it->second.size() - 1;
+        const std::string &elem_id = type_map_it->second.at(eff_index).first;
+        elem_type = type_map_it->second.at(eff_index).second;
+
+        if (elem_type == converter_.get_type_handler().get_list_type())
+        {
+          // Nested-list element.  The recorded elem_id names the inner-list
+          // symbol, but copy_type_info copies that id verbatim across a
+          // function-return boundary (Q = build()), where it is a *callee*
+          // frame local — returning build_symbol(elem_id) would reference a
+          // symbol that is never assigned in the caller's symex frame, so its
+          // value is nondet (float_buf OOB / wrong value, #5103/#5102).
+          //
+          // Instead, read the inner list pointer at runtime from `array`
+          // (valid in every scope: list_at returns the stored pointer, so
+          // aliasing/mutation semantics are preserved), bind it to a fresh
+          // caller-scope symbol, and copy the inner element-type map onto
+          // that symbol so deeper subscripts (Q[i][j]) still resolve
+          // int/float.  For parameter-annotation-only entries (elem_id
+          // empty) fall through to the dynamic __ESBMC_list_at path below.
+          if (!elem_id.empty())
+          {
+            exprt list_at_call =
+              build_list_at_call(array, pos_expr, list_value_);
+            exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
+
+            // As a store target the subscript must stay an lvalue into the
+            // slot: binding it to the temporary below sends `xs[0] = xs[1]`
+            // into a dead local and leaves xs untouched, so len(xs[0]) keeps
+            // answering the overwritten element's length (#7360). Reads
+            // nested inside a target still take the temp path.
+            if (converter_.is_store_target(list_value_))
+              return inner_ptr;
+
+            const locationt loc =
+              converter_.get_location_from_decl(list_value_);
+
+            symbolt &inner_sym = converter_.create_tmp_symbol(
+              list_value_, "$nested_list$", elem_type, exprt());
+            code_declt inner_decl(build_symbol(inner_sym));
+            inner_decl.location() = loc;
+            converter_.add_instruction(inner_decl);
+
+            code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
+            inner_assign.location() = loc;
+            converter_.add_instruction(inner_assign);
+
+            copy_type_info(elem_id, inner_sym.id.as_string());
+            return build_symbol(inner_sym);
+          }
+        }
+      }
+    }
+  }
+  return std::nullopt;
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -2290,80 +3438,19 @@ exprt python_list::handle_index_access(
     // Handle list types (symbol-based)
     typet elem_type;
 
-    // Check for nested list access
-    if (array.type() == converter_.get_type_handler().get_list_type())
-    {
-      const auto &key = array.identifier().as_string();
-      auto type_map_it = list_type_map.find(key);
-      if (type_map_it != list_type_map.end())
-      {
-        if (!type_map_it->second.empty())
-        {
-          // Homogeneous lists (e.g. list comprehensions) record a single
-          // element-type entry; ESBMC models lists as homogeneous, so reuse
-          // that entry for any in-structure index.  Without this, a constant
-          // outer index >= 1 into a comprehension-built nested list skips the
-          // nested-element handling below, the inner element type (float) is
-          // lost, and the value reaches the SMT FP encoder as a non-FP sort
-          // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
-          // lists record one entry per element, so for an in-bounds index
-          // eff_index == index and behaviour is unchanged.  The runtime value
-          // is still read at pos_expr below, so only the static type is taken
-          // from the homogeneous entry.
-          const size_t eff_index = index < type_map_it->second.size()
-                                     ? index
-                                     : type_map_it->second.size() - 1;
-          const std::string &elem_id = type_map_it->second.at(eff_index).first;
-          elem_type = type_map_it->second.at(eff_index).second;
-
-          if (elem_type == converter_.get_type_handler().get_list_type())
-          {
-            // Nested-list element.  The recorded elem_id names the inner-list
-            // symbol, but copy_type_info copies that id verbatim across a
-            // function-return boundary (Q = build()), where it is a *callee*
-            // frame local — returning build_symbol(elem_id) would reference a
-            // symbol that is never assigned in the caller's symex frame, so its
-            // value is nondet (float_buf OOB / wrong value, #5103/#5102).
-            //
-            // Instead, read the inner list pointer at runtime from `array`
-            // (valid in every scope: list_at returns the stored pointer, so
-            // aliasing/mutation semantics are preserved), bind it to a fresh
-            // caller-scope symbol, and copy the inner element-type map onto
-            // that symbol so deeper subscripts (Q[i][j]) still resolve
-            // int/float.  For parameter-annotation-only entries (elem_id
-            // empty) fall through to the dynamic __ESBMC_list_at path below.
-            if (!elem_id.empty())
-            {
-              const locationt loc =
-                converter_.get_location_from_decl(list_value_);
-
-              exprt list_at_call =
-                build_list_at_call(array, pos_expr, list_value_);
-              exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
-
-              symbolt &inner_sym = converter_.create_tmp_symbol(
-                list_value_, "$nested_list$", elem_type, exprt());
-              code_declt inner_decl(build_symbol(inner_sym));
-              inner_decl.location() = loc;
-              converter_.add_instruction(inner_decl);
-
-              code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
-              inner_assign.location() = loc;
-              converter_.add_instruction(inner_assign);
-
-              copy_type_info(elem_id, inner_sym.id.as_string());
-              return build_symbol(inner_sym);
-            }
-          }
-        }
-      }
-    }
+    if (
+      std::optional<exprt> nested =
+        resolve_nested_list_element(array, pos_expr, index, elem_type))
+      return *nested;
 
     // Determine element type
     if (list_node.contains("_type") && list_node["_type"] == "arg")
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
+
+      elem_type = bare_list_param_elem_type(
+        list_node, array.identifier().as_string(), elem_type);
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
@@ -2451,7 +3538,8 @@ exprt python_list::handle_index_access(
           list_node, converter_.get_type_handler());
       }
 
-      // If still no elem_type, try to get it from the array variable's type annotation
+      // If still no elem_type, try to get it from the array variable's type
+      // annotation
       if (array.is_symbol() && elem_type == typet())
       {
         // Extract variable name from the symbol identifier
@@ -2462,7 +3550,8 @@ exprt python_list::handle_index_access(
         nlohmann::json list_var_decl = json_utils::find_var_decl(
           list_var_name, converter_.current_function_name(), converter_.ast());
 
-        // If the variable has a type annotation such as list[str], extract element type
+        // If the variable has a type annotation such as list[str], extract
+        // element type
         if (!list_var_decl.is_null() && list_var_decl.contains("annotation"))
         {
           elem_type = get_elem_type_from_annotation(
@@ -2522,7 +3611,8 @@ exprt python_list::handle_index_access(
             list_node["value"].contains("_type") &&
             list_node["value"]["_type"] == "Subscript")
           {
-            // For ESBMC_iter_0 = d['a'], get element type from dict's actual value
+            // For ESBMC_iter_0 = d['a'], get element type from dict's actual
+            // value
             if (
               list_node["value"].contains("value") &&
               list_node["value"]["value"].is_object() &&
@@ -2590,8 +3680,9 @@ exprt python_list::handle_index_access(
             list_node["value"]["elts"].is_array() &&
             !list_node["value"]["elts"].empty())
           {
-            // Infer element type from the literal, accounting for the int->float
-            // promotion applied to mixed numeric literals at construction.
+            // Infer element type from the literal, accounting for the
+            // int->float promotion applied to mixed numeric literals at
+            // construction.
             elem_type = infer_literal_element_type(list_node["value"]);
           }
         }
@@ -2717,8 +3808,8 @@ exprt python_list::handle_index_access(
         }
 
         // If array is a constant placeholder (e.g., from a chained OOB access),
-        // we're in dead code after a prior IndexError. Emit IndexError and return
-        // a placeholder rather than crashing the frontend.
+        // we're in dead code after a prior IndexError. Emit IndexError and
+        // return a placeholder rather than crashing the frontend.
         if (!array.is_symbol() && array.is_constant())
         {
           exprt raise = converter_.get_exception_handler().gen_exception_raise(
@@ -3033,6 +4124,7 @@ exprt python_list::handle_index_access(
     norm_guard.cond() = idx_lt_zero;
     norm_guard.then_case() = normalize;
     norm_guard.location() = loc;
+    norm_guard.location().property("skipped");
     converter_.add_instruction(norm_guard);
 
     // --- 4. OOB check: if (idx < 0 || idx >= (ll)len) raise IndexError ---
@@ -3053,6 +4145,7 @@ exprt python_list::handle_index_access(
     oob_guard.cond() = migrate_expr_back(or2tc(still_neg, idx_ge_len));
     oob_guard.then_case() = throw_code;
     oob_guard.location() = loc;
+    oob_guard.location().property("skipped");
     converter_.add_instruction(oob_guard);
 
     // --- 5. __python_str_slice(array, idx, idx+1, 1) ---
@@ -3070,7 +4163,10 @@ exprt python_list::handle_index_access(
   }
 
   // Handle static arrays
-  return build_index(array, pos_expr, array.type().subtype());
+  exprt guarded_pos =
+    guard_numpy_pointer_view_index(array, pos_expr, slice_node);
+  return try_build_row_pointer_view(array, slice_node)
+    .value_or(build_index(array, guarded_pos, array.type().subtype()));
 }
 
 exprt python_list::extract_pyobject_value(
@@ -3080,9 +4176,10 @@ exprt python_list::extract_pyobject_value(
   bool string_safe)
 {
   // For float types, read __ESBMC_float_buf[item->float_idx].
-  // This avoids the void*→integer truncation in --ir mode: float_idx is a size_t
-  // (no sort mismatch in BV mode), and float_buf is a typed global double array
-  // (real-sorted in --ir mode), so the array read gives the correct real value.
+  // This avoids the void*→integer truncation in --ir mode: float_idx is a
+  // size_t (no sort mismatch in BV mode), and float_buf is a typed global
+  // double array (real-sorted in --ir mode), so the array read gives the
+  // correct real value.
   if (elem_type.is_floatbv())
   {
     // Helper: build (*pyobject_expr).field for a given field/type.
@@ -3090,7 +4187,8 @@ exprt python_list::extract_pyobject_value(
       return build_deref_member(pyobject_expr, field, ftype);
     };
 
-    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol table)
+    // Look up __ESBMC_float_buf global (static in list.c, but still in symbol
+    // table)
     const symbolt *fbuf_sym =
       converter_.symbol_table().find_symbol("c:list.c@__ESBMC_float_buf");
     assert(fbuf_sym && "could not find __ESBMC_float_buf symbol");
@@ -3186,13 +4284,14 @@ exprt python_list::extract_pyobject_value(
     return build_typecast(obj_value, pointer_typet(arr_type.subtype()));
   }
 
-  // For char* strings and None (_Bool*), the void* already contains the pointer value
-  // For all other types, the void* contains a pointer to the value
+  // For char* strings and None (_Bool*), the void* already contains the pointer
+  // value. For all other types, the void* contains a pointer to the value.
   if (
     elem_type.is_pointer() &&
     (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
   {
-    // String and None case: cast void* directly to the pointer type (no dereference needed)
+    // String and None case: cast void* directly to the pointer type (no
+    // dereference needed)
     return build_typecast(obj_value, elem_type);
   }
   else

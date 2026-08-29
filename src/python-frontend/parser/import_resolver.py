@@ -61,6 +61,8 @@ def reset_state() -> None:
     module_exports.clear()
     _reported_cycles.clear()
     _reported_resolution_failures.clear()
+    imported_signature_sources.clear()
+    default_helper_exports.clear()
 
 
 def _resolver_error(detail: str) -> None:
@@ -115,6 +117,7 @@ def _is_imported_model(module_name: str) -> bool:
         "threading",
         "queue",
         "torch",
+        "unittest",
     }
     return module_name in models
 
@@ -367,6 +370,41 @@ def filter_imports(tree: ast.AST) -> ast.AST:
     return tree
 
 
+# Preprocessors of every imported module, published so the entry module can
+# adopt their signatures before its own body is finalized.
+imported_signature_sources: list = []
+
+# Per-module def-time default helpers that an importing module may reference.
+default_helper_exports: dict = {}
+
+
+def ensure_default_helper_imports(tree: ast.AST) -> None:
+    """Import the def-time default helpers a filled call site now references.
+
+    A container default is hoisted to a module-level variable where the
+    function is defined; a call in another module reaches it only if the name
+    is imported alongside the function itself.
+    """
+    referenced = {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id.startswith("ESBMC_default_")
+    }
+    if not referenced:
+        return
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        owned = default_helper_exports.get(node.module)
+        if not owned:
+            continue
+        already = {alias.name for alias in node.names}
+        for helper in sorted(referenced & owned - already):
+            node.names.append(ast.alias(name=helper, asname=None))
+        ast.fix_missing_locations(node)
+
+
 def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> None:
     """Emit collected imports after transitive discovery converges.
 
@@ -408,6 +446,24 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
     for _module_name, (tree, _filename, preprocessor) in parsed_trees.items():
         preprocessor.finalize_module(tree)
 
+    # Each module was preprocessed in isolation, so it only knows its own call
+    # signatures. Publish them, now that every body has been visited, for the
+    # entry module to adopt before its own body is finalized: a call into an
+    # imported module is otherwise converted without the arguments that
+    # module's defaults would supply.
+    imported_signature_sources.clear()
+    imported_signature_sources.extend(
+        (name, pp) for name, (_tree, _filename, pp) in parsed_trees.items())
+
+    # A call site filled from those defaults references the def-time helper
+    # holding the container default, so it has to be emitted alongside the
+    # functions imported from its module. Kept out of `specific_names`, which
+    # also drives submodule emission -- a helper is a plain module global.
+    default_helper_exports.clear()
+    for module_name, preprocessor in imported_signature_sources:
+        if preprocessor.hoisted_default_names:
+            default_helper_exports[module_name] = set(preprocessor.hoisted_default_names)
+
     _emit_collected_import_json(parsed_trees, output_dir, callbacks)
 
 
@@ -418,7 +474,8 @@ def _emit_collected_import_json(
 ) -> None:
     for module_name, import_info in module_imports.items():
         imported_elements = None if import_info['import_all'] else [
-            ast.alias(name, None) for name in import_info['specific_names']
+            ast.alias(name, None) for name in (import_info['specific_names']
+                                               | default_helper_exports.get(module_name, set()))
         ]
 
         for name in sorted(import_info['specific_names']):

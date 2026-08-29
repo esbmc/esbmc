@@ -2,4 +2,4 @@ CORE
 main.c
 --assertion-coverage --schedule
 ^Total Asserts: 0
-^VERIFICATION SUCCESSFUL$
+^COVERAGE ANALYSIS COMPLETE$

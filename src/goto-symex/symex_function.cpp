@@ -370,6 +370,49 @@ void goto_symext::symex_function_call(const expr2tc &code)
     symex_function_call_deref(code);
 }
 
+/// Ackermannise rather than drop congruence outright: for every earlier
+/// application of this callee, assume equal arguments imply an equal result.
+/// That is the defining property of an uninterpreted function, and stating it
+/// here keeps the tuple-sorted symbol out of the solver (GitHub #6965). Sound:
+/// it rules out only non-functional behaviour. It needs operands the encoding
+/// can compare, so aggregates still fall through uncongruent.
+void goto_symext::assume_uf_congruence(
+  const irep_idt &identifier,
+  const irep_idt &name,
+  const std::vector<expr2tc> &arguments,
+  const expr2tc &result,
+  const type2tc &ret_type)
+{
+  auto comparable = [](const type2tc &t) {
+    return is_number_type(t) || is_pointer_type(t);
+  };
+  bool congruent = comparable(ret_type);
+  for (const expr2tc &argument : arguments)
+    congruent = congruent && comparable(argument->type);
+
+  if (!congruent)
+  {
+    log_debug(
+      "symex",
+      "uninterpreted function '{}' has an incomparable signature; modelling "
+      "its result as unconstrained nondet (no functional congruence)",
+      name);
+    return;
+  }
+
+  for (const auto &previous : uf_applications[identifier])
+  {
+    if (previous.first.size() != arguments.size())
+      continue;
+    expr2tc same_args = gen_true_expr();
+    for (size_t i = 0; i < arguments.size(); i++)
+      same_args =
+        and2tc(same_args, equality2tc(arguments[i], previous.first[i]));
+    assume(implies2tc(same_args, equality2tc(result, previous.second)));
+  }
+  uf_applications[identifier].emplace_back(arguments, result);
+}
+
 bool goto_symext::symex_uninterpreted_function(
   const code_function_call2t &call,
   const irep_idt &identifier)
@@ -421,9 +464,8 @@ bool goto_symext::symex_uninterpreted_function(
   // and which aborts the solver backend (GitHub #5369; the CBMC aws-c-common
   // harnesses hit this with a `const void *` hasher/equals argument). When any
   // argument or the result is non-scalar, fall back to a fresh nondeterministic
-  // result. This is a sound over-approximation: it drops only the functional-
-  // congruence constraint (equal arguments need no longer imply an equal
-  // result), never adding behaviour, and the body is still discarded.
+  // result, and recover congruence explicitly where the operands are still
+  // comparable (below).
   bool uf_encodable = is_number_type(call.ret->type);
   for (const expr2tc &argument : arguments)
     uf_encodable = uf_encodable && is_number_type(argument->type);
@@ -442,11 +484,6 @@ bool goto_symext::symex_uninterpreted_function(
   }
   else
   {
-    log_debug(
-      "symex",
-      "uninterpreted function '{}' has a non-scalar signature; modelling its "
-      "result as unconstrained nondet (no functional congruence)",
-      name);
     result = sideeffect2tc(
       call.ret->type,
       expr2tc(),
@@ -455,6 +492,8 @@ bool goto_symext::symex_uninterpreted_function(
       type2tc(),
       sideeffect2t::allockind::nondet);
     replace_nondet(result);
+
+    assume_uf_congruence(identifier, name, arguments, result, call.ret->type);
   }
 
   symex_assign(code_assign2tc(call.ret, result));
@@ -666,6 +705,18 @@ static bool function_is_type_compatible(
   return true;
 }
 
+// Whether a dereferenced function pointer designates anything callable: the
+// two failed-symbol spellings mean the value-set had nothing to offer.
+static bool has_call_target(const expr2tc &expr)
+{
+  if (!is_symbol2t(expr))
+    return true;
+
+  const std::string &name = to_symbol2t(expr).thename.as_string();
+  return !has_prefix(name, "symex::invalid_object") &&
+         name.find("$object") == std::string::npos;
+}
+
 static std::list<std::pair<guard2tc, expr2tc>>
 get_function_list(const expr2tc &expr)
 {
@@ -742,6 +793,29 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
+  // Closed world: the program we were given is all there is, so a call with no
+  // compatible target cannot happen and its path is dead. Decide that on a
+  // throwaway copy with the pointer-safety claims suppressed -- the real
+  // dereference below records an invalid-pointer claim before we would
+  // otherwise learn there is no target, condemning the path first
+  // (esbmc/esbmc#604). When a target does exist nothing is skipped: we fall
+  // through to the unmodified path and its claims.
+  if (options.get_bool_option("closed-world-fnptr"))
+  {
+    expr2tc probe = call.function;
+    dereference(probe, dereferencet::READ, true);
+    if (!has_call_target(probe))
+    {
+      log_status(
+        "No target candidate for function call {}; assuming unreachable "
+        "(--closed-world-fnptr)",
+        from_expr(ns, "", call.function));
+      assume(gen_false_expr());
+      cur_state->source.pc++;
+      return;
+    }
+  }
+
   expr2tc func_ptr = call.function;
   dereference(func_ptr, dereferencet::READ);
 
@@ -758,6 +832,12 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     log_status(
       "No target candidate for function call {}",
       from_expr(ns, "", call.function));
+    // Open world by default: the definition may live in a translation unit we
+    // were not given, so the call is skipped and its result left havoc'd.
+    // Under --closed-world-fnptr the whole program is assumed present, so no
+    // such call can happen and the path is dead (esbmc/esbmc#604).
+    if (options.get_bool_option("closed-world-fnptr"))
+      assume(gen_false_expr());
     cur_state->source.pc++;
     return;
   }
@@ -862,7 +942,13 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   cur_state->top().orig_func_ptr_call = expr;
 
   if (!run_next_function_ptr_target(true))
+  {
+    // Same rationale as the failed-symbol case above: an empty target list
+    // means no compatible definition was found in what we were given.
+    if (options.get_bool_option("closed-world-fnptr"))
+      assume(gen_false_expr());
     cur_state->source.pc++;
+  }
 }
 
 bool goto_symext::run_next_function_ptr_target(bool first)
@@ -963,7 +1049,7 @@ void goto_symext::pop_frame()
   if (!cur_state->guard.is_false())
     cur_state->guard = frame.entry_guard;
 
-  // clear locals from L2 renaming
+  // retire locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
     // Python objects are garbage-collected (issue #4773): keep user class
@@ -984,7 +1070,7 @@ void goto_symext::pop_frame()
     // Erase from level 1 propagation
     cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
-    cur_state->level2.remove(it);
+    cur_state->level2.retire(it);
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.
@@ -1048,18 +1134,13 @@ void goto_symext::symex_return(const expr2tc &code)
     cur_state->top().merge_state_map[cur_state->top().end_of_function];
 
   merge_state_list.emplace_back(*cur_state);
+  record_parked_path(
+    cur_state->top().end_of_function, std::prev(merge_state_list.end()));
 
   // check whether the stack limit and return
   // value optimization have been activated.
-  if (stack_limit > 0 && no_return_value_opt)
-  {
-    code->foreach_operand([this](const expr2tc &e) {
-      // check whether the stack size has been reached.
-      claim(
-        (cur_state->top().process_stack_size(e, stack_limit)),
-        "Stack limit property was violated");
-    });
-  }
+  if (stack_checks_enabled() && no_return_value_opt)
+    code->foreach_operand([this](const expr2tc &e) { check_stack_size(e); });
 
   // kill this one
   cur_state->guard.make_false();

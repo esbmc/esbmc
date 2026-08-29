@@ -1,4 +1,4 @@
-// Exercises the --irep2-native-body dispatcher's code_switch2t /
+// Exercises the IREP2-native dispatcher's code_switch2t /
 // code_switch_case2t handling (W1-loc spike Phase C, esbmc/esbmc#4715). Each of
 // these converts natively end to end: consecutive case labels sharing an arm,
 // fallthrough, a switch with no default, a default that is not last, a nested

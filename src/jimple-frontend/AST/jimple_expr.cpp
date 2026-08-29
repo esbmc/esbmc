@@ -1,4 +1,6 @@
 #include <jimple-frontend/AST/jimple_expr.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -21,6 +23,18 @@ exprt jimple_constant::to_exprt(
     integer2binary(as_number, 10), integer2string(as_number), int_type());
 };
 
+// The leaf of this frontend's expression tree: a literal with no context and no
+// operands, so it converts with nothing left to migrate. Matches what
+// migrate_expr makes of the constant_exprt above -- int_type() is signedbv, so
+// the IREP2 form is a constant_int2t of the same width.
+expr2tc jimple_constant::to_expr2t(
+  contextt &,
+  const std::string &,
+  const std::string &) const
+{
+  return constant_int2tc(migrate_type(int_type()), BigInt(std::stoi(value)));
+}
+
 void jimple_symbol::from_json(const json &j)
 {
   j.at("value").get_to(var_name);
@@ -41,6 +55,15 @@ exprt jimple_symbol::to_exprt(
 
   return symbol_expr(s);
 };
+
+expr2tc jimple_symbol::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  return symbol_expr2tc(
+    *ctx.find_symbol(get_symbol_name(class_name, function_name, var_name)));
+}
 
 std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 {
@@ -185,6 +208,40 @@ exprt jimple_binop::to_exprt(
     rhs->to_exprt(ctx, class_name, function_name));
 };
 
+// The operator reaches to_exprt as a legacy irep id -- gen_binary builds
+// exprt(binop, ...) -- so the usable set is whatever migrate_expr maps, not
+// whatever the Jimple producer emits. The corpus uses six: ==, +, notequal, -,
+// >= and >, with from_json rewriting == to = beforehand. Anything else falls
+// through to the base default and takes exactly the path it takes today, so an
+// operator this switch does not know cannot silently build the wrong node.
+expr2tc jimple_binop::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc l = lhs->to_expr2t(ctx, class_name, function_name);
+  expr2tc r = rhs->to_expr2t(ctx, class_name, function_name);
+
+  // gen_binary gives the node the lhs type; the relational kinds force bool
+  // themselves, which is what migrate_expr produces for them too.
+  const type2tc &t = l->type;
+
+  if (binop == "+")
+    return add2tc(t, l, r);
+  if (binop == "-")
+    return sub2tc(t, l, r);
+  if (binop == "=")
+    return equality2tc(l, r);
+  if (binop == "notequal")
+    return notequal2tc(l, r);
+  if (binop == ">")
+    return greaterthan2tc(l, r);
+  if (binop == ">=")
+    return greaterthanequal2tc(l, r);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 void jimple_cast::from_json(const json &j)
 {
   jimple_type type;
@@ -204,6 +261,17 @@ exprt jimple_cast::to_exprt(
   c_typecast.implicit_typecast(from_expr, to->to_typet(ctx));
   return from_expr;
 };
+
+expr2tc jimple_cast::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc from_expr = from->to_expr2t(ctx, class_name, function_name);
+  namespacet ns(ctx);
+  c_implicit_typecast(from_expr, to->to_type2t(ctx), ns);
+  return from_expr;
+}
 
 void jimple_lengthof::from_json(const json &j)
 {
@@ -236,6 +304,23 @@ exprt jimple_lengthof::to_exprt(
     static_cast<const typet &>(call.function().type().return_type());
   return sideeffect;
 };
+
+expr2tc jimple_lengthof::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc operand = from->to_expr2t(ctx, class_name, function_name);
+
+  symbolt lengthof = get_lengthof_function();
+  symbolt &added_symbol = *ctx.move_symbol_to_context(lengthof);
+
+  return side_effect_function_call2tc(
+    migrate_type(
+      static_cast<const typet &>(added_symbol.get_type().return_type())),
+    symbol_expr2tc(added_symbol),
+    {operand});
+}
 
 void jimple_newarray::from_json(const json &j)
 {
@@ -336,6 +421,21 @@ exprt jimple_expr_invoke::to_exprt(
   return block;
 }
 
+expr2tc jimple_expr_invoke::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // TODO: Move intrinsics to backend
+  // valueOf(n) is the identity on its argument. This is the only arm reachable
+  // here: jimple_assignment routes an invoke right-hand side to the migrating
+  // default unless it is nondet or intrinsic, and valueOf_1 is the intrinsic.
+  if (base_class == "java.lang.Integer" && method == "valueOf_1")
+    return parameters[0]->to_expr2t(ctx, class_name, function_name);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 void jimple_virtual_invoke::from_json(const json &j)
 {
   lhs = nil_exprt();
@@ -424,6 +524,20 @@ exprt jimple_virtual_invoke::to_exprt(
   return block;
 }
 
+expr2tc jimple_virtual_invoke::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // The only arm reachable here: jimple_assignment sends an invoke right-hand
+  // side to the migrating default unless it is nondet. The three skip arms and
+  // the main path all produce statements, so they belong there in any case.
+  if (is_nondet_call())
+    return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
+
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
+
 exprt jimple_newarray::to_exprt(
   contextt &ctx,
   const std::string &class_name,
@@ -480,6 +594,44 @@ exprt jimple_newarray::to_exprt(
   return sideeffect;
 };
 
+expr2tc jimple_newarray::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  typet base_type = type->to_typet(ctx);
+
+  // to_exprt's temp symbol only ever becomes the lhs of a call it then
+  // discards, but it is still entered into the context; keep that side effect.
+  symbolt tmp_symbol =
+    get_temp_symbol(pointer_typet(base_type), class_name, function_name);
+  ctx.move_symbol_to_context(tmp_symbol);
+
+  const type2tc uint2 = migrate_type(uint_type());
+
+  expr2tc alloc_size = size->to_expr2t(ctx, class_name, function_name);
+  if (is_nil_expr(alloc_size))
+    alloc_size = constant_int2tc(uint2, BigInt(1));
+
+  symbolt alloca = get_allocation_function();
+  symbolt &alloca_symbol = *ctx.move_symbol_to_context(alloca);
+
+  int type_width = 64;
+  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
+    type_width = std::stoi(
+      (base_type.is_pointer() ? base_type.subtype().width() : base_type.width())
+        .as_string());
+
+  expr2tc bytes =
+    mul2tc(uint2, alloc_size, constant_int2tc(uint2, BigInt(type_width)));
+
+  return side_effect_function_call2tc(
+    migrate_type(
+      static_cast<const typet &>(alloca_symbol.get_type().return_type())),
+    symbol_expr2tc(alloca_symbol),
+    {bytes});
+}
+
 void jimple_deref::from_json(const json &j)
 {
   base = get_expression(j.at("base"));
@@ -506,6 +658,20 @@ exprt jimple_deref::to_exprt(
   return index;
 };
 
+expr2tc jimple_deref::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  expr2tc arr = base->to_expr2t(ctx, class_name, function_name);
+  expr2tc offset = index->to_expr2t(ctx, class_name, function_name);
+
+  // to_exprt assembles an index_exprt and then rewrites it in place into a
+  // dereference of pointer arithmetic; this is that result, built directly.
+  const type2tc &element = to_pointer_type(arr->type).subtype;
+  return dereference2tc(element, add2tc(arr->type, arr, offset));
+}
+
 exprt jimple_nondet::to_exprt(
   contextt &,
   const std::string &,
@@ -517,6 +683,17 @@ exprt jimple_nondet::to_exprt(
 
   return rhs;
 };
+
+// gen_nondet builds exactly the sideeffect2t that migrate_expr makes of the
+// legacy sideeffect("nondet") above: nil operand, size and alloc type, kind
+// nondet.
+expr2tc jimple_nondet::to_expr2t(
+  contextt &,
+  const std::string &,
+  const std::string &) const
+{
+  return gen_nondet(migrate_type(int_type()));
+}
 
 void jimple_static_member::from_json(const json &j)
 {
@@ -562,6 +739,40 @@ exprt jimple_static_member::to_exprt(
   }
   return op;
 };
+
+expr2tc jimple_virtual_member::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // to_exprt also builds a gen_zero and looks the class tag up into a local,
+  // reading neither afterwards; both are dropped here.
+  expr2tc base = symbol_expr2tc(
+    *ctx.find_symbol(get_symbol_name(class_name, function_name, variable)));
+
+  if (is_pointer_type(base->type))
+    base = dereference2tc(to_pointer_type(base->type).subtype, base);
+
+  return member2tc(type->to_type2t(ctx), base, "tag-" + field);
+}
+
+expr2tc jimple_static_member::to_expr2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // make_true/make_false replace the expression outright, so to_exprt's
+  // gen_zero(to_typet(...)) is discarded on both of these arms.
+  if (from == "kotlin._Assertions" && field == "ENABLED")
+    return gen_true_expr();
+
+  if (from == "Main" && field == "$assertionsDisabled")
+    return gen_false_expr();
+
+  // The member access itself is still marked "Needs OOP members"; leave it on
+  // the migrating default.
+  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+}
 
 void jimple_virtual_member::from_json(const json &j)
 {

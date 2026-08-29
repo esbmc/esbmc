@@ -2,5 +2,5 @@ CORE
 main.c
 --multi-property --unwind 11 --context-bound 2 --no-standard-checks --no-library-assertions
 ^VERIFICATION FAILED$
-FAILED: 'assert data equal at file .*main\.c line \d+
+^ +FAILED .*line +\d+ +assert data equal$
 \A(?![\s\S]*Sem is not initialized)[\s\S]*\Z

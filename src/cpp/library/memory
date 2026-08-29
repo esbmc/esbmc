@@ -174,6 +174,136 @@ struct default_delete
 };
 
 #if __cplusplus >= 201103L
+namespace __alloc_detail
+{
+/* [allocator.traits.types]: rebind_alloc<T> is Alloc::rebind<T>::other when
+ * that qualified-id is valid, and otherwise Alloc<T, Args...> for an Alloc
+ * spelled Alloc<U, Args...>. fmt's own allocator supplies no rebind member and
+ * needs the second form. */
+template <class Alloc, class T>
+struct replace_first_arg;
+
+template <
+  template <class, class...>
+  class Alloc,
+  class U,
+  class... Args,
+  class T>
+struct replace_first_arg<Alloc<U, Args...>, T>
+{
+  using type = Alloc<T, Args...>;
+};
+
+template <class Alloc, class T, class = void>
+struct rebind_alloc : replace_first_arg<Alloc, T>
+{
+};
+
+template <class Alloc, class T>
+struct rebind_alloc<
+  Alloc,
+  T,
+  void_t<typename Alloc::template rebind<T>::other>>
+{
+  using type = typename Alloc::template rebind<T>::other;
+};
+
+/* [allocator.requirements] requires only value_type, allocate and deallocate of
+ * an allocator; [allocator.traits.members] supplies the rest when the allocator
+ * omits it. fmt's own allocator omits all three below.
+ *
+ * These are static members of class templates rather than free function
+ * templates, which do not get a GOTO body in OM headers (github #6063). */
+template <class Alloc, class = void>
+struct has_max_size : false_type
+{
+};
+template <class Alloc>
+struct has_max_size<Alloc, void_t<decltype(declval<const Alloc &>().max_size())>>
+  : true_type
+{
+};
+
+template <class Alloc, class T, bool = has_max_size<Alloc>::value>
+struct max_size_of
+{
+  static size_t get(const Alloc &a)
+  {
+    return a.max_size();
+  }
+};
+template <class Alloc, class T>
+struct max_size_of<Alloc, T, false>
+{
+  static size_t get(const Alloc &)
+  {
+    return size_t(-1) / sizeof(T);
+  }
+};
+
+template <class Alloc, class T, class = void>
+struct has_construct : false_type
+{
+};
+template <class Alloc, class T>
+struct has_construct<
+  Alloc,
+  T,
+  void_t<
+    decltype(declval<Alloc &>().construct(declval<T *>(), declval<const T &>()))>>
+  : true_type
+{
+};
+
+template <class Alloc, class T, bool = has_construct<Alloc, T>::value>
+struct construct_with
+{
+  template <class... Args>
+  static void run(Alloc &a, T *p, Args &&...args)
+  {
+    a.construct(p, std::forward<Args>(args)...);
+  }
+};
+template <class Alloc, class T>
+struct construct_with<Alloc, T, false>
+{
+  template <class... Args>
+  static void run(Alloc &, T *p, Args &&...args)
+  {
+    ::new (static_cast<void *>(p)) T(std::forward<Args>(args)...);
+  }
+};
+
+template <class Alloc, class T, class = void>
+struct has_destroy : false_type
+{
+};
+template <class Alloc, class T>
+struct has_destroy<
+  Alloc,
+  T,
+  void_t<decltype(declval<Alloc &>().destroy(declval<T *>()))>> : true_type
+{
+};
+
+template <class Alloc, class T, bool = has_destroy<Alloc, T>::value>
+struct destroy_with
+{
+  static void run(Alloc &a, T *p)
+  {
+    a.destroy(p);
+  }
+};
+template <class Alloc, class T>
+struct destroy_with<Alloc, T, false>
+{
+  static void run(Alloc &, T *p)
+  {
+    p->~T();
+  }
+};
+} // namespace __alloc_detail
+
 // Minimal allocator_traits (github #6063): delegates to the allocator's own
 // members. Static member functions of class templates convert to GOTO
 // correctly (unlike free-function templates in OM headers).
@@ -184,8 +314,25 @@ struct allocator_traits
   typedef typename Alloc::value_type value_type;
   typedef value_type *pointer;
   typedef const value_type *const_pointer;
+  typedef void *void_pointer;
+  typedef const void *const_void_pointer;
   typedef size_t size_type;
   typedef ptrdiff_t difference_type;
+
+  template <class T>
+  using rebind_alloc = typename __alloc_detail::rebind_alloc<Alloc, T>::type;
+  template <class T>
+  using rebind_traits = allocator_traits<rebind_alloc<T> >;
+
+  typedef false_type propagate_on_container_copy_assignment;
+  typedef false_type propagate_on_container_move_assignment;
+  typedef false_type propagate_on_container_swap;
+  typedef true_type is_always_equal;
+
+  static Alloc select_on_container_copy_construction(const Alloc &a)
+  {
+    return a;
+  }
 
   static pointer allocate(Alloc &a, size_type n)
   {
@@ -197,24 +344,26 @@ struct allocator_traits
     a.deallocate(p, n);
   }
 
-  static void construct(Alloc &a, pointer p, const value_type &v)
+  /* [allocator.traits.members]: construct and destroy are templates on the
+   * pointee, not on the allocator's own value_type. boost multi_index relies on
+   * that -- it destroys a symbolt through a traits instantiated on its node
+   * allocator, so a `pointer` parameter rejects the call. */
+  template <class T, class... Args>
+  static void construct(Alloc &a, T *p, Args &&...args)
   {
-    a.construct(p, v);
+    __alloc_detail::construct_with<Alloc, T>::run(
+      a, p, std::forward<Args>(args)...);
   }
 
-  static void construct(Alloc &a, pointer p)
+  template <class T>
+  static void destroy(Alloc &a, T *p)
   {
-    a.construct(p);
-  }
-
-  static void destroy(Alloc &a, pointer p)
-  {
-    a.destroy(p);
+    __alloc_detail::destroy_with<Alloc, T>::run(a, p);
   }
 
   static size_type max_size(const Alloc &a)
   {
-    return a.max_size();
+    return __alloc_detail::max_size_of<Alloc, value_type>::get(a);
   }
 };
 #endif
@@ -238,7 +387,14 @@ class unique_ptr
   D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  // [unique.ptr.single.ctor] p1: the default constructor is a separate,
+  // non-explicit one, so a unique_ptr member value-initialises inside an
+  // aggregate -- `std::array<std::unique_ptr<T>, N> a{};`.
+  constexpr unique_ptr() noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
+  explicit unique_ptr(T *p, D del = D()) : ptr(p), deleter(del)
   {
   }
 
@@ -370,7 +526,14 @@ class unique_ptr<T[], D>
   D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
+  // [unique.ptr.single.ctor] p1: the default constructor is a separate,
+  // non-explicit one, so a unique_ptr member value-initialises inside an
+  // aggregate -- `std::array<std::unique_ptr<T>, N> a{};`.
+  constexpr unique_ptr() noexcept : ptr(nullptr), deleter(D())
+  {
+  }
+
+  explicit unique_ptr(T *p, D del = D()) : ptr(p), deleter(del)
   {
   }
 
@@ -867,6 +1030,24 @@ shared_ptr<T> make_shared(Args &&...args)
 {
   return shared_ptr<T>(new T(std::forward<Args>(args)...));
 }
+
+/* The allocator is deliberately not modelled, and the two halves cannot be
+ * coupled as they stand: allocator::allocate hands out malloc'd storage while
+ * shared_ptr releases with `delete __p`, so routing through the allocator
+ * makes every use report "Mismatched memory deallocation operators". Storage
+ * therefore comes from the same `new` make_shared uses, a custom allocator's
+ * allocate/deallocate/construct are never called, and this model cannot
+ * answer questions *about* an allocator -- only about code that happens to
+ * use one. allocate_shared_allocator_calls pins that divergence (github
+ * #6488). The array forms added in C++20 are not declared.
+ * `typename A::value_type` ([allocator.requirements]) stops A deducing to a
+ * constructor argument when the allocator is omitted altogether, which would
+ * otherwise silently swallow it. */
+template <class T, class A, class... Args, class = typename A::value_type>
+shared_ptr<T> allocate_shared(const A &, Args &&...args)
+{
+  return make_shared<T>(std::forward<Args>(args)...);
+}
 #endif
 
 #if 0
@@ -888,6 +1069,77 @@ public:
 	raw_storage_iterator<OutputIterator,T> operator++ (int)
 	{	raw_storage_iterator<OutputIterator,T> tmp = *this; ++iter; return tmp;}
 };
+#endif
+
+#if __cplusplus >= 201103L
+/* [uninitialized.construct]: construct the destination range in place from the
+ * source, rather than assigning over objects that do not exist yet.
+ * uninitialized_move is C++17; the other two are older but were missing too. */
+template <class InputIterator, class ForwardIterator>
+ForwardIterator uninitialized_copy(
+  InputIterator first,
+  InputIterator last,
+  ForwardIterator result)
+{
+  for (; first != last; ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(*first);
+  return result;
+}
+
+template <class InputIterator, class ForwardIterator>
+ForwardIterator uninitialized_move(
+  InputIterator first,
+  InputIterator last,
+  ForwardIterator result)
+{
+  for (; first != last; ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(::std::move(*first));
+  return result;
+}
+
+template <class ForwardIterator, class T>
+void uninitialized_fill(
+  ForwardIterator first,
+  ForwardIterator last,
+  const T &value)
+{
+  for (; first != last; ++first)
+    ::new (static_cast<void *>(&*first))
+      typename iterator_traits<ForwardIterator>::value_type(value);
+}
+
+/* The _n forms, which take a count rather than an end iterator. */
+template <class InputIterator, class Size, class ForwardIterator>
+ForwardIterator
+uninitialized_copy_n(InputIterator first, Size n, ForwardIterator result)
+{
+  for (Size i = 0; i < n; ++i, ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(*first);
+  return result;
+}
+
+template <class InputIterator, class Size, class ForwardIterator>
+ForwardIterator
+uninitialized_move_n(InputIterator first, Size n, ForwardIterator result)
+{
+  for (Size i = 0; i < n; ++i, ++first, ++result)
+    ::new (static_cast<void *>(&*result))
+      typename iterator_traits<ForwardIterator>::value_type(::std::move(*first));
+  return result;
+}
+
+template <class ForwardIterator, class Size, class T>
+ForwardIterator
+uninitialized_fill_n(ForwardIterator first, Size n, const T &value)
+{
+  for (Size i = 0; i < n; ++i, ++first)
+    ::new (static_cast<void *>(&*first))
+      typename iterator_traits<ForwardIterator>::value_type(value);
+  return first;
+}
 #endif
 
 } // namespace std

@@ -3,12 +3,18 @@
 
 #include <ld-frontend/ir/ld_ir.h>
 #include <ld-frontend/ir_gen/ld_converter.h>
+#include <util/config/config.h>
 #include <util/symtab/context.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 
 static LdIR make_empty_ir()
 {
+  // int_type() reads config.ansi_c.int_width, which this binary never sets. A
+  // zero-width integer type makes the counters' saturation bounds underflow
+  // their width to a 2^32-bit exponent.
+  config.ansi_c.set_data_model(configt::LP64);
+
   LdIR ir;
   ir.source_file = "<test>";
   return ir;

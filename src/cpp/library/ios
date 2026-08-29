@@ -133,7 +133,11 @@ public:
   static int xalloc() throw();
 
   void register_callback(event_callback fn, int index);
-  bool sync_with_stdio(bool sync = true);
+
+  /* Held inverted so that zero-initialised storage means "synchronised",
+   * which is the initial state [ios.base.sync]/1 mandates. */
+  static bool __unsynced;
+  static bool sync_with_stdio(bool sync = true);
   class Init
   {
   public:
@@ -160,7 +164,7 @@ public:
 
   ios()
   {
-    ios_base();
+    __fill = ' ';
   }
   virtual ~ios()
   {
@@ -205,11 +209,17 @@ ios_base::ios_base()
 {
   __streambuf_state = goodbit;
   __exception = goodbit;
+  // [ios.base.cons]: width starts at 0, precision at 6.
+  __width = 0;
+  __precision = 6;
 }
 
+/* Caveat: __flags is `static`, so format state is shared between every
+ * stream -- `cout << hex` changes the base a later ostringstream formats in.
+ * Making it a member of the virtual ios_base base costs ~15x in symex. */
 ios_base::fmtflags ios_base::flags() const
 {
-  return (bool)__flags;
+  return __flags;
 }
 
 ios_base::fmtflags ios_base::flags(ios_base::fmtflags fmtfl)
@@ -237,6 +247,16 @@ ios_base::setf(ios_base::fmtflags fmtfl, ios_base::fmtflags mask)
 void ios_base::unsetf(ios_base::fmtflags mask)
 {
   __flags &= ~mask;
+}
+
+/* [ios.base.sync]/2: returns the previous state, which starts out
+ * synchronised. The models write through the C stdio layer already, so the
+ * flag only has to be observable — there is no buffering to reconfigure. */
+bool ios_base::sync_with_stdio(bool sync)
+{
+  bool __old = !__unsynced;
+  __unsynced = !sync;
+  return __old;
 }
 
 streamsize ios_base::precision() const

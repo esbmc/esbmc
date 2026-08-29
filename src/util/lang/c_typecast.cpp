@@ -192,6 +192,15 @@ bool check_c_implicit_typecast(const typet &src_type, const typet &dest_type)
   return true;
 }
 
+/* Arithmetic destinations every scalar source below converts to implicitly.
+ * The arms differ only in whether they additionally admit bool or a pointer,
+ * so the shared membership test is written once. */
+static bool is_numeric_type(const type2tc &t)
+{
+  return is_unsignedbv_type(t) || is_signedbv_type(t) || is_floatbv_type(t) ||
+         is_fixedbv_type(t);
+}
+
 bool check_c_implicit_typecast(
   const type2tc &src_type,
   const type2tc &dest_type)
@@ -205,39 +214,28 @@ bool check_c_implicit_typecast(
   if (src_type == dest_type)
     return false;
 
+  // `floatbv` appears in every branch of the typet overload above and in none
+  // of this one, so any implicit conversion touching a float fell through to
+  // the `return true` below and was rejected. ESBMC represents a float as
+  // floatbv unless --fixedbv is given, so that rejected the default
+  // representation outright: python_adjust's assignment arm left an integer
+  // stored into a `double` lvalue (scope-relational-float-reconciliation.md
+  // §18.3). Same omission #6688 fixed in get_c_type.
   if (is_bool_type(src_type))
   {
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_pointer_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (is_numeric_type(dest_type) || is_pointer_type(dest_type))
       return false;
   }
   else if (is_bv_type(src_type))
   {
-    if (is_bool_type(dest_type))
-      return false;
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_pointer_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (
+      is_numeric_type(dest_type) || is_bool_type(dest_type) ||
+      is_pointer_type(dest_type))
       return false;
   }
-  else if (is_fixedbv_type(src_type))
+  else if (is_fixedbv_type(src_type) || is_floatbv_type(src_type))
   {
-    if (is_bool_type(dest_type))
-      return false;
-    if (is_unsignedbv_type(dest_type))
-      return false;
-    if (is_signedbv_type(dest_type))
-      return false;
-    if (is_fixedbv_type(dest_type))
+    if (is_numeric_type(dest_type) || is_bool_type(dest_type))
       return false;
   }
   else if (is_array_type(src_type) || is_pointer_type(src_type))
@@ -303,43 +301,50 @@ type2tc c_typecastt::follow_with_qualifiers(const type2tc &src_type)
   return dest_type;
 }
 
+c_typecastt::c_typet c_typecastt::rank_integer(unsigned width, bool is_signed)
+{
+  if (width <= config.ansi_c.char_width)
+    return is_signed ? CHAR : UCHAR;
+  if (width <= config.ansi_c.int_width)
+    return is_signed ? INT : UINT;
+  if (width <= config.ansi_c.long_int_width)
+    return is_signed ? LONG : ULONG;
+  if (width <= config.ansi_c.long_long_int_width)
+    return is_signed ? LONGLONG : ULONGLONG;
+  // Exactly 128, not <=: a _BitInt(65..127) is a signedbv of its own width,
+  // and ranking it INT128 makes implicit_typecast_arithmetic widen it to 128
+  // bits, moving the overflow boundary --overflow-check tests. The #extint
+  // marker cannot gate this instead: migrate_type rebuilds signedbv from width
+  // alone (migrate.cpp), so the expr2tc overload cannot see it and the two
+  // copies would diverge.
+  if (width == config.ansi_c.int_128_width)
+    return is_signed ? INT128 : UINT128;
+  return OTHER;
+}
+
+c_typecastt::c_typet c_typecastt::rank_floating(unsigned width)
+{
+  if (width <= config.ansi_c.single_width)
+    return SINGLE;
+  if (width <= config.ansi_c.double_width)
+    return DOUBLE;
+  if (width <= config.ansi_c.long_double_width)
+    return LONGDOUBLE;
+  return OTHER;
+}
+
 c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 {
   unsigned width = atoi(type.width().c_str());
 
   if (type.id() == "signedbv")
-  {
-    if (width <= config.ansi_c.char_width)
-      return CHAR;
-    else if (width <= config.ansi_c.int_width)
-      return INT;
-    else if (width <= config.ansi_c.long_int_width)
-      return LONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return LONGLONG;
-  }
+    return rank_integer(width, true);
   else if (type.id() == "unsignedbv")
-  {
-    if (width <= config.ansi_c.char_width)
-      return UCHAR;
-    else if (width <= config.ansi_c.int_width)
-      return UINT;
-    else if (width <= config.ansi_c.long_int_width)
-      return ULONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return ULONGLONG;
-  }
+    return rank_integer(width, false);
   else if (type.is_bool())
     return BOOL;
   else if (type.id() == "floatbv" || type.id() == "fixedbv")
-  {
-    if (width <= config.ansi_c.single_width)
-      return SINGLE;
-    else if (width <= config.ansi_c.double_width)
-      return DOUBLE;
-    else if (width <= config.ansi_c.long_double_width)
-      return LONGDOUBLE;
-  }
+    return rank_floating(width);
   else if (type.id() == "pointer")
   {
     if (type.subtype().id() == "empty")
@@ -364,46 +369,22 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
 {
   if (is_signedbv_type(type))
-  {
-    unsigned width = to_signedbv_type(type).width;
-
-    if (width <= config.ansi_c.char_width)
-      return CHAR;
-    else if (width <= config.ansi_c.int_width)
-      return INT;
-    else if (width <= config.ansi_c.long_int_width)
-      return LONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return LONGLONG;
-    if (width <= config.ansi_c.int_128_width)
-      return INT128;
-  }
+    return rank_integer(to_signedbv_type(type).width, true);
   else if (is_unsignedbv_type(type))
-  {
-    unsigned width = to_unsignedbv_type(type).width;
-
-    if (width <= config.ansi_c.char_width)
-      return UCHAR;
-    else if (width <= config.ansi_c.int_width)
-      return UINT;
-    else if (width <= config.ansi_c.long_int_width)
-      return ULONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return ULONGLONG;
-    if (width <= config.ansi_c.int_128_width)
-      return UINT128;
-  }
+    return rank_integer(to_unsignedbv_type(type).width, false);
   else if (is_bool_type(type))
     return BOOL;
-  else if (is_fixedbv_type(type))
+  else if (is_fixedbv_type(type) || is_floatbv_type(type))
   {
-    unsigned width = to_fixedbv_type(type).width;
-    if (width <= config.ansi_c.single_width)
-      return SINGLE;
-    else if (width <= config.ansi_c.double_width)
-      return DOUBLE;
-    else if (width <= config.ansi_c.long_double_width)
-      return LONGDOUBLE;
+    // The legacy typet overload above classifies "floatbv" and "fixedbv"
+    // together; this one only ever handled fixedbv, so every floatbv fell
+    // through to OTHER. OTHER outranks every arithmetic kind, so
+    // implicit_typecast_arithmetic promoted both operands to a type its switch
+    // has no case for and silently converted neither -- making the whole
+    // helper a no-op on any expr2tc pair with a floating-point operand.
+    return rank_floating(
+      is_fixedbv_type(type) ? to_fixedbv_type(type).width
+                            : to_floatbv_type(type).get_width());
   }
   else if (is_pointer_type(type))
   {
@@ -594,6 +575,30 @@ void c_typecastt::implicit_typecast(expr2tc &expr, const type2tc &type)
   implicit_typecast_followed(expr, src_type, dest_type);
 }
 
+/// Build the pointer that models a reference bound to \p expr.
+///
+/// A conditional whose arms are lvalues is itself an lvalue ([expr.cond]), so
+/// the address has to be taken per arm: `&(c ? a : b)` is `c ? &a : &b`. Left
+/// as `address_of(if(...))` the pointer analysis resolves neither arm and the
+/// bound reference silently designates the wrong object (#6291, #3387).
+static void take_reference_address(exprt &expr)
+{
+  if (
+    expr.id() == "if" && expr.operands().size() == 3 &&
+    expr.op1().type() == expr.op2().type())
+  {
+    take_reference_address(expr.op1());
+    take_reference_address(expr.op2());
+    expr.type() = expr.op1().type();
+    return;
+  }
+
+  address_of_exprt addr(expr);
+  addr.location() = expr.location();
+  addr.type().set("#reference", true);
+  expr.swap(addr);
+}
+
 void c_typecastt::implicit_typecast_followed(
   exprt &expr,
   const typet &src_type,
@@ -620,10 +625,7 @@ void c_typecastt::implicit_typecast_followed(
       src_type != dest_type &&
       !expr.is_address_of()) // TODO: remove this condition
     {
-      address_of_exprt addr(expr);
-      addr.location() = expr.location();
-      addr.type().set("#reference", true);
-      expr.swap(addr);
+      take_reference_address(expr);
     }
     else
     {
@@ -729,7 +731,8 @@ void c_typecastt::implicit_typecast_followed(
 
     if (src_type.is_struct() || src_type.is_union())
     {
-      // We got a case to convert derived class object to base base class pointer, e.g.:
+      // We got a case to convert derived class object to base base class
+      // pointer, e.g.:
       //  Convert from `derived_obj` to `(Base*)&derived_obj`
       // (probably) as part of function call argument adjustment flow
       // when calling a base method from a derived object
@@ -886,7 +889,8 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
     if (dest.id() == "if")
     {
       // Special case: if expression
-      // To typecast the if expression, we need to apply the operations: true and false
+      // To typecast the if expression, we need to apply the operations: true
+      // and false
       dest.type() = type;
 
       do_typecast(dest.op1(), type);
@@ -943,6 +947,13 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   if (dest_type != type)
   {
+    // Fold a typecast of a constant, as the irept overload above does. Without
+    // this the two copies disagree on the commonest conversion a frontend
+    // performs -- storing a literal into a differently-typed lvalue leaves an
+    // unfolded typecast here but a folded constant there.
+    const bool fold = is_constant(dest) && !no_simplify;
     dest = typecast2tc(type, dest);
+    if (fold)
+      simplify(dest);
   }
 }

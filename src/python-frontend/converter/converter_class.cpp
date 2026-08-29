@@ -599,6 +599,13 @@ void python_converter::get_attributes_from_self(
     }
   }
 
+  auto is_callable_annotation = [](const nlohmann::json &annotation) {
+    return annotation.is_object() &&
+           annotation.value("_type", "") == "Subscript" &&
+           annotation.contains("value") && annotation["value"].is_object() &&
+           annotation["value"].value("id", "") == "Callable";
+  };
+
   for (const auto &stmt : method_body)
   {
     if (
@@ -637,7 +644,18 @@ void python_converter::get_attributes_from_self(
         // or PEP 604 union BinOp like int | None (get_type_from_annotation
         // already maps `T | None` to gen_pointer_type(T), the same shape it
         // produces for Optional[T]).
-        typet type = get_type_from_annotation(stmt["annotation"], stmt);
+        //
+        // `Callable[...]` is mapped here rather than inside
+        // get_type_from_annotation: as a *member* it has to be the function
+        // pointer the bare `Callable` spelling yields, because struct layout
+        // cannot compute the width of the bare code type it otherwise keeps,
+        // and aborts with symbolic_type_excp (#4566). A *parameter* annotated
+        // `Callable[...]` is resolved on a different path that the pointer
+        // form breaks (regression/python/callable4), so the mapping stays
+        // local to members.
+        typet type = is_callable_annotation(stmt["annotation"])
+                       ? get_callable_type(stmt["annotation"], stmt)
+                       : get_type_from_annotation(stmt["annotation"], stmt);
         if (type.is_nil() || type.is_empty())
         {
           log_warning(
@@ -781,6 +799,21 @@ void python_converter::get_attributes_from_self(
           rhs_is_aliased_name && type.id() == "symbol" &&
           json_utils::is_class(annotated_type, *ast_json))
           type = gen_pointer_type(type);
+
+        // A bare `Callable` is what the annotation pass infers for an
+        // unannotated `self.fn = fn`; the signature is lost because the
+        // inference carries a type *name*. Recover it from the parameter the
+        // RHS names, so a call through the member resolves rather than being
+        // reported as an AttributeError (esbmc/esbmc#6640).
+        if (annotated_type == "Callable" && rhs_is_aliased_name)
+        {
+          auto param =
+            param_annotations.find(stmt["value"].value("id", std::string()));
+          if (
+            param != param_annotations.end() &&
+            is_callable_annotation(param->second))
+            type = get_callable_type(param->second, stmt);
+        }
       }
 
       if (!clazz.has_component(attr_name))
@@ -804,6 +837,7 @@ void python_converter::get_attributes_from_self(
       // A member is initialized with something that might be not annotated
       typet type = any_type();
       const std::string &attr_name = stmt["targets"][0]["attr"];
+
       if (!clazz.has_component(attr_name))
       {
         struct_typet::componentt comp = python_frontend::build_component(

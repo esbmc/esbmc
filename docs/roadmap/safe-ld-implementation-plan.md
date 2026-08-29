@@ -3,14 +3,14 @@
 **Status:** PLANNING — WP2 largely implemented (skeleton #5280, property pipeline #5289, ld-verify runner + fault injection #5294, industrial benchmarks #5427, user-FB/REAL/watchdog #5620, graphical-LD soundness fixes + WP1 SOS spec)  
 **Project:** APP113435 — ESBMC-PLC (EPSRC Standard Research Grant)  
 **Tracking:** umbrella issue TBD  
-**Date:** 2026-06-09 (status refreshed 2026-07-24)
+**Date:** 2026-06-09 (status refreshed 2026-07-30)
 
 > **Implementation note.** The boolean/combinational Tier-1 subset, the
 > integer-arithmetic constructs (TON/TOF/TP timers, CTU/CTD counters, and the
 > `response` property), and — beyond the original Tier-1 scope — user-defined
 > function-block bodies, REAL/analog process variables, and an optional
 > scan-watchdog all now lower to GOTO IR and verify end-to-end (see §10). The
-> suite under `regression/ld/` has grown to 23 CTest cases, plus 10 for the
+> suite under `regression/ld/` has grown to 37 CTest cases, plus 10 for the
 > `ld-verify` runner, and CI now actually runs them. All four curated
 > benchmarks have validated verdicts and are wired as regression tests. The WP1
 > SOS specification exists as `docs/safe-ld-sos-semantics.md`; its independent
@@ -572,7 +572,7 @@ all 20 programs pass semantic review; spec reviewed against IEC 61508 §7.
 | T2.1 Parser & Semantic Analyser | PLCopen XML parser; AST; type checker; SOS consistency check | M3 (Month 6): parser handles all WP1 SOS constructs | skeleton landed (#5280); extended with user-FB-body and REAL/analog parsing (#5620) |
 | T2.2 GOTO IR Generator & Property Encoder | LdIR; `ld_converter` (irep2); YAML parser; property encoder (`code_assertt`) | M4 (Month 9): IR generator correct on all benchmark programs | boolean subset + timers/counters/`response` all lower and verify (#5289); ST→`codet` FB-body translator + numeric↔Boolean coercion (#5620); graphical resolver now models FB blocks, edge contacts, parallel-path OR and network feedback; all four benchmark verdicts validated (§10) |
 | T2.3 ESBMC Integration & ld-verify | `ld_languaget`; CMake wiring; ld-verify CLI; JSON report | M5 (Month 12): end-to-end pipeline ready | `--ld-props` wired + JSON report (#5289); `ld-verify` runner implemented, driving `esbmc` (#5294); `--ld-fault-injection`, `--ld-sound-mode`, `--ld-scan-watchdog`/`--ld-scan-budget` driver flags added (#5294, #5620) |
-| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 23 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
+| T2.4 Test Suite (TDD, >90% coverage) | Unit tests per component; integration tests; fault-injection tests | tracked per task; coverage measured with gcov | 3 unit suites + 37 driver regression tests (incl. fault-injection, user-FB, watchdog, REAL arithmetic) + 10 `ld-verify` runner tests, all run by CI; line-coverage target not yet measured |
 
 **Success criteria (WP2):**
 - **Correctness:** ≥95% of benchmark programs translated to GOTO IR with semantic
@@ -777,6 +777,12 @@ prose in §3 is not mistaken for delivered functionality.
   also re-encoded so that `Q` starts false rather than reading an un-run timer's
   `ET` as an expired interval. PLCopen `<initialValue>` is now parsed; before,
   every declared preset silently read as zero.
+- **Unmodellable rung paths are rejected, not dropped.** The graphical resolver
+  used to skip any rail-to-coil path it could not model and, when a block's
+  output drove a coil without a power-flow edge reaching it, emitted no rung and
+  no diagnostic at all — leaving the coil at its initial value and passing
+  properties over it vacuously. Both now raise
+  `UnsupportedConstruct(name, tier=2)` per §7, naming the offending block.
 - **Benchmark verdicts validated.** `conveyor_sequencing` and
   `emergency_shutdown` are wired as regression tests. The ESD violation proved
   to be a true positive — its reset rung does not gate on the manual trip being
@@ -784,7 +790,7 @@ prose in §3 is not mistaken for delivered functionality.
   pinned as `esd_manual_reset_fail`, with the corrected program as
   `emergency_shutdown_safe`. The conveyor's failure was a `response` property
   whose bound ignored a free `Stop_Button` input, plus the unparsed preset.
-- **Regression suite `regression/ld/`** now holds **23 CTest cases** (guarded by
+- **Regression suite `regression/ld/`** now holds **37 CTest cases** (guarded by
   `ENABLE_LD_FRONTEND`, with the `benchmarks/` dataset excluded from CTest —
   `regression/CMakeLists.txt`), covering all five property kinds plus
   fault-injection, user-FB, watchdog, REAL-arithmetic, and the `stairs_light` /
@@ -812,7 +818,7 @@ requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
 `regression/ld/` or `unit/ld-frontend/`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
-  runs `regression/ld/` (23 cases), the `ld-verify` runner suite (10 cases) and
+  runs `regression/ld/` (37 cases), the `ld-verify` runner suite (10 cases) and
   the three LD unit binaries.
 - `build-linux-amd64` builds the release binary, smoke-tests that it advertises
   `--ld-props`, and publishes it as an artifact.
@@ -829,23 +835,147 @@ is the only gate on the front-end.
   reset dominance, and the scope of the feedback rule).
 - **WRITE_OUTPUTS** is not modelled as a distinct step; output coils are plain
   variable assignments (sufficient for the current property checks).
-- **Timer/counter integer width.** The arithmetic uses `int_type()` with no
-  overflow guard; very long-running counters could wrap. Not exercised by the
-  current bounded tests.
-- **Graphical path enumeration is exponential.** The resolver enumerates every
-  simple rail-to-sink path; a vendor export with many parallel branches would
-  blow up. No path-count guard yet.
-- **Arithmetic and unknown blocks on a rung path** are still diagnosed and
-  dropped rather than modelled, so a program using one verifies over strictly
-  less behaviour. Only timers and counters are resolved on graphical paths.
+- **Timer/counter integer width — now saturating.** CTU/CTD saturate CV at the
+  configured integer type's bound and TON bounds ET by PT, so neither wraps.
+  Before this, `CV + 1` on a counter at INTmax was reachable undefined behaviour
+  (`--overflow-check` reports `arithmetic overflow on add`) and the wrap dropped
+  Q back to false, losing violations; `counter_saturate_at_max` pins it, and
+  `counter_counts_fail` pins that the bound does not stop the counter counting.
+  Whether IEC saturates CV at the type bound or at PV is recorded as open item 4
+  for the M1 review in `docs/safe-ld-sos-semantics.md` §10 — the two agree on Q
+  and differ only above the preset, and the type bound is the over-approximating
+  (so non-hiding) choice.
+- **Graphical path enumeration replaced by per-node accumulation.** The
+  resolver used to enumerate every simple rail-to-sink path, so cost grew as 2^N
+  in re-convergent parallel branches: 18 fully-connected 2-wide stages — just 36
+  contacts — cost 112 s of GOTO-creation time, and a search bound was needed to
+  reject such a program outright. It now computes
+  `pf(n) = (OR over preds p of pf(p)) AND cond(n)` once per node, which is
+  O(V+E), and the search bound is gone. The same 36-contact network resolves in
+  0.13 s (`graphical_wide_network_fail`), and GOTO creation is linear in
+  practice on fully re-convergent networks:
+
+  | contacts | 150 | 450 | 1050 | 2100 |
+  |---|---|---|---|---|
+  | GOTO creation | 0.33 s | 0.37 s | 0.76 s | 1.50 s |
+
+  This removes the resolver as the obstacle to the WP2 <5 s / 1000-rung
+  criterion, but **does not meet it**. Measured end-to-end on ladder-shaped
+  programs (each rung a short series chain, every third with a parallel branch),
+  `--k-induction --unlimited-k-steps`, all verdicts SUCCESSFUL:
+
+  | rungs | GOTO creation | end-to-end |
+  |---|---|---|
+  | 100 | 0.12 s | 2.6 s |
+  | 250 | 0.26 s | 12.4 s |
+  | 500 | 0.48 s | 48.0 s |
+  | 1000 | 0.96 s | 190.9 s |
+
+  GOTO creation is linear and is **0.5% of the runtime**; end-to-end grows
+  roughly quadratically, so the criterion holds only to ~130 rungs and is missed
+  by ~38x at 1000.
+
+  The cost is **symex, not the solver**. At 500 rungs one symex pass takes 5.7 s
+  for 12673 assignments, of which slicing then removes 12659 — 99.9% — leaving a
+  single VCC that the solver discharges in 0.000 s. k-induction repeats that
+  whole pass per step. So the lever is not the resolver or the solver but the
+  work symex does on rungs the property never reads: slicing earlier, or
+  restricting the scan body to the cone of influence of the properties, is what
+  the criterion needs.
+- **Arithmetic and unknown blocks on a rung path** are still not modelled —
+  only timers and counters are resolved on graphical paths — but they are now
+  a hard `UnsupportedConstruct(name, tier=2)` error rather than a dropped path,
+  so a program using one is rejected instead of verifying over strictly less
+  behaviour. Previously such a block was not even diagnosed: because step 3
+  only makes `IN`/`CU`/`CD` into power-flow edges, a block like `GT` driving a
+  coil got no incoming edge, `paths_to` returned nothing, and the coil was left
+  unassigned — a `VERIFICATION SUCCESSFUL` verdict on a program whose rung had
+  silently vanished (`graphical_unsupported_block_fail` pins this).
 - **Counter reset from a contact chain** is diagnosed and left unconnected;
   only a reset pin wired to a variable is modelled.
+- **Non-numeric presets used to terminate the process.** `literal_to_ticks`
+  converted with `std::stoll` and relied on catching `std::invalid_argument`, but
+  the catch did not fire: a block data pin wired to a named variable via
+  `<inVariable>`, or an unparsable `<initialValue>`, aborted ESBMC with an
+  uncaught exception. Both of the callers' fallback paths — the identifier
+  reference in `resolve_data_pin` and the "unrecognised initial value" warning in
+  `parse_var_decl` — were therefore unreachable. It now validates with `strtoll`
+  and errno instead of converting and catching; `ld_preset_named_pin_safe` and
+  `graphical_timer_path_fail` pin the two paths. Why the handler was skipped is
+  not established, so the same convert-and-catch pattern elsewhere in ESBMC
+  (~20 `std::sto*` call sites, several on user input) should not be assumed safe.
+
+### Validation beyond the regression suite
+
+`scripts/ld_resolver_oracle.py` is a randomised **structural** oracle for the
+graphical resolver. It generates random PLCopen networks, derives each one's
+power-flow formula from the ladder algebra independently of the resolver, and
+asserts through ESBMC that the coil is equivalent to that formula (both
+implications, so an undriven coil fails rather than passing vacuously). It is not
+a differential test against a previous resolver, which would bless a bug present
+in both. Two shapes are generated: `sp` (series-parallel, what a vendor tool
+draws) and `dag` (layered, each node fed by a random subset of the previous
+layer — not series-parallel, so it is what checks that path enumeration and the
+per-node recurrence agree by distributivity).
+
+This exists because the graphical corpus is only two real programs
+(`stairs_light`, `water_control`), which is thin cover for changing the resolver.
+Current state: **101 generated programs pass** (69 `sp` at depths 3–5, 32 `dag`
+up to 4 layers x 3 wide). Run it before and after any resolver change:
+
+```sh
+python3 scripts/ld_resolver_oracle.py 30 4 sp        # series-parallel
+python3 scripts/ld_resolver_oracle.py 20 3 dag 4 3   # re-convergent DAG
+```
+
+The oracle cannot be extended to stateful constructs, and this is a property of
+the property language rather than an omission: the edge/feedback shadow update is
+emitted *before* the scan-boundary assertion, so a previous-scan value is not
+observable where properties are checked (`__edge_prev_a == a` there), and the
+expression grammar has no temporal operators. So `q <=> f(inputs, prev)` is not
+expressible.
+
+Stateful constructs are therefore pinned by **discriminating reachability
+tests** instead: a state that is reachable under the intended semantics and
+provably unreachable under the plausible wrong one. `edge_rising_fail` /
+`edge_falling_fail` assert that `a && !q` / `!a && q` are reachable, and
+`edge_level_safe` proves both unreachable for a plain contact — so a resolver
+that ignored the `edge` attribute again (as one did before #6378) flips all
+three. `graphical_timer_path_fail` does the same for a timer on a graphical rung
+path, which the enumerating resolver handles by cutting the path at the block and
+resuming from its Q pin.
+
+Set/Reset coils and multi-coil networks are pinned the same way:
+`graphical_set_latch_fail` shows a set coil holding on with no path energised (an
+output coil cannot); `graphical_set_reset_order_safe` proves the reset drawn
+below the set wins within a scan, and **reversing the two `rightPowerRail`
+connections flips it to FAILED**, so it pins sink emission order rather than
+passing trivially; `graphical_multi_coil_safe` gives two coils different power
+flows from one shared prefix, so a resolver handing both the same flow fails one
+of the two invariants.
+
+`graphical_feedback_snapshot_fail` closes the last one, the entry-snapshot rule
+(§6.3 / IEC 61131-3 §4.1.3): `m` is written by the first rung and read by the
+second, and the GOTO shows `m__prev = m` emitted before any rung, so the reader
+sees the entry value and the scan in which `a` rises leaves `q` off. Reading `m`
+immediately would make `q` track `a` and the state unreachable.
+
+Note the textual-`<rung>` tests (`counter_*`, `function_blocks_*`, `userfb_*`)
+bypass the graphical resolver entirely and are not cover for it.
+
+**Together the oracle and these tests are the intended safety net for replacing
+the resolver** (next increment 2): 101 generated programs for the combinational
+algebra, plus one discriminating test per stateful construct — edge rising and
+falling with a level complement, a timer on a rung path, set-coil latching, sink
+emission order, multi-coil sub-network sharing, and the feedback snapshot — plus
+the undriven-sink and unsupported-block rejections and the enumeration bound.
 
 ### Suggested next increments
 
 1. Run the M1 review of `docs/safe-ld-sos-semantics.md` and close its §10 items.
-2. Model arithmetic/unknown blocks on graphical rung paths, or make the
-   diagnostic an error rather than a dropped path, so a silently weaker model
-   is not possible.
-3. Add a path-count guard to the graphical resolver.
-4. Widen or guard the timer/counter integer arithmetic.
+2. Cut the symex cost that dominates end-to-end time (see the table above):
+   slice against the properties' cone of influence before symex rather than
+   after, so a 1000-rung program does not re-explore 12673 assignments per
+   k-induction step to discharge one VCC.
+3. Model arithmetic/unknown blocks on graphical rung paths, so the programs
+   rejected as `UnsupportedConstruct` can be verified rather than refused.

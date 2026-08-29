@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --smt-during-symex
+may fail.*FAILED|FAILED.*may fail
+^VERIFICATION FAILED$

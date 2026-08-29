@@ -4,10 +4,34 @@
 #include <util/lang/c_types.h>
 
 #include <irep2/irep2_expr.h>
+#include <irep2/simplification_check.h>
 #include <util/irep/migrate.h>
 #include <util/message/message.h>
 
 std::string indent_str_irep2(unsigned int indent);
+
+// Parameter names are not part of a function's type (C++ [dcl.fct]p5, C11
+// 6.7.6.3p15), but irep2 type equality compares argument_names too. An
+// out-of-line virtual definition gives its parameters fresh symbol ids, so the
+// vtable slot and the function symbol end up with code types that differ in
+// nothing else -- enough for the virtual call to lose its target (#6749).
+inline bool same_function_pointer_ignoring_argument_names(
+  const type2tc &a,
+  const type2tc &b)
+{
+  if (!is_pointer_type(a) || !is_pointer_type(b))
+    return false;
+
+  const type2tc &sub_a = to_pointer_type(a).subtype;
+  const type2tc &sub_b = to_pointer_type(b).subtype;
+  if (!is_code_type(sub_a) || !is_code_type(sub_b))
+    return false;
+
+  const code_type2t &ca = to_code_type(sub_a);
+  const code_type2t &cb = to_code_type(sub_b);
+  return ca.arguments == cb.arguments && ca.ret_type == cb.ret_type &&
+         ca.ellipsis == cb.ellipsis;
+}
 
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t)
@@ -267,6 +291,9 @@ inline bool simplify(expr2tc &expr)
   expr2tc tmp = expr->simplify();
   if (!is_nil_expr(tmp))
   {
+    // No verify_rewrite() here: simplify() now checks each rewrite where it is
+    // made, so a whole-expression claim would restate what is already proved,
+    // in the widest and most decline-prone query of the run (esbmc/esbmc#7260).
     expr = tmp;
     return true;
   }
@@ -389,6 +416,8 @@ distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
       // store nil into the member slot — keep new_op so the lane
       // expression survives unsimplified for the SMT layer.
       auto folded = new_op->do_simplify();
+      if (!is_nil_expr(folded))
+        simplification_check::verify_rewrite(new_op, folded);
       datatype_member = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
@@ -426,5 +455,26 @@ expr2tc make_cmp_value(const type2tc &t, int v);
 void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols);
+
+/** Insert a zero operand at each reserved padding-member position so a struct
+ *  literal's operand list matches its type's component list, exactly as
+ *  clang_c_adjust::adjust_struct's insertion loop does. IREP2 carries no
+ *  is_padding flag, so the member name is the signal (util/irep/pad_names.h).
+ *  Idempotent: returns @p ops unchanged when already padded. */
+std::vector<expr2tc>
+pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops);
+
+/** Base name of the variable a forall2t/exists2t binds, or an empty id when
+ *  @p binder holds no symbol at all. Strips typecasts, then the address_of
+ *  the solver expects around a binder that names a variable directly.
+ *
+ *  A binder of any other shape yields the name of whatever symbol it does
+ *  hold: `void *q = &i; __ESBMC_forall(q, ...)` binds `i` but reads as `q`.
+ *  Callers that must not confuse the two want the strict form below. */
+irep_idt quantifier_bound_name(const expr2tc &binder);
+
+/** As quantifier_bound_name, but empty unless @p binder is (a typecast of)
+ *  address_of(symbol), i.e. unless it names the bound variable directly. */
+irep_idt quantifier_direct_bound_name(const expr2tc &binder);
 
 #endif /* UTIL_IREP2_UTILS_H_ */

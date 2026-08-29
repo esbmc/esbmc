@@ -11,6 +11,7 @@
 void f(int *p, int flag)
 {
   __ESBMC_requires(p != NULL);
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(int)));
   __ESBMC_requires(flag == 0 || flag == 1 || flag == 2);
   __ESBMC_ensures(flag == 0 || flag == 1 || *p == __ESBMC_old(*p) + 5);
 

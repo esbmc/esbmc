@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--multi-property --assertion-coverage --program-only
+\A(?![\s\S]*COVERAGE ANALYSIS)[\s\S]*\Z
+\A(?![\s\S]*VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN))[\s\S]*\Z

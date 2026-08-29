@@ -171,6 +171,14 @@ public:
   /** Pop one context on the SMT assertion stack. */
   virtual void pop_ctx();
 
+  /** Whether a satisfiable result can be turned into a model. False for the
+   *  subprocess SMT-LIB backends with no interactive model solver attached:
+   *  they answer sat/unsat, but get() and l_get() have nothing to read. */
+  virtual bool has_model() const
+  {
+    return true;
+  }
+
   /** Main interface to SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
    *  returning a single smt_ast that represents the converted expressions
@@ -187,6 +195,11 @@ public:
    *  frame per level and overflow the stack. The operand walk inside this
    *  body therefore hits the cache instead of recursing. */
   smt_astt convert_ast_node(const expr2tc &expr);
+
+  /** Convert one of the two-operand IEEE arithmetic nodes (add/sub/mul/div/
+   *  rem), which share an operand layout and differ only in the solver call
+   *  they end up in. */
+  smt_astt convert_ieee_arith_2op(const expr2tc &expr);
 
   /** Interface to specifig SMT conversion.
    *  Takes one expression, and converts it into the underlying SMT solver,
@@ -432,7 +445,16 @@ public:
    *         Tends to be one integer divided ('/') by another. After inspecting
    *         all other options, there are none that are good, this is a
    *         legitimate use of strings.
-   *  @return The newly created terminal smt_ast of this real. */
+   *  @return An SMT AST representing this real value.
+   *
+   *  No backend is required to return a distinct smt_ast * per call: a
+   *  backend that memoises real constants by value (a natural
+   *  optimisation) is free to hand back the same pointer for repeated
+   *  calls with the same str. Do not key identity-sensitive metadata
+   *  (e.g. AST-pointer-keyed side-channel maps) directly on the result of
+   *  this call unless the value is known to be one this call site
+   *  exclusively owns; mint a fresh symbol (mk_fresh) and constrain it
+   *  equal to the desired real value instead. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
   // Returns SMT AST representing real zero

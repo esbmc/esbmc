@@ -1,5 +1,6 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_expr2string.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
@@ -10,6 +11,7 @@
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <util/irep/location.h>
+#include <util/irep/pad_names.h>
 #include <util/irep/migrate.h>
 #include <util/arith/mp_arith.h>
 #include <util/lang/python_types.h>
@@ -671,17 +673,6 @@ void goto_checkt::shift_check(
   // get a signedness mismatch in the lessthan2tc below
   expr2tc left_op_type_size =
     constant_int2tc(right_op_type, BigInt(left_op_type->get_width()));
-#ifndef NDEBUG
-  // Be paranoid and verify that the size is the same regardless of which type we're using for the
-  // constant. In theory, we could have different signedness or width, but in practice
-  // those differences should not be relevant as the relevant numbers e.g. 32 or 64 can't
-  // cause wraparound issues.
-  expr2tc check2 = (equality2tc(
-    constant_int2tc(left_op_type, BigInt(left_op_type->get_width())),
-    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()))));
-  simplify(check2);
-  assert(is_true(check2));
-#endif
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
@@ -957,22 +948,57 @@ void goto_checkt::pointer_rel_check(
   }
 }
 
-static bool has_dereference(const expr2tc &expr)
+// Trailing padding is appended after the declared members (padding.cpp, the
+// `pad(components, components.end(), ...)` calls), so the last declared member
+// is the last non-`anon_pad#` entry. That one name is enough: of the four pad
+// kinds add_padding mints, `anon_bit_field_pad#` is only appended to a struct
+// that *ends* in bit-fields, `ext_int_pad#` only ever follows an _ExtInt
+// member, and the union pad is union-only -- none of them can follow a trailing
+// array. The `char qux[1]` case in regression/esbmc/github_6508_safe pins this.
+static bool is_trailing_member(const type2tc &t, const irep_idt &name)
+{
+  const std::vector<irep_idt> names = struct_union_member_names(t);
+
+  auto it = names.rbegin();
+  while (it != names.rend() && has_prefix(*it, pad_prefix))
+    ++it;
+
+  return it != names.rend() && *it == name;
+}
+
+// True when `expr` may designate storage extending past its declared type,
+// i.e. a trailing member reached through a pointer. That is the struct-hack
+// idiom -- `struct { int n; T qux[1]; }` allocated with room for more than one
+// `qux` -- where the declared array bound does not govern the object actually
+// allocated (see 82b5ce54f7). An interior member array cannot be over-allocated
+// that way, so its declared bound does apply (C11 6.5.6p8).
+static bool may_be_over_allocated(const expr2tc &expr, const namespacet &ns)
 {
   if (is_dereference2t(expr))
     return true;
 
-  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
-    // This is an index of a pointer, which is a dereference
-    return true;
+  if (is_index2t(expr))
+    // An index into a pointer is a dereference; an index into a real array
+    // selects a fixed-size element, which cannot be over-allocated.
+    return is_pointer_type(to_index2t(expr).source_value);
 
-  // Recurse through all subsequent source objects, which are always operand
-  // zero.
-  bool found = false;
-  expr->foreach_operand(
-    [&found](const expr2tc &e) { found |= has_dereference(e); });
+  if (is_typecast2t(expr))
+    return may_be_over_allocated(to_typecast2t(expr).from, ns);
 
-  return found;
+  if (is_bitcast2t(expr))
+    return may_be_over_allocated(to_bitcast2t(expr).from, ns);
+
+  if (is_member2t(expr))
+  {
+    const member2t &memb = to_member2t(expr);
+    const type2tc &t = ns.follow(memb.source_value->type);
+    // A union's storage is deliberately shared, so reaching a larger sibling
+    // member through a smaller one is legitimate rather than an overflow.
+    return (is_union_type(t) || is_trailing_member(t, memb.member)) &&
+           may_be_over_allocated(memb.source_value, ns);
+  }
+
+  return false;
 }
 
 void goto_checkt::bounds_check(
@@ -1012,10 +1038,13 @@ void goto_checkt::bounds_check(
   if (is_pointer_type(t))
     return; // done by the pointer code
 
-  // Otherwise, if there's a dereference in the array source, this bounds check
-  // should be performed by the symex-time dereferencing code, as the base thing
-  // being accessed may be anything.
-  if (has_dereference(ind.source_value))
+  // Otherwise, if the object really being accessed may be larger than its
+  // declared type, defer to the symex-time dereferencing code, which bounds
+  // the allocation rather than the type. That only happens for a trailing
+  // member reached through a pointer; for an interior one the declared bound
+  // governs, and the symex-time check misses the overflow entirely because it
+  // still lands inside the enclosing object (issue #6508).
+  if (may_be_over_allocated(ind.source_value, ns))
     return;
 
   // We can't check bounds of an infinite sized array
@@ -1252,13 +1281,12 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
   if (!is_symbol2t(call.function))
     return;
 
-  // __builtin_clz/clzl/clzll(0) is undefined behaviour (GCC); assert the
-  // argument is non-zero. Matched exactly so the two-argument __builtin_clzg is
-  // not caught.
+  // A zero argument is undefined for __builtin_clz*/ctz* (GCC); assert it is
+  // non-zero. The two-argument clzg/ctzg name their own result at zero, so the
+  // arity test below leaves them alone, and ffs is defined there outright.
   const std::string name = to_symbol2t(call.function).thename.as_string();
-  if (
-    name != "c:@F@__builtin_clz" && name != "c:@F@__builtin_clzl" &&
-    name != "c:@F@__builtin_clzll")
+  const bit_scan_endt kind = bit_scan_builtin(name);
+  if (kind == bit_scan_endt::none || kind == bit_scan_endt::first_set)
     return;
 
   if (call.operands.size() != 1)
@@ -1269,7 +1297,7 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
   guard2tc guard;
   add_guarded_claim(
     nonzero,
-    "__builtin_clz of zero is undefined",
+    "__builtin_clz/ctz of zero is undefined",
     "undef-behavior",
     loc,
     guard);

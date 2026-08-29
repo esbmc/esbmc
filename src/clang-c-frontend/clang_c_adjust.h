@@ -22,7 +22,17 @@ public:
 
   bool adjust();
 
+  /// Hand the index rewrite to the IREP2 adjuster. Set only by the C driver:
+  /// clang_cpp_adjust derives from this class, and the IREP2 pass is wired into
+  /// clang_c_languaget::typecheck alone, so a global option check here would
+  /// disable the rewrite for C++ with nothing to replace it.
+  void set_irep2_owns_arms()
+  {
+    irep2_owns_arms = true;
+  }
+
 protected:
+  bool irep2_owns_arms = false;
   contextt &context;
   namespacet ns;
   symbol_generator tmp_symbol{"clang_c_adjust::"};
@@ -30,8 +40,16 @@ protected:
   /**
    * methods for symbol adjustment
    */
+  /// True when the single argument is arithmetic, as the `abs` node requires.
+  bool has_single_arithmetic_argument(
+    const side_effect_expr_function_callt &expr) const;
+
+  /// True when a name-matched builtin lowering would discard a definition the
+  /// program supplies, in which case the definition wins. See #6904.
+  bool
+  shadows_user_definition(const irep_idt &identifier, const exprt &f_op) const;
+
   virtual void adjust_symbol(symbolt &symbol);
-  void adjust_argc_argv(const symbolt &main_symbol);
 
   /**
    * methods for type (typet) adjustment
@@ -43,12 +61,22 @@ protected:
    * and other IRs derived from exprt
    */
   void adjust_expr(exprt &expr);
+  void adjust_base_to_derived(exprt &expr);
+  void adjust_derived_to_base(exprt &expr, const irep_idt &base_id);
+  void adjust_call_argument(exprt &arg);
+  void adjust_struct(exprt &expr);
+  void adjust_ptr_mem(exprt &expr);
   void adjust_side_effect_assignment(exprt &expr);
   virtual void
   adjust_side_effect_function_call(side_effect_expr_function_callt &expr);
   void adjust_side_effect_statement_expression(side_effect_exprt &expr);
   virtual void adjust_member(member_exprt &expr);
   void adjust_expr_binary_arithmetic(exprt &expr);
+  /** Rewrite a binary arithmetic expression over complex operands into the
+   *  component-level form, in place. Expects both operands already adjusted;
+   *  returns false when neither is complex, leaving @p expr untouched. */
+  bool lower_complex_binary_arithmetic(exprt &expr);
+  bool lower_complex_compound_assignment(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
   void bind_sideeffect_operands(exprt &expr, code_blockt &block);
   void finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
@@ -102,5 +130,10 @@ protected:
 
   virtual void adjust_reference(exprt &expr);
 };
+
+/// The `argc'`/`argv'`/`envp'` symbols `clang_c_main` looks up unconditionally
+/// when main takes arguments. A symbol-table side effect rather than an
+/// expression rewrite, so whichever adjust pass is in charge has to make it.
+void declare_argc_argv(contextt &context, const symbolt &main_symbol);
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

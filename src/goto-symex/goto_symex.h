@@ -79,7 +79,8 @@ public:
     expr2tc obj;
     /** Guard when allocation occured. */
     guard2tc alloc_guard;
-    /** Record if the object is automatically desallocated (allocated with alloca). */
+    /** Record if the object is automatically desallocated (allocated with
+     * alloca). */
     bool auto_deallocd;
     /** The object name */
     std::string name;
@@ -105,15 +106,21 @@ public:
       std::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain,
-      unsigned int simplified)
+      unsigned int simplified,
+      unsigned int truncations = 0)
       : target(std::move(t)),
         total_claims(claims),
         remaining_claims(remain),
-        simplified_claims(simplified){};
+        simplified_claims(simplified),
+        bounded_loop_truncations(truncations){};
     std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
     unsigned int simplified_claims;
+    /// Carried out of exploration rather than read back from live state:
+    /// under --schedule the current frame is already dangling by the time
+    /// bmct looks (issue #6423).
+    unsigned int bounded_loop_truncations;
   };
 
   /**
@@ -170,14 +177,30 @@ protected:
   virtual void do_simplify(expr2tc &expr);
 
   /**
+   *  The guard a branch decision is read from.
+   *  `is_false`/`is_true` are syntactic, so they hold only once the guard is
+   *  folded to a literal, and `do_simplify` is a no-op under --no-simplify.
+   *  Returns an unconditionally simplified copy under that flag, so a bounded
+   *  loop can still be seen to exit, and `guard` untouched otherwise.
+   *  @param guard The renamed branch guard.
+   */
+  expr2tc branch_decision_guard(const expr2tc &guard) const;
+
+  /**
    *  Dereference an expression.
    *  Finds dereference expressions within expr, takes the set of things that
    *  it might point at, according to value set tracking, and builds an
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param mode The dereference mode.
+   *  @param block_assertions Suppress the pointer-safety claims this
+   *         dereference would otherwise record. Only for probing what a
+   *         pointer may designate before deciding whether the access happens.
    */
-  void dereference(expr2tc &expr, dereferencet::modet mode);
+  void dereference(
+    expr2tc &expr,
+    dereferencet::modet mode,
+    bool block_assertions = false);
 
   // symex
 
@@ -193,15 +216,16 @@ protected:
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
-   *  Hook called when a GOTO forks off a sibling merge_statet snapshot.
-   *  Used by execution_statet to record an explicit reference to the sibling
-   *  path on the active transition result, so it can be preserved across
-   *  context switches without re-discovering it by scanning merge_state_map.
-   *  No-op for non-concurrent symex.
+   *  Hook called when a step parks a merge_statet snapshot for a deferred
+   *  merge — a GOTO forking off its sibling arm, or a RETURN parking the
+   *  continuation at end_of_function. Used by execution_statet to record an
+   *  explicit reference to that path on the active transition result, so it
+   *  can be preserved across context switches without re-discovering it by
+   *  scanning merge_state_map. No-op for non-concurrent symex.
    */
-  virtual void record_branch_sibling(
+  virtual void record_parked_path(
     goto_programt::const_targett /*target*/,
-    statet::merge_state_listt::iterator /*sibling*/)
+    statet::merge_state_listt::iterator /*parked*/)
   {
   }
 
@@ -247,6 +271,21 @@ protected:
    */
   void symex_dead(const expr2tc &code);
 
+  /** True when either stack limit is on. The DECL, DEAD and return sites must
+   *  agree, or the accounting desynchronises from the frames. */
+  bool stack_checks_enabled() const
+  {
+    return stack_limit > 0 || total_stack_limit > 0;
+  }
+
+  /**
+   *  Account expr's storage against the current frame and claim that neither
+   *  --stack-limit nor --total-stack-limit is exceeded.
+   *  @param expr Expr whose type gives the storage to account for.
+   *  @param subject Suffix naming what was being placed on the stack.
+   */
+  void check_stack_size(const expr2tc &expr, const std::string &subject = "");
+
   /**
    *  Interpret an ASSUME instruction.
    */
@@ -275,6 +314,20 @@ protected:
    *  @param msg Textual message explaining assertion.
    */
   virtual void claim(const expr2tc &expr, const std::string &msg);
+
+  /**
+   *  Record a verdict for the claim being symbolically executed.
+   *  Used for claims symex discharges itself, so that they are reported once
+   *  per run alongside the ones the solver discharges, rather than once per
+   *  thread interleaving.
+   *  @param msg Textual message explaining the claim.
+   *  @param verdict Outcome to record.
+   *  @param note How the verdict was reached, when it needs qualifying.
+   */
+  void record_property_verdict(
+    const std::string &msg,
+    property_verdictt verdict,
+    const std::string &note = "");
 
   /**
    *  Perform an assertion.
@@ -357,6 +410,14 @@ protected:
    *  @param guard Current state guard.
    */
   void loop_bound_exceeded(const expr2tc &guard);
+
+  /// Records that a loop was cut off at the unwinding bound with nothing to
+  /// flag it. Virtual because --schedule runs each path in its own execution
+  /// state, so the count also has to accumulate outside them.
+  virtual void note_bounded_loop_truncation()
+  {
+    ++bounded_loop_truncations;
+  }
 
   // function calls
 
@@ -538,11 +599,11 @@ protected:
   void intrinsic_kill_monitor(reachability_treet &art);
   /**
    * @brief Intrinsic call for C memset function call
-   * 
+   *
    * This will either invoke our operational model (at string.c)
    * or try to compute the resulting value directly
-   * 
-   * @param art 
+   *
+   * @param art
    * @param func_call memset function call
    */
   void intrinsic_memset(
@@ -612,7 +673,8 @@ protected:
     const code_function_call2t &func_call,
     const std::string &bump_name);
 
-  // Function to call a symname function, in case where were not able to optimize it
+  // Function to call a symname function, in case where were not able to
+  // optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
 
@@ -624,7 +686,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  /** Implements GCC's __builtin_object_size intrinsic for object size determination
+  /** Implements GCC's __builtin_object_size intrinsic for object size
+   * determination
    *
    * @param func_call Function call with 2 operands: pointer and type parameter
    * @param art Reachability tree (unused)
@@ -645,7 +708,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  /* Handles dereferencing between threads and is used only in data race checks. **/
+  /* Handles dereferencing between threads and is used only in data race checks.
+   * **/
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
@@ -696,7 +760,18 @@ protected:
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &over_cap);
+
+  /**
+   *  Bound at PTRDIFF_MAX the object size an assignment records, reporting a
+   *  constant request that exceeds it rather than assuming it away. Only an
+   *  assignment to a dynamic_size2t records one -- a VLA declaration is the
+   *  only way a stack object's size reaches symex, and renaming has exposed
+   *  its constness by then. R40.
+   *  @param code The assignment, unrenamed.
+   */
+  void bound_dynamic_object_size(const code_assign2t &code);
 
   /**
    *  Create result pointer from newly allocated array.
@@ -869,13 +944,13 @@ protected:
 
   /**
    * Handle side effects in the symbolic execution.
-   * 
+   *
    * @param lhs The left-hand side expression (target of the assignment).
    * @param effect The side effect expression to be handled, typically one of
    *        the `sideeffect2t` kinds like `malloc`, `realloc`, etc.
-   * 
-   * This function does not return any value; it modifies the symbolic execution state
-   * based on the side effect encountered.
+   *
+   * This function does not return any value; it modifies the symbolic execution
+   * state based on the side effect encountered.
    */
   void handle_sideeffect(
     const expr2tc &lhs,
@@ -884,11 +959,11 @@ protected:
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
-   * 
+   *
    * @param lhs The left-hand side expression (target of the assignment).
-   * @param if_effect The conditional expression (`if2t`) to be handled, containing
-   *        the condition, true branch, and false branch.
-   * 
+   * @param if_effect The conditional expression (`if2t`) to be handled,
+   * containing the condition, true branch, and false branch.
+   *
    * This function returns true if there is a sideeffect.
    */
   bool handle_conditional(
@@ -912,6 +987,15 @@ protected:
     const expr2tc &code,
     const bool hidden = false,
     const guard2tc &guard = guard2tc());
+
+  /** Give a value storage of its own, for __ESBMC_old.
+   *
+   *  Only an lvalue has an address, and dereference lowering can turn a read
+   *  through an untyped allocation into a value rebuilt from bytes. Snapshot
+   *  such a value into a symbol so the caller has something to point at.
+   *  @return A reference to the new storage, holding \p value.
+   */
+  expr2tc materialise_old_snapshot(const expr2tc &value, const guard2tc &guard);
 
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(
@@ -1167,6 +1251,12 @@ protected:
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guard2tc &guard);
+  /** Offer both outcomes C17 7.22.3p1 permits for a zero-sized malloc,
+   *  under --malloc-zero-is-null. Widens @p alloc_guard and @p rhs. */
+  void offer_malloc_zero_null(
+    const expr2tc &size,
+    expr2tc &rhs,
+    guard2tc &alloc_guard);
   /** Wrapper around for infinite array allocation. */
   expr2tc symex_mem_inf(
     const expr2tc &lhs,
@@ -1189,7 +1279,7 @@ protected:
     const sideeffect2t &code,
     const guard2tc &guard);
   /** Symbolic implementation of printf */
-  void symex_printf(const expr2tc &lhs, expr2tc &code);
+  virtual void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Recover the variadic arguments hidden behind a va_list operand of a
    *  v*printf-family call (vprintf/vfprintf/vsprintf/vsnprintf/vasprintf).
    *  Succeeds only under conservative conditions guaranteeing the mapping is
@@ -1277,6 +1367,12 @@ protected:
   unsigned remaining_claims;
   /** Number of assertions that were trivially verified. */
   unsigned simplified_claims;
+  /** Loops cut off at the unwinding bound with no unwinding assertion to flag
+   *  it, i.e. under --no-unwinding-assertions (which the coverage modes force
+   *  on whenever --unwind is given). Exploration stopped there silently, so a
+   *  coverage percentage measured on such a run is a lower bound: goals past
+   *  the bound were never reached (issue #6387). */
+  unsigned bounded_loop_truncations = 0;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
@@ -1292,8 +1388,6 @@ protected:
    *  --no-interval-symex-guard); assertion pruning via --interval-symex-assert
    *  discharges claims proven TRUE. */
   std::optional<interval_domaint> interval_domain_state;
-  /** Whether constant propagation is to be enabled. */
-  bool constant_propagation;
   /** Namespace we're working in. */
   const namespacet &ns;
   /** Context we're working with */
@@ -1314,6 +1408,24 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
+  /** Per-callee history of uninterpreted-function applications the SMT backend
+   *  cannot encode natively, keyed on the mangled callee name. Each entry pairs
+   *  the renamed argument terms with the symbol standing for that application's
+   *  result, so a later call can be Ackermannised against it.
+   *  @see symex_uninterpreted_function */
+  std::map<irep_idt, std::vector<std::pair<std::vector<expr2tc>, expr2tc>>>
+    uf_applications;
+
+  /** Assume equal arguments imply an equal result against every earlier
+   *  application of \p identifier, and record this one.
+   *  @see symex_uninterpreted_function */
+  void assume_uf_congruence(
+    const irep_idt &identifier,
+    const irep_idt &name,
+    const std::vector<expr2tc> &arguments,
+    const expr2tc &result,
+    const type2tc &ret_type);
+
   /** Level-1 identities (base name, activation, thread) of va_list objects
    *  initialised by va_start, or by va_copy from a started source. Keyed on
    *  the l1 renaming so the same object is recognised across frames (a
@@ -1329,8 +1441,12 @@ protected:
 
   /** Disable return value optimization */
   bool no_return_value_opt;
-  /** Limit size for stack */
+  /** Limit size, in bits, for a single stack frame */
   unsigned long stack_limit;
+  /** Limit size, in bits, for every live stack frame taken together. Catches
+   *  overruns that come from call depth rather than from one oversized
+   *  frame, which stack_limit alone cannot see (esbmc/esbmc#4605). */
+  unsigned long total_stack_limit;
   /** Depth limit, as given by the --depth option */
   unsigned long depth_limit;
   /** Instruction number we are to break at -- that is, trap, to the debugger.
@@ -1368,16 +1484,17 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
-  /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
+  /** Cached from --validate-violation-witness; checked on every
+   * branch/intrinsic. */
   bool validate_witness;
 
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
-  /** Analyze the shared varables in a function call, this is because an argumemt
-   *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
   friend void build_goto_symex_classes();
 };
@@ -1418,7 +1535,8 @@ protected:
 namespace goto_symex_utils
 {
 /**
- * Computes the equivalent object value when considering a memcpy operation on it.
+ * Computes the equivalent object value when considering a memcpy operation on
+ * it.
  *
  * @param src The source expression from which bytes are copied.
  * @param dst The destination expression to which bytes are copied.
@@ -1426,7 +1544,8 @@ namespace goto_symex_utils
  * @param src_offset The offset in src from which the bytes start.
  * @param dst_offset The offset in dst at which the bytes are written.
  *
- * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
+ * @returns A new expr2tc representing the result of the memcpy operation, or an
+ * empty expr2tc if unable construct the object
  *
  * Usage Examples:
  * @code
@@ -1436,7 +1555,8 @@ namespace goto_symex_utils
  * size_t src_offset = 1;
  * size_t dst_offset = 2;
  *
- * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+ * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset,
+ * dst_offset);
  * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
  * @endcode
  */

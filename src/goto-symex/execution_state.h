@@ -31,11 +31,11 @@ class reachability_treet;
  *
  *  Context switches are not detected by ad-hoc hooks. Instead, every
  *  symex_step records the executed transition into last_transition
- *  (thread id, optional parent guard, optional branch_resultt). When the
+ *  (thread id, optional parent guard, optional parked_patht). When the
  *  scheduler later decides to switch threads, preserve_last_paths reads
  *  last_transition to know which deferred-merge snapshots to carry across
- *  the switch — including a direct iterator to the branch sibling pushed
- *  by goto_symext::symex_goto via the record_branch_sibling hook.
+ *  the switch — including a direct iterator to the path parked by
+ *  goto_symext::symex_goto or symex_return via the record_parked_path hook.
  *
  *  goto_symext occasionally needs data only execution_statet has (current
  *  thread id, the ability to spawn a new thread); those flow back through
@@ -49,11 +49,15 @@ public:
   // Convenience typedef
   typedef goto_symex_statet::merge_statet merge_statet;
 
-  struct branch_resultt
+  /** A path the transition parked for a deferred merge: the sibling arm of a
+   *  branch, or the continuation a return parked at end_of_function. In both
+   *  cases the thread's live continuation is the parked state, not its
+   *  present (falsified) guard. */
+  struct parked_patht
   {
-    /** Instruction at which the sibling path will be merged in. */
+    /** Instruction at which the parked path will be merged in. */
     goto_programt::const_targett target;
-    /** Direct reference to the sibling merge_statet in
+    /** Direct reference to the parked merge_statet in
      *  cur_state->top().merge_state_map[target]. std::list iterators
      *  don't invalidate on inserts/erases of other nodes.
      *
@@ -62,7 +66,7 @@ public:
      *  clones an execution_statet via create_next_state(), the clone
      *  rebuilds its own threads_state / merge_state_maps but the
      *  defaulted operator= still copies this iterator unchanged. On
-     *  the clone, sibling therefore points into the **parent**'s
+     *  the clone, snapshot therefore points into the **parent**'s
      *  merge_state_map.
      *
      *  This is currently sound because (a) the parent's exploration
@@ -75,14 +79,14 @@ public:
      *  iterator dereference will read corrupted data — fix by
      *  snapshotting the {guard, num_instructions, value_set} at record
      *  time instead of storing the iterator. */
-    goto_symex_statet::merge_state_listt::iterator sibling;
+    goto_symex_statet::merge_state_listt::iterator snapshot;
   };
 
   struct transition_resultt
   {
     unsigned int thread_id = 0;
     std::optional<guard2tc> parent_guard;
-    std::optional<branch_resultt> branch;
+    std::optional<parked_patht> parked;
   };
 
 public:
@@ -280,6 +284,22 @@ public:
   void assume(const expr2tc &assumption) override;
 
   /**
+   *  Implemented by goto_symext::symex_printf. Overridden only to record the
+   *  globals the arguments read: the frontend lowers a printf call to an OTHER
+   *  instruction, so the function-call path never analyses them.
+   */
+  void symex_printf(const expr2tc &lhs, expr2tc &code) override;
+
+  /**
+   *  Under --no-unwinding-assertions a truncated loop is cut with an
+   *  assumption, which drives the state guard false and so is indistinguishable
+   *  at the scheduler from a genuinely infeasible path. The remaining
+   *  iterations are not infeasible, only unexplored, so the subtree is not
+   *  exhausted and no thread may be put to sleep against it (issue #6831).
+   */
+  void note_bounded_loop_truncation() override;
+
+  /**
    *  Fetch reference to count of dynamic objects in this state.
    *  The goto_symext class knows that such a count exists, just it doesn't
    *  store it itself. So we instead provide a hook for it to fetch a reference
@@ -290,6 +310,12 @@ public:
 
   /** Like get_dynamic_counter, but with nondet symbols. */
   unsigned int &get_nondet_counter() override;
+
+  /** Zero the dynamic-object counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore -- never from this class's
+   *  constructor, which the reachability tree runs per interleaving and where
+   *  a reset would mint colliding object names (R15). */
+  static void reset_dynamic_counter();
 
   /**
    *  Fetch name of current execution guard.
@@ -402,9 +428,9 @@ public:
   void cull_all_paths();
   void restore_last_paths();
 
-  void record_branch_sibling(
+  void record_parked_path(
     goto_programt::const_targett target,
-    statet::merge_state_listt::iterator sibling) override;
+    statet::merge_state_listt::iterator parked) override;
 
   /**
    *  Analyze the contents of an assignment for threading.
@@ -449,6 +475,32 @@ public:
     access_kindt kind);
 
   /**
+   *  Resolve one pointer level: the object `ptr`'s value set names, or nil.
+   *  @param to_global Set when the resolved object is shared.
+   */
+  expr2tc resolve_pointer_target(
+    const namespacet &ns,
+    const expr2tc &ptr,
+    bool &to_global);
+
+  /**
+   *  Record what a dereference reaches when the pointer it goes through is not
+   *  a bare symbol (R29). No-op on any other expression, and on a target that
+   *  is not shared.
+   */
+  void record_aggregate_held_target(
+    const namespacet &ns,
+    const expr2tc &expr,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /** Record `key` as an object accessed by this transition, for MPOR. */
+  void record_access_key(
+    const expr2tc &key,
+    std::set<expr2tc> &global_list,
+    access_kindt kind);
+
+  /**
    *  Check for scheduling dependencies. Whether it exists between the variables
    *  accessed by the last transition of thread j and the last transition of
    *  thread l.
@@ -457,6 +509,27 @@ public:
    *  @return True if scheduling dependency exists between threads j and l
    */
   bool check_mpor_dependency(unsigned int j, unsigned int l) const;
+
+  /** The objects one transition read and wrote, as MPOR records them. */
+  struct transition_footprintt
+  {
+    std::set<expr2tc> reads, writes;
+  };
+
+  /** Footprint of the transition thread `tid` most recently completed. */
+  transition_footprintt last_transition_footprint(unsigned int tid) const
+  {
+    return {thread_last_reads.at(tid), thread_last_writes.at(tid)};
+  }
+
+  /**
+   *  As check_mpor_dependency, but against a footprint captured earlier rather
+   *  than against a thread's current one. Sleep sets need this: the transition
+   *  a sleeping thread would take is the one it took when it was put to sleep,
+   *  which its `thread_last_*` entries no longer describe.
+   */
+  bool
+  check_mpor_dependency(unsigned int j, const transition_footprintt &fp) const;
 
   /**
    *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
@@ -468,6 +541,18 @@ public:
   bool is_transition_blocked_by_mpor() const
   {
     return mpor_says_no;
+  }
+
+  /** Read-only accessor for the MPOR dependency chain, for the A6.4 harness. */
+  const std::vector<std::vector<int>> &get_dependency_chain() const
+  {
+    return dependency_chain;
+  }
+
+  /** Read-only accessor for the chain's run order, for the A6.4 harness. */
+  const std::vector<unsigned int> &get_thread_last_transition() const
+  {
+    return thread_last_transition;
   }
 
   /** Accessor method for cswitch_forced. Sets it to true. */
@@ -536,9 +621,9 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  /** Analyze the shared varables in a function call, this is because an argumemt
-   *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
   void analyze_args(const expr2tc &expr) override;
 
 public:
@@ -620,6 +705,14 @@ protected:
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependency_chain[i][j] here. */
   std::vector<std::vector<int>> dependency_chain;
+  /** Run-order ordinal of each thread's last completed transition; 0 for a
+   *  thread that has not run. Only advanced where the chain is maintained,
+   *  which is why it is the chain's own notion of time rather than CS_number.
+   *  DCij asserts a chain from Ti's last transition to Tj's, so every 1 must
+   *  point forward in this order (A6.4). */
+  std::vector<unsigned int> thread_last_transition;
+  /** Ordinal issued to the next completed transition. */
+  unsigned int transition_ordinal;
   /** MPOR scheduling outcome. If we've just taken a transition that MPOR
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */
@@ -635,6 +728,10 @@ protected:
   /** Are we evaluating the thread guard in the SMT solver during context
    *  switching? */
   bool smt_thread_guard;
+  /** Was constant propagation disabled with --no-propagation? Seeds every
+   *  thread's goto_symex_statet, so the option is looked up once per run
+   *  rather than once per thread creation. */
+  bool no_propagation;
 
   /** Copy execution_statet's own scheduling fields from `ex`. The base
    *  goto_symext slice is left untouched (the copy constructor's
@@ -707,7 +804,8 @@ public:
     optionst &options,
     unsigned int *ptotal_claims,
     unsigned int *premaining_claims,
-    unsigned int *psimplified_claims)
+    unsigned int *psimplified_claims,
+    unsigned int *ptruncations)
     : execution_statet(
         goto_functions,
         ns,
@@ -720,19 +818,29 @@ public:
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;
     this->psimplified_claims = psimplified_claims;
+    this->ptruncations = ptruncations;
     *ptotal_claims = 0;
     *premaining_claims = 0;
     *psimplified_claims = 0;
+    *ptruncations = 0;
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref) = default;
   std::shared_ptr<execution_statet> clone() const override;
   ~schedule_execution_statet() override;
   void claim(const expr2tc &expr, const std::string &msg) override;
+  void note_bounded_loop_truncation() override
+  {
+    goto_symext::note_bounded_loop_truncation();
+    ++*ptruncations;
+  }
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;
   unsigned int *psimplified_claims;
+  // Each --schedule path runs in its own execution state, so the count has to
+  // accumulate outside them like the claim counts do.
+  unsigned int *ptruncations;
 };
 
 #endif /* EXECUTION_STATE_H_ */

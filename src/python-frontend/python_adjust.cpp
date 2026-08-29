@@ -1,11 +1,13 @@
 #include <python-frontend/python_adjust.h>
 
 #include <clang-c-frontend/padding.h>
+#include <util/lang/c_typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
+#include <util/irep/pad_names.h>
 #include <vector>
 
 python_adjust::python_adjust(contextt &_context)
@@ -156,30 +158,107 @@ bool is_resolved_aggregate(const type2tc &t)
          is_vector_type(t);
 }
 
-// The four reserved pad-member names add_padding assigns (padding.cpp). The
-// exact-prefix match matters: `$` cannot appear in a Python identifier, but
-// OM struct tags originate from C/C++ headers where Clang accepts `$` as an
-// extension — a substring test could misfire on a legitimate member.
-bool is_padding_member_name(const std::string &name)
+// Re-flag every pad member in the whole legacy type tree. add_padding recurses
+// into component types (padding.cpp:71), so a nested aggregate that is already
+// padded is re-padded unless *its* pad members carry #is_padding too — flagging
+// only the top-level components leaves the inner ones looking like real fields.
+void restore_padding_flags(typet &type)
 {
-  return has_prefix(name, "anon_pad$") ||
-         has_prefix(name, "anon_bit_field_pad$") ||
-         has_prefix(name, "ext_int_pad$") || name == "$pad";
+  if (type.is_array())
+  {
+    restore_padding_flags(type.subtype());
+    return;
+  }
+
+  if (!type.is_struct() && !type.is_union())
+    return;
+
+  for (auto &comp : to_struct_union_type(type).components())
+  {
+    if (is_padding_name(comp.get_name().as_string()))
+      comp.set_is_padding(true);
+    restore_padding_flags(comp.type());
+  }
 }
 
-// Insert a gen_zero operand at each reserved padding-member position so the
-// literal's operand list matches the struct's component list, exactly as the
-// legacy adjust_struct insertion loop does. Idempotent when already padded.
-std::vector<expr2tc>
-pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops)
+// Convert each argument to its declared parameter type, mirroring
+// clang_c_adjust::adjust_function_call_arguments (clang_c_adjust_expr.cpp:1069).
+// Callers decide which call forms reach it -- see adjust_expr.
+//
+// Cast only scalar/pointer kinds; an aggregate argument from an upstream typing
+// bug keeps symex's own per-argument diagnostic rather than an unencodable
+// typecast. Idempotent: a second pass sees `got == want` and rewrites nothing.
+bool convert_call_arguments(const type2tc &callee, std::vector<expr2tc> &args)
 {
-  for (size_t i = 0; i < st.members.size(); i++)
-    if (
-      i <= ops.size() && is_padding_member_name(st.member_names[i].as_string()))
-      ops.insert(ops.begin() + i, gen_zero(st.members[i]));
-  return ops;
+  if (!is_code_type(callee))
+    return false;
+
+  const auto is_castable_kind = [](const type2tc &t) {
+    return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
+           is_bool_type(t) || is_pointer_type(t);
+  };
+
+  const code_type2t &ct = to_code_type(callee);
+  bool changed = false;
+  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
+  {
+    const type2tc &want = ct.arguments[i];
+    const type2tc &got = args[i]->type;
+    if (is_castable_kind(want) && is_castable_kind(got) && got != want)
+    {
+      const bool fold = is_constant_expr(args[i]);
+      args[i] = typecast2tc(want, args[i]);
+      // Legacy folds a cast over a constant into the literal
+      // (c_typecastt::do_typecast's exprt overload, c_typecast.cpp:911-922);
+      // its expr2tc overload does not, so mirroring only the wrap leaves
+      // `(signed long int)3` where legacy prints a bare `3`.
+      if (fold)
+        simplify(args[i]);
+      changed = true;
+    }
+  }
+  return changed;
 }
+
 } // namespace
+
+// clang_c_adjust::adjust_float_arith rewrites +,-,*,/ over a float type to
+// ieee_add/sub/mul/div and attaches the rounding mode
+// (clang_c_adjust_expr.cpp:656-697); migrate_expr then builds the ieee_*2t
+// node. Nothing in this adjuster did that, so under --python-irep2-adjust-only
+// a float `+` stayed a plain add2t and tripped simplify_arith_2ops'
+// assert(!is_floatbv_type(type)) -- "this should be handled by ieee_*"
+// (scope-coupled-arith-assign-conversion.md §17).
+//
+// Returns @p expr unchanged for every other shape, which is what makes this
+// inert on the default pipeline: clang_c_adjust has already promoted every
+// float arithmetic node, so nothing here matches. Vectors are excluded
+// deliberately -- the legacy pass returns before attaching a rounding mode for
+// them ("BUG: setting rounding_mode breaks migration") and the Python frontend
+// emits no vector arithmetic.
+//
+// Operand surgery: the operands are reused as they stand, never round-tripped
+// through migrate_expr_back, which would revert a resolved member2t/index2t
+// source to a by-name symbol_type2t.
+static expr2tc promote_to_ieee(const expr2tc &expr)
+{
+  if (!is_floatbv_type(expr->type))
+    return expr;
+
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  const type2tc &t = expr->type;
+
+  if (is_add2t(expr))
+    return ieee_add2tc(t, to_add2t(expr).side_1, to_add2t(expr).side_2, rm);
+  if (is_sub2t(expr))
+    return ieee_sub2tc(t, to_sub2t(expr).side_1, to_sub2t(expr).side_2, rm);
+  if (is_mul2t(expr))
+    return ieee_mul2tc(t, to_mul2t(expr).side_1, to_mul2t(expr).side_2, rm);
+  if (is_div2t(expr))
+    return ieee_div2tc(t, to_div2t(expr).side_1, to_div2t(expr).side_2, rm);
+
+  return expr;
+}
 
 void python_adjust::adjust_expr(expr2tc &expr)
 {
@@ -213,6 +292,8 @@ void python_adjust::adjust_expr(expr2tc &expr)
   // mutates each operand in place, so an inner member2t rebuilt below updates
   // the outer member2t's source before we read its type.
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
+
+  expr = promote_to_ieee(expr);
 
   // Resolve a transient symbol_type2t member/index source to its followed
   // aggregate, re-establishing the strong source invariant before symex sees
@@ -318,6 +399,142 @@ void python_adjust::adjust_expr(expr2tc &expr)
       i.true_value,
       i.false_value);
   }
+  else if (is_not2t(expr) && !is_bool_type(to_not2t(expr).value->type))
+  {
+    // clang_c_adjust::adjust_expr_unary_boolean casts `not`'s operand to bool
+    // (clang_c_adjust_expr.cpp:1530-1538). Python's `not x` over a non-boolean
+    // value -- `not (x and True)` where `x` is None, so the short-circuit select
+    // has pointer type -- otherwise reaches the SMT layer as a negation of a
+    // non-boolean sort and trips bitwuzla's mk_not assert. not2t is immutable.
+    expr = not2tc(typecast2tc(get_bool_type(), to_not2t(expr).value));
+  }
+  else if (is_equality2t(expr) || is_notequal2t(expr))
+  {
+    // Python's `x is True` builds `floatbv == bool`, which reaches bitwuzla's
+    // mk_eq with 64- and 1-bit sorts and aborts. Legacy routes == and !=
+    // through adjust_expr_rel, whose gen_typecast_arithmetic promotes the
+    // Boolean;
+    // python_adjust had no equality arm at all, so nothing did. Restricted to a
+    // Boolean paired with a number: the only shape measured to reach here
+    // unreconciled (docs/roadmap/scope-relational-float-reconciliation.md
+    // §15, §17). A wider rule would re-open gap-2.
+    std::vector<expr2tc *> ops;
+    expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
+
+    auto number = [](const type2tc &t) {
+      return is_bv_type(t) || is_floatbv_type(t) || is_fixedbv_type(t);
+    };
+
+    if (
+      ops.size() == 2 &&
+      ((is_bool_type((*ops[0])->type) && number((*ops[1])->type)) ||
+       (number((*ops[0])->type) && is_bool_type((*ops[1])->type))))
+      c_implicit_typecast_arithmetic(*ops[0], *ops[1], ns);
+  }
+  else if (
+    is_lessthan2t(expr) || is_lessthanequal2t(expr) || is_greaterthan2t(expr) ||
+    is_greaterthanequal2t(expr))
+  {
+    // clang_c_adjust::adjust_expr_rel reconciles the two operands with
+    // gen_typecast_arithmetic (the usual arithmetic conversions). Mirrored only
+    // for the shape the SMT layer cannot encode: an ordering relation whose
+    // operands disagree in signedness, which smt_convt::convert_ast_node has no
+    // arm for and aborts on (smt_solver.cpp:1512 -- it dispatches on *both*
+    // sides being unsigned or *both* signed). `while i < len(parts)` is the
+    // canonical source: the loop variable is a Python int (signed long) and the
+    // list model returns unsigned long, so hop-off reaches the solver with
+    // `i < list_size(...)` unreconciled and never produces a verdict.
+    //
+    // Deliberately not the general relational mirror: running
+    // gen_typecast_arithmetic on *every* relational node was tried and rejected
+    // (docs/roadmap/scope-v1k-adjuster.md, "gap-2") because it diverges
+    // corpus-wide from clang's promotions over the OM bodies. The
+    // signedness-mismatch gate excludes that traffic -- a same-signedness
+    // width promotion (char vs int) is encodable and stays untouched -- and
+    // leaves only nodes that are otherwise a hard abort.
+    std::vector<expr2tc *> ops;
+    expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
+
+    // The second admission: one side floating point, the other an integer.
+    // `0 <= x <= 10` with a float `x` trips convert_ast_node's signedbv
+    // assertion. Deliberately NOT a same-kind width promotion (char vs int):
+    // that is the traffic gap-2 showed diverges corpus-wide over the
+    // operational-model bodies. §12's census measured the mixed float/integer
+    // traffic there as empty -- 1296 comparison nodes, zero mixed pairs -- so
+    // this admits exactly what that census covered and nothing more.
+    const bool float_int_mix =
+      ops.size() == 2 &&
+      ((is_floatbv_type((*ops[0])->type) && is_bv_type((*ops[1])->type)) ||
+       (is_bv_type((*ops[0])->type) && is_floatbv_type((*ops[1])->type)));
+
+    if (
+      (ops.size() == 2 && is_bv_type((*ops[0])->type) &&
+       is_bv_type((*ops[1])->type) &&
+       is_signedbv_type((*ops[0])->type) !=
+         is_signedbv_type((*ops[1])->type)) ||
+      float_int_mix)
+    {
+      // The expr2tc overload, not the legacy exprt one clang_c_adjust calls:
+      // same usual-arithmetic-conversion rule with no migrate round-trip, so an
+      // operand cannot pick up a spurious wrap from a type that fails to compare
+      // equal to itself after migration -- the first of the two "gap-2"
+      // negative results. Same helper python_math's floor-div/modulo width
+      // reconciliation uses (#5725).
+      c_implicit_typecast_arithmetic(*ops[0], *ops[1], ns);
+    }
+  }
+  else if (
+    is_add2t(expr) || is_sub2t(expr) || is_mul2t(expr) || is_div2t(expr) ||
+    is_modulus2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr) ||
+    is_bitor2t(expr))
+  {
+    // The scalar half of clang_c_adjust::adjust_expr_binary_arithmetic
+    // (clang_c_adjust_expr.cpp:524-540), over the IREP2 counterparts of the
+    // eight ids legacy routes there (clang_c_adjust_expr.cpp:124-130). Phase 1
+    // of docs/roadmap/scope-coupled-arith-assign-conversion.md, and it must
+    // precede that scope's assignment arm: converting at the assignment seam
+    // over operands this pass never reconciled masks a real bug
+    // (neural-net_fail SUCCESSFUL where legacy correctly reports FAILED).
+    //
+    // Legacy's other two pieces -- the complex branch and the ieee_* retype --
+    // are measured dead on the Python path; §10.1 of that scope records the
+    // evidence and the converter sites responsible.
+    std::vector<expr2tc *> ops;
+    expr->Foreach_operand([&ops](expr2tc &op) { ops.push_back(&op); });
+
+    // Declining pointer reproduces legacy's is_number guard: pointer operands
+    // are ~31 % of the corpus (the C operational-model bodies' pointer
+    // arithmetic) and converting them would corrupt it. `code` operands occur
+    // too -- `cmath.pi / 2.0` builds an IEEE_DIV over a bare code-typed symbol
+    // -- and c_implicit_typecast_arithmetic has no arm for either.
+    auto convertible = [](const expr2tc &e) {
+      return is_bv_type(e->type) || is_floatbv_type(e->type) ||
+             is_fixedbv_type(e->type);
+    };
+
+    if (ops.size() == 2 && convertible(*ops[0]) && convertible(*ops[1]))
+    {
+      expr2tc lhs = *ops[0], rhs = *ops[1];
+      c_implicit_typecast_arithmetic(lhs, rhs, ns);
+
+      // arith_2ops requires the node's own type to agree with *both* operands
+      // in bv-ness and width (assert_arith_2ops_consistency,
+      // irep2_expr.cpp:656 -- compiled out under NDEBUG, so a Release build
+      // will not catch a violation here). Reconcile on copies and commit only
+      // when the promotion lands both operands on one type, which is then
+      // adopted for the node: a half-applied promotion would leave the node
+      // ill-formed. This is legacy's `expr.type() = type0`
+      // (clang_c_adjust_expr.cpp:532-533) with the rebuild IREP2 immutability
+      // forces.
+      if (lhs->type == rhs->type)
+      {
+        *ops[0] = lhs;
+        *ops[1] = rhs;
+        if (lhs->type != expr->type)
+          expr = expr->with_type(lhs->type);
+      }
+    }
+  }
   else if (
     is_typecast2t(expr) && is_pointer_type(expr->type) &&
     is_array_type(to_typecast2t(expr).from->type))
@@ -402,6 +619,93 @@ void python_adjust::adjust_expr(expr2tc &expr)
     const type2tc &pointee = to_pointer_type(a.target->type).subtype;
     expr =
       code_assign2tc(a.target, address_of2tc(pointee, a.source), a.location);
+  }
+  else if (
+    is_code_assign2t(expr) && is_sideeffect2t(to_code_assign2t(expr).source) &&
+    to_sideeffect2t(to_code_assign2t(expr).source).kind ==
+      sideeffect2t::allockind::function_call &&
+    to_code_assign2t(expr).source->type != to_code_assign2t(expr).target->type)
+  {
+    // Convert a call result to the target's type, the one shape of
+    // clang_c_adjust::adjust_assign's gen_typecast that is safe to mirror
+    // alone. `length = len(xs)` binds an `unsigned long` model return to a
+    // `signed long` variable; without the conversion convert_assign's
+    // call-valued-rhs special case (goto_convert.cpp) hands the lhs straight to
+    // do_function_call, so no temporary and no cast is emitted and the signed
+    // variable holds an unsigned value -- a later `i < length` then reaches the
+    // solver as a lessthan2t over mismatched operand kinds.
+    //
+    // Kept ahead of the general arm below because a call source needs the
+    // unconditional cast: convert_assign's call-valued-rhs special case emits
+    // no temporary, so c_implicit_typecast's own no-op cases would leave the
+    // binding unconverted.
+    const code_assign2t &a = to_code_assign2t(expr);
+    expr = code_assign2tc(
+      a.target, typecast2tc(a.target->type, a.source), a.location);
+  }
+  else if (
+    is_code_assign2t(expr) &&
+    to_code_assign2t(expr).source->type != to_code_assign2t(expr).target->type)
+  {
+    // The general assignment conversion -- the second statement of
+    // clang_c_adjust::adjust_assign (clang_c_adjust_code.cpp:175-181). Phase 2
+    // of docs/roadmap/scope-coupled-arith-assign-conversion.md, and sound only
+    // because Phase 1's arithmetic arm above already reconciled the right-hand
+    // side's operands: converting here over operands that were never reconciled
+    // changes the stored value and makes neural-net_fail report SUCCESSFUL
+    // where legacy correctly reports FAILED (§2, measured in §9.3).
+    //
+    // code_assign2t is the only node kind this needs: §11 measured that every
+    // Python-source assignment arrives as one, and that the sideeffect_assign2t
+    // population is invariant under the Python source -- it is OM traffic
+    // clang_c_adjust already reconciled before c2goto froze it.
+    const code_assign2t &a = to_code_assign2t(expr);
+
+    // Numeric both sides, plus the pointer-into-Boolean case: legacy's
+    // gen_typecast turns a pointer source into a null test, and that is the §2
+    // witness -- `all()`'s model reads a list element as `void *` and binds it
+    // to a `_Bool`, giving `ASSIGN element=(_Bool)tmp$5`. A pointer source is
+    // otherwise declined for §9.2's reason (it would corrupt the operational
+    // models' pointer arithmetic); a pointer *target* is already owned by the
+    // decay and address-of arms above.
+    auto numeric = [](const type2tc &t) {
+      return is_bv_type(t) || is_floatbv_type(t) || is_fixedbv_type(t) ||
+             is_bool_type(t);
+    };
+
+    if (
+      (numeric(a.target->type) && numeric(a.source->type)) ||
+      (is_bool_type(a.target->type) && is_pointer_type(a.source->type)))
+    {
+      expr2tc source = a.source;
+      c_implicit_typecast(source, a.target->type, ns);
+      if (source != a.source)
+        expr = code_assign2tc(a.target, source, a.location);
+    }
+    else if (
+      is_array_type(a.target->type) && is_array_type(a.source->type) &&
+      is_constant_array2t(a.source))
+    {
+      // An array-typed source into an array-typed target, which every arm above
+      // declines because they all guard on a pointer target. `s = ""` where `s`
+      // carries the #5571 fixed-width tuple-string representation assigns a
+      // char[1] literal to a char[16]; the hop-off leaves the bare
+      // constant_array, and symex then synthesises the array-to-array typecast
+      // that convert_typecast has no arm for.
+      //
+      // Reproduce legacy's two steps at this seam -- decay the literal to
+      // &lit[0], then cast that pointer to the target array type -- which is
+      // the shape clang_c_adjust emits and the only one the working default
+      // path produces. Phase 1 of
+      // docs/roadmap/scope-array-assignment-conversion.md; its Phase 0
+      // established that the conversion is the defect, not the literal or the
+      // char[0] declaration that every passing variant also carries.
+      const type2tc &elem = to_array_type(a.source->type).subtype;
+      expr2tc decayed =
+        address_of2tc(elem, index2tc(elem, a.source, gen_zero(index_type2())));
+      expr = code_assign2tc(
+        a.target, typecast2tc(a.target->type, decayed), a.location);
+    }
   }
   else if (
     is_code_ifthenelse2t(expr) &&
@@ -518,7 +822,7 @@ void python_adjust::adjust_expr(expr2tc &expr)
   {
     // A literal already retyped to a resolved struct but left with fewer
     // operands than components — the converter built an Optional/union literal
-    // (e.g. `int | None`: `{ is_none, anon_pad$, value }`) without its padding
+    // (e.g. `int | None`: `{ is_none, anon_pad#, value }`) without its padding
     // operand, and no legacy adjust_struct ran to insert it. Pad it the same
     // way as the by-name S2 arm above; the type is already resolved so no
     // follow is needed. A residual mismatch is left for the exit invariant.
@@ -591,7 +895,20 @@ void python_adjust::adjust_expr(expr2tc &expr)
 
     expr2tc fn = s.operand;
     std::vector<expr2tc> args = s.arguments;
-    if (wrap_function_pointer_callee(fn, args))
+    bool changed = wrap_function_pointer_callee(fn, args);
+    changed |= decay_array_arguments(fn, args);
+
+    // Argument conversion belongs to this form only. Legacy reaches
+    // adjust_function_call_arguments exclusively via
+    // adjust_side_effect_function_call; its statement-form arm
+    // (clang_c_adjust_code.cpp, `statement == "function_call"`) adjusts index
+    // expressions and nothing else, so a statement-form call keeps its
+    // arguments verbatim. Converting both forms is a measured parity
+    // regression -- it casts the list-model calls (`list_push(result,
+    // (void *)(&elem), ...)`) legacy leaves alone, trading one closed diff for
+    // roughly ten new ones.
+    changed |= convert_call_arguments(fn->type, args);
+    if (changed)
       expr = sideeffect2tc(s.type, fn, s.size, args, s.alloctype, s.kind);
   }
   else if (is_code_cpp_throw2t(expr))
@@ -627,37 +944,87 @@ bool python_adjust::wrap_function_pointer_callee(
   // adjust_symbol + implicit-deref + adjust_function_call_arguments trio.
   // Inert on the default pipeline (legacy rewrites these calls before
   // migration, so the callee already arrives as a dereference).
-  if (is_nil_expr(fn) || !is_symbol2t(fn))
+  if (is_nil_expr(fn))
     return false;
-  const irep_idt &name = to_symbol2t(fn).thename;
-  const symbolt *fs = context.find_symbol(name);
+
+  const symbolt *fs =
+    is_symbol2t(fn) ? context.find_symbol(to_symbol2t(fn).thename) : nullptr;
+
+  // Any other pointer-to-code callee -- a lambda read back out of a container,
+  // `{'+': lambda: 1.0}[x]()`, whose callee is a typecast of a member read, not
+  // a symbol. clang_c_adjust::adjust_side_effect_function_call dereferences
+  // *any* pointer-typed callee (clang_c_adjust_expr.cpp, the implicit-deref
+  // arm); without it goto-convert calls through the pointer value itself and
+  // the result is read under the wrong signature. This path fixes the callee
+  // only -- argument conversion is the call site's job in adjust_expr.
   if (fs == nullptr || !is_pointer_type(fs->get_type2()))
-    return false;
+  {
+    if (!is_pointer_type(fn->type))
+      return false;
+    const type2tc &pointee = to_pointer_type(fn->type).subtype;
+    if (!is_code_type(pointee))
+      return false;
+    fn = dereference2tc(pointee, fn);
+    return true;
+  }
+
   // Python points directly at the code type (no typedefs to follow).
   const type2tc &pointee = to_pointer_type(fs->get_type2()).subtype;
   if (!is_code_type(pointee))
     return false;
+  const irep_idt &name = to_symbol2t(fn).thename;
 
-  // Cast only scalar/pointer argument kinds; an aggregate arg from an
-  // upstream typing bug keeps symex's own per-argument diagnostic rather
-  // than an unencodable typecast.
-  const auto is_castable_kind = [](const type2tc &t) {
-    return is_bv_type(t) || is_fixedbv_type(t) || is_floatbv_type(t) ||
-           is_bool_type(t) || is_pointer_type(t);
-  };
-  const code_type2t &ct = to_code_type(pointee);
-  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
-  {
-    const type2tc &want = ct.arguments[i];
-    const type2tc &got = args[i]->type;
-    if (is_castable_kind(want) && is_castable_kind(got) && got != want)
-      args[i] = typecast2tc(want, args[i]);
-  }
+  convert_call_arguments(pointee, args);
 
   // Build the dereference over the code type — goto-convert's dispatch
   // wants a code-typed callee.
   fn = dereference2tc(pointee, symbol2tc(fs->get_type2(), name));
   return true;
+}
+
+bool python_adjust::decay_array_arguments(
+  const expr2tc &fn,
+  std::vector<expr2tc> &args)
+{
+  // clang_c_adjust::adjust_function_call_arguments converts each argument to
+  // its declared parameter type, and c_typecastt's array case decays rather
+  // than casts. `is_foo(a="foo")` passes the `char[4]` literal straight into a
+  // `char *` parameter, so without the decay symex aborts on the argument
+  // binding ("type mismatch: got array, expected pointer") and hop-off produces
+  // no verdict at all. The node-level `&array` and assignment-seam decays
+  // (#6395 and the code_assign2t arm above) do not reach this seam: the
+  // argument is neither an address_of nor an assignment source.
+  //
+  // Scoped to the array→pointer shape, which is a *structural* rewrite (the
+  // value is the same object, addressed differently), and — like
+  // convert_call_arguments (#6461) — to expression-form calls only. A
+  // statement-form wiring was tried and removed: 0 firings across 70 tests,
+  // because `e = f(...)` is a code_assign2t over a sideeffect2t at adjust time
+  // and only becomes a statement-form FUNCTION_CALL later in goto-convert.
+  if (is_nil_expr(fn))
+    return false;
+
+  const type2tc callee =
+    is_pointer_type(fn->type) ? to_pointer_type(fn->type).subtype : fn->type;
+  if (!is_code_type(callee))
+    return false;
+
+  const code_type2t &ct = to_code_type(callee);
+  bool changed = false;
+  for (size_t i = 0; i < args.size() && i < ct.arguments.size(); i++)
+  {
+    if (!is_array_type(args[i]->type) || !is_pointer_type(ct.arguments[i]))
+      continue;
+
+    // address_of2t's type is pointer-to-<subtype>, so pass the parameter's
+    // pointee, exactly as the assignment-seam decay does.
+    const type2tc &elem = to_array_type(args[i]->type).subtype;
+    const type2tc &pointee = to_pointer_type(ct.arguments[i]).subtype;
+    args[i] =
+      address_of2tc(pointee, index2tc(elem, args[i], gen_zero(index_type2())));
+    changed = true;
+  }
+  return changed;
 }
 
 std::vector<irep_idt>
@@ -841,10 +1208,11 @@ void python_adjust::adjust_type(type2tc &type)
     // identifier, so only add_padding's own members match. (The #bitfield/
     // #extint type flags are likewise dropped by the round-trip, but the
     // Python frontend never emits either, so only #is_padding needs
-    // restoring.)
-    for (auto &comp : to_struct_union_type(legacy).components())
-      if (is_padding_member_name(comp.get_name().as_string()))
-        comp.set_is_padding(true);
+    // restoring.) The walk must be recursive: add_padding pads component types
+    // before the enclosing one, so an already-padded nested aggregate (an
+    // `int | None` attribute inside its class struct) is re-padded unless its
+    // own pad members are flagged too.
+    restore_padding_flags(legacy);
     add_padding(legacy, ns);
     type2tc padded = migrate_type(legacy);
     if (padded != type)

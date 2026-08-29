@@ -50,6 +50,19 @@ public:
 private:
   friend class function_call_expr_test_access;
 
+  /// Fold a constant integer component of a tuple being sorted at convert
+  /// time; follows symbols, unary minus and widening typecasts.
+  bool eval_const_int(const exprt &e, BigInt &out) const;
+
+  /// Fold a constant str component of such a tuple (#6883).
+  bool eval_const_str(const exprt &e, std::string &out) const;
+
+  /*
+   * Build the receiver for a method called on a constructor temporary
+   * (`A().f()`), running A's __init__ when it has one.
+   */
+  exprt build_temporary_receiver(const nlohmann::json &ctor_call) const;
+
   /*
   * Check if the current function call is to math.comb() function
   * Returns true if this is a call to math.comb
@@ -221,6 +234,16 @@ private:
   exprt handle_isinstance() const;
 
   exprt handle_hasattr() const;
+
+  /*
+   * hasattr()'s first argument when it names an imported module. A module is
+   * not a first-class value here, so it has no symbol of its own; resolve the
+   * attribute against the symbols the module contributed instead. Returns
+   * nullopt when the argument does not name an imported module.
+   */
+  std::optional<exprt> module_hasattr(
+    const nlohmann::json &obj_arg,
+    const std::string &attr_name) const;
 
   /*
    * Handles issubclass(cls, classinfo): resolves the class hierarchy from the
@@ -565,6 +588,11 @@ private:
    * Honours reverse=<constant bool>; returns nullopt for any other shape.
    */
   std::optional<exprt> try_fold_sorted();
+  std::optional<exprt> try_materialize_numpy_tolist();
+  std::optional<exprt> try_reduce_numpy_descriptor_method();
+  /// Internal keys-list symbol id behind a `<name>.keys()` argument.
+  std::string dict_keys_list_id_for_call(const nlohmann::json &arg) const;
+
   std::optional<exprt> fold_sorted_int_list(
     const std::string &list_id,
     size_t map_size,
@@ -609,6 +637,9 @@ private:
    * not resolve to a non-code variable symbol.
    */
   std::optional<exprt> try_indirect_variable_call();
+
+  /// Indirect call through a function pointer held in an instance field.
+  std::optional<exprt> try_indirect_member_call();
 
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass

@@ -1,5 +1,8 @@
 #pragma once
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "utility"
 #include "type_traits"
 
@@ -154,4 +157,170 @@ constexpr bool operator!=(const optional<T> &a, const optional<T> &b)
   return !(a == b);
 }
 
+/* [optional.comp.with.t]: comparison against a value. The overloads have to
+ * exclude optional and nullopt_t themselves, or comparing two optionals -- or
+ * an optional against nullopt -- matches these just as exactly as the
+ * overloads above and is ambiguous. */
+namespace __optional_detail
+{
+template <class U>
+struct is_optional : false_type
+{
+};
+template <class U>
+struct is_optional<optional<U>> : true_type
+{
+};
+
+template <class U>
+struct is_value
+  : integral_constant<
+      bool,
+      !is_optional<typename decay<U>::type>::value &&
+        !is_same<typename decay<U>::type, nullopt_t>::value>
+{
+};
+} // namespace __optional_detail
+
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator==(const optional<T> &o, const U &v)
+{
+  return o.has_value() && *o == v;
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator==(const U &v, const optional<T> &o)
+{
+  return o.has_value() && v == *o;
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator!=(const optional<T> &o, const U &v)
+{
+  return !(o == v);
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator!=(const U &v, const optional<T> &o)
+{
+  return !(v == o);
+}
+
+/* [optional.relops], [optional.nullops] and [optional.comp.with.t]: a
+ * disengaged optional orders below every value and below every engaged
+ * optional. */
+template <class T>
+constexpr bool operator<(const optional<T> &a, const optional<T> &b)
+{
+  return b.has_value() && (!a.has_value() || *a < *b);
+}
+template <class T>
+constexpr bool operator>(const optional<T> &a, const optional<T> &b)
+{
+  return b < a;
+}
+template <class T>
+constexpr bool operator<=(const optional<T> &a, const optional<T> &b)
+{
+  return !(b < a);
+}
+template <class T>
+constexpr bool operator>=(const optional<T> &a, const optional<T> &b)
+{
+  return !(a < b);
+}
+
+template <class T>
+constexpr bool operator<(const optional<T> &, nullopt_t) noexcept
+{
+  return false;
+}
+template <class T>
+constexpr bool operator<(nullopt_t, const optional<T> &o) noexcept
+{
+  return o.has_value();
+}
+template <class T>
+constexpr bool operator>(const optional<T> &o, nullopt_t) noexcept
+{
+  return o.has_value();
+}
+template <class T>
+constexpr bool operator>(nullopt_t, const optional<T> &) noexcept
+{
+  return false;
+}
+template <class T>
+constexpr bool operator<=(const optional<T> &o, nullopt_t) noexcept
+{
+  return !o.has_value();
+}
+template <class T>
+constexpr bool operator<=(nullopt_t, const optional<T> &) noexcept
+{
+  return true;
+}
+template <class T>
+constexpr bool operator>=(const optional<T> &, nullopt_t) noexcept
+{
+  return true;
+}
+template <class T>
+constexpr bool operator>=(nullopt_t, const optional<T> &o) noexcept
+{
+  return !o.has_value();
+}
+
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator<(const optional<T> &o, const U &v)
+{
+  return !o.has_value() || *o < v;
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator<(const U &v, const optional<T> &o)
+{
+  return o.has_value() && v < *o;
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator>(const optional<T> &o, const U &v)
+{
+  return v < o;
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator>(const U &v, const optional<T> &o)
+{
+  return o < v;
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator<=(const optional<T> &o, const U &v)
+{
+  return !(v < o);
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator<=(const U &v, const optional<T> &o)
+{
+  return !(o < v);
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator>=(const optional<T> &o, const U &v)
+{
+  return !(o < v);
+}
+template <class T, class U>
+constexpr typename enable_if<__optional_detail::is_value<U>::value, bool>::type
+operator>=(const U &v, const optional<T> &o)
+{
+  return !(v < o);
+}
+
 } // namespace std
+
+#endif // __cplusplus >= 201103L

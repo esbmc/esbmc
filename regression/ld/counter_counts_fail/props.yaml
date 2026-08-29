@@ -1,0 +1,9 @@
+properties:
+
+  # Companion to counter_saturate_at_max: the saturation bound must not stop the
+  # counter from counting at all. Two rising edges reach PV=2, so this invariant
+  # is genuinely violated — a bound computed as 0 would leave it holding.
+  - id: P1
+    kind: invariant
+    expression: "!CUQ"
+    description: "The counter never reaches its preset"

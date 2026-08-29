@@ -3,6 +3,9 @@
 
 #include "iterator"
 #include "stdexcept"
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 #define DEQUE_CAPACITY 500
 
@@ -46,12 +49,12 @@ public:
       return *this;
     }
 
-    T *operator->()
+    T *operator->() const
     {
       return pointer;
     }
 
-    T &operator*()
+    T &operator*() const
     {
       if (vec_pos != 0)
         return vec_pos[pos];
@@ -155,6 +158,12 @@ public:
       pos = i.pos;
       vec_pos = i.vec_pos;
     }
+    const_iterator(const iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+    }
     const_iterator()
     {
     }
@@ -176,9 +185,15 @@ public:
       return *this;
     }
 
-    const T *operator->();
+    /* Declared and never defined: a declaration-only member converts as a call
+     * returning a nondeterministic value, so `it->m` satisfied neither the
+     * property nor its negation. */
+    const T *operator->() const
+    {
+      return &vec_pos[pos];
+    }
 
-    const T &operator*()
+    const T &operator*() const
     {
       return vec_pos[pos];
     }
@@ -283,12 +298,12 @@ public:
       return *this;
     }
 
-    T *operator->()
+    T *operator->() const
     {
       return pointer;
     }
 
-    T &operator*()
+    T &operator*() const
     {
       return *pointer;
     }
@@ -435,6 +450,14 @@ public:
     _size = 0;
     _capacity = 1;
   }
+
+#if __cplusplus >= 201103L
+  deque(std::initializer_list<T> init) : _size(0), _capacity(1)
+  {
+    for (const T *it = init.begin(); it != init.end(); ++it)
+      this->push_back(*it);
+  }
+#endif
 
   ~deque()
   {
@@ -699,7 +722,7 @@ public:
     return buf[1];
   }
 
-  value_type back()
+  reference back()
   {
     return buf[_size];
   }
@@ -847,33 +870,51 @@ public:
   }
 
   // comparators:
-  bool operator==(const deque<T> &rhv)
+  bool operator==(const deque<T> &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
-    int i = 0;
-    while (i != this->size())
-    {
+    for (size_type i = 0; i < this->size(); i++)
       if (this->at(i) != rhv[i])
         return false;
-      i++;
-    }
     return true;
   }
 
-  bool operator!=(const deque<T> &rhv)
+  bool operator!=(const deque<T> &rhv) const
   {
     return (!(*this == rhv));
   }
 
-  bool operator>=(const deque<T> &rhv)
+  /* [container.requirements]: the ordering is the lexicographical comparison
+   * of the two ranges, so the first differing element decides it and the
+   * lengths matter only when one range is a prefix of the other. Comparing
+   * sizes instead made {2} <= {1, 3}. */
+  bool operator<(const deque<T> &rhv) const
   {
-    return ((*this == rhv) || (this->size() > rhv.size()));
+    size_type n = this->size() < rhv.size() ? this->size() : rhv.size();
+    for (size_type i = 0; i < n; i++)
+    {
+      if ((*this)[i] < rhv[i])
+        return true;
+      if (rhv[i] < (*this)[i])
+        return false;
+    }
+    return this->size() < rhv.size();
   }
 
-  bool operator<=(const deque<T> &rhv)
+  bool operator>(const deque<T> &rhv) const
   {
-    return ((*this == rhv) || (this->size() < rhv.size()));
+    return rhv < *this;
+  }
+
+  bool operator>=(const deque<T> &rhv) const
+  {
+    return !(*this < rhv);
+  }
+
+  bool operator<=(const deque<T> &rhv) const
+  {
+    return !(rhv < *this);
   }
 
 private:

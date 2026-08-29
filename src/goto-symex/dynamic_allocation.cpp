@@ -2,15 +2,12 @@
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/goto_symex.h>
 #include <util/lang/c_types.h>
+#include <util/symtab/base_subobject.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/irep/std_expr.h>
 #include <string>
-
-// Component-name prefix the C++ frontend uses for nested base subobjects; see
-// base_subobject_name() in clang-c-frontend/clang_c_convert.h (#1866, #3894).
-static const std::string base_subobject_prefix = "@base@";
 
 // Build a member access to `member` within `source`, descending through nested
 // "@base@" base subobjects when the member is inherited rather than declared
@@ -41,7 +38,7 @@ static bool build_nested_member_access(
   {
     const std::string name = st.member_names[i].as_string();
     if (
-      name.compare(0, base_subobject_prefix.size(), base_subobject_prefix) != 0)
+      name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) != 0)
       continue;
 
     expr2tc base_access = member2tc(st.members[i], source, st.member_names[i]);
@@ -117,14 +114,16 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc sym_2;
     migrate_expr(symbol_expr(*ns.lookup(dyn_info_arr_name)), sym_2);
 
-    expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr.ptr_obj);
-    expr2tc is_dyn = index2tc(get_bool_type(), sym_2, ptr_obj);
+    expr2tc is_dyn = index2tc(get_bool_type(), sym_2, obj_expr);
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
-    // invalid pointer.
+    // invalid pointer. Compare object ids, not whole pointers: an
+    // integer-derived pointer lands on that object at a non-zero offset
+    // (#6544).
     type2tc ptr_type = pointer_type2tc(get_empty_type());
     expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
-    expr2tc isinvalid = equality2tc(ptr.ptr_obj, invalid_object);
+    expr2tc isinvalid =
+      equality2tc(obj_expr, pointer_object2tc(pointer_type2(), invalid_object));
 
     expr2tc is_not_bad_ptr = and2tc(notindex, is_dyn);
     expr2tc is_valid_ptr = or2tc(is_not_bad_ptr, isinvalid);
@@ -188,6 +187,19 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc member = ptr.member_pointer;
 
     cur_state->rename(member);
+
+    // `&C::m` written inline reaches here as the address of a symbol named
+    // after the member, whereas one that has gone through a pointer-to-member
+    // variable arrives as a member_ref because renaming substitutes the
+    // variable's value. Normalise the first spelling onto the second so both
+    // resolve through the same path (issue #6717).
+    if (is_address_of2t(member))
+    {
+      const expr2tc &inner = to_address_of2t(member).ptr_obj;
+      if (is_symbol2t(inner))
+        member =
+          member_ref2tc(member->type, to_symbol2t(inner).get_symbol_name());
+    }
 
     if (is_member_ref2t(member))
     {

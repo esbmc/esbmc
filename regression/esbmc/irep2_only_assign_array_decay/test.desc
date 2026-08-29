@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto-functions-only --clang-c-irep2-adjust-only
+ASSIGN p=&a\[0\]

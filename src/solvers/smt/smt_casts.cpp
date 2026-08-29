@@ -90,8 +90,10 @@ smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
 
   smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
   smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
-  smt_astt switched = mk_ite(a, zero, one);
-  return mk_concat(switched, zero);
+  smt_astt switched = mk_ite(a, one, zero);
+
+  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), fbvt.width - to_integer_bits);
+  return mk_concat(switched, zero_fracbits);
 }
 
 smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
@@ -289,11 +291,24 @@ smt_solver_baset::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 
   unsigned from_width = cast.from->type->get_width();
 
+  if (is_fixedbv_type(cast.from) && is_bv_type(cast.type))
+  {
+    /* Round in the source width first. A fixedbv's low bits hold its fraction,
+     * so resizing the raw bit pattern would yield the fraction rather than the
+     * integer value (esbmc/esbmc#562). */
+    smt_astt rounded = round_fixedbv_to_int(a, from_width, from_width);
+
+    if (from_width == to_width)
+      return rounded;
+
+    if (from_width < to_width)
+      return mk_sign_ext(rounded, to_width - from_width);
+
+    return mk_extract(rounded, to_width - 1, 0);
+  }
+
   if (from_width == to_width)
   {
-    if (is_fixedbv_type(cast.from) && is_bv_type(cast.type))
-      return round_fixedbv_to_int(a, from_width, to_width);
-
     if (
       (is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from)) ||
       (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from)))
@@ -565,6 +580,18 @@ smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
   expr2tc ptr_offs = pointer_offset2tc(diff_type, cast.from);
   expr2tc address = add2tc(addr_type, from_start, ptr_offs);
   expr2tc pointer = address;
+
+  /* Object 0 is NULL and occupies the single address 0; finalize_pointer_chain
+   * makes every other live object disjoint from it, so only NULL has address
+   * zero. Those constraints exist only for objects symex registered, so a
+   * pointer whose object id is a free variable -- one returned by an
+   * unmodelled function, say -- escaped the invariant and the solver could
+   * place it at address 0. A `p != NULL` assumption was then lost the moment
+   * the pointer went through its numeric address, which is what any store into
+   * an untyped byte object does (#7008). */
+  assert_expr(implies2tc(
+    notequal2tc(obj_num, gen_zero(obj_num->type)),
+    notequal2tc(address, gen_zero(address->type))));
 
   if (config.ansi_c.cheri && can_carry_provenance(cast.type))
   {

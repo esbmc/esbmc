@@ -1,0 +1,4 @@
+CORE
+main.c
+
+^(ERROR: expression nesting is too deep to migrate.*|VERIFICATION SUCCESSFUL)$

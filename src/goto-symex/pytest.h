@@ -19,8 +19,25 @@ private:
   std::string function_name;
   mutable std::mutex data_mutex;
 
+  /// Emit the counterexample as data rather than as a callable test.
+  bool values_only = false;
+
   /// Clean up ESBMC internal variable names
   std::string clean_variable_name(const std::string &name) const;
+
+  /// Write either the witness values or the importing test body.
+  void write_test_body(
+    std::ofstream &file,
+    const std::string &module_name,
+    const std::string &func_name,
+    const std::vector<std::string> &param_names,
+    const std::vector<std::vector<std::string>> &test_data) const;
+
+  /// Write the counterexample values as an importable `witness` list.
+  void write_witness(
+    std::ofstream &file,
+    const std::vector<std::string> &param_names,
+    const std::vector<std::vector<std::string>> &test_data) const;
 
   /// Extract function name from SSA steps
   std::string extract_function_name(
@@ -97,6 +114,12 @@ public:
 
   /// Single-shot generation for non-coverage mode. `file_name` is the bare
   /// filename; the file is written to output_dir/file_name (github #6220).
+  /// Selects the values-only output (see --pytest-values-only).
+  void set_values_only(bool enabled)
+  {
+    values_only = enabled;
+  }
+
   void generate_single(
     const std::string &output_dir,
     const std::string &file_name,

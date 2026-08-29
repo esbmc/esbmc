@@ -5,4 +5,5 @@ main.c
 ^Total Assertion Instances: unknown / non-deterministic
 ^Reached Assertion Instances: 4
 ^Assertion Instances Coverage Unknown
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS INCOMPLETE
+reason: the total number of assertion instances could not be determined

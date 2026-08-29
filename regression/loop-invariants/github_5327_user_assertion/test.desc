@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --unwind 5
+^WARNING: Vacuous discharge: claim 'assertion
+^VERIFICATION UNKNOWN$

@@ -8,6 +8,8 @@
 void swap(int *a, int *b)
 {
   __ESBMC_requires(a != NULL && b != NULL);
+  __ESBMC_requires(__ESBMC_is_fresh(a, sizeof(int)));
+  __ESBMC_requires(__ESBMC_is_fresh(b, sizeof(int)));
   __ESBMC_ensures(*a == __ESBMC_old(*b) && *b == __ESBMC_old(*a));
 
   *a = *b; /* copies b to a, but loses original *a */

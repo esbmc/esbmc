@@ -1,128 +1,14 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-07-25.
+**Updated:** 2026-08-25.
 
-This file tracks what is **not yet implemented or broken** in the NumPy
-module. Completed items are in the git history and `regression/numpy/`.
+This file tracks only what is **not yet implemented, broken, risky, or queued
+as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
+or backlog entry, treat it as already implemented and covered by git history
+and `regression/numpy/`.
+
 Architectural decisions that gate specific pendencies here (referenced as
 `ADR-NP-XXX`) are the normative source in `numpy-architecture-decisions.md`.
-
----
-
-## Recently completed
-
-- **Canonical bounded ndarray descriptor (initial slice)** — new
-  `ndarray_descriptor` class (shape/strides/capacity/offset/dtype/buffer_id
-  + invariant validation), the frontend-side scaffolding ADR-NP-001 and
-  ADR-NP-003 are gated on. Wired to two consumers so far: a new `.ndim`
-  attribute (previously entirely unsupported), and rejection of a negative
-  array shape at creation (`np.zeros(-2)` now raises NumPy's actual
-  `ValueError: negative dimensions are not allowed` instead of silently
-  building an empty array or raising a misleading `TypeError`). The legacy
-  nested-`array_typet` layout is still the sole runtime representation for
-  everything else — this commit does not migrate consumers wholesale. See
-  `regression/numpy/ndarray_descriptor_*`.
-- **Symbolic (non-literal) boolean-mask *row* selection on 2-D arrays**
-  (`a[mask]`, ADR-NP-001) — implemented via the canonical descriptor
-  pattern: the result is a `{ rows: row_type[num_rows]; count: size_t }`
-  struct built by a single runtime while-loop that scans the mask once,
-  copies each selected row in order, and tracks a symbolic logical count
-  (not the physical worst-case capacity). Indexing (`b[i]`, negative
-  indices) is bounds-checked against the logical `count`, not the buffer's
-  capacity. `.shape`/`.ndim` on the result read `(count, cols)` /
-  `2`. Reassigned masks and masks with no local declaration (e.g. received
-  as a parameter — see below) are also supported, since the symbolic path
-  reads the mask's live runtime value rather than resolving it from its
-  AST declaration. Six pre-existing regression tests that pinned the old
-  "symbolic mask rejected" behaviour were updated from `_fail` to
-  `_success`. See `regression/numpy/bool_mask_rows_*` and
-  `regression/numpy/numpy_bool_mask_rows_*`.
-- **Boolean-mask indexing through a function parameter**
-  (`def f(a, mask): return a[mask]`) — a parameter playing either role in
-  an `a[mask]` pattern (the array or the mask) now decays to
-  pointer-to-*whole-array* instead of C's usual pointer-to-element/row, so
-  the SUBSCRIPT converter can recognize it as a mask array at the call
-  site (ordinary decay otherwise erases enough shape information that a
-  1-D mask array is indistinguishable from a pointer to one bool). Also
-  fixed a related soundness gap found while validating this: conflicting
-  array shapes passed to the same parameter across different call sites
-  used to be silently accepted (only the first-seen shape was checked);
-  they are now rejected with `TypeError: conflicting array shapes...`.
-  Forwarding through one intermediate function's own array/mask parameters
-  is supported. See `regression/numpy/bool_mask_param_*` and
-  `regression/numpy/array_param_mask_success`.
-- **Identity array return from a function** (`def f(a): return a`) — a
-  user function with exactly one parameter whose entire body is
-  `return <that param>` is inlined at the call site to the caller's own
-  argument expression (restricted to a single positional argument, no
-  keywords, so no other argument's evaluation or type-checking is skipped),
-  since arrays still aren't a valid by-value return type in the current GOTO
-  model (see "Missing indexing/slicing" below). This is a narrow,
-  call-site-local fix, not a general return mechanism — it does not cover
-  `return <param>[index]` or functions with more than one parameter — see
-  the note on the general case below. See
-  `regression/numpy/array_return_identity_success` and
-  `array_return_empty_edge`.
-- **`np.std` and `np.var`** — 1-D and 2-D (flattened) concrete numeric
-  inputs; rejects empty/non-numeric input and `axis`/`ddof`/`keepdims`/
-  `where`/`out`/`dtype` kwargs explicitly. `std` is `sqrt(var)` on the same
-  code path. See `regression/numpy/numpy_std_*` and `numpy_var_*`.
-- **Symbolic (non-literal) boolean-mask selection on 1-D arrays** —
-  confirmed already sound and now covered by regression tests: a mask built
-  from nondet/computed values works via the existing runtime while-loop
-  path (`build_bool_mask_index`), including through reassignment, since it
-  reads the mask's current value at the point of use rather than folding it
-  statically. This also covers `a[i][mask]` (a row sliced off a 2-D array,
-  then filtered). See `regression/numpy/bool_mask_symbolic_*`. The 2-D
-  *row-select* path (`a[mask]` selecting whole rows) is now also supported
-  symbolically — see above.
-- **`a[i, j, k]` and n-D tuple indexing** — confirmed already implemented
-  for literal/negative/symbolic integer indices on 3-D+ arrays, including
-  out-of-bounds bounds-checking; the assessment above was stale. Mixing a
-  slice with integer indices in the same tuple (`a[:, 0, 0]`) is now also
-  supported — see the dedicated entry below. See
-  `regression/numpy/tuple_index_3d_*`.
-- **NumPy arrays as genuine function parameters** — a numpy array passed
-  into a user-defined function now keeps a concrete array type (inferred
-  from the shapes its callers actually pass, including through one level of
-  forwarding via another function's own array parameter) instead of
-  decaying to `PyListObject*`/`Any`, so it stays indexable inside the
-  callee. Parameters whose call sites can't be resolved this way keep the
-  old default and the existing explicit-rejection/boundary diagnostics
-  still fire for genuine mismatches (e.g. a scalar argument against a
-  parameter otherwise inferred as array-shaped). Boolean-mask indexing
-  through a parameter is now also supported — see above. Returning a numpy
-  array *out* of a function by value (beyond the narrow identity case — see
-  above) is a separate, still-unsupported case — see "Missing indexing /
-  slicing" below. See `regression/numpy/numpy_param_array_*` and
-  `array_param_*`.
-- **Mixing one literal slice with integer indices in one tuple index**
-  (`a[:, 0, 0]`, `a[0, :, 0]`, `a[0:2, 0, 0]`) — an N-D tuple subscript
-  with exactly one literal slice axis and every other axis a
-  literal/resolvable integer now lowers to a bounded copy along the slice
-  axis, generalizing the existing 2-D column-select path. More than one
-  slice axis (`a[:, :, 0]`) or symbolic slice bounds stay rejected
-  explicitly. See `regression/numpy/numpy_tuple_mixed_slice_*`.
-- **Strided slicing (`a[::2]`, `a[1::2]`, `a[::-1]`)** — confirmed already
-  supported and now covered by regression tests for 1-D arrays (the
-  existing slice model already implemented `step`). Extended to 2-D:
-  `a[::2, :]` (strided row selection) and `a[:, ::2]` (strided column
-  selection, bare step only — see "Missing indexing / slicing"). `step=0`
-  continues to raise `ValueError` at runtime. See
-  `regression/numpy/numpy_strided_slice_*`.
-- **NumPy API expansion PR** — added or promoted focused support for:
-  `np.empty`; `empty_like`/`zeros_like`/`ones_like`/`full_like`;
-  concrete `sort`, `argsort`, `searchsorted`, `unique`, `median` and
-  `percentile`; scalar and bounded-array `np.random.random`, `rand`,
-  `randint`, `uniform`, `choice`, plus explicit `seed` handling; `.flat`
-  and readonly `np.nditer`; vector `np.linalg.norm` (`ord` default/2, 1,
-  `np.inf`, `-np.inf`) and explicit `solve` size limits; boolean and
-  chained `np.dot`; and integer literal `np.transpose` cases that used to
-  fall through to an unsafe runtime shape. See the corresponding
-  regressions under `regression/numpy/` with prefixes such as `empty_`,
-  `like_creation_`, `sort_`, `argsort_`, `searchsorted_`, `unique_`,
-  `median_`, `percentile_`, `random_`, `flat`, `nditer`, `norm_`,
-  `np_linalg_boundary_`, `dot`, and `transpose`.
 
 ---
 
@@ -130,9 +16,10 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Feature | Status | Notes |
 |---|---|---|
-| Returning a numpy array *out* of a function by value (general case: a sub-array, e.g. `def f(a): return a[0]`, or any non-trivial body) | Missing | Arrays aren't valid by-value return types in the current GOTO model. Only the narrow *identity*-return case is fixed (see "Recently completed") — the general case was attempted twice this round and reverted both times after hitting the same structural wall: **(1)** inlining the substituted return expression at every call site works for the eligibility check but the two-pass assignment machinery (`create_symbol_for_unannotated_assign` type-probes the RHS once, then `get_var_assign` converts it again "for real") evaluates a `Subscript` return expression twice, duplicating the bounds-check GOTO code it emits and corrupting the result (confirmed via `--goto-functions-only`: the second, discarded evaluation's DECLs still land in the block); a cross-call-node cache (keyed by the AST node's address, confirmed to see the same `current_block` on both hits) prevented the double-conversion but did *not* fix the wrong result, meaning the bug is elsewhere in that pipeline. **(2)** A single-member wrapper-struct return type (`struct { value: array_type }`, unwrapped right after a real, once-only function call via the existing `store_call_result` helper — mirroring how a returned tuple already works today) also hit a variant of the same issue: while building it, a separate pre-existing bug was found and fixed (a static Python-level pre-pass injects a wrong `-> Any` return annotation for `return a[0]`, decided *before* parameters are processed, which pre-empted the array-shape detection with a `double` default — now deferred to the post-body GOTO scan, which sees real converted types), but the wrapped struct still isn't reliably unwrapped before a variable's type is decided elsewhere in the same assignment pipeline, causing a segfault (`build_index` dereferencing a struct's `.subtype()`). Both attempts point at the same root cause: `y = f(...)`'s type is decided by more than one code path in `get_var_assign`/`create_symbol_for_unannotated_assign`, not uniformly from what `get_expr` returns. A real fix needs to understand and consolidate that pipeline first, not just work around it at the call site. |
-| View aliasing for basic indexing and transpose-like views | Missing | The frontend still uses conservative copies for many basic-indexing/view-like operations. Some unsafe view-copy/source-write cases are now guarded, but a general shared-buffer descriptor model is not wired into indexing and assignment yet. |
-| Higher-dimensional or symbolic slice bounds beyond the supported literal-copy cases | Missing | Bounded 2-D column slices and one-slice-axis mixed tuple indexing are supported for literal/fixed-shape cases. Multiple slice axes, symbolic slice bounds, and broader stride combinations remain rejected explicitly rather than silently approximated. |
+| General NumPy array returns from user functions | Missing | Only the narrow identity-return pattern is supported. Non-trivial returns such as `def f(a): return a[0]`, functions with multiple parameters, and functions with more than one statement still need a real fix in the assignment/type-inference pipeline. Previous attempts hit double conversion in `create_symbol_for_unannotated_assign` / `get_var_assign` and wrapper-type confusion before variable type selection. |
+| Final shared-buffer view model | Partial | ADR-NP-003 etapa 2 now aliases fixed-shape 1-D/2-D views through frontend view metadata. Implemented consumers include literal 1-D slices (unit stride, step != 1, and reversed), 2-D row/column views, `diagonal`, `trace`, `fill_diagonal`, `ravel`/`.flat`, 2-D transpose (`np.transpose`, `.T`, `.transpose()`, `swapaxes`, `moveaxis`), contiguous `reshape` rank 1/2, `squeeze`, `expand_dims`, read-only `broadcast_to`, basic single-operand `nditer`, explicit descriptor materialization (`np.copy`, `view.copy`, `np.array(view)`, including empty descriptors), descriptor `tolist()` rank 1/2, and flattened descriptor reducers (`sum`, `mean`, `min`, `max`, `view.any()`, `view.all()`). Literal-index writes are mirrored across sibling 1-D/2-D descriptor views; non-constant view writes are rejected explicitly. Remaining gaps are 3-D+ view aliasing, symbolic shapes/axes/bounds, non-literal descriptor mutation, non-contiguous reshape beyond the explicit recut, advanced `nditer`, descriptor escape through unknown calls/containers/returns, and making `ndarray_descriptor` itself the consulted runtime structure rather than auxiliary frontend maps. |
+| Higher-dimensional or symbolic slice bounds beyond literal-copy cases | Missing | Literal/fixed-shape cases such as bounded 2-D column slices and one-/two-slice-axis mixed tuple indexing are supported. Three or more slice axes, symbolic slice bounds, non-literal strides, and broader stride combinations remain explicitly rejected. |
+| Remaining array method forms | Partial | `view.tolist()` is supported for descriptor views rank 1/2, and `view.any()`/`view.all()` are supported for descriptor views rank 1/2. Plain ndarray `a.tolist()`, plain ndarray `a.any()`/`a.all()`, `a.sort()`, and `a.argsort()` remain separate method-form gaps. `a.sort()` is in-place while `np.sort(a)` returns a copy; `a.argsort()` needs `np.argsort()` to support variables first. |
 
 ---
 
@@ -140,126 +27,118 @@ Architectural decisions that gate specific pendencies here (referenced as
 
 | Category | Missing items |
 |---|---|
-| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) and broad NumPy constructor parity |
-| Sorting / searching | Axis-aware and stable-kind variants, `sort`/`argsort` kwargs beyond the supported concrete 1-D recut, and symbolic arrays |
-| Statistics | Axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile` |
-| Linear algebra | `inv`/`solve` limited to 2×2/3×3; `norm` limited to vectors and Frobenius matrices; `eig`/`svd` limited to small concrete matrices |
-| Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes |
-| Structured arrays | Record dtypes |
-| Views / strides | No aliasing model — all ops copy; see "Soundness concerns" #4, this is a confirmed unsound gap, not just a missing feature |
-| Iteration | Writable `nditer`, advanced `op_flags`, multi-operand iteration, and mutation through `flat` |
+| Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) and broad constructor parity. |
+| Sorting / searching | Axis-aware and stable-kind variants, `sort`/`argsort` kwargs beyond the supported concrete 1-D recut, and symbolic arrays. |
+| Statistics | Axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`. |
+| Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
+| Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
+| Structured arrays | Record dtypes. |
+| Views / strides | Higher-rank (3-D+) view aliasing, symbolic/non-literal-stride slices, symbolic shape/axis handling, non-literal descriptor mutation, advanced descriptor escape handling, and replacing frontend-only maps with a fully consulted `ndarray_descriptor` runtime model. |
+| Iteration | Advanced `nditer` flags/options, multi-operand iteration, `external_loop`, `multi_index`, buffering, non-C order, casting/op_dtypes/op_axes, and broader mutable item forms. |
 
 ---
 
-## Soundness concerns
+## Soundness / performance concerns
 
-1. **Constant-folding bypasses ESBMC's overflow/rounding checks** for the
-   folded path. Use `--python-no-fold` to force SMT encoding and compare
-   verdicts.
-2. **Element-wise broadcasting** (e.g. `np.add(a, b)`) still requires
-   concrete shapes at conversion time; symbolic shapes work only for array
-   creation (`zeros`, `ones`, `full`).
-3. **Scalability wall** (#5121): every array is a fully-unrolled value list.
-   Large arrays explode. Symbolic shapes mitigate this via `--unwind` but do
-   not eliminate the underlying state-explosion for large bounds.
-4. **Basic-indexing views are silently copied, not aliased — confirmed with
-   a concrete false-positive counterexample** (ADR-NP-003). NumPy's basic
-   indexing (`a[0]`) returns a *view* sharing the source's buffer; this
-   frontend always copies. Reproduced with no function call involved at
-   all:
-   ```python
-   import numpy as np
-   x = np.array([[1, 2], [3, 4]])
-   row = x[0]
-   row[0] = 999
-   assert x[0][0] == 1  # numpy: fails (row aliases x). ESBMC today: VERIFICATION SUCCESSFUL.
-   ```
-   ESBMC reports `VERIFICATION SUCCESSFUL` — a silently wrong verdict per
-   the ADR's own principle ("a subapproximation that could hide a bug is
-   not acceptable"). This is not a missing-feature gap, it's an existing,
-   reproducible unsoundness, and it predates and is independent of this
-   round's work (found while investigating whether a returned view needed
-   its own rejection — it turns out the *non-returned* case is equally
-   unsound today). See ADR-NP-003 "Etapa 1: protecao de solidez" for the
-   intended fix shape (reject conservatively on write-to-view,
-   write-to-source-with-live-view, or escape, until the definitive
-   descriptor-based model lands).
+1. **Constant-folding bypasses ESBMC's overflow/rounding checks** for folded
+   paths. Use `--python-no-fold` to force SMT encoding and compare verdicts.
+2. **Element-wise broadcasting** still requires concrete shapes at conversion
+   time; symbolic shapes work only for selected array creation paths.
+3. **Scalability wall** (#5121): arrays are still represented as fully
+   unrolled value lists. Large arrays can explode even when the operation is
+   conceptually simple.
+4. **Descriptor views still rely on frontend maps instead of one runtime
+   descriptor abstraction.** The implemented 1-D/2-D literal-index paths
+   propagate writes across tracked sibling views, and unsupported non-literal
+   writes reject explicitly; 3-D+, symbolic shape/axis/bound cases, broad
+   escape handling, and advanced iterator/method semantics remain
+   intentionally incomplete.
+
+No known soundness bugs remain open (the numpy call-result chaining gap that
+used to be listed here — a `Name` argument whose declaration was itself a
+non-constructor numpy call resolving to the wrong operand instead of its
+evaluated result — was fixed: `evaluate_numpy_logical_call()` now evaluates
+`greater`/`less`/`greater_equal`/`less_equal`/`equal`/`not_equal`/
+`logical_and`/`logical_or`/`logical_not`/`where` chained as another numpy
+call's argument, nested directly or via an intermediate variable, including
+more than one level of chaining; a chain past the supported depth declines
+explicitly instead of misreading. See `regression/numpy/chaining_*`).
 
 ---
 
-## KNOWNBUG tests
+## Community testing readiness
 
-No remaining KNOWNBUG in the targeted `dot6`/`dot7`/`transpose2`/
-`transpose7` set. `dot6`/`dot7` and `transpose7` are now CORE regressions;
-`transpose2` was already CORE and remains covered.
+ESBMC's standard across every frontend (C, C++, Solidity, Java/Kotlin) is
+sound-but-incomplete, not full language/library coverage: whatever falls
+outside the currently supported subset must reject with an explicit
+diagnostic (ADR-NP principle 3) rather than silently return a wrong
+verdict. By that bar, every gap in "Missing indexing / slicing" and
+"Missing API surface" above is **not** a blocker for community testing —
+each one already rejects explicitly instead of misbehaving.
+
+With the call-result chaining fix above, there are no known soundness bugs
+left in this file. **A build can be cut for community testing at any point
+from here** — everything remaining is documented backlog that surfaces as
+an explicit "not supported yet" diagnostic, not a wrong answer.
 
 ---
 
 ## Prioritised next steps
 
-1. **View/aliasing soundness protection** (ADR-NP-003 "Etapa 1") — the
-   highest-priority item: "Soundness concerns" #4 above is a confirmed,
-   reproducible false-`VERIFICATION SUCCESSFUL` with no function call or
-   other feature involved (`row = x[0]; row[0] = 999; assert x[0][0] == 1`
-   should fail and doesn't). Needs conservative rejection of write-to-view,
-   write-to-source-with-a-live-view, and view escape, until the definitive
-   descriptor-based model (buffer_id/offset/strides shared between a view
-   and its source) lands. The canonical descriptor scaffolding from
-   "Recently completed" is a starting point but isn't wired into the
-   general indexing/assignment path yet.
-2. **NumPy arrays as function return values, general case** — only the
-   narrow identity-return pattern (a single-parameter function whose entire
-   body is `return <that param>`) is fixed; a sub-array return
-   (`def f(a): return a[0]`), a function with more than one parameter, or
-   any function with more than the one return statement is still
-   unsupported. Two implementation strategies were
-   tried and reverted this round — see the "Missing indexing / slicing"
-   table entry above for the detailed failure analysis. Both hit the same
-   root cause: `y = f(...)`'s type is decided by more than one code path
-   in the unannotated-assignment machinery
-   (`get_var_assign`/`create_symbol_for_unannotated_assign`), not
-   uniformly from what `get_expr` returns for the call. A real fix likely
-   needs to understand and consolidate that pipeline first, rather than
-   work around it purely at the call site or the callee's return
-   statement.
-3. **Strided column slice combined with explicit bounds** (`a[:, 1:3:2]`) —
-   currently rejected explicitly; the bare-step form (`a[:, ::step]`) is
-   supported. Would need the result width resolved from runtime bounds
-   instead of the array's static shape.
-4. **Multiple slice axes or symbolic bounds mixed with integer indices in
-   one tuple** (`a[:, :, 0]`, `a[i:j, 0, 0]`) — literal bounded one-axis
-   mixed tuple slices are supported; broader symbolic/multi-axis forms stay
-   rejected explicitly.
-5. **Advanced dtype and constructor parity** — object/structured/custom
-   dtype support remains intentionally rejected in the new creation helpers.
-6. **Random and iterator follow-up** — extend beyond the initial nondet
-   random/choice recut to probability vectors, replacement semantics,
-   additional distributions, writable `nditer`, and mutation through `flat`.
-7. **Linear algebra breadth** — larger matrices, symbolic matrix entries,
-   additional `norm` axes/orders, and more faithful `eig`/`svd` semantics.
+Nothing below blocks community testing (see above); this is post-release
+backlog, in priority order:
+
+1. **3-D+ and symbolic view descriptors (ADR-NP-003 etapa 3)** — extend the
+   fixed-shape rank 1/2 descriptor model to higher ranks, symbolic
+   shapes/axes/bounds, and broader stride combinations.
+2. **General array returns** — consolidate assignment/type inference so user
+   functions can return non-trivial NumPy arrays and sub-arrays safely.
+3. **Remaining array method forms** — design plain ndarray `tolist`/`any`/`all`
+   plus `a.sort()` and `a.argsort()` individually.
+4. **Symbolic and broader multi-axis slicing** — support cases beyond the
+   literal/fixed-shape recuts.
+5. **Advanced dtype and constructor parity** — structured/object/custom dtype
+   policy, diagnostics, and propagation.
+6. **Random and iteration depth** — probability/replacement `choice`, extra
+   distributions, and advanced `nditer`.
+7. **Linear algebra breadth** — larger matrices, symbolic entries, and more
+   faithful `norm`/`eig`/`svd`.
+
+---
 
 ## Suggested next PRs
 
-1. **View aliasing and descriptor wiring** — connect `ndarray_descriptor`
-   buffer/offset/stride metadata to basic indexing, transpose, assignment,
-   and escape checks so supported views alias correctly and unsupported view
-   mutation is rejected consistently.
-2. **General array returns** — consolidate the assignment/type inference
-   pipeline so user functions can return non-trivial NumPy arrays and
-   sub-arrays without double conversion or wrapper-type confusion.
-3. **Advanced dtype and constructors** — structured/object dtype policy,
-   constructor diagnostics, and dtype propagation for creation/sort/stat
-   helpers.
-4. **Random and iteration depth** — PRNG-state decisions, remaining
-   distributions, probability/replacement `choice`, writable `nditer`, and
-   `flat` assignment semantics.
-5. **Linear algebra expansion** — matrix-size strategy, symbolic-entry
-   policy, and additional `norm`/`eig`/`svd` coverage.
+Each roadmap item above groups several sub-efforts; sizing them 1 PR per
+item undercounts the real work. The two most recent NumPy PRs (arange
+small-range performance, and this call-chaining fix) each took a small,
+isolated gap through several commits of core fix plus a matching review
+round; items below with multiple named consumers or distinct designs are
+sized accordingly instead of assumed to be one PR each.
 
-### Out of scope
-- True SMT-array scalability — `array_typet` already lowers to SMT
-  select/store; see ADR-NP-004. Any further change is benchmark-gated.
-- Extending the runtime-list model to hold array-typed elements — rejected
-  as an approach for symbolic 2-D boolean-mask row selection (see
-  ADR-NP-001's "Alternativas rejeitadas"); still considered
-  disproportionately risky for any other use case.
+1. **3-D+ / symbolic view descriptors** (~2 PRs) — extend the rank 1/2
+   fixed-shape descriptor model to higher ranks, symbolic axes/bounds/shapes,
+   and broader non-literal stride combinations.
+2. **General array returns** (~2 PRs) — root-cause the shared
+   assignment/type-selection issue (two prior attempts already hit it)
+   before extending to broader return support.
+3. **Remaining array method forms** (~2 PRs) — plain ndarray
+   `tolist`/`any`/`all` separately from `sort`/`argsort` (in-place vs copy
+   semantics).
+4. **Advanced dtype and constructors** (~2 PRs) — dtype policy
+   (object/structured/custom) separate from constructor
+   diagnostics/propagation.
+5. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
+   separate from advanced `nditer`.
+6. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
+   separate from fuller `eig`/`svd`/`norm`.
+
+**Total to close every item in this file: ~12 PRs.**
+
+---
+
+## Out of scope
+
+- True SMT-array scalability beyond the current `array_typet` lowering; see
+  ADR-NP-004.
+- Extending the runtime-list model to hold array-typed elements; this remains
+  disproportionately risky for current NumPy goals.

@@ -1,5 +1,8 @@
 #include "goto-programs/goto_binary_reader.h"
+#include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_code.h>
 #include <util/config/config.h>
@@ -590,11 +593,49 @@ static void splice_expr(const exprt &expr, expr2tc &new_expr_ref)
   migrate_expr(newexpr, new_expr_ref);
 }
 
+/// Clang does not cast a binary operator's real operand to complex -- it hands
+/// over `double + _Complex double` and leaves the promotion to the consumer, so
+/// clang_c_adjust's complex lowering pairs the real with a zero imaginary part
+/// before anything migrates. Under --clang-c-irep2-adjust-only that pass does
+/// not run and the mixed node reaches the arith constructors, whose width
+/// assertion fires before clang_c_adjust_irep2 can lower it. The promotion is a
+/// pure function of the node's type and the operand, so migration may do it
+/// (§80).
+static void promote_complex_operand(const type2tc &t, expr2tc &op)
+{
+  if (is_complex_type(op->type))
+    return;
+
+  const type2tc &et = to_complex_type(t).subtype;
+  op = constant_struct2tc(t, std::vector<expr2tc>{op, gen_zero(et)});
+}
+
+/// C11 6.3.2.1p3. clang_c_convert drops CK_ArrayToPointerDecay and leaves
+/// clang_c_adjust to insert the `&a[0]`, so an expression migrated before that
+/// pass -- which --clang-c-irep2-adjust-only does -- still carries the array,
+/// and add2t/sub2t assert on it (esbmc/esbmc#4715).
+static void decay_array_operand(expr2tc &op)
+{
+  if (is_nil_expr(op) || !is_array_type(op->type))
+    return;
+
+  const type2tc &elem = to_array_type(op->type).subtype;
+  op = address_of2tc(
+    elem, index2tc(elem, op, gen_zero(migrate_type(index_type()))));
+}
+
 static void
 convert_operand_pair(const exprt &expr, expr2tc &arg1, expr2tc &arg2)
 {
   migrate_expr(expr.op0(), arg1);
   migrate_expr(expr.op1(), arg2);
+
+  if (expr.type().id() == "complex")
+  {
+    const type2tc t = migrate_type(expr.type());
+    promote_complex_operand(t, arg1);
+    promote_complex_operand(t, arg2);
+  }
 }
 
 static bool handle_introspection_expr(const exprt &expr, expr2tc &new_expr_ref)
@@ -687,9 +728,16 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     // Check that at_pos and exm_pos are valid before using them
     if (at_pos == std::string::npos || exm_pos == std::string::npos)
     {
-      log_warning(
-        "migrate_expr: symbol '{}' missing renaming delimiters, "
-        "treating as level0 with base name '{}'",
+      /* A level0 symbol carries no renaming delimiters by definition, so their
+       * absence is not an anomaly: all this has established is that the symbol
+       * was not in the namespace, which is ordinary while a context is still
+       * being built -- an implicitly-declared callee, or a local reached before
+       * it is added. There is nothing for a reader to act on, and it fired once
+       * per occurrence. */
+      log_debug(
+        "migrate",
+        "migrate_expr: symbol '{}' is not in the namespace; treating as "
+        "level0 with base name '{}'",
         init,
         thename);
       return symbol2tc(
@@ -722,8 +770,190 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
     type, thename, target_level, level1_num, level2_num, thread_num, node_num);
 }
 
+namespace
+{
+/* migrate_expr recurses once per level of expression nesting, and its frame is
+ * large: ~150 branches whose locals clang does not coalesce, measured at ~16KB
+ * a level. A deeply nested expression therefore exhausts even the 512MB stack
+ * main() hands us and dies with SIGSEGV instead of a diagnostic (#5048). */
+using migrate_stack_guardt = stack_budget_guardt<struct migrate_tagt>;
+
+/* Called rather than inlined into migrate_expr: that function is already far
+ * past the complexity gate, so a bare `if` there fails the build. */
+void enforce_migrate_stack_budget(const migrate_stack_guardt &stack_guard)
+{
+  if (stack_guard.exceeded(default_stack_budget))
+  {
+    log_error(
+      "expression nesting is too deep to migrate: {} MiB of stack used. "
+      "Simplify or split the input expression.",
+      stack_guard.bytes_used() / (1024 * 1024));
+    abort();
+  }
+}
+} // namespace
+
+/// sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
+/// eagerly-computed byte-size value. Both become reflected sizeof2t fields,
+/// replacing the legacy sizeof-type side channel (esbmc/esbmc#5337).
+static expr2tc migrate_sizeof(const exprt &expr)
+{
+  // The frontends always produce the type operand; fail closed rather than
+  // over-read it in a release build.
+  if (expr.operands().empty())
+  {
+    log_error("sizeof node must carry a type operand and a value operand");
+    abort();
+  }
+
+  const type2tc type = migrate_type(expr.type());
+  const type2tc measured = migrate_type(expr.op0().type());
+  expr2tc value;
+
+  if (expr.operands().size() >= 2)
+    migrate_expr(expr.op1(), value);
+  else
+  {
+    // A VLA's size is not constant, so the frontend leaves the value operand
+    // off and clang_c_adjust::adjust_sizeof fills it in. Under
+    // --clang-c-irep2-adjust-only that pass does not run, and the node would
+    // be unrepresentable before anything could fix it. Computing the size here
+    // is safe where deciding a shift kind was not (§72, §80): c_sizeof is a
+    // pure function of the measured type, not a result of adjustment. The
+    // normal pipeline adjusts first and never reaches this branch.
+    const exprt sz = migrate_namespace_lookup
+                       ? c_sizeof(expr.op0().type(), *migrate_namespace_lookup)
+                       : nil_exprt();
+    if (sz.is_nil())
+    {
+      log_error("sizeof node must carry a type operand and a value operand");
+      abort();
+    }
+    migrate_expr(sz, value);
+  }
+
+  return sizeof2tc(type, value, measured);
+}
+
+/// clang_c_adjust::adjust_builtin_va_arg lowers this to a __ESBMC_va_arg call,
+/// and IREP2 has no builtin_va_arg kind -- so under --clang-c-irep2-adjust-only
+/// the node would die before anything could rewrite it. The lowering is a pure
+/// function of the node's type and operand, which migration may compute (§72,
+/// §80). The callee symbol is declared by
+/// clang_c_adjust_irep2::declare_implicit_callee, and goto_convert's
+/// __ESBMC_va_arg arm (builtin_functions.cpp) enforces the one-argument
+/// contract and settles the operand's final shape. The normal pipeline adjusts
+/// first and never reaches this function.
+static expr2tc migrate_builtin_va_arg(const exprt &expr)
+{
+  if (expr.operands().size() != 1 || migrate_namespace_lookup == nullptr)
+  {
+    log_error("builtin_va_arg needs one operand and a namespace to migrate");
+    abort();
+  }
+
+  const pointer_typet va_list_arg{empty_typet()};
+
+  code_typet call_type;
+  call_type.return_type() = expr.type();
+  call_type.arguments().resize(1);
+  call_type.arguments()[0].type() = va_list_arg;
+
+  exprt arg = expr.op0();
+  c_typecastt(*migrate_namespace_lookup).implicit_typecast(arg, va_list_arg);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_exprt("__ESBMC_va_arg");
+  call.function().type() = call_type;
+  call.arguments().push_back(arg);
+  call.type() = expr.type();
+
+  expr2tc lowered;
+  migrate_expr(call, lowered);
+  return lowered;
+}
+
+/// The rounding mode a legacy `ieee_*` node carries. The frontends leave it
+/// implicit on most of them, in which case it is the global symbol.
+static expr2tc migrate_rounding_mode(const exprt &expr)
+{
+  expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+  exprt old_rm = expr.find_expr("rounding_mode");
+  if (old_rm.is_not_nil())
+    migrate_expr(old_rm, rm);
+
+  return rm;
+}
+
+/// The two-operand IEEE nodes migrate identically: an n-ary irep splices into
+/// nested binaries, and the rounding mode comes from the irep's attribute when
+/// it carries one. False when `expr` is not one of them.
+static bool migrate_ieee_arith_2op(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (
+    id != "ieee_add" && id != "ieee_sub" && id != "ieee_mul" &&
+    id != "ieee_div" && id != "ieee_rem")
+    return false;
+
+  if (expr.operands().size() > 2)
+  {
+    splice_expr(expr, new_expr_ref);
+    return true;
+  }
+
+  type2tc type = migrate_type(expr.type());
+
+  expr2tc side1, side2;
+  convert_operand_pair(expr, side1, side2);
+
+  /* fp.rem is exact, so no rounding mode participates for ieee_rem; the field
+   * is the 2-op plumbing's and keeps the default symbol. */
+  const expr2tc rm = migrate_rounding_mode(expr);
+
+  if (id == "ieee_add")
+    new_expr_ref = ieee_add2tc(type, side1, side2, rm);
+  else if (id == "ieee_sub")
+    new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
+  else if (id == "ieee_mul")
+    new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
+  else if (id == "ieee_div")
+    new_expr_ref = ieee_div2tc(type, side1, side2, rm);
+  else
+    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
+
+  return true;
+}
+
+/// Bring one ternary branch to the ternary's own type.
+///
+/// C11 6.3.2.1p3: an array operand converts to a pointer to its first element.
+/// That is not a cast of the array object, and the frontend's own conversion
+/// (c_typecastt::do_typecast) spells it &a[0]; coerced as a plain typecast the
+/// node reaches the encoder as typecast(array, pointer) and aborts it.
+static void coerce_ternary_branch(expr2tc &branch, const type2tc &type)
+{
+  if (branch->type->type_id == type->type_id)
+    return;
+
+  if (is_array_type(branch->type) && is_pointer_type(type))
+  {
+    const array_type2t &arr = to_array_type(branch->type);
+    expr2tc first = index2tc(arr.subtype, branch, gen_zero(index_type2()));
+    branch = address_of2tc(arr.subtype, first);
+    if (branch->type == type)
+      return;
+  }
+
+  branch = typecast2tc(type, branch);
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
+  const migrate_stack_guardt stack_guard;
+  enforce_migrate_stack_budget(stack_guard);
+
   type2tc type;
 
   if (expr.id() == "nil")
@@ -746,23 +976,15 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "builtin_va_arg")
+  {
+    new_expr_ref = migrate_builtin_va_arg(expr);
+    return;
+  }
+
   if (expr.id() == "sizeof")
   {
-    // sizeof(T): op0 (a type_exprt) carries the measured type T, op1 the
-    // eagerly-computed byte-size value. Both become reflected sizeof2t fields,
-    // replacing the legacy sizeof-type side channel (esbmc/esbmc#5337). The
-    // frontends always produce both operands (the C adjust pass fills the value
-    // for VLAs); fail closed rather than over-read op1 in a release build.
-    if (expr.operands().size() != 2)
-    {
-      log_error("sizeof node must carry a type operand and a value operand");
-      abort();
-    }
-    type = migrate_type(expr.type());
-    type2tc measured = migrate_type(expr.op0().type());
-    expr2tc value;
-    migrate_expr(expr.op1(), value);
-    new_expr_ref = sizeof2tc(type, value, measured);
+    new_expr_ref = migrate_sizeof(expr);
     return;
   }
 
@@ -844,14 +1066,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc old_expr;
     migrate_expr(expr.op0(), old_expr);
 
-    // Default to rounding mode symbol
-    expr2tc rounding_mode =
-      symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rounding_mode);
+    const expr2tc rounding_mode = migrate_rounding_mode(expr);
 
     new_expr_ref = typecast2tc(type, old_expr, rounding_mode);
     return;
@@ -877,14 +1092,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc old_expr;
     migrate_expr(expr.op0(), old_expr);
 
-    // Default to rounding mode symbol
-    expr2tc rounding_mode =
-      symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rounding_mode);
+    const expr2tc rounding_mode = migrate_rounding_mode(expr);
 
     new_expr_ref = nearbyint2tc(type, old_expr, rounding_mode);
     return;
@@ -998,10 +1206,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // ternaries already have matching branch types, so no cast is added on the
     // common path. Matching on type_id (not full structural type) keeps this to
     // exactly the cases the if2t invariant rejects.
-    if (true_val->type->type_id != type->type_id)
-      true_val = typecast2tc(type, true_val);
-    if (false_val->type->type_id != type->type_id)
-      false_val = typecast2tc(type, false_val);
+    coerce_ternary_branch(true_val, type);
+    coerce_ternary_branch(false_val, type);
 
     new_expr_ref = if2tc(type, cond, true_val, false_val, expr.location());
     return;
@@ -1257,6 +1463,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     convert_operand_pair(expr, side1, side2);
+    decay_array_operand(side1);
+    decay_array_operand(side2);
 
     new_expr_ref = add2tc(type, side1, side2);
     return;
@@ -1274,6 +1482,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
+    decay_array_operand(side1);
+    decay_array_operand(side2);
 
     new_expr_ref = sub2tc(type, side1, side2);
     return;
@@ -1309,101 +1519,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "ieee_add")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_add2tc(type, side1, side2, rm);
+  if (migrate_ieee_arith_2op(expr, new_expr_ref))
     return;
-  }
-
-  if (expr.id() == "ieee_sub")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_sub2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_mul")
-  {
-    type = migrate_type(expr.type());
-
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_mul2tc(type, side1, side2, rm);
-    return;
-  }
-
-  if (expr.id() == "ieee_div")
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
-
-    new_expr_ref = ieee_div2tc(type, side1, side2, rm);
-    return;
-  }
 
   if (expr.id() == "ieee_fma")
   {
@@ -1414,13 +1531,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), v2);
     migrate_expr(expr.op2(), v3);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_fma2tc(type, v1, v2, v3, rm);
     return;
@@ -1433,13 +1544,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc value;
     migrate_expr(expr.op0(), value);
 
-    // Default to rounding mode symbol
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    // If it's not nil, convert it
-    exprt old_rm = expr.find_expr("rounding_mode");
-    if (old_rm.is_not_nil())
-      migrate_expr(old_rm, rm);
+    const expr2tc rm = migrate_rounding_mode(expr);
 
     new_expr_ref = ieee_sqrt2tc(type, value, rm);
     return;
@@ -1522,7 +1627,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = address_of2tc(type, theval);
+    new_expr_ref = address_of2tc(type, theval, expr.implicit());
     return;
   }
 
@@ -1937,6 +2042,29 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
         args.push_back(init);
       }
+
+      // A replaced operator new (github #6494) rides in arguments[1], for the
+      // same reason the initializer rides in arguments[0]: sideeffect2t has
+      // fixed fields, so a named sub on the side_effect_exprt does not survive
+      // the round trip. Keep slot 0 occupied so slot 1 stays meaningful.
+      const exprt &alloc_function =
+        static_cast<const exprt &>(expr.find("alloc_function"));
+      if (alloc_function.is_not_nil())
+      {
+        if (args.empty())
+          args.emplace_back();
+        expr2tc fn;
+        migrate_expr(alloc_function, fn);
+        args.push_back(fn);
+      }
+
+      // Value-initialisation of the elements (github #6588) rides in
+      // arguments[2], for the same reason as the two slots above.
+      if (expr.get_bool("zero_initialized"))
+      {
+        args.resize(2);
+        args.push_back(gen_true_expr());
+      }
     }
     else if (
       expr.statement() == "malloc" || expr.statement() == "realloc" ||
@@ -2067,6 +2195,19 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         expr2tc d;
         migrate_expr(destructor, d);
         args.push_back(d);
+      }
+
+      // A replaced operator delete rides in arguments[1], mirroring the
+      // allocation side (github #6494).
+      const exprt &dealloc_function =
+        static_cast<const exprt &>(expr.find("dealloc_function"));
+      if (dealloc_function.is_not_nil())
+      {
+        if (args.empty())
+          args.emplace_back();
+        expr2tc fn;
+        migrate_expr(dealloc_function, fn);
+        args.push_back(fn);
       }
     }
     else if (expr.statement() == "temporary_object")
@@ -2931,6 +3072,14 @@ typet migrate_type_back(const type2tc &ref)
   }
 }
 
+// Only set the flag when it is on: `set` stores an explicit "0" rather than
+// omitting the attribute, which would change the irep the round-trip produces.
+static void set_implicit_flag(exprt &e, bool implicit)
+{
+  if (implicit)
+    e.implicit(true);
+}
+
 exprt migrate_expr_back(const expr2tc &ref)
 {
   if (ref.get() == nullptr)
@@ -3342,6 +3491,15 @@ exprt migrate_expr_back(const expr2tc &ref)
     divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return divval;
   }
+  case expr2t::ieee_rem_id:
+  {
+    const ieee_rem2t &ref2 = to_ieee_rem2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt remval("ieee_rem", thetype);
+    remval.copy_to_operands(
+      migrate_expr_back(ref2.side_1), migrate_expr_back(ref2.side_2));
+    return remval;
+  }
   case expr2t::ieee_fma_id:
   {
     const ieee_fma2t &ref2 = to_ieee_fma2t(ref);
@@ -3425,6 +3583,7 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt address_ofval("address_of", thetype);
     address_ofval.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
+    set_implicit_flag(address_ofval, ref2.implicit);
     return address_ofval;
   }
   case expr2t::byte_extract_id:
@@ -3754,20 +3913,29 @@ exprt migrate_expr_back(const expr2tc &ref)
       ref2.kind == sideeffect2t::allockind::cpp_delete ||
       ref2.kind == sideeffect2t::allockind::cpp_delete_array)
     {
-      // op0 = pointer (in `operand`); arguments[0] = destructor call, if any.
-      // remove_cpp_delete asserts exactly one operand and reads "destructor".
+      // op0 = pointer (in `operand`); arguments[0] = destructor call, if any,
+      // arguments[1] = replaced operator delete, if any. remove_cpp_delete
+      // asserts exactly one operand and reads both named subs back out.
       theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
-      if (!ref2.arguments.empty())
+      if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
         theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
+      if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
+        theexpr.add("dealloc_function") = migrate_expr_back(ref2.arguments[1]);
     }
     else if (
       ref2.kind == sideeffect2t::allockind::cpp_new ||
       ref2.kind == sideeffect2t::allockind::cpp_new_arr)
     {
       // cpp_new has no operands in source form (size lives in the size field,
-      // handled below; the initializer, if any, is carried in arguments[0]).
+      // handled below; the initializer, if any, is carried in arguments[0], a
+      // replaced operator new in arguments[1], and the value-initialisation
+      // marker in arguments[2]).
       if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
         theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
+      if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
+        theexpr.add("alloc_function") = migrate_expr_back(ref2.arguments[1]);
+      if (ref2.arguments.size() > 2 && !is_nil_expr(ref2.arguments[2]))
+        theexpr.set("zero_initialized", true);
     }
     else
     {

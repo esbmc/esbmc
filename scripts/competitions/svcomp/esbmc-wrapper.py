@@ -3,6 +3,7 @@
 import os
 import argparse
 import shlex
+import re
 import subprocess
 import time
 import sys
@@ -68,6 +69,9 @@ class Property:
   memcleanup = 5
   datarace = 6
 
+# Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
+args = None
+
 def do_exec(cmd_line):
 
   if args.dry_run:
@@ -88,11 +92,74 @@ def run(cmd_line):
   print(out.decode())
   return out
 
+# A property table row, e.g. "  FAILED       [main.assertion.1]  line 7  x != 0".
+PROPERTY_ROW = re.compile(r"\s+(?:\033\[[0-9;]*m)?(FAILED|PASSED|NOT CHECKED|UNKNOWN)\b")
+
+def violated_property_text(the_output):
+  """The comments ESBMC attached to the properties it actually violated.
+
+  Since esbmc/esbmc#7064 every run also prints a "** Results:" table naming
+  each property it did not violate, so matching a comment against the whole
+  output classifies the task from a property that passed or was never checked.
+  """
+  violated = []
+  lines = the_output.splitlines()
+  i = 0
+  while i < len(lines):
+    line = lines[i]
+    i += 1
+    if line.startswith("Violated property:"):
+      while i < len(lines) and lines[i].startswith("  "):
+        violated.append(lines[i])
+        i += 1
+    else:
+      row = PROPERTY_ROW.match(line)
+      if row and row.group(1) == "FAILED":
+        violated.append(line)
+  return "\n".join(violated)
+
+MEMORY_LEAK = "dereference failure: forgotten memory"
+UNREACHABILITY_INTRINSIC = "reachability: unreachable code reached"
+
+# Ordered: the first comment found in the violated properties decides the
+# category, so a task violating several keeps the answer the pre-#7250 chain
+# gave. The trailing bare "dereference failure" is the catch-all for comments
+# not spelled out above -- "Data object accessed with code type" and memcpy's
+# write-side message, for two -- which an always-true operand in that chain
+# used to catch by accident, at the price of making the free() checks dead.
+MEMORY_VIOLATIONS = (
+  (MEMORY_LEAK, Result.fail_memtrack),
+  ("dereference failure: invalid pointer freed", Result.fail_free),
+  ("dereference failure: invalidated dynamic object freed", Result.fail_free),
+  ("dereference failure: accessed expired variable pointer", Result.fail_deref),
+  ("dereference failure: invalid pointer", Result.fail_deref),
+  ("dereference failure: NULL pointer", Result.fail_deref),
+  ("dereference failure: free() of non-dynamic memory", Result.fail_free),
+  ("dereference failure: Access to object out of bounds", Result.fail_deref),
+  ("dereference failure: memset of memory segment of size", Result.fail_deref),
+  ("dereference failure on memcpy: reading memory segment", Result.fail_deref),
+  ("dereference failure: invalidated dynamic object", Result.fail_deref),
+  ("array bounds violated", Result.fail_deref),
+  ("Operand of free must have zero pointer offset", Result.fail_free),
+  (" Verifier error called", Result.success),
+  ("dereference failure", Result.fail_deref),
+)
+
+
+def classify_memory_violation(violated):
+  """Map violated-property text to a memsafety sub-property, or None."""
+  for comment, result in MEMORY_VIOLATIONS:
+    if comment in violated:
+      return result
+  return None
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
   # --sarif-output. Both are purely informational; the SV-COMP category is
-  # still derived from the unchanged freeform comment strings below.
+  # still derived from the unchanged freeform comment strings below, matched
+  # against the violated properties rather than the whole output.
 
   # Parse output
   if "Timed out" in the_output:
@@ -104,76 +171,32 @@ def parse_result(the_output, prop):
   if "Chosen solver doesn\'t support floating-point numbers" in the_output:
     return Result.force_fp_mode
 
-  # Error messages:
-  memory_leak = "dereference failure: forgotten memory"
-  invalid_pointer = "dereference failure: invalid pointer"
-  memset_access_oob = "dereference failure: memset of memory segment of size"
-  memcpy_access_oob = "dereference failure on memcpy: reading memory segment"
-  access_out = "dereference failure: Access to object out of bounds"
-  dereference_null = "dereference failure: NULL pointer"
-  expired_variable = "dereference failure: accessed expired variable pointer"
-  invalid_object = "dereference failure: invalidated dynamic object"
-  invalid_object_free = "dereference failure: invalidated dynamic object freed"
-  invalid_pointer_free = "dereference failure: invalid pointer freed"
-  free_error = "dereference failure: free() of non-dynamic memory"
-  bounds_violated = "array bounds violated"
-  free_offset = "Operand of free must have zero pointer offset"
-  data_race = "/W data race on"
-  unreachability_intrinsic = "reachability: unreachable code reached"
+  memory_leak = MEMORY_LEAK
+  unreachability_intrinsic = UNREACHABILITY_INTRINSIC
 
   if "VERIFICATION FAILED" in the_output:
-    if "unwinding assertion loop" in the_output:
+    violated = violated_property_text(the_output)
+
+    if "unwinding assertion loop" in violated:
       return Result.err_unwinding_assertion
 
     if prop == Property.memcleanup:
-      if memory_leak in the_output:
+      if memory_leak in violated:
         return Result.fail_memcleanup
 
     if prop == Property.termination:
       return Result.fail_termination
 
     if prop == Property.memory:
-      if memory_leak in the_output:
-        return Result.fail_memtrack
-
-      if invalid_pointer_free in the_output:
-        return Result.fail_free
-
-      if invalid_object_free in the_output:
-        return Result.fail_free
-
-      if expired_variable in the_output:
-        return Result.fail_deref
-
-      if invalid_pointer in the_output:
-        return Result.fail_deref
-
-      if dereference_null in the_output:
-        return Result.fail_deref
-
-      if free_error in the_output:
-        return Result.fail_free
-
-      if access_out in the_output or memset_access_oob or memcpy_access_oob in the_output:
-        return Result.fail_deref
-
-      if invalid_object in the_output:
-        return Result.fail_deref
-
-      if bounds_violated in the_output:
-        return Result.fail_deref
-
-      if free_offset in the_output:
-        return Result.fail_free
-
-      if " Verifier error called" in the_output:
-        return Result.success
+      memory_result = classify_memory_violation(violated)
+      if memory_result is not None:
+        return memory_result
 
     if prop == Property.overflow:
       return Result.fail_overflow
 
     if prop == Property.reach:
-      if unreachability_intrinsic not in the_output:
+      if unreachability_intrinsic not in violated:
         return Result.fail_reach
 
     if prop == Property.datarace:
@@ -235,13 +258,12 @@ esbmc_path = "./esbmc "
 # as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
 # in the fopen/fclose models.
 esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
-esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
+esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
 
 
-import re
 def check_if_benchmark_contains_pthread(benchmark):
   with open(benchmark, "r") as f:
     for line in f:
@@ -265,6 +287,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
+    # --smt-symex-guard also turns on --smt-during-symex, which is what makes
+    # sibling schedules share a solver context (issue #6831, W3.3); do not add
+    # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
@@ -313,7 +338,12 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 
   # Add strategy
   if concurrency: # Concurrency only works with incremental
-    command_line += "--incremental-bmc "
+    # A violation needing few context switches can sit deep in unbounded DFS
+    # order, where the task times out with no answer at all (issue #6831, W4).
+    # One bounded round first costs a median 0.02s and can only report a
+    # violation -- it never claims a proof, so --incremental-bmc still owns
+    # every other verdict.
+    command_line += "--falsify-context-bound 1 --incremental-bmc "
   elif prop == Property.overflow: # Overflow only works with incremental
     command_line += "--incremental-bmc "
   elif strat == "fixed":
@@ -330,7 +360,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 
   return command_line
 
-def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
+def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
   if witness_path:
@@ -338,74 +368,75 @@ def verify(strat, prop, concurrency, dargs, esbmc_ci, witness_path, validate_mod
     esbmc_command_line += "--witness " + witness_path + " "
 
   output = run(esbmc_command_line)
-  res = parse_result(output.decode(), category_property)
+  res = parse_result(output.decode(), prop)
   return res
 
-# Options
-parser = argparse.ArgumentParser()
-parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
-parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
-parser.add_argument("-p", "--propertyfile", help="Path to the property file")
-parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
-parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
-parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
-parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
-parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
-parser.add_argument("--witness", help="Path to witness file; enables witness validation mode")
-parser.add_argument("--validate-violation-witness", dest="validate_violation", action='store_true',
-                    help="Validate a violation witness (use with --witness)")
-parser.add_argument("--validate-correctness-witness", dest="validate_correctness", action='store_true',
-                    help="Validate a correctness witness (use with --witness)")
+if __name__ == "__main__":
+  # Options
+  parser = argparse.ArgumentParser()
+  parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
+  parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
+  parser.add_argument("-p", "--propertyfile", help="Path to the property file")
+  parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
+  parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
+  parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
+  parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
+  parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
+  parser.add_argument("--witness", help="Path to witness file; enables witness validation mode")
+  parser.add_argument("--validate-violation-witness", dest="validate_violation", action='store_true',
+                      help="Validate a violation witness (use with --witness)")
+  parser.add_argument("--validate-correctness-witness", dest="validate_correctness", action='store_true',
+                      help="Validate a correctness witness (use with --witness)")
 
-args = parser.parse_args()
+  args = parser.parse_args()
 
-arch = args.arch
-version = args.version
-property_file = args.propertyfile
-benchmark = args.benchmark
-strategy = args.strategy
-concurrency = args.concurrency
-esbmc_ci = args.ci
-witness_path = args.witness
+  arch = args.arch
+  version = args.version
+  property_file = args.propertyfile
+  benchmark = args.benchmark
+  strategy = args.strategy
+  concurrency = args.concurrency
+  esbmc_ci = args.ci
+  witness_path = args.witness
 
-if version:
-  print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
-  exit(0)
+  if version:
+    print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
+    exit(0)
 
-if property_file is None:
-  print("Please, specify a property file")
-  exit(1)
+  if property_file is None:
+    print("Please, specify a property file")
+    exit(1)
 
-if benchmark is None:
-  print("Please, specify a benchmark to verify")
-  exit(1)
+  if benchmark is None:
+    print("Please, specify a benchmark to verify")
+    exit(1)
 
-if witness_path and not args.validate_violation and not args.validate_correctness:
-  print("Please specify --validate-violation-witness or --validate-correctness-witness when using --witness")
-  exit(1)
-validate_mode = "violation" if args.validate_violation else "correctness" if args.validate_correctness else None
+  if witness_path and not args.validate_violation and not args.validate_correctness:
+    print("Please specify --validate-violation-witness or --validate-correctness-witness when using --witness")
+    exit(1)
+  validate_mode = "violation" if args.validate_violation else "correctness" if args.validate_correctness else None
 
-# Parse property files
-f = open(property_file, 'r')
-property_file_content = f.read()
+  # Parse property files
+  f = open(property_file, 'r')
+  property_file_content = f.read()
 
-category_property = 0
-if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
-  category_property = Property.memory
-elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
-  category_property = Property.overflow
-elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
-  category_property = Property.reach
-elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
-  category_property = Property.termination
-elif "CHECK( init(main()), LTL(G valid-memcleanup) )" in property_file_content:
-  category_property = Property.memcleanup
-elif "CHECK( init(main()), LTL(G ! data-race) )" in property_file_content:
-  category_property = Property.datarace
-else:
-  print("Unsupported Property")
-  exit(1)
+  category_property = 0
+  if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
+    category_property = Property.memory
+  elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
+    category_property = Property.overflow
+  elif "CHECK( init(main()), LTL(G ! call(reach_error())) )" in property_file_content:
+    category_property = Property.reach
+  elif "CHECK( init(main()), LTL(F end) )" in property_file_content:
+    category_property = Property.termination
+  elif "CHECK( init(main()), LTL(G valid-memcleanup) )" in property_file_content:
+    category_property = Property.memcleanup
+  elif "CHECK( init(main()), LTL(G ! data-race) )" in property_file_content:
+    category_property = Property.datarace
+  else:
+    print("Unsupported Property")
+    exit(1)
 
-result = verify(strategy, category_property, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
+  result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 
-print(get_result_string(result))
+  print(get_result_string(result))

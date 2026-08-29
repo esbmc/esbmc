@@ -313,6 +313,14 @@ struct is_polymorphic : integral_constant<bool, __is_polymorphic(T)>
 {
 };
 
+// has_virtual_destructor ([meta.unary.prop]). Unguarded, like is_polymorphic
+// above: the Clang builtin is valid pre-C++11.
+template <class T>
+struct has_virtual_destructor
+  : integral_constant<bool, __has_virtual_destructor(T)>
+{
+};
+
 // is_union
 template <class T>
 struct is_union : integral_constant<bool, __is_union(T)>
@@ -387,6 +395,21 @@ struct extent<T[_Ip], _Np> : extent<T, _Np - 1>
 {
 };
 
+// rank ([meta.unary.prop.query]): the number of array dimensions. Unguarded,
+// like the extent above it.
+template <class T>
+struct rank : integral_constant<size_t, 0>
+{
+};
+template <class T>
+struct rank<T[]> : integral_constant<size_t, rank<T>::value + 1>
+{
+};
+template <class T, size_t _Np>
+struct rank<T[_Np]> : integral_constant<size_t, rank<T>::value + 1>
+{
+};
+
 // is_same
 template <class T, class U>
 struct is_same : false_type
@@ -400,6 +423,35 @@ struct is_same<T, T> : true_type
 // is_void
 template <class T>
 struct is_void : is_same<void, typename remove_cv<T>::type>
+{
+};
+
+// is_null_pointer
+#if __cplusplus >= 201103L
+template <class T>
+struct is_null_pointer
+  : is_same<decltype(nullptr), typename remove_cv<T>::type>
+{
+};
+#endif
+
+// is_fundamental: arithmetic types, cv void and cv std::nullptr_t
+// ([basic.types.general], [meta.unary.comp]).
+template <class T>
+struct is_fundamental : integral_constant<
+                          bool,
+                          is_arithmetic<T>::value || is_void<T>::value
+#if __cplusplus >= 201103L
+                            || is_null_pointer<T>::value
+#endif
+                          >
+{
+};
+
+// is_compound: everything that is not fundamental ([meta.unary.comp]).
+// Unguarded, like is_fundamental itself, which guards its own C++11 part.
+template <class T>
+struct is_compound : integral_constant<bool, !is_fundamental<T>::value>
 {
 };
 
@@ -437,6 +489,35 @@ struct is_function : integral_constant<bool, __is_function(T)>
 {
 };
 
+/* [meta.unary.cat]: a pointer to member is one or the other -- the pointee of a
+ * pointer to member function is a function type. Defined here rather than
+ * beside is_member_pointer because it needs is_function above. */
+namespace detail
+{
+template <class T>
+struct is_member_function_pointer_base : false_type
+{
+};
+template <class T, class U>
+struct is_member_function_pointer_base<T U::*> : is_function<T>
+{
+};
+} // namespace detail
+
+template <class T>
+struct is_member_function_pointer
+  : detail::is_member_function_pointer_base<typename remove_cv<T>::type>
+{
+};
+
+template <class T>
+struct is_member_object_pointer
+  : integral_constant<
+      bool,
+      is_member_pointer<T>::value && !is_member_function_pointer<T>::value>
+{
+};
+
 #if __cplusplus >= 201103L
 // alignment_of
 template <class T>
@@ -469,6 +550,30 @@ struct is_rvalue_reference<T &&> : true_type
 template <class T>
 struct is_reference : integral_constant<bool, is_lvalue_reference<T>::value ||
                                                 is_rvalue_reference<T>::value>
+{
+};
+
+// [meta.unary.comp]: an object type is any type that is not a function type,
+// not a reference type, and not cv void.
+/* [meta.unary.comp]: a scalar type is an arithmetic type, an enumeration, a
+ * pointer, a pointer to member, or nullptr_t, possibly cv-qualified. Guarded
+ * because is_null_pointer -- and the trait itself -- are C++11. */
+#if __cplusplus >= 201103L
+template <class T>
+struct is_scalar
+  : integral_constant<
+      bool,
+      is_arithmetic<T>::value || is_enum<T>::value || is_pointer<T>::value ||
+        is_member_pointer<T>::value || is_null_pointer<T>::value>
+{
+};
+#endif
+
+template <class T>
+struct is_object
+  : integral_constant<
+      bool,
+      !is_function<T>::value && !is_reference<T>::value && !is_void<T>::value>
 {
 };
 
@@ -616,6 +721,241 @@ struct is_constructible : integral_constant<bool, __is_constructible(T)>
 
 #if __cplusplus >= 201103L
 
+// The layout categories, and the assignability / destructibility family.
+// Each of the composite traits names the reference type the standard's own
+// definition uses, so that a non-referenceable T answers false rather than
+// making the instantiation ill-formed.
+template <class T>
+struct is_standard_layout : integral_constant<bool, __is_standard_layout(T)>
+{
+};
+
+template <class T>
+struct is_trivial : integral_constant<bool, __is_trivial(T)>
+{
+};
+
+template <class T, class U>
+struct is_assignable : integral_constant<bool, __is_assignable(T, U)>
+{
+};
+
+template <class T>
+struct is_copy_assignable
+  : integral_constant<
+      bool,
+      __is_assignable(
+        typename add_lvalue_reference<T>::type,
+        typename add_lvalue_reference<const T>::type)>
+{
+};
+
+template <class T>
+struct is_default_constructible : integral_constant<bool, __is_constructible(T)>
+{
+};
+
+template <class T>
+struct is_copy_constructible
+  : integral_constant<
+      bool,
+      __is_constructible(T, typename add_lvalue_reference<const T>::type)>
+{
+};
+
+template <class T>
+struct is_move_constructible
+  : integral_constant<
+      bool,
+      __is_constructible(T, typename add_rvalue_reference<T>::type)>
+{
+};
+
+template <class T>
+struct is_move_assignable
+  : integral_constant<
+      bool,
+      __is_assignable(
+        typename add_lvalue_reference<T>::type,
+        typename add_rvalue_reference<T>::type)>
+{
+};
+
+template <class T>
+struct is_destructible : integral_constant<bool, __is_destructible(T)>
+{
+};
+
+template <class T>
+struct is_nothrow_move_constructible
+  : integral_constant<
+      bool,
+      __is_nothrow_constructible(T, typename add_rvalue_reference<T>::type)>
+{
+};
+
+template <class T>
+struct is_nothrow_copy_constructible
+  : integral_constant<
+      bool,
+      __is_nothrow_constructible(
+        T,
+        typename add_lvalue_reference<const T>::type)>
+{
+};
+
+template <class T>
+struct is_nothrow_copy_assignable
+  : integral_constant<
+      bool,
+      __is_nothrow_assignable(
+        typename add_lvalue_reference<T>::type,
+        typename add_lvalue_reference<const T>::type)>
+{
+};
+
+template <class T>
+struct is_nothrow_destructible
+  : integral_constant<bool, __is_nothrow_destructible(T)>
+{
+};
+
+template <class T>
+struct is_nothrow_move_assignable
+  : integral_constant<
+      bool,
+      __is_nothrow_assignable(
+        typename add_lvalue_reference<T>::type,
+        typename add_rvalue_reference<T>::type)>
+{
+};
+
+/* [meta.unary.prop]: the generic nothrow/trivially forms. The specialised ones
+ * above were written out individually; these are the ones they are defined in
+ * terms of, and were missing. All sit inside the C++11 guard already opened
+ * above, since they name add_rvalue_reference. */
+template <class T, class... Args>
+struct is_nothrow_constructible
+  : integral_constant<bool, __is_nothrow_constructible(T, Args...)>
+{
+};
+
+template <class T>
+struct is_nothrow_default_constructible
+  : integral_constant<bool, __is_nothrow_constructible(T)>
+{
+};
+
+template <class T, class U>
+struct is_nothrow_assignable
+  : integral_constant<bool, __is_nothrow_assignable(T, U)>
+{
+};
+
+template <class T, class... Args>
+struct is_trivially_constructible
+  : integral_constant<bool, __is_trivially_constructible(T, Args...)>
+{
+};
+
+template <class T>
+struct is_trivially_copy_constructible
+  : integral_constant<
+      bool,
+      __is_trivially_constructible(
+        T,
+        typename add_lvalue_reference<const T>::type)>
+{
+};
+
+template <class T>
+struct is_trivially_move_constructible
+  : integral_constant<
+      bool,
+      __is_trivially_constructible(
+        T,
+        typename add_rvalue_reference<T>::type)>
+{
+};
+
+template <class T, class U>
+struct is_trivially_assignable
+  : integral_constant<bool, __is_trivially_assignable(T, U)>
+{
+};
+
+template <class T>
+struct is_trivially_copy_assignable
+  : integral_constant<
+      bool,
+      __is_trivially_assignable(
+        typename add_lvalue_reference<T>::type,
+        typename add_lvalue_reference<const T>::type)>
+{
+};
+
+template <class T>
+struct is_trivially_move_assignable
+  : integral_constant<
+      bool,
+      __is_trivially_assignable(
+        typename add_lvalue_reference<T>::type,
+        typename add_rvalue_reference<T>::type)>
+{
+};
+
+/* Storage aligned for any object of size Len. The standard's default is the
+ * strictest alignment any such object could need, which __BIGGEST_ALIGNMENT__
+ * bounds from above. */
+template <size_t Len, size_t Align = __BIGGEST_ALIGNMENT__>
+struct aligned_storage
+{
+  struct type
+  {
+    alignas(Align) unsigned char __data[Len];
+  };
+};
+
+#  if __cplusplus >= 201703L
+template <class T>
+struct is_aggregate : integral_constant<bool, __is_aggregate(T)>
+{
+};
+
+template <class...>
+struct conjunction : true_type
+{
+};
+template <class B1>
+struct conjunction<B1> : B1
+{
+};
+template <class B1, class... Bn>
+struct conjunction<B1, Bn...>
+  : conditional<bool(B1::value), conjunction<Bn...>, B1>::type
+{
+};
+
+template <class...>
+struct disjunction : false_type
+{
+};
+template <class B1>
+struct disjunction<B1> : B1
+{
+};
+template <class B1, class... Bn>
+struct disjunction<B1, Bn...>
+  : conditional<bool(B1::value), B1, disjunction<Bn...>>::type
+{
+};
+
+template <class B>
+struct negation : integral_constant<bool, !bool(B::value)>
+{
+};
+#  endif
+
 // void_t (C++17)
 template <class...>
 using void_t = void;
@@ -654,17 +994,70 @@ struct is_invocable_r : decltype(detail::test_invocable_r<R, F, Args...>(0))
 {
 };
 
-// is_convertible (simplified)
 namespace detail
 {
+// SFINAE-friendly per [meta.trans.other]: no member `type` when the call is
+// ill-formed, so invoke_result can appear in a deduction context without
+// hard-erroring.
+template <class Void, class F, class... Args>
+struct invoke_result_impl
+{
+};
+
+template <class F, class... Args>
+struct invoke_result_impl<
+  void_t<decltype(declval<F>()(declval<Args>()...))>,
+  F,
+  Args...>
+{
+  using type = decltype(declval<F>()(declval<Args>()...));
+};
+} // namespace detail
+
+// invoke_result. Only the plain call form of INVOKE is modelled, matching
+// is_invocable above; pointer-to-member callables are out of scope.
+template <class F, class... Args>
+struct invoke_result : detail::invoke_result_impl<void, F, Args...>
+{
+};
+
+template <class F, class... Args>
+using invoke_result_t = typename invoke_result<F, Args...>::type;
+
+// is_convertible
+namespace detail
+{
+// [meta.rel]: the trait is defined by copy-initialising the return value of
+// `To test() { return declval<From>(); }`, so passing by value is the test --
+// a static_cast here would also accept an `explicit` conversion operator.
+template <class To>
+auto test_convertible_dest(To) -> void;
+
 template <class From, class To>
-auto test_convertible(int) -> decltype(static_cast<To>(declval<From>()), true_type{});
+auto test_convertible(int)
+  -> decltype(test_convertible_dest<To>(declval<From>()), true_type{});
 template <class From, class To>
 false_type test_convertible(...);
+
+template <class From, class To>
+struct is_convertible_impl : decltype(test_convertible<From, To>(0))
+{
+};
+
+// [meta.rel]: when To is a function or array type, or From is void, the result
+// is is_void<To> -- the by-value probe above cannot be formed for those.
+template <class From, class To>
+struct is_convertible_base
+  : conditional<
+      is_void<From>::value || is_function<To>::value || is_array<To>::value,
+      is_void<To>,
+      is_convertible_impl<From, To>>::type
+{
+};
 } // namespace detail
 
 template <class From, class To>
-struct is_convertible : decltype(detail::test_convertible<From, To>(0))
+struct is_convertible : detail::is_convertible_base<From, To>
 {
 };
 
@@ -691,12 +1084,24 @@ template <class T>
 inline constexpr bool is_volatile_v = is_volatile<T>::value;
 template <class T>
 inline constexpr bool is_member_pointer_v = is_member_pointer<T>::value;
+template <class T>
+inline constexpr bool is_member_function_pointer_v =
+  is_member_function_pointer<T>::value;
+template <class T>
+inline constexpr bool is_member_object_pointer_v =
+  is_member_object_pointer<T>::value;
 template <class Base, class Derived>
 inline constexpr bool is_base_of_v = is_base_of<Base, Derived>::value;
 template <class T>
 inline constexpr bool is_function_v = is_function<T>::value;
 template <class T>
 inline constexpr size_t alignment_of_v = alignment_of<T>::value;
+template <class T>
+inline constexpr bool is_null_pointer_v = is_null_pointer<T>::value;
+template <class T>
+inline constexpr bool is_fundamental_v = is_fundamental<T>::value;
+template <class T>
+inline constexpr bool is_compound_v = is_compound<T>::value;
 template <class T>
 inline constexpr bool is_integral_v = is_integral<T>::value;
 template <class T>
@@ -715,17 +1120,38 @@ inline constexpr bool is_trivially_copyable_v =
 template <class T>
 inline constexpr bool is_class_v = is_class<T>::value;
 template <class T>
+inline constexpr bool is_object_v = is_object<T>::value;
+template <class T>
+inline constexpr bool is_scalar_v = is_scalar<T>::value;
+template <class T>
 inline constexpr bool is_polymorphic_v = is_polymorphic<T>::value;
+template <class T>
+inline constexpr bool has_virtual_destructor_v =
+  has_virtual_destructor<T>::value;
 template <class T>
 inline constexpr bool is_trivially_default_constructible_v =
   is_trivially_default_constructible<T>::value;
 template <class T>
 inline constexpr bool is_trivially_destructible_v =
   is_trivially_destructible<T>::value;
+template <class T, class... Args>
+inline constexpr bool is_nothrow_constructible_v =
+  is_nothrow_constructible<T, Args...>::value;
+template <class T>
+inline constexpr bool is_nothrow_default_constructible_v =
+  is_nothrow_default_constructible<T>::value;
+template <class T, class U>
+inline constexpr bool is_nothrow_assignable_v =
+  is_nothrow_assignable<T, U>::value;
+template <class T, class... Args>
+inline constexpr bool is_trivially_constructible_v =
+  is_trivially_constructible<T, Args...>::value;
 template <class T>
 inline constexpr bool is_array_v = is_array<T>::value;
 template <class T>
 inline constexpr size_t extent_v = extent<T>::value;
+template <class T>
+inline constexpr size_t rank_v = rank<T>::value;
 template <class T, class U>
 inline constexpr bool is_same_v = is_same<T, U>::value;
 template <class T>
@@ -740,6 +1166,50 @@ template <class T, class... Args>
 inline constexpr bool is_constructible_v = is_constructible<T, Args...>::value;
 template <class From, class To>
 inline constexpr bool is_convertible_v = is_convertible<From, To>::value;
+template <class T>
+inline constexpr bool is_standard_layout_v = is_standard_layout<T>::value;
+template <class T>
+inline constexpr bool is_trivial_v = is_trivial<T>::value;
+template <class T, class U>
+inline constexpr bool is_assignable_v = is_assignable<T, U>::value;
+template <class T>
+inline constexpr bool is_copy_assignable_v = is_copy_assignable<T>::value;
+template <class T>
+inline constexpr bool is_copy_constructible_v = is_copy_constructible<T>::value;
+template <class T>
+inline constexpr bool is_default_constructible_v =
+  is_default_constructible<T>::value;
+template <class T>
+inline constexpr bool is_move_constructible_v = is_move_constructible<T>::value;
+template <class T>
+inline constexpr bool is_move_assignable_v = is_move_assignable<T>::value;
+template <class T>
+inline constexpr bool is_destructible_v = is_destructible<T>::value;
+template <class T>
+inline constexpr bool is_nothrow_copy_constructible_v =
+  is_nothrow_copy_constructible<T>::value;
+template <class T>
+inline constexpr bool is_nothrow_copy_assignable_v =
+  is_nothrow_copy_assignable<T>::value;
+template <class T>
+inline constexpr bool is_nothrow_destructible_v =
+  is_nothrow_destructible<T>::value;
+template <class T>
+inline constexpr bool is_nothrow_move_constructible_v =
+  is_nothrow_move_constructible<T>::value;
+template <class T>
+inline constexpr bool is_nothrow_move_assignable_v =
+  is_nothrow_move_assignable<T>::value;
+#if __cplusplus >= 201703L
+template <class T>
+inline constexpr bool is_aggregate_v = is_aggregate<T>::value;
+template <class... B>
+inline constexpr bool conjunction_v = conjunction<B...>::value;
+template <class... B>
+inline constexpr bool disjunction_v = disjunction<B...>::value;
+template <class B>
+inline constexpr bool negation_v = negation<B>::value;
+#endif
 
 // remove_volatile / add_const: the members of the cv family that were missing
 // next to their already-present siblings. add_lvalue_reference already comes
@@ -760,6 +1230,48 @@ struct add_const
 {
   typedef const T type;
 };
+
+// [meta.trans.cv]: the other two of the trio.
+template <class T>
+struct add_volatile
+{
+  typedef volatile T type;
+};
+
+template <class T>
+struct add_cv
+{
+  typedef const volatile T type;
+};
+
+// [meta.trans.arr]: remove_extent's recursive sibling. remove_extent itself
+// comes from <utility>, which this header includes.
+template <class T>
+struct remove_all_extents
+{
+  typedef T type;
+};
+template <class T>
+struct remove_all_extents<T[]>
+{
+  typedef typename remove_all_extents<T>::type type;
+};
+template <class T, size_t _Np>
+struct remove_all_extents<T[_Np]>
+{
+  typedef typename remove_all_extents<T>::type type;
+};
+
+#if __cplusplus >= 202002L
+// [meta.trans.other]: C++20, and libc++ gates it the same way (P0887R1).
+template <class T>
+struct type_identity
+{
+  typedef T type;
+};
+template <class T>
+using type_identity_t = typename type_identity<T>::type;
+#endif
 
 // common_type: enough of [meta.trans.other] for the two-type case TMP-heavy
 // headers use; the variadic form folds left as the standard specifies.
@@ -798,13 +1310,52 @@ using remove_pointer_t = typename remove_pointer<T>::type;
 template <class T>
 using add_const_t = typename add_const<T>::type;
 template <class T>
+using add_volatile_t = typename add_volatile<T>::type;
+template <class T>
+using add_cv_t = typename add_cv<T>::type;
+template <class T>
 using add_pointer_t = typename add_pointer<T>::type;
 template <class T>
 using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;
+template <class T>
+using add_rvalue_reference_t = typename add_rvalue_reference<T>::type;
+template <class T>
+using remove_all_extents_t = typename remove_all_extents<T>::type;
 template <class... T>
 using common_type_t = typename common_type<T...>::type;
+template <class T>
+struct remove_cvref
+{
+  typedef typename remove_cv<typename remove_reference<T>::type>::type type;
+};
+template <class T>
+using remove_cvref_t = typename remove_cvref<T>::type;
+template <size_t Len, size_t Align = __BIGGEST_ALIGNMENT__>
+using aligned_storage_t = typename aligned_storage<Len, Align>::type;
 
 #endif // __cplusplus >= 201103L
+
+
+// void_t over a value, so sizeof(T) can be used as the SFINAE probe.
+template <__SIZE_TYPE__>
+struct __om_list_void
+{
+  typedef void type;
+};
+
+// True when T is complete here. A member array of an incomplete type is
+// ill-formed, so a container's pool shape has to be chosen on this.
+template <class T, class = void>
+struct __om_list_complete
+{
+  static const bool value = false;
+};
+
+template <class T>
+struct __om_list_complete<T, typename __om_list_void<sizeof(T)>::type>
+{
+  static const bool value = true;
+};
 
 } // namespace std
 

@@ -8,6 +8,8 @@ class codet;
 class symbolt;
 class struct_typet;
 
+class symbol_id;
+
 class python_class_builder
 {
 public:
@@ -30,6 +32,11 @@ private:
   symbolt *ensure_sym(const std::string &name);
 
   bool get_bases(struct_typet &st);
+
+  /// Add the converted method \p sid to \p st's method table, reporting
+  /// whether it could be. A method that was not converted has no symbol, and
+  /// dereferencing that miss used to segfault.
+  bool register_method(struct_typet &st, const symbol_id &sid);
 
   void get_members(struct_typet &st, codet &out, bool has_ud_base);
 

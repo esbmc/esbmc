@@ -5,4 +5,4 @@ main.c
 ^Short Circuited Conditions:  0
 ^Total Conditions:  96
 ^Condition Coverage: 100%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

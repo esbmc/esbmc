@@ -11,6 +11,15 @@
 #  define __ESBMC_ARRAY_CONSTEXPR_17
 #endif
 
+// The relational operators loop, which a C++11 constexpr function body may not
+// do; relaxed constexpr arrived in C++14. The standard only makes these
+// constexpr in C++20 anyway (github #3387).
+#if __cplusplus >= 201402L
+#  define __ESBMC_ARRAY_CONSTEXPR_14 constexpr
+#else
+#  define __ESBMC_ARRAY_CONSTEXPR_14
+#endif
+
 namespace std
 {
 #if __cplusplus >= 201103L
@@ -185,7 +194,8 @@ __ESBMC_ARRAY_CONSTEXPR_17 void swap(array<T, N> &a, array<T, N> &b) noexcept
 }
 
 template <typename T, std::size_t N>
-constexpr bool operator==(const array<T, N> &a, const array<T, N> &b)
+__ESBMC_ARRAY_CONSTEXPR_14 bool
+operator==(const array<T, N> &a, const array<T, N> &b)
 {
   for (std::size_t i = 0; i < N; ++i)
   {
@@ -196,13 +206,15 @@ constexpr bool operator==(const array<T, N> &a, const array<T, N> &b)
 }
 
 template <typename T, std::size_t N>
-constexpr bool operator!=(const array<T, N> &a, const array<T, N> &b)
+__ESBMC_ARRAY_CONSTEXPR_14 bool
+operator!=(const array<T, N> &a, const array<T, N> &b)
 {
   return !(a == b);
 }
 
 template <typename T, std::size_t N>
-constexpr bool operator<(const array<T, N> &a, const array<T, N> &b)
+__ESBMC_ARRAY_CONSTEXPR_14 bool
+operator<(const array<T, N> &a, const array<T, N> &b)
 {
   for (std::size_t i = 0; i < N; ++i)
   {
@@ -215,19 +227,22 @@ constexpr bool operator<(const array<T, N> &a, const array<T, N> &b)
 }
 
 template <typename T, std::size_t N>
-constexpr bool operator<=(const array<T, N> &a, const array<T, N> &b)
+__ESBMC_ARRAY_CONSTEXPR_14 bool
+operator<=(const array<T, N> &a, const array<T, N> &b)
 {
   return !(b < a);
 }
 
 template <typename T, std::size_t N>
-constexpr bool operator>(const array<T, N> &a, const array<T, N> &b)
+__ESBMC_ARRAY_CONSTEXPR_14 bool
+operator>(const array<T, N> &a, const array<T, N> &b)
 {
   return b < a;
 }
 
 template <typename T, std::size_t N>
-constexpr bool operator>=(const array<T, N> &a, const array<T, N> &b)
+__ESBMC_ARRAY_CONSTEXPR_14 bool
+operator>=(const array<T, N> &a, const array<T, N> &b)
 {
   return !(a < b);
 }

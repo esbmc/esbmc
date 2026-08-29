@@ -184,7 +184,17 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
+     "fopen/fclose models. Set automatically by the SV-COMP wrapper."},
+    /* Read by clang_c_language.cpp, which is built unconditionally, so these
+     * must not sit in a frontend-gated group (#7345). */
+    {"clang-c-irep2-adjust",
+     NULL,
+     "Run the IREP2-native C adjuster alongside the legacy adjust pass "
+     "(Phase 6 migration; experimental, default off)"},
+    {"clang-c-irep2-adjust-only",
+     NULL,
+     "Use the IREP2-native C adjuster instead of the legacy adjust pass "
+     "(Phase 6 hop-off; experimental, default off)"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
@@ -308,6 +318,25 @@ const struct group_opt_templ all_cmd_options[] = {
      {"i386-win32", NULL, "Set Windows/I386 architecture"},
 #endif
    }},
+  {"Floating-point",
+   {
+     {"round-to-nearest",
+      NULL,
+      "Round floating-point results towards the nearest even value (default)"},
+     {"round-to-even", NULL, "Alias for --round-to-nearest"},
+     {"round-to-plus-inf",
+      NULL,
+      "Round floating-point results towards plus infinity"},
+     {"round-to-minus-inf",
+      NULL,
+      "Round floating-point results towards minus infinity"},
+     {"round-to-zero", NULL, "Round floating-point results towards zero"},
+     {"fp-taylor-terms",
+      boost::program_options::value<int>()->value_name("n"),
+      "Terms the exp/log/pow operational models expand their Taylor series to, "
+      "between 2 and 12 (default 8). More terms are more accurate and more "
+      "expensive to solve"},
+   }},
   {"Witness",
    {{"witness-output",
      boost::program_options::value<std::string>()->value_name("path"),
@@ -348,11 +377,36 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-witnesses",
      boost::program_options::value<int>()->default_value(16)->value_name("n"),
      "Cap the number of witnesses reported per property "
-     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."}}},
+     "(default: 16; 0 = unlimited). Only meaningful with --all-witnesses."},
+    {"full-traces",
+     NULL,
+     "Print every trace state in the multi-witness report instead of the "
+     "states closest to the failure. Only meaningful with --all-witnesses."},
+    {"ascii-report",
+     NULL,
+     "Draw the multi-witness report with ASCII instead of box-drawing "
+     "characters. Detected automatically from the locale; this forces it."}}},
   {"Output",
    {{"output-goto",
      boost::program_options::value<std::string>(),
      "Export generated goto program"},
+    {"proof-cache",
+     boost::program_options::value<std::string>()->value_name("<dir>"),
+     "Reuse claims already proved unsatisfiable in an earlier run, keyed on "
+     "the claim's sliced SSA cone, this ESBMC build, every option in effect "
+     "and the data model. Requires --multi-property. Only proofs are stored. "
+     "Inactive under --ltl, --smt-during-symex, coverage modes and past the "
+     "first thread interleaving. "
+     "See https://esbmc.github.io/docs/proof-cache/"},
+    {"proof-cache-verify",
+     NULL,
+     "Consult --proof-cache but solve every claim anyway, reporting an error "
+     "when a stored proof disagrees with the solver"},
+    {"claim-fingerprint-dump",
+     boost::program_options::value<std::string>()->value_name("<file>"),
+     "Append one line per solved claim (digest of its sliced cone under each "
+     "SSA-name normalisation, cone size, verdict, location) to this file; "
+     "'-' writes to stdout prefixed with CLAIM-FP"},
     {"cex-output",
      boost::program_options::value<std::string>(),
      "Save the counterexample into a file or, "
@@ -374,6 +428,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"pytest-output-dir",
      boost::program_options::value<std::string>()->value_name("<dir>"),
      "Directory for --generate-pytest-testcase output (default: esbmc-pytest)"},
+    {"pytest-values-only",
+     NULL,
+     "Record the counterexample as a `witness` list instead of a runnable "
+     "test: importing the program would re-run it under CPython, where the "
+     "nondet intrinsics do not exist"},
     {"generate-ctest-testcase",
      NULL,
      "If a solution is found, generates CTest testcases for C programs"},
@@ -427,6 +486,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Disable the removal of NO-OP instructions in GOTO programs"},
     {"partial-loops", NULL, "Permit paths with partial loops"},
+    {"closed-world-fnptr",
+     NULL,
+     "Treat a function-pointer call with no compatible target as unreachable "
+     "rather than assuming an external definition may supply one"},
     {"no-slice", NULL, "Do not remove unused equations"},
     {"multi-fail-fast",
      boost::program_options::value<int>()->value_name("n"),
@@ -519,11 +582,29 @@ const struct group_opt_templ all_cmd_options[] = {
     {"context-bound",
      boost::program_options::value<int>()->default_value(-1)->value_name("nr"),
      "Limit number of context switches for each thread"},
+    {"incremental-context-bound",
+     NULL,
+     "Re-explore with the context bound raised by one each round, stopping at "
+     "the first violation or once a round has covered every interleaving"},
+    {"max-context-bound",
+     boost::program_options::value<int>()->default_value(20)->value_name("nr"),
+     "Highest context bound tried by --incremental-context-bound"},
+    {"falsify-context-bound",
+     boost::program_options::value<int>()->default_value(0)->value_name("nr"),
+     "Before the chosen strategy runs, look for a violation with the context "
+     "bound raised from 1 to nr; such a violation is genuine, no proof is "
+     "claimed, and the strategy still runs when none is found (0 = off)"},
     {"state-hashing", NULL, "Enable state-hashing, prunes duplicate states"},
     {"no-goto-merge",
      NULL,
      "Do not merge gotos when restoring paths after a context-switch"},
     {"no-por", NULL, "Do not do partial order reduction"},
+    {"sleep-sets",
+     NULL,
+     "Prune schedules with sleep sets; only fires where the search is "
+     "exhaustive, so pair it with --no-por and no context bound. Ignored under "
+     "--schedule, --direct-interleavings, --interactive-ileaves and "
+     "--data-races-check-only (experimental, off by default)"},
     {"cswitch-skip-readonly-globals",
      NULL,
      "Skip context switches on globals that are never written anywhere "
@@ -642,6 +723,11 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"multi-property-interleavings",
+     boost::program_options::value<int>()->value_name("n"),
+     "In multi-property mode, keep exploring thread interleavings after a "
+     "violation until n consecutive ones reach a verdict on no new property "
+     "(default 100, must be positive)"},
     {"no-standard-checks", NULL, "Disable default checks"},
     {"no-assertions", NULL, "Ignore assertions"},
     {"no-library-assertions",
@@ -681,6 +767,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"restrict-check",
      NULL,
      "Check C restrict-qualified pointer parameters do not alias"},
+    {"restrict-assume",
+     NULL,
+     "Assume the entry function's C restrict-qualified pointer parameters do "
+     "not alias"},
     {"unsigned-overflow-check",
      NULL,
      "Enable arithmetic over- and underflow check for unsigned integers"},
@@ -730,12 +820,18 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<int>()->default_value(-1)->value_name(
        "bits"),
      "Check if stack limit is respected"},
+    {"total-stack-limit",
+     boost::program_options::value<int>()->default_value(-1)->value_name(
+       "bits"),
+     "Bound the combined size of all live stack frames, excluding ESBMC's "
+     "own operational models. Accounted per symbolic path at declaration "
+     "points; over-approximates for spawned threads"},
     {"error-label",
      boost::program_options::value<std::string>()->value_name("label"),
      "Check if label is unreachable"},
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
-    {"malloc-zero-is-null", NULL, "Force malloc(0) to return NULL"},
+    {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "
@@ -909,7 +1005,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "Configure time limit, integer followed by {s,m,h}"},
     {"enable-core-dump", NULL, "Do not disable core dump output"},
     {"no-simplify", NULL, "Do not simplify any expression"},
-    {"no-propagation", NULL, "Disable constant propagation"},
+    {"no-propagation",
+     NULL,
+     "Disable constant propagation (unsupported with concurrency: the pthread "
+     "model requires constant thread ids)"},
     {"gcse",
      NULL,
      "Adds intermediate variables to precompute common sub-expressions between "
@@ -953,15 +1052,14 @@ const struct group_opt_templ all_cmd_options[] = {
      "always lowers function bodies through the IREP2 round-trip "
      "(migrate legacy codet → code_*2t → codet) since V.4.4; the legacy "
      "bypass and the --no-irep2-bodies escape hatch have been removed."},
-    {"irep2-native-body",
+    {"no-irep2-native-body",
      NULL,
-     "Experimental, default off (W1-loc spike Phase C, esbmc/esbmc#4715). "
-     "Route function bodies to an IREP2-native goto_convert that consumes "
-     "code_*2t directly and inherits the statement location onto value "
-     "operands at consumption, skipping the whole-body legacy round-trip. "
-     "Grown one statement kind at a time; any body containing an unsupported "
-     "construct falls back to the round-trip path, so flag-on is byte-"
-     "identical to flag-off until the native path is complete."}}},
+     "Convert function bodies through the whole-body legacy round-trip "
+     "instead of the IREP2-native goto_convert (esbmc/esbmc#4715). The native "
+     "path consumes code_*2t directly and inherits the statement location "
+     "onto value operands at consumption; a body containing an unsupported "
+     "construct falls back to the round-trip either way, so this is a "
+     "diagnostic escape hatch, not a semantic switch."}}},
   {"end", {{"", NULL, "End of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "Instruction"},

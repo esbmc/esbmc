@@ -1461,6 +1461,113 @@ irept build_inf_rhs(const irept &lhs)
   return c;
 }
 
+enum class builtin_rhs_kind
+{
+  mem,
+  realloc,
+  unary_fp,
+  fma,
+  nan,
+  inf,
+  zero,
+};
+
+struct builtin_rhs_rule
+{
+  builtin_rhs_kind kind;
+  // The statement/expression id the builder takes, for the kinds that share a
+  // builder across several spellings; unused otherwise.
+  const char *id;
+};
+
+// The rhs a recognised value-returning builtin lowers to, or nil for a callee
+// that is not one (roadmap §4.8) and for one whose arity does not match --
+// fix_builtin_call declines both alike. The spellings are a table rather than
+// an `||` chain so that adding a family costs a row, not a decision point: the
+// twelve abs spellings alone put a chain over the complexity gate.
+irept build_builtin_rhs(
+  const std::string &callee,
+  const irept &lhs,
+  const irept::subt &args)
+{
+  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
+  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
+  // must be in fix_expression's operand-wrap set for the argument to reach it.
+  // The native abs expr is type-agnostic (build_unary_fp_rhs takes the lhs
+  // type), so the same rewrite covers the integer abs family -- CBMC emits
+  // abs/labs/llabs/imaxabs (and their __builtin_ spellings) as bodyless
+  // FUNCTION_CALL externals too, so without this ESBMC returns nondet and a
+  // valid abs(-7)==7 reports FAILED where CBMC says SUCCESSFUL.
+  //
+  // setjmp: neither tool models the longjmp control transfer, so the direct
+  // return is the only one the explored control flow can take and 0 is exact
+  // -- the value CBMC itself assigns. ESBMC's own setjmp OM instead puts the
+  // construct out of scope (__ESBMC_unreachable), leaving a bodyless external
+  // here whose nondet return admits values the modelled program cannot
+  // produce: a false FAILED on any setjmp-using binary. A longjmp still fails
+  // to transfer control, exactly as under CBMC -- cbmc_setjmp_longjmp pins
+  // that this rewrite does not claim otherwise.
+  static const std::unordered_map<std::string, builtin_rhs_rule> rules = {
+    {"malloc", {builtin_rhs_kind::mem, "malloc"}},
+    {"alloca", {builtin_rhs_kind::mem, "alloca"}},
+    {"__builtin_alloca", {builtin_rhs_kind::mem, "alloca"}},
+    {"realloc", {builtin_rhs_kind::realloc, nullptr}},
+    {"sqrtf", {builtin_rhs_kind::unary_fp, "ieee_sqrt"}},
+    {"sqrt", {builtin_rhs_kind::unary_fp, "ieee_sqrt"}},
+    {"sqrtl", {builtin_rhs_kind::unary_fp, "ieee_sqrt"}},
+    {"nearbyint", {builtin_rhs_kind::unary_fp, "nearbyint"}},
+    {"nearbyintf", {builtin_rhs_kind::unary_fp, "nearbyint"}},
+    {"nearbyintl", {builtin_rhs_kind::unary_fp, "nearbyint"}},
+    {"fma", {builtin_rhs_kind::fma, nullptr}},
+    {"fmaf", {builtin_rhs_kind::fma, nullptr}},
+    {"fmal", {builtin_rhs_kind::fma, nullptr}},
+    {"__builtin_nan", {builtin_rhs_kind::nan, nullptr}},
+    {"__builtin_nanf", {builtin_rhs_kind::nan, nullptr}},
+    {"__builtin_huge_val", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_huge_valf", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_huge_vall", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_inf", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_inff", {builtin_rhs_kind::inf, nullptr}},
+    {"__builtin_infl", {builtin_rhs_kind::inf, nullptr}},
+    {"fabsf", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"fabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"fabsl", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"abs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"labs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"llabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"imaxabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_abs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_labs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_llabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"__builtin_imaxabs", {builtin_rhs_kind::unary_fp, "abs"}},
+    {"setjmp", {builtin_rhs_kind::zero, nullptr}},
+    {"_setjmp", {builtin_rhs_kind::zero, nullptr}}};
+
+  auto it = rules.find(callee);
+  if (it == rules.end())
+    return get_nil_irep();
+
+  const builtin_rhs_rule &rule = it->second;
+  switch (rule.kind)
+  {
+  case builtin_rhs_kind::mem:
+    return build_mem_rhs(lhs, args, rule.id);
+  case builtin_rhs_kind::realloc:
+    return build_realloc_rhs(lhs, args);
+  case builtin_rhs_kind::unary_fp:
+    return build_unary_fp_rhs(lhs, args, rule.id);
+  case builtin_rhs_kind::fma:
+    return build_fma_rhs(lhs, args);
+  case builtin_rhs_kind::nan:
+    return build_nan_rhs(lhs);
+  case builtin_rhs_kind::inf:
+    return build_inf_rhs(lhs);
+  case builtin_rhs_kind::zero:
+    return mk_bv_const(lhs.find("type"), 0);
+  }
+  return get_nil_irep();
+}
+
 // CBMC-sourced FUNCTION_CALL instructions never go through ESBMC's own
 // goto_convert, so ESBMC's builtin-call rewrites (e.g. malloc ->
 // side_effect_exprt via goto-programs/builtin_functions.cpp, or sqrtf ->
@@ -1535,47 +1642,9 @@ bool fix_builtin_call(irept &code)
 
   const irept lhs = sub[0];
 
-  irept rhs;
-  if (callee == "malloc")
-    rhs = build_mem_rhs(lhs, args, "malloc");
-  else if (callee == "alloca" || callee == "__builtin_alloca")
-    rhs = build_mem_rhs(lhs, args, "alloca");
-  else if (callee == "realloc")
-    rhs = build_realloc_rhs(lhs, args);
-  else if (callee == "sqrtf" || callee == "sqrt" || callee == "sqrtl")
-    rhs = build_unary_fp_rhs(lhs, args, "ieee_sqrt");
-  else if (
-    callee == "nearbyint" || callee == "nearbyintf" || callee == "nearbyintl")
-    rhs = build_unary_fp_rhs(lhs, args, "nearbyint");
-  else if (callee == "fma" || callee == "fmaf" || callee == "fmal")
-    rhs = build_fma_rhs(lhs, args);
-  else if (callee == "__builtin_nan" || callee == "__builtin_nanf")
-    rhs = build_nan_rhs(lhs);
-  else if (
-    callee == "__builtin_huge_val" || callee == "__builtin_huge_valf" ||
-    callee == "__builtin_huge_vall" || callee == "__builtin_inf" ||
-    callee == "__builtin_inff" || callee == "__builtin_infl")
-    rhs = build_inf_rhs(lhs);
-  // "abs" mirrors what clang_c_adjust_expr.cpp builds for a recognised
-  // fabs/fabsf/fabsl call; migrate_expr's abs handler reads op0(), so "abs"
-  // must be in fix_expression's operand-wrap set for the argument to reach it.
-  // The native abs expr is type-agnostic (build_unary_fp_rhs takes the lhs
-  // type), so the same rewrite covers the integer abs family -- CBMC emits
-  // abs/labs/llabs/imaxabs (and their __builtin_ spellings) as bodyless
-  // FUNCTION_CALL externals too, so without this ESBMC returns nondet and a
-  // valid abs(-7)==7 reports FAILED where CBMC says SUCCESSFUL.
-  else if (
-    callee == "fabsf" || callee == "fabs" || callee == "fabsl" ||
-    callee == "abs" || callee == "labs" || callee == "llabs" ||
-    callee == "imaxabs" || callee == "__builtin_abs" ||
-    callee == "__builtin_labs" || callee == "__builtin_llabs" ||
-    callee == "__builtin_imaxabs")
-    rhs = build_unary_fp_rhs(lhs, args, "abs");
-  else
-    return false; // not (yet) a recognised builtin; see roadmap §4.8
-
+  const irept rhs = build_builtin_rhs(callee, lhs, args);
   if (rhs.is_nil())
-    return false; // wrong arity for the builtin matched above
+    return false;
 
   code.set("statement", "assign");
   code.get_sub().clear();
@@ -1649,6 +1718,20 @@ bool is_zero_fill(const irept &v)
   return !val.empty() && val.find_first_not_of('0') == std::string::npos;
 }
 
+// True if `i` is a literal zero subscript, tolerating the width-coercing cast
+// CBMC wraps an array index in.
+bool is_zero_index(const irept &i)
+{
+  const irept *e = &i;
+  while (e->id() == "typecast")
+  {
+    if (e->get_sub().empty())
+      return false;
+    e = &e->get_sub().front();
+  }
+  return is_zero_fill(*e);
+}
+
 // Rewrites JBMC's `ARRAY_SET payload <0|NULL>` into a __ESBMC_memset call over
 // the byte extent recorded when the payload was allocated two instructions
 // earlier. __CPROVER_array_set carries no length of its own -- that is why the
@@ -1685,6 +1768,294 @@ bool rewrite_java_array_set(
   return true;
 }
 
+// The whole object a HAVOC_OBJECT operand designates, or null when it is not
+// statically known. CBMC hands the instruction a `void *`, but its semantics is
+// the entire object containing the target, so a subobject address (`&a[0]` from
+// an array decay, `&s.f`) walks down to the base symbol. A pointer whose value
+// is not an address-of -- a `malloc` result, a parameter -- names no symbol
+// here, and the caller declines rather than havocking the wrong storage.
+const irept *havoc_target(const irept &op)
+{
+  const irept *e = &op;
+  while (e->id() == "typecast")
+  {
+    if (e->get_sub().empty())
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  // Only an address-of names an object here. A pointer *value*
+  // (`havoc_object(p)` after `p = malloc(n)`) would otherwise reach the walk
+  // below as the symbol `p` itself, and havocking `p` scribbles on the pointer,
+  // not the heap object it designates -- a different program, not a weaker one.
+  if (e->id() != "address_of" || e->get_sub().empty())
+    return nullptr;
+  e = &e->get_sub().front();
+
+  while (e->id() == "index" || e->id() == "member")
+  {
+    if (e->get_sub().empty())
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  return e->id() == "symbol" ? e : nullptr;
+}
+
+// The array a CBMC whole-object array codet (ARRAY_SET / ARRAY_COPY /
+// ARRAY_REPLACE) operates on, or null when the operand does not name one
+// statically. The pointer reaches the instruction as the decayed `&arr[0]`, so
+// peel the casts, the address-of and that subscript. The result must be an
+// array-typed *symbol*: CBMC works on the whole object the pointer lands in,
+// which coincides with the array only when the array is the entire object. A
+// member array (`&s.a[0]`) is therefore declined -- CBMC clobbers the rest of
+// `s` too, so touching only `s.a` would claim SUCCESSFUL where CBMC reports a
+// violation. A non-zero index would start from an offset, which a whole-array
+// assignment cannot express, so only the decayed form is accepted.
+const irept *whole_array_target(const irept &op)
+{
+  const irept *e = &op;
+  while (e->id() == "typecast")
+  {
+    if (e->get_sub().empty())
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  if (e->id() != "address_of" || e->get_sub().empty())
+    return nullptr;
+  e = &e->get_sub().front();
+
+  if (e->id() == "index")
+  {
+    if (e->get_sub().size() != 2 || !is_zero_index(e->get_sub()[1]))
+      return nullptr;
+    e = &e->get_sub().front();
+  }
+
+  return e->id() == "symbol" && e->find("type").id() == "array" ? e : nullptr;
+}
+
+// Rewrites `ARRAY_SET p v` (__CPROVER_array_set) into the fill assignment
+// `ASSIGN arr := array_of(v)`.
+// The instruction carries no length -- the extent is the pointee array's own,
+// which is exactly what an array_of over that type expresses, so the recovered
+// target supplies what the operand does not.
+bool rewrite_array_set_fill(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 2)
+    return false;
+
+  const irept *target = whole_array_target(ops[0]);
+  if (!target)
+    return false;
+
+  const irept &atype = target->find("type");
+  if (atype.get_sub().empty())
+    return false;
+
+  // CBMC converts the fill to the element type -- `__CPROVER_array_set(d, 5)`
+  // on a double[] leaves 5.0, and a char[] takes (char)300 -- so the value is
+  // cast rather than reinterpreted. Without it a wider or differently-kinded
+  // fill reaches the solver as an array_of whose operand sort disagrees with
+  // the array's, which Bitwuzla rejects outright.
+  irept value(irep_idt("typecast"));
+  value.add("type") = atype.get_sub().front();
+  value.get_sub().push_back(ops[1]);
+
+  irept fill(irep_idt("array_of"));
+  fill.add("type") = atype;
+  fill.get_sub().push_back(value);
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(*target);
+  code.get_sub().push_back(fill);
+  return true;
+}
+
+// Rewrites `ARRAY_COPY dst src` / `ARRAY_REPLACE dst src` into the whole-array
+// `ASSIGN dst := src`, which both reduce to when the two arrays have the same
+// type. They part company only when the extents differ, and neither remainder
+// is a whole-array assignment: a longer `array_copy` destination is left
+// *unconstrained* past the source extent (verified against CBMC), while
+// `array_replace` overwrites only the prefix and preserves the tail. Mismatched
+// extents are therefore declined rather than approximated in either direction.
+bool rewrite_array_copy(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 2)
+    return false;
+
+  const irept *dst = whole_array_target(ops[0]);
+  const irept *src = whole_array_target(ops[1]);
+  if (!dst || !src || !(dst->find("type") == src->find("type")))
+    return false;
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(*dst);
+  code.get_sub().push_back(*src);
+  return true;
+}
+
+// Reads a raw CBMC integer constant. Values are hex strings at this point --
+// fix_expression's own constant branch is what later rewrites them to binary of
+// the type's width -- so parse base 16, and reject anything too wide for the
+// conversion rather than letting stoull throw.
+bool constant_uint(const irept &c, unsigned long long &out)
+{
+  if (c.id() != "constant")
+    return false;
+
+  const std::string v = c.find("value").id_string();
+  if (
+    v.empty() || v.size() > 16 ||
+    v.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
+    return false;
+
+  out = std::stoull(v, nullptr, 16);
+  return true;
+}
+
+// Guards against building a pathological conjunction for a huge array; such a
+// comparison is beyond BMC anyway, and declining beats exhausting memory.
+const unsigned long long array_equal_max_elements = 4096;
+
+// Rewrites `ARRAY_EQUAL lhs rhs result` (__CPROVER_array_equal) into
+// `ASSIGN result := lhs[0] == rhs[0] && ... && lhs[n-1] == rhs[n-1]`. Unlike
+// the rest of the family this codet carries its own destination -- the bool
+// temporary CBMC declares for the call's value -- as a third operand, so the
+// result lands there rather than on either array.
+//
+// The comparison is spelled out per element rather than as a whole-array `==`
+// because ESBMC's array equality does not decide this: two arrays whose every
+// in-bounds element is equal still compare may-differ (checked on both
+// solvers, with and without initialisers), where CBMC -- which flattens arrays
+// to fixed-size tuples -- answers equal. Indexing sidesteps that entirely.
+//
+// Arrays of differing type are declined: CBMC answers `false` for them (a
+// shorter array is never equal to a longer one), but two spellings of one type
+// would compare unequal as ireps while CBMC calls them equal, so a synthesised
+// `false` risks a wrong verdict where a decline only costs a case.
+bool rewrite_array_equal(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 3)
+    return false;
+
+  const irept *lhs = whole_array_target(ops[0]);
+  const irept *rhs = whole_array_target(ops[1]);
+  if (!lhs || !rhs || !(lhs->find("type") == rhs->find("type")))
+    return false;
+
+  const irept &atype = lhs->find("type");
+  unsigned long long n = 0;
+  if (
+    atype.get_sub().empty() || !constant_uint(atype.find("size"), n) ||
+    n == 0 || n > array_equal_max_elements)
+    return false;
+
+  const irept &elem = atype.get_sub().front();
+  const irept &bool_ty = ops[2].find("type");
+  const irept idx_ty = static_cast<const irept &>(int_type());
+
+  irept result;
+  for (unsigned long long i = 0; i < n; i++)
+  {
+    const irept subscript = mk_bv_const(idx_ty, i);
+    irept eq = mk_binary(
+      "=",
+      bool_ty,
+      mk_binary("index", elem, *lhs, subscript),
+      mk_binary("index", elem, *rhs, subscript));
+    result = i == 0 ? eq : mk_binary("and", bool_ty, result, eq);
+  }
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(ops[2]);
+  code.get_sub().push_back(result);
+  return true;
+}
+
+// Rewrites `HAVOC_OBJECT p` (__CPROVER_havoc_object) into the ASSIGN of a
+// nondet side effect the native pipeline would produce, so the object loses
+// its value the way CBMC's own symex drops it. The instruction carries no
+// extent -- that is why an unrecoverable target is still declined -- but a
+// whole-symbol assignment needs none: the nondet takes the symbol's type.
+bool rewrite_havoc_object(irept &code)
+{
+  const irept::subt ops = code.get_sub();
+  if (ops.size() != 1)
+    return false;
+
+  const irept *target = havoc_target(ops[0]);
+  if (!target)
+    return false;
+
+  irept nondet(irep_idt("sideeffect"));
+  nondet.add("statement") = mk("nondet");
+  nondet.add("type") = target->find("type");
+
+  code.add("statement") = mk("assign");
+  code.get_sub().clear();
+  code.get_sub().push_back(*target);
+  code.get_sub().push_back(nondet);
+  return true;
+}
+
+// CBMC's whole-object codet statements are size-implicit: `array_set`
+// (__CPROVER_array_set: set every element of the pointed-to array) and
+// `havoc_object` take the extent from the pointee's type, which nothing here
+// reconstructs. Rewrite the shapes that need no extent and return the ESBMC
+// instruction kind that rewrite implies (13 ASSIGN, 16 FUNCTION_CALL -- shared
+// numbering, see map_cbmc_instruction_type), or null when `code` is not one of
+// them. The rest are declined by throwing, which create_goto_program's handler
+// turns into a graceful error exit (roadmap §4.7): migrate would otherwise
+// abort() on them (SIGABRT). These reach the adapter only from an explicit
+// __CPROVER_array_set / _array_copy / _array_replace / _havoc_object -- CBMC's
+// own memset lowering is retargeted to __ESBMC_memset in fix_builtin_call
+// before its ARRAY_SET body runs (§4.8).
+const char *rewrite_whole_object_codet(
+  irept &code,
+  const std::unordered_map<std::string, irept> &payload_extent)
+{
+  if (code.id() == "nil")
+    return nullptr;
+
+  const irep_idt stmt = code.find("statement").id();
+  if (stmt == "array_set")
+  {
+    if (rewrite_java_array_set(code, payload_extent))
+      return "16";
+    if (rewrite_array_set_fill(code))
+      return "13";
+  }
+  else if (stmt == "array_copy" || stmt == "array_replace")
+  {
+    if (rewrite_array_copy(code))
+      return "13";
+  }
+  else if (stmt == "array_equal")
+  {
+    if (rewrite_array_equal(code))
+      return "13";
+  }
+  else if (stmt == "havoc_object")
+  {
+    if (rewrite_havoc_object(code))
+      return "13";
+  }
+  else
+    return nullptr;
+
+  throw std::string(
+    "CBMC adapter: '" + stmt.as_string() +
+    "' whole-object operations are not yet supported on the --binary path");
+}
+
 irept instruction_to_esbmc_irep(
   const cbmc_instructiont &ins,
   const std::map<unsigned, unsigned> &target_revmap,
@@ -1696,28 +2067,8 @@ irept instruction_to_esbmc_irep(
   // ESBMC expects code arguments inside "operands".
   irept code = ins.code;
 
-  // CBMC's whole-object codet statements have no ESBMC symex counterpart, so
-  // migrate would abort() on them (SIGABRT). `array_set` (__CPROVER_array_set:
-  // set every element of the pointed-to array) carries no explicit length -- the
-  // extent comes from the pointee's type, which ESBMC's memset/array machinery
-  // does not reconstruct here -- and `havoc_object` (set the whole pointed-to
-  // object nondet) is likewise size-implicit. Decline cleanly (a throw the
-  // create_goto_program handler turns into a graceful error exit, roadmap §4.7)
-  // rather than crashing; these reach the adapter only from an explicit
-  // __CPROVER_array_set / __CPROVER_havoc_object (CBMC's own memset lowering is
-  // retargeted to __ESBMC_memset in fix_builtin_call before its ARRAY_SET body
-  // runs, §4.8).
-  bool rewrote_array_set = false;
-  if (code.id() != "nil")
-  {
-    const irep_idt stmt = code.find("statement").id();
-    if (stmt == "array_set")
-      rewrote_array_set = rewrite_java_array_set(code, payload_extent);
-    if (!rewrote_array_set && (stmt == "array_set" || stmt == "havoc_object"))
-      throw std::string(
-        "CBMC adapter: '" + stmt.as_string() +
-        "' whole-object operations are not yet supported on the --binary path");
-  }
+  const char *whole_object_kind =
+    rewrite_whole_object_codet(code, payload_extent);
 
   const bool rewrote_builtin_call = fix_builtin_call(code);
   irept operands;
@@ -1734,13 +2085,13 @@ irept instruction_to_esbmc_irep(
 
   result.add("code") = code;
   result.add("location") = ins.source_location;
-  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...) or
-  // an OTHER "free" codet; the instruction kind must agree with the rewritten
-  // code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER (shared
-  // numbering, see map_cbmc_instruction_type).
-  // 16 is FUNCTION_CALL: the memset call that replaced an ARRAY_SET.
+  // fix_builtin_call rewrote a FUNCTION_CALL into an ASSIGN (malloc/sqrt/...)
+  // or an OTHER "free" codet; the instruction kind must agree with the
+  // rewritten code, not CBMC's original raw type. 13 is ASSIGN, 4 is OTHER
+  // (shared numbering, see map_cbmc_instruction_type).
+  // rewrite_whole_object_codet reports the kind its own rewrite implies.
   result.add("typeid") = mk(
-    rewrote_array_set ? "16"
+    whole_object_kind ? whole_object_kind
     : rewrote_builtin_call
       ? (code.find("statement").id() == "free" ? "4" : "13")
       : std::to_string(map_cbmc_instruction_type(ins.instr_type)));

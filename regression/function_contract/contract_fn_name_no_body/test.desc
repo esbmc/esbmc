@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract extern_fn
+^ERROR: --replace-call-with-contract: cannot use 'extern_fn': no function of that name has a body here$
+\A(?!(.|\n)*VERIFICATION)

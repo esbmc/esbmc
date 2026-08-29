@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 3
+^ERROR: the result of the 'map' builtin is not modelled \(no 'map' type\)$

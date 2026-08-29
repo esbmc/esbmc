@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis
+^VERIFICATION SUCCESSFUL$
+^Generated 1 VCC\(s\), 0 remaining after simplification

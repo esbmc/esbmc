@@ -53,7 +53,11 @@ private:
   ios::streampos _filepos = 0;
 };
 
-class fstream : public istream, public ostream
+/* ostream first: a virtual call through a non-first base that itself derives
+ * virtually dereferences a bad vtable pointer (github #7025), and every
+ * formatted insertion dispatches through ostream. iostream already orders the
+ * bases this way. */
+class fstream : public ostream, public istream
 {
 public:
   fstream();

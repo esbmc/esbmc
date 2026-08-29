@@ -4,6 +4,11 @@
 #include "OM_compiler_defs.h"
 #include "definitions.h"
 #include "cstdio"
+// Base of the stream chain, so this is what makes the fixed-width typedefs
+// reachable from <ios>/<ostream>/<istream>/<iomanip>/<iostream>/<iterator>/
+// <memory> as on libstdc++ and libc++ (github #3267).
+#include "cstdint"
+#include "char_traits.h"
 
 namespace std
 {
@@ -11,9 +16,6 @@ namespace std
 /* forward declaration */
 class locale;
 class ostream;
-
-template <typename>
-struct char_traits;
 
 /* References:
  * - https://cplusplus.com/reference/streambuf/
@@ -24,8 +26,14 @@ struct char_traits;
  *  The APIs provided by this OM appears to be "just enough" to verify the test cases in our regression suite.
  *  However, this OM does NOT provide 100% coverage of the actual C++ streambuf library. Some APIs are not included here.
  *  We probably need to add the missing APIs on-demand when we start to verify real-world C++ programs.
+ *
+ * [streambuf]: streambuf is basic_streambuf<char>, not a class of its own.
+ * Code that names the template -- boost's lexical_cast derives its unlocked
+ * buffer from std::basic_streambuf<CharT, Traits> -- did not compile while
+ * only the char instantiation existed. See #5868.
  */
-class streambuf
+template <class CharT, class Traits = char_traits<CharT> >
+class basic_streambuf
 {
   typedef int streampos;
   typedef int streamoff;
@@ -36,49 +44,55 @@ class streambuf
   static const openmode out = 1L << 4;
 
 public:
+  typedef CharT char_type;
+  typedef Traits traits_type;
+  typedef typename Traits::int_type int_type;
+  typedef typename Traits::pos_type pos_type;
+  typedef typename Traits::off_type off_type;
+
   //  Locales
   locale pubimbue(const locale &loc);
   locale getloc() const;
 
   //  Buffer management and positioning:
-  streambuf *pubsetbuf(char *s, streamsize n);
+  basic_streambuf *pubsetbuf(char_type *s, streamsize n);
   streampos pubseekoff(streamoff off, seekdir way, openmode which = in | out);
   streampos pubseekpos(streampos pos, openmode which = in | out);
   int pubsync();
 
   //  Input functions (get):
   streamsize in_avail();
-  int snextc();
-  int sbumpc();
-  int sgetc();
-  streamsize sgetn(char *s, streamsize n);
-  int sputbackc(char c);
-  int sungetc();
+  int_type snextc();
+  int_type sbumpc();
+  int_type sgetc();
+  streamsize sgetn(char_type *s, streamsize n);
+  int_type sputbackc(char_type c);
+  int_type sungetc();
 
   //  Output functions (put):
-  int sputc(char c);
-  streamsize sputn(const char *s, streamsize n);
+  int_type sputc(char_type c);
+  streamsize sputn(const char_type *s, streamsize n);
 
   //Protected member functions
 protected:
-  streambuf();
-  virtual ~streambuf()
+  basic_streambuf();
+  virtual ~basic_streambuf()
   {
   }
 
   //	Input sequence (get):
-  char *eback() const;
-  char *gptr() const;
-  char *egptr() const;
+  char_type *eback() const;
+  char_type *gptr() const;
+  char_type *egptr() const;
   void gbump(int n);
-  void setg(char *gbeg, char *gnext, char *gend);
+  void setg(char_type *gbeg, char_type *gnext, char_type *gend);
 
   //	Output sequence (put):
-  char *pbase() const;
-  char *pptr() const;
-  char *epptr() const;
+  char_type *pbase() const;
+  char_type *pptr() const;
+  char_type *epptr() const;
   void pbump(int n);
-  void setp(char *pbeg, char *pend);
+  void setp(char_type *pbeg, char_type *pend);
 
   //Virtual protected member functions
   //	Locales
@@ -97,7 +111,7 @@ protected:
   CC_DIAGNOSTIC_PUSH()
   CC_DIAGNOSTIC_IGNORE_OM_LLVM_CHECKS()
   //	Buffer management and positioning:
-  virtual streambuf *setbuf(char *s, streamsize n)
+  virtual basic_streambuf *setbuf(char_type *s, streamsize n)
   {
   }
   virtual streampos
@@ -115,28 +129,31 @@ protected:
   virtual streamsize showmanyc()
   {
   }
-  virtual streamsize xsgetn(char *s, streamsize n)
+  virtual streamsize xsgetn(char_type *s, streamsize n)
   {
   }
-  virtual int underflow()
+  virtual int_type underflow()
   {
   }
-  virtual int uflow()
+  virtual int_type uflow()
   {
   }
-  virtual int pbackfail(int c = EOF)
+  virtual int_type pbackfail(int_type c = Traits::eof())
   {
   }
 
   //	Output functions (put):
-  virtual streamsize xsputn(const char *s, streamsize n)
+  virtual streamsize xsputn(const char_type *s, streamsize n)
   {
   }
-  virtual int overflow(int c = EOF)
+  virtual int_type overflow(int_type c = Traits::eof())
   {
   }
   CC_DIAGNOSTIC_POP()
 };
+
+typedef basic_streambuf<char> streambuf;
+typedef basic_streambuf<wchar_t> wstreambuf;
 
 template <typename CharT, typename Traits = char_traits<CharT> >
 class istreambuf_iterator
@@ -147,7 +164,7 @@ template <typename CharT, typename Traits = char_traits<CharT> >
 class ostreambuf_iterator
 {
 private:
-  streambuf* sbuf_;
+  basic_streambuf<CharT, Traits> *sbuf_;
 
 public:
   // Multiple constructors including template constructor for streams

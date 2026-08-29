@@ -48,7 +48,7 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
 
   // get the class' type where this ctor is declared
   const symbolt *ctor_class_symb =
-    namespacet(context).lookup(ctor_type.get("#member_name"));
+    namespacet(context).lookup(ctor_type.member_name());
   assert(ctor_class_symb);
   // get the `components` vector from this class' type
   const struct_typet::componentst &components =
@@ -197,7 +197,7 @@ exprt clang_cpp_adjust::gen_vptr_init_rhs(
 
   // get the corresponding vtable variable symbol
   std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
-                              "@" + ctor_type.get("#member_name").as_string();
+                              "@" + ctor_type.member_name().as_string();
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 

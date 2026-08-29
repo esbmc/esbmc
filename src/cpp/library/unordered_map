@@ -1,7 +1,11 @@
 #ifndef ESBMC_UNORDERED_MAP_H
 #define ESBMC_UNORDERED_MAP_H
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include <utility>
+#include <memory> /* std::allocator, for the Allocator parameter */
 
 namespace std {
 
@@ -26,8 +30,12 @@ struct esbmc_um_equal_to {
 };
 
 // Forward declaration
-template<typename Key, typename Value, typename Hash = esbmc_um_hash<Key>, 
-         typename KeyEqual = esbmc_um_equal_to<Key>>
+// [unord.map.overview]: the Allocator parameter completes the signature. The
+// fixed array below does the allocating, so it is carried for the signature and
+// the allocator_type typedef only.
+template<typename Key, typename Value, typename Hash = esbmc_um_hash<Key>,
+         typename KeyEqual = esbmc_um_equal_to<Key>,
+         typename Allocator = allocator<std::pair<const Key, Value>>>
 class unordered_map;
 
 // Iterator for unordered_map
@@ -149,7 +157,8 @@ public:
 };
 
 // Simple unordered_map implementation using fixed-size array
-template<typename Key, typename Value, typename Hash, typename KeyEqual>
+template<typename Key, typename Value, typename Hash, typename KeyEqual,
+         typename Allocator>
 class unordered_map {
 public:
     // Type definitions
@@ -159,6 +168,7 @@ public:
     typedef std::pair<Key, Value> value_type;
     typedef Hash hasher;
     typedef KeyEqual key_equal;
+    typedef Allocator allocator_type;
     typedef value_type& reference;
     typedef const value_type& const_reference;
     typedef value_type* pointer;
@@ -558,6 +568,170 @@ public:
     }
 };
 
+// [unord.multimap]: same storage as unordered_map, but insert never rejects an
+// equivalent key, so find/count have to scan for every match and there is no
+// operator[]/at.
+template<typename Key, typename Value, typename Hash = esbmc_um_hash<Key>,
+         typename KeyEqual = esbmc_um_equal_to<Key>,
+         typename Allocator = allocator<std::pair<const Key, Value>>>
+class unordered_multimap {
+public:
+    typedef Key key_type;
+    typedef Value mapped_type;
+    typedef std::pair<Key, Value> value_type;
+    typedef Hash hasher;
+    typedef KeyEqual key_equal;
+    typedef Allocator allocator_type;
+    typedef value_type& reference;
+    typedef const value_type& const_reference;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+
+    typedef esbmc_unordered_map_iterator<Key, Value, Hash, KeyEqual> iterator;
+    typedef esbmc_unordered_map_const_iterator<Key, Value, Hash, KeyEqual> const_iterator;
+
+private:
+    // 64 slots, for the reason unordered_map above records.
+    static const size_t MAX_SIZE = 64;
+    value_type data_[MAX_SIZE];
+    size_type size_;
+    hasher hash_function_;
+    key_equal equal_function_;
+
+    size_type find_index(const Key& key) const {
+        for (size_type i = 0; i < size_; ++i) {
+            if (equal_function_(data_[i].first, key)) {
+                return i;
+            }
+        }
+        return MAX_SIZE;
+    }
+
+public:
+    unordered_multimap() : size_(0) {}
+
+    ~unordered_multimap() { size_ = 0; }
+
+    explicit unordered_multimap(size_type /*bucket_count*/) : size_(0) {}
+
+    template<typename InputIterator>
+    unordered_multimap(InputIterator first, InputIterator last) : size_(0) {
+        insert(first, last);
+    }
+
+    unordered_multimap(const unordered_multimap& other)
+        : size_(other.size_), hash_function_(other.hash_function_),
+          equal_function_(other.equal_function_) {
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i] = other.data_[i];
+        }
+    }
+
+    unordered_multimap& operator=(const unordered_multimap& other) {
+        if (this != &other) {
+            size_ = other.size_;
+            hash_function_ = other.hash_function_;
+            equal_function_ = other.equal_function_;
+            for (size_type i = 0; i < size_; ++i) {
+                data_[i] = other.data_[i];
+            }
+        }
+        return *this;
+    }
+
+    iterator begin() { return iterator(data_, 0, size_); }
+    iterator end() { return iterator(data_, size_, size_); }
+    const_iterator begin() const { return const_iterator(data_, 0, size_); }
+    const_iterator end() const { return const_iterator(data_, size_, size_); }
+    const_iterator cbegin() const { return begin(); }
+    const_iterator cend() const { return end(); }
+
+    bool empty() const { return size_ == 0; }
+    size_type size() const { return size_; }
+    size_type max_size() const { return MAX_SIZE; }
+
+    // Unlike unordered_map::insert, an equivalent key is always added, so this
+    // returns a plain iterator rather than a pair.
+    iterator insert(const value_type& value) {
+        __ESBMC_assert(size_ < MAX_SIZE, "unordered_multimap capacity exceeded");
+        data_[size_] = value;
+        ++size_;
+        return iterator(data_, size_ - 1, size_);
+    }
+
+    template<typename InputIterator>
+    void insert(InputIterator first, InputIterator last) {
+        for (InputIterator it = first; it != last; ++it) {
+            insert(*it);
+        }
+    }
+
+    template<typename... Args>
+    iterator emplace(Args&&... args) {
+        return insert(value_type(std::forward<Args>(args)...));
+    }
+
+    // [unord.multimap] erase(k) removes every equivalent key.
+    size_type erase(const key_type& key) {
+        size_type removed = 0;
+        size_type out = 0;
+        for (size_type i = 0; i < size_; ++i) {
+            if (equal_function_(data_[i].first, key)) {
+                ++removed;
+            } else {
+                data_[out] = data_[i];
+                ++out;
+            }
+        }
+        size_ = out;
+        return removed;
+    }
+
+    void clear() { size_ = 0; }
+
+    iterator find(const key_type& key) {
+        size_type idx = find_index(key);
+        if (idx == MAX_SIZE) {
+            return end();
+        }
+        return iterator(data_, idx, size_);
+    }
+
+    const_iterator find(const key_type& key) const {
+        size_type idx = find_index(key);
+        if (idx == MAX_SIZE) {
+            return end();
+        }
+        return const_iterator(data_, idx, size_);
+    }
+
+    size_type count(const key_type& key) const {
+        size_type n = 0;
+        for (size_type i = 0; i < size_; ++i) {
+            if (equal_function_(data_[i].first, key)) {
+                ++n;
+            }
+        }
+        return n;
+    }
+
+    bool contains(const key_type& key) const {
+        return find_index(key) != MAX_SIZE;
+    }
+
+    void swap(unordered_multimap& other) {
+        unordered_multimap tmp = *this;
+        *this = other;
+        other = tmp;
+    }
+
+    hasher hash_function() const { return hash_function_; }
+    key_equal key_eq() const { return equal_function_; }
+};
+
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif // ESBMC_UNORDERED_MAP_H

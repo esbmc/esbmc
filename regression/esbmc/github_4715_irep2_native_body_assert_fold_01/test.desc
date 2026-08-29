@@ -1,0 +1,9 @@
+CORE
+main.c
+--goto-functions-only
+ASSERT !\(c == 1\) // a
+ASSERT !\(c == 2\) // b
+ASSERT c == 3 // c
+ASSERT !\(c == 4\) // d
+ASSERT c == 4 // e
+ASSERT !\(c == 5\) // f

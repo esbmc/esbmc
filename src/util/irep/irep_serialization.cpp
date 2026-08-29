@@ -1,5 +1,6 @@
 #include <sstream>
 #include <util/irep/irep_serialization.h>
+#include <util/message/message.h>
 
 void irep_serializationt::write_irep(std::ostream &out, const irept &irep)
 {
@@ -31,18 +32,25 @@ void irep_serializationt::write_irep(std::ostream &out, const irept &irep)
 void irep_serializationt::reference_convert(std::istream &in, irept &irep)
 {
   unsigned id = read_long(in);
+  auto &ireps_on_read = ireps_container.ireps_on_read;
 
-  if (
-    ireps_container.ireps_on_read.find(id) !=
-    ireps_container.ireps_on_read.end())
+  if (id < ireps_on_read.size())
   {
-    irep = ireps_container.ireps_on_read[id];
+    irep = ireps_on_read[id];
+    return;
   }
-  else
+
+  /* A first occurrence always takes the next index; anything beyond that is a
+   * forward reference the format cannot express, i.e. a corrupt stream. */
+  if (id != ireps_on_read.size())
   {
-    read_irep(in, irep);
-    ireps_container.ireps_on_read[id] = irep;
+    log_error("goto binary: irep {} referenced before it is defined", id);
+    abort();
   }
+
+  ireps_on_read.emplace_back(); // claim the slot before the nested ids are read
+  read_irep(in, irep);
+  ireps_on_read[id] = irep;
 }
 
 void irep_serializationt::read_irep(std::istream &in, irept &irep)

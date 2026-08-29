@@ -124,7 +124,7 @@ def _run_check_json(check, base_dir):
     if not os.path.isfile(path):
         return False, f"CHECK_JSON file not found: {file}"
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         return False, f"CHECK_JSON read/parse failed for {file}: {exc}"
@@ -197,7 +197,7 @@ def _run_check_file(check, base_dir):
     if not os.path.isfile(path):
         return False, f"CHECK_FILE file not found: {file}"
     try:
-        with open(path, errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             content = f.read()
     except OSError as exc:
         return False, f"CHECK_FILE read failed for {file}: {exc}"
@@ -213,6 +213,143 @@ def _run_check_file(check, base_dir):
 # run, so a test can establish a precondition CHECK_FILE then asserts on --
 # e.g. that ESBMC refuses to overwrite a file it did not generate.
 SEED_FILE_KEYWORD = "SEED_FILE"
+
+# A test may only run where the host and the build actually support what it
+# exercises. Each name below is a capability the build system probes for and
+# passes in via --capabilities; a test naming one it does not get is reported
+# SKIPPED rather than failed. Names are validated against this set, so a typo
+# is a hard error instead of a test that quietly stops running.
+REQUIRES_KEYWORD = "REQUIRES"
+
+STATIC_CAPABILITIES = {
+    # <uchar.h> is present. Not in the C standard library on macOS.
+    "uchar_h",
+    # The 32-bit target (--32) is usable: multi-arch headers exist and the
+    # frontend's type model matches them. See issue #1400.
+    "arch32",
+    # The host is x86. For tests whose *input* is x86-only: clang's SSE/MMX
+    # intrinsic headers reject other targets outright, and inline asm naming
+    # x86 register constraints ('=a', '=q') does not compile elsewhere.
+    "arch_x86",
+    # The operational-model library is bundled as a goto binary. With
+    # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
+    # measuring the blob has nothing to measure.
+    "bundled_libc",
+    # The bundled musl libm is reached rather than shadowed by the host's own
+    # <math.h>. Not so on Windows, where the UCRT declares cosf/pow itself.
+    "bundled_libm",
+    # The host's `unsigned long` is 64 bits. Value-set descriptor offsets are
+    # materialised through it, so a negative offset is a different constant --
+    # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
+    "lp64_host",
+}
+
+# Capabilities of the frontend itself, which the build system cannot answer:
+# CMake would have to probe with the *build* compiler, whose target need not
+# match the one ESBMC's Clang is configured for -- a probe that disagreed would
+# silently skip tests on hosts that actually support them. Ask the tool under
+# test instead, by parsing a snippet that exercises the feature.
+# "source" is the probe; "suffix" (default .c) picks the frontend, and "args"
+# adds options the probe needs.
+DYNAMIC_CAPABILITY_PROBES = {
+    # Clang caps _BitInt/_ExtInt width per target (128 bits on aarch64-darwin,
+    # far higher on x86_64-linux), so this cannot be answered statically.
+    "bitint_wide": {
+        "source": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    },
+    # The `_BitInt(N)` spelling parses at all. Clang exposes bit-precise
+    # integers as `_ExtInt` before LLVM 14, so a source written with the
+    # standard C23 spelling is a parse error on the LLVM 11-13 builds the
+    # project still supports. Narrower than bitint_wide, which additionally
+    # requires a 1000-bit width the aarch64-darwin target caps out below.
+    "bitint": {
+        "source": "int main() { _BitInt(80) x = 0; return (int)x; }\n",
+    },
+    # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
+    # does not. Pins both tests spelling a char type in expected output
+    # ("signed char c") and tests whose verdict turns on the range: CHAR_MIN,
+    # and whether char arithmetic such as 100 + 100 overflows. It also pins the
+    # Python frontend, whose string model assumes a signed char throughout and
+    # aborts where the target disagrees (#7308).
+    "signed_char_host": {
+        "source": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # wchar_t is `int`, as it is on x86-64 Linux. The AAPCS makes it
+    # `unsigned int`, so a source redeclaring it as int is rejected there.
+    "signed_wchar_host": {
+        "source": '_Static_assert((__WCHAR_TYPE__)-1 < 0, "wchar_t is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # `long double` is the x87 80-bit format (64-bit significand) rather than
+    # IEEE binary128. Exact floating-point identities hold in one and not the
+    # other, so a test asserting one cannot hold on both.
+    "x87_long_double": {
+        "source": '_Static_assert(__LDBL_MANT_DIG__ == 64, "x87 long double");\n'
+        "int main() { return 0; }\n",
+    },
+    # The host's C++ standard library headers are reachable, which is what the
+    # tests passing --no-abstracted-cpp-includes, --no-library or
+    # --mix-cpp-host-headers read instead of the bundled OMs. Installing
+    # libstdc++-dev is not enough: on aarch64 ESBMC's Clang fails to find the
+    # GCC C++ include tree even when it is present (#7308).
+    "host_cxx_headers": {
+        "source": "#include <cassert>\nint main() { return 0; }\n",
+        "suffix": ".cpp",
+        "args": ["--no-abstracted-cpp-includes"],
+    },
+}
+
+KNOWN_CAPABILITIES = STATIC_CAPABILITIES | set(DYNAMIC_CAPABILITY_PROBES)
+
+
+def _probe_capability(name, executor_path):
+    """Ask the tool under test whether it supports `name`.
+
+    Parsing is enough -- every dynamic capability is a frontend question -- and
+    it keeps the probe far cheaper than a verification run. An unparseable
+    snippet, a crash, or a hang all mean "not supported", so the test is
+    skipped rather than failing for a reason that is not about the test.
+    """
+    probe = DYNAMIC_CAPABILITY_PROBES[name]
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        source = os.path.join(tmp_dir, "probe" + probe.get("suffix", ".c"))
+        with open(source, "w") as fp:
+            fp.write(probe["source"])
+        try:
+            completed = subprocess.run(
+                shlex.split(executor_path)
+                + ["--parse-tree-only"]
+                + probe.get("args", [])
+                + [source],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=120,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+    return b"PARSING ERROR" not in completed.stdout
+
+
+def _is_requires_line(stripped):
+    """True iff the first whitespace-delimited token is REQUIRES."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == REQUIRES_KEYWORD
+
+
+def _parse_requires(line):
+    """Parse one REQUIRES directive into a list of capability names."""
+    parts = line.split()
+    names = parts[1:]
+    if not names:
+        raise ValueError(f"REQUIRES expects: REQUIRES <capability>...; got: {line!r}")
+    unknown = [n for n in names if n not in KNOWN_CAPABILITIES]
+    if unknown:
+        raise ValueError(
+            f"unknown capability {', '.join(sorted(unknown))}; known names are "
+            f"{', '.join(sorted(KNOWN_CAPABILITIES))}"
+        )
+    return names
 
 
 def _is_seed_file_line(stripped):
@@ -246,7 +383,7 @@ def _run_seed_file(seed, base_dir):
     file, content = seed
     path = os.path.join(base_dir, file)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(content + "\n" if content else "")
 
 
@@ -261,7 +398,9 @@ class TestCase:
 
     def _initialize_test_case(self):
         """Reads test description and initialize this object"""
-        with open(os.path.join(self.test_dir, "test.desc")) as fp:
+        with open(
+            os.path.join(self.test_dir, "test.desc"), encoding="utf-8"
+        ) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
             assert (
@@ -284,9 +423,15 @@ class TestCase:
             self.check_json = []
             self.check_file = []
             self.seed_file = []
+            self.requires = []
             for line in fp:
                 stripped = line.strip()
-                if _is_seed_file_line(stripped):
+                if _is_requires_line(stripped):
+                    try:
+                        self.requires.extend(_parse_requires(stripped))
+                    except ValueError as exc:
+                        raise ValueError(f"{self.test_dir}/test.desc: {exc}") from exc
+                elif _is_seed_file_line(stripped):
                     try:
                         self.seed_file.append(_parse_seed_file(stripped))
                     except ValueError as exc:
@@ -343,7 +488,10 @@ class TestCase:
         assert os.path.exists(test_dir)
         assert os.path.exists(os.path.join(test_dir, "test.desc"))
         self.name = name
-        self.test_dir = test_dir
+        # A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
+        # temporary cwd, where a test_dir relative to the invoking cwd no longer
+        # resolves. Anchor it here so every derived path survives the chdir.
+        self.test_dir = os.path.abspath(test_dir)
         self.test_args = None
         self.test_file = None
         self.test_mode = "CORE"
@@ -356,7 +504,7 @@ class TestCase:
         """Replaces original test with the current configuration"""
         test_desc_path = os.path.join(self.test_dir, "test.desc")
         assert os.path.isfile(test_desc_path)
-        with open(test_desc_path, "w") as f:
+        with open(test_desc_path, "w", encoding="utf-8") as f:
             f.write(f"{self.test_mode}\n")
             f.write(f"{self.test_file}\n")
             f.write(f"{self.test_args}\n")
@@ -416,19 +564,23 @@ class Executor:
                 # Gracefully shut down the whole process group so
                 # grandchildren don't linger and starve the CI runner.
                 if os.name == "posix":
-                    # Best-effort: on macOS killpg can raise EPERM when the
-                    # group holds a process we can no longer signal, which
-                    # otherwise turns a tolerated timeout into a hard ERROR.
+                    # ESBMC does not necessarily die on SIGTERM, so the SIGKILL
+                    # escalation has to run even when the SIGTERM itself failed.
+                    # Sharing one try with the wait meant a killpg that raised
+                    # (on macOS it raises EPERM when the group holds a process
+                    # we can no longer signal) skipped the kill entirely and
+                    # left the group running.
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+                    try:
                         proc.wait(timeout=_TERM_GRACE)
                     except subprocess.TimeoutExpired:
                         try:
                             os.killpg(proc.pid, signal.SIGKILL)
                         except OSError:
                             pass
-                    except OSError:
-                        pass
                 else:
                     proc.kill()
                 stdout, stderr = proc.communicate()
@@ -550,7 +702,7 @@ def _add_test(test_case, executor):
                 destination = os.path.join(log_dir, f"{suite}_{test_case.name}")
                 # Overwrite on every run — accumulating across ctest invocations
                 # would corrupt downstream stat-counting (e.g. summing VCCs).
-                with open(destination, "w") as f:
+                with open(destination, "w", encoding="utf-8") as f:
                     f.write("ESBMC args: " + test_case.test_args + "\n\n")
                     f.write(output_to_validate)
 
@@ -595,10 +747,25 @@ def _add_test(test_case, executor):
     return test
 
 
-def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+def gen_one_test(
+    base_dir: str, test: str, executor_path: str, modes, capabilities=None
+):
     executor = Executor(executor_path)
     test_case = TestCase(os.path.join(base_dir, test), test)
     if test_case.test_mode not in modes:
+        exit(10)
+    missing = []
+    for capability in test_case.requires:
+        if capability in DYNAMIC_CAPABILITY_PROBES:
+            if not _probe_capability(capability, executor_path):
+                missing.append(capability)
+        # No --capabilities at all means the caller did not probe the static
+        # ones: run the test and let it fail loudly rather than silently
+        # dropping coverage.
+        elif capabilities is not None and capability not in capabilities:
+            missing.append(capability)
+    if missing:
+        print(f"SKIP: {test} requires {', '.join(missing)}")
         exit(10)
     test_func = _add_test(test_case, executor)
     setattr(RegressionBase, "test_{0}".format(test_case.name), test_func)
@@ -642,6 +809,13 @@ def _arg_parsing():
         type=int,
         help="Per-test virtual memory limit in megabytes",
     )
+    parser.add_argument(
+        "--capabilities",
+        required=False,
+        help="Comma/semicolon-separated capabilities this build and host "
+        "provide; a test whose REQUIRES names one that is absent is skipped. "
+        "Omitting the flag runs every test regardless of its REQUIRES.",
+    )
 
     main_args = parser.parse_args()
     if main_args.timeout:
@@ -663,7 +837,27 @@ def _arg_parsing():
         TestCase.RUN_ONLY = True
         TestCase.SMT_ONLY = True
 
-    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
+    capabilities = None
+    if main_args.capabilities is not None:
+        capabilities = {
+            c for c in re.split(r"[,;\s]+", main_args.capabilities.strip()) if c
+        }
+        # Only the static ones: the dynamic capabilities are the tool's own
+        # answer, so accepting them here would let the build override it.
+        unknown = capabilities - STATIC_CAPABILITIES
+        assert not unknown, (
+            f"--capabilities names unknown capability "
+            f"{', '.join(sorted(unknown))}; known names are "
+            f"{', '.join(sorted(STATIC_CAPABILITIES))}"
+        )
+
+    gen_one_test(
+        regression_path,
+        main_args.file,
+        main_args.tool,
+        main_args.modes,
+        capabilities,
+    )
 
 
 def main():

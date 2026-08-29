@@ -56,25 +56,106 @@ endif()
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT
      "${ESBMC_REGRESS_TIMEOUT} + ${ESBMC_REGRESS_TIMEOUT_GRACE}")
 
+# Capabilities this host and build actually provide. A test declaring
+# "REQUIRES <name>" in its test.desc is reported SKIPPED where the name is
+# absent, rather than failing for a reason that has nothing to do with ESBMC
+# (issue #1400). Keep these names in sync with KNOWN_CAPABILITIES in
+# testing_tool.py, which rejects any name it does not recognise.
+include(CheckIncludeFile)
+set(ESBMC_TEST_CAPABILITIES "")
+
+check_include_file(uchar.h ESBMC_HAVE_UCHAR_H)
+if(ESBMC_HAVE_UCHAR_H)
+    list(APPEND ESBMC_TEST_CAPABILITIES uchar_h)
+endif()
+
+# --32 reads the bundled 32-bit libc that c2goto builds, not the host's own
+# headers, so the capability follows that build option rather than the host
+# CPU. Apple Silicon keeps it on and runs the --32 tests; the aarch64 Linux
+# build turns it off (scripts/build.sh), which is the case #1400 was filed
+# about.
+if(ESBMC_BUNDLE_LIBC AND ESBMC_BUNDLE_LIBC_32BIT)
+    list(APPEND ESBMC_TEST_CAPABILITIES arch32)
+endif()
+
+# A test whose input is x86-only: clang's SSE/MMX intrinsic headers reject any
+# other target, and x86 asm register constraints do not compile there.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64|i[3-6]86)$")
+    list(APPEND ESBMC_TEST_CAPABILITIES arch_x86)
+endif()
+
+if(ESBMC_BUNDLE_LIBC)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libc)
+endif()
+
+# The bundled musl libm is only reached where the host's own <math.h> does not
+# shadow it. On Windows the UCRT headers declare cosf/pow themselves, so no
+# /esbmc-vfs libm source ever enters the goto program.
+if(NOT WIN32)
+    list(APPEND ESBMC_TEST_CAPABILITIES bundled_libm)
+endif()
+
+# value_sett::to_expr materialises a descriptor's offset through the host's
+# `unsigned long` (gen_ulong), so a negative offset wraps at 32 bits on LLP64
+# and at 64 bits elsewhere. The two constants get opposite out-of-bounds
+# verdicts, so a test pinning either one holds on LP64 hosts only.
+include(CheckTypeSize)
+check_type_size("long" ESBMC_SIZEOF_LONG)
+if(ESBMC_SIZEOF_LONG EQUAL 8)
+    list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
+endif()
+
+string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
+message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
+
+# Tests covering behaviour that is genuinely OS-specific -- resource limits,
+# threading, signals, memory mapping, filesystem semantics -- named as
+# "<folder>/<test>". The macOS CI leg runs only the python/ suite, so without
+# this a change of that kind passes on Linux and fails on macOS with no signal
+# from CI; #6617 was fixed twice for exactly that reason. These carry the
+# platform-sensitive label, which the macOS leg also selects (#6619).
+set(ESBMC_PLATFORM_SENSITIVE_TESTS
+    # Deep expression nesting: needs the large-stack thread main.cpp spawns,
+    # since raising RLIMIT_STACK does not grow the main thread's stack on
+    # macOS even though setrlimit reports success (#6618).
+    esbmc/deep_binary_chain_pass
+    esbmc/deep_binary_chain_fail)
+
+# An optional 5th argument names a backend to run the suite under. The tool
+# string is shlex-split by testing_tool.py, so the extra option rides along with
+# the binary; --default-solver only applies when the test itself names no
+# solver, leaving solver-specific tests on their own backend (esbmc/esbmc#1118).
 function(add_esbmc_regression_test folder modes test)
+    set(solver "${ARGN}")
     set(test_name "regression/${folder}/${test}")
+    set(tool "${ESBMC_BIN}")
+    set(extra_labels "")
+    if(solver)
+        set(test_name "${test_name}[${solver}]")
+        set(tool "${ESBMC_BIN} --default-solver=${solver}")
+        set(extra_labels ";cross-backend;cross-backend/${solver}")
+    endif()
+    if("${folder}/${test}" IN_LIST ESBMC_PLATFORM_SENSITIVE_TESTS)
+        string(APPEND extra_labels ";platform-sensitive")
+    endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                     --tool=${ESBMC_BIN}
+                     --tool=${tool}
                      --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                      --modes ${modes}
                      --file=${test}
+                     --capabilities=${ESBMC_TEST_CAPABILITIES_ARG}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
     # Timeout and memory limit are passed via environment
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
       TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
       ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
-      LABELS "regression;${folder}/")
+      LABELS "regression;${folder}/${extra_labels}")
 endfunction()
 
 function(add_esbmc_regression folder modes)
-    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${regression})
+    subdirlist(SUBDIRS ${CMAKE_CURRENT_SOURCE_DIR}/${folder})
     if(${folder} STREQUAL "quixbugs")
         list(REMOVE_ITEM SUBDIRS bucketsort)
     endif()
@@ -83,7 +164,7 @@ function(add_esbmc_regression folder modes)
         list(REMOVE_ITEM SUBDIRS benchmarks)
     endif()
     foreach(test ${SUBDIRS})
-        add_esbmc_regression_test(${folder} "${modes}" ${test})
+        add_esbmc_regression_test(${folder} "${modes}" ${test} ${ARGN})
     endforeach()
 endfunction()
 
@@ -150,6 +231,7 @@ if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_HUMANEVAL humaneval)
     set(REGRESSIONS_QUIXBUGS quixbugs)
     set(REGRESSIONS_PYTHON_COVERAGE python-coverage)
+    set(REGRESSIONS_PYTHON_CONTRACTS python-contracts)
     set(REGRESSIONS_AI_GENERATED_CODE ai-generated-code)
 endif()
 
@@ -219,6 +301,9 @@ set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
 
+# list of C++23 test suites
+set(REGRESSIONS_CPP23 esbmc-cpp23/cpp)
+
 # enable test case geeneration
 set(TEST_GENERATION witnesses/test_case_generation)
 
@@ -250,6 +335,7 @@ if(APPLE)
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP20}
+                    ${REGRESSIONS_CPP23}
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
@@ -259,6 +345,7 @@ if(APPLE)
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
@@ -314,6 +401,7 @@ else()
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
+                    ${REGRESSIONS_CPP23}
                     ${REGRESSIONS_CPP20}
                     ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP14}
@@ -332,6 +420,7 @@ else()
                     ${REGRESSIONS_HUMANEVAL}
                     ${REGRESSIONS_QUIXBUGS}
                     ${REGRESSIONS_PYTHON_COVERAGE}
+                    ${REGRESSIONS_PYTHON_CONTRACTS}
                     ${REGRESSIONS_AI_GENERATED_CODE}
                     ${REGRESSIONS_LD}
                     ${TEST_GENERATION}
@@ -368,6 +457,41 @@ foreach(regression IN LISTS REGRESSIONS)
     endif()
     add_esbmc_regression("${regression}" "${MODES}")
 endforeach()
+
+# Cross-backend regression testing (esbmc/esbmc#1118). Off unless a backend is
+# named, so an ordinary build registers exactly the tests it did before. Each
+# named backend re-registers CROSS_BACKEND_SUITES as
+# `regression/<suite>/<test>[<backend>]`, labelled `cross-backend` and
+# `cross-backend/<backend>`, so one backend can be run on its own:
+#     cmake -DCROSS_BACKEND_SOLVERS="z3;bitwuzla" ...
+#     ctest -L "cross-backend/z3"
+# smtlib additionally needs a solver binary, which has to be supplied through
+# the same mechanism (--smtlib-solver-prog), and that program's own timeout can
+# change verdicts -- so it is deliberately not enabled by default here.
+set(CROSS_BACKEND_SOLVERS "" CACHE STRING
+    "Backends to additionally run CROSS_BACKEND_SUITES under, e.g. z3;bitwuzla")
+set(CROSS_BACKEND_SUITES "esbmc" CACHE STRING
+    "Suites re-run under every entry of CROSS_BACKEND_SOLVERS")
+
+if(CROSS_BACKEND_SOLVERS)
+    string(REPLACE " " ";" _available_solvers "${ESBMC_AVAILABLE_SOLVERS}")
+    list(REMOVE_ITEM _available_solvers "")
+
+    foreach(solver IN LISTS CROSS_BACKEND_SOLVERS)
+        if(NOT solver IN_LIST _available_solvers)
+            message(FATAL_ERROR
+                    "CROSS_BACKEND_SOLVERS names '${solver}', which this build "
+                    "does not have. Available: ${_available_solvers}")
+        endif()
+        foreach(suite IN LISTS CROSS_BACKEND_SUITES)
+            if(NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${suite}")
+                message(FATAL_ERROR "CROSS_BACKEND_SUITES names '${suite}', which is not a suite")
+            endif()
+            add_esbmc_regression("${suite}" "${MODES}" "${solver}")
+        endforeach()
+    endforeach()
+    message(STATUS "Cross-backend regression: ${CROSS_BACKEND_SUITES} x ${CROSS_BACKEND_SOLVERS}")
+endif()
 
 # Tests that legitimately run close to the per-test TIMEOUT on CI's Linux
 # runners (locally ~20-30s; CI ~75-110s; CI cap 120s, leaving no headroom).
@@ -482,10 +606,13 @@ set(_slow_regression_tests
     # "NameError: name 'Queue' is not defined" because aliased deque imports
     # were not resolved. With PR #5008 the alias fix and popleft/appendleft
     # support land, so ESBMC now reaches the real BFS symex (deque + set +
-    # 6-node graph), which does not converge under --incremental-bmc due to
-    # the __memcpy_impl loop in the list OM (string.c:278). These stay
-    # KNOWNBUG; the larger inner timeout lets testing_tool record the KNOWNBUG
-    # verdict instead of ctest hard-killing the run.
+    # 6-node graph). breadth_first_search still does not converge under
+    # --incremental-bmc, due to the __memcpy_impl loop in the list OM
+    # (string.c:278), and stays KNOWNBUG: the larger inner timeout lets
+    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing
+    # the run. breadth_first_search_fail is CORE since #7235 and reaches its
+    # VERIFICATION FAILED at ~123s on the DebugOpt Linux runner, so the 2x
+    # budget is what keeps it off the 120s cap -- removing it flaps the test.
     "regression/quixbugs/breadth_first_search"
     "regression/quixbugs/breadth_first_search_fail"
     # reverse_linked_list used to fast-crash with a SIGSEGV when comparing a
@@ -496,6 +623,14 @@ set(_slow_regression_tests
     # It stays KNOWNBUG; the larger inner timeout lets testing_tool record the
     # KNOWNBUG verdict instead of ctest hard-killing the run.
     "regression/quixbugs/reverse_linked_list"
+    # github_2335_1 verifies SUCCESSFUL but sits exactly on the cap: ~30s
+    # locally, 120.15s on the DebugOpt Linux runner. Its cost is one k
+    # iteration of the --no-reachable-memory-leak closure over a 30-object heap
+    # (10 slots x 3 nodes), so bounding --k-step does not shrink it. With no
+    # headroom it flaps on runner jitter, and has timed out at exactly 120.15s
+    # in #6609 and #6611 -- neither of which touches its code path (#6611 adds
+    # only two test directories and no source at all).
+    "regression/esbmc/github_2335_1"
     # github_4435 was a soundness false alarm on the SV-COMP libvsync
     # bounded_mpmc_check_full benchmark; the underlying deref unit
     # mismatch is fixed by PR #4939, but the full benchmark
@@ -548,6 +683,19 @@ set(_slow_regression_tests
     # touch its code path. Give it the 2x budget so transient CI slowness does
     # not flap it.
     "regression/python/set_variadic_methods"
+    # github_4634 verifies SUCCESSFUL but searches without a k bound
+    # (--incremental-bmc --unlimited-k-steps, with --data-races-check and
+    # --state-hashing), so its cost is set by how many steps it takes to
+    # converge rather than by a fixed unwind. It measures ~107s locally
+    # against the 120s cap and timed out on the DebugOpt Linux runner in
+    # #7073 CI -- a comment-only change that cannot reach its code path.
+    "regression/esbmc/github_4634"
+    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
+    # over the 120s cap on aarch64, where the whole floats-regression suite runs
+    # ~3x slower while the rest of the suite matches x86 to within 5%. The
+    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
+    # armv8 leg green meanwhile.
+    "regression/floats-regression/nn-tanh_5_unsafe"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
      "${ESBMC_REGRESS_TIMEOUT_SLOW} + 30")

@@ -1,10 +1,7 @@
-/* replace_ternary_ensures_knownbug (issue #6298):
- * The recursive flattening only descends &&/|| trees, not a ternary (?:)
- * ensures. A ternary is lowered soundly (the unsound-if-passed t==1 case is
- * correctly rejected) but imprecisely: the else-branch old() constraints are
- * not recovered, so this correct program is spuriously rejected. The desired
- * result is VERIFICATION SUCCESSFUL; until ternary ensures are flattened it is
- * absent (VERIFICATION FAILED), so this is pinned KNOWNBUG.
+/* replace_ternary_ensures (issue #6298, fixed by #6499):
+ * A ternary ensures used to be reconstructed as its else-arm alone, so the
+ * then-arm and the guard were lost and this correct program was spuriously
+ * rejected. Reconstructing the conditional recovers both arms.
  */
 #include <stddef.h>
 

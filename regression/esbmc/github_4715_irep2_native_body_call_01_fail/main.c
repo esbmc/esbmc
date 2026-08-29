@@ -1,7 +1,7 @@
 // _fail sibling of github_4715_irep2_native_body_call_01 (W1-loc spike
 // Phase C, esbmc/esbmc#4715). Pins that a genuine violation through native
 // call statements is still reported as VERIFICATION FAILED, not silently
-// dropped, under --irep2-native-body: run() returns 5, so the wrong-value
+// dropped, under native conversion: run() returns 5, so the wrong-value
 // assertion is a reachable violation.
 #include <assert.h>
 

@@ -8,10 +8,9 @@
 // error_code carries a value and a category; the two standard categories are
 // distinct singletons so codes from different categories never compare equal.
 //
-// Not modelled: user-defined categories beyond deriving from error_category,
-// error_condition's equivalence mapping (default_error_condition returns a
-// condition with the same value and category), and message() strings, which
-// would need the string model for no verification benefit.
+// Not modelled: message() strings, which would need the string model for no
+// verification benefit, and error_category::equivalent. A user-defined
+// category cannot customise default_error_condition either; see below.
 
 #if __cplusplus >= 201103L
 
@@ -36,6 +35,50 @@ enum class errc
   timed_out = 110
 };
 
+class error_category;
+class error_code;
+
+// [syserr.errcondition]: a portable condition -- the same shape as error_code
+// but compared against it through the category's mapping, so a
+// platform-specific code can match a portable condition. Defined ahead of
+// error_category, which returns one by value from default_error_condition.
+class error_condition
+{
+  int __v;
+  const error_category *__c;
+
+public:
+  error_condition() OM_NOEXCEPT;
+  error_condition(errc e) OM_NOEXCEPT;
+
+  error_condition(int v, const error_category &c) OM_NOEXCEPT : __v(v), __c(&c)
+  {
+  }
+
+  void assign(int v, const error_category &c) OM_NOEXCEPT
+  {
+    __v = v;
+    __c = &c;
+  }
+
+  void clear() OM_NOEXCEPT;
+
+  int value() const OM_NOEXCEPT
+  {
+    return __v;
+  }
+
+  const error_category &category() const OM_NOEXCEPT
+  {
+    return *__c;
+  }
+
+  explicit operator bool() const OM_NOEXCEPT
+  {
+    return __v != 0;
+  }
+};
+
 class error_category
 {
 public:
@@ -44,6 +87,11 @@ public:
   }
 
   virtual const char *name() const OM_NOEXCEPT = 0;
+
+  // [syserr.errcat.virtuals]. Not virtual: an overridden virtual returning a
+  // struct that carries `this` is mis-dereferenced (esbmc #6749), so a
+  // user-defined category cannot customise the mapping in this model.
+  error_condition default_error_condition(int v) const OM_NOEXCEPT;
 
   bool operator==(const error_category &o) const OM_NOEXCEPT
   {
@@ -74,16 +122,54 @@ public:
   }
 };
 
+static __generic_category __generic_category_instance;
+static __system_category __system_category_instance;
+
+// Category comparison is object identity ([syserr.errcat.overview]). Members
+// must be initialised from these rather than from `&generic_category()`: the
+// returned reference is materialised into a temporary whose address expires
+// with the enclosing constructor.
 inline const error_category &generic_category() OM_NOEXCEPT
 {
-  static __generic_category __c;
-  return __c;
+  return __generic_category_instance;
 }
 
 inline const error_category &system_category() OM_NOEXCEPT
 {
-  static __system_category __c;
-  return __c;
+  return __system_category_instance;
+}
+
+inline error_condition::error_condition() OM_NOEXCEPT
+  : __v(0), __c(&__generic_category_instance)
+{
+}
+
+inline error_condition::error_condition(errc e) OM_NOEXCEPT
+  : __v((int)e), __c(&__generic_category_instance)
+{
+}
+
+inline void error_condition::clear() OM_NOEXCEPT
+{
+  __v = 0;
+  __c = &__generic_category_instance;
+}
+
+inline bool operator==(const error_condition &a, const error_condition &b)
+  OM_NOEXCEPT
+{
+  return a.value() == b.value() && a.category() == b.category();
+}
+
+inline bool operator!=(const error_condition &a, const error_condition &b)
+  OM_NOEXCEPT
+{
+  return !(a == b);
+}
+
+inline error_condition make_error_condition(errc e) OM_NOEXCEPT
+{
+  return error_condition((int)e, generic_category());
 }
 
 class error_code
@@ -92,7 +178,7 @@ class error_code
   const error_category *__c;
 
 public:
-  error_code() OM_NOEXCEPT : __v(0), __c(&system_category())
+  error_code() OM_NOEXCEPT : __v(0), __c(&__system_category_instance)
   {
   }
 
@@ -100,7 +186,7 @@ public:
   {
   }
 
-  error_code(errc e) OM_NOEXCEPT : __v((int)e), __c(&generic_category())
+  error_code(errc e) OM_NOEXCEPT : __v((int)e), __c(&__generic_category_instance)
   {
   }
 
@@ -113,7 +199,7 @@ public:
   void clear() OM_NOEXCEPT
   {
     __v = 0;
-    __c = &system_category();
+    __c = &__system_category_instance;
   }
 
   int value() const OM_NOEXCEPT
@@ -124,6 +210,11 @@ public:
   const error_category &category() const OM_NOEXCEPT
   {
     return *__c;
+  }
+
+  error_condition default_error_condition() const OM_NOEXCEPT
+  {
+    return __c->default_error_condition(__v);
   }
 
   explicit operator bool() const OM_NOEXCEPT
@@ -145,6 +236,46 @@ inline bool operator!=(const error_code &a, const error_code &b) OM_NOEXCEPT
 inline error_code make_error_code(errc e) OM_NOEXCEPT
 {
   return error_code((int)e, generic_category());
+}
+
+inline error_condition
+error_category::default_error_condition(int v) const OM_NOEXCEPT
+{
+  // [syserr.errcat.objects]/4: on a POSIX target every system value is an
+  // errno value, so that whole range maps onto the generic category.
+  if (this == &__system_category_instance)
+    return error_condition(v, __generic_category_instance);
+  return error_condition(v, *this);
+}
+
+// [syserr.compare] with error_category::equivalent's default definitions
+// substituted in -- a code matches a condition when either side's category
+// says so, which is what lets a system code equal a generic condition.
+// equivalent() itself is not modelled: it is an overload set of virtuals, and
+// only an overriding category could distinguish it from this expansion.
+inline bool operator==(const error_code &a, const error_condition &b)
+  OM_NOEXCEPT
+{
+  return a.category().default_error_condition(a.value()) == b ||
+         (a.category() == b.category() && a.value() == b.value());
+}
+
+inline bool operator==(const error_condition &a, const error_code &b)
+  OM_NOEXCEPT
+{
+  return b == a;
+}
+
+inline bool operator!=(const error_code &a, const error_condition &b)
+  OM_NOEXCEPT
+{
+  return !(a == b);
+}
+
+inline bool operator!=(const error_condition &a, const error_code &b)
+  OM_NOEXCEPT
+{
+  return !(a == b);
 }
 
 class system_error : public runtime_error

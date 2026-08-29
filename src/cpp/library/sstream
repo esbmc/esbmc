@@ -1,262 +1,265 @@
 #ifndef STL_SSTREAM
 #define STL_SSTREAM
 
+#include "iosfwd"
 #include "streambuf"
 #include "definitions.h"
 #include "ostream"
+#include "istream"
 #include "ios"
 #include "string"
+#include "memory"
 #include "cstdio"
 #include "cstdlib"
-
-#ifdef _WIN64
-#define NUM_SIZE 20
-#else
-#define NUM_SIZE 20
-#endif
-#define DEC 10
-
-/* TODO: this is not part of <sstream> */
-extern "C" void itoa(int value, char *str, int base);
+#include "cstring"
 
 namespace std
 {
-class stringbuf : public streambuf
+/* The string streams used to be plain classes bound to std::string, so any
+ * instantiation over a non-default allocator failed to parse (github #7017).
+ * basic_ostringstream overrides the ostream sink, which is what makes an
+ * insertion through an ostream& reach the stream (github #7016). */
+template <class CharT, class Traits, class Alloc>
+class basic_stringbuf : public streambuf
 {
 public:
-  explicit stringbuf(ios_base::openmode which = ios_base::in | ios_base::out);
-  explicit stringbuf(
-    const string &str,
+  typedef basic_string<CharT, Traits, Alloc> string_type;
+
+  explicit basic_stringbuf(
     ios_base::openmode which = ios_base::in | ios_base::out);
-  void str(const string &s);
-  string str() const;
+  explicit basic_stringbuf(
+    const string_type &str,
+    ios_base::openmode which = ios_base::in | ios_base::out);
+  void str(const string_type &s);
+  string_type str() const;
 };
 
-class istringstream : public istream
+template <class CharT, class Traits, class Alloc>
+class basic_istringstream : public istream
 {
 public:
-  explicit istringstream(openmode which = ios_base::in)
+  typedef basic_string<CharT, Traits, Alloc> string_type;
+
+  explicit basic_istringstream(ios_base::openmode which = ios_base::in)
+    : istream()
   {
-    istream();
   }
-  explicit istringstream(const string &str, openmode which = ios_base::in)
+  explicit basic_istringstream(
+    const string_type &str,
+    ios_base::openmode which = ios_base::in)
+    : istream()
   {
-    istream();
   }
-  stringbuf *rdbuf() const;
-  string str() const;
-  void str(const string &s);
+  basic_stringbuf<CharT, Traits, Alloc> *rdbuf() const;
+  string_type str() const;
+  void str(const string_type &s);
 };
 
-class stringstream : public istream, public ostream
+template <class CharT, class Traits, class Alloc>
+class basic_ostringstream : public ostream
 {
 public:
-  string _string;
-  explicit stringstream(openmode which = ios_base::out | ios_base::in)
-    : istream(), ostream(), _string("")
+  typedef basic_string<CharT, Traits, Alloc> string_type;
+
+  streamsize _len;
+  char _buf[OSTREAM_CAPACITY];
+
+  explicit basic_ostringstream(ios_base::openmode which = ios_base::out)
+    : ostream(), _len(0)
   {
   }
 
-  explicit stringstream(
-    const string &str,
-    openmode which = ios_base::out | ios_base::in)
-    : istream(), ostream(), _string("")
+  explicit basic_ostringstream(
+    const string_type &str,
+    ios_base::openmode which = ios_base::out)
+    : ostream(), _len(0)
+  {
+    _sink_write(str.c_str(), str.size());
+  }
+
+  virtual bool _discard()
+  {
+    return false;
+  }
+
+  virtual void _sink_write(const char *s, streamsize n)
+  {
+    __ESBMC_assert(_len + n < OSTREAM_CAPACITY, "ostream capacity exceeded");
+    memcpy(_buf + _len, s, n);
+    _len += n;
+  }
+
+  virtual void _sink_fill(char c, streamsize n)
+  {
+    __ESBMC_assert(_len + n < OSTREAM_CAPACITY, "ostream capacity exceeded");
+    memset(_buf + _len, c, n);
+    _len += n;
+  }
+
+  basic_stringbuf<CharT, Traits, Alloc> *rdbuf() const;
+
+  string_type str() const
+  {
+    return string_type(_buf, _len);
+  }
+
+  void str(const string_type &s)
+  {
+    _len = 0;
+    _sink_write(s.c_str(), s.size());
+  }
+};
+
+/* Unlike the other three, this one keeps its own buffer and its own inserters
+ * instead of overriding the ostream sink: it derives from both stream classes,
+ * and a member reached through `this` in that layout resolves to the wrong
+ * offset (github #7025) -- _len read inside an inherited _sink_write() yields
+ * another field's bytes. Members of the complete object are safe, so the
+ * inserters return the derived type to keep a chain off the base; insertion
+ * through an explicit ostream& still does not reach a stringstream
+ * (github #7016). ostream comes first so that such an insertion at least
+ * discards rather than dispatching through a bad vtable pointer. Fold this
+ * back into the base once #7025 is fixed. */
+template <class CharT, class Traits, class Alloc>
+class basic_stringstream : public ostream, public istream
+{
+public:
+  typedef basic_string<CharT, Traits, Alloc> string_type;
+
+  string_type _sbuf;
+
+  explicit basic_stringstream(
+    ios_base::openmode which = ios_base::out | ios_base::in)
+    : ostream(), istream(), _sbuf("")
   {
   }
 
-  stringbuf *rdbuf() const;
-
-  string str() const
+  explicit basic_stringstream(
+    const string_type &str,
+    ios_base::openmode which = ios_base::out | ios_base::in)
+    : ostream(), istream(), _sbuf(str)
   {
-    return _string;
   }
 
-  ostream &operator<<(const string &val)
+  basic_stringbuf<CharT, Traits, Alloc> *rdbuf() const;
+
+  string_type str() const
   {
-    _string.append(val.c_str());
+    return _sbuf;
+  }
+
+  void str(const string_type &s)
+  {
+    _sbuf = s;
+  }
+
+  basic_stringstream &operator<<(const string_type &val)
+  {
+    _sbuf.append(val.c_str());
     return *this;
   }
 
-  ostream &operator<<(bool val)
+  basic_stringstream &operator<<(const char *val)
   {
-    if (val)
-      _string.append("1");
-    else
-      _string.append("0");
+    _sbuf.append(val);
     return *this;
   }
 
-  ostream &operator<<(void* val)
+  basic_stringstream &operator<<(char val)
   {
-    char temp[NUM_SIZE];
-    // Convert pointer to string representation (hexadecimal)
-    // For simplicity, just convert the pointer value to decimal
-    itoa(reinterpret_cast<unsigned long long>(val), temp, DEC);
-    _string.append(temp);
+    _sbuf.append(&val, 1);
     return *this;
   }
 
-  ostream &operator<<(short val)
+  basic_stringstream &operator<<(signed char val)
   {
-    char temp[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
+    return *this << (char)val;
+  }
+
+  basic_stringstream &operator<<(unsigned char val)
+  {
+    return *this << (char)val;
+  }
+
+  basic_stringstream &operator<<(bool val)
+  {
+    _sbuf.append(val ? "1" : "0");
     return *this;
   }
 
-  ostream &operator<<(int val)
+  basic_stringstream &operator<<(short val)
   {
-    char temp[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
+    return *this << (long long)val;
+  }
+
+  basic_stringstream &operator<<(int val)
+  {
+    return *this << (long long)val;
+  }
+
+  basic_stringstream &operator<<(long val)
+  {
+    return *this << (long long)val;
+  }
+
+  basic_stringstream &operator<<(long long val)
+  {
+    char temp[OSTREAM_NUM_SIZE + 1];
+    _ostream_itoa(val, temp);
+    _sbuf.append(temp);
     return *this;
   }
 
-  ostream &operator<<(long val)
+  basic_stringstream &operator<<(unsigned short val)
   {
-    char temp[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
+    return *this << (unsigned long long)val;
+  }
+
+  basic_stringstream &operator<<(unsigned int val)
+  {
+    return *this << (unsigned long long)val;
+  }
+
+  basic_stringstream &operator<<(unsigned long val)
+  {
+    return *this << (unsigned long long)val;
+  }
+
+  basic_stringstream &operator<<(unsigned long long val)
+  {
+    char temp[OSTREAM_NUM_SIZE];
+    _ostream_utoa(val, temp);
+    _sbuf.append(temp);
     return *this;
   }
 
-  ostream &operator<<(unsigned short val)
+  basic_stringstream &operator<<(const void *val)
   {
-    char temp[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
+    return *this << (unsigned long long)val;
+  }
+
+  basic_stringstream &operator<<(void *val)
+  {
+    return *this << (const void *)val;
+  }
+
+  basic_stringstream &operator<<(double val)
+  {
+    char temp[OSTREAM_CAPACITY];
+    _ostream_dtoa(val, 6, temp);
+    _sbuf.append(temp);
     return *this;
   }
 
-  ostream &operator<<(unsigned int val)
-  {
-    char temp[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
-    return *this;
-  }
-
-  ostream &operator<<(unsigned long val)
-  {
-    char temp[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
-    return *this;
-  }
-
-  // Default-precision (6 significant digits) %g-like formatting, with trailing
-  // zeros and a trailing '.' stripped to match iostream defaults. Negative
-  // values get a leading '-'; the integer part fits in `int` (sufficient for
-  // the regression tests). Long double maps to double under ESBMC.
-  ostream &operator<<(double val)
-  {
-    char buf[NUM_SIZE];
-    if (val < 0)
-    {
-      _string.append("-");
-      val = -val;
-    }
-    int ipart = (int)val;
-    itoa(ipart, buf, DEC);
-    int len = strlen(buf);
-
-    // Ternary, not `if (prec < 0) prec = 0;`. With `--unwind 10`
-    // (no `--incremental-bmc`) ESBMC's interval domain widens `prec`
-    // through the if-clamp and produces a false positive on a later
-    // `len` invariant; the ternary is opaque to that widening. Verified
-    // against regression/esbmc-cpp/stream/sstream_str_{char,double,float}
-    // (issue #4401).
-    int prec = (len < 6) ? (6 - len) : 0;
-    if (prec > 0)
-    {
-      double fpart = val - (double)ipart;
-      long mult = 1;
-      for (int i = 0; i < prec; i++)
-        mult *= DEC;
-      long fint = (long)(fpart * (double)mult + 0.5);
-
-      // Half-up rounding can produce fint == mult (e.g. fpart = 0.999999,
-      // mult = 1e6). Promote the carry into ipart and re-emit so the
-      // leading digit is not silently dropped from the fractional buffer.
-      if (fint >= mult)
-      {
-        ipart++;
-        itoa(ipart, buf, DEC);
-        len = strlen(buf);
-        fint = 0;
-      }
-
-      char fbuf[NUM_SIZE];
-      int j = prec;
-      fbuf[j] = '\0';
-      while (j > 0)
-      {
-        fbuf[--j] = '0' + (int)(fint % 10);
-        fint /= 10;
-      }
-      int flen = prec;
-      while (flen > 0 && fbuf[flen - 1] == '0')
-        fbuf[--flen] = '\0';
-      if (flen > 0)
-      {
-        buf[len++] = '.';
-        buf[len] = '\0';
-        strcat(buf, fbuf);
-      }
-    }
-    _string.append(buf);
-    return *this;
-  }
-
-  ostream &operator<<(float val)
+  basic_stringstream &operator<<(float val)
   {
     return *this << (double)val;
   }
 
-  ostream &operator<<(long double val)
+  basic_stringstream &operator<<(long double val)
   {
     return *this << (double)val;
   }
-
-  ostream &operator<<(char val)
-  {
-    _string.append(&val, 1);
-    return *this;
-  }
-
-  ostream &operator<<(signed char val)
-  {
-    _string.append(reinterpret_cast<const char *>(&val), 1);
-    return *this;
-  }
-
-  ostream &operator<<(unsigned char val)
-  {
-    _string.append(reinterpret_cast<const char *>(&val), 1);
-    return *this;
-  }
-
-  ostream &operator<<(const char *val)
-  {
-    _string.append(val);
-    return *this;
-  }
-};
-
-class ostringstream : public ostream
-{
-public:
-  explicit ostringstream(openmode which = out)
-  {
-    ostream();
-  }
-  explicit ostringstream(const string &str, openmode which = out)
-  {
-    ostream();
-  }
-  stringbuf *rdbuf() const;
-  string str() const;
-  void str(const string &s);
 };
 
 } // namespace std

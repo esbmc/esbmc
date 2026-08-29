@@ -1,4 +1,5 @@
 #include <limits>
+#include <type_traits>
 
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -7,6 +8,7 @@
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
+#include <irep2/simplification_check.h>
 #include <util/expr/type_byte_size.h>
 
 expr2tc expr2t::do_simplify() const
@@ -27,9 +29,15 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
   // It propagates unchanged into recursive simplify() calls below.
   try
   {
-    // Corner case! Don't even try to simplify address of's operands, might end up
-    // taking the address of some /completely/ arbitary pice of data, by
+    // Corner case! Don't even try to simplify address of's operands, might end
+    // up taking the address of some /completely/ arbitary pice of data, by
     // simplifiying an index to its data, discarding the symbol.
+    // Running the node's own do_simplify here is not safe either: rewriting
+    // every &base[c] to &base[0] + c costs the value-set analysis the concrete
+    // offset and k-induction stops converging
+    // (regression/incremental-smt/incremental-24). The comparisons that need
+    // the two forms to meet normalize their own operands instead — see
+    // normalize_addressof_index.
     if (expr_id == address_of_id) // unlikely
       return expr2tc();
 
@@ -55,6 +63,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       expr2tc shortcut = do_simplify();
       if (!is_nil_expr(shortcut))
       {
+        simplification_check::verify_node_rewrite(*this, shortcut);
         expr2tc resimp = shortcut->simplify(suppress_reassoc);
         return is_nil_expr(resimp) ? shortcut : resimp;
       }
@@ -132,6 +141,8 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     expr2tc top = changed ? current->do_simplify() : do_simplify();
     if (!is_nil_expr(top))
     {
+      simplification_check::verify_rewrite_or_node(current, *this, top);
+
       // Pass our own suppress_reassoc through: if a peephole rewrote an
       // add into a sub (or vice versa), that result is still subject to
       // whatever suppression we were given.
@@ -167,6 +178,9 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
       if (is_arith_chain || is_other_chain)
       {
         expr2tc canonical = is_nil_expr(result) ? clone() : result;
+        // The reassociators replace the container rather than mutating through
+        // it, so this keeps the pre-rewrite tree without a clone.
+        const expr2tc before_reassoc = canonical;
         bool rewrote = false;
         if (is_arith_chain)
           rewrote = reassociate_arith(canonical);
@@ -180,6 +194,7 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
           rewrote = reassociate_bitxor(canonical);
         if (rewrote)
         {
+          simplification_check::verify_rewrite(before_reassoc, canonical);
           // Run peepholes on the rebuilt tree so add(x, neg(y)) -> sub(x, y)
           // and friends collapse. simplify_no_reassoc forces
           // suppress_reassoc=true throughout to avoid re-entering the
@@ -206,7 +221,8 @@ static expr2tc try_simplification(const expr2tc &expr)
 {
   expr2tc to_simplify = expr->do_simplify();
   if (is_nil_expr(to_simplify))
-    to_simplify = expr;
+    return expr;
+  simplification_check::verify_rewrite(expr, to_simplify);
   return to_simplify;
 }
 
@@ -363,6 +379,149 @@ static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed);
 static bool is_all_ones_constant(const expr2tc &e);
 static bool coerce_to_common_type(expr2tc &a, expr2tc &b);
 
+/// (p + C1) + C2 -> p + (C1 + C2), for a pointer-typed add.
+///
+/// Symex sometimes calls do_simplify() directly after renaming a pointer
+/// increment, bypassing the full expr2t::simplify() reassociation pass. Keep
+/// this pointer-only fold local so repeated increments still canonicalize.
+static expr2tc simplify_pointer_add_const(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  auto split_pointer_add_const =
+    [](const expr2tc &expr, expr2tc &base, expr2tc &constant) -> bool {
+    if (!is_add2t(expr))
+      return false;
+
+    const add2t &add = to_add2t(expr);
+    if (is_pointer_type(add.side_1) && is_constant_int2t(add.side_2))
+    {
+      base = add.side_1;
+      constant = add.side_2;
+      return true;
+    }
+
+    if (is_pointer_type(add.side_2) && is_constant_int2t(add.side_1))
+    {
+      base = add.side_2;
+      constant = add.side_1;
+      return true;
+    }
+
+    return false;
+  };
+
+  // Each unfolded `add(pointer, ptr, c)` step sign-extends c to the pointer
+  // offset width (index_type2, signed long) before the SMT bv add (see
+  // smt_memspace.cpp:155). Cast both constants to the offset type, sum the
+  // sign-extended values there, and re-emit the folded constant at that same
+  // type. This avoids a per-operand type-match guard that would refuse the
+  // fold whenever C produces mixed-width offsets (e.g. `&arr[0] + (int)1 +
+  // (long)2`).
+  auto fold_offsets = [](const expr2tc &c1, const expr2tc &c2) -> expr2tc {
+    const type2tc &offset_t = index_type2();
+    auto extend = [&](const expr2tc &c) -> BigInt {
+      const BigInt &v = to_constant_int2t(c).value;
+      const unsigned w = c->type->get_width();
+      const bool is_signed = is_signedbv_type(c->type);
+      return binary2integer(integer2binary(v, w), is_signed);
+    };
+    BigInt folded = extend(c1) + extend(c2);
+    return from_integer(folded, offset_t);
+  };
+
+  auto rebuild = [&type](const expr2tc &base, const expr2tc &folded) {
+    return to_constant_int2t(folded).value.is_zero()
+             ? base
+             : add2tc(type, base, folded);
+  };
+
+  expr2tc base, constant;
+  if (
+    is_constant_int2t(side_2) &&
+    split_pointer_add_const(side_1, base, constant))
+    return rebuild(base, fold_offsets(constant, side_2));
+
+  if (
+    is_constant_int2t(side_1) &&
+    split_pointer_add_const(side_2, base, constant))
+    return rebuild(base, fold_offsets(constant, side_1));
+
+  return expr2tc();
+}
+
+/// ~B + C -> (C - 1) - B for one ordering of the operands, since ~B == -B - 1.
+///
+/// The bitnot folds into the constant beside it, and vanishes outright at
+/// C == 1. Applied across one level of an add chain too, this is the
+/// `(A + 1) + ~B -> A - B` family in whichever permutation reassociation
+/// leaves behind. A constant is required, so the rewrite never trades a
+/// bitnot for a longer expression.
+static expr2tc fold_bitnot_plus_const(
+  const type2tc &type,
+  const expr2tc &first,
+  const expr2tc &second)
+{
+  auto bitnot_value = [&type](const expr2tc &e) -> expr2tc {
+    return is_bitnot2t(e) && e->type == type ? to_bitnot2t(e).value : expr2tc();
+  };
+  auto is_const = [&type](const expr2tc &e) {
+    return is_constant_int2t(e) && e->type == type;
+  };
+  auto decrement = [&type](const expr2tc &c) {
+    return from_integer(to_constant_int2t(c).value - 1, type);
+  };
+  auto fold = [&](const expr2tc &a, const expr2tc &b, const expr2tc &c) {
+    return add2tc(type, sub2tc(type, a, b), decrement(c));
+  };
+
+  // ~B + C
+  if (expr2tc b = bitnot_value(first); !is_nil_expr(b) && is_const(second))
+    return sub2tc(type, decrement(second), b);
+
+  if (!is_add2t(first) || first->type != type)
+    return expr2tc();
+  const add2t &inner = to_add2t(first);
+
+  // (A + C) + ~B
+  if (expr2tc b = bitnot_value(second); !is_nil_expr(b))
+  {
+    if (is_const(inner.side_2))
+      return fold(inner.side_1, b, inner.side_2);
+    if (is_const(inner.side_1))
+      return fold(inner.side_2, b, inner.side_1);
+  }
+
+  // (A + ~B) + C
+  if (is_const(second))
+  {
+    if (expr2tc b = bitnot_value(inner.side_2); !is_nil_expr(b))
+      return fold(inner.side_1, b, second);
+    if (expr2tc b = bitnot_value(inner.side_1); !is_nil_expr(b))
+      return fold(inner.side_2, b, second);
+  }
+
+  return expr2tc();
+}
+
+/// Bitvector-only add identities that reassociation leaves behind (#626).
+static expr2tc simplify_add_bv_identities(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  // No x + x -> x << 1 here: measured, the rewrite costs more than it pays.
+  // It takes the add out of reach of the add-based folds and constant
+  // propagation downstream, which on regression/esbmc-unix/00_bbuf_02 left
+  // 253 rather than 71 VCCs after simplification and ran 25x longer (#626).
+  if (expr2tc folded = fold_bitnot_plus_const(type, side_1, side_2);
+      !is_nil_expr(folded))
+    return folded;
+
+  return fold_bitnot_plus_const(type, side_2, side_1);
+}
+
 expr2tc add2t::do_simplify() const
 {
   // x + 0 = x, 0 + x = x. Mirrors Addtor::simplify but short-circuits before
@@ -372,75 +531,10 @@ expr2tc add2t::do_simplify() const
   if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
     return side_2;
 
-  // Symex sometimes calls do_simplify() directly after renaming a pointer
-  // increment, bypassing the full expr2t::simplify() reassociation pass. Keep
-  // this pointer-only fold local so repeated increments still canonicalize:
-  //   (p + C1) + C2 -> p + (C1 + C2)
   if (is_pointer_type(type))
-  {
-    auto split_pointer_add_const =
-      [](const expr2tc &expr, expr2tc &base, expr2tc &constant) -> bool {
-      if (!is_add2t(expr))
-        return false;
-
-      const add2t &add = to_add2t(expr);
-      if (is_pointer_type(add.side_1) && is_constant_int2t(add.side_2))
-      {
-        base = add.side_1;
-        constant = add.side_2;
-        return true;
-      }
-
-      if (is_pointer_type(add.side_2) && is_constant_int2t(add.side_1))
-      {
-        base = add.side_2;
-        constant = add.side_1;
-        return true;
-      }
-
-      return false;
-    };
-
-    // Pointer-add fold: each unfolded `add(pointer, ptr, c)` step
-    // sign-extends c to the pointer offset width (index_type2, signed long)
-    // before the SMT bv add (see smt_memspace.cpp:155). Cast both constants
-    // to the offset type, sum the sign-extended values there, and re-emit
-    // the folded constant at that same type. This avoids a per-operand
-    // type-match guard that would refuse the fold whenever C produces
-    // mixed-width offsets (e.g. `&arr[0] + (int)1 + (long)2`).
-    auto fold_offsets = [](const expr2tc &c1, const expr2tc &c2) -> expr2tc {
-      const type2tc &offset_t = index_type2();
-      auto extend = [&](const expr2tc &c) -> BigInt {
-        const BigInt &v = to_constant_int2t(c).value;
-        const unsigned w = c->type->get_width();
-        const bool is_signed = is_signedbv_type(c->type);
-        return binary2integer(integer2binary(v, w), is_signed);
-      };
-      BigInt folded = extend(c1) + extend(c2);
-      return from_integer(folded, offset_t);
-    };
-
-    expr2tc base, constant;
-    if (
-      is_constant_int2t(side_2) &&
-      split_pointer_add_const(side_1, base, constant))
-    {
-      expr2tc folded = fold_offsets(constant, side_2);
-      if (to_constant_int2t(folded).value.is_zero())
-        return base;
-      return add2tc(type, base, folded);
-    }
-
-    if (
-      is_constant_int2t(side_1) &&
-      split_pointer_add_const(side_2, base, constant))
-    {
-      expr2tc folded = fold_offsets(constant, side_1);
-      if (to_constant_int2t(folded).value.is_zero())
-        return base;
-      return add2tc(type, base, folded);
-    }
-  }
+    if (expr2tc folded = simplify_pointer_add_const(type, side_1, side_2);
+        !is_nil_expr(folded))
+      return folded;
 
   // x + (-x) = 0
   if (is_neg2t(side_2) && to_neg2t(side_2).value == side_1)
@@ -476,6 +570,11 @@ expr2tc add2t::do_simplify() const
     return constant_int2tc(type, BigInt(-1));
   if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
     return constant_int2tc(type, BigInt(-1));
+
+  if (is_bv_type(type))
+    if (expr2tc folded = simplify_add_bv_identities(type, side_1, side_2);
+        !is_nil_expr(folded))
+      return folded;
 
   // (-x) + (-y) -> -(x + y). Signed-bv only: for unsigned bv, neg2t lowers
   // to (modulus - x) % modulus, so the rewrite would fold two cheap structural
@@ -632,6 +731,89 @@ static bool coerce_to_common_type(expr2tc &a, expr2tc &b)
   return true;
 }
 
+/// &base[i] - &base[j] = i - j, or nil when the operands are not two constant
+/// subscripts of one array. C23 6.5.6p9 defines pointer subtraction as the
+/// difference of the subscripts, so this is the standard's own answer rather
+/// than an optimisation; a differing base is undefined there and is left
+/// unfolded (#6779). Without this the difference stays a comparison operand
+/// symex cannot decide, and a loop bounded by it never exits.
+static expr2tc
+fold_index_difference(const expr2tc &a, const expr2tc &b, const type2tc &type)
+{
+  if (!is_address_of2t(a) || !is_address_of2t(b))
+    return expr2tc();
+
+  const expr2tc &obj_a = to_address_of2t(a).ptr_obj;
+  const expr2tc &obj_b = to_address_of2t(b).ptr_obj;
+  if (!is_index2t(obj_a) || !is_index2t(obj_b))
+    return expr2tc();
+
+  const index2t &idx_a = to_index2t(obj_a);
+  const index2t &idx_b = to_index2t(obj_b);
+  if (
+    idx_a.source_value != idx_b.source_value ||
+    !is_constant_int2t(idx_a.index) || !is_constant_int2t(idx_b.index))
+    return expr2tc();
+
+  return constant_int2tc(
+    type,
+    to_constant_int2t(idx_a.index).value -
+      to_constant_int2t(idx_b.index).value);
+}
+
+/// (w + x) - (y + z) with one shared addend cancels the common term; nil when
+/// no addend is shared or the surviving pair cannot be rebuilt.
+///
+/// Pointer-arith chains can have a common pointer base with mixed-width integer
+/// offsets, and the surviving sub's result type is the parent sub's type
+/// (ptrdiff for pointer-pointer subtraction, otherwise the arith type) — so the
+/// operands are coerced before the rebuilt sub2tc is handed back.
+static expr2tc
+fold_common_addend(const expr2tc &a, const expr2tc &b, const type2tc &type)
+{
+  if (!is_add2t(a) || !is_add2t(b))
+    return expr2tc();
+
+  auto cancel_sub = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc lhs = a_in, rhs = b_in;
+    if (!coerce_to_common_type(lhs, rhs))
+      return expr2tc();
+    // The arith_2ops invariant requires the operand widths match the result
+    // type's width when neither side is a pointer. For pointer-pointer
+    // cancellation the result type is ptrdiff but the surviving operands are
+    // integer offsets — only fold when widths match.
+    if (lhs->type->get_width() != type->get_width())
+      return expr2tc();
+    return sub2tc(type, lhs, rhs);
+  };
+
+  const add2t &add_a = to_add2t(a);
+  const add2t &add_b = to_add2t(b);
+  const std::pair<const expr2tc &, const expr2tc &> pairs[] = {
+    {add_a.side_1, add_b.side_1},
+    {add_a.side_1, add_b.side_2},
+    {add_a.side_2, add_b.side_1},
+    {add_a.side_2, add_b.side_2},
+  };
+  // Each shared-addend case keeps the two operands the match did not consume.
+  const std::pair<const expr2tc &, const expr2tc &> survivors[] = {
+    {add_a.side_2, add_b.side_2},
+    {add_a.side_2, add_b.side_1},
+    {add_a.side_1, add_b.side_2},
+    {add_a.side_1, add_b.side_1},
+  };
+
+  for (std::size_t i = 0; i < 4; ++i)
+    if (pairs[i].first == pairs[i].second)
+    {
+      expr2tc folded = cancel_sub(survivors[i].first, survivors[i].second);
+      if (!is_nil_expr(folded))
+        return folded;
+    }
+
+  return expr2tc();
+}
+
 expr2tc sub2t::do_simplify() const
 {
   // x - 0 = x. Mirrors Subtor::simplify but short-circuits before
@@ -650,6 +832,10 @@ expr2tc sub2t::do_simplify() const
   // a pointer-typed zero (i.e. NULL) and corrupt downstream encoding.
   if (side_1 == side_2)
     return gen_zero(type);
+
+  if (expr2tc folded = fold_index_difference(side_1, side_2, type);
+      !is_nil_expr(folded))
+    return folded;
 
   if (is_bv_type(type))
   {
@@ -697,43 +883,9 @@ expr2tc sub2t::do_simplify() const
         return neg2tc(type, add.side_1);
     }
 
-    // (w + x) - (y + z) with one shared addend cancels the common term.
-    // Pointer-arith chains can have a common pointer base with mixed-width
-    // integer offsets, and the surviving sub's result type is the parent
-    // sub's type (ptrdiff for pointer-pointer subtraction, otherwise the
-    // arith type) — coerce the operands so the rebuilt sub2tc is valid.
-    auto cancel_sub = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-      expr2tc a = a_in, b = b_in;
-      if (!coerce_to_common_type(a, b))
-        return expr2tc();
-      // The arith_2ops invariant requires the operand widths match the
-      // result type's width when neither side is a pointer. For
-      // pointer-pointer cancellation the result type is ptrdiff but the
-      // surviving operands are integer offsets — only fold when widths
-      // match.
-      if (a->type->get_width() != type->get_width())
-        return expr2tc();
-      return sub2tc(type, a, b);
-    };
-
-    if (is_add2t(side_1) && is_add2t(side_2))
-    {
-      const add2t &add1 = to_add2t(side_1);
-      const add2t &add2 = to_add2t(side_2);
-      expr2tc r;
-      if (add1.side_1 == add2.side_1)
-        if (!is_nil_expr(r = cancel_sub(add1.side_2, add2.side_2)))
-          return r;
-      if (add1.side_1 == add2.side_2)
-        if (!is_nil_expr(r = cancel_sub(add1.side_2, add2.side_1)))
-          return r;
-      if (add1.side_2 == add2.side_1)
-        if (!is_nil_expr(r = cancel_sub(add1.side_1, add2.side_2)))
-          return r;
-      if (add1.side_2 == add2.side_2)
-        if (!is_nil_expr(r = cancel_sub(add1.side_1, add2.side_1)))
-          return r;
-    }
+    if (expr2tc folded = fold_common_addend(side_1, side_2, type);
+        !is_nil_expr(folded))
+      return folded;
   }
 
   // x - (-y) -> x + y
@@ -1028,28 +1180,14 @@ expr2tc neg2t::do_simplify() const
     }
     return constant_vector2tc(value->type, std::move(members));
   }
-  if (is_unsignedbv_type(value))
-  {
-    // Get bit-width of the unsigned type
-    const unsigned int width = value->type->get_width();
-
-    // Compute modulus: 2^width
-    const BigInt modulus = BigInt(1) << width;
-    const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
-
-    // Perform modular negation: (modulus - x) % modulus.
-    //
-    // simplify_no_reassoc instead of plain ::simplify: ::simplify would
-    // re-enter the chain-root reassoc path on the freshly-built sub2tc
-    // and, on already-flattened reassoc output, recurse without bound.
-    // The wrap is a one-shot canonicalisation, not a chain root.
-    const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
-    expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
-    simplify_no_reassoc(wrap);
-
-    return wrap;
-  }
-
+  /* No unsigned special case: -x on an unsigned type is modular negation,
+   * which is exactly what mk_bvneg gives at the SMT layer, and what
+   * Negator + from_integer gives when folding a constant.
+   *
+   * The previous form built `(2^w - x) % 2^w`, but 2^w is not representable
+   * in a w-bit unsigned type: constant_int2tc wrapped it to 0, so every SSA
+   * that negated an unsigned carried `(0 - x) % 0`. It computed the right
+   * answer only because SMT-LIB defines `bvurem x 0` as `x` (#4625). */
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 
@@ -1083,6 +1221,36 @@ expr2tc abs2t::do_simplify() const
   return simplify_arith_1op<abstor, abs2t>(type, value);
 }
 
+/** Do the float constants in two expressions that already compare equal agree
+ *  on their signs? Callers rely on @p a and @p b having the same shape. */
+static bool float_signs_agree(const expr2tc &a, const expr2tc &b)
+{
+  if (is_nil_expr(a) || is_nil_expr(b))
+    return true;
+
+  if (is_constant_floatbv2t(a))
+    return to_constant_floatbv2t(a).value.get_sign() ==
+           to_constant_floatbv2t(b).value.get_sign();
+
+  for (unsigned int i = 0; i < a->get_num_sub_exprs(); i++)
+    if (!float_signs_agree(*a->get_sub_expr(i), *b->get_sub_expr(i)))
+      return false;
+  return true;
+}
+
+/** Whether two expressions denote the same value, sign included.
+ *
+ *  expr2tc equality on constant floats is IEEE equality (ieee_float.cpp), and
+ *  under it -0.0 == +0.0. A rewrite that drops one of two "equal" operands --
+ *  if(c, x, y) -> x, or with(s, f, v) -> s -- therefore returns the wrong sign
+ *  whenever they disagree on it, at any depth inside an aggregate constant
+ *  (esbmc/esbmc#7321). NaN needs no guard here: IEEE equality already reports
+ *  two NaNs as unequal, so those rewrites never fire on them. */
+static bool same_value_and_sign(const expr2tc &a, const expr2tc &b)
+{
+  return a == b && float_signs_agree(a, b);
+}
+
 expr2tc with2t::do_simplify() const
 {
   // with(with(s, f, v_old), f, v_new) -> with(s, f, v_new). Two writes to
@@ -1104,7 +1272,7 @@ expr2tc with2t::do_simplify() const
     unsigned no = struct_union_get_component_number(type, memb.value).value();
     assert(no < c_struct.datatype_members.size());
 
-    if (c_struct.datatype_members[no] == update_value)
+    if (same_value_and_sign(c_struct.datatype_members[no], update_value))
       return source_value;
 
     // Clone constant struct, update its field according to this "with".
@@ -1130,7 +1298,7 @@ expr2tc with2t::do_simplify() const
     if (
       c_union.init_field == thetype.member_names[no] &&
       !c_union.datatype_members.empty() &&
-      c_union.datatype_members[0] == update_value)
+      same_value_and_sign(c_union.datatype_members[0], update_value))
       return source_value;
 
     std::vector<expr2tc> newmembers = {update_value};
@@ -1149,7 +1317,8 @@ expr2tc with2t::do_simplify() const
     if (index.value >= array.datatype_members.size())
       return expr2tc();
 
-    if (array.datatype_members[index.as_ulong()] == update_value)
+    if (same_value_and_sign(
+          array.datatype_members[index.as_ulong()], update_value))
       return source_value;
 
     constant_array2t arr = array; // copy
@@ -1169,7 +1338,8 @@ expr2tc with2t::do_simplify() const
     if (index.value >= vec.datatype_members.size())
       return expr2tc();
 
-    if (vec.datatype_members[index.as_ulong()] == update_value)
+    if (same_value_and_sign(
+          vec.datatype_members[index.as_ulong()], update_value))
       return source_value;
 
     constant_vector2t vec2 = vec; // copy
@@ -1189,7 +1359,7 @@ expr2tc with2t::do_simplify() const
       return expr2tc();
 
     // Eliminate this operation if the update value matches the initializer.
-    if (update_value == array.initializer)
+    if (same_value_and_sign(update_value, array.initializer))
       return source_value;
 
     return expr2tc();
@@ -3362,6 +3532,92 @@ expr2tc address_of2t::do_simplify() const
   return expr2tc();
 }
 
+/// Fold a relation between two constants. The constant kind and the comparison
+/// itself are per-domain, so this dispatches on the operand type; C compares
+/// two booleans only after widening them to int, but a Java goto binary
+/// compares them directly. Split out of simplify_relations, whose own decision
+/// count is already over the complexity gate's threshold.
+template <template <typename> class TFunctor>
+static expr2tc simplify_constant_relation(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  expr2tc simpl_res;
+
+  if (is_bv_type(side_1) || is_bv_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
+
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
+
+    simpl_res =
+      TFunctor<BigInt &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
+
+    std::function<fixedbvt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
+
+    simpl_res =
+      TFunctor<fixedbvt &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
+
+    std::function<ieee_floatt &(expr2tc &)> get_value =
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
+
+    simpl_res =
+      TFunctor<ieee_floatt &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_bool_type(side_1) || is_bool_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      (bool (*)(const expr2tc &)) & is_constant_bool2t;
+
+    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
+      return to_constant_bool2t(c).value;
+    };
+
+    simpl_res =
+      TFunctor<bool &>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else if (is_pointer_type(side_1) || is_pointer_type(side_2))
+  {
+    std::function<bool(const expr2tc &)> is_constant =
+      [&](const expr2tc &t) -> bool {
+      if (is_pointer_type(t) && is_symbol2t(t))
+      {
+        symbol2t s = to_symbol2t(t);
+        if (s.thename == "NULL")
+          return true;
+      }
+      return false;
+    };
+
+    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int {
+      return 0xbadbeef;
+    };
+
+    simpl_res = TFunctor<int>::simplify(side_1, side_2, is_constant, get_value);
+  }
+  else
+    return expr2tc();
+
+  return typecast_check_return(type, simpl_res);
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_relations(
   const type2tc &type,
@@ -3437,71 +3693,8 @@ static expr2tc simplify_relations(
     return expr2tc();
   }
 
-  expr2tc simpl_res;
-
-  if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt &>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res = TFunctor<fixedbvt &>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_floatbv_type(simplified_side_1) || is_floatbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-    std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
-
-    simpl_res = TFunctor<ieee_floatt &>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_pointer_type(simplified_side_1) || is_pointer_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      [&](const expr2tc &t) -> bool {
-      if (is_pointer_type(t) && is_symbol2t(t))
-      {
-        symbol2t s = to_symbol2t(t);
-        if (s.thename == "NULL")
-          return true;
-      }
-      return false;
-    };
-
-    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int {
-      return 0xbadbeef;
-    };
-
-    simpl_res = TFunctor<int>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else
-    return expr2tc();
-
-  return typecast_check_return(type, simpl_res);
+  return simplify_constant_relation<TFunctor>(
+    type, simplified_side_1, simplified_side_2);
 }
 
 template <template <typename> class TFunctor, typename constructor>
@@ -3601,6 +3794,198 @@ struct Equalitytor
   }
 };
 
+/// Recognise `(T)b` compared against zero, for `b` already boolean. Widening a
+/// bool to an integer yields exactly 0 or 1, so comparing it with zero recovers
+/// `b` itself -- the bool->int->bool round trip every condition over a stored
+/// _Bool produces. Returns `b`, or nil when the operands are not that shape
+/// (#4626). The reverse trip does not fold: (int)(_Bool)i keeps only whether i
+/// was non-zero, so it is not the identity on i.
+static expr2tc
+widened_bool_compared_to_zero(const expr2tc &side_1, const expr2tc &side_2)
+{
+  auto match = [](const expr2tc &cast, const expr2tc &zero) -> expr2tc {
+    if (!is_typecast2t(cast) || !is_bv_type(cast->type))
+      return expr2tc();
+    if (!is_constant_int2t(zero) || !to_constant_int2t(zero).value.is_zero())
+      return expr2tc();
+    const expr2tc &inner = to_typecast2t(cast).from;
+    return is_bool_type(inner->type) ? inner : expr2tc();
+  };
+
+  expr2tc r = match(side_1, side_2);
+  return is_nil_expr(r) ? match(side_2, side_1) : r;
+}
+
+/// (x + c1) REL c2 -> x REL (c2 - c1), and (x - c1) REL c2 -> x REL (c2 + c1),
+/// for REL in {==, !=}: the two hold together, since `!= x y` is exactly the
+/// negation of `== x y`.
+///
+/// Requires homogeneous types across the entire shape: the add or sub, BOTH
+/// its operands, and c2 must share a single arithmetic domain. Mixed widths
+/// (e.g. (x_u8 + c_u16) == c2_u16) would silently rewrite into something that
+/// confuses modular semantics. The folded constant must also fit the compared
+/// type, or the rewrite would wrap where the original did not.
+template <class Rel2t>
+static expr2tc
+fold_const_across_addsub(const expr2tc &side_1, const expr2tc &side_2)
+{
+  if (!is_constant_int2t(side_2) || side_1->type != side_2->type)
+    return expr2tc();
+
+  const BigInt &c2 = to_constant_int2t(side_2).value;
+  const type2tc &t = side_2->type;
+
+  auto rebuild = [&t](const expr2tc &rest, const BigInt &folded) -> expr2tc {
+    if (!fits_in_width(folded, t->get_width(), is_signedbv_type(t)))
+      return expr2tc();
+    return make_irep<Rel2t>(rest, constant_int2tc(t, folded));
+  };
+
+  auto homogeneous = [&t](const expr2tc &a, const expr2tc &b) {
+    return a->type == t && b->type == t;
+  };
+
+  if (is_add2t(side_1))
+  {
+    const add2t &add_expr = to_add2t(side_1);
+    if (!homogeneous(add_expr.side_1, add_expr.side_2))
+      return expr2tc();
+
+    if (is_constant_int2t(add_expr.side_2))
+      if (expr2tc r = rebuild(
+            add_expr.side_1, c2 - to_constant_int2t(add_expr.side_2).value);
+          !is_nil_expr(r))
+        return r;
+
+    if (is_constant_int2t(add_expr.side_1))
+      return rebuild(
+        add_expr.side_2, c2 - to_constant_int2t(add_expr.side_1).value);
+
+    return expr2tc();
+  }
+
+  if (is_sub2t(side_1))
+  {
+    const sub2t &sub_expr = to_sub2t(side_1);
+    if (!homogeneous(sub_expr.side_1, sub_expr.side_2))
+      return expr2tc();
+
+    if (is_constant_int2t(sub_expr.side_2))
+      return rebuild(
+        sub_expr.side_1, c2 + to_constant_int2t(sub_expr.side_2).value);
+  }
+
+  return expr2tc();
+}
+
+/// Rewrite `&base[c]` to `&base[0] + c` for one comparison operand.
+///
+/// A loop exit spelled `&a[4]` must meet an induction variable built from
+/// increments off `a`, which carries the `&a[0] + k` shape; without a common
+/// form the guard stays a comparison symex cannot decide and the loop never
+/// exits (#6778). The rewrite is applied here rather than in expr2t::simplify
+/// because folding every address_of loses the concrete offset the value-set
+/// analysis needs (regression/incremental-smt/incremental-24).
+static expr2tc normalize_addressof_index(const expr2tc &e)
+{
+  if (!is_address_of2t(e) || !is_index2t(to_address_of2t(e).ptr_obj))
+    return e;
+
+  expr2tc folded = to_address_of2t(e).do_simplify();
+  return is_nil_expr(folded) ? e : folded;
+}
+
+/// Put both operands of a pointer comparison into `&base[0] + c` form, and
+/// return the rebuilt comparison when either changed. @p rebuild re-emits the
+/// node so the common-addend cancellation in the caller can decide it.
+template <typename Rebuild>
+static expr2tc normalize_addressof_operands(
+  const expr2tc &a,
+  const expr2tc &b,
+  Rebuild rebuild)
+{
+  expr2tc na = normalize_addressof_index(a);
+  expr2tc nb = normalize_addressof_index(b);
+  if (na == a && nb == b)
+    return expr2tc();
+
+  expr2tc rebuilt = rebuild(na, nb);
+  expr2tc simplified = rebuilt->simplify();
+  return is_nil_expr(simplified) ? rebuilt : simplified;
+}
+
+/// Re-emit a comparison over @p a_in and @p b_in after coercing them to a
+/// common type; nil when they have none. Pointer-arith chains reach the
+/// cancellations below with mixed-width integer offsets (`(int)c` against
+/// `(long)e`), so the coercion is not optional.
+template <typename Rebuild>
+static expr2tc
+coerce_and_rebuild(const expr2tc &a_in, const expr2tc &b_in, Rebuild rebuild)
+{
+  expr2tc a = a_in, b = b_in;
+  if (!coerce_to_common_type(a, b))
+    return expr2tc();
+  return rebuild(a, b);
+}
+
+/// `d + c ~ d + e -> c ~ e` and `(d - c) ~ (d - e) -> c ~ e`: cancel the addend
+/// or minuend the two sides share.
+///
+/// Shared by equality2t and notequal2t: `!= x y` holds iff `== x y` doesn't, so
+/// a rewrite that preserves equality preserves inequality too.
+template <typename Rebuild>
+static expr2tc cancel_common_addend_operand(
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  Rebuild rebuild)
+{
+  if (is_add2t(side_1) && is_add2t(side_2))
+  {
+    const add2t &a1 = to_add2t(side_1);
+    const add2t &a2 = to_add2t(side_2);
+    // {addend to match, its counterpart} then {the two survivors}.
+    const expr2tc *const combinations[][4] = {
+      {&a1.side_1, &a2.side_1, &a1.side_2, &a2.side_2},
+      {&a1.side_1, &a2.side_2, &a1.side_2, &a2.side_1},
+      {&a1.side_2, &a2.side_1, &a1.side_1, &a2.side_2},
+      {&a1.side_2, &a2.side_2, &a1.side_1, &a2.side_1}};
+
+    for (const auto &c : combinations)
+      if (*c[0] == *c[1])
+        if (expr2tc r = coerce_and_rebuild(*c[2], *c[3], rebuild);
+            !is_nil_expr(r))
+          return r;
+  }
+
+  if (is_sub2t(side_1) && is_sub2t(side_2))
+  {
+    const sub2t &s1 = to_sub2t(side_1);
+    const sub2t &s2 = to_sub2t(side_2);
+    if (s1.side_1 == s2.side_1)
+      return coerce_and_rebuild(s1.side_2, s2.side_2, rebuild);
+  }
+
+  return expr2tc();
+}
+
+/// `(-x) ~ (-y)` and `(~x) ~ (~y)`: cancel the wrapper both sides share.
+template <typename Rebuild>
+static expr2tc cancel_common_unary_operand(
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  Rebuild rebuild)
+{
+  if (is_neg2t(side_1) && is_neg2t(side_2))
+    return coerce_and_rebuild(
+      to_neg2t(side_1).value, to_neg2t(side_2).value, rebuild);
+
+  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
+    return coerce_and_rebuild(
+      to_bitnot2t(side_1).value, to_bitnot2t(side_2).value, rebuild);
+
+  return expr2tc();
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
@@ -3612,70 +3997,22 @@ expr2tc equality2t::do_simplify() const
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type, side_1, side_2);
 
-  // (x + c1) == c2 -> x == (c2 - c1). Requires homogeneous types across
-  // the entire shape: the add, BOTH its operands, and c2 must share a
-  // single arithmetic domain. Mixed widths (e.g. (x_u8 + c_u16) == c2_u16)
-  // would silently rewrite into something that confuses modular semantics.
-  if (
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_add2t(side_1).side_1->type == side_2->type &&
-    to_add2t(side_1).side_2->type == side_2->type)
-  {
-    const add2t &add_expr = to_add2t(side_1);
+  // (T)b == 0 -> !b
+  if (expr2tc b = widened_bool_compared_to_zero(side_1, side_2);
+      !is_nil_expr(b))
+    return not2tc(b);
 
-    if (is_constant_int2t(add_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt diff = c2 - c1;
+  if (expr2tc r = fold_const_across_addsub<equality2t>(side_1, side_2);
+      !is_nil_expr(r))
+    return r;
 
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return equality2tc(add_expr.side_1, new_const);
-      }
-    }
+  auto rebuild_eq = [](const expr2tc &a, const expr2tc &b) {
+    return equality2tc(a, b);
+  };
 
-    if (is_constant_int2t(add_expr.side_1))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return equality2tc(add_expr.side_2, new_const);
-      }
-    }
-  }
-
-  // (x - c1) == c2 -> x == (c2 + c1). Same homogeneity requirement.
-  if (
-    is_sub2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_sub2t(side_1).side_1->type == side_2->type &&
-    to_sub2t(side_1).side_2->type == side_2->type)
-  {
-    const sub2t &sub_expr = to_sub2t(side_1);
-
-    if (is_constant_int2t(sub_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt sum = c2 + c1;
-
-      if (fits_in_width(
-            sum, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, sum);
-        return equality2tc(sub_expr.side_1, new_const);
-      }
-    }
-  }
+  if (expr2tc r = normalize_addressof_operands(side_1, side_2, rebuild_eq);
+      !is_nil_expr(r))
+    return r;
 
   // (x * c) == 0 -> x == 0 when c is odd. Restricted to odd constants
   // because modular bv multiplication is injective only for invertibles
@@ -3716,64 +4053,13 @@ expr2tc equality2t::do_simplify() const
     }
   }
 
-  // d + c == d + e -> c == e (cancel common addend). When the surviving
-  // operands have differing concrete types (pointer-arith chains often mix
-  // `(int)c` with `(long)e`), coerce both to a common type so the rebuilt
-  // equality is well-formed.
-  auto cancel_eq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-    expr2tc a = a_in, b = b_in;
-    if (!coerce_to_common_type(a, b))
-      return expr2tc();
-    return equality2tc(a, b);
-  };
+  if (expr2tc r = cancel_common_addend_operand(side_1, side_2, rebuild_eq);
+      !is_nil_expr(r))
+    return r;
 
-  if (is_add2t(side_1) && is_add2t(side_2))
-  {
-    const add2t &add1 = to_add2t(side_1);
-    const add2t &add2 = to_add2t(side_2);
-    expr2tc r;
-    if (add1.side_1 == add2.side_1)
-      if (!is_nil_expr(r = cancel_eq(add1.side_2, add2.side_2)))
-        return r;
-    if (add1.side_1 == add2.side_2)
-      if (!is_nil_expr(r = cancel_eq(add1.side_2, add2.side_1)))
-        return r;
-    if (add1.side_2 == add2.side_1)
-      if (!is_nil_expr(r = cancel_eq(add1.side_1, add2.side_2)))
-        return r;
-    if (add1.side_2 == add2.side_2)
-      if (!is_nil_expr(r = cancel_eq(add1.side_1, add2.side_1)))
-        return r;
-  }
-
-  // (d - c) == (d - e) -> c == e (cancel common minuend)
-  if (is_sub2t(side_1) && is_sub2t(side_2))
-  {
-    const sub2t &sub1 = to_sub2t(side_1);
-    const sub2t &sub2 = to_sub2t(side_2);
-    if (sub1.side_1 == sub2.side_1)
-    {
-      expr2tc r = cancel_eq(sub1.side_2, sub2.side_2);
-      if (!is_nil_expr(r))
-        return r;
-    }
-  }
-
-  // (-x) == (-y) -> x == y
-  if (is_neg2t(side_1) && is_neg2t(side_2))
-  {
-    expr2tc r = cancel_eq(to_neg2t(side_1).value, to_neg2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
-
-  // (~x) == (~y) -> x == y
-  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
-  {
-    expr2tc r = cancel_eq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
+  if (expr2tc r = cancel_common_unary_operand(side_1, side_2, rebuild_eq);
+      !is_nil_expr(r))
+    return r;
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
@@ -3835,132 +4121,48 @@ expr2tc notequal2t::do_simplify() const
     return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
       type, side_1, side_2);
 
+  // (T)b != 0 -> b
+  if (expr2tc b = widened_bool_compared_to_zero(side_1, side_2);
+      !is_nil_expr(b))
+    return b;
+
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
   // preserves equality also preserves inequality.
 
-  // (x + c1) != c2 -> x != (c2 - c1), and the (c1 + x) != c2 mirror.
-  // Same homogeneity requirement as the equality case: the add, BOTH its
-  // operands, and c2 must all share a single arithmetic domain.
-  if (
-    is_add2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_add2t(side_1).side_1->type == side_2->type &&
-    to_add2t(side_1).side_2->type == side_2->type)
-  {
-    const add2t &add_expr = to_add2t(side_1);
-    const BigInt &c2 = to_constant_int2t(side_2).value;
+  if (expr2tc r = fold_const_across_addsub<notequal2t>(side_1, side_2);
+      !is_nil_expr(r))
+    return r;
 
-    if (is_constant_int2t(add_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_2).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return notequal2tc(add_expr.side_1, new_const);
-      }
-    }
-
-    if (is_constant_int2t(add_expr.side_1))
-    {
-      const BigInt &c1 = to_constant_int2t(add_expr.side_1).value;
-      BigInt diff = c2 - c1;
-
-      if (fits_in_width(
-            diff, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, diff);
-        return notequal2tc(add_expr.side_2, new_const);
-      }
-    }
-  }
-
-  // (x - c1) != c2 -> x != (c2 + c1). Same homogeneity requirement.
-  if (
-    is_sub2t(side_1) && is_constant_int2t(side_2) &&
-    side_1->type == side_2->type &&
-    to_sub2t(side_1).side_1->type == side_2->type &&
-    to_sub2t(side_1).side_2->type == side_2->type)
-  {
-    const sub2t &sub_expr = to_sub2t(side_1);
-
-    if (is_constant_int2t(sub_expr.side_2))
-    {
-      const BigInt &c1 = to_constant_int2t(sub_expr.side_2).value;
-      const BigInt &c2 = to_constant_int2t(side_2).value;
-      BigInt sum = c2 + c1;
-
-      if (fits_in_width(
-            sum, side_2->type->get_width(), is_signedbv_type(side_2->type)))
-      {
-        expr2tc new_const = constant_int2tc(side_2->type, sum);
-        return notequal2tc(sub_expr.side_1, new_const);
-      }
-    }
-  }
-
-  // d + c != d + e -> c != e (cancel common addend). Coerce surviving
-  // operands to a common type when their concrete types differ.
-  auto cancel_neq = [](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-    expr2tc a = a_in, b = b_in;
-    if (!coerce_to_common_type(a, b))
-      return expr2tc();
+  auto rebuild_neq = [](const expr2tc &a, const expr2tc &b) {
     return notequal2tc(a, b);
   };
 
-  if (is_add2t(side_1) && is_add2t(side_2))
-  {
-    const add2t &add1 = to_add2t(side_1);
-    const add2t &add2 = to_add2t(side_2);
-    expr2tc r;
-    if (add1.side_1 == add2.side_1)
-      if (!is_nil_expr(r = cancel_neq(add1.side_2, add2.side_2)))
-        return r;
-    if (add1.side_1 == add2.side_2)
-      if (!is_nil_expr(r = cancel_neq(add1.side_2, add2.side_1)))
-        return r;
-    if (add1.side_2 == add2.side_1)
-      if (!is_nil_expr(r = cancel_neq(add1.side_1, add2.side_2)))
-        return r;
-    if (add1.side_2 == add2.side_2)
-      if (!is_nil_expr(r = cancel_neq(add1.side_1, add2.side_1)))
-        return r;
-  }
+  if (expr2tc r = normalize_addressof_operands(side_1, side_2, rebuild_neq);
+      !is_nil_expr(r))
+    return r;
 
-  // (d - c) != (d - e) -> c != e (cancel common minuend)
-  if (is_sub2t(side_1) && is_sub2t(side_2))
-  {
-    const sub2t &sub1 = to_sub2t(side_1);
-    const sub2t &sub2 = to_sub2t(side_2);
-    if (sub1.side_1 == sub2.side_1)
-    {
-      expr2tc r = cancel_neq(sub1.side_2, sub2.side_2);
-      if (!is_nil_expr(r))
-        return r;
-    }
-  }
+  if (expr2tc r = cancel_common_addend_operand(side_1, side_2, rebuild_neq);
+      !is_nil_expr(r))
+    return r;
 
-  // (-x) != (-y) -> x != y
-  if (is_neg2t(side_1) && is_neg2t(side_2))
-  {
-    expr2tc r = cancel_neq(to_neg2t(side_1).value, to_neg2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
-
-  // (~x) != (~y) -> x != y
-  if (is_bitnot2t(side_1) && is_bitnot2t(side_2))
-  {
-    expr2tc r =
-      cancel_neq(to_bitnot2t(side_1).value, to_bitnot2t(side_2).value);
-    if (!is_nil_expr(r))
-      return r;
-  }
+  if (expr2tc r = cancel_common_unary_operand(side_1, side_2, rebuild_neq);
+      !is_nil_expr(r))
+    return r;
 
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
+}
+
+/// A bool constant is never negative, and GCC rejects `bool < 0` outright
+/// (-Wbool-compare), so the sign shortcut below has to be skipped for the
+/// bool instantiation rather than merely evaluate to false.
+template <class T>
+static bool is_negative_constant(const T &v)
+{
+  if constexpr (std::is_same_v<std::remove_cv_t<T>, bool>)
+    return false;
+  else
+    return v < 0;
 }
 
 template <class constant_type>
@@ -3976,7 +4178,7 @@ struct Lessthantor
     if (is_constant(op1))
     {
       expr2tc c1 = op1;
-      if ((get_value(c1) < 0) && is_unsignedbv_type(op2))
+      if (is_negative_constant(get_value(c1)) && is_unsignedbv_type(op2))
         return gen_true_expr();
     }
 
@@ -4050,7 +4252,7 @@ struct Greaterthantor
     if (is_constant(op2))
     {
       expr2tc c2 = op2;
-      if ((get_value(c2) < 0) && is_unsignedbv_type(op1))
+      if (is_negative_constant(get_value(c2)) && is_unsignedbv_type(op1))
         return gen_true_expr();
     }
 
@@ -4285,7 +4487,7 @@ expr2tc if2t::do_simplify() const
   // below the bool-arm so it fires for bool-typed selects whose branches
   // happen to be the same symbolic value (the bool arm previously short-
   // circuited to nil before this rule could be reached).
-  if (true_value == false_value)
+  if (same_value_and_sign(true_value, false_value))
     return typecast_check_return(type, true_value);
 
   // Constant-condition fold. expr2t::simplify already simplified `cond`.
@@ -5473,6 +5675,50 @@ expr2tc ieee_div2t::do_simplify() const
 {
   return simplify_floatbv_2ops<IEEE_divtor, ieee_div2t>(
     type, side_1, side_2, rounding_mode);
+}
+
+expr2tc ieee_rem2t::do_simplify() const
+{
+  // ieee_floatt has no remainder operation, so a constant-constant pair is
+  // left to the solver. What does fold are the operand facts that decide the
+  // result no matter what the other side is (IEEE 754 remainder; the
+  // operation is exact, so no rounding mode participates).
+  assert(is_floatbv_type(type));
+  const ieee_float_spect spec(to_floatbv_type(type));
+
+  if (is_constant_floatbv2t(side_1))
+  {
+    const ieee_floatt &v1 = to_constant_floatbv2t(side_1).value;
+    // NaN % y and inf % y are NaN for every y.
+    if (v1.is_NaN() || v1.is_infinity())
+      return constant_floatbv2tc(ieee_floatt::NaN(spec));
+  }
+
+  if (is_constant_floatbv2t(side_2))
+  {
+    const ieee_floatt &v2 = to_constant_floatbv2t(side_2).value;
+    // x % NaN and x % 0 are NaN for every x.
+    if (v2.is_NaN() || v2.is_zero())
+      return constant_floatbv2tc(ieee_floatt::NaN(spec));
+
+    // x % inf passes finite x through untouched (incl. the sign of a zero);
+    // infinite or NaN x was handled above when constant, and must not fold
+    // when symbolic.
+    if (v2.is_infinity() && is_constant_floatbv2t(side_1))
+    {
+      const ieee_floatt &v1 = to_constant_floatbv2t(side_1).value;
+      if (!v1.is_NaN() && !v1.is_infinity())
+        return side_1;
+    }
+
+    // 0 % y is x itself for any nonzero non-NaN y (sign preserved).
+    if (
+      is_constant_floatbv2t(side_1) &&
+      to_constant_floatbv2t(side_1).value.is_zero())
+      return side_1;
+  }
+
+  return expr2tc();
 }
 
 expr2tc ieee_fma2t::do_simplify() const

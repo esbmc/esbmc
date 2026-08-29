@@ -1,0 +1,5 @@
+CORE
+cbmc_array_equal_fail.goto
+--binary
+^VERIFICATION FAILED$
+return_value___CPROVER_array_equal

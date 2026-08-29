@@ -1,0 +1,7 @@
+CORE
+main.c
+--result-only --multi-property
+^ +FAILED .*a is not one$
+^ +FAILED .*a is not two$
+^VERIFICATION FAILED$
+\A(?![\s\S]*NOT CHECKED)[\s\S]*\Z

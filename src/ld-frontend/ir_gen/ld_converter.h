@@ -48,6 +48,8 @@ private:
   typet int32_t_() const;
   typet type_of_kind(VarKind kind) const; // IEC 61131-3 type -> ESBMC typet
   exprt int_const(long long value) const;
+  exprt int_max() const;
+  exprt int_min() const;
 
   symbol_exprt declare_variable(const VarDecl &v);
   symbol_exprt declare_bool_shadow(const std::string &id);

@@ -19,6 +19,7 @@ if(ENABLE_LD_FRONTEND)
   add_subdirectory(ld-frontend)
 endif()
 
+add_subdirectory(langapi)
 add_subdirectory(util)
 add_subdirectory(c2goto)
 add_subdirectory(irep2)

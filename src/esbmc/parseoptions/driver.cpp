@@ -25,6 +25,8 @@ extern "C"
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <irep2/simplification_check.h>
+#include <solvers/smt/simplification_equivalence.h>
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -80,6 +82,7 @@ extern "C"
 #include <goto-programs/goto_cfg.h>
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
+#include <util/ssa/proof_cache.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -98,52 +101,11 @@ extern "C"
 #define CLR_BOLD "\033[1m"
 #define CLR_RESET "\033[0m"
 
-// This is the main entry point of ESBMC. Here ESBMC performs initialisation
-// of the algorithms that will be run over the GOTO program at later stages
-//
-//  1) Parse CMD                            (see "get_command_line_options")
-//  2) Create and preprocess a GOTO program (see "get_goto_functions")
-//  3) Set user-specified claims            (see "set_claims")
-//  4) Perform Bounded Model Checking
-//    - Run a particular verification strategy if specified
-//      in CMD (see "do_bmc_strategy"), or
-//    - Perform a single run of Bounded Model Checking and rely
-//      on the simplifier to determine the sufficient verification bound
-//      (see "do_bmc")
-int esbmc_parseoptionst::doit()
+/// The flag combinations that cannot produce a sound report, rejected
+/// before any work is done. Kept out of doit() so every combination check
+/// reads in one place.
+static bool incompatible_flags(const cmdlinet &cmdline)
 {
-  // Configure msg output
-  if (cmdline.isset("file-output"))
-  {
-    FILE *f = fopen(cmdline.getval("file-output"), "w+");
-    /* TODO: handle failure */
-    out = f;
-    messaget::state.out = f;
-  }
-
-  // Print a banner with version info to stdout
-  {
-    FILE *output_stream = messaget::state.out;
-    messaget::state.out = stdout;
-    log_status(
-      "ESBMC version {} {}-bit {} {}",
-      ESBMC_VERSION,
-      sizeof(void *) * 8,
-      config.this_architecture(),
-      config.this_operating_system());
-    messaget::state.out = output_stream;
-  }
-
-  if (cmdline.isset("version"))
-    return 0;
-
-  // Unwinding of transition systems
-  if (cmdline.isset("module") || cmdline.isset("gen-interface"))
-  {
-    log_error("This version has no support for hardware modules.");
-    return 1;
-  }
-
   // --dead-code-check is a standalone base-case advisory analysis: it reuses
   // the branch-coverage instrumentation and forces a SUCCESSFUL verdict. The
   // k-induction / incremental strategies and early-stopping fail-fast drive
@@ -209,8 +171,138 @@ int esbmc_parseoptionst::doit()
       {
         log_error(
           "--dead-code-check cannot be combined with --{}", incompatible);
-        return 1;
+        return true;
       }
+
+  // --incremental-context-bound owns the outer verification loop, re-running
+  // do_bmc per context bound; the unwinding strategies each drive an outer
+  // loop of their own, so only one driver can own the run (issue #6480).
+  if (cmdline.isset("incremental-context-bound"))
+    for (const char *incompatible :
+         {"termination",
+          "incremental-bmc",
+          "falsification",
+          "k-induction",
+          "k-induction-parallel",
+          "loop-invariant"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--incremental-context-bound cannot be combined with --{}",
+          incompatible);
+        return true;
+      }
+
+  return false;
+}
+
+/// The proof cache is wired into the per-claim solve alone, and both its flags
+/// are inert without it. Refused rather than accepted, because a run that
+/// reuses nothing is indistinguishable from one whose cache is working. The
+/// flags are judged on their own terms, so --skip-bmc and the print-and-stop
+/// modes are refused too rather than accepting a combination that could never
+/// have worked. Called after the GOTO program is built because only by then is
+/// the option set final: --multi-property is implied by several flags, the
+/// coverage ones not until process_goto_program.
+static bool proof_cache_flags_usable(const optionst &options)
+{
+  const std::string dir = options.get_option("proof-cache");
+
+  if (options.get_bool_option("proof-cache-verify") && dir.empty())
+  {
+    log_error(
+      "--proof-cache-verify has no cache to check without "
+      "--proof-cache <dir>");
+    return false;
+  }
+
+  if (dir.empty())
+    return true;
+
+  const std::string why = proof_cache_inactive_reason(options);
+  if (!why.empty())
+  {
+    report_proof_cache_inactive(why);
+    return true;
+  }
+
+  if (!options.get_bool_option("multi-property"))
+  {
+    log_error(
+      "--proof-cache reuses claims one at a time and needs "
+      "--multi-property");
+    return false;
+  }
+
+  return true;
+}
+
+// This is the main entry point of ESBMC. Here ESBMC performs initialisation
+// of the algorithms that will be run over the GOTO program at later stages
+//
+//  1) Parse CMD                            (see "get_command_line_options")
+//  2) Create and preprocess a GOTO program (see "get_goto_functions")
+//  3) Set user-specified claims            (see "set_claims")
+//  4) Perform Bounded Model Checking
+//    - Run a particular verification strategy if specified
+//      in CMD (see "do_bmc_strategy"), or
+//    - Perform a single run of Bounded Model Checking and rely
+//      on the simplifier to determine the sufficient verification bound
+//      (see "do_bmc")
+int esbmc_parseoptionst::run_chosen_strategy(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  if (cmdline.isset("incremental-context-bound"))
+    return do_context_bound_deepening(options, goto_functions);
+
+  if (
+    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
+    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
+    cmdline.isset("loop-invariant"))
+    return do_bmc_strategy(options, goto_functions);
+
+  // No strategy chosen: rely on the simplifier and the flags set through CMD.
+  bmct bmc(goto_functions, options, context);
+  return do_bmc(bmc);
+}
+
+int esbmc_parseoptionst::doit()
+{
+  // Configure msg output
+  if (cmdline.isset("file-output"))
+  {
+    FILE *f = fopen(cmdline.getval("file-output"), "w+");
+    /* TODO: handle failure */
+    out = f;
+    messaget::state.out = f;
+  }
+
+  // Print a banner with version info to stdout
+  {
+    FILE *output_stream = messaget::state.out;
+    messaget::state.out = stdout;
+    log_status(
+      "ESBMC version {} {}-bit {} {}",
+      ESBMC_VERSION,
+      sizeof(void *) * 8,
+      config.this_architecture(),
+      config.this_operating_system());
+    messaget::state.out = output_stream;
+  }
+
+  if (cmdline.isset("version"))
+    return 0;
+
+  // Unwinding of transition systems
+  if (cmdline.isset("module") || cmdline.isset("gen-interface"))
+  {
+    log_error("This version has no support for hardware modules.");
+    return 1;
+  }
+
+  if (incompatible_flags(cmdline))
+    return 1;
 
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)
@@ -368,6 +460,16 @@ int esbmc_parseoptionst::doit()
     }
   }
 
+  // Installed before the GOTO program is built so the check also covers the
+  // simplification the frontend and the GOTO passes perform. Inert unless
+  // the build enabled ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK.
+  install_simplification_equivalence_check(namespacet(context), options);
+  // Reports and uninstalls on the way out, whichever of doit()'s exits is
+  // taken. Uninstalling here rather than at the end of GOTO construction left
+  // symex -- where the rewrites that decide a verdict actually happen --
+  // unchecked, and the count describing only the frontend (esbmc/esbmc#7260).
+  const simplification_check_scopet simplification_check_scope;
+
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
     return 6;
@@ -386,34 +488,48 @@ int esbmc_parseoptionst::doit()
   if (set_claims(goto_functions))
     return 7;
 
+  if (!proof_cache_flags_usable(options))
+    return 1;
+
   // Leave without doing any Bounded Model Checking
   if (options.get_bool_option("skip-bmc"))
     return 0;
 
-  // Now run one of the chosen strategies
-  if (
-    cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
-    cmdline.isset("falsification") || cmdline.isset("k-induction") ||
-    cmdline.isset("loop-invariant"))
-    return do_bmc_strategy(options, goto_functions);
+  // A violation found under a bounded schedule space is genuine whichever
+  // strategy owns the run, so this precedes the dispatch rather than joins it.
+  const int prepass = falsify_with_bounded_schedules(options, goto_functions);
+  if (prepass >= 0)
+    return prepass;
 
-  // If no strategy is chosen, just rely on the simplifier
-  // and the flags set through CMD
-  bmct bmc(goto_functions, options, context);
-  int bmc_result = do_bmc(bmc);
+  const int res = run_chosen_strategy(options, goto_functions);
+
   // Dead-code analysis is advisory: its probes are SAT for every live branch,
   // which do_bmc maps to a non-zero (FAILED) exit code. The findings are
   // reported separately, so remap that to 0 — but only for a completed
   // analysis. A solver error (P_ERROR) or an SMTLIB-only emission (P_SMTLIB)
   // is not a finished advisory run, so propagate it rather than masking a
   // crashed/incomplete analysis as success (issue #4495).
+  //
+  // Checked before the coverage branch below: `is_coverage` also covers
+  // --dead-code-check, which borrows the instrumentation but reports
+  // advisories and a verdict rather than a [Coverage] block.
   if (options.get_bool_option("dead-code-check"))
   {
-    if (bmc_result == P_ERROR || bmc_result == P_SMTLIB)
-      return bmc_result;
+    if (res == P_ERROR || res == P_SMTLIB)
+      return res;
     return 0;
   }
-  return bmc_result;
+
+  // A coverage run has no verdict, so it has no failure exit code either: its
+  // result is the [Coverage] block closed by the completeness line. Printed
+  // here, once, so it lands after the last block (k-induction prints one per
+  // phase).
+  if (is_coverage)
+  {
+    report_coverage_completeness();
+    return 0;
+  }
+  return res;
 }
 
 bool esbmc_parseoptionst::resolve_color_option() const

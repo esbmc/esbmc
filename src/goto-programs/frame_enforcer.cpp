@@ -49,6 +49,44 @@ void frame_enforcert::materialize_snapshots(
   }
 }
 
+static const expr2tc &strip_typecasts(const expr2tc &e)
+{
+  const expr2tc *leaf = &e;
+  while (is_typecast2t(*leaf))
+    leaf = &to_typecast2t(*leaf).from;
+  return *leaf;
+}
+
+// The parameter a path is rooted at, and the field of *that* parameter the path
+// goes through: `o->sub->a` is rooted at `o` through `sub`. Recording that much
+// lets the per-field check hold every other field of `*o` unchanged, which is
+// what catches a write to `o->x`. What happens under `o->sub` is not covered --
+// the pointee of a field is not a parameter, so Phase 2C has nothing to root a
+// snapshot at (github_7055_assigns_multilevel_inner_knownbug).
+static bool root_pointer_field(const expr2tc &e, irep_idt &ptr, irep_idt &field)
+{
+  if (!is_member2t(e))
+    return false;
+
+  // A cast anywhere along the path -- `((Inner *)o->sub)->a` -- must not lose
+  // the root, or the target falls back to direct_targets and no obligation is
+  // generated at all.
+  const member2t &mem = to_member2t(e);
+  const expr2tc &src = strip_typecasts(mem.source_value);
+  if (!is_dereference2t(src))
+    return false;
+
+  const expr2tc &under = strip_typecasts(to_dereference2t(src).value);
+  if (is_symbol2t(under))
+  {
+    ptr = to_symbol2t(under).thename;
+    field = mem.member;
+    return true;
+  }
+
+  return root_pointer_field(under, ptr, field);
+}
+
 frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
   const std::vector<expr2tc> &explicit_assigns)
 {
@@ -56,7 +94,22 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
 
   for (const auto &target : explicit_assigns)
   {
-    if (is_pointer_type(target))
+    if (
+      is_index2t(target) && is_symbol2t(to_index2t(target).source_value) &&
+      is_array_type(to_index2t(target).source_value->type))
+    {
+      // global[i]: record the index so the assertion can spare that element.
+      // As a direct target it matched nothing, and the whole array was asserted
+      // unchanged, which the named write itself falsifies (#7056).
+      // Tested before the pointer case: an element of an array *of pointers*
+      // is pointer-typed, and classing it as a pointer target left the whole
+      // array asserted unchanged, so even a body writing only the named
+      // element failed.
+      const index2t &idx = to_index2t(target);
+      result.array_elem_targets[to_symbol2t(idx.source_value).thename]
+        .push_back(idx.index);
+    }
+    else if (is_pointer_type(target))
     {
       // Pointer-typed symbol: Clang simplified &(*ptr) to ptr
       result.pointer_targets.push_back(target);
@@ -87,8 +140,17 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
         }
         else
         {
-          // Complex pointer expression — fall back to direct_targets
-          result.direct_targets.push_back(target);
+          // A path through more than one pointer, e.g. `o->sub->a`. Record the
+          // parameter it is rooted at and the field it enters, so the per-field
+          // check still holds every other field of that parameter unchanged.
+          // Left in direct_targets it matched no snapshot and no obligation was
+          // generated at all, so a body writing outside its frame verified
+          // (#7055).
+          irep_idt root_ptr, root_field;
+          if (root_pointer_field(target, root_ptr, root_field))
+            result.ptr_field_targets[root_ptr].insert(root_field);
+          else
+            result.direct_targets.push_back(target);
         }
       }
       else
@@ -130,6 +192,238 @@ static void emit_frame_instruction(
   }
 }
 
+// One assertion per element costs more than linearly: 256 elements solve in
+// 0.6s, 512 in 2.4s, 1000 in 16s, and 10000 does not finish inside the
+// regression timeout.
+static const unsigned max_elementwise_frame_extent = 256;
+
+// The array equals its snapshot with only the named indices replaced by their
+// current values. Exact, and one equality whatever the extent, so it is what
+// carries an array too large to hold element by element.
+//
+// It does not replace the element-wise form, for three reasons measured on
+// this branch: it reports the array rather than the element that broke the
+// frame, Bitwuzla rejects equality over constant arrays ("not fully supported
+// yet") so it cannot serve the loop rule's ASSUME mode, and an element that is
+// itself an array fails on every solver -- reading an array-typed rvalue is
+// the same gap that stops __ESBMC_old over an array (#7057).
+static void emit_array_store_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const std::vector<expr2tc> &assigned_indices,
+  const expr2tc &var,
+  const expr2tc &snap,
+  const irep_idt &arr_name)
+{
+  const array_type2t &atype = to_array_type(var->type);
+  expr2tc updated = snap;
+  for (const expr2tc &assigned : assigned_indices)
+  {
+    // An index outside the array excuses nothing, which is what comparing the
+    // index against each element gives for free. Fed to a store it would not:
+    // the solver's index domain is only as wide as the extent, so an index
+    // past the end wraps and spares some unrelated element instead.
+    expr2tc in_range = and2tc(
+      greaterthanequal2tc(assigned, gen_zero(assigned->type)),
+      lessthan2tc(assigned, typecast2tc(assigned->type, atype.array_size)));
+
+    updated = if2tc(
+      var->type,
+      in_range,
+      with2tc(
+        var->type, updated, assigned, index2tc(atype.subtype, var, assigned)),
+      updated);
+  }
+
+  emit_frame_instruction(
+    dest, loc, equality2tc(var, updated), mode, id2string(arr_name));
+}
+
+// Compare the scalar leaves, not whole rows: a row of a multi-dimensional
+// array is an array-typed rvalue, which no solver reads correctly (#7057).
+static void emit_leaf_equalities(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const expr2tc &var_elem,
+  const expr2tc &snap_elem,
+  const expr2tc &exemption,
+  const std::string &label)
+{
+  if (is_array_type(var_elem->type))
+  {
+    const array_type2t &at = to_array_type(var_elem->type);
+    const BigInt &n = to_constant_int2t(at.array_size).value;
+    for (BigInt j = 0; j < n; j += 1)
+    {
+      expr2tc jc = constant_int2tc(at.array_size->type, j);
+      emit_leaf_equalities(
+        dest,
+        loc,
+        mode,
+        index2tc(at.subtype, var_elem, jc),
+        index2tc(at.subtype, snap_elem, jc),
+        exemption,
+        label + "[" + integer2string(j) + "]");
+    }
+    return;
+  }
+
+  expr2tc guard = equality2tc(var_elem, snap_elem);
+  if (!is_nil_expr(exemption))
+    guard = or2tc(guard, exemption);
+  emit_frame_instruction(dest, loc, guard, mode, label);
+}
+
+// Hold every element the clause did not name unchanged, rather than the array
+// as a whole -- which the named write itself falsifies (#7056). A global array
+// has a constant extent, so this needs neither a witness index nor a
+// quantifier: one assertion per element, each excused at the named indices.
+// Returns whether \p var was of that shape and so is now dealt with; what
+// neither form covers falls back to the whole-array assertion.
+static bool emit_array_elem_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var,
+  const expr2tc &snap)
+{
+  if (!is_symbol2t(var) || !is_array_type(var->type))
+    return false;
+
+  const irep_idt &arr_name = to_symbol2t(var).thename;
+  auto ait = classified.array_elem_targets.find(arr_name);
+  if (ait == classified.array_elem_targets.end())
+    return false;
+
+  const array_type2t &atype = to_array_type(var->type);
+  if (!is_constant_int2t(atype.array_size))
+    return false;
+
+  const BigInt &n = to_constant_int2t(atype.array_size).value;
+  if (n > BigInt(max_elementwise_frame_extent))
+  {
+    if (mode != frame_modet::ASSERT || is_array_type(atype.subtype))
+      return false;
+
+    emit_array_store_frame(dest, loc, mode, ait->second, var, snap, arr_name);
+    return true;
+  }
+
+  // Descending to the leaves multiplies the assertion count, so the budget is
+  // measured over the leaves, and a nested dimension of unknown extent has
+  // none to count.
+  BigInt leaves = n;
+  for (type2tc sub = atype.subtype; is_array_type(sub);
+       sub = to_array_type(sub).subtype)
+  {
+    const array_type2t &s = to_array_type(sub);
+    if (!is_constant_int2t(s.array_size))
+      return false;
+    leaves = leaves * to_constant_int2t(s.array_size).value;
+  }
+  if (leaves > BigInt(max_elementwise_frame_extent))
+    return false;
+
+  for (BigInt k = 0; k < n; k += 1)
+  {
+    expr2tc kc = constant_int2tc(atype.array_size->type, k);
+    expr2tc exemption;
+
+    for (const expr2tc &assigned : ait->second)
+    {
+      expr2tc named = equality2tc(typecast2tc(assigned->type, kc), assigned);
+      exemption = is_nil_expr(exemption) ? named : or2tc(exemption, named);
+    }
+
+    emit_leaf_equalities(
+      dest,
+      loc,
+      mode,
+      index2tc(atype.subtype, var, kc),
+      index2tc(atype.subtype, snap, kc),
+      exemption,
+      id2string(arr_name) + "[" + integer2string(k) + "]");
+  }
+  return true;
+}
+
+// Assert only that the struct fields NOT in the assigns clause are unchanged.
+// Example: __ESBMC_assigns(global_pt.x) allows global_pt.x to change but holds
+// global_pt.y, global_pt.z, ... to their pre-state.
+static bool emit_struct_field_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var,
+  const expr2tc &snap)
+{
+  if (!is_symbol2t(var) || !is_struct_type(var))
+    return false;
+
+  const irep_idt &sym_name = to_symbol2t(var).thename;
+  auto sit = classified.struct_field_targets.find(sym_name);
+  if (sit == classified.struct_field_targets.end())
+    return false;
+
+  const struct_type2t &stype = to_struct_type(var->type);
+  for (size_t i = 0; i < stype.member_names.size(); ++i)
+  {
+    const irep_idt &field = stype.member_names[i];
+    if (sit->second.count(field))
+      continue; // This field is explicitly assigned — skip
+
+    const type2tc &ftype = stype.members[i];
+    expr2tc field_guard =
+      equality2tc(member2tc(ftype, var, field), member2tc(ftype, snap, field));
+
+    emit_frame_instruction(
+      dest,
+      loc,
+      field_guard,
+      mode,
+      id2string(sym_name) + "." + id2string(field));
+  }
+  return true;
+}
+
+// Hold the parts of \p var the clause did not name unchanged, rather than \p
+// var as a whole: named struct fields, or named array elements.
+// Returns whether \p var was one of those shapes and so is now dealt with.
+static bool emit_partial_frame(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var,
+  const expr2tc &snap)
+{
+  return emit_struct_field_frame(dest, loc, mode, classified, var, snap) ||
+         emit_array_elem_frame(dest, loc, mode, classified, var, snap);
+}
+
+// Whether the whole-object constraint must be withheld because the clause
+// named elements of \p var that no encoding above could express.
+//
+// Asserting the whole array is merely imprecise: it reports the write the
+// clause itself permits, a false positive. Assuming it is not. An assumption
+// the clause contradicts is a hypothesis stronger than the truth, and anything
+// proved under it may be false -- a loop writing an element it was granted
+// verified an assertion that element falsifies. Withholding the constraint
+// only weakens the hypothesis, which can cost a proof but cannot invent one.
+static bool withhold_whole_object_frame(
+  frame_modet mode,
+  const frame_enforcert::classified_assignst &classified,
+  const expr2tc &var)
+{
+  return mode == frame_modet::ASSUME && is_symbol2t(var) &&
+         is_array_type(var->type) &&
+         classified.array_elem_targets.count(to_symbol2t(var).thename) != 0;
+}
+
 void frame_enforcert::enforce_frame_rule(
   const std::vector<expr2tc> &explicit_assigns,
   goto_programt &dest,
@@ -138,6 +432,16 @@ void frame_enforcert::enforce_frame_rule(
 {
   // Classify assigns targets for aliasing analysis
   classified_assignst classified = classify_assigns_targets(explicit_assigns);
+
+  // A clause names its targets in the pre-state: `__ESBMC_assigns(buf[head])`
+  // grants the element `head` denoted on entry. The array is snapshotted but
+  // the index used to be read back after the body, so a body that moved `head`
+  // -- itself in the clause, as the ring-buffer idiom needs -- chose after the
+  // fact which element it had been granted. An off-by-one write verified while
+  // the correct body was reported.
+  for (auto &[name, indices] : classified.array_elem_targets)
+    for (expr2tc &index : indices)
+      index = in_pre_state(index);
 
   for (const auto &entry : active_snapshots)
   {
@@ -159,38 +463,11 @@ void frame_enforcert::enforce_frame_rule(
     if (is_assigned)
       continue;
 
-    // Check for struct field targets: if this global is a struct and some of
-    // its fields are in the assigns clause, generate per-field assertions
-    // instead of a coarse whole-struct assertion.
-    // Example: __ESBMC_assigns(global_pt.x) allows global_pt.x to change but
-    // asserts that global_pt.y, global_pt.z, ... remain unchanged.
-    if (is_symbol2t(var) && is_struct_type(var))
-    {
-      const irep_idt &sym_name = to_symbol2t(var).thename;
-      auto sit = classified.struct_field_targets.find(sym_name);
-      if (sit != classified.struct_field_targets.end())
-      {
-        // Some fields of this struct are in the assigns clause.
-        // Assert only that the fields NOT in assigns are unchanged.
-        const struct_type2t &stype = to_struct_type(var->type);
-        for (size_t i = 0; i < stype.member_names.size(); ++i)
-        {
-          const irep_idt &field = stype.member_names[i];
-          if (sit->second.count(field))
-            continue; // This field is explicitly assigned — skip
+    if (emit_partial_frame(dest, loc, mode, classified, var, snap))
+      continue;
 
-          const type2tc &ftype = stype.members[i];
-          expr2tc field_var = member2tc(ftype, var, field);
-          expr2tc field_snap = member2tc(ftype, snap, field);
-          expr2tc field_guard = equality2tc(field_var, field_snap);
-
-          std::string field_name_str =
-            id2string(sym_name) + "." + id2string(field);
-          emit_frame_instruction(dest, loc, field_guard, mode, field_name_str);
-        }
-        continue; // Skip the whole-struct assertion
-      }
-    }
+    if (withhold_whole_object_frame(mode, classified, var))
+      continue;
 
     // Build the base guard: var == snapshot (unchanged condition)
     expr2tc guard = equality2tc(var, snap);
@@ -300,6 +577,36 @@ void frame_enforcert::patch_old_snapshot_assigns(goto_programt &prog) const
       break;
     }
   }
+}
+
+expr2tc frame_enforcert::in_pre_state(const expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return expr;
+
+  if (is_symbol2t(expr))
+  {
+    const irep_idt &name = to_symbol2t(expr).thename;
+    for (const auto &entry : active_snapshots)
+      if (
+        is_symbol2t(entry.original_expr) &&
+        to_symbol2t(entry.original_expr).thename == name)
+        return entry.snapshot_sym;
+    return expr;
+  }
+
+  expr2tc result = expr->clone();
+  bool modified = false;
+  result->Foreach_operand([this, &modified](expr2tc &op) {
+    expr2tc replaced = in_pre_state(op);
+    if (replaced != op)
+    {
+      op = replaced;
+      modified = true;
+    }
+  });
+
+  return modified ? result : expr;
 }
 
 expr2tc frame_enforcert::replace_old_with_snapshots(const expr2tc &expr) const

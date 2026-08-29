@@ -17,6 +17,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <limits>
+#include <util/arith/ieee_float.h>
 #include <util/expr/expr_util.h>
 #include <iostream>
 #include <fstream>
@@ -76,6 +77,102 @@
 #  include <goto-programs/goto_contractor.h>
 #endif
 
+/* Rewrite the initialiser __ESBMC_main performs for a model-tuning global.
+ * Rewriting the initialiser rather than the symbol leaves any later assignment
+ * (fesetround(), say) free to change the value again. Returns false when the
+ * program does not carry the global, which happens when nothing pulled the
+ * model in. */
+static bool set_model_global(
+  goto_functionst &goto_functions,
+  const irep_idt &name,
+  const BigInt &value)
+{
+  goto_functionst::function_mapt::iterator main =
+    goto_functions.function_map.find("__ESBMC_main");
+  if (main == goto_functions.function_map.end())
+    return false;
+
+  for (auto &i : main->second.body.instructions)
+  {
+    if (!i.is_assign())
+      continue;
+    const code_assign2t &assign = to_code_assign2t(i.code);
+    if (
+      !is_symbol2t(assign.target) || to_symbol2t(assign.target).thename != name)
+      continue;
+    i.code = code_assign2tc(
+      assign.target, constant_int2tc(assign.source->type, value));
+    return true;
+  }
+  return false;
+}
+
+/* --fp-taylor-terms tunes how far the exp/log/pow models expand their Taylor
+ * series (esbmc/esbmc#2865); see src/c2goto/library/libm/exp.c. */
+static bool
+apply_taylor_terms(goto_functionst &goto_functions, const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("fp-taylor-terms"))
+    return false;
+
+  const int terms = atoi(cmdline.getval("fp-taylor-terms"));
+  if (terms < 2 || terms > 12)
+  {
+    log_error("--fp-taylor-terms must be between 2 and 12; got {}", terms);
+    return true;
+  }
+
+  if (!set_model_global(
+        goto_functions, "c:@__ESBMC_fp_taylor_terms", BigInt(terms)))
+    log_warning(
+      "--fp-taylor-terms has no effect: this program calls no Taylor-series "
+      "model");
+  return false;
+}
+
+/* The --round-to-* flags select the IEEE 754 rounding mode (esbmc/esbmc#2763).
+ * Floating-point operations read it from __ESBMC_rounding_mode, a global whose
+ * zero-initialiser __ESBMC_main performs. */
+static bool
+apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
+{
+  static const struct
+  {
+    const char *flag;
+    ieee_floatt::rounding_modet mode;
+  } modes[] = {
+    {"round-to-nearest", ieee_floatt::ROUND_TO_EVEN},
+    {"round-to-even", ieee_floatt::ROUND_TO_EVEN},
+    {"round-to-plus-inf", ieee_floatt::ROUND_TO_PLUS_INF},
+    {"round-to-minus-inf", ieee_floatt::ROUND_TO_MINUS_INF},
+    {"round-to-zero", ieee_floatt::ROUND_TO_ZERO}};
+
+  const char *selected_flag = nullptr;
+  ieee_floatt::rounding_modet selected = ieee_floatt::ROUND_TO_EVEN;
+  for (const auto &m : modes)
+  {
+    if (!cmdline.isset(m.flag))
+      continue;
+    if (selected_flag && selected != m.mode)
+    {
+      log_error("--{} and --{} are mutually exclusive", selected_flag, m.flag);
+      return true;
+    }
+    selected_flag = m.flag;
+    selected = m.mode;
+  }
+
+  if (!selected_flag)
+    return false;
+
+  if (!set_model_global(
+        goto_functions, "c:@__ESBMC_rounding_mode", BigInt(selected)))
+    log_warning(
+      "--{} has no effect: this program performs no floating-point rounding",
+      selected_flag);
+  return false;
+}
+
 // This method performs various analyses and transformations
 // on the given GOTO program. They involve all the techniques that we class
 // as "static analyses" - performed on the given GOTO program before it is
@@ -97,6 +194,11 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
+    if (
+      apply_rounding_mode(goto_functions, cmdline) ||
+      apply_taylor_terms(goto_functions, cmdline))
+      return true;
+
     bool is_mul =
       cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
@@ -112,6 +214,13 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("k-path-coverage") ||
                   cmdline.isset("k-path-coverage-claims") ||
                   cmdline.isset("dead-code-check");
+
+    // Single source of truth for "this run measures coverage", read back by
+    // bmc.cpp. --dead-code-check borrows the same instrumentation but keeps a
+    // verdict and reports CWE-561 advisories, so it is deliberately excluded:
+    // the coverage reporting rules must not apply to it (issue #6387).
+    options.set_option(
+      "coverage-measurement", is_coverage && !cmdline.isset("dead-code-check"));
 
     // For coverage mode, treat extra input files (cmdline.args[1:]) as include
     // files so that the coverage location_pool covers all input sources.
@@ -440,12 +549,15 @@ bool esbmc_parseoptionst::process_goto_program(
     bool has_enforce_all = cmdline.isset("enforce-all-contracts");
     bool has_replace_all = cmdline.isset("replace-all-contracts");
     if (has_enforce || has_replace || has_enforce_all || has_replace_all)
-      process_function_contracts(
-        goto_functions,
-        has_replace,
-        has_enforce,
-        has_enforce_all,
-        has_replace_all);
+    {
+      if (process_function_contracts(
+            goto_functions,
+            has_replace,
+            has_enforce,
+            has_enforce_all,
+            has_replace_all))
+        return true;
+    }
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -487,6 +599,13 @@ bool esbmc_parseoptionst::process_goto_program(
     {
       log_status("Adding Restrict Aliasing Checks");
       add_restrict_assertions(context, goto_functions);
+    }
+
+    if (cmdline.isset("restrict-assume"))
+    {
+      log_status("Assuming Restrict Parameters Do Not Alias");
+      add_restrict_assumptions(
+        context, goto_functions, config.main.empty() ? "main" : config.main);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
@@ -566,10 +685,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // --dead-code-check reuses the branch-coverage instrumentation: each
     // conditional branch gets `assert(guard)` and `assert(!guard)` reachability
-    // probes, and a probe proven UNSAT means that branch direction is
-    // unreachable under all inputs — i.e. dead code. report_dead_code() reports
-    // those as CWE-561 note-level advisories without flipping the verdict (see
-    // bmc.cpp).
+    // probes, and an unviolated probe means the *opposite* direction is dead.
+    // report_dead_code() reports those as CWE-561 note-level advisories without
+    // flipping the verdict (see bmc.cpp).
     if (
       cmdline.isset("branch-coverage") ||
       cmdline.isset("branch-coverage-claims") ||

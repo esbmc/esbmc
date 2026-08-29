@@ -9,10 +9,11 @@
 const expr2tc
 printf_formattert::make_type(const expr2tc &src, const type2tc &dest)
 {
-  if (src->type == dest)
-    return src;
-
-  expr2tc tmp = typecast2tc(dest, src);
+  // Callers test the result with is_constant_int2t, so fold on both paths --
+  // an operand already of the target type may be constant only after folding.
+  expr2tc tmp = src;
+  if (src->type != dest)
+    tmp = typecast2tc(dest, src);
   simplify(tmp);
   return tmp;
 }

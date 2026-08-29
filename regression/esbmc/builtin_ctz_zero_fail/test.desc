@@ -1,0 +1,5 @@
+CORE
+main.c
+--clz-zero-check
+^  __builtin_clz/ctz of zero is undefined$
+^VERIFICATION FAILED$

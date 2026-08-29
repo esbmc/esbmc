@@ -408,6 +408,7 @@ static bool walks_operands(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
+  case expr2t::ieee_rem_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
@@ -492,6 +493,53 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
   return smt_cache.find(expr)->ast;
 }
 
+smt_astt smt_solver_baset::convert_ieee_arith_2op(const expr2tc &expr)
+{
+  assert(is_floatbv_type(expr));
+
+  if (int_encoding)
+    switch (expr->expr_id)
+    {
+    case expr2t::ieee_add_id:
+      return ir_ieee_api->encode_ieee_add(expr);
+    case expr2t::ieee_sub_id:
+      return ir_ieee_api->encode_ieee_sub(expr);
+    case expr2t::ieee_mul_id:
+      return ir_ieee_api->encode_ieee_mul(expr);
+    case expr2t::ieee_div_id:
+      return ir_ieee_api->encode_ieee_div(expr);
+    default:
+      assert(expr->expr_id == expr2t::ieee_rem_id);
+      return ir_ieee_api->encode_ieee_rem(expr);
+    }
+
+  /* ESBMC_DEFINE_IEEE_ARITH_2OP fixes the field order for the whole family:
+   * rounding mode first, then the two values. Convert in that order, which is
+   * the order the per-op arms this replaced produced (three conversions as
+   * call arguments, evaluated right-to-left by GCC). The solver hashes and
+   * searches on node creation order, so converting operands first leaves the
+   * formula equivalent but reshuffled: it cost nn-tanh_5_unsafe 29s -> 275s. */
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
+  smt_astt side_2 = convert_ast(*expr->get_sub_expr(2));
+  smt_astt side_1 = convert_ast(*expr->get_sub_expr(1));
+
+  switch (expr->expr_id)
+  {
+  case expr2t::ieee_add_id:
+    return fp_api->mk_smt_fpbv_add(side_1, side_2, rm);
+  case expr2t::ieee_sub_id:
+    return fp_api->mk_smt_fpbv_sub(side_1, side_2, rm);
+  case expr2t::ieee_mul_id:
+    return fp_api->mk_smt_fpbv_mul(side_1, side_2, rm);
+  case expr2t::ieee_div_id:
+    return fp_api->mk_smt_fpbv_div(side_1, side_2, rm);
+  default:
+    assert(expr->expr_id == expr2t::ieee_rem_id);
+    /* fp.rem is exact; the node's rounding_mode is plumbing only. */
+    return fp_api->mk_smt_fpbv_rem(side_1, side_2);
+  }
+}
+
 smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 {
   {
@@ -536,6 +584,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     case expr2t::ieee_sub_id:
     case expr2t::ieee_mul_id:
     case expr2t::ieee_div_id:
+    case expr2t::ieee_rem_id:
       return convert_ast(distribute_vector_operation(
         expr->expr_id,
         *expr->get_sub_expr(1),   // side_1
@@ -573,6 +622,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::ieee_sub_id:
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
+  case expr2t::ieee_rem_id:
   case expr2t::ieee_fma_id:
   case expr2t::ieee_sqrt_id:
   case expr2t::pointer_offset_id:
@@ -779,53 +829,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::ieee_add_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_add(expr);
-    else
-      a = fp_api->mk_smt_fpbv_add(
-        convert_ast(to_ieee_add2t(expr).side_1),
-        convert_ast(to_ieee_add2t(expr).side_2),
-        convert_rounding_mode(to_ieee_add2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_sub_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_sub(expr);
-    else
-      a = fp_api->mk_smt_fpbv_sub(
-        convert_ast(to_ieee_sub2t(expr).side_1),
-        convert_ast(to_ieee_sub2t(expr).side_2),
-        convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_mul_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_mul(expr);
-    else
-      a = fp_api->mk_smt_fpbv_mul(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2),
-        convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode));
-    break;
-  }
   case expr2t::ieee_div_id:
-  {
-    assert(is_floatbv_type(expr));
-    if (int_encoding)
-      a = ir_ieee_api->encode_ieee_div(expr);
-    else
-      a = fp_api->mk_smt_fpbv_div(
-        convert_ast(to_ieee_div2t(expr).side_1),
-        convert_ast(to_ieee_div2t(expr).side_2),
-        convert_rounding_mode(to_ieee_div2t(expr).rounding_mode));
+  case expr2t::ieee_rem_id:
+    a = convert_ieee_arith_2op(expr);
     break;
-  }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
@@ -1478,6 +1487,24 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     expr2tc inner = if2tc(
       cw.type, eq, make_cmp_value(cw.type, 0), make_cmp_value(cw.type, 1));
     expr2tc outer = if2tc(cw.type, lt, make_cmp_value(cw.type, -1), inner);
+
+    // Floating-point operands yield std::partial_ordering, whose fourth
+    // result is `unordered` when either operand is NaN ([expr.spaceship]/4).
+    // Without this the NaN case falls through the chain above and is reported
+    // as `greater`. The sentinel must agree with std::partial_ordering's
+    // representation in src/cpp/library/compare, which follows libc++.
+    if (is_floatbv_type(cw.side_1) || is_floatbv_type(cw.side_2))
+    {
+      constexpr int partial_ordering_unordered = -127;
+      expr2tc gt = greaterthan2tc(cw.side_1, cw.side_2);
+      expr2tc ordered = or2tc(lt, or2tc(eq, gt));
+      outer = if2tc(
+        cw.type,
+        ordered,
+        outer,
+        make_cmp_value(cw.type, partial_ordering_unordered));
+    }
+
     a = convert_ast(outer);
     break;
   }
@@ -2016,7 +2043,29 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     if (int_encoding)
     {
       if (thereal.value.is_zero())
+      {
+        // A literal -0.0 constant is a second source of IEEE 754 negative
+        // zero, alongside the subnormal-flush case handled by
+        // mk_subnormal_flush. Reuse the same neg_zero_pred side-channel
+        // rather than adding new tracking machinery -- but tag a fresh
+        // symbol constrained equal to zero, not the shared mk_smt_real("0")
+        // AST directly: nothing guarantees mk_smt_real returns a distinct
+        // pointer per call (see its declaration), so tagging the literal
+        // itself could let an ordinary +0.0 silently inherit this
+        // predicate if any backend ever memoises real constants by value.
+        // Mirrors the NaN branch below, which mints mk_fresh(...) for the
+        // same reason.
+        if (ir_ieee && thereal.value.get_sign())
+        {
+          smt_astt neg_zero_ast =
+            mk_fresh(mk_real_sort(), "ir_ieee::neg_zero_const::", nullptr);
+          smt_astt is_zero = mk_eq(neg_zero_ast, mk_smt_real("0"));
+          assert_ast(is_zero);
+          ir_ieee_api->store_neg_zero_pred(neg_zero_ast, is_zero);
+          return neg_zero_ast;
+        }
         return mk_smt_real("0");
+      }
       if (thereal.value.is_NaN())
       {
         if (ir_ieee)
@@ -2134,6 +2183,14 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
       assert_ast(
         mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+      // The other half of representability: a magnitude strictly between
+      // max_normal and the infinity sentinel is a value no operation can
+      // produce, and the two readings of "infinite" disagree there --
+      // encode_ieee_mul's invalid-operation term tests |x| > max_normal
+      // while a math.h isinf() that compares against INFINITY tests
+      // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
+      ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
     }
 
     return sym_ast;
@@ -2522,9 +2579,11 @@ static unsigned long size_to_bit_width(unsigned long sz)
   uint64_t domwidth = 2;
   unsigned int dombits = 1;
 
-  // Shift domwidth up until it's either larger or equal to sz, or we risk
-  // overflowing.
-  while (domwidth != 0x8000000000000000ULL && domwidth < sz)
+  // Shift domwidth up until it is strictly larger than sz, or we risk
+  // overflowing. Strictly larger, not just equal: sz itself is the
+  // one-past-the-end index, a valid pointer value in C, and a domain that
+  // cannot represent it wraps it to 0 and aliases element 0 (#6399).
+  while (domwidth != 0x8000000000000000ULL && domwidth <= sz)
   {
     domwidth <<= 1;
     dombits++;
@@ -3825,6 +3884,12 @@ smt_astt
 smt_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
 {
   return ctx->mk_ite(cond, this, falseop);
+}
+
+smt_astt smt_ast::with_sort(smt_solver_baset *, smt_sortt s) const
+{
+  const_cast<smt_ast *>(this)->sort = s;
+  return this;
 }
 
 smt_astt smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const

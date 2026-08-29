@@ -1,0 +1,5 @@
+CORE
+main.c
+--function g --enforce-contract g --unwind 8
+^VERIFICATION FAILED$
+^.*contract ensures.*$

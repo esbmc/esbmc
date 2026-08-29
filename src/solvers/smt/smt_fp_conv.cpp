@@ -828,15 +828,22 @@ smt_astt smt_solver_baset::convert_signbit(const expr2tc &expr)
     // We can't extract bits, so check the sign mathematically
     is_neg = mk_lt(value, mk_smt_real("0"));
 
-    // A value flushed to zero from a negative subnormal-range result is
-    // IEEE 754 -0.0, but the real zero it collapsed to carries no sign of
-    // its own; consult the tracked negative-zero predicate to recover it.
+    // A value flushed to zero from a negative subnormal-range result, or
+    // a literal -0.0 constant, is IEEE 754 -0.0, but the real zero used
+    // to represent it carries no sign of its own; consult the tracked
+    // negative-zero predicate to recover it.
     smt_astt neg_zero_pred = ir_ieee_api->get_neg_zero_pred(value);
     if (neg_zero_pred)
       is_neg = mk_or(is_neg, neg_zero_pred);
   }
   else
   {
+    /* Under a native floating-point theory the operand is fp-sorted, and the
+     * sign bit is only reachable through its IEEE encoding. The sign of a NaN
+     * stays free across that round-trip (esbmc/esbmc#7021). */
+    if (value->sort->id == SMT_SORT_FPBV)
+      value = fp_api->mk_from_fp_to_bv(value);
+
     // In bitvector mode, extract the sign bit
     const auto width = value->sort->get_data_width();
     is_neg =

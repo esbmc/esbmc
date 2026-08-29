@@ -12,6 +12,7 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
@@ -21,6 +22,11 @@
 #include <util/expr/type_byte_size.h>
 
 thread_local unsigned int dereferencet::invalid_counter = 0;
+
+void dereferencet::reset_object_counter()
+{
+  invalid_counter = 0;
+}
 
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
@@ -136,6 +142,78 @@ const expr2tc &dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
+static expr2tc distribute_steps_over_if(const expr2tc &e);
+
+/// Records what a forall2t/exists2t binds while its body is walked, so the
+/// index fold in dereference_expr_nonscalar leaves the bound variable alone:
+/// the rename callback carries no quantifier context and would substitute the
+/// like-named program variable's SSA value (rename_quantified guards the same
+/// concern at the renaming layer, #7024). Constructing one over any other
+/// expression does nothing.
+class dereferencet::quantifier_scopet
+{
+public:
+  quantifier_scopet(dereferencet &deref, const expr2tc &expr) : deref(deref)
+  {
+    if (!is_forall2t(expr) && !is_exists2t(expr))
+      return;
+
+    /* Reached through a pointer -- `void *q = &i; __ESBMC_forall(q, ...
+     * p->buf[i] ...)` -- the binder reads as `q` while binding `i`, so there
+     * is no name to exclude and the whole body has to stay out of the fold. */
+    name = quantifier_direct_bound_name(
+      is_forall2t(expr) ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1);
+    active = true;
+    if (name.empty())
+      deref.opaque_binders++;
+    else
+      deref.quantifier_bound_vars.insert(name);
+  }
+
+  quantifier_scopet(const quantifier_scopet &) = delete;
+  quantifier_scopet &operator=(const quantifier_scopet &) = delete;
+
+  ~quantifier_scopet()
+  {
+    if (!active)
+      return;
+    if (name.empty())
+    {
+      deref.opaque_binders--;
+      return;
+    }
+    // erase(iterator), not erase(key): an inner scope that rebound the same
+    // name must not drop the outer scope's entry too.
+    auto it = deref.quantifier_bound_vars.find(name);
+    if (it != deref.quantifier_bound_vars.end())
+      deref.quantifier_bound_vars.erase(it);
+  }
+
+private:
+  dereferencet &deref;
+  irep_idt name;
+  bool active = false;
+};
+
+bool dereferencet::mentions_bound_var(const expr2tc &expr) const
+{
+  if (quantifier_bound_vars.empty() || is_nil_expr(expr))
+    return false;
+  if (is_symbol2t(expr))
+    return quantifier_bound_vars.count(to_symbol2t(expr).thename) != 0;
+  bool found = false;
+  expr->foreach_operand([this, &found](const expr2tc &e) {
+    if (!found)
+      found = mentions_bound_var(e);
+  });
+  return found;
+}
+
+bool dereferencet::may_fold_index(const expr2tc &index) const
+{
+  return opaque_binders == 0 && !mentions_bound_var(index);
+}
+
 void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
 {
   if (!has_dereference(expr))
@@ -175,6 +253,17 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
     // Index/member ops applied on top of a dereference: resolve the chain
     // to a single dereference at the accumulated offset.
 
+    // A conditional inside the chain -- `(c ? *ra : *rb).x` -- must be lifted
+    // out first. The walk below accumulates the offset from the whole
+    // expression, which it cannot do across an `if`; pushing the steps into
+    // the arms gives each one a complete access path (#6717).
+    expr2tc lifted = distribute_steps_over_if(expr);
+    if (is_if2t(lifted))
+    {
+      expr = resolve_nonscalar_if(lifted, guard, mode);
+      break;
+    }
+
     expr2tc res = dereference_expr_nonscalar(expr, guard, mode, expr);
 
     // If a dereference successfully occurred, replace expr at this level.
@@ -184,9 +273,12 @@ void dereferencet::dereference_expr(expr2tc &expr, guard2tc &guard, modet mode)
     break;
   }
 
+  case expr2t::forall_id:
+  case expr2t::exists_id:
   default:
   {
     // Recurse over the operands
+    quantifier_scopet scope(*this, expr);
     expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
       if (is_nil_expr(e))
         return;
@@ -329,7 +421,20 @@ void dereferencet::dereference_addrof_expr(
   dereference_expr(expr, guard, mode);
 }
 
-static bool is_aligned_member(const expr2tc &expr)
+/* Once per type: this fires on every access, so a program that reads a packed
+ * struct in a loop otherwise buries its own output. */
+static void warn_unchecked_packed_alignment(const type2tc &structure)
+{
+  static std::set<irep_idt> reported;
+  irep_idt name = struct_union_name(structure);
+  if (reported.insert(name).second)
+    log_warning(
+      "not checking alignment for access to packed {} {}",
+      get_type_id(*structure),
+      name.as_string());
+}
+
+static bool is_aligned_member(const expr2tc &expr, const namespacet &ns)
 {
   if (!is_member2t(expr))
     return false;
@@ -345,11 +450,86 @@ static bool is_aligned_member(const expr2tc &expr)
     return false;
   }
 
-  /* non-packed structures have all members aligned
+  /* `#pragma pack(n)` leaves members at offsets that need not respect their own
+   * type's alignment, and the compiler emits an unaligned access for those, so
+   * a direct member read is not a misalignment. Unions place every member at
+   * offset 0, so only structs can under-align one.
    *
-   * TODO: This holds true only for non-padding members as padding is not
-   *       actually a member. We just treat it as one, which here is wrong. */
-  return true;
+   * TODO: For a non-packed struct this holds only for non-padding members, as
+   *       padding is not actually a member. We just treat it as one. */
+  if (!is_struct_type(structure->type))
+    return true;
+
+  const member2t &member = to_member2t(expr);
+  const BigInt offset =
+    member_offset_bits(structure->type, member.member, &ns) / 8;
+  return offset % alignment(migrate_type_back(member.type), ns) == 0;
+}
+
+/// Push member/index steps inside a conditional, so `(c ? a : b).f` becomes
+/// `c ? a.f : b.f`. Returns \p e unchanged when there is no conditional to
+/// lift. Both forms denote the same object; the rewrite only moves the
+/// selection outside the access path.
+static expr2tc distribute_steps_over_if(const expr2tc &e)
+{
+  if (is_member2t(e))
+  {
+    const member2t &m = to_member2t(e);
+    expr2tc src = distribute_steps_over_if(m.source_value);
+    if (is_if2t(src))
+    {
+      const if2t &i = to_if2t(src);
+      return if2tc(
+        e->type,
+        i.cond,
+        member2tc(e->type, i.true_value, m.member),
+        member2tc(e->type, i.false_value, m.member));
+    }
+    return src == m.source_value ? e : member2tc(e->type, src, m.member);
+  }
+
+  if (is_index2t(e))
+  {
+    const index2t &idx = to_index2t(e);
+    expr2tc src = distribute_steps_over_if(idx.source_value);
+    if (is_if2t(src))
+    {
+      const if2t &i = to_if2t(src);
+      return if2tc(
+        e->type,
+        i.cond,
+        index2tc(e->type, i.true_value, idx.index),
+        index2tc(e->type, i.false_value, idx.index));
+    }
+    return src == idx.source_value ? e : index2tc(e->type, src, idx.index);
+  }
+
+  return e;
+}
+
+/// Resolve each arm of a lifted conditional access path under the condition
+/// that selects it, so a dereference failure in one arm cannot fire when the
+/// other is taken. Arms that need no dereferencing are kept as they are.
+expr2tc dereferencet::resolve_nonscalar_if(
+  const expr2tc &expr,
+  guard2tc &guard,
+  modet mode)
+{
+  const if2t &ifref = to_if2t(expr);
+
+  auto resolve_arm =
+    [this, &guard, &mode](const expr2tc &arm, const expr2tc &cond) {
+      guard2tc saved(guard);
+      guard.add(cond);
+      expr2tc copy = arm;
+      expr2tc res = dereference_expr_nonscalar(copy, guard, mode, copy);
+      guard = std::move(saved);
+      return is_nil_expr(res) ? arm : res;
+    };
+
+  expr2tc t = resolve_arm(ifref.true_value, ifref.cond);
+  expr2tc f = resolve_arm(ifref.false_value, not2tc(ifref.cond));
+  return if2tc(expr->type, ifref.cond, t, f);
 }
 
 expr2tc dereferencet::dereference_expr_nonscalar(
@@ -400,12 +580,9 @@ expr2tc dereferencet::dereference_expr_nonscalar(
     expr2tc &structure = member.source_value;
     if (
       !options.get_bool_option("no-align-check") && !mode.unaligned &&
-      !is_aligned_member(expr))
+      !is_aligned_member(expr, ns))
     {
-      log_warning(
-        "not checking alignment for access to packed {} {}",
-        get_type_id(*structure->type),
-        struct_union_name(structure->type).as_string());
+      warn_unchecked_packed_alignment(structure->type);
       mode.unaligned = true;
     }
     return dereference_expr_nonscalar(structure, guard, mode, base);
@@ -415,6 +592,23 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
+
+    /* Now free of dereferences, fold in any value symex already knows for
+     * the index (e.g. an array index stored in a struct field): a constant
+     * index keeps this access on the constant-offset path, which produces a
+     * member/index reference. A symbolic index degenerates to a whole-object
+     * byte_extract/byte_update that constant propagation cannot see through:
+     * the assignment drops the object's recorded constant, later guards over
+     * it become undecidable and loops unwind to the bound (#7311).
+     *
+     * may_fold_index keeps quantified indices out: the rename callback would
+     * replace a bound symbol with the like-named program variable's SSA
+     * value, collapsing the quantified body to a constant (#7024 shape). */
+    if (!is_constant_int2t(index.index) && may_fold_index(index.index))
+    {
+      dereference_callback.rename(index.index);
+      simplify(index.index);
+    }
     return dereference_expr_nonscalar(index.source_value, guard, mode, base);
   }
 
@@ -568,6 +762,10 @@ bool dereferencet::dereference_type_compare(
 
   // Test for simple equality
   if (object->type == dereference_type)
+    return true;
+
+  if (same_function_pointer_ignoring_argument_names(
+        object_type, dereference_type))
     return true;
 
   // Check for C++ subclasses; we can cast derived up to base safely.
@@ -1229,25 +1427,36 @@ void dereferencet::construct_from_array(
   }
   else
   {
-    // Dyn offset -- is alignment guarantee strong enough?
+    // Dyn offset -- is alignment guarantee strong enough? `alignment` is in
+    // bits here: the caller scaled it (see `alignment *= 8` in dereference()).
     is_correctly_aligned = (alignment >= subtype_size);
-    // Special case for pointer-typed array elements: `alignment` is in
-    // BYTES (value_set.h:139) while `subtype_size` is in BITS (set from
-    // type_byte_size_bits above). For an array of pointers reached
-    // through a struct-member pointer dereference, the unit mismatch
-    // wrongly forced the byte-extract branch, which hides the pointer
-    // RHS from value_sett::assign and breaks the downstream deref of
-    // the loaded pointer (issue #4435). Pointer subtypes are always
-    // accessed atomically, so a byte-equal-or-larger natural alignment
-    // makes the direct index2tc encoding sound. Keep the original
-    // comparison for non-pointer subtypes so over-approximated
-    // alignments on int / short / char arrays still trigger
-    // check_alignment (e.g. regression/esbmc/align-deref_fail).
-    if (
-      !is_correctly_aligned && is_pointer_type(arr_subtype) &&
-      alignment * 8 >= subtype_size)
-      is_correctly_aligned = true;
-    overflows_boundaries = !is_correctly_aligned || deref_size > subtype_size;
+    /* A whole-element access needs no stitching. check_alignment() below
+     * asserts the offset lands on an element boundary, which is exactly the
+     * precondition index2tc needs, so an unproven alignment claim is a reason
+     * to *check*, not to decompose.
+     *
+     * Floats: reassembling one costs a fp.to_ieee_bv / to_fp round trip per
+     * byte, and SMT-LIB leaves the NaN pattern fp.to_ieee_bv returns
+     * unconstrained -- so once an intermediate is NaN the solver may pick a
+     * different pattern each time and the value read back is not the one
+     * stored (esbmc/esbmc#6922).
+     *
+     * Pointers: stitching hides the pointer RHS from value_sett::assign and
+     * breaks the downstream deref of the loaded pointer (esbmc/esbmc#4435).
+     * That used to be papered over by claiming such an access was aligned
+     * whenever alignment * 8 >= subtype_size -- an 8x over-approximation on
+     * an alignment already in bits, which also suppressed check_alignment, so
+     * a genuinely misaligned pointer read went unreported.
+     *
+     * Integer subtypes keep the original condition: their stitching is exact,
+     * and weakening it would stop over-approximated alignments reaching
+     * check_alignment (regression/esbmc/align-deref_fail). */
+    const bool whole_element =
+      deref_size == subtype_size &&
+      (is_floatbv_type(arr_subtype) || is_pointer_type(arr_subtype));
+    overflows_boundaries =
+      whole_element ? false
+                    : (!is_correctly_aligned || deref_size > subtype_size);
   }
 
   // No alignment guarantee: assert that it's correct.
@@ -1858,7 +2067,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   std::list<std::pair<expr2tc, expr2tc>> resolved_list;
 
   construct_struct_ref_from_dyn_offs_rec(
-    value, offs, type, gen_true_expr(), mode, resolved_list);
+    value, offs, type, guard, gen_true_expr(), mode, resolved_list);
 
   if (resolved_list.size() == 0)
   {
@@ -1901,6 +2110,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   const expr2tc &value,
   const expr2tc &offs,
   const type2tc &type,
+  const guard2tc &guard,
   const expr2tc &accuml_guard,
   modet mode,
   std::list<std::pair<expr2tc, expr2tc>> &output)
@@ -1945,7 +2155,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     simplify(range_guard);
 
     construct_struct_ref_from_dyn_offs_rec(
-      index, new_offset, type, range_guard, mode, output);
+      index, new_offset, type, guard, range_guard, mode, output);
     return;
   }
 
@@ -1993,7 +2203,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
 
       simplify(new_offset);
       construct_struct_ref_from_dyn_offs_rec(
-        memb, new_offset, type, range_guard, mode, output);
+        memb, new_offset, type, guard, range_guard, mode, output);
       i++;
     }
     return;
@@ -2027,7 +2237,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
       expr2tc memb = member2tc(it, value, union_type.member_names[i]);
 
       construct_struct_ref_from_dyn_offs_rec(
-        memb, offs, type, accuml_guard, mode, output);
+        memb, offs, type, guard, accuml_guard, mode, output);
       i++;
     }
     return;
@@ -2039,7 +2249,7 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
   {
     // This is a byte array. We can reconstruct a structure from this, if
     // we don't overflow bounds. Start by encoding an assertion.
-    guard2tc tmp;
+    guard2tc tmp(guard);
     tmp.add(accuml_guard);
 
     // Only encode a bounds check if we're directly accessing an array symbol:
@@ -2598,16 +2808,19 @@ void dereferencet::check_data_obj_access(
 
   BigInt data_sz = type_byte_size_bits(value->type);
   BigInt access_sz = type_byte_size_bits(type);
-  expr2tc data_sz_e = gen_long(offset->type, data_sz);
-  expr2tc access_sz_e = gen_long(offset->type, access_sz);
 
   // Only erroneous thing we check for right now is that the offset is out of
   // bounds, misaligned access happens elsewhere. The highest byte read is at
-  // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
-  // Lower bound not checked, instead we just treat everything as unsigned,
-  // which has the same effect.
-  expr2tc add = add2tc(access_sz_e->type, offset, access_sz_e);
-  expr2tc gt = greaterthan2tc(add, data_sz_e);
+  // offset+access_sz-1, so the access fails if offset+access_sz > data_sz.
+  // The lower bound is not checked separately: an offset below the object
+  // arrives here as a huge unsigned value. That relies on the sum not
+  // wrapping, so it is rearranged into offset > data_sz-access_sz, which is
+  // equivalent over the integers and cannot overflow. Adding instead let every
+  // offset in [-access_sz, 0) wrap back into range (R35).
+  expr2tc gt =
+    access_sz > data_sz
+      ? gen_true_expr()
+      : greaterthan2tc(offset, gen_long(offset->type, data_sz - access_sz));
 
   if (!options.get_bool_option("no-bounds-check"))
   {

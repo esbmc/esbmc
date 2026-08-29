@@ -15,8 +15,6 @@
 
 #include <goto-symex/goto_symex.h>
 
-const mode_table_et mode_table[] = {};
-
 SCENARIO("the memcpy generation can generate valid results", "[symex]")
 {
   auto primitive_test_case = [](

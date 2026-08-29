@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion \(_Bool\)ok$
+^VERIFICATION FAILED$

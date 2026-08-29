@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto-functions-only
+\* #location: \n\s*\* file: [^\n]*main\.py\n\s*\* line: 6\n\s*\* function: run\n\s*\* column: 4

@@ -9,7 +9,7 @@ void test_priority() {
 
   __ESBMC_assume(limit == 10);
 
-  // This is loop 1
+  // Loop 3 globally: --show-loops numbers the two C library loops first
   for (i = 0; i < limit; i++) {
     sum += i;
   }

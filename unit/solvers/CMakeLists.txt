@@ -15,6 +15,15 @@ if(ENABLE_Z3)
                 "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
   target_include_directories(z3_bigint_test
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
+
+  # Drives array_convt's bounded select/store directly: the boundary they guard
+  # is unreachable from C input, so only a unit test can pin it. Z3 serves
+  # merely as a concrete backend for the flattener to sit on.
+  new_unit_test(array_conv_bounded_index_test
+                "array_conv_bounded_index.test.cpp"
+                "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
+  target_include_directories(array_conv_bounded_index_test
+    PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 endif()
 
 if(ENABLE_SMTLIB)
@@ -24,3 +33,19 @@ if(ENABLE_SMTLIB)
   new_unit_test(oneshot_verdict_test "oneshot_verdict.test.cpp"
                 "smtlib;filesystem;util_esbmc;fmt::fmt")
 endif()
+
+# The SMT equivalence checker for simplifier rewrites (#4625). The installed
+# checker aborts on a mismatch, so only a direct call can assert that it
+# detects one. Any built-in solver serves; `solve` picks the default.
+# Links the `solvers` interface target rather than a named backend: solve.cpp
+# registers every backend compiled in, so the creator symbols must all be
+# present. Whichever is the default answers the queries.
+new_unit_test(simplification_equivalence_test
+              "simplification_equivalence.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
+
+# The node tuple flattener's update(), driven directly: the field-preservation
+# contract it broke is unreachable from C input, so no regression test states
+# it. `solvers` rather than a named backend -- whichever is built in answers.
+new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")

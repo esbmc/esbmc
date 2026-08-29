@@ -410,6 +410,11 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     args.push_back(tmp);
   });
 
+  // The value assigned to the return lvalue, nil when the result is discarded.
+  // Needed below to keep the asprintf/vasprintf *strp allocation off the
+  // failure path.
+  expr2tc retval;
+
   if (!is_nil_expr(lhs))
   {
     // get the return value from code_printf2tc
@@ -511,14 +516,12 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     //    >1 GB formatted string — infeasible in practice. Tightening further
     //    would risk masking real overflows; see also GitHub #4976-#4979.
     const bool sound_bound = format_is_constant && printf_formatter.bounded;
-    const bool is_allocating = new_rhs.kind == printf_kindt::ASPRINTF ||
-                               new_rhs.kind == printf_kindt::VASPRINTF;
     if (
       sound_bound && printf_formatter.min_outlen == printf_formatter.max_outlen)
     {
-      symex_assign(code_assign2tc(
-        lhs,
-        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen))));
+      retval =
+        constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
+      symex_assign(code_assign2tc(lhs, retval));
     }
     else
     {
@@ -530,6 +533,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
         type2tc(),
         sideeffect2t::allockind::nondet);
       replace_nondet(nondet);
+      retval = nondet;
       if (sound_bound)
       {
         expr2tc lo =
@@ -563,6 +567,15 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
   // should be aware of this limitation.
   if (is_allocating && !is_nil_expr(strp) && is_pointer_type(strp->type))
   {
+    // Only the success path allocates. POSIX leaves *strp undefined when the
+    // call fails, so the caller owns nothing and correctly returns without
+    // freeing; allocating unconditionally orphans the buffer on that path and
+    // trips --memory-leak-check (GitHub #6966). The guard reaches the object's
+    // allocation guard via symex_mem, so the leak check is scoped too.
+    guard2tc alloc_guard;
+    if (!is_nil_expr(retval))
+      alloc_guard.add(greaterthanequal2tc(retval, gen_zero(retval->type)));
+
     // Derive char * from strp's declared type (char **) so the dereference
     // width matches what the value-set analysis and SMT encoding expect.
     type2tc char_ptr_type = to_pointer_type(strp->type).subtype;
@@ -574,7 +587,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       std::vector<expr2tc>(),
       char_type2(),
       sideeffect2t::allockind::malloc);
-    symex_assign(code_assign2tc(deref_strp, malloc_se));
+    symex_assign(code_assign2tc(deref_strp, malloc_se), false, alloc_guard);
   }
 
   target->output(

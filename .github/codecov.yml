@@ -3,10 +3,13 @@ coverage:
   round: down
   range: "50...80"
 
-# Mirrors the lcov --remove filters in .github/workflows/coverage.yml
+# Codecov-side exclusions. The coverage jobs (pull_request.yml, push.yml) strip
+# only '/usr/*' and '*/build/*' via lcov --remove, so everything else is
+# filtered here rather than in the uploaded report.
 ignore:
   - "src/ansi-c/cpp/**"
   - "src/clang-c-frontend/headers/**"
   - "src/c2goto/library/libm/musl/**"
+  - "src/lib/toml.hpp"
   - "build/**"
   - "**/unit/**"

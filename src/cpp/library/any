@@ -1,6 +1,9 @@
 #ifndef ESBMC_ANY
 #define ESBMC_ANY
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "type_traits"
 #include "typeinfo"
 #include "utility"
@@ -231,4 +234,5 @@ T *any_cast(any *a) noexcept
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif

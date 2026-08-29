@@ -30,10 +30,14 @@ typedef struct {
     (((fd_set *)(set))->fds_bits[(fd) / (8 * sizeof(unsigned long))] \
         & (1UL << ((fd) % (8 * sizeof(unsigned long)))))
 
-/* Guard with the same macro glibc uses (bits/types/struct_timeval.h) so we
- * do not clash when <sys/time.h> defines timeval and then includes us. */
-#ifndef __timeval_defined
+/* Guard with the macros both libcs use -- glibc's __timeval_defined
+ * (bits/types/struct_timeval.h) and Apple's _STRUCT_TIMEVAL
+ * (sys/_types/_timeval.h). Defining theirs makes any SDK header that would
+ * define timeval skip it; honouring theirs stops us redefining it when a
+ * system header we do not shadow got there first. */
+#if !defined(__timeval_defined) && !defined(_STRUCT_TIMEVAL)
 #define __timeval_defined 1
+#define _STRUCT_TIMEVAL struct timeval
 struct timeval {
     long tv_sec; // cppcheck-suppress unusedStructMember
     long tv_usec; // cppcheck-suppress unusedStructMember

@@ -157,6 +157,13 @@ if(ENABLE_LD_FRONTEND)
     add_definitions(-DENABLE_LD_FRONTEND)
 endif()
 
+# Debug aid: prove every simplifier rewrite equivalent with an SMT solver
+# (esbmc/esbmc#4625). Orders of magnitude slower -- never enable for a release.
+option(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK "Prove each simplifier rewrite with an SMT solver" OFF)
+if(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK)
+    add_definitions(-DENABLE_SIMPLIFIER_EQUIVALENCE_CHECK)
+endif()
+
 if(ENABLE_GOTO_CONTRACTOR)
   add_compile_options(-DENABLE_GOTO_CONTRACTOR)
 endif()

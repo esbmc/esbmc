@@ -1,0 +1,9 @@
+CORE
+main.c
+--multi-property --assertion-coverage-claims
+^Total Asserts: 2$
+^Unreached Asserts: 1$
+^Reached Assertion Instances: 1$
+assertion x == 1.*main\.c line 7.* : REACHED
+assertion x != 0.*main\.c line 6.* : UNREACHED
+^Assertion Instances Coverage: 50%$

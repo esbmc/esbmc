@@ -19,8 +19,28 @@ typedef __int64 streamsize;
 typedef unsigned int streamsize;
 #endif
 
+/* The <iomanip> manipulators are implementation-defined types; the model
+ * funnels all of them through this one, tagged with which setting to apply
+ * when it reaches a stream (github #7016). */
 class smanip
 {
+public:
+  enum kind
+  {
+    _setiosflags,
+    _resetiosflags,
+    _setbase,
+    _setfill,
+    _setprecision,
+    _setw
+  };
+
+  int _kind;
+  long _arg;
+
+  smanip(kind k, long a) : _kind(k), _arg(a)
+  {
+  }
 };
 
 #define _SIZE_T_DEFINED

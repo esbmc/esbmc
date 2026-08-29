@@ -1,9 +1,46 @@
 #include <jimple-frontend/AST/jimple_method_body.h>
+#include <irep2/irep2_expr.h>
 #include <jimple-frontend/AST/jimple_declaration.h>
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <memory>
 #include <util/irep/std_code.h>
 #include <util/expr/expr_util.h>
+
+// The IREP2 twin of to_exprt below (K.2 of
+// docs/roadmap/scope-jimple-irep2.md). migrate_expr's block arm additionally
+// splices a child whose legacy statement is "decl-block"; this frontend never
+// builds one -- its statements are decl, assign, block, function_call, goto,
+// label, return and skip -- so there is nothing to reproduce here.
+expr2tc jimple_full_method_body::to_code2t(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  std::vector<expr2tc> ops;
+  ops.reserve(this->members.size());
+
+  for (auto const &stmt : this->members)
+  {
+    auto l = jimple_ast::get_location(class_name, function_name);
+    if (stmt->line_location != -1)
+      l.set_line(stmt->line_location);
+
+    ops.push_back(stmt->to_code2t(ctx, class_name, function_name, l));
+  }
+
+  // migrate_expr reads the legacy block's location through the *const*
+  // accessor, so an unlocated block migrates with a nil location, not the
+  // default-constructed empty one -- the nil-vs-empty distinction of #6176.
+  // A default here renders as a blank location where the round-trip renders
+  // "no location". This frontend never locates the block itself.
+  // Both locations must be nil, not default-constructed: migrate_expr reads
+  // them off the legacy block through the *const* accessors, so an unlocated
+  // block migrates nil where a default renders blank -- the nil-vs-empty
+  // distinction of #6176. end_location is the one that shows: goto_convert
+  // gives END_FUNCTION that location. This frontend locates neither.
+  const locationt &nil = static_cast<const locationt &>(get_nil_irep());
+  return code_block2tc(ops, nil, nil);
+}
 
 exprt jimple_full_method_body::to_exprt(
   contextt &ctx,

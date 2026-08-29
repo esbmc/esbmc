@@ -1,4 +1,4 @@
-# Pins the experimental --irep2-native-body flag (W1-loc spike Phase C,
+# Pins the IREP2-native body path (W1-loc spike Phase C,
 # esbmc/esbmc#4715). Until the IREP2-native goto_convert dispatcher supports a
 # body's statement kinds it falls back to the legacy round-trip, so the verdict
 # must stay VERIFICATION SUCCESSFUL, byte-identical to a run without the flag.

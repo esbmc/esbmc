@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Internal error: numpy.dot runtime lowering requires an assignment target$

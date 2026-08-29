@@ -1,0 +1,18 @@
+- entry_type: "invariant_set"
+  metadata:
+    format_version: "2.0"
+    uuid: "a3b1cab2-ac35-4095-97f5-fa994e95bf0c"
+    creation_time: "2026-08-11T20:53:01+01:00"
+    producer:
+      name: "ESBMC"
+      version: "8.4.0"
+    task:
+      input_files:
+        - "/Users/user/esbmc/regression/csmith/csmith01/main.c"
+      input_file_hashes:
+        "/Users/user/esbmc/regression/csmith/csmith01/main.c": "945f7a0767b461f01f14d3264a9e796f54ad5d04951a02147199056de081a042"
+      specification: "G ! call(reach_error())"
+      data_model: "LP64"
+      language: "C"
+  content:
+    []

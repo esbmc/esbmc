@@ -9,6 +9,7 @@ this mixin only adds methods.
 """
 import ast
 import copy
+import sys
 from typing import Dict, Optional, Set
 
 __all__ = ["LoopMixin"]
@@ -691,15 +692,24 @@ class LoopMixin:
             2. for item in enumerate(iterable, start):          # single variable gets tuple
         """
         enumerate_call = node.iter
-        # Generate unique variable names for this enumerate loop level
-        loop_id = self.enumerate_loop_counter
-        self.enumerate_loop_counter += 1
 
         # Step 1: Validate the enumerate call
         self._validate_enumerate_call(enumerate_call)
 
         # Step 2: Parse and validate the target structure
         target_info = self._parse_enumerate_target(node.target)
+
+        if target_info["type"] == "nested":
+            return self._unroll_nested_enumerate_for(node, target_info)
+
+        if target_info["type"] == "unpacking":
+            literal, start = self._tuple_literal_enumerate_source(node)
+            if literal is not None:
+                return self._unroll_enumerate_over_tuples(node, target_info, literal, start)
+
+        # Generate unique variable names for this enumerate loop level
+        loop_id = self.enumerate_loop_counter
+        self.enumerate_loop_counter += 1
 
         # Step 3: Extract and validate arguments
         iterable, start_value = self._parse_enumerate_arguments(enumerate_call, node)
@@ -741,6 +751,13 @@ class LoopMixin:
         is_unpacking = (isinstance(target, (ast.Tuple, ast.List)) and len(target.elts) == 2)
 
         if is_unpacking:
+            index_elt, value_elt = target.elts
+            if isinstance(index_elt, ast.Name) and isinstance(value_elt, (ast.Tuple, ast.List)):
+                return {
+                    "type": "nested",
+                    "index_var": index_elt.id,
+                    "value_target": value_elt,
+                }
             if not all(isinstance(elt, ast.Name) for elt in target.elts):
                 raise ValueError("enumerate unpacking target must contain only names")
             return {
@@ -758,6 +775,128 @@ class LoopMixin:
             if expected < 2:
                 raise ValueError(f"too many values to unpack (expected {expected})")
         raise ValueError("enumerate target must be a name, tuple, or list")
+
+    def _reject_unsupported_loop(self, node, message):
+        """Emit a located parser-stage diagnostic and abort, as threading lowering does."""
+        print(f"ERROR: {self.module_name}:{getattr(node, 'lineno', '?')}: {message}")
+        sys.exit(4)
+
+    @staticmethod
+    def _static_int_value(expr):
+        """Return the int an expression denotes statically, or None."""
+        if isinstance(expr, ast.Constant) and isinstance(expr.value, int):
+            return int(expr.value)
+        if (isinstance(expr, ast.UnaryOp) and isinstance(expr.op, (ast.UAdd, ast.USub))
+                and isinstance(expr.operand, ast.Constant) and isinstance(expr.operand.value, int)):
+            sign = -1 if isinstance(expr.op, ast.USub) else 1
+            return sign * int(expr.operand.value)
+        return None
+
+    def _nested_enumerate_source(self, node, arity):
+        """Return the (list literal, start) the unroll needs, or reject with the reason."""
+        iterable, start_value = self._parse_enumerate_arguments(node.iter, node)
+        literal = self._resolve_list_literal_iterable(iterable)
+        start = self._static_int_value(start_value)
+
+        blocker = None
+        if literal is None:
+            blocker = "the iterable is not a list literal"
+        elif start is None:
+            blocker = "the start argument is not a constant integer"
+        elif not self._can_safely_unroll_list_literal_for(node, literal):
+            blocker = "the loop body contains break/continue/return"
+        else:
+            for elt in literal.elts:
+                if not isinstance(elt, (ast.Tuple, ast.List)):
+                    blocker = "an element is not a tuple or list literal"
+                elif len(elt.elts) != arity:
+                    blocker = f"an element does not have {arity} items"
+                if blocker:
+                    break
+        if blocker:
+            self._reject_unsupported_loop(
+                node, f"enumerate() with a nested unpacking target is unsupported here: {blocker}")
+        return literal, start
+
+    def _tuple_literal_enumerate_source(self, node):
+        """Return (list literal, start) when unrolling would preserve tuple shape.
+
+        `for i, v in enumerate(pairs)` is lowered to a while loop whose value
+        variable is a bare-`tuple`-annotated subscript read, which carries no
+        component types, so a later `a, b = v` is handed an untyped value and
+        refuses to unpack. Unrolling binds each tuple literal directly and
+        keeps its shape, exactly as the nested-target form already does.
+
+        Returns (None, None) when this does not apply, leaving the ordinary
+        lowering in place -- unlike the nested form, a plain value target is
+        fully supported there.
+        """
+        iterable, start_value = self._parse_enumerate_arguments(node.iter, node)
+        literal = self._resolve_list_literal_iterable(iterable)
+        start = self._static_int_value(start_value)
+        if (literal is None or start is None
+                or not self._can_safely_unroll_list_literal_for(node, literal)):
+            return None, None
+
+        # Only the tuple/list-element case loses type information; leave every
+        # other element kind to the ordinary lowering.
+        if not literal.elts or not all(
+                isinstance(elt, (ast.Tuple, ast.List)) for elt in literal.elts):
+            return None, None
+
+        return literal, start
+
+    def _unroll_enumerate_over_tuples(self, node, target_info, literal, start):
+        """Bind each tuple literal directly, keeping its shape."""
+        unrolled = []
+        for offset, elt in enumerate(literal.elts):
+            index_assign = ast.AnnAssign(
+                target=self.create_name_node(target_info["index_var"], ast.Store(), node),
+                annotation=self.create_name_node("int", ast.Load(), node),
+                value=self.create_constant_node(start + offset, node),
+                simple=1,
+            )
+            value_assign = ast.Assign(
+                targets=[self.create_name_node(target_info["value_var"], ast.Store(), node)],
+                value=copy.deepcopy(elt),
+            )
+            unrolled.extend([index_assign, value_assign])
+            unrolled.extend(copy.deepcopy(stmt) for stmt in node.body)
+
+        for stmt in unrolled:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return unrolled
+
+    def _unroll_nested_enumerate_for(self, node, target_info):
+        """Unroll `for i, (a, b) in enumerate(seq)` over a statically known list.
+
+        Nested patterns need a literal RHS; see _unroll_list_literal_for (#6744).
+        Shares its evaluate-once caveat: elements are not snapshotted, so an
+        element naming a body-mutated variable reads the mutated value.
+        """
+        value_target = target_info["value_target"]
+        literal, start = self._nested_enumerate_source(node, len(value_target.elts))
+
+        unrolled = []
+        for offset, elt in enumerate(literal.elts):
+            index_assign = ast.AnnAssign(
+                target=self.create_name_node(target_info["index_var"], ast.Store(), node),
+                annotation=self.create_name_node("int", ast.Load(), node),
+                value=self.create_constant_node(start + offset, node),
+                simple=1,
+            )
+            value_assign = ast.Assign(
+                targets=[copy.deepcopy(value_target)],
+                value=copy.deepcopy(elt),
+            )
+            unrolled.extend([index_assign, value_assign])
+            unrolled.extend(copy.deepcopy(stmt) for stmt in node.body)
+
+        for stmt in unrolled:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+        return unrolled
 
     def _parse_enumerate_arguments(self, enumerate_call, node):
         """Extract and validate iterable and start value from enumerate call."""
@@ -905,6 +1044,13 @@ class LoopMixin:
         self.ensure_all_locations(subscript, node)
 
         element_type = self._get_element_type_from_container(annotation_id, iterable_node)
+        # A container annotation yields only the element's head name, so
+        # `List[Tuple[int, int]]` gives a component-less `Tuple`. Annotating the
+        # loop value with that types it as an opaque pointer and a later
+        # `a, b = v` cannot unpack it -- strictly worse than `Any`, which the
+        # unannotated path uses and which recovers the real type.
+        if element_type in ("Tuple", "tuple"):
+            element_type = "Any"
         ann_node = self.create_name_node(element_type, ast.Load(), node)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info["value_var"], ast.Store(), node),
@@ -1128,6 +1274,25 @@ class LoopMixin:
 
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
+
+    @staticmethod
+    def _body_destructures_name(body, name):
+        """True if `body` assigns `name` to a tuple/list target (`u, v = name`).
+
+        Only a direct statement counts: a nested loop or branch may rebind the
+        name first, and this only decides whether to keep the key's concrete
+        type, so a missed case just falls back to the existing handling.
+        """
+        if not name:
+            return False
+        for stmt in body:
+            if not isinstance(stmt, ast.Assign):
+                continue
+            if not (isinstance(stmt.value, ast.Name) and stmt.value.id == name):
+                continue
+            if any(isinstance(t, (ast.Tuple, ast.List)) for t in stmt.targets):
+                return True
+        return False
 
     def _transform_items_for(self, node):  # pylint: disable=too-many-locals,too-many-statements
         """
@@ -1400,6 +1565,37 @@ class LoopMixin:
         return (isinstance(ann_node, ast.Subscript)
                 and self._get_base_type_name(ann_node) in ("tuple", "Tuple"))
 
+    # Member types the C++ list subscript read can size. A str member reaches
+    # the solver as a mismatched bitvector width, a tuple member emits a bare
+    # inner `tuple` -- the very #5444 erosion this annotation avoids -- and a
+    # bool member mismatches the tuple AST, so anything outside this set leaves
+    # the literal unannotated and the unpack refused.
+    _SIZABLE_TUPLE_MEMBER_TYPES = frozenset({"int", "float"})
+
+    def _literal_tuple_annotation_node(self, iterable_node):
+        """tuple[A, B, ...] element annotation of a list literal whose elements
+        are all same-arity tuples of one sizable scalar type per position, else
+        None.
+
+        A key'd sorted() over a constant dict of tuple keys folds to such a
+        literal, which carries no annotation of its own to read (#5444).
+        """
+        if not (isinstance(iterable_node, ast.List) and iterable_node.elts
+                and all(isinstance(elt, ast.Tuple) for elt in iterable_node.elts)):
+            return None
+        arity = len(iterable_node.elts[0].elts)
+        if arity == 0 or any(len(elt.elts) != arity for elt in iterable_node.elts):
+            return None
+        members = []
+        for position in range(arity):
+            names = {self._infer_type_from_value(elt.elts[position]) for elt in iterable_node.elts}
+            if len(names) != 1 or not names <= self._SIZABLE_TUPLE_MEMBER_TYPES:
+                return None
+            members.append(ast.Name(id=names.pop(), ctx=ast.Load()))
+        return ast.Subscript(value=ast.Name(id="tuple", ctx=ast.Load()),
+                             slice=ast.Tuple(elts=members, ctx=ast.Load()),
+                             ctx=ast.Load())
+
     def _full_tuple_annotation_node(self, iterable_node):
         """Return the full tuple[A, B, ...] element annotation of a
         list[tuple[...]]-annotated Name iterable, or None if unavailable.
@@ -1413,6 +1609,9 @@ class LoopMixin:
         typed as tuple[str, str] instead of eroding to bare tuple, whose
         element_0/element_1 members the C++ converter cannot size (#5444).
         """
+        literal_ann = self._literal_tuple_annotation_node(iterable_node)
+        if literal_ann is not None:
+            return literal_ann
         if not (isinstance(iterable_node, ast.Name) and hasattr(self, "variable_annotations")):
             return None
         annotation = self.variable_annotations.get(iterable_node.id)
@@ -1635,16 +1834,24 @@ class LoopMixin:
         expression is copied into a fresh annotated ESBMC_iter variable. Returns
         (iter_var_name, setup_statements, element_type).
         """
+        # A key'd sorted() has to be lowered here: this assignment is built
+        # after the pass that lowers one, so the call would otherwise reach the
+        # frontend with its key= dropped, and be refused.
+        setup = []
+        lowered = self._lower_sorted_key_iterable(seq)
+        if lowered is not None:
+            setup, seq = lowered
+
         annotation_id = self._get_iterable_type_annotation(seq)
         element_type = self._get_element_type_from_container(annotation_id, seq)
         if isinstance(seq, ast.Name):
-            return seq.id, [], element_type
+            return seq.id, setup, element_type
         iter_var_name = f"ESBMC_iter_{loop_id}{suffix}"
         saved = node.iter
         node.iter = seq
         iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name, element_type)
         node.iter = saved
-        return iter_var_name, [iter_assign], element_type
+        return iter_var_name, setup + [iter_assign], element_type
 
     def _make_target_assign(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self, node, target, iter_var_name, index_var, element_type):
@@ -1876,20 +2083,22 @@ class LoopMixin:
         # Handle the target variable name
         target_var_name = self._name_id_or_none(node.target) or "ESBMC_loop_var"
 
+        # A key'd sorted() has to be lowered here: this loop's iterable
+        # assignment is built after the pass that lowers one, so the call would
+        # otherwise reach the frontend with its key= dropped, and be refused.
+        # Lowered before the annotation is read, so the annotation describes
+        # what the loop actually iterates -- a constant fold yields a list
+        # literal, whose element type the sorted() call does not carry.
+        scan_setup = []
+        lowered = self._lower_sorted_key_iterable(node.iter)
+        if lowered is not None:
+            scan_setup, node.iter = lowered
+
         # Determine annotation type based on the iterable value
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
         # Get element type for proper annotation
         element_type = self._get_element_type_from_container(annotation_id, node.iter)
-
-        # A tuple-unpacking target over a list[tuple[...]] iterable (e.g. the
-        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
-        # variable) needs the full tuple[A, B, ...] annotation, not the bare
-        # "tuple" name element_type collapses to -- otherwise the per-index
-        # element assignment can't size element_0/element_1 (#5444).
-        full_element_ann = None
-        if isinstance(node.target, (ast.Tuple, ast.List)) and element_type in ("tuple", "Tuple"):
-            full_element_ann = self._full_tuple_annotation_node(node.iter)
 
         # Tuple-unpacking iteration over a dict's keys (for u, v in d): the keys
         # are tuples, so materialize d.keys() into an annotated
@@ -1899,7 +2108,24 @@ class LoopMixin:
         # crashing on the unpack (#5444). Scoped to dicts whose key annotation
         # is concrete; a bare/unknown key type falls through to the existing
         # scalar-key handling below.
-        if (annotation_id in ["dict", "Dict"] and isinstance(node.target, (ast.Tuple, ast.List))
+        # A single-name target whose body destructures it (`for edge in d:` then
+        # `u, v = edge`) needs the concrete key type just as much as unpacking
+        # at the target does: without it the key reads as Any and the later
+        # unpack is handed a generic pointer it cannot destructure.
+        target_destructured = (isinstance(node.target, (ast.Tuple, ast.List))
+                               or self._body_destructures_name(node.body,
+                                                               self._name_id_or_none(node.target)))
+
+        # A destructured target over a list[tuple[...]] iterable (e.g. the
+        # ESBMC_keys_N materialized just below, or any other list[tuple[...]]
+        # variable) needs the full tuple[A, B, ...] annotation, not the bare
+        # "tuple" name element_type collapses to -- otherwise the per-index
+        # element assignment can't size element_0/element_1 (#5444).
+        full_element_ann = None
+        if target_destructured and element_type in ("tuple", "Tuple"):
+            full_element_ann = self._full_tuple_annotation_node(node.iter)
+
+        if (annotation_id in ["dict", "Dict"] and target_destructured
                 and isinstance(node.iter, ast.Name)):
             key_ann, _ = self._get_dict_kv_types(node.iter.id)
             if self._get_base_type_name(key_ann) not in ("Any", None):
@@ -1944,13 +2170,13 @@ class LoopMixin:
             # For any Name reference (parameter or variable), use it directly
             # This preserves type information for the converter
             iter_var_name = node.iter.id
-            setup_statements = []
+            setup_statements = list(scan_setup)
         else:
             # For other iterables (literals, calls, expressions), create ESBMC_iter copy
             iter_var_name = f"{iter_var_base}_{loop_id}"
             iter_assign = self._create_iter_assignment(node, annotation_id, iter_var_name,
-                                                       element_type)
-            setup_statements = [iter_assign]
+                                                       element_type, full_element_ann)
+            setup_statements = scan_setup + [iter_assign]
 
         # Create common setup statements (index and length) with unique names
         index_assign = self._create_index_assignment(node, index_var)
@@ -1977,14 +2203,32 @@ class LoopMixin:
 
         return result
 
-    def _create_iter_assignment(self, node, annotation_id, iter_var_name, element_type):
-        """Create assignment for iterator variable with proper type annotation."""
+    def _create_iter_assignment(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self,
+            node,
+            annotation_id,
+            iter_var_name,
+            element_type,
+            full_element_ann=None):
+        """Create assignment for iterator variable with proper type annotation.
+
+        ``full_element_ann`` carries the concrete tuple[A, B, ...] element
+        annotation when one is known: the C++ list subscript read sizes the
+        tuple from this list annotation, and the bare "tuple" name erases it to
+        void* (#5444).
+        """
         # str iterables (`for c in str(x)`, `for c in some_str_var`) must be
         # annotated as str so the converter lowers loop bounds via strlen
         # rather than the list-style get_object_size, which overshoots and
         # trips IndexError.
         if annotation_id == "str":
             iter_annotation = ast.Name(id="str", ctx=ast.Load())
+        elif full_element_ann is not None:
+            iter_annotation = ast.Subscript(
+                value=ast.Name(id="list", ctx=ast.Load()),
+                slice=copy.deepcopy(full_element_ann),
+                ctx=ast.Load(),
+            )
         # Create proper list[T] annotation instead of just 'list'
         elif element_type and element_type != "Any":
             # Create Subscript: list[element_type]
@@ -2005,6 +2249,10 @@ class LoopMixin:
                 slice=ast.Name(id="Any", ctx=ast.Load()),
                 ctx=ast.Load(),
             )
+        # Any other annotation binds the constructor's __ESBMC_new_object
+        # result to a non-pointer lvalue (#7083).
+        elif annotation_id in getattr(self, "module_class_names", set()):
+            iter_annotation = ast.Name(id=annotation_id, ctx=ast.Load())
         else:
             # Use 'Any' instead of bare 'list' to avoid misinterpreting the
             # container type as the element type in the C++ converter,

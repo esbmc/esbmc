@@ -49,13 +49,22 @@ typedef union pthread_attr_t
 typedef struct
 {
   int __lock;
+  /* Repurposed as this mutex's waiter count; see __ESBMC_mutex_waiters. */
   unsigned int __count;
+  /* Thread holding the mutex; only meaningful while __lock is 1. */
   int __owner;
+  /* PTHREAD_MUTEX_NORMAL / _RECURSIVE / _ERRORCHECK, from the attribute
+     passed to pthread_mutex_init. */
+  int __kind;
+  /* The owner's nesting depth, which only a recursive mutex takes above 1. */
+  unsigned int __depth;
 } pthread_mutex_t;
 
-/* Mutex initializer. */
-#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, }
+/* Mutex initializer. PTHREAD_MUTEX_NORMAL is 0, so a statically initialised
+   mutex gets the default kind. */
+#define PTHREAD_MUTEX_INITIALIZER { 0, 0, 0, 0, 0, }
 
+/* __align holds the mutex kind; see __ESBMC_mutexattr_kind. */
 typedef union
 {
   int __align;
@@ -91,6 +100,8 @@ typedef int pthread_once_t;
 typedef struct {
   int __readers;
   int __writer;
+  /* Threads currently blocked on this lock; see __ESBMC_rwlock_waiters. */
+  unsigned int __waiters;
 } pthread_rwlock_t;
 
 /* Read-write lock initializer. */
@@ -103,23 +114,33 @@ typedef union
 //#endif
 
 
-#ifdef __USE_XOPEN2K
-/* POSIX spinlock data type.  */
-typedef volatile int pthread_spinlock_t;
+/* Always exposed: ESBMC never defines __USE_XOPEN2K, so guarding these made
+   barriers and spinlocks unusable outright (#6478). */
+/* POSIX spinlock data type. Both fields are ESBMC bookkeeping: __lock holds
+   the state and __waiters the blocked-thread count, as for pthread_mutex_t. */
+typedef struct
+{
+  int __lock;
+  unsigned int __waiters;
+} pthread_spinlock_t;
 
 
 /* POSIX barriers data type.  The structure of the type is
    deliberately not exposed.  */
-typedef union
+typedef struct
 {
-  long int __align;
+  unsigned int __count;
+  unsigned int __arrived;
+  /* Bumped every time the barrier opens, so a waiter can tell that the
+     round it arrived in has completed. */
+  unsigned int __generation;
+  unsigned int __waiters;
 } pthread_barrier_t;
 
 typedef union
 {
   int __align;
 } pthread_barrierattr_t;
-#endif
 
 struct sched_param
 {
@@ -253,12 +274,10 @@ enum
 #define PTHREAD_ONCE_INIT 0
 
 
-#ifdef __USE_XOPEN2K
 /* Value returned by 'pthread_barrier_wait' for one of the threads after
    the required number of threads have called this function.
    -1 is distinct from 0 and all errno constants */
-# define PTHREAD_BARRIER_SERIAL_THREAD -1
-#endif
+#define PTHREAD_BARRIER_SERIAL_THREAD -1
 
 
 /* Create a new thread, starting with execution of START-ROUTINE
@@ -562,8 +581,9 @@ extern int pthread_mutexattr_setrobust (pthread_mutexattr_t *__attr,
 #endif
 
 
-#if defined __USE_UNIX98 || defined __USE_XOPEN2K
-/* Functions for handling read-write locks.  */
+/* Functions for handling read-write locks. Unguarded because ESBMC defines
+   neither __USE_UNIX98 nor __USE_XOPEN2K, which would leave the
+   --deadlock-check -D renames with no prototype to rewrite.  */
 
 /* Initialize read-write lock RWLOCK using attributes ATTR, or use
    the default values if later is NULL.  */
@@ -629,7 +649,6 @@ extern int pthread_rwlockattr_getkind_np (__const pthread_rwlockattr_t *
 /* Set reader/write preference.  */
 extern int pthread_rwlockattr_setkind_np (pthread_rwlockattr_t *__attr,
 					  int __pref);
-#endif
 
 
 /* Functions for handling conditional variables.  */
@@ -698,7 +717,7 @@ extern int pthread_condattr_setclock (pthread_condattr_t *__attr,
 #endif
 
 
-#ifdef __USE_XOPEN2K
+/* Always exposed; see the type definitions above. */
 /* Functions to handle spinlocks.  */
 
 /* Initialize the spinlock LOCK.  If PSHARED is nonzero the spinlock can
@@ -747,7 +766,6 @@ extern int pthread_barrierattr_getpshared (__const pthread_barrierattr_t *
 /* Set the process-shared flag of the barrier attribute ATTR.  */
 extern int pthread_barrierattr_setpshared (pthread_barrierattr_t *__attr,
 					   int __pshared);
-#endif
 
 
 /* Functions for handling thread-specific data.  */

@@ -1,7 +1,6 @@
-# A return inside an except handler escapes the try; the appended finally on
-# the fall-through path would be bypassed, so this shape is refused rather than
-# verified unsoundly. (Valid Python -- finally runs before the return under
-# CPython, so it executes cleanly and exits 0 here.)
+# A return inside an except handler escapes the try, so the finally is copied
+# in front of it and runs before control leaves. Issue #7076: this shape used
+# to be refused during conversion.
 def f() -> int:
     try:
         raise ValueError()
@@ -11,4 +10,4 @@ def f() -> int:
         pass
 
 
-print(f())
+assert f() == 1

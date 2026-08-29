@@ -1,4 +1,4 @@
 CORE
 main.py
---bitwuzla --unwind 4
+--unwind 4
 ^VERIFICATION SUCCESSFUL$

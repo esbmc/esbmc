@@ -3,4 +3,4 @@ main.c
 --condition-coverage-claims --no-cov-asserts -Wno-error=implicit-function-declaration
 ^Reached Conditions:  6
 ^Short Circuited Conditions:  0
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

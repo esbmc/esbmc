@@ -2,7 +2,7 @@
 # C, esbmc/esbmc#4715). Pins that consuming bare call statements natively
 # neither corrupts the accumulated global nor suppresses bug detection:
 # run() returns 5, so the wrong-value assertion is a reachable violation
-# reported as VERIFICATION FAILED under --irep2-native-body.
+# reported as VERIFICATION FAILED under native conversion.
 
 g: int = 0
 

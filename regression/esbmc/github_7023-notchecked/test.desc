@@ -1,0 +1,7 @@
+CORE
+main.c
+--result-only
+^ +NOT CHECKED .*a is not (one|two)$
+^\*\* 1 of 3 properties failed, 1 passed, 1 not checked$
+^VERIFICATION FAILED$
+\A(?![\s\S]*PASSED .*a is not )[\s\S]*\Z

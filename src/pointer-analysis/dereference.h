@@ -124,8 +124,17 @@ public:
   virtual bool
   has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) = 0;
 
-  /** Optionally rename the given expression. This exists to provide potential
-   *  optimization expansion in the future, it isn't currently used by anything.
+  /** Rename the given expression into the callback's current execution
+   *  context. The default implementation is a no-op; the symbolic-execution
+   *  override substitutes the SSA names and recorded constants symex
+   *  currently holds. Called on the index operands of dereference chains once
+   *  their inner dereferences are resolved, so an index whose value symex
+   *  knows folds to a constant and the access stays on the constant-offset
+   *  path (see dereference_expr_nonscalar, #7311). Indices mentioning a
+   *  symbol bound by an enclosing quantifier are excluded, as is the whole
+   *  body of a quantifier whose binder names no symbol: the callback has no
+   *  quantifier context and would substitute the like-named program
+   *  variable's value.
    *  @param expr An expression to be renamed
    */
   virtual void rename(expr2tc &expr [[maybe_unused]])
@@ -265,6 +274,11 @@ public:
    */
   bool has_dereference(const expr2tc &expr) const;
 
+  /** Zero the failed-symbol counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore, so the equation is a function
+   *  of (program, options) alone (R15). */
+  static void reset_object_counter();
+
 private:
   /** Namespace to perform type lookups against. */
   const namespacet &ns;
@@ -339,6 +353,14 @@ private:
     guard2tc &guard,
     modet mode,
     const expr2tc &base);
+
+  /** Resolve an access path whose steps were lifted out of a conditional,
+   *  e.g. `(c ? *ra : *rb).x` rewritten to `c ? (*ra).x : (*rb).x`. Each arm
+   *  is a complete path and is resolved under the condition selecting it, so
+   *  a dereference failure in the arm not taken cannot fire (#6717).
+   */
+  expr2tc
+  resolve_nonscalar_if(const expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Check whether the given pointer expression satisfies the alignment
    *  requirements for accessing a value of the specified type. This uses the
@@ -550,6 +572,7 @@ private:
     const expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
+    const guard2tc &guard,
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
@@ -560,6 +583,20 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  class quantifier_scopet;
+
+  /** Variables bound by quantifiers enclosing the expression currently being
+   *  dereferenced, and how many of those quantifiers bind through a shape
+   *  that names no variable we can identify. */
+  std::multiset<irep_idt> quantifier_bound_vars;
+  unsigned opaque_binders = 0;
+
+  /** True when @p expr mentions a symbol bound by an enclosing quantifier. */
+  bool mentions_bound_var(const expr2tc &expr) const;
+
+  /** True when the index fold may substitute the value symex holds for
+   *  @p index. */
+  bool may_fold_index(const expr2tc &index) const;
 
 public:
   void set_block_assertions(void)

@@ -3,6 +3,7 @@
 
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
+#include <goto-programs/property_verdict.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
@@ -12,6 +13,7 @@
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
+#include <set>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/config/options.h>
@@ -44,8 +46,22 @@ public:
   };
   size_t ltl_results_seen[4];
 
+  /* ltl_run_thread returns an ltl_res, or one of these sentinels. A formula
+   * with no prefix assertion, or whose monitor preconditions are violated,
+   * carries no usable prefix verdict: neither ⊤ nor any lower outcome may be
+   * claimed from it (#6547). */
+  static constexpr int ltl_res_uninstrumented = -3;
+
+  // Set when an LTL run produced no four-valued verdict; consulted by
+  // report_result to report UNKNOWN rather than the ⊤ that an absent or
+  // truncated monitor used to produce.
+  std::atomic<bool> ltl_uninstrumented{false};
+
   BigInt interleaving_number;
   BigInt interleaving_failed;
+
+  /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
+  bool cs_bound_pruned = false;
 
   virtual smt_resultt start_bmc();
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
@@ -100,13 +116,18 @@ protected:
 
   smt_resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
-  int ltl_run_thread(symex_target_equationt &equation) const;
+  /* Not const: the solver that satisfied a prefix assertion is kept in
+   * runtime_solver so the verdict can be backed by a counterexample. */
+  int ltl_run_thread(symex_target_equationt &equation);
 
+  /// \param truncated_loops how many loops exploration cut off at the
+  ///   unwinding bound, carried in from the symex result rather than read back
+  ///   from live state, which --schedule has already invalidated (#6423).
   smt_resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims,
-    size_t simplified_claims,
-    smt_convt &runtime_solver);
+    smt_convt &runtime_solver,
+    unsigned int truncated_loops);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
@@ -145,11 +166,14 @@ protected:
   /// testcase, html, json, graphml, yaml) are emitted by the caller while
   /// each witness's solver model is still live; this function only handles
   /// the human-readable counterexample output.
+  /// \param reachability_trace render as evidence that the location is
+  ///   reachable, not as a property violation (coverage runs; issue #6387).
   virtual void report_multi_property_trace(
     const smt_resultt &res,
     const std::vector<witness_recordt> &witnesses,
     enumeration_stop_reasont stop_reason,
-    const std::string &msg);
+    const std::string &msg,
+    bool reachability_trace = false);
 
   void report_coverage_verbose(
     const claim_slicer &claim,
@@ -163,20 +187,89 @@ protected:
     const std::unordered_multiset<std::string> &reached_mul_claims);
 
 private:
-  struct SimpleSummary
+  /// Report each of the program's properties once, with the verdict that
+  /// dominates across every thread interleaving explored, followed by a
+  /// summary. A phase that decided nothing and does not conclude the run stays
+  /// silent, leaving the report to the phase that does.
+  void report_property_verdicts(smt_resultt res) const;
+
+  /// Print the property table, grouped by file and function.
+  void print_property_rows(
+    const std::vector<struct property_rowt> &rows,
+    const struct property_countst &counts) const;
+
+  /// Print the "** N of M properties failed, ..." line.
+  void
+  print_property_summary(size_t total, const struct property_countst &) const;
+
+  /// Render the verdict table as coverage goals rather than properties.
+  void report_coverage_goal_verdicts(
+    const std::map<std::string, property_resultt> &verdicts) const;
+
+  /// Enter every assertion in \p eq into the verdict table as NotChecked, so
+  /// the report covers the whole program rather than only those properties
+  /// some phase happened to reach a verdict on (discussion #7023).
+  void seed_property_verdicts(const symex_target_equationt &eq) const;
+
+  /// Record Failed for every assertion in \p eq that \p smt_conv's model
+  /// falsifies, so the report names them even when the counterexample itself
+  /// is suppressed. Call only where a SAT result witnesses a real violation:
+  /// an inductive-step or forward-condition model does not.
+  void record_violated_properties(
+    smt_convt &smt_conv,
+    const symex_target_equationt &eq) const;
+
+  /// Source files whose assertions come from ESBMC's own operational models,
+  /// so the report can sort them after the user's code. Empty for Python,
+  /// where a hidden body does not imply a model (remove_library_assertions).
+  std::set<std::string> library_files;
+
+  /// Whether this phase concludes the run, i.e. report_result() will print a
+  /// VERIFICATION verdict for \p res rather than deepen the search. The
+  /// property report describes the whole run, so an iterative strategy must
+  /// not emit one table per k.
+  bool reports_final_verdict(smt_resultt res) const;
+
+  /// Set when exploration cut a loop short at the unwinding bound while
+  /// unwinding assertions were disabled, so the paths past the bound were
+  /// assumed away rather than checked. Read by report_success(), which is
+  /// otherwise the only place a user learns the run proved anything.
+  bool saw_bounded_loop_truncation = false;
+
+  /// Whether \p res establishes that *every* property holds, as opposed to a
+  /// merely bounded round such as a k-induction base case. Must agree with the
+  /// path through report_result() that reaches report_success().
+  bool all_properties_proved(smt_resultt res) const;
+
+  static constexpr size_t default_barren_interleaving_budget = 100;
+
+  /// How many consecutive thread interleavings may reach a verdict on nothing
+  /// new before exploration stops after a violation
+  /// (--multi-property-interleavings). Aborts on a non-positive value.
+  size_t barren_interleaving_budget() const;
+
+  /// Solver time and name accumulated across every interleaving of the run.
+  /// Atomic because multi_property_check writes from parallel job threads.
+  struct SolverStats
   {
-    std::atomic<size_t> total_properties = 0;
-    std::atomic<size_t> passed_properties = 0;
-    std::atomic<size_t> skipped_properties = 0;
-    std::atomic<size_t> simplified_properties = 0;
-    std::atomic<size_t> failed_properties = 0;
-    std::atomic<size_t> unknown_properties = 0;
-    std::atomic<double> total_time_s = 0.0;
-    std::string solver_name;
-    std::once_flag solver_name_flag;
+    std::atomic<double> total_time_ms = 0.0;
+    std::string name;
+    std::once_flag name_flag;
   };
 
-  void report_simple_summary(const SimpleSummary &summary) const;
+  SolverStats solver_stats;
+
+  /// Counterexample file numbering. Run-scoped, not per-interleaving: two
+  /// interleavings of one run share a phase and k, so a per-interleaving
+  /// counter would make them overwrite each other's artifacts.
+  std::atomic<size_t> ce_counter{0};
+
+  /// Set when the run stopped before reaching a verdict on every property --
+  /// exploration cut short after a violation, or claims skipped by
+  /// --multi-fail-fast. The summary counts only what was checked, so without
+  /// this the report would read as a complete account of the program.
+  /// Atomic because multi_property_check sets it from parallel job threads.
+  std::atomic<bool> report_incomplete{false};
 };
 
 void report_coverage(
@@ -185,5 +278,14 @@ void report_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen);
+
+/// Record why a coverage measurement is not exhaustive; the reason is listed
+/// under the closing COVERAGE ANALYSIS INCOMPLETE line.
+void note_cov_incomplete(const std::string &reason);
+
+/// Closing line of a coverage run: whether every goal was actually decided,
+/// and if not, why. Printed by the driver once, after the last [Coverage]
+/// block (k-induction prints one per phase).
+void report_coverage_completeness();
 
 #endif

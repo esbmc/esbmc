@@ -5,6 +5,7 @@
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <util/base/filesystem.h>
 #include <util/base/prefix.h>
 
 namespace
@@ -72,20 +73,13 @@ void collect_address_taken(const expr2tc &expr, std::set<irep_idt> &out)
 /// location; restricting to real source keeps advisories on user code and off
 /// the operational-model library baked into the goto program. The pass runs
 /// before inlining, so every linked OM/library function with a body is still
-/// present — those live under the extracted-headers temp dir ("-headers-") at
-/// runtime and under c2goto/library/ for in-tree builds (mirrors
-/// remove_exceptions.cpp::is_library_function).
+/// present.
 bool is_reportable_location(const locationt &loc)
 {
-  const std::string file = loc.get_file().as_string();
-  if (file.empty() || file == "<built-in>" || file == "<builtin>")
-    return false;
-  // ESBMC's own bundled operational-model / library sources: "-headers-" is
-  // the extracted-headers temp dir at runtime, "c2goto/library/" the in-tree
-  // path (mirrors remove_exceptions.cpp::is_library_function).
+  const std::string &file = loc.get_file().as_string();
   if (
-    file.find("-headers-") != std::string::npos ||
-    file.find("c2goto/library/") != std::string::npos)
+    file.empty() || file == "<built-in>" || file == "<builtin>" ||
+    file_operations::is_bundled_source(file))
     return false;
   // System headers across platforms. There is no location system-header flag,
   // so this is a best-effort path heuristic: Linux (/usr/include, but NOT the

@@ -81,7 +81,7 @@ bool solidity_convertert::add_implicit_constructor(
   code_typet type;
   typet tmp_rtn_type("constructor");
   type.return_type() = tmp_rtn_type;
-  type.set("#member_name", prefix + contract_name);
+  type.member_name(prefix + contract_name);
   type.set("#inlined", true);
 
   locationt location_begin;

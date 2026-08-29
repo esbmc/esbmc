@@ -1,4 +1,4 @@
 CORE
 main.py
 --multi-property
-^Properties: 2 verified, \✗ 2 failed$
+^\*\* 2 of 2 properties failed$

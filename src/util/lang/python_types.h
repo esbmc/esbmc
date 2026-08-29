@@ -8,6 +8,11 @@ typet none_type();
 
 typet any_type();
 
+// True when a function yields nothing a postcondition could name: `-> None`,
+// no annotation, or no enclosing function at all. Shared so the clause check
+// and the __ESBMC_return_value lowering cannot disagree about what None means.
+bool returns_no_value(const typet &t);
+
 // Classification of Python "internal model aggregate" struct types.
 //
 // The Python frontend lowers a handful of built-in container/union types to

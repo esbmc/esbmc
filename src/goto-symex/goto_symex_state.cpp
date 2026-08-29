@@ -4,17 +4,20 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 
 goto_symex_statet::goto_symex_statet(
   renaming::level2t &l2,
   value_sett &vs,
-  const namespacet &_ns)
-  : level2(l2), value_set(vs), ns(_ns)
+  const namespacet &_ns,
+  bool no_propagation)
+  : no_propagation(no_propagation), level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   num_instructions = 0;
@@ -44,6 +47,7 @@ goto_symex_statet &goto_symex_statet::operator=(const goto_symex_statet &state)
   loop_iterations = state.loop_iterations;
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
+  no_propagation = state.no_propagation;
   call_stack = state.call_stack;
   witness_segs = state.witness_segs;
   cur_seg = state.cur_seg;
@@ -95,22 +99,88 @@ static bool type_has_constant_size(const type2tc &type)
   return true;
 }
 
+/* Above this many elements a multi-dimensional array is left symbolic; see
+ * constant_propagation() for the measurement behind the number. */
+static constexpr unsigned multidim_propagation_bound = 256;
+
+/* Total element count of a possibly nested array type, or nothing when any
+ * dimension is not a constant. */
+static std::optional<BigInt> array_element_count(const type2tc &t)
+{
+  const array_type2t &arr = to_array_type(t);
+  if (
+    arr.size_is_infinite || is_nil_expr(arr.array_size) ||
+    !is_constant_int2t(arr.array_size))
+    return {};
+
+  BigInt n = to_constant_int2t(arr.array_size).value;
+  if (!is_array_type(arr.subtype))
+    return n;
+
+  std::optional<BigInt> sub = array_element_count(arr.subtype);
+  if (!sub)
+    return {};
+  return n * *sub;
+}
+
+/* A nested constant array whose leaves are all constants. */
+static bool is_constant_array_value(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_constant_array_of2t(e))
+    return is_constant_array_value(to_constant_array_of2t(e).initializer);
+
+  if (is_constant_array2t(e))
+  {
+    for (const expr2tc &m : to_constant_array2t(e).datatype_members)
+      if (!is_constant_array_value(m))
+        return false;
+    return true;
+  }
+
+  return is_constant_expr(e);
+}
+
+/* Whether an array value is cheap and well-formed enough to carry as a
+ * propagated constant. */
+static bool array_may_propagate(const expr2tc &e)
+{
+  const array_type2t &arr = to_array_type(e->type);
+
+  // Infinite-size arrays are special modelling arrays needing their own
+  // handling at SMT or some other level, so optimising them is a Bad Plan (TM).
+  if (arr.size_is_infinite)
+    return false;
+
+  if (!is_array_type(arr.subtype))
+    return true;
+
+  // A multi-dimensional array propagates only as a whole constant. A `with`
+  // chain over one lets a second update land on an already-updated row, and
+  // the SMT flattening in convert_array_store()/decompose_store_chain() walks
+  // only the update-value spine: the earlier sibling store is dropped from the
+  // formula (silent wrong answers) or reaches mk_store()/mk_eq() with a row on
+  // one side and an element on the other. Folding the reads is what R42 needs;
+  // folding the writes is a separate, unfixed encoding gap.
+  if (!is_constant_array_value(e))
+    return false;
+
+  // And only while it stays small: a read at a symbolic index inlines the
+  // whole nested constant, so the cost grows with the element count. The cap
+  // is R42's (docs/roadmap/goto-symex-verification-plan.md).
+  std::optional<BigInt> elems = array_element_count(e->type);
+  return elems && *elems <= multidim_propagation_bound;
+}
+
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
-  if (is_array_type(expr))
-  {
-    array_type2t arr = to_array_type(expr->type);
+  if (no_propagation)
+    return false;
 
-    // Don't permit const propagation of infinite-size arrays. They're going to
-    // be special modelling arrays that require special handling either at SMT
-    // or some other level, so attempting to optimize them is a Bad Plan (TM).
-    if (arr.size_is_infinite)
-      return false;
-
-    // Don't propagate multi dimensional arrays
-    if (is_array_type(arr.subtype))
-      return false;
-  }
+  if (is_array_type(expr) && !array_may_propagate(expr))
+    return false;
 
   if (is_vector_type(expr))
     return true;
@@ -408,6 +478,61 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   }
 }
 
+void goto_symex_statet::rename_quantified(
+  expr2tc &expr,
+  const std::set<irep_idt> &bound)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  rename_type(expr);
+
+  if (is_symbol2t(expr))
+  {
+    if (!bound.count(to_symbol2t(expr).thename))
+    {
+      rename(expr);
+      return;
+    }
+
+    // A bound occurrence denotes the quantified variable, not the program
+    // variable of the same name: L2 renaming would substitute the latter's
+    // value and collapse the body into a constant (GitHub #7024). Stop at
+    // L1, the name rename_address() gives the binder operand, which no SSA
+    // definition constrains.
+    type2tc origtype = expr->type;
+    top().level1.rename(expr);
+    fixup_renamed_type(expr, origtype);
+    return;
+  }
+
+  if (is_forall2t(expr) || is_exists2t(expr))
+  {
+    const bool forall = is_forall2t(expr);
+    expr2tc &binder =
+      forall ? to_forall2t(expr).side_1 : to_exists2t(expr).side_1;
+    expr2tc &body =
+      forall ? to_forall2t(expr).side_2 : to_exists2t(expr).side_2;
+
+    rename(binder);
+
+    std::set<irep_idt> inner = bound;
+    if (irep_idt name = quantifier_bound_name(binder); !name.empty())
+      inner.insert(name);
+    rename_quantified(body, inner);
+    return;
+  }
+
+  if (is_address_of2t(expr))
+  {
+    rename_address(to_address_of2t(expr).ptr_obj, bound);
+    return;
+  }
+
+  expr->Foreach_operand(
+    [this, &bound](expr2tc &e) { rename_quantified(e, bound); });
+}
+
 void goto_symex_statet::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
@@ -429,6 +554,10 @@ void goto_symex_statet::rename(expr2tc &expr)
     address_of2t &addrof = to_address_of2t(expr);
     rename_address(addrof.ptr_obj);
   }
+  else if (is_forall2t(expr) || is_exists2t(expr))
+  {
+    rename_quantified(expr, {});
+  }
   else
   {
     // do this recursively
@@ -437,6 +566,14 @@ void goto_symex_statet::rename(expr2tc &expr)
 }
 
 void goto_symex_statet::rename_address(expr2tc &expr)
+{
+  static const std::set<irep_idt> nothing_bound;
+  rename_address(expr, nothing_bound);
+}
+
+void goto_symex_statet::rename_address(
+  expr2tc &expr,
+  const std::set<irep_idt> &bound)
 {
   // rename symbols to their l1 storage names only (no value substitution)
 
@@ -464,13 +601,14 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else if (is_index2t(expr))
   {
     index2t &index = to_index2t(expr);
-    rename_address(index.source_value);
-    rename(index.index);
+    rename_address(index.source_value, bound);
+    rename_quantified(index.index, bound);
   }
   else
   {
     // do this recursively
-    expr->Foreach_operand([this](expr2tc &e) { rename_address(e); });
+    expr->Foreach_operand(
+      [this, &bound](expr2tc &e) { rename_address(e, bound); });
   }
 }
 

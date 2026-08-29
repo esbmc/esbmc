@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check
+^  dereference failure: forgotten memory: dynamic_1_array$
+^VERIFICATION FAILED$

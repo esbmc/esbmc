@@ -48,6 +48,18 @@ exprt ld_converter::int_const(long long value) const
   return from_integer(BigInt(value), int32_t_());
 }
 
+// Saturation bounds for CV, taken from the configured integer width rather than
+// assumed to be 32-bit.
+exprt ld_converter::int_max() const
+{
+  return to_signedbv_type(int32_t_()).largest_expr();
+}
+
+exprt ld_converter::int_min() const
+{
+  return to_signedbv_type(int32_t_()).smallest_expr();
+}
+
 static std::string ld_name(const std::string &var)
 {
   return "ld::" + var;
@@ -278,7 +290,12 @@ codet ld_converter::translate_timer(const LdIRNode &n)
   exprt in_val = bool_value_of(in_sym);
   exprt q_val = bool_value_of(q_sym);
 
-  auto advance_et =
+  // IEC 61131-3 §2.5.2.3.2 bounds ET by PT, so the count stops once the
+  // interval is up. Without the bound ET rises every scan IN holds and
+  // eventually overflows, which is UB and flips Q back to false.
+  code_ifthenelset advance_et;
+  advance_et.cond() = binary_relation_exprt(et_sym, "<", pt_sym);
+  advance_et.then_case() =
     code_assignt(et_sym, make_arith(exprt::plus, et_sym, one, int32_t_()));
   auto q_while_pending =
     code_assignt(q_sym, binary_relation_exprt(et_sym, "<", pt_sym));
@@ -363,7 +380,9 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cu_step;
-    cu_step.cond() = and_exprt(cu, not_exprt(cu_prev));
+    cu_step.cond() = and_exprt(
+      and_exprt(cu, not_exprt(cu_prev)),
+      binary_relation_exprt(cv, "<", int_max()));
     cu_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, one, int32_t_()));
     blk.copy_to_operands(cu_step);
@@ -396,7 +415,9 @@ codet ld_converter::translate_counter(const LdIRNode &n)
       declare_bool_shadow(ld_name("__ctr_prev_" + n.ctr_instance));
 
     code_ifthenelset cd_step;
-    cd_step.cond() = and_exprt(cd, not_exprt(cd_prev));
+    cd_step.cond() = and_exprt(
+      and_exprt(cd, not_exprt(cd_prev)),
+      binary_relation_exprt(cv, ">", int_min()));
     cd_step.then_case() =
       code_assignt(cv, make_arith(exprt::plus, cv, neg_one, int32_t_()));
     blk.copy_to_operands(cd_step);

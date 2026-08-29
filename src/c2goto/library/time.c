@@ -11,6 +11,7 @@
 #undef difftime
 #undef clock
 #undef mktime
+#undef timegm
 #undef localtime
 #undef gmtime
 #undef localtime_r
@@ -49,8 +50,9 @@ clock_t __VERIFIER_nondet_clock_t();
 static struct tm __esbmc_localtime_buf;
 static time_t __esbmc_localtime_last_input;
 
-/* ── Ghost state for gmtime ── */
+/* ── Ghost state for gmtime/timegm roundtrip ── */
 static struct tm __esbmc_gmtime_buf;
+static time_t __esbmc_gmtime_last_input;
 
 /* ── Static string buffers for asctime/ctime ── */
 static char __esbmc_asctime_buf[26];
@@ -121,6 +123,7 @@ struct tm *gmtime(const time_t *timer)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "gmtime argument must not be NULL");
+  __esbmc_gmtime_last_input = *timer;
   __esbmc_fill_tm_nondet(&__esbmc_gmtime_buf);
   return &__esbmc_gmtime_buf;
 }
@@ -145,15 +148,10 @@ __ESBMC_HIDE:;
   return buf;
 }
 
-/* ── mktime ── */
-time_t mktime(struct tm *timeptr)
+/* Normalize tm_mon into [0,11], adjusting tm_year (closed-form) */
+static void __esbmc_normalize_tm_mon(struct tm *timeptr)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assert(timeptr != NULL, "mktime argument must not be NULL");
-  if (timeptr == NULL)
-    return (time_t)-1;
-
-  /* Normalize tm_mon into [0,11], adjusting tm_year (closed-form) */
   int m = timeptr->tm_mon;
   if (m < 0 || m > 11)
   {
@@ -165,11 +163,48 @@ __ESBMC_HIDE:;
     timeptr->tm_year += years;
     timeptr->tm_mon = m - years * 12;
   }
+}
+
+/* ── mktime ── */
+time_t mktime(struct tm *timeptr)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(timeptr != NULL, "mktime argument must not be NULL");
+  if (timeptr == NULL)
+    return (time_t)-1;
+
+  __esbmc_normalize_tm_mon(timeptr);
 
   /* Roundtrip consistency: if called on the localtime static buffer,
      return the original time_t that produced it */
   if (timeptr == &__esbmc_localtime_buf)
     return __esbmc_localtime_last_input;
+
+  return __VERIFIER_nondet_time_t();
+}
+
+/* ── timegm (GNU/BSD) ── */
+/* mktime's UTC counterpart: same in-place normalisation, but the fields are
+   read as UTC rather than local time, so tm_isdst plays no part. */
+time_t timegm(struct tm *timeptr)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(timeptr != NULL, "timegm argument must not be NULL");
+  if (timeptr == NULL)
+    return (time_t)-1;
+
+  __esbmc_normalize_tm_mon(timeptr);
+  timeptr->tm_isdst = 0;
+  /* glibc ignores tm_wday/tm_yday on input and recomputes them from the
+     normalised date. Deriving them needs a calendar this model does not have,
+     so havoc them: a caller must not read back what it wrote. */
+  timeptr->tm_wday = nondet_int();
+  __ESBMC_assume(timeptr->tm_wday >= 0 && timeptr->tm_wday <= 6);
+  timeptr->tm_yday = nondet_int();
+  __ESBMC_assume(timeptr->tm_yday >= 0 && timeptr->tm_yday <= 365);
+
+  if (timeptr == &__esbmc_gmtime_buf)
+    return __esbmc_gmtime_last_input;
 
   return __VERIFIER_nondet_time_t();
 }

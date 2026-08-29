@@ -87,6 +87,199 @@ static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
   return false;
 }
 
+/// `__ESBMC_old(base[j])` with `j` bound by the enclosing quantifier takes the
+/// address of one element, which has no value outside the quantifier and so
+/// cannot be hoisted. Snapshot the array instead — `__ESBMC_old(base)[j]` —
+/// leaving an operand the bound variable does not reach, so the ordinary
+/// hoisting applies and the contract layer materialises one array snapshot in
+/// place of one per index (#4219). A pointer parameter base is also
+/// rewritten, snapshotting the pointer's value and deferring the actual
+/// region copy to the contracts pass, which is the only place the pointer's
+/// __ESBMC_is_fresh extent is known (#7057).
+/// The `__ESBMC_old_raw` call under \p deref, which the `__ESBMC_old` macro
+/// wraps as `*(T*)__ESBMC_old_raw(&x)`, or nullptr if this is not one.
+static exprt *old_raw_call_under(exprt &deref)
+{
+  if (deref.id() != exprt::deref || deref.operands().size() != 1)
+    return nullptr;
+
+  exprt *call = &deref.op0();
+  while (call->id() == exprt::typecast && call->operands().size() == 1)
+    call = &call->op0();
+
+  if (
+    call->id() != "sideeffect" || call->statement() != "function_call" ||
+    call->operands().size() < 2 || !call->op0().is_symbol())
+    return nullptr;
+
+  // Compare the base name rather than suffix-matching the mangled id, so a
+  // user function whose name merely ends in the token keeps the meaning it
+  // was written with. Same split as is_contract_intrinsic in contracts.cpp.
+  const std::string callee = call->op0().identifier().as_string();
+  const size_t at = callee.rfind('@');
+  if (
+    (at == std::string::npos ? callee : callee.substr(at + 1)) !=
+    "__ESBMC_old_raw")
+    return nullptr;
+
+  return call->op1().operands().size() == 1 ? call : nullptr;
+}
+
+/// &(base[j]) is address_of(index_exprt(base, j)) when base has real array
+/// type -- the target's own type is already the element type.
+static const exprt *
+bound_array_index(const exprt &target, const std::set<irep_idt> &bound_vars)
+{
+  if (target.id() != exprt::index || target.operands().size() != 2)
+    return nullptr;
+  if (
+    !mentions_symbol(target.op1(), bound_vars) ||
+    !target.op0().type().is_array())
+    return nullptr;
+  return &target;
+}
+
+/// A decayed pointer's p[j] desugars at the frontend to *(p + j), so
+/// &(p[j]) is address_of(dereference(+(p, j))), not
+/// address_of(index_exprt(...)). No named object to snapshot here, only N
+/// bytes reachable through p, with N known only once the contracts pass
+/// resolves __ESBMC_is_fresh (#7057). Restrict to a bare symbol base so
+/// contracts.cpp can look it up in param_extents by identifier; an lvalue
+/// reached through a pointer (e.g. a struct field) is deferred (documented
+/// follow-up). Return the "+" node itself: like bound_array_index's
+/// index_exprt, it already has op0()=base, op1()=index -- but unlike the
+/// array case, its own type is the *pointer* type, not the element type
+/// (the caller must go through ->type().subtype() instead).
+static const exprt *bound_ptr_param_offset(
+  const exprt &target,
+  const std::set<irep_idt> &bound_vars)
+{
+  if (target.id() != exprt::deref || target.operands().size() != 1)
+    return nullptr;
+  const exprt &offset = target.op0();
+  if (offset.id() != "+" || offset.operands().size() != 2)
+    return nullptr;
+  if (
+    !mentions_symbol(offset.op1(), bound_vars) ||
+    offset.op0().type().id() != "pointer" || offset.op0().id() != "symbol")
+    return nullptr;
+  return &offset;
+}
+
+/// The array element \p addr addresses, when its index reaches \p bound_vars
+/// and its base is an array or a pointer parameter. A pointer with a
+/// symbolic extent has no whole object to snapshot; bound_ptr_param_offset
+/// defers that to contracts.cpp once the extent is known.
+static const exprt *
+bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
+{
+  const exprt *e = &addr;
+  while (e->id() == exprt::typecast && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() != exprt::addrof || e->operands().size() != 1)
+    return nullptr;
+
+  const exprt &target = e->op0();
+  if (const exprt *array_elem = bound_array_index(target, bound_vars))
+    return array_elem;
+  return bound_ptr_param_offset(target, bound_vars);
+}
+
+static void lift_old_over_bound_index(
+  exprt &expr,
+  const std::set<irep_idt> &bound_vars,
+  const namespacet &ns)
+{
+  Forall_operands (it, expr)
+    lift_old_over_bound_index(*it, bound_vars, ns);
+
+  exprt *call = old_raw_call_under(expr);
+  if (!call)
+    return;
+
+  const exprt *target =
+    bound_array_element(call->op1().operands()[0], bound_vars);
+  if (!target)
+    return;
+
+  const exprt base = target->op0();
+  const exprt index = target->op1();
+
+  if (base.type().id() == "pointer")
+  {
+    // No named object to snapshot -- only N bytes reachable through base,
+    // and N is not known until the contracts pass resolves
+    // __ESBMC_is_fresh. Snapshot the pointer's *value* (exactly what a
+    // direct __ESBMC_old(ptr) would already produce -- always legal, no
+    // size needed here) and leave the element-wise copy to contracts.cpp.
+    // The result is deliberately dereference(add(...)), not
+    // index(dereference(...)): there is no array-typed rvalue to
+    // dereference into here, only a pointer, so the whole-object wrapping
+    // the array case uses below (dereference outside, index outside that)
+    // cannot be built. #7057.
+    exprt whole_snapshot = *call;
+    whole_snapshot.op1().operands()[0] = address_of_exprt(base);
+
+    // target->type() is the *pointer* type here (target is the "+" node,
+    // not an index_exprt) -- its subtype is the element type. A struct
+    // element's subtype is an unfollowed symbol_typet referencing its tag;
+    // the dereference layer requires the concrete struct_typet to resolve
+    // a member access, and this construction has no later chance to follow
+    // it (unlike contracts.cpp's own copy of the extent-aware snapshot,
+    // this raw shape also survives, unused, as dead residual code in the
+    // renamed original function body, where it still gets symbolically
+    // evaluated) (#7057).
+    const typet &elem_type = ns.follow(target->type().subtype());
+
+    typet elem_ptr_type("pointer");
+    elem_ptr_type.subtype() = elem_type; // T*
+
+    typet elem_ptr_ptr_type("pointer");
+    elem_ptr_ptr_type.subtype() = elem_ptr_type; // T**
+
+    // whole_snapshot's argument is &base (base = the pointer parameter
+    // itself), matching what a bare __ESBMC_old(base) already does -- the
+    // macro's own *(T*)old_raw(&x) shape, with x = base and T = base's own
+    // type (T*). So the raw result must first be reinterpreted as T** and
+    // dereferenced ONCE to recover the snapshotted *pointer value*, before
+    // any arithmetic on it -- casting straight to T* and dereferencing
+    // directly (as if base's own storage held the array) reads past base's
+    // few bytes instead of the region it points to.
+    exprt snapshot_ptr_cast = typecast_exprt(whole_snapshot, elem_ptr_ptr_type);
+    exprt snapshotted_ptr("dereference", elem_ptr_type);
+    snapshotted_ptr.copy_to_operands(snapshot_ptr_cast);
+
+    plus_exprt offset_ptr(snapshotted_ptr, index);
+    offset_ptr.type() = elem_ptr_type;
+
+    exprt element("dereference", elem_type);
+    element.copy_to_operands(offset_ptr);
+    expr.swap(element);
+    return;
+  }
+
+  // Snapshotting an array through a dereference is an rvalue array read, which
+  // the dereference layer refuses. Where the array is a struct member, take the
+  // struct — a legal rvalue — and re-apply the member to the snapshot.
+  const bool via_member = base.id() == exprt::member;
+  const exprt object = via_member ? base.op0() : base;
+
+  exprt whole_snapshot = *call;
+  whole_snapshot.op1().operands()[0] = address_of_exprt(object);
+
+  typet object_ptr("pointer");
+  object_ptr.subtype() = object.type();
+  exprt snapshot =
+    dereference_exprt(typecast_exprt(whole_snapshot, object_ptr), object_ptr);
+
+  if (via_member)
+    snapshot = member_exprt(
+      snapshot, to_member_expr(base).get_component_name(), base.type());
+
+  index_exprt element(snapshot, index);
+  expr.swap(element);
+}
+
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
 /// cannot be replicated by argument substitution.
 static bool has_non_call_sideeffect(const exprt &e)
@@ -1008,6 +1201,9 @@ void goto_convertt::convert_quantifier_calls(exprt &expr)
       // Bottom-up: convert any nested quantifier calls first, then summarize
       // the remaining calls so the bound variable stays free in the body.
       convert_quantifier_calls(args[1]);
+      const irep_idt bound = quantifier_bound_var_id(args[0]);
+      if (!bound.empty())
+        lift_old_over_bound_index(args[1], {bound}, ns);
       inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
       if (!has_sideeffect(args[1]))
       {
@@ -1492,11 +1688,7 @@ void goto_convertt::remove_sideeffects(
       // they have zero effect on the GOTO program (no FUNCTION_CALL step, no
       // side-effect processing of the argument).  The declarations remain in
       // the unconditional intrinsics section so annotated files still compile.
-      if (
-        fsym && options.get_option("enforce-contract").empty() &&
-        options.get_option("replace-call-with-contract").empty() &&
-        !options.get_bool_option("enforce-all-contracts") &&
-        !options.get_bool_option("replace-all-contracts"))
+      if (fsym && !options.contracts_enabled())
       {
         const std::string &fname = id2string(fsym->name);
         if (
@@ -1630,7 +1822,7 @@ void goto_convertt::remove_sideeffects(
     else if (statement == "temporary_object")
     {
       const locationt location = expr.find_location();
-      remove_temporary_object(expr, dest, result_is_used);
+      remove_temporary_object(expr, dest);
 
       // A discarded temporary dies at the end of its full expression
       // (C++ [class.temporary]/4, github #6076), not at block exit: emit
@@ -1825,12 +2017,24 @@ void goto_convertt::remove_assignment(
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type() = expr.op0().type();
 
+    // The C frontend records the type C says the operation runs in when it
+    // differs from E1's (#6589). Promote E1 into it and convert the result
+    // back on assignment, so `E1 op= E2` and `E1 = E1 op (E2)` agree.
+    const typet &computation_type =
+      static_cast<const typet &>(expr.find("computation_type"));
+
     if (rhs.op0().type().is_bool())
     {
       rhs.op0().make_typecast(int_type());
       rhs.op1().make_typecast(int_type());
       rhs.type() = int_type();
       rhs.make_typecast(typet("bool"));
+    }
+    else if (computation_type.is_not_nil() && computation_type != rhs.type())
+    {
+      rhs.op0().make_typecast(computation_type);
+      rhs.type() = computation_type;
+      rhs.make_typecast(expr.op0().type());
     }
 
     exprt lhs(expr.op0());
@@ -2268,16 +2472,14 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   tmp.location() = expr.location();
   tmp.copy_to_operands(to_unary_expr(expr).op0());
   tmp.set("destructor", expr.find("destructor"));
+  tmp.set("dealloc_function", expr.find("dealloc_function"));
 
   convert_cpp_delete(tmp, dest);
 
   expr.make_nil();
 }
 
-void goto_convertt::remove_temporary_object(
-  exprt &expr,
-  goto_programt &dest,
-  bool result_is_used)
+void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 {
   if (expr.operands().size() != 1 && expr.operands().size() != 0)
     throw "temporary_object takes 0 or 1 operands";

@@ -525,6 +525,65 @@ exprt python_list::build_concat_list_call(
   return build_symbol(dst_list);
 }
 
+/// The declaring literal's elements for a list held in a variable, or empty
+/// when the literal cannot be used -- it does not exist, or the list has been
+/// mutated since and the literal no longer describes it.
+std::vector<exprt> python_list::literal_elems_for_variable_list(
+  const nlohmann::json *source_node,
+  const exprt &source_list)
+{
+  std::string var_name;
+  if (
+    source_node->contains("_type") && (*source_node)["_type"] == "Name" &&
+    source_node->contains("id") && (*source_node)["id"].is_string())
+    var_name = (*source_node)["id"].get<std::string>();
+  else
+    var_name = json_utils::extract_var_name_from_symbol_id(
+      source_list.identifier().as_string());
+
+  const nlohmann::json var_decl = json_utils::find_var_decl(
+    var_name, converter_.current_function_name(), converter_.ast());
+
+  std::vector<exprt> elems;
+  if (
+    var_decl.is_null() || !var_decl.contains("value") ||
+    !var_decl["value"].is_object() || !var_decl["value"].contains("_type") ||
+    var_decl["value"]["_type"] != "List" ||
+    !var_decl["value"].contains("elts") ||
+    !var_decl["value"]["elts"].is_array())
+    return elems;
+
+  if (!literal_still_describes_list(
+        source_list, var_decl["value"]["elts"].size()))
+    return elems;
+
+  for (const auto &elt : var_decl["value"]["elts"])
+    elems.push_back(converter_.get_expr(elt));
+  return elems;
+}
+
+/// True when the declaring literal still describes the list's contents.
+///
+/// `xs * n` expands the literal's elements at convert time, which is wrong
+/// once the list has been mutated: after `xs = [1, 2, 3]; xs += [4]` the
+/// literal still has three elements, and the repetition silently produced a
+/// six-element result where Python gives eight. The recorded element types
+/// track every push, so a length mismatch means the literal is stale and the
+/// caller must build from those records instead.
+bool python_list::literal_still_describes_list(
+  const exprt &source_list,
+  size_t literal_elem_count)
+{
+  if (!source_list.is_symbol())
+    return true;
+
+  const size_t recorded =
+    get_list_type_map_size(source_list.identifier().as_string());
+  // No records at all means nothing was tracked for this list, so the literal
+  // is the only description available; keep using it.
+  return recorded == 0 || recorded == literal_elem_count;
+}
+
 exprt python_list::list_repetition(
   const nlohmann::json &left_node,
   const nlohmann::json &right_node,
@@ -608,33 +667,7 @@ exprt python_list::list_repetition(
         source_elems.push_back(converter_.get_expr(elt));
     }
     else
-    {
-      std::string var_name;
-      if (
-        source_node->contains("_type") && (*source_node)["_type"] == "Name" &&
-        source_node->contains("id") && (*source_node)["id"].is_string())
-      {
-        var_name = (*source_node)["id"].get<std::string>();
-      }
-      else
-      {
-        var_name = json_utils::extract_var_name_from_symbol_id(
-          source_list.identifier().as_string());
-      }
-
-      nlohmann::json var_decl = json_utils::find_var_decl(
-        var_name, converter_.current_function_name(), converter_.ast());
-      if (
-        !var_decl.is_null() && var_decl.contains("value") &&
-        var_decl["value"].is_object() && var_decl["value"].contains("_type") &&
-        var_decl["value"]["_type"] == "List" &&
-        var_decl["value"].contains("elts") &&
-        var_decl["value"]["elts"].is_array())
-      {
-        for (const auto &elt : var_decl["value"]["elts"])
-          source_elems.push_back(converter_.get_expr(elt));
-      }
-    }
+      source_elems = literal_elems_for_variable_list(source_node, source_list);
 
     if (!source_elems.empty())
     {
@@ -1107,9 +1140,20 @@ exprt python_list::build_pop_list_call(
   const std::string &list_id = list.id.as_string();
   typet elem_type;
 
+  // One syntactic pop() consumes one list_type_map entry, but the assignment
+  // path converts its RHS more than once; replay the first answer rather than
+  // consuming a second entry (#4780).
+  const std::string site = list_id + ":" + location.get_line().as_string() +
+                           ":" + location.get_column().as_string();
+  auto memo_it = pop_elem_type_memo.find(site);
+  if (memo_it != pop_elem_type_memo.end())
+    elem_type = memo_it->second;
+
   // Try to get element type from list_type_map (use last element for default pop)
   auto type_map_it = list_type_map.find(list_id);
-  if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+  if (
+    elem_type == typet() && type_map_it != list_type_map.end() &&
+    !type_map_it->second.empty())
   {
     // Get the last element's type (since default pop() pops from the end)
     size_t last_idx = type_map_it->second.size() - 1;
@@ -1117,6 +1161,7 @@ exprt python_list::build_pop_list_call(
 
     // Remove the popped element from type map to maintain consistency
     type_map_it->second.pop_back();
+    pop_elem_type_memo[site] = elem_type;
   }
 
   // If type map lookup failed, try to infer from list declaration
@@ -1200,10 +1245,10 @@ exprt python_list::build_shallow_copy_call(
   const typet list_type = converter_.get_type_handler().get_list_type();
 
   const symbolt *copy_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy_shallow");
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_copy_shallow_sz");
   if (!copy_func)
     throw std::runtime_error(
-      "__ESBMC_list_copy_shallow not found in symbol table");
+      "__ESBMC_list_copy_shallow_sz not found in symbol table");
 
   // Materialize a list-returning call into a temporary so it can be passed
   // to the model by value (same pattern as handle_slice_assignment's RHS).
@@ -1248,10 +1293,39 @@ exprt python_list::build_shallow_copy_call(
       converter_.get_type_handler().type_to_string(list_type)),
     config.ansi_c.address_width));
 
+  BigInt elem_size_bytes = 0;
+  size_t float_type_id = 0;
+  if (src.is_symbol())
+  {
+    auto it = list_type_map.find(src.identifier().as_string());
+    if (it != list_type_map.end() && !it->second.empty())
+    {
+      const typet &elem_type = converter_.ns.follow(it->second.back().second);
+      if (
+        elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
+        elem_type.is_floatbv() || elem_type.is_bool())
+      {
+        elem_size_bytes =
+          type_byte_size(migrate_type(elem_type), &converter_.name_space());
+      }
+    }
+    int type_flag = 0;
+    get_list_type_flags(
+      src.identifier().as_string(),
+      converter_.get_type_handler(),
+      type_flag,
+      float_type_id);
+  }
+  constant_exprt elem_size(size_type());
+  elem_size.set_value(
+    integer2binary(elem_size_bytes, config.ansi_c.address_width));
+
   code_function_callt copy_call;
   copy_call.function() = build_symbol(*copy_func);
   copy_call.arguments().push_back(src);
   copy_call.arguments().push_back(list_type_id);
+  copy_call.arguments().push_back(elem_size);
+  copy_call.arguments().push_back(from_integer(float_type_id, size_type()));
   copy_call.lhs() = build_symbol(copied);
   copy_call.type() = list_type;
   copy_call.location() = location;
@@ -1317,5 +1391,6 @@ exprt python_list::build_remove_list_call(
   guard.cond() = migrate_expr_back(not2tc(rr2));
   guard.then_case() = throw_code;
   guard.location() = elem_info.location;
+  guard.location().property("skipped");
   return guard;
 }

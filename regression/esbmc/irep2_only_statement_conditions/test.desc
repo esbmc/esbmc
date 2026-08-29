@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto-functions-only --clang-c-irep2-adjust-only
+IF !\(_Bool\)a THEN GOTO
+IF !\(_Bool\)b THEN GOTO
+IF !\(_Bool\)c THEN GOTO

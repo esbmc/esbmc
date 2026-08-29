@@ -63,7 +63,7 @@ bool solidity_convertert::get_function_definition(
   {
     typet tmp_rtn_type("constructor");
     type.return_type() = tmp_rtn_type;
-    type.set("#member_name", prefix + c_name);
+    type.member_name(prefix + c_name);
     type.set("#inlined", true);
   }
   else if (ast_node.contains("returnParameters"))
@@ -76,7 +76,7 @@ bool solidity_convertert::get_function_definition(
   {
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
-    type.set("#member_name", prefix + c_name);
+    type.member_name(prefix + c_name);
   }
 
   // special handling for tuple:

@@ -243,3 +243,5 @@ void python_list::reverse_type_info(const std::string &list_id)
     return;
   std::reverse(it->second.begin(), it->second.end());
 }
+
+std::unordered_map<std::string, typet> python_list::pop_elem_type_memo{};

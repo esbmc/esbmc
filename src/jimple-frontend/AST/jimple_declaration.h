@@ -22,6 +22,12 @@ public:
     const std::string &class_name,
     const std::string &function_name) const override;
 
+  virtual expr2tc to_code2t(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name,
+    const locationt &loc) const override;
+
   jimple_type type;
   std::string name;
 };

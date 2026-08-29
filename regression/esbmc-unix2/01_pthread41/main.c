@@ -38,7 +38,7 @@ int main()
 
 //  pthread_join(a, NULL);
 //  pthread_join(b, NULL);
-
-  return 0;
+  /* Returning from main calls exit() and tears the workers down before they
+     can deadlock; pthread_exit keeps them alive (#6479). */
+  pthread_exit(0);
 }
-

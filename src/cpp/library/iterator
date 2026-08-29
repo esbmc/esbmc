@@ -1,9 +1,11 @@
 #ifndef STL_ITERATOR
 #define STL_ITERATOR
 
+#include "iterator_tags.h"
 #include "iostream"
 #include "streambuf"
 #include "utility"
+#include "type_traits" /* void_t, declval, for the advance/distance dispatch */
 
 namespace std
 {
@@ -26,33 +28,6 @@ public:
   typedef Category iterator_category;
 };
 
-/* [iterator.tags]: the five categories, with the inheritance the standard
- * specifies. forward_ and bidirectional_ were missing, and random_access_ did
- * not derive from anything, so tag dispatch could not select an overload. */
-///  Marking input iterators.
-struct input_iterator_tag
-{
-};
-
-///  Marking output iterators.
-struct output_iterator_tag
-{
-};
-
-///  Marking forward iterators.
-struct forward_iterator_tag : public input_iterator_tag
-{
-};
-
-///  Marking bidirectional iterators.
-struct bidirectional_iterator_tag : public forward_iterator_tag
-{
-};
-
-// Marking random iterators
-struct random_access_iterator_tag : public bidirectional_iterator_tag
-{
-};
 
 /* [iterator.traits] specifies iterator_traits as a struct. Declared as a
  * class with no access specifier, all five member typedefs were private, so
@@ -89,12 +64,184 @@ struct iterator_traits<const T *>
   typedef random_access_iterator_tag iterator_category;
 };
 
+/* [iterator.synopsis] puts advance and distance here, but the definitions
+ * lived in <algorithm> while <iterator> carried declarations with no body.
+ * A translation unit that included <iterator> without <algorithm> therefore
+ * got a distance() returning an unconstrained value -- it satisfied neither
+ * `== 3` nor `!= 3` on a three-element range -- and an advance() that left
+ * the iterator where it was. The bodies below are the ones <algorithm> had;
+ * <algorithm> includes this header, so its own callers are unaffected. */
+/* [iterator.operations]: advance and distance are specified per iterator
+ * category -- only a random access iterator supports i + n and first < last.
+ * A bidirectional iterator such as std::list's has to step with ++ and --.
+ *
+ * The category is detected by whether `i + n` is well-formed rather than by
+ * iterator_traits<It>::iterator_category, because the container iterators this
+ * header has to serve do not all carry the traits typedefs -- the same reason
+ * the parameter below is a ptrdiff_t.
+ *
+ * The detection needs void_t and declval, so the C++03 path keeps the original
+ * random-access-only bodies rather than losing advance and distance entirely. */
+#if __cplusplus >= 201103L
+namespace __iter_detail
+{
+template <class It, class = void>
+struct has_plus : false_type
+{
+};
+template <class It>
+struct has_plus<It, void_t<decltype(declval<It>() + declval<ptrdiff_t>())>>
+  : true_type
+{
+};
+
+template <class It, bool = has_plus<It>::value>
+struct advance_by
+{
+  static void run(It &i, ptrdiff_t n)
+  {
+    i = i + n;
+  }
+};
+template <class It>
+struct advance_by<It, false>
+{
+  static void run(It &i, ptrdiff_t n)
+  {
+    for (; n > 0; --n)
+      ++i;
+    for (; n < 0; ++n)
+      --i;
+  }
+};
+
+template <class It, bool = has_plus<It>::value>
+struct distance_between
+{
+  static int run(It first, It last)
+  {
+    int i = 0;
+    int koef = first < last ? 1 : -1;
+    It pilgrim = first < last ? first : last;
+    while (pilgrim != last)
+    {
+      pilgrim = pilgrim + koef;
+      i++;
+    }
+    return i;
+  }
+};
+template <class It>
+struct distance_between<It, false>
+{
+  // Only the forward direction is defined for a non-random-access range.
+  static int run(It first, It last)
+  {
+    int i = 0;
+    while (first != last)
+    {
+      ++first;
+      i++;
+    }
+    return i;
+  }
+};
+} // namespace __iter_detail
+
 template <class InputIterator, class Distance>
-void advance(InputIterator &i, Distance n);
+void advance(InputIterator &i, Distance n)
+{
+  __iter_detail::advance_by<InputIterator>::run(i, n);
+}
 
 template <class InputIterator>
-typename iterator_traits<InputIterator>::difference_type
-distance(InputIterator first, InputIterator last);
+int distance(InputIterator first, InputIterator last)
+{
+  return __iter_detail::distance_between<InputIterator>::run(first, last);
+}
+#else
+template <class InputIterator, class Distance>
+void advance(InputIterator &i, Distance n)
+{
+  i = i + n;
+}
+
+template <class InputIterator>
+int distance(InputIterator first, InputIterator last)
+{
+  int i = 0;
+  int koef = first < last ? 1 : -1;
+  InputIterator pilgrim = first < last ? first : last;
+  while (pilgrim != last)
+  {
+    pilgrim = pilgrim + koef;
+    i++;
+  }
+  return i;
+}
+#endif
+
+#if __cplusplus >= 201103L
+/* [iterator.operations]/3,6. The parameter type is spelled ptrdiff_t rather
+ * than iterator_traits<It>::difference_type so that these stay usable with the
+ * container iterators that do not carry the traits typedefs -- the same reason
+ * distance above returns int. */
+template <class ForwardIterator>
+ForwardIterator next(ForwardIterator i, ptrdiff_t n = 1)
+{
+  advance(i, n);
+  return i;
+}
+
+template <class BidirectionalIterator>
+BidirectionalIterator prev(BidirectionalIterator i, ptrdiff_t n = 1)
+{
+  advance(i, -n);
+  return i;
+}
+#endif
+
+#if __cplusplus >= 201703L
+/* [iterator.range]: the free range-access functions. size() on a raw array is
+ * the one that generic code cannot express any other way. */
+template <class C>
+constexpr auto size(const C &c) -> decltype(c.size())
+{
+  return c.size();
+}
+template <class T, size_t N>
+constexpr size_t size(const T (&)[N]) noexcept
+{
+  return N;
+}
+
+template <class C>
+constexpr auto empty(const C &c) -> decltype(c.empty())
+{
+  return c.empty();
+}
+template <class T, size_t N>
+constexpr bool empty(const T (&)[N]) noexcept
+{
+  return false;
+}
+
+template <class C>
+constexpr auto data(C &c) -> decltype(c.data())
+{
+  return c.data();
+}
+template <class C>
+constexpr auto data(const C &c) -> decltype(c.data())
+{
+  return c.data();
+}
+template <class T, size_t N>
+constexpr T *data(T (&array)[N]) noexcept
+{
+  return array;
+}
+#endif
 
 template <class Container>
 class back_insert_iterator
@@ -304,9 +451,16 @@ public:
     : out_stream(&s), delim(delimiter)
   {
   }
-  ostream_iterator(ostream_iterator<T, charT, traits> &x); /* :
-			out_stream(x.out_stream), delim(x.delim) {
-	}*/
+  /* Needs a body for the same reason ostream's own constructors do: an
+   * undefined one leaves out_stream unconstrained, and std::copy takes the
+   * iterator by value -- an insertion through the copy then dispatches on a
+   * vtable pointer no value set can pin down, surfacing as "No target
+   * candidate" and a bogus invalid-pointer violation on a safe program.
+   * [ostream.iterator.cons] declares the parameter const. */
+  ostream_iterator(const ostream_iterator<T, charT, traits> &x)
+    : out_stream(x.out_stream), delim(x.delim)
+  {
+  }
   ~ostream_iterator()
   {
   }
@@ -462,6 +616,48 @@ constexpr T *end(T (&arr)[N]) noexcept
 #endif
 
 #if __cplusplus >= 201402L
+// [iterator.range]: the reverse range accessors, alongside cbegin/cend below.
+template <class C>
+constexpr auto rbegin(C &c) -> decltype(c.rbegin())
+{
+  return c.rbegin();
+}
+
+template <class C>
+constexpr auto rbegin(const C &c) -> decltype(c.rbegin())
+{
+  return c.rbegin();
+}
+
+template <class C>
+constexpr auto rend(C &c) -> decltype(c.rend())
+{
+  return c.rend();
+}
+
+template <class C>
+constexpr auto rend(const C &c) -> decltype(c.rend())
+{
+  return c.rend();
+}
+
+/* No array overloads: std::reverse_iterator is declaration-only in this model
+ * (no constructors, no definitions), so reverse_iterator<T*>(arr + N) has
+ * nothing to construct from. The container overloads above forward to the
+ * container's own rbegin, which is implemented. */
+
+template <class C>
+constexpr auto crbegin(const C &c) -> decltype(std::rbegin(c))
+{
+  return std::rbegin(c);
+}
+
+template <class C>
+constexpr auto crend(const C &c) -> decltype(std::rend(c))
+{
+  return std::rend(c);
+}
+
 template <class C>
 constexpr auto cbegin(const C &c) noexcept(noexcept(std::begin(c)))
   -> decltype(std::begin(c))

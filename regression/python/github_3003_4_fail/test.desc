@@ -1,4 +1,5 @@
 CORE
 main.py
 --multi-property --unwind 2 --no-bounds-check --no-pointer-check
-^Properties: 6 verified \✓ 5 passed, \✗ 1 failed$
+^\*\* 1 of 4 properties failed, 3 passed$
+^ +FAILED .*line +6 +assertion l != 0$

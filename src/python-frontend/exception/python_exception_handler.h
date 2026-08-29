@@ -51,6 +51,16 @@ public:
   static bool
   body_has_escaping_control_flow(const nlohmann::json &node, bool in_loop);
 
+  /// True if an escaping return/break/continue sits inside a nested try or
+  /// with, whose own cleanup must run before this finally. Duplicating this
+  /// finally there would order the two wrongly, so such shapes are refused.
+  static bool
+  escape_in_nested_cleanup_scope(const nlohmann::json &node, bool in_loop);
+
+  /// escape_in_nested_cleanup_scope's walk over a statement's child bodies.
+  static bool
+  escape_in_nested_cleanup_children(const nlohmann::json &node, bool in_loop);
+
   /**
    * Convert a Python raise statement.
    *
@@ -144,6 +154,25 @@ private:
   // ------------------------------------------------------------------
   // Internal helpers
   // ------------------------------------------------------------------
+
+  /// Copies `finalbody` in front of every return/break/continue in `body` that
+  /// leaves the enclosing try, so those exit edges run the finally as CPython
+  /// does. A returned expression is spilled to a temporary first, because
+  /// CPython evaluates it before the finally runs.
+  nlohmann::json inject_finally_before_escapes(
+    const nlohmann::json &body,
+    const nlohmann::json &finalbody,
+    bool in_loop);
+
+  /// Appends `finalbody` followed by `stmt` to `out`, spilling a returned
+  /// expression to a temporary first.
+  void emit_finally_then_escape(
+    const nlohmann::json &stmt,
+    const nlohmann::json &finalbody,
+    nlohmann::json &out);
+
+  /// Names the spill temporaries inject_finally_before_escapes introduces.
+  unsigned finally_spill_count_ = 0;
 
   /** Create a temporary boolean symbol used by assertion helpers. */
   symbolt create_assert_temp_variable(const locationt &location) const;

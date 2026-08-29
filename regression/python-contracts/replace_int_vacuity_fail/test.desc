@@ -1,0 +1,5 @@
+CORE
+main.py
+--replace-call-with-contract double
+^  assertion y == 10$
+^VERIFICATION FAILED$

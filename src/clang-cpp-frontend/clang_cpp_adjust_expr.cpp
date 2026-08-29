@@ -579,7 +579,7 @@ void clang_cpp_adjust::convert_exception_id(
   }
 
   // add C++ type
-  std::string cpp_type = type.get("#cpp_type").as_string();
+  std::string cpp_type = type.cpp_type().as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
 

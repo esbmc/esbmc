@@ -4,4 +4,4 @@ main.c
 ^Branches : 8
 ^Reached : 7
 ^Branch Coverage: 87.5%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS INCOMPLETE

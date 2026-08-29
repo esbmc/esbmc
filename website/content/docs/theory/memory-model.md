@@ -44,7 +44,9 @@ By default ESBMC also explores the possibility that an allocation *fails*
 flagged. This can be tuned:
 
 - `--force-malloc-success` — assume allocation never fails
-- `--malloc-zero-is-null` — model `malloc(0)` as returning `NULL`
+- `--malloc-zero-is-null` — let `malloc(0)` return `NULL`, as C17 7.22.3p1
+  permits; the non-`NULL` alternative stays reachable, and the object it yields
+  can be freed but not accessed
 
 ## Properties checked
 

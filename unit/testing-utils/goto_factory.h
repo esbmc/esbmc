@@ -48,14 +48,14 @@ public:
   static cmdlinet get_default_cmdline(const std::string &filename);
   static optionst get_default_options(cmdlinet cmd);
 
+  static void
+  config_environment(goto_factory::Architecture arch, cmdlinet c, optionst o);
+
 private:
   static bool parse(const cmdlinet &cmdline, language_uit &l);
   static void
   create_file_from(std::istream &c_inputstream, std::string filename);
   static void create_file_from(std::string &str, std::string filename);
-
-  static void
-  config_environment(goto_factory::Architecture arch, cmdlinet c, optionst o);
 
   static program get_goto_functions(cmdlinet &cmd, optionst &opts);
   /**

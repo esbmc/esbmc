@@ -2,12 +2,20 @@
 #define __STL_VECTOR
 
 #include <stdlib.h>
+/* Not required by [vector.syn], but the toolchains this model stands in for
+ * make errno visible through <vector>, and code relies on it: nlohmann's
+ * lexer sets errno around strtod having included only <vector> and <cstdlib>.
+ * Checked against the host compiler, where <vector> provides it and <cstdlib>
+ * does not. */
+#include <errno.h>
 #include <assert.h>
 #include <cstddef> // for size_t, ptrdiff_t
 #include <memory>
 #include "stdexcept"
+#include "OM_compiler_defs.h" // OM_NULLPTR
 
 #include <utility> /* std::move */
+#include "type_traits" /* enable_if, is_integral */
 #include <new>     /* placement-new */
 #if __cplusplus >= 201103L
 #  include <initializer_list>
@@ -35,9 +43,9 @@ public:
     }
     reverse_iterator()
     {
-      pointer = nullptr;
+      pointer = OM_NULLPTR;
       pos = -1;
-      vec_pos = nullptr;
+      vec_pos = OM_NULLPTR;
     }
     reverse_iterator &operator=(const reverse_iterator &i)
     {
@@ -165,7 +173,7 @@ public:
     }
 
     // Default constructor
-    const_reverse_iterator() : pointer(nullptr), pos(-1), vec_pos(nullptr)
+    const_reverse_iterator() : pointer(OM_NULLPTR), pos(-1), vec_pos(OM_NULLPTR)
     {
     }
 
@@ -302,7 +310,7 @@ public:
   // types:
   typedef T &reference;
   typedef const T &const_reference;
-  typedef int size_type;
+  typedef size_t size_type;
   typedef int difference_type;
   typedef T value_type;
   typedef T *pointer;
@@ -337,10 +345,10 @@ public:
   // vector by value under --memory-leak-check remains unsupported.
   ~vector()
   {
-    if (buf != nullptr)
+    if (buf != OM_NULLPTR)
     {
       free(buf);
-      buf = nullptr;
+      buf = OM_NULLPTR;
       _size = 0;
       _capacity = 0;
     }
@@ -359,7 +367,8 @@ public:
     int n = 0;
     for (; t1 != t2; t1++)
     {
-      buf[n++] = *t1;
+      __construct_at(buf + n, *t1);
+      n++;
     }
     _size = n;
     _capacity = _size;
@@ -378,8 +387,17 @@ public:
     _capacity = n;
   }
 
+  /* [sequence.reqmts]: this constructor must not participate in overload
+   * resolution unless InputIt qualifies as an input iterator. Unconstrained,
+   * vector<T> v(3, 0) deduced InputIt = int and instantiated *t++ on an int.
+   * Only vector<int> escaped, because size_type is int here and the
+   * (size_type, const T&) overload then tied and won as the non-template. */
   template <typename InputIt>
-  vector(InputIt t, InputIt addr, const Allocator &alloc = Allocator())
+  vector(
+    InputIt t,
+    InputIt addr,
+    const Allocator &alloc = Allocator(),
+    typename enable_if<!is_integral<InputIt>::value>::type * = OM_NULLPTR)
     : _size(0), _capacity(1)
   {
     int count = 0;
@@ -389,7 +407,7 @@ public:
     buf = static_cast<T *>(malloc(sizeof(T) * count));
     __ESBMC_assume(buf);
     for (int i = 0; i < count; i++)
-      buf[i] = *t++;
+      __construct_at(buf + i, *t++);
 
     _size = count;
     _capacity = _size;
@@ -401,7 +419,7 @@ public:
     __ESBMC_assume(buf);
     _size = n;
     for (int i = 0; i < n; i++)
-      buf[i] = x;
+      __construct_at(buf + i, x);
     _capacity = n;
   }
 
@@ -412,7 +430,7 @@ public:
     __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
-      buf[i] = x.buf[i];
+      __construct_at(buf + i, x.buf[i]);
     _capacity = _size;
   }
 
@@ -424,7 +442,7 @@ public:
     __ESBMC_assume(buf);
     _size = init.size();
     for (int i = 0; i < _size; i++)
-      buf[i] = *(init.begin() + i);
+      __construct_at(buf + i, *(init.begin() + i));
     _capacity = _size;
   }
 #endif
@@ -438,7 +456,7 @@ public:
       __ESBMC_assume(buf);
       _size = x._size;
       for (int i = 0; i < _size; i++)
-        buf[i] = x.buf[i];
+        __construct_at(buf + i, x.buf[i]);
       _capacity = _size;
     }
     return *this;
@@ -446,11 +464,13 @@ public:
 
   void assign(size_type n, const T &u)
   {
+    // realloc preserves the existing objects, so [0, min(_size, n)) stays live.
+    size_type live_end = _size < n ? _size : n;
     _size = n;
     buf = static_cast<T *>(realloc(buf, sizeof(T) * n));
     __ESBMC_assume(buf);
     for (int i = 0; i < n; i++)
-      buf[i] = u;
+      __put(i, u, live_end);
     _capacity = _size;
   }
 
@@ -467,7 +487,8 @@ public:
     int n = 0;
     for (; t1 != t2; t1++)
     {
-      buf[n++] = *t1;
+      __construct_at(buf + n, *t1);
+      n++;
     }
     _size = n;
     _capacity = _size;
@@ -488,17 +509,19 @@ public:
     }
 
     // Ensure we have enough capacity
+    size_type live_end = _size;
     if (count > _capacity)
     {
       free(buf);
       buf = static_cast<T *>(malloc(sizeof(T) * count));
       __ESBMC_assume(buf);
       _capacity = count;
+      live_end = 0;
     }
 
     // Copy elements
     for (size_type i = 0; i < count; i++)
-      buf[i] = t11[i];
+      __put(i, t11[i], live_end);
 
     _size = count;
   }
@@ -540,7 +563,7 @@ public:
     }
     else
     {
-      buffer.pointer = nullptr;
+      buffer.pointer = OM_NULLPTR;
       buffer.pos = -1;
     }
     buffer.vec_pos = buf;
@@ -558,7 +581,7 @@ public:
     }
     else
     {
-      buffer.pointer = nullptr;
+      buffer.pointer = OM_NULLPTR;
       buffer.pos = -1;
       buffer.vec_pos = buf;
     }
@@ -611,7 +634,13 @@ public:
     return _size;
   }
 
-  size_type max_size() const;
+  /* Declared but never defined, so callers got a nondeterministic result.
+   * The model's own invariant is _size <= VECTOR_CAPACITY, so that bound is
+   * what a vector here can actually hold. */
+  size_type max_size() const
+  {
+    return VECTOR_CAPACITY;
+  }
 
   void resize(size_type sz)
   {
@@ -655,7 +684,7 @@ public:
 
     // Initialize new elements with the provided value
     for (unsigned int n = _size; n < sz; n++)
-      buf[n] = t;
+      __construct_at(buf + n, t);
 
     _size = sz;
   }
@@ -680,7 +709,7 @@ public:
 
       // copy over existing values
       for (int i = 0; i < _size; i++)
-        new_buf[i] = buf[i];
+        __construct_at(new_buf + i, buf[i]);
 
       free(buf); // free old memory
       buf = new_buf;
@@ -774,8 +803,8 @@ public:
       reserve(new_capacity);
     }
 
-    buf[_size] = x; // write element into slot
-    _size++;        // now bump size
+    __construct_at(buf + _size, x); // the slot is raw storage, so construct
+    _size++;                        // now bump size
   }
 
   void pop_back()
@@ -784,12 +813,14 @@ public:
     _size--;
   }
 
+#if __cplusplus >= 201103L
   template <class... Args>
   reference emplace_back(Args &&...args)
   {
     push_back(T(std::forward<Args>(args)...));
     return buf[_size - 1];
   }
+#endif
 
   // Non-binding request to reduce capacity; leaving the buffer as-is is a
   // conforming implementation and keeps capacity() >= size().
@@ -813,7 +844,7 @@ public:
 
       // Copy existing elements
       for (size_type i = 0; i < _size; i++)
-        new_buf[i] = buf[i];
+        __construct_at(new_buf + i, buf[i]);
 
       free(buf);
       buf = new_buf;
@@ -823,11 +854,12 @@ public:
     // one place. Backwards copy to avoid overwriting existing data.
     for (int i = (int)_size - 1; i >= (int)at; i--)
     {
-      buf[i + 1] = buf[i];
+      __put(i + 1, buf[i], _size);
     }
 
-    // And now install the new value.
-    buf[at] = x;
+    // And now install the new value: slot at is live unless it is the one
+    // past the last element, which the shift above left raw.
+    __put(at, x, _size);
     _size++;
     return buf + at;
   }
@@ -852,7 +884,7 @@ public:
 
     for (size_type i = 0; i < count; i++)
     {
-      temp_array[i] = *(first + i);
+      __construct_at(temp_array + i, *(first + i));
     }
 
     // Insert from the temporary array
@@ -886,7 +918,7 @@ public:
 
       // Copy existing elements
       for (size_type i = 0; i < _size; i++)
-        new_buf[i] = buf[i];
+        __construct_at(new_buf + i, buf[i]);
 
       free(buf);
       buf = new_buf;
@@ -897,12 +929,12 @@ public:
     // We need to move elements from [at, _size) to [at+count, _size+count)
     for (int i = (int)_size - 1; i >= (int)at; i--)
     {
-      buf[i + count] = buf[i];
+      __put(i + count, buf[i], _size);
     }
 
     // Insert the new values
     for (size_type i = 0; i < count; i++)
-      buf[at + i] = value;
+      __put(at + i, value, _size);
 
     _size += count;
     return buf + at;
@@ -921,12 +953,14 @@ public:
 
   iterator erase(iterator first, iterator last)
   {
-    iterator it;
-    while (first != last)
-    {
-      it = erase(last--);
-    }
-    return it;
+    /* [vector.modifiers]: the range is half-open, so last is not itself
+     * erased, and the result is an iterator to the element that followed it.
+     * Each single erase shifts the tail down, so erasing at first that many
+     * times removes exactly the range. */
+    size_type n = last - first;
+    for (size_type i = 0; i < n; i++)
+      erase(first);
+    return first;
   }
 
   void swap(vector &v1)
@@ -944,33 +978,51 @@ public:
   }
 
   // comparators:
-  bool operator==(const vector &rhv)
+  bool operator==(const vector &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
-    int i = 0;
-    while (i != this->size())
-    {
+    for (size_type i = 0; i < this->size(); i++)
       if (this->at(i) != rhv[i])
         return false;
-      i++;
-    }
     return true;
   }
 
-  bool operator!=(const vector &rhv)
+  bool operator!=(const vector &rhv) const
   {
     return (!(*this == rhv));
   }
 
-  bool operator>=(const vector &rhv)
+  /* [container.requirements]: the ordering is the lexicographical comparison
+   * of the two ranges, so the first differing element decides it and the
+   * lengths matter only when one range is a prefix of the other. Comparing
+   * sizes instead made {2} < {1,3}. */
+  bool operator<(const vector &rhv) const
   {
-    return ((*this == rhv) || (this->size() > rhv.size()));
+    size_type n = this->size() < rhv.size() ? this->size() : rhv.size();
+    for (size_type i = 0; i < n; i++)
+    {
+      if ((*this)[i] < rhv[i])
+        return true;
+      if (rhv[i] < (*this)[i])
+        return false;
+    }
+    return this->size() < rhv.size();
   }
 
-  bool operator<=(const vector &rhv)
+  bool operator>(const vector &rhv) const
   {
-    return ((*this == rhv) || (this->size() < rhv.size()));
+    return rhv < *this;
+  }
+
+  bool operator>=(const vector &rhv) const
+  {
+    return !(*this < rhv);
+  }
+
+  bool operator<=(const vector &rhv) const
+  {
+    return !(rhv < *this);
   }
 
 private:
@@ -983,6 +1035,25 @@ private:
     return T();
   }
 
+  // Slots [0, _size) hold live objects; [_size, _capacity) is raw storage.
+  // A raw slot must be written by construction, never by assignment: T's
+  // operator= reads the destination as a live object, and for a T that owns
+  // heap memory (a nested container) it frees the garbage pointer the
+  // uninitialised slot happens to hold (issue #6368).
+  void __construct_at(T *p, const T &x)
+  {
+    new (static_cast<void *>(p)) T(x);
+  }
+
+  // Write x into slot i for a range that straddles the live/raw boundary.
+  void __put(size_type i, const T &x, size_type live_end)
+  {
+    if (i < live_end)
+      buf[i] = x;
+    else
+      __construct_at(buf + i, x);
+  }
+
   // Value-initialise slots [lo, hi) when T is default-constructible.
   // The non-default-constructible overload is selected for types whose
   // only constructor is user-provided (issue #2040), and is a no-op so
@@ -992,7 +1063,7 @@ private:
   __value_init_range(size_type lo, size_type hi)
   {
     for (size_type i = lo; i < hi; ++i)
-      buf[i] = U();
+      new (static_cast<void *>(buf + i)) U();
   }
   template <typename U = T>
   typename std::enable_if<!std::is_constructible<U>::value>::type

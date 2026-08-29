@@ -80,32 +80,39 @@ void python_exception_handler::get_try_statement(
 
   // Python's `finally` runs on every exit path: normal completion, a caught
   // exception, an *uncaught* exception (run finally, then re-raise), and a
-  // return/break/continue that leaves the try. We model the first three by
+  // return/break/continue that leaves the try. The first three are modelled by
   // duplicating the finally body on the normal path (after the try/catch) and
-  // inside a catch-all handler that re-raises. A return/break/continue inside
-  // the try body, an except handler, or the finally body would bypass that
-  // appended finally and silently change the result, so refuse those with a
-  // clean diagnostic rather than return an unsound verdict.
+  // inside a catch-all handler that re-raises; the fourth by copying it in
+  // front of each escaping statement (#7076).
+  nlohmann::json try_body = element["body"];
+  nlohmann::json else_body =
+    element.contains("orelse") ? element["orelse"] : nlohmann::json::array();
+  nlohmann::json handlers = element["handlers"];
+
   if (has_finally)
   {
-    bool escapes = body_has_escaping_control_flow(element["body"], false) ||
-                   body_has_escaping_control_flow(element["finalbody"], false);
-    // The else clause is appended to the try body below, so an escaping
-    // return/break/continue there would bypass the appended finally just like
-    // one in the try body — scan it too.
-    if (element.contains("orelse"))
-      escapes =
-        escapes || body_has_escaping_control_flow(element["orelse"], false);
-    for (const auto &h : element["handlers"])
-      if (h.contains("body"))
-        escapes = escapes || body_has_escaping_control_flow(h["body"], false);
-    if (escapes)
+    // A finally that itself returns overrides an in-flight return or a
+    // propagating exception, and a break/continue there swallows one; neither
+    // is modelled, so those shapes are still refused. So is an escape nested
+    // under a try or with, whose own cleanup would have to run first.
+    if (
+      body_has_escaping_control_flow(element["finalbody"], false) ||
+      escape_in_nested_cleanup_scope(try_body, false) ||
+      escape_in_nested_cleanup_scope(else_body, false) ||
+      escape_in_nested_cleanup_scope(handlers, false))
       throw std::runtime_error(
         "try/finally with return/break/continue in the try, except, else, or "
         "finally body is not supported");
+
+    const nlohmann::json &finalbody = element["finalbody"];
+    try_body = inject_finally_before_escapes(try_body, finalbody, false);
+    else_body = inject_finally_before_escapes(else_body, finalbody, false);
+    for (auto &h : handlers)
+      if (h.is_object() && h.contains("body"))
+        h["body"] = inject_finally_before_escapes(h["body"], finalbody, false);
   }
 
-  exprt try_block = converter_.get_block(element["body"]);
+  exprt try_block = converter_.get_block(try_body);
 
   // The `else` clause runs after the try body completes without an exception.
   // Append it to the try body: on the normal path it runs right after the body,
@@ -113,14 +120,14 @@ void python_exception_handler::get_try_statement(
   // so it is correctly skipped. (An exception raised inside the else itself is
   // caught by this try's handlers here rather than propagating, a minor
   // deviation from CPython that is out of scope.)
-  if (element.contains("orelse") && !element["orelse"].empty())
+  if (!else_body.empty())
   {
-    exprt else_block = converter_.get_block(element["orelse"]);
+    exprt else_block = converter_.get_block(else_body);
     for (const auto &op : else_block.operands())
       try_block.copy_to_operands(op);
   }
 
-  exprt handler = converter_.get_block(element["handlers"]);
+  exprt handler = converter_.get_block(handlers);
 
   // A bare `except:` already catches every exception, so the fall-through
   // finally below runs after it on the exception path too. Appending a second
@@ -129,7 +136,7 @@ void python_exception_handler::get_try_statement(
   // dropping the user's handler. So synthesise the finally-rethrow catch-all
   // only when no bare `except:` is present.
   bool has_catch_all = false;
-  for (const auto &h : element["handlers"])
+  for (const auto &h : handlers)
     if (h["type"].is_null())
       has_catch_all = true;
 
@@ -174,6 +181,168 @@ void python_exception_handler::get_try_statement(
   }
 }
 
+namespace
+{
+bool is_function_scope(const std::string &t)
+{
+  return t == "FunctionDef" || t == "AsyncFunctionDef" || t == "Lambda";
+}
+
+bool is_loop_scope(const std::string &t)
+{
+  return t == "For" || t == "AsyncFor" || t == "While";
+}
+
+/// A construct that runs cleanup of its own on an escaping exit edge.
+bool is_cleanup_scope(const std::string &t)
+{
+  return t == "Try" || t == "TryStar" || t == "With" || t == "AsyncWith";
+}
+
+/// A return/break/continue that leaves the enclosing try. break/continue are
+/// captured by a nested loop, so they escape only outside one.
+bool is_escaping_stmt(const std::string &t, bool in_loop)
+{
+  if (t == "Return")
+    return true;
+  return (t == "Break" || t == "Continue") && !in_loop;
+}
+
+void copy_location(const nlohmann::json &from, nlohmann::json &to)
+{
+  for (const char *k : {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (from.contains(k))
+      to[k] = from[k];
+}
+
+nlohmann::json make_name_node(
+  const std::string &id,
+  const nlohmann::json &loc,
+  const char *ctx)
+{
+  nlohmann::json name;
+  name["_type"] = "Name";
+  name["id"] = id;
+  name["ctx"] = {{"_type", ctx}};
+  copy_location(loc, name);
+  return name;
+}
+} // namespace
+
+void python_exception_handler::emit_finally_then_escape(
+  const nlohmann::json &stmt,
+  const nlohmann::json &finalbody,
+  nlohmann::json &out)
+{
+  // CPython evaluates the returned expression before running the finally, so
+  // spill it to a temporary rather than re-ordering the two.
+  std::string spill_name;
+  if (
+    stmt.value("_type", "") == "Return" && stmt.contains("value") &&
+    !stmt["value"].is_null())
+  {
+    spill_name = "_esbmc_finally_ret_" + std::to_string(++finally_spill_count_);
+    nlohmann::json spill;
+    spill["_type"] = "Assign";
+    spill["targets"] =
+      nlohmann::json::array({make_name_node(spill_name, stmt, "Store")});
+    spill["value"] = stmt["value"];
+    copy_location(stmt, spill);
+    out.push_back(spill);
+  }
+
+  for (const auto &f : finalbody)
+    out.push_back(f);
+
+  nlohmann::json exit_stmt = stmt;
+  if (!spill_name.empty())
+    exit_stmt["value"] = make_name_node(spill_name, stmt, "Load");
+  out.push_back(exit_stmt);
+}
+
+nlohmann::json python_exception_handler::inject_finally_before_escapes(
+  const nlohmann::json &body,
+  const nlohmann::json &finalbody,
+  bool in_loop)
+{
+  if (!body.is_array())
+    return body;
+
+  nlohmann::json out = nlohmann::json::array();
+  for (const auto &stmt : body)
+  {
+    const std::string t = stmt.is_object() ? stmt.value("_type", "") : "";
+
+    if (is_escaping_stmt(t, in_loop))
+    {
+      emit_finally_then_escape(stmt, finalbody, out);
+      continue;
+    }
+
+    // A nested function or lambda captures its own return/break/continue.
+    if (t.empty() || is_function_scope(t))
+    {
+      out.push_back(stmt);
+      continue;
+    }
+
+    const bool child_in_loop = in_loop || is_loop_scope(t);
+    nlohmann::json rewritten = stmt;
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        rewritten[key] =
+          inject_finally_before_escapes(stmt[key], finalbody, child_in_loop);
+    out.push_back(rewritten);
+  }
+  return out;
+}
+
+bool python_exception_handler::escape_in_nested_cleanup_children(
+  const nlohmann::json &node,
+  bool in_loop)
+{
+  for (const char *key : {"body", "orelse", "finalbody"})
+    if (
+      node.contains(key) && escape_in_nested_cleanup_scope(node[key], in_loop))
+      return true;
+
+  if (!node.contains("handlers") || !node["handlers"].is_array())
+    return false;
+  for (const auto &h : node["handlers"])
+    if (
+      h.is_object() && h.contains("body") &&
+      escape_in_nested_cleanup_scope(h["body"], in_loop))
+      return true;
+  return false;
+}
+
+bool python_exception_handler::escape_in_nested_cleanup_scope(
+  const nlohmann::json &node,
+  bool in_loop)
+{
+  if (node.is_array())
+  {
+    for (const auto &stmt : node)
+      if (escape_in_nested_cleanup_scope(stmt, in_loop))
+        return true;
+    return false;
+  }
+  if (!node.is_object())
+    return false;
+
+  const std::string t = node.value("_type", "");
+  if (is_function_scope(t))
+    return false;
+
+  // A nested try or with runs cleanup of its own on the same exit edge; the
+  // two would have to be ordered innermost-first, which this rewrite does not
+  // model.
+  if (is_cleanup_scope(t))
+    return body_has_escaping_control_flow(node, in_loop);
+
+  return escape_in_nested_cleanup_children(node, in_loop || is_loop_scope(t));
+}
+
 // True if `node` contains a return/break/continue that transfers control out of
 // the enclosing try. `return` always escapes (we never descend into a nested
 // function/lambda, which would capture it); `break`/`continue` escape only when
@@ -194,17 +363,14 @@ bool python_exception_handler::body_has_escaping_control_flow(
     return false;
 
   const std::string t = node.value("_type", "");
-  if (t == "Return")
+  if (is_escaping_stmt(t, in_loop))
     return true;
-  if (t == "Break" || t == "Continue")
-    return !in_loop;
   // Nested functions/lambdas capture every return/break/continue within them.
-  if (t == "FunctionDef" || t == "AsyncFunctionDef" || t == "Lambda")
+  if (is_function_scope(t) || t == "Break" || t == "Continue")
     return false;
 
   // A loop captures break/continue in its own body/orelse.
-  const bool child_in_loop =
-    in_loop || t == "For" || t == "AsyncFor" || t == "While";
+  const bool child_in_loop = in_loop || is_loop_scope(t);
 
   for (const char *key : {"body", "orelse", "finalbody"})
     if (
@@ -493,6 +659,19 @@ void python_exception_handler::emit_catch_block(
     }
     else if (ct.ellipsis())
       exc_id = "ellipsis";
+    else if (ct.id() == "struct")
+    {
+      // A resolved class type, as `except KeyboardInterrupt:` produces once
+      // the builtin exception tag is completed. Recover the class name from
+      // the tag: the `ct.id()` fallback below yields the literal "struct",
+      // which matches no throw id.
+      const std::string name = ct.get("name").as_string();
+      exc_id = !name.empty()
+                 ? (name.rfind("tag-", 0) == 0 ? name.substr(4) : name)
+                 : ct.get("tag").as_string();
+      if (exc_id.empty())
+        exc_id = ct.id().as_string();
+    }
     else
       exc_id = ct.id().as_string();
     catch_block.set("exception_id", exc_id);

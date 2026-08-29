@@ -2,7 +2,7 @@
 # C, esbmc/esbmc#4715). Pins that consuming the while loop natively neither
 # corrupts the accumulated values nor suppresses bug detection: sum_to(5) is
 # 10, so the wrong-value assertion is a reachable violation reported as
-# VERIFICATION FAILED under --irep2-native-body.
+# VERIFICATION FAILED under native conversion.
 
 
 def sum_to(n: int) -> int:

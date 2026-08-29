@@ -1,0 +1,4 @@
+CORE
+cbmc_missing_entry_point.goto
+--binary --function no_such_entry
+^ERROR: entry point `no_such_entry' not found in the goto binary$

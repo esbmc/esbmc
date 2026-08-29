@@ -36,6 +36,12 @@ void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   array_ast *destination = const_cast<array_ast *>(array_downcast(sym));
   const array_ast *source = src;
 
+  // Copying into a pre-existing destination is only safe while the destination
+  // is current-level: array_fields would otherwise outlive the ASTs it names
+  // once pop_ctx runs, and base_array_id would index the containers
+  // pop_array_ctx resizes. That invariant is the one tuple assign relies on too
+  // (smt_tuple_node_ast.cpp), and it held across 2133 CORE push/pop tests.
+
   // And copy across it's valuation
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
@@ -150,7 +156,9 @@ smt_astt array_convt::mk_select(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    /* array_fields is indexed 0..size()-1, so an index equal to size() is
+     * already out of range; `>` let it through to an out-of-bounds read. */
+    if (intval >= ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
 
@@ -195,7 +203,8 @@ smt_astt array_convt::mk_store(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    // Same off-by-one as mk_select, except the access below is a write.
+    if (intval >= ma->array_fields.size())
       return ma;
 
     // Otherwise,
@@ -256,7 +265,16 @@ smt_astt array_convt::mk_unbounded_select(
   {
     if (it->idx == real_idx)
     {
-      // Aha.
+      // Aha -- unless this is still the placeholder inserted below, meaning a
+      // re-entrant select: convert_ast() on the index has led back here before
+      // apply_new_selects() could fill the value in. That entry is what breaks
+      // the cycle, so we must not recurse to compute it. Hand out a free value
+      // and let apply_new_selects() bind it by equality, which it already does
+      // for an entry that arrives pre-filled. Returning the placeholder as-is
+      // handed NULL to callers that use the result immediately, such as
+      // finalize_pointer_chain() (esbmc/esbmc#595).
+      if (it->val == nullptr)
+        it->val = ctx->mk_fresh(ressort, "array_deferred_select::");
       return it->val;
     }
   }
@@ -438,6 +456,19 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
 {
   // Record an equality between two arrays at this point in time. To be
   // implemented at constraint time.
+
+  /* Both operands are resolved through array_valuation[id][update], so this
+   * pair is the identity of an array state, and only an unbounded array
+   * carries one -- a bounded one leaves both fields unset. */
+  assert(is_unbounded_array(a1->sort) && is_unbounded_array(a2->sort));
+
+  /* Same id and update level: the element-wise encoding would compare a
+   * valuation vector with itself, and that vector is empty when the array was
+   * never selected (#6794). */
+  if (
+    a1->base_array_id == a2->base_array_id &&
+    a1->array_update_num == a2->array_update_num)
+    return ctx->mk_smt_bool(true);
 
   struct array_equality e;
   e.arr1_id = a1->base_array_id;

@@ -5,10 +5,12 @@
 #define __ESBMC_sem_lock_field(a) ((a).__lock)
 #define __ESBMC_sem_count_field(a) ((a).__count)
 #define __ESBMC_sem_init_field(a) ((a).__init)
+#define __ESBMC_sem_waiters(a) ((a).__waiters)
 
 /* Declaration of external variables */
 extern unsigned short int __ESBMC_num_threads_running;
 extern unsigned short int __ESBMC_blocked_threads_count;
+extern void __ESBMC_release_blocked_threads(unsigned int waiters);
 
 /************************* Sem manipulation routines ************************/
 
@@ -22,6 +24,9 @@ __ESBMC_HIDE:;
   __ESBMC_sem_lock_field(*__sem) = (__value == 0);
   __ESBMC_sem_count_field(*__sem) = __value;
   __ESBMC_sem_init_field(*__sem) = 1;
+  // Re-initialising a contended semaphore frees it: release, don't drop.
+  __ESBMC_release_blocked_threads(__ESBMC_sem_waiters(*__sem));
+  __ESBMC_sem_waiters(*__sem) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -54,11 +59,12 @@ __ESBMC_HIDE:;
   else
   {
     // Deadlock foo
+    __ESBMC_sem_waiters(*__sem)++;
     __ESBMC_blocked_threads_count++;
     // No more threads to run -> croak.
     __ESBMC_assert(
       __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_mutex_lock");
+      "Deadlocked state in sem_wait");
   }
   __ESBMC_atomic_end();
 
@@ -86,7 +92,11 @@ __ESBMC_HIDE:;
   sem_init_check(__sem);
   __ESBMC_sem_count_field(*__sem) += 1;
   if (__ESBMC_sem_count_field(*__sem))
+  {
     __ESBMC_sem_lock_field(*__sem) = 0;
+    __ESBMC_release_blocked_threads(__ESBMC_sem_waiters(*__sem));
+    __ESBMC_sem_waiters(*__sem) = 0;
+  }
   __ESBMC_atomic_end();
   return 0;
 }
@@ -96,6 +106,8 @@ int sem_destroy(sem_t *__sem)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_sem_lock_field(*__sem) = -1;
+  __ESBMC_release_blocked_threads(__ESBMC_sem_waiters(*__sem));
+  __ESBMC_sem_waiters(*__sem) = 0;
   __ESBMC_atomic_end();
   return 0;
 }

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--goto-functions-only
+main\.cpp line 16 column 12 function main\n\s+IF c \? a : b THEN GOTO

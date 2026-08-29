@@ -1,0 +1,5 @@
+CORE
+main.c
+--force-malloc-success
+dereference failure: array bounds violated: heap object
+^VERIFICATION FAILED$

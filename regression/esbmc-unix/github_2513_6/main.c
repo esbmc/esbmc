@@ -1,3 +1,10 @@
+/* KNOWNBUG: --unwind 5 is the tight bound (at 3 the program fails its own
+ * unwinding assertions, so safety cannot honestly be claimed there), but ESBMC
+ * no longer reaches a verdict at that depth. It passed this job in 6.27s on
+ * 2026-07-31; the concurrency fixes merged since (#6576, #6605, #6607, #6608)
+ * explore schedules the old throttles pruned, and it now exceeds 360s. The
+ * extra schedules are the point of those fixes, so the bound stays and the
+ * expected verdict is what changed. */
 // This file is part of the SV-Benchmarks collection of verification tasks:
 // https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
 //

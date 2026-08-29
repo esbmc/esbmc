@@ -91,6 +91,16 @@ This installs `esbmc` together with its bundled SMT solvers (Z3, Bitwuzla).
 
 You can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
 
+## Editor and tool integration
+
+Three companion front-ends run ESBMC outside the terminal:
+
+- **Visual Studio Code** — the [ESBMC extension](https://github.com/esbmc/vscode-esbmc) verifies the file you are editing and reports results in the integrated terminal.
+- **Web interface** — [ESBMC-Web](https://github.com/esbmc/esbmc-web) is a self-hosted browser GUI for C, C++ and Python, with a flag picker and an interactive dashboard for violations and counterexamples.
+- **Claude Code** — the [ESBMC plugin](https://github.com/esbmc/agent-marketplace) provides `/verify` and `/audit` commands, a verification skill, reference documentation, and examples.
+
+See [Editor and tool integration](https://esbmc.github.io/docs/integrations) for details, and the [GitHub Action](https://esbmc.github.io/docs/github-action) to run ESBMC in CI.
+
 ## Building ESBMC
 
 See the [building instructions](https://esbmc.github.io/docs/development/building) document.
@@ -218,6 +228,30 @@ VERIFICATION FAILED
 ESBMC-Python will parse the Python code, generate an Abstract Syntax Tree (AST), perform type inference, and translate it into the GOTO intermediate representation for symbolic execution and verification.
 For detailed information about Python support, please take a look at the [Python Frontend Documentation](src/python-frontend/README.md).
 
+### Verification intrinsics
+
+Harnesses and stubs written by hand can include [`esbmc.h`](include/esbmc.h), installed alongside the binary, for the supported spelling of ESBMC's intrinsics — `ESBMC_assume`, `ESBMC_assert`, `ESBMC_alloca`, `ESBMC_same_object`, `ESBMC_unreachable`, `ESBMC_unroll`, `ESBMC_atomic_begin` / `ESBMC_atomic_end` and `ESBMC_yield`:
+
+```c
+#include <esbmc.h>
+
+int nondet_int(void);
+
+int main(void)
+{
+  int x = nondet_int();
+  ESBMC_assume(x > 10);
+  ESBMC_assert(x > 5, "the assumption carries");
+  return 0;
+}
+```
+
+```
+$ esbmc main.c -I /usr/local/include
+```
+
+The header requires `__ESBMC_execution`, which ESBMC defines on every run, so including it under any other compiler is a hard error rather than a pile of undefined intrinsics.
+
 ## Tutorials
 
 We provide a short video that explains ESBMC: 
@@ -292,10 +326,6 @@ ESBMC is open-source software mainly distributed under the Apache License 2.0. I
 We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
 
 Please review the [developer documentation](https://esbmc.github.io/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
-
-## Claude Code Plugin
-
-A [Claude Code](https://docs.anthropic.com/claude-code) plugin for ESBMC is available at [esbmc/agent-marketplace](https://github.com/esbmc/agent-marketplace). It provides `/verify` and `/audit` commands, a verification skill, reference documentation, and examples for using ESBMC within Claude Code.
 
 ## Differences from CBMC
 

@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract callee --unwind 6
+^VERIFICATION FAILED$
+^.*__ESBMC_is_fresh argument must not alias.*$

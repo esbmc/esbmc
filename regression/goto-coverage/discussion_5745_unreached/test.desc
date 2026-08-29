@@ -8,4 +8,4 @@ dead concrete else B.*main.c line 16.* : UNREACHED
 dead symbolic then A.*main.c line 26.* : UNREACHED
 dead symbolic then B.*main.c line 27.* : UNREACHED
 Assertion Instances Coverage: 42.8
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

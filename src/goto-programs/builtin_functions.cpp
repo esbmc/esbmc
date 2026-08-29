@@ -46,7 +46,16 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_warning("expected string constant, but got:\n{}", expr);
+    // Only the assertion's description is read from here, so a message built
+    // at runtime is not an error: the caller falls back to printing the guard.
+    // Name the location rather than dumping the expression tree — the dump was
+    // pages of irep for a benign case, and it is the source line the user needs
+    // (#1557).
+    const locationt &loc = expr.find_location();
+    log_warning(
+      "assertion description at {} is not a string literal; reporting the "
+      "guard instead",
+      loc.is_nil() ? std::string("unknown location") : loc.as_string());
     return;
   }
 
@@ -209,6 +218,38 @@ void goto_convertt::emit_assert_fail_noreturn(
   a->location.user_provided(true);
 }
 
+void goto_convertt::do_assert_fail(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest,
+  const irep_idt &base_name,
+  std::size_t arity,
+  std::size_t expr_arg)
+{
+  if (arguments.size() != arity)
+  {
+    log_error(
+      "`{}' expected to have {} arguments", id2string(base_name), arity);
+    abort();
+  }
+
+  std::string description = "assertion ";
+  get_string_constant(arguments[expr_arg], description);
+
+  if (options.get_bool_option("no-assertions"))
+  {
+    emit_assert_fail_noreturn(function.location(), dest);
+    return;
+  }
+
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  t->guard = gen_false_expr();
+  t->location = function.location();
+  t->location.user_provided(true);
+  t->location.property("assertion");
+  t->location.comment(description);
+}
+
 void goto_convertt::do_printf(
   const exprt &lhs,
   const exprt &function,
@@ -307,10 +348,20 @@ void goto_convertt::do_mem(
 {
   std::string func = is_malloc ? "malloc" : "alloca";
 
-  if (lhs.is_nil())
-    return; // does nothing
-
   locationt location = function.location();
+
+  // `malloc(n);` with the result discarded still allocates, and the storage is
+  // unreachable the moment the statement ends -- exactly what
+  // --memory-leak-check exists to report. Dropping the call made that leak
+  // invisible, so allocate into a temporary instead (#822). The result type is
+  // the allocator's own; the object's type and size ride on the side effect
+  // below, so nothing downstream depends on it.
+  exprt target = lhs;
+  if (target.is_nil())
+  {
+    const typet ptr_type = pointer_typet(empty_typet());
+    target = symbol_exprt(new_tmp_symbol(ptr_type).id, ptr_type);
+  }
 
   // get alloc type and size
   typet alloc_type;
@@ -321,7 +372,7 @@ void goto_convertt::do_mem(
 
   // produce new object
 
-  exprt new_expr("sideeffect", lhs.type());
+  exprt new_expr("sideeffect", target.type());
   new_expr.statement(func);
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(alloc_size);
@@ -330,7 +381,7 @@ void goto_convertt::do_mem(
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
-  exprt new_assign = code_assignt(lhs, new_expr);
+  exprt new_assign = code_assignt(target, new_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
@@ -413,11 +464,19 @@ void goto_convertt::do_cpp_new(
     assert(0);
   }
 
-  // grab initializer
-  goto_programt tmp_initializer;
-  cpp_new_initializer(lhs, rhs, tmp_initializer);
+  // The frontend attaches the resolved allocation function when the program
+  // replaced ::operator new, or the class supplied its own. Calling it is the
+  // whole point: a pool allocator that hands out the same storage twice makes
+  // two objects alias, which a fresh built-in allocation hides (github #6494).
+  const exprt &alloc_function =
+    static_cast<const exprt &>(rhs.find("alloc_function"));
 
+  // The element count drives both the allocation size and the construction
+  // loop, and `new T[f()]` evaluates f() exactly once, so evaluate it here --
+  // ahead of cpp_new_initializer -- and hand the resulting side-effect-free
+  // expression to both.
   exprt alloc_size;
+  exprt elem_count;
 
   if (rhs.statement() == "cpp_new[]")
   {
@@ -426,6 +485,7 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(size_type());
 
     remove_sideeffects(alloc_size, dest);
+    elem_count = alloc_size;
 
     // jmorse: multiply alloc size by size of subtype.
     type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
@@ -440,6 +500,16 @@ void goto_convertt::do_cpp_new(
   else
     alloc_size = from_integer(1, size_type());
 
+  // grab initializer
+  goto_programt tmp_initializer;
+  // With no initializer the built-in path zero-fills, which models a fresh
+  // object well enough. Storage from a replaced operator new is not fresh --
+  // the program decides its contents ([expr.new]/17 default-initialises a
+  // scalar to nothing at all) -- so zero-filling it would overwrite what the
+  // replacement just returned.
+  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+    cpp_new_initializer(lhs, rhs, elem_count, tmp_initializer);
+
   if (alloc_size.is_nil())
     alloc_size = from_integer(1, size_type());
 
@@ -449,24 +519,132 @@ void goto_convertt::do_cpp_new(
     simplify_via_irep2(alloc_size);
   }
 
-  exprt new_expr("sideeffect", rhs.type());
-  new_expr.statement(rhs.statement());
-  new_expr.cmt_size(alloc_size);
-  new_expr.location() = rhs.find_location();
+  if (alloc_function.is_not_nil())
+  {
+    // operator new takes a byte count. alloc_size is already scaled by the
+    // element size for the array form; the scalar form allocates one T.
+    exprt byte_size = alloc_size;
+    if (rhs.statement() == "cpp_new")
+      byte_size = from_integer(
+        type_byte_size(migrate_type(ns.follow(rhs.type().subtype()))),
+        size_type());
 
-  // produce new object
-  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt new_assign = code_assignt(lhs, new_expr);
-  migrate_expr(new_assign, t_n->code);
-  t_n->location = rhs.find_location();
+    const typet &raw_type = to_code_type(alloc_function.type()).return_type();
+    symbol_exprt raw(new_tmp_symbol(raw_type).id, raw_type);
+
+    code_function_callt call;
+    call.lhs() = raw;
+    call.function() = alloc_function;
+    call.arguments().push_back(byte_size);
+    call.location() = rhs.find_location();
+
+    goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_a->code);
+    t_a->location = rhs.find_location();
+
+    exprt allocated = raw;
+    allocated.make_typecast(lhs.type());
+
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    migrate_expr(code_assignt(lhs, allocated), t_n->code);
+    t_n->location = rhs.find_location();
+  }
+  else
+  {
+    exprt new_expr("sideeffect", rhs.type());
+    new_expr.statement(rhs.statement());
+    new_expr.cmt_size(alloc_size);
+    new_expr.location() = rhs.find_location();
+
+    // produce new object
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    exprt new_assign = code_assignt(lhs, new_expr);
+    migrate_expr(new_assign, t_n->code);
+    t_n->location = rhs.find_location();
+  }
 
   // run initializer
   dest.destructive_append(tmp_initializer);
 }
 
+// Locate the element constructor inside a cpp_new[] initializer, by shape.
+//
+// The decl-path helper (find_constructor_call in clang_cpp_adjust_code.cpp)
+// keys on the "constructor" flag, but nothing in the initializer the frontend
+// builds for the array form carries it. What is there is a plain function_call
+// side effect -- the element constructor, whose first argument is the `this`
+// pointer -- nested inside a temporary_object of the whole array type. Match
+// that shape instead, and note a temporary_object keeps its call under the
+// named "initializer" sub-irep rather than in an operand.
+static exprt *find_cpp_new_constructor(exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.operands().size() == 2 && !e.op1().operands().empty())
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+  {
+    if (e.find("initializer").is_not_nil())
+      if (
+        exprt *c =
+          find_cpp_new_constructor(static_cast<exprt &>(e.add("initializer"))))
+        return c;
+  }
+
+  Forall_operands (it, e)
+    if (exprt *c = find_cpp_new_constructor(*it))
+      return c;
+
+  return nullptr;
+}
+
+// Zero the elements a value-initialising `new T[n]()` just allocated:
+//
+//   for (size_type i = 0; i < n; ++i)
+//     *(lhs + i) = <zero of T>;
+//
+// An assignment loop rather than a memset call: n need not be a compile-time
+// constant, and __ESBMC_memset falls back to a library body that is only linked
+// when the program itself calls memset.
+void goto_convertt::cpp_new_zero_fill(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  const typet &subtype = ns.follow(rhs.type().subtype());
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+  // Pointer arithmetic on lhs, for the reason spelled out at the element
+  // constructor loop below: &lhs[i] does not survive symex.
+  plus_exprt element_addr(lhs, index);
+  element_addr.type() = lhs.type();
+
+  exprt element("dereference", subtype);
+  element.copy_to_operands(element_addr);
+
+  code_assignt body(element, gen_zero(subtype));
+  body.location() = rhs.find_location();
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort loop;
+  loop.init() = code_assignt(index, from_integer(0, size_type()));
+  loop.cond() = binary_relation_exprt(index, "<", elem_count);
+  loop.iter() = code_assignt(index, next);
+  loop.body() = body;
+  loop.location() = rhs.find_location();
+
+  convert(loop, dest);
+}
+
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
+  const exprt &elem_count,
   goto_programt &dest)
 {
   // grab initializer
@@ -492,7 +670,13 @@ void goto_convertt::cpp_new_initializer(
   {
     initializer = static_cast<const code_expressiont &>(rhs.initializer());
 
-    if (!initializer.op0().get_bool("constructor"))
+    // The wrap below is scalar-shaped: it assigns into a `new_object` of the
+    // element type. For the array form the frontend supplies an array-typed
+    // temporary_object, so wrapping it assigns a T* into a T. The cpp_new[]
+    // arm retargets the element constructor itself instead (github #6584).
+    if (
+      rhs.statement() != "cpp_new[]" &&
+      !initializer.op0().get_bool("constructor"))
     {
       // for auto *p = Foo(3) and int *p = 3
       // constructor case:  init is Foo(&(*new_object), 3)
@@ -517,7 +701,72 @@ void goto_convertt::cpp_new_initializer(
   {
     if (rhs.statement() == "cpp_new[]")
     {
-      // build loop
+      // The parenthesised and braced-empty forms value-initialise, which zeroes
+      // every element the constructor -- if any -- does not write itself
+      // ([expr.new]/24, github #6588). The frontend flags exactly those forms,
+      // so plain `new T[n]` keeps its indeterminate elements.
+      // An array element type (`new T[n][m]()`) is skipped: symex rejects a
+      // dereference yielding an array, and leaving those elements
+      // indeterminate stays sound.
+      if (
+        rhs.get_bool("zero_initialized") &&
+        !ns.follow(rhs.type().subtype()).is_array())
+        cpp_new_zero_fill(lhs, rhs, elem_count, dest);
+
+      // Construct every element: what the scalar arm below does once, done for
+      // each element of the allocated array. Leaving this unimplemented meant
+      // `new T[n]` ran no constructor at all, so members initialised by T's
+      // constructor read back nondeterministically (github #6584). The element
+      // count need not be a compile-time constant, so emit a loop rather than
+      // unrolling it:
+      //
+      //   for (size_type i = 0; i < n; ++i)
+      //     <element constructor, with `this` = lhs + i>
+      exprt *ctor = find_cpp_new_constructor(initializer);
+      if (ctor == nullptr)
+        return;
+
+      // do_cpp_new already evaluated the count for the allocation; reusing it
+      // is what keeps `new T[f()]` from calling f() a second time here.
+      const exprt &count = elem_count;
+
+      symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+      // The element address is plain pointer arithmetic on lhs. Building it as
+      // &lhs[i] instead would not survive symex: dereference_expr_nonscalar
+      // recurses into an index's source, and a pointer source is scalar, so it
+      // trips the "no sudden transition back to scalars" assertion. `p[i]` in
+      // user code only reaches symex as a dereference because the adjuster
+      // rewrites it, and this runs after adjust.
+      plus_exprt element_addr(lhs, index);
+      element_addr.type() = lhs.type();
+
+      // The frontend's initializer is shaped for the whole array: a
+      // temporary_object of type T[n] wrapping the element constructor, whose
+      // `this` is &new_object[0]. Lift that call out and re-point its `this`
+      // at lhs + i, so each iteration constructs its own element in place.
+      exprt call = *ctor;
+      call.op1().operands().at(0) = element_addr;
+      code_expressiont body;
+      body.expression() = call;
+      body.location() = rhs.find_location();
+
+      plus_exprt next(index, from_integer(1, size_type()));
+      next.type() = size_type();
+
+      code_fort loop;
+      loop.init() = code_assignt(index, from_integer(0, size_type()));
+      loop.cond() = binary_relation_exprt(index, "<", count);
+      loop.iter() = code_assignt(index, next);
+      loop.body() = body;
+      loop.location() = rhs.find_location();
+
+      // Same reasoning as the scalar arm: a class-typed initializer may lower
+      // to a stack temporary copied into the element, and that slot must not
+      // get its own scope-exit destructor.
+      std::size_t stack_size = targets.destructor_stack.size();
+      convert(loop, dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else if (rhs.statement() == "cpp_new")
     {
@@ -615,6 +864,23 @@ static void emit_va_marker_call(
   t->location = function.location();
 }
 
+bool goto_convertt::drop_inactive_contract_clause(bool is_clause) const
+{
+  return is_clause && !options.contracts_enabled();
+}
+
+// The assigns marker is an assignment, so symex reads its right-hand side. A
+// whole array read through a pointer is the one rvalue dereference refuses to
+// build (pointer-analysis/dereference.cpp), so carry an array target by
+// address; the contracts layer strips it back off. A frame target is a place,
+// and its address is the part that matters.
+static exprt assigns_marker_operand(const exprt &target)
+{
+  if (!target.type().is_array())
+    return target;
+  return address_of_exprt(target);
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -676,6 +942,7 @@ void goto_convertt::do_function_call_symbol(
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
   bool is_requires = (base_name == "__ESBMC_requires");
   bool is_ensures = (base_name == "__ESBMC_ensures");
+  bool is_clause = is_requires || is_ensures;
   bool is_assigns = (base_name == "__ESBMC_assigns");
 
   // Debug: log if we see assigns
@@ -687,7 +954,15 @@ void goto_convertt::do_function_call_symbol(
       arguments.size());
   }
 
-  if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
+  // A contract clause states nothing outside contract mode. goto_sideeffects
+  // already drops it, but only for clauses that arrive as a side-effect
+  // expression; the Python frontend emits a direct FUNCTION_CALL, which never
+  // reaches that strip, so a live `requires` would be assumed and mask real
+  // bugs in the function it annotates.
+  if (drop_inactive_contract_clause(is_clause))
+    return;
+
+  if (is_assume || is_assert || is_loop_invariant || is_clause)
   {
     if (arguments.size() != 1)
     {
@@ -697,7 +972,7 @@ void goto_convertt::do_function_call_symbol(
 
     if (
       options.get_bool_option("no-assertions") && !is_assume &&
-      !is_loop_invariant && !is_requires && !is_ensures)
+      !is_loop_invariant && !is_clause)
       return;
 
     // Rafael's invariant merging: combine consecutive
@@ -730,7 +1005,7 @@ void goto_convertt::do_function_call_symbol(
     else
     {
       // For contract functions, generate ASSUME instructions with special markers
-      if (is_requires || is_ensures)
+      if (is_clause)
       {
         t = dest.add_instruction(ASSUME);
         t->guard = guard;
@@ -877,6 +1152,8 @@ void goto_convertt::do_function_call_symbol(
 
       log_debug(
         "builtin_functions", "  Assigns target {}: {}", i, actual_arg.pretty());
+
+      actual_arg = assigns_marker_operand(actual_arg);
 
       // Create a sideeffect expression to mark this as an assigns target
       // Type is inherited from the actual argument (after stripping typecast)
@@ -1155,83 +1432,28 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
-    // __assert_fail is Linux
-    // These take four arguments:
-    // "expression", "file.c", line, __func__
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    // Both take four arguments, but not in the same order. glibc's
+    // __assert_fail is (#e, file, line, __func__); Darwin's __assert_rtn is
+    // (__func__, file, line, #e) -- the FreeBSD __assert order handled below.
+    // Reading argument 0 for both put the enclosing function's name in every
+    // macOS counterexample where the failing expression belongs.
+    do_assert_fail(
+      function,
+      arguments,
+      dest,
+      base_name,
+      4,
+      base_name == "__assert_rtn" ? 3 : 0);
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
   {
     /* This is FreeBSD, taking 4 arguments: __func__, __FILE__, __LINE__, #e */
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[3], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    do_assert_fail(function, arguments, dest, base_name, 4, 3);
   }
   else if (base_name == "_wassert")
   {
-    // this is Windows
-
-    if (arguments.size() != 3)
-    {
-      log_error("`{}' expected to have three arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (!options.get_bool_option("no-assertions"))
-    {
-      goto_programt::targett t = dest.add_instruction(ASSERT);
-      t->guard = gen_false_expr();
-      t->location = function.location();
-      t->location.user_provided(true);
-      t->location.property("assertion");
-      t->location.comment(description);
-    }
-    else
-      emit_assert_fail_noreturn(function.location(), dest);
-    // we ignore any LHS
+    // this is Windows: #e, __FILE__, __LINE__
+    do_assert_fail(function, arguments, dest, base_name, 3, 0);
   }
   else if (base_name == "operator new")
   {

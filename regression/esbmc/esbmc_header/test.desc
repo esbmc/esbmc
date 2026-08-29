@@ -1,0 +1,4 @@
+CORE
+main.c
+-I ../../../include
+^VERIFICATION SUCCESSFUL$

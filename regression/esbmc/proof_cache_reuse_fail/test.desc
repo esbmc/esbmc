@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property --proof-cache proof-store --claim-fingerprint-dump fp.tsv
+^Proof cache: 0 claim\(s\) reused, 2 solved$
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line 8\s+assertion x > 5$
+^VERIFICATION FAILED$
+CHECK_FILE fp.tsv contains SAT
+CHECK_FILE fp.tsv contains line\s8

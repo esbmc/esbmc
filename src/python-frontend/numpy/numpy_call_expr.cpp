@@ -19,6 +19,7 @@
 #include <util/irep/std_types.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <functional>
@@ -214,6 +215,47 @@ try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
 
   out = extract_value(node);
   return true;
+}
+
+static bool is_numpy_literal_int_node(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return true;
+
+  return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+         node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+         node["operand"].value("_type", "") == "Constant" &&
+         node["operand"].contains("value") &&
+         node["operand"]["value"].is_number_integer();
+}
+
+static bool is_concrete_transpose_axes(const nlohmann::json &node)
+{
+  if (is_numpy_literal_int_node(node))
+    return true;
+
+  if (node.value("_type", "") != "Tuple" && node.value("_type", "") != "List")
+    return false;
+
+  if (!node.contains("elts") || !node["elts"].is_array())
+    return false;
+
+  return std::all_of(
+    node["elts"].begin(), node["elts"].end(), is_numpy_literal_int_node);
+}
+
+static void reject_symbolic_transpose_axes(
+  const std::string &function,
+  const nlohmann::json &call)
+{
+  if (
+    function == "transpose" && call.contains("args") &&
+    call["args"].is_array() && call["args"].size() > 1 &&
+    !is_concrete_transpose_axes(call["args"][1]))
+    throw std::runtime_error(
+      "TypeError: numpy.transpose() axes must be concrete integers");
 }
 
 static std::optional<nlohmann::json>
@@ -971,6 +1013,51 @@ get_literal_shape(const nlohmann::json &node, std::vector<std::size_t> &shape)
   return true;
 }
 
+static std::optional<std::size_t>
+normalize_numpy_axis(long long axis, std::size_t rank, bool insertion_axis)
+{
+  const long long upper =
+    static_cast<long long>(rank) + (insertion_axis ? 1 : 0);
+  if (axis < 0)
+    axis += upper;
+  if (axis < 0 || axis >= upper)
+    return std::nullopt;
+  return static_cast<std::size_t>(axis);
+}
+
+static std::optional<std::vector<std::size_t>>
+parse_numpy_literal_shape_arg(const nlohmann::json &shape_arg)
+{
+  std::vector<nlohmann::json> dims;
+  if (
+    shape_arg.is_object() && shape_arg.contains("_type") &&
+    (shape_arg["_type"] == "Tuple" || shape_arg["_type"] == "List") &&
+    shape_arg.contains("elts"))
+  {
+    dims = shape_arg["elts"].get<std::vector<nlohmann::json>>();
+  }
+  else
+  {
+    dims.push_back(shape_arg);
+  }
+
+  std::vector<std::size_t> shape;
+  for (const auto &dim_node : dims)
+  {
+    if (!is_numpy_literal_int_node(dim_node))
+      return std::nullopt;
+
+    numeric_value dim_value;
+    if (
+      !try_extract_numeric_constant(dim_node, dim_value) || !dim_value.is_int ||
+      dim_value.int_value < 0)
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(dim_value.int_value));
+  }
+
+  return shape;
+}
+
 enum class scalar_kind
 {
   int_like,
@@ -1369,6 +1456,32 @@ static bool build_broadcast_literal_result(
   return true;
 }
 
+static bool build_broadcast_to_literal_result(
+  const nlohmann::json &source,
+  const std::vector<std::size_t> &source_shape,
+  const std::vector<std::size_t> &target_shape,
+  std::vector<std::size_t> &indices,
+  std::size_t depth,
+  nlohmann::json &out)
+{
+  if (depth == target_shape.size())
+    return fetch_broadcast_leaf(source, source_shape, indices, out);
+
+  out["_type"] = "List";
+  out["elts"] = nlohmann::json::array();
+  for (std::size_t i = 0; i < target_shape[depth]; ++i)
+  {
+    indices.push_back(i);
+    nlohmann::json child;
+    if (!build_broadcast_to_literal_result(
+          source, source_shape, target_shape, indices, depth + 1, child))
+      return false;
+    out["elts"].push_back(child);
+    indices.pop_back();
+  }
+  return true;
+}
+
 static bool try_extract_numeric_1d_list(
   const nlohmann::json &list_node,
   std::vector<numeric_value> &values)
@@ -1579,6 +1692,71 @@ get_literal_numpy_array_arg(const nlohmann::json &node)
   return std::nullopt;
 }
 
+static std::optional<nlohmann::json>
+resolve_literal_numpy_row_view(nlohmann::json arg, python_converter &converter)
+{
+  if (arg.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+
+  if (
+    !arg.is_object() || arg.value("_type", std::string()) != "Subscript" ||
+    !arg.contains("value") || !arg.contains("slice"))
+    return std::nullopt;
+
+  auto parse_index = [](const nlohmann::json &node) -> std::optional<int64_t> {
+    if (
+      node.is_object() && node.value("_type", std::string()) == "Constant" &&
+      node.contains("value") && node["value"].is_number_integer())
+      return node["value"].get<int64_t>();
+
+    if (
+      node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
+      node.contains("op") &&
+      node["op"].value("_type", std::string()) == "USub" &&
+      node.contains("operand") &&
+      node["operand"].value("_type", std::string()) == "Constant" &&
+      node["operand"].contains("value") &&
+      node["operand"]["value"].is_number_integer())
+      return -node["operand"]["value"].get<int64_t>();
+
+    return std::nullopt;
+  };
+
+  std::optional<int64_t> index = parse_index(arg["slice"]);
+  if (!index)
+    return std::nullopt;
+
+  nlohmann::json base = arg["value"];
+  if (base.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      base["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      base = decl["value"];
+  }
+
+  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
+  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+    return std::nullopt;
+
+  const auto &rows = (*literal)["elts"];
+  int64_t resolved_index = *index;
+  if (resolved_index < 0)
+    resolved_index += static_cast<int64_t>(rows.size());
+  if (resolved_index < 0 || resolved_index >= static_cast<int64_t>(rows.size()))
+    return std::nullopt;
+
+  const nlohmann::json &row = rows[static_cast<std::size_t>(resolved_index)];
+  if (row.is_object() && row.value("_type", std::string()) == "List")
+    return row;
+  return std::nullopt;
+}
+
 static bool is_sorted_numeric_list(
   const nlohmann::json &list,
   const std::string &diagnostic)
@@ -1780,6 +1958,871 @@ static exprt fold_numpy_unary_constant_list(
   throw std::runtime_error("Unsupported Numpy call: " + function);
 }
 
+static nlohmann::json build_constant_node(const numeric_value &value)
+{
+  nlohmann::json node;
+  node["_type"] = "Constant";
+  if (value.is_int)
+    node["value"] = value.int_value;
+  else
+    node["value"] = value.double_value;
+  return node;
+}
+
+static nlohmann::json build_filled_array_literal(
+  const std::vector<std::size_t> &dims,
+  std::size_t dim_index,
+  const numeric_value &fill)
+{
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  const bool innermost = dim_index + 1 == dims.size();
+  for (std::size_t i = 0; i < dims[dim_index]; ++i)
+    node["elts"].push_back(
+      innermost ? build_constant_node(fill)
+                : build_filled_array_literal(dims, dim_index + 1, fill));
+  return node;
+}
+
+static std::vector<std::size_t>
+extract_constructor_shape_dims(const nlohmann::json &shape_node)
+{
+  std::vector<std::size_t> dims;
+
+  numeric_value scalar;
+  if (
+    try_extract_numeric_constant(shape_node, scalar) && scalar.is_int &&
+    scalar.int_value >= 0)
+  {
+    dims.push_back(static_cast<std::size_t>(scalar.int_value));
+    return dims;
+  }
+
+  if (
+    shape_node.is_object() &&
+    (shape_node.value("_type", std::string()) == "Tuple" ||
+     shape_node.value("_type", std::string()) == "List") &&
+    shape_node.contains("elts") && shape_node["elts"].is_array())
+  {
+    for (const auto &elem : shape_node["elts"])
+    {
+      numeric_value dim_value;
+      if (
+        !try_extract_numeric_constant(elem, dim_value) || !dim_value.is_int ||
+        dim_value.int_value < 0)
+      {
+        dims.clear();
+        return dims;
+      }
+      dims.push_back(static_cast<std::size_t>(dim_value.int_value));
+    }
+  }
+
+  return dims;
+}
+
+// Reconstructs the equivalent literal List (or nested List-of-List) AST that
+// a shape-based numpy constructor call (zeros/ones/full/eye/identity) would
+// need to produce the same concrete array np.array(<literal>) would build.
+// Several numpy helpers (transpose's Name-branch, the sum/mean/reducer
+// dispatch) resolve a variable's declaration only as far as a literal
+// np.array(<literal>) call and reuse that literal for everything downstream;
+// blindly reusing the first call argument for ANY constructor call
+// misreads a shape/size argument as array data for constructors whose first
+// argument is not the array data itself (e.g. np.zeros((2, 3))'s args[0] is
+// the shape tuple, not two rows of data). Declines (returns nullopt) rather
+// than guessing for anything not explicitly modelled here, including a call
+// carrying keyword arguments such as dtype= (ADR-NP principle 3: reject
+// explicitly instead of applying a silently different semantics).
+static std::optional<nlohmann::json>
+materialize_zeros_ones(const std::string &ctor, const nlohmann::json &args)
+{
+  if (args.empty())
+    return std::nullopt;
+  std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
+  // Rank capped at 8 as a sanity bound (real numpy arrays are rarely, if
+  // ever, higher-rank than this); callers needing a tighter, shape-specific
+  // limit (e.g. transpose's 2D-only support) apply their own on top.
+  if (dims.empty() || dims.size() > 8)
+    return std::nullopt;
+  // Matches the real zeros()/ones() creation path: no dtype= means a
+  // floating-point fill (make_numpy_typed_constant with an empty dtype
+  // always returns a floating-point JSON value).
+  const numeric_value fill = make_float_value(ctor == "zeros" ? 0.0 : 1.0);
+  return build_filled_array_literal(dims, 0, fill);
+}
+
+static std::optional<nlohmann::json>
+materialize_full(const nlohmann::json &args)
+{
+  if (args.size() < 2)
+    return std::nullopt;
+  std::vector<std::size_t> dims = extract_constructor_shape_dims(args[0]);
+  numeric_value fill;
+  if (
+    dims.empty() || dims.size() > 8 ||
+    !try_extract_numeric_constant(args[1], fill))
+    return std::nullopt;
+  return build_filled_array_literal(dims, 0, fill);
+}
+
+static std::optional<nlohmann::json>
+materialize_eye_identity(const std::string &ctor, const nlohmann::json &args)
+{
+  if (args.empty() || (ctor == "eye" && args.size() > 1))
+    return std::nullopt;
+  numeric_value n_value;
+  if (
+    !try_extract_numeric_constant(args[0], n_value) || !n_value.is_int ||
+    n_value.int_value < 0)
+    return std::nullopt;
+  const std::size_t n = static_cast<std::size_t>(n_value.int_value);
+  // Matches the real eye()/identity() creation path: 1/0 built from a
+  // plain C++ int literal, i.e. an integer dtype (not float64, unlike
+  // real NumPy's default -- see make_constant() in the creation path).
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    nlohmann::json row;
+    row["_type"] = "List";
+    row["elts"] = nlohmann::json::array();
+    for (std::size_t j = 0; j < n; ++j)
+      row["elts"].push_back(
+        build_constant_node(make_int_value(i == j ? 1 : 0)));
+    node["elts"].push_back(row);
+  }
+  return node;
+}
+
+static std::optional<nlohmann::json>
+materialize_linspace(const nlohmann::json &args)
+{
+  if (args.size() < 2 || args.size() > 3)
+    return std::nullopt;
+  numeric_value start_v;
+  numeric_value stop_v;
+  if (
+    !try_extract_numeric_constant(args[0], start_v) ||
+    !try_extract_numeric_constant(args[1], stop_v))
+    return std::nullopt;
+  std::size_t num = 50;
+  if (args.size() == 3)
+  {
+    numeric_value num_v;
+    if (
+      !try_extract_numeric_constant(args[2], num_v) || !num_v.is_int ||
+      num_v.int_value < 0)
+      return std::nullopt;
+    num = static_cast<std::size_t>(num_v.int_value);
+  }
+  // Matches the real linspace() creation path: every element is a float,
+  // computed with the same start + step * i formula.
+  const double start = to_double(start_v);
+  const double stop = to_double(stop_v);
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  if (num == 0)
+    return node;
+  if (num == 1)
+  {
+    node["elts"].push_back(build_constant_node(make_float_value(start)));
+    return node;
+  }
+  const double step = (stop - start) / static_cast<double>(num - 1);
+  for (std::size_t i = 0; i < num; ++i)
+    node["elts"].push_back(build_constant_node(
+      make_float_value(start + step * static_cast<double>(i))));
+  return node;
+}
+
+// Exact int64 arithmetic: routing an all-integer arange() call through
+// double (as materialize_arange_float() does) silently loses precision and
+// can drift the termination point past 2^53.
+static nlohmann::json
+materialize_arange_int(int64_t start, int64_t stop, int64_t step)
+{
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+  if (step > 0)
+    for (int64_t current = start; current < stop; current += step)
+      node["elts"].push_back(build_constant_node(make_int_value(current)));
+  else
+    for (int64_t current = start; current > stop; current += step)
+      node["elts"].push_back(build_constant_node(make_int_value(current)));
+  return node;
+}
+
+// NumPy computes an arange() with float arguments as length =
+// ceil((stop - start) / step) and element i = start + i * step, rather than
+// repeatedly accumulating current += step. Accumulation drifts under
+// floating-point rounding and can add a spurious trailing element (e.g.
+// arange(0.0, 1.0, 0.1) accumulated to 11 elements here vs NumPy's 10).
+static nlohmann::json
+materialize_arange_float(double start, double stop, double step)
+{
+  nlohmann::json node;
+  node["_type"] = "List";
+  node["elts"] = nlohmann::json::array();
+
+  const double count_d = std::ceil((stop - start) / step);
+  if (count_d <= 0.0)
+    return node;
+
+  const auto count = static_cast<std::size_t>(count_d);
+  for (std::size_t i = 0; i < count; ++i)
+    node["elts"].push_back(build_constant_node(
+      make_float_value(start + static_cast<double>(i) * step)));
+  return node;
+}
+
+// Keeps the fast literal-materialization path itself cheap and any
+// downstream verification within the regression suite's timeout: a range
+// with more elements than this still hits the pre-existing ADR-NP-004
+// scalability wall documented in the numpy roadmap (arrays are fully
+// unrolled) whether materialized here or via the operational model, so
+// declining early avoids building an oversized literal list up front (e.g.
+// np.arange(1000000) would otherwise allocate a million-element JSON list
+// unconditionally, before any downstream cost is even considered).
+static constexpr std::size_t max_materialized_arange_elements = 10000;
+
+enum class arange_decline_reason
+{
+  none,
+  bad_arity,
+  non_constant,
+  zero_step,
+  too_many_elements,
+};
+
+struct arange_materialize_result
+{
+  std::optional<nlohmann::json> list;
+  arange_decline_reason reason = arange_decline_reason::none;
+};
+
+static arange_materialize_result
+materialize_arange_ex(const nlohmann::json &args)
+{
+  arange_materialize_result result;
+  if (!args.is_array() || args.empty() || args.size() > 3)
+  {
+    result.reason = arange_decline_reason::bad_arity;
+    return result;
+  }
+
+  std::vector<numeric_value> values;
+  values.reserve(args.size());
+  for (const auto &a : args)
+  {
+    numeric_value v;
+    if (!try_extract_numeric_constant(a, v))
+    {
+      result.reason = arange_decline_reason::non_constant;
+      return result;
+    }
+    values.push_back(v);
+  }
+
+  numeric_value start_v = make_int_value(0);
+  numeric_value stop_v = values[0];
+  numeric_value step_v = make_int_value(1);
+  if (values.size() >= 2)
+  {
+    start_v = values[0];
+    stop_v = values[1];
+  }
+  if (values.size() == 3)
+    step_v = values[2];
+
+  if (to_double(step_v) == 0.0)
+  {
+    result.reason = arange_decline_reason::zero_step;
+    return result;
+  }
+
+  const double count =
+    std::ceil((to_double(stop_v) - to_double(start_v)) / to_double(step_v));
+  if (count > static_cast<double>(max_materialized_arange_elements))
+  {
+    result.reason = arange_decline_reason::too_many_elements;
+    return result;
+  }
+
+  // Matches the real arange() creation path: an int dtype unless any
+  // argument is float.
+  const bool any_float =
+    std::any_of(values.begin(), values.end(), [](const numeric_value &v) {
+      return !v.is_int;
+    });
+  result.list = any_float
+                  ? materialize_arange_float(
+                      to_double(start_v), to_double(stop_v), to_double(step_v))
+                  : materialize_arange_int(
+                      start_v.int_value, stop_v.int_value, step_v.int_value);
+  return result;
+}
+
+static std::optional<nlohmann::json>
+materialize_arange(const nlohmann::json &args)
+{
+  return materialize_arange_ex(args).list;
+}
+
+// The structural/receiver checks materialize_numpy_constructor_array() needs
+// before it can even ask which constructor it's looking at, split out so
+// that function's own decision count stays small.
+static bool is_recognized_numpy_constructor_call_shape(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_json)
+{
+  if (
+    !call_node.is_object() ||
+    call_node.value("_type", std::string()) != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", std::string()) != "Attribute" ||
+    !call_node["func"].contains("attr") ||
+    !call_node["func"].contains("value") ||
+    !call_node["func"]["value"].is_object() ||
+    call_node["func"]["value"].value("_type", std::string()) != "Name" ||
+    !is_imported_numpy_module_alias(
+      ast_json, call_node["func"]["value"].value("id", std::string())))
+    return false;
+
+  if (call_node.contains("keywords") && !call_node["keywords"].empty())
+    return false;
+
+  return call_node.contains("args") && call_node["args"].is_array();
+}
+
+static std::optional<nlohmann::json> materialize_numpy_constructor_array(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_json)
+{
+  if (!is_recognized_numpy_constructor_call_shape(call_node, ast_json))
+    return std::nullopt;
+
+  const std::string ctor = call_node["func"]["attr"].get<std::string>();
+  const auto &args = call_node["args"];
+
+  if (ctor == "zeros" || ctor == "ones")
+    return materialize_zeros_ones(ctor, args);
+  if (ctor == "full")
+    return materialize_full(args);
+  if (ctor == "eye" || ctor == "identity")
+    return materialize_eye_identity(ctor, args);
+  if (ctor == "linspace")
+    return materialize_linspace(args);
+  if (ctor == "arange")
+    return materialize_arange(args);
+
+  return std::nullopt;
+}
+
+// True when call_node's attribute name is one materialize_numpy_constructor_
+// array() knows about, regardless of whether materialization actually
+// succeeded. Callers use this to tell "not a constructor call at all" (safe
+// to fall back to args[0] for the pre-existing np.array(<literal>) shape)
+// apart from "a recognized constructor call materialization declined on"
+// (e.g. a dtype= keyword, a non-constant fill) -- the latter must not fall
+// back to args[0] either, since that is exactly the shape/size argument
+// this whole helper exists to stop misreading as array data.
+static bool is_numpy_constructor_call_by_name(const nlohmann::json &call_node)
+{
+  if (
+    !call_node.is_object() ||
+    call_node.value("_type", std::string()) != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", std::string()) != "Attribute" ||
+    !call_node["func"].contains("attr"))
+    return false;
+
+  static const std::set<std::string> constructors = {
+    "zeros", "ones", "full", "eye", "identity", "linspace", "arange"};
+  return constructors.count(call_node["func"]["attr"].get<std::string>()) != 0;
+}
+
+// resolve_var()/resolve_numpy_var() copies only resolve a Name argument to
+// its declaration; a constructor call passed inline as the argument itself
+// (e.g. the arange(4) in np.sum(np.arange(4))) is left untouched and fails
+// downstream extraction. Materializes it in place when possible, after the
+// Name-resolution attempt above has already run (a no-op for an already
+// materialized/non-Call node).
+static void materialize_inline_numpy_constructor_call(
+  nlohmann::json &node,
+  const nlohmann::json &ast_json)
+{
+  if (!node.is_object() || node.value("_type", std::string()) != "Call")
+    return;
+  if (
+    std::optional<nlohmann::json> materialized =
+      materialize_numpy_constructor_array(node, ast_json))
+    node = std::move(*materialized);
+}
+
+// True when call_node is a call to one of the comparison/logical functions
+// the block below evaluates. Shared by the top-level dispatch and by
+// resolve_numpy_logical_arg() below, so a call chained as another numpy
+// call's argument is recognized the same way as a top-level call.
+static bool is_numpy_logical_comparison_call(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast_json)
+{
+  if (
+    !call_node.is_object() ||
+    call_node.value("_type", std::string()) != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", std::string()) != "Attribute" ||
+    !call_node["func"].contains("attr") ||
+    !call_node["func"].contains("value") ||
+    !call_node["func"]["value"].is_object() ||
+    call_node["func"]["value"].value("_type", std::string()) != "Name" ||
+    !is_imported_numpy_module_alias(
+      ast_json, call_node["func"]["value"].value("id", std::string())))
+    return false;
+
+  static const std::set<std::string> functions = {
+    "greater",
+    "less",
+    "greater_equal",
+    "less_equal",
+    "equal",
+    "not_equal",
+    "logical_and",
+    "logical_or",
+    "logical_not",
+    "where"};
+  return functions.count(call_node["func"]["attr"].get<std::string>()) != 0;
+}
+
+static nlohmann::json make_bool_constant_node(bool value)
+{
+  nlohmann::json out;
+  out["_type"] = "Constant";
+  out["value"] = value;
+  return out;
+}
+
+static nlohmann::json make_list_node(const std::vector<nlohmann::json> &elts)
+{
+  nlohmann::json out;
+  out["_type"] = "List";
+  out["elts"] = elts;
+  return out;
+}
+
+// A node that reaches here unresolved (e.g. resolve_numpy_logical_arg left a
+// recognized-but-not-evaluable chained call untouched) must raise, not
+// silently stand in as false/0.0 -- the latter is exactly the class of
+// silent-wrong-verdict bug this whole chaining fix exists to close.
+static bool numpy_logical_as_bool(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (try_extract_numeric_constant(node, value))
+    return to_double(value) != 0.0;
+  if (node.is_object() && node.contains("value") && node["value"].is_boolean())
+    return node["value"].get<bool>();
+  throw std::runtime_error(
+    "TypeError: numpy call composition could not resolve an operand to a "
+    "constant value");
+}
+
+static double numpy_logical_as_double(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (try_extract_numeric_constant(node, value))
+    return to_double(value);
+  throw std::runtime_error(
+    "TypeError: numpy call composition could not resolve an operand to a "
+    "constant value");
+}
+
+static nlohmann::json numpy_compare_scalar(
+  const std::string &op,
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs)
+{
+  const double left = numpy_logical_as_double(lhs);
+  const double right = numpy_logical_as_double(rhs);
+  bool result = false;
+  if (op == "greater")
+    result = left > right;
+  else if (op == "less")
+    result = left < right;
+  else if (op == "greater_equal")
+    result = left >= right;
+  else if (op == "less_equal")
+    result = left <= right;
+  else if (op == "equal")
+    result = left == right;
+  else
+    result = left != right;
+  return make_bool_constant_node(result);
+}
+
+// Applies element_fn pairwise across lhs/rhs, broadcasting a scalar against a
+// list on either side. Shared by comparisons and logical_and/or, both at the
+// top-level dispatch and when evaluating a chained call. When both operands
+// are lists, their lengths must agree -- indexing the shorter one past its
+// end is an out-of-bounds JSON access, not a controlled diagnostic.
+template <typename ElementFn>
+static nlohmann::json numpy_broadcast_binary(
+  const nlohmann::json &lhs,
+  const nlohmann::json &rhs,
+  ElementFn element_fn)
+{
+  const bool lhs_is_list = lhs.contains("elts") && lhs["elts"].is_array();
+  const bool rhs_is_list = rhs.contains("elts") && rhs["elts"].is_array();
+
+  if (lhs_is_list && rhs_is_list && lhs["elts"].size() != rhs["elts"].size())
+    throw std::runtime_error(
+      "TypeError: numpy comparison/logical operands have mismatched "
+      "lengths");
+
+  if (lhs_is_list)
+  {
+    std::vector<nlohmann::json> out_elts;
+    for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
+    {
+      const nlohmann::json &rhs_item = rhs_is_list ? rhs["elts"][i] : rhs;
+      out_elts.push_back(element_fn(lhs["elts"][i], rhs_item));
+    }
+    return make_list_node(out_elts);
+  }
+  if (rhs_is_list)
+  {
+    std::vector<nlohmann::json> out_elts;
+    for (const auto &rhs_item : rhs["elts"])
+      out_elts.push_back(element_fn(lhs, rhs_item));
+    return make_list_node(out_elts);
+  }
+  return element_fn(lhs, rhs);
+}
+
+// Bounds recursion for evaluate_numpy_logical_call() below. A handful of
+// levels comfortably covers realistic chaining; beyond that, resolve_
+// numpy_logical_arg() raises an explicit diagnostic instead of leaving an
+// unresolved Call node for the caller's numeric/list extraction to silently
+// misread (the exact failure mode this fix closes).
+static constexpr int max_numpy_logical_chain_depth = 4;
+
+// Single owner of the chaining-depth diagnostic (regex-pinned by
+// regression/numpy/chaining_depth_exceeded_fail) so recursing one level
+// deeper than the supported bound always reports the same, correct reason --
+// resolve_numpy_logical_arg() is the only place that actually recurses, so
+// it is the only call site that can legitimately hit this.
+static void check_numpy_logical_chain_depth(int next_depth)
+{
+  if (next_depth > max_numpy_logical_chain_depth)
+    throw std::runtime_error(
+      "TypeError: numpy call composition exceeds the supported chaining "
+      "depth");
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_logical_call(
+  const nlohmann::json &call_node,
+  python_converter &converter,
+  int depth);
+
+// Resolves one argument of a numpy comparison/logical call: a Name is
+// followed to its declaration; a Call to a recognized constructor is
+// materialized; a Call to another comparison/logical function is evaluated
+// recursively via evaluate_numpy_logical_call(), or left unresolved if that
+// recognized call shape still isn't evaluable (e.g. a wrong argument count)
+// rather than being misreported as a chaining-depth failure. Anything else
+// (a function parameter, a call to an unrelated numpy function) is also left
+// unchanged, so the caller's own numeric/list extraction raises an explicit
+// TypeError on it exactly as it already does for any other unresolvable
+// operand (see numpy_logical_as_bool/_double).
+static nlohmann::json resolve_numpy_logical_arg(
+  nlohmann::json arg,
+  python_converter &converter,
+  int depth)
+{
+  if (arg.is_object() && arg.value("_type", std::string()) == "Name")
+  {
+    // find_var_decl() below returns the first textual assignment to this
+    // name, not the one that actually reaches this use site. A reassigned
+    // name is left unresolved rather than risk reading a stale value.
+    const std::string &name = arg["id"].get<std::string>();
+    if (!json_utils::has_multiple_assignments_in_scope(
+          name, converter.current_function_name(), converter.ast()))
+    {
+      const nlohmann::json decl = json_utils::find_var_decl(
+        name, converter.current_function_name(), converter.ast());
+      if (decl.contains("value") && decl["value"].is_object())
+        arg = decl["value"];
+    }
+  }
+  if (arg.is_object() && arg.value("_type", std::string()) == "Call")
+  {
+    if (
+      std::optional<nlohmann::json> materialized =
+        materialize_numpy_constructor_array(arg, converter.ast()))
+      return *materialized;
+    if (is_numpy_logical_comparison_call(arg, converter.ast()))
+    {
+      check_numpy_logical_chain_depth(depth + 1);
+      if (
+        std::optional<nlohmann::json> evaluated =
+          evaluate_numpy_logical_call(arg, converter, depth + 1))
+        return *evaluated;
+    }
+  }
+  return arg;
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_compare_call(
+  const std::string &function,
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 2)
+    return std::nullopt;
+  const nlohmann::json lhs =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  const nlohmann::json rhs =
+    resolve_numpy_logical_arg(args[1], converter, depth);
+  return numpy_broadcast_binary(
+    lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+      return numpy_compare_scalar(function, a, b);
+    });
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_logical_and_or_call(
+  const std::string &function,
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 2)
+    return std::nullopt;
+  const nlohmann::json lhs =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  const nlohmann::json rhs =
+    resolve_numpy_logical_arg(args[1], converter, depth);
+  return numpy_broadcast_binary(
+    lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+      const bool l = numpy_logical_as_bool(a);
+      const bool r = numpy_logical_as_bool(b);
+      return make_bool_constant_node(
+        function == "logical_and" ? (l && r) : (l || r));
+    });
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_logical_not_call(
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 1)
+    return std::nullopt;
+  const nlohmann::json arg =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  if (arg.contains("elts") && arg["elts"].is_array())
+  {
+    std::vector<nlohmann::json> out_elts;
+    for (const auto &item : arg["elts"])
+      out_elts.push_back(make_bool_constant_node(!numpy_logical_as_bool(item)));
+    return make_list_node(out_elts);
+  }
+  return make_bool_constant_node(!numpy_logical_as_bool(arg));
+}
+
+// Shared by evaluate_numpy_where_call() below and the top-level "where"
+// dispatch, so the length validation lives in exactly one place. When x or y
+// is a list, it must have the same length as cond -- indexing a shorter one
+// past its end is an out-of-bounds JSON access, not a controlled diagnostic.
+static nlohmann::json numpy_where_select(
+  const nlohmann::json &cond,
+  const nlohmann::json &x,
+  const nlohmann::json &y)
+{
+  if (!cond.contains("elts") || !cond["elts"].is_array())
+    return numpy_logical_as_bool(cond) ? x : y;
+
+  const bool x_is_list = x.contains("elts") && x["elts"].is_array();
+  const bool y_is_list = y.contains("elts") && y["elts"].is_array();
+  const std::size_t n = cond["elts"].size();
+  if (
+    (x_is_list && x["elts"].size() != n) ||
+    (y_is_list && y["elts"].size() != n))
+    throw std::runtime_error(
+      "TypeError: numpy.where() operands have mismatched lengths");
+
+  std::vector<nlohmann::json> out_elts;
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    const bool choose_x = numpy_logical_as_bool(cond["elts"][i]);
+    out_elts.push_back(
+      choose_x ? (x_is_list ? x["elts"][i] : x)
+               : (y_is_list ? y["elts"][i] : y));
+  }
+  return make_list_node(out_elts);
+}
+
+static std::optional<nlohmann::json> evaluate_numpy_where_call(
+  const nlohmann::json &args,
+  python_converter &converter,
+  int depth)
+{
+  if (args.size() != 3)
+    return std::nullopt;
+  const nlohmann::json cond =
+    resolve_numpy_logical_arg(args[0], converter, depth);
+  const nlohmann::json x = resolve_numpy_logical_arg(args[1], converter, depth);
+  const nlohmann::json y = resolve_numpy_logical_arg(args[2], converter, depth);
+  return numpy_where_select(cond, x, y);
+}
+
+// Evaluates a numpy comparison/logical Call node to its literal JSON result
+// (a "List" of booleans/values, or a scalar "Constant"), so it can resolve a
+// call chained as another numpy call's argument -- either nested directly
+// (np.logical_not(np.equal(a, b))) or via an intermediate variable
+// (x = np.equal(a, b); np.logical_not(x)). Mirrors the top-level dispatch in
+// numpy_call_expr::get() for these same functions; both share the helpers
+// above instead of each reimplementing broadcasting/comparison logic. Every
+// caller already checks the chaining depth before reaching here (see
+// check_numpy_logical_chain_depth()), so this only re-validates the call
+// shape itself.
+static std::optional<nlohmann::json> evaluate_numpy_logical_call(
+  const nlohmann::json &call_node,
+  python_converter &converter,
+  int depth)
+{
+  if (!is_numpy_logical_comparison_call(call_node, converter.ast()))
+    return std::nullopt;
+
+  const std::string function = call_node["func"]["attr"].get<std::string>();
+  const auto &args = call_node["args"];
+
+  if (
+    function == "greater" || function == "less" ||
+    function == "greater_equal" || function == "less_equal" ||
+    function == "equal" || function == "not_equal")
+    return evaluate_numpy_compare_call(function, args, converter, depth);
+
+  if (function == "logical_and" || function == "logical_or")
+    return evaluate_numpy_logical_and_or_call(function, args, converter, depth);
+
+  if (function == "logical_not")
+    return evaluate_numpy_logical_not_call(args, converter, depth);
+
+  if (function == "where")
+    return evaluate_numpy_where_call(args, converter, depth);
+
+  return std::nullopt;
+}
+
+// full()/eye()/identity()/linspace() are declared through to_list_expr in
+// the real creation path (see array_creation_funcs and its neighbours),
+// which forces a dynamic PyListObj representation instead of a plain
+// array. zeros()/ones()/np.array(<literal>) use a plain array. A runtime
+// backend call that takes the address of the argument (e.g. transpose's
+// array path) assumes a flat array's memory layout, which does not match
+// a PyListObj's layout and reads out of bounds. Callers must route the
+// former group through a compile-time literal fold instead (see
+// try_fold_transpose_literal_2d).
+static bool
+is_dynamic_list_backed_numpy_constructor(const nlohmann::json &call_node)
+{
+  if (
+    !call_node.is_object() ||
+    call_node.value("_type", std::string()) != "Call" ||
+    !call_node.contains("func") || !call_node["func"].is_object() ||
+    call_node["func"].value("_type", std::string()) != "Attribute" ||
+    !call_node["func"].contains("attr"))
+    return false;
+
+  static const std::set<std::string> dynamic_list_ctors = {
+    "full", "eye", "identity", "linspace"};
+  return dynamic_list_ctors.count(
+           call_node["func"]["attr"].get<std::string>()) != 0;
+}
+
+static bool numeric_2d_list_is_rectangular(
+  const nlohmann::json &elts,
+  std::size_t col_count)
+{
+  for (const auto &row : elts)
+  {
+    if (
+      !row.is_object() || row.value("_type", std::string()) != "List" ||
+      !row.contains("elts") || row["elts"].size() != col_count)
+      return false;
+  }
+  return true;
+}
+
+static std::optional<nlohmann::json> build_transposed_literal(
+  const nlohmann::json &elts,
+  std::size_t row_count,
+  std::size_t col_count)
+{
+  nlohmann::json transposed;
+  transposed["_type"] = "List";
+  transposed["elts"] = nlohmann::json::array();
+  for (std::size_t c = 0; c < col_count; ++c)
+  {
+    nlohmann::json out_row;
+    out_row["_type"] = "List";
+    out_row["elts"] = nlohmann::json::array();
+    for (std::size_t r = 0; r < row_count; ++r)
+    {
+      numeric_value value;
+      if (!try_extract_numeric_constant(elts[r]["elts"][c], value))
+        return std::nullopt;
+      out_row["elts"].push_back(build_constant_node(value));
+    }
+    transposed["elts"].push_back(out_row);
+  }
+  return transposed;
+}
+
+// Computes np.transpose() directly over a fully-materialized numeric
+// literal (all Constant leaves), returning nullopt for anything this
+// conservative fold does not model (non-rectangular, 3D+, non-numeric
+// elements). A 1D literal is returned unchanged (transpose of a 1D array
+// is itself).
+static std::optional<exprt> try_fold_transpose_literal_2d(
+  const nlohmann::json &list_arg,
+  python_converter &converter)
+{
+  if (
+    !list_arg.is_object() || list_arg.value("_type", std::string()) != "List" ||
+    !list_arg.contains("elts") || !list_arg["elts"].is_array())
+    return std::nullopt;
+
+  const auto &elts = list_arg["elts"];
+  const bool is_1d =
+    elts.empty() ||
+    !(elts[0].is_object() && elts[0].value("_type", std::string()) == "List");
+
+  // current_lhs is private to python_converter; the caller (a friend of
+  // python_converter, unlike this free function) is responsible for
+  // updating it with the returned expression's type.
+  if (is_1d)
+    return converter.get_expr(list_arg);
+
+  const std::size_t row_count = elts.size();
+  const std::size_t col_count =
+    elts[0].contains("elts") ? elts[0]["elts"].size() : 0;
+  if (col_count == 0 || !numeric_2d_list_is_rectangular(elts, col_count))
+    return std::nullopt;
+
+  std::optional<nlohmann::json> transposed =
+    build_transposed_literal(elts, row_count, col_count);
+  if (!transposed)
+    return std::nullopt;
+
+  return converter.get_expr(*transposed);
+}
+
 static nlohmann::json unwrap_list_like_node(const nlohmann::json &node)
 {
   if (!node.is_object() || !node.contains("_type"))
@@ -1851,6 +2894,483 @@ numpy_call_expr::numpy_call_expr(
 numpy_call_expr::~numpy_call_expr()
 {
   converter_.build_static_lists = false;
+}
+
+const nlohmann::json *
+numpy_call_expr::find_keyword_arg(const std::string &name) const
+{
+  if (!call_.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call_["keywords"])
+    if (kw["_type"] == "keyword" && !kw["arg"].is_null() && kw["arg"] == name)
+      return &kw["value"];
+  return nullptr;
+}
+
+long long
+numpy_call_expr::extract_literal_diagonal_offset(const char *error_context)
+{
+  long long offset = 0;
+  const nlohmann::json *offset_node =
+    call_["args"].size() > 1 ? &call_["args"][1] : find_keyword_arg("offset");
+  if (!offset_node)
+    return offset;
+
+  numeric_value offset_value;
+  if (
+    !try_extract_numeric_constant(*offset_node, offset_value) ||
+    !offset_value.is_int)
+    throw std::runtime_error(
+      std::string("TypeError: numpy ") + error_context +
+      " requires a literal offset");
+  return offset_value.int_value;
+}
+
+exprt numpy_call_expr::handle_diagonal_call()
+{
+  if (call_["args"].empty())
+    throw std::runtime_error(
+      "TypeError: numpy.diagonal() requires an array argument");
+
+  // NumPy's diagonal(a, offset=0, axis1=0, axis2=1) supports arbitrary
+  // axis1/axis2 for arrays with more than 2 dimensions; this ADR is
+  // 2-D-only, so anything other than the default pair is out of scope.
+  // axis1/axis2 are the 3rd/4th positional parameters, so a caller can
+  // pass them positionally instead of by keyword.
+  if (
+    call_["args"].size() > 2 || find_keyword_arg("axis1") ||
+    find_keyword_arg("axis2"))
+    throw std::runtime_error(
+      "TypeError: numpy diagonal only supports the default axis1/axis2");
+
+  long long offset = extract_literal_diagonal_offset("diagonal");
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list list(converter_, call_);
+  if (
+    std::optional<exprt> view =
+      list.try_build_diagonal_pointer_view(array_expr, offset))
+    return *view;
+
+  throw std::runtime_error(
+    "TypeError: numpy.diagonal() is only supported when assigned "
+    "directly to a variable");
+}
+
+exprt numpy_call_expr::handle_trace_call()
+{
+  if (call_["args"].empty())
+    throw std::runtime_error(
+      "TypeError: numpy.trace() requires an array argument");
+
+  // Same 2-D-only scope as np.diagonal: axis1/axis2 are trace's 3rd/4th
+  // positional parameters (trace(a, offset=0, axis1=0, axis2=1, dtype=None,
+  // out=None)), so passing axis1 alone already means a 3rd positional arg
+  // (size() > 2), one before dtype/out's own threshold below.
+  if (
+    call_["args"].size() > 2 || find_keyword_arg("axis1") ||
+    find_keyword_arg("axis2"))
+    throw std::runtime_error(
+      "TypeError: numpy trace only supports the default axis1/axis2");
+
+  // Any positional dtype/out is already excluded by the axis1/axis2 check
+  // above (dtype/out sit two positions further out), so only their keyword
+  // forms need checking here.
+  if (find_keyword_arg("dtype") || find_keyword_arg("out"))
+    throw std::runtime_error(
+      "TypeError: numpy trace does not support out/dtype");
+
+  long long offset = extract_literal_diagonal_offset("trace");
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list list(converter_, call_);
+  if (std::optional<exprt> sum = list.build_trace_reduction(array_expr, offset))
+    return *sum;
+
+  throw std::runtime_error("TypeError: numpy.trace() requires a 2-D array");
+}
+
+exprt numpy_call_expr::handle_fill_diagonal_call()
+{
+  if (call_["args"].size() < 2)
+    throw std::runtime_error(
+      "TypeError: numpy.fill_diagonal() requires an array and a value "
+      "argument");
+
+  if (call_["args"].size() > 2 || find_keyword_arg("wrap"))
+    throw std::runtime_error(
+      "TypeError: numpy fill_diagonal does not support wrap");
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list list(converter_, call_);
+  if (!list.try_build_fill_diagonal_mutation(array_expr, call_["args"][1]))
+    throw std::runtime_error(
+      "TypeError: numpy fill_diagonal requires a 2-D array");
+
+  return exprt();
+}
+
+std::optional<exprt> numpy_call_expr::handle_ravel_pointer_view_attempt()
+{
+  if (function_id_.get_function() != "ravel" || call_["args"].empty())
+    return std::nullopt;
+
+  // np.ravel(a, order='C') (the default) flattens row-major and aliases a's
+  // own buffer; any other order (e.g. 'F') flattens column-major and is a
+  // copy in real NumPy (confirmed against NumPy 2.5.2), not this same
+  // pointer view. order= is ravel's only other parameter, so a 2nd
+  // positional argument or an order= keyword at all -- regardless of its
+  // literal value -- means declining here and falling through to the
+  // existing copy-based ravel/flatten/nditer handling below.
+  if (call_["args"].size() > 1 || find_keyword_arg("order"))
+    return std::nullopt;
+
+  exprt array_expr = converter_.get_expr(call_["args"][0]);
+  python_list ravel_view_list(converter_, call_);
+  return ravel_view_list.try_build_ravel_pointer_view(array_expr);
+}
+
+std::optional<exprt> numpy_call_expr::try_get_pointer_view_call_result()
+{
+  const std::string &function = function_id_.get_function();
+  if (function == "diagonal")
+    return handle_diagonal_call();
+  if (function == "trace")
+    return handle_trace_call();
+  if (function == "fill_diagonal")
+    return handle_fill_diagonal_call();
+  return std::nullopt;
+}
+
+static exprt build_numpy_axis_swapped_2d_expr(
+  const type_handler &type_handler,
+  const exprt &source_expr,
+  const std::vector<int> &source_shape)
+{
+  const typet source_row_type = source_expr.type().subtype();
+  const typet base_type = source_row_type.subtype();
+  typet row_type = type_handler.build_array(base_type, source_shape[0]);
+  typet result_type = type_handler.build_array(row_type, source_shape[1]);
+
+  exprt result = gen_zero(result_type);
+  result.operands().clear();
+  for (int c = 0; c < source_shape[1]; ++c)
+  {
+    exprt row = gen_zero(row_type);
+    row.operands().clear();
+    for (int r = 0; r < source_shape[0]; ++r)
+    {
+      exprt source_row =
+        np_index(source_expr, from_integer(r, size_type()), source_row_type);
+      row.operands().push_back(
+        np_index(source_row, from_integer(c, size_type()), base_type));
+    }
+    result.operands().push_back(row);
+  }
+
+  return result;
+}
+
+exprt numpy_call_expr::handle_axis_permutation_view_call(
+  const std::string &function)
+{
+  if (call_["args"].size() < 3)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() requires array and axis arguments");
+
+  exprt source_expr = converter_.get_expr(call_["args"][0]);
+  std::vector<int> source_shape =
+    type_handler_.get_array_type_shape(source_expr.type());
+  if (source_shape.empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() currently supports only fixed-shape arrays");
+
+  const std::size_t rank = source_shape.size();
+  if (rank == 0 || rank > 2)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " currently supports up to 2D arrays");
+
+  std::array<long long, 2> axes{};
+  for (std::size_t i = 0; i < axes.size(); ++i)
+  {
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(call_["args"][i + 1], axis_value) ||
+      !axis_value.is_int)
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() axis must be a concrete integer");
+
+    axes[i] = axis_value.int_value;
+    if (axes[i] < 0)
+      axes[i] += static_cast<long long>(rank);
+    if (axes[i] < 0 || axes[i] >= static_cast<long long>(rank))
+      throw std::runtime_error(
+        "AxisError: axis " + std::to_string(axis_value.int_value) +
+        " is out of bounds for array of dimension " + std::to_string(rank));
+  }
+
+  if (axes[0] == axes[1])
+  {
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = source_expr.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return source_expr;
+  }
+
+  exprt transposed =
+    build_numpy_axis_swapped_2d_expr(type_handler_, source_expr, source_shape);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = transposed.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return transposed;
+}
+
+exprt numpy_call_expr::handle_broadcast_to_call()
+{
+  if (call_["args"].size() < 2)
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() requires array and shape arguments");
+
+  nlohmann::json arr_arg = call_["args"][0];
+  if (arr_arg.contains("_type") && arr_arg["_type"] == "Name")
+  {
+    const std::string name = arr_arg["id"].get<std::string>();
+    if (json_utils::has_multiple_assignments_in_scope(
+          name, converter_.current_function_name(), converter_.ast()))
+      throw std::runtime_error(
+        "TypeError: numpy.broadcast_to() currently supports only "
+        "single-assignment array inputs");
+
+    arr_arg = json_utils::find_var_decl(
+      arr_arg["id"], converter_.current_function_name(), converter_.ast());
+    if (arr_arg.contains("value") && arr_arg["value"].is_object())
+      arr_arg = arr_arg["value"];
+  }
+  if (
+    std::optional<nlohmann::json> literal_arg =
+      get_literal_numpy_array_arg(arr_arg))
+    arr_arg = std::move(*literal_arg);
+
+  std::vector<std::size_t> source_shape;
+  if (!get_literal_shape(arr_arg, source_shape))
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() currently supports only constant "
+      "arrays");
+
+  std::optional<std::vector<std::size_t>> target_shape =
+    parse_numpy_literal_shape_arg(call_["args"][1]);
+  if (!target_shape)
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() shape must contain concrete integers");
+
+  if (target_shape->empty() || target_shape->size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() currently supports rank 1 or 2 shapes");
+
+  std::vector<std::size_t> computed_shape;
+  if (
+    !compute_broadcast_shape(source_shape, *target_shape, computed_shape) ||
+    computed_shape != *target_shape)
+    throw std::runtime_error(
+      "ValueError: operands could not be broadcast together with shapes " +
+      format_shape(source_shape) + " " + format_shape(*target_shape));
+
+  std::vector<std::size_t> indices;
+  nlohmann::json result;
+  if (!build_broadcast_to_literal_result(
+        arr_arg, source_shape, *target_shape, indices, 0, result))
+    throw std::runtime_error(
+      "TypeError: numpy.broadcast_to() currently supports only constant "
+      "arrays");
+
+  return converter_.get_expr(result);
+}
+
+std::optional<exprt>
+numpy_call_expr::try_build_nditer_descriptor_list(const nlohmann::json &arg)
+{
+  std::optional<std::vector<nlohmann::json>> logical_elements =
+    converter_.build_numpy_nditer_logical_elements(arg);
+  if (!logical_elements)
+    return std::nullopt;
+
+  std::vector<exprt> elems;
+  elems.reserve(logical_elements->size());
+  for (const nlohmann::json &elem : *logical_elements)
+    elems.push_back(converter_.get_expr(elem));
+
+  nlohmann::json list_node{
+    {"_type", "List"}, {"elts", nlohmann::json::array()}};
+  python_list list(converter_, list_node);
+  return list.build_list_from_exprs(elems);
+}
+
+std::optional<exprt> numpy_call_expr::try_materialize_descriptor_copy_call()
+{
+  if (function_id_.get_function() != "copy")
+    return std::nullopt;
+
+  if (call_["args"].empty())
+    throw std::runtime_error("TypeError: numpy.copy() requires an array");
+
+  return converter_.build_numpy_descriptor_materialized_array(call_["args"][0]);
+}
+
+std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
+  nlohmann::json &array_arg)
+{
+  if (function_id_.get_function() != "array")
+    return std::nullopt;
+
+  return converter_.build_numpy_descriptor_materialized_array(array_arg);
+}
+
+static bool numpy_reducer_has_unsupported_keywords(const nlohmann::json &call)
+{
+  return call.contains("keywords") && !call["keywords"].empty();
+}
+
+static exprt numpy_cast_to_double(const exprt &value)
+{
+  return value.type() == double_type() ? value
+                                       : typecast_exprt(value, double_type());
+}
+
+static exprt reduce_numpy_descriptor_values(
+  const std::string &function,
+  const std::vector<exprt> &elems)
+{
+  if (function == "mean")
+  {
+    exprt total = numpy_cast_to_double(elems.front());
+    for (std::size_t i = 1; i < elems.size(); ++i)
+      total = python_expr::build_add(
+        total, numpy_cast_to_double(elems[i]), double_type());
+    return div_exprt(
+      total, from_double(static_cast<double>(elems.size()), double_type()));
+  }
+
+  if (function == "sum")
+  {
+    exprt total = elems.front();
+    for (std::size_t i = 1; i < elems.size(); ++i)
+      total = python_expr::build_add(total, elems[i], total.type());
+    return total;
+  }
+
+  if (function == "min" || function == "max")
+  {
+    exprt result = elems.front();
+    for (std::size_t i = 1; i < elems.size(); ++i)
+    {
+      const irep_idt relation = function == "min" ? "<" : ">";
+      result = if_exprt(
+        binary_relation_exprt(elems[i], relation, result), elems[i], result);
+    }
+    return result;
+  }
+
+  throw std::runtime_error("unsupported numpy descriptor reducer");
+}
+
+std::optional<exprt>
+numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
+{
+  if (
+    function != "sum" && function != "mean" && function != "min" &&
+    function != "max")
+    return std::nullopt;
+
+  if (call_["args"].empty())
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    call_["args"][0],
+    "TypeError: numpy descriptor reducers currently support rank 1 or 2 "
+    "arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  if (numpy_reducer_has_unsupported_keywords(call_) || call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support axis, keepdims, where, out, initial or dtype "
+      "arguments yet");
+
+  if (materialized->second.empty())
+  {
+    if (function == "sum")
+    {
+      nlohmann::json zero{
+        {"_type", "Constant"}, {"value", 0}, {"kind", nullptr}};
+      return converter_.get_expr(zero);
+    }
+
+    throw std::runtime_error(
+      "ValueError: numpy." + function + "() arg is an empty sequence");
+  }
+
+  return reduce_numpy_descriptor_values(function, materialized->second);
+}
+
+void numpy_call_expr::reject_unsupported_nditer_keywords(
+  const nlohmann::json &arg) const
+{
+  if (!call_.contains("keywords"))
+    return;
+
+  for (const auto &kw : call_["keywords"])
+  {
+    if (kw["_type"] != "keyword" || kw["arg"].is_null())
+      continue;
+
+    if (kw["arg"] == "flags")
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() flags are not supported");
+
+    if (kw["arg"] == "op_flags")
+    {
+      if (converter_.is_numpy_readonly_view_arg(arg))
+        throw std::runtime_error(
+          "ValueError: assignment destination is read-only");
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_flags are not supported");
+    }
+
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() keyword '" + kw["arg"].get<std::string>() +
+      "' is not supported");
+  }
+}
+
+void numpy_call_expr::reject_unsupported_transpose_axes_rank(
+  const std::string &function)
+{
+  if (
+    function != "transpose" || !call_.contains("args") ||
+    !call_["args"].is_array() || call_["args"].size() < 2)
+    return;
+
+  exprt *saved_lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  try
+  {
+    exprt source_expr = converter_.get_expr(call_["args"][0]);
+    converter_.current_lhs = saved_lhs;
+    if (type_handler_.get_array_type_shape(source_expr.type()).size() > 2)
+      throw std::runtime_error(
+        "TypeError: numpy.transpose currently supports up to 2D arrays");
+  }
+  catch (...)
+  {
+    converter_.current_lhs = saved_lhs;
+    throw;
+  }
 }
 
 template <typename T>
@@ -2374,7 +3894,13 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (var["value"]["_type"] == "Call")
       {
-        if (var["value"].contains("args") && !var["value"]["args"].empty())
+        if (
+          std::optional<nlohmann::json> materialized =
+            materialize_numpy_constructor_array(var["value"], converter_.ast()))
+          var = std::move(*materialized);
+        else if (is_numpy_constructor_call_by_name(var["value"]))
+          var = var["value"];
+        else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];
         else
           var = var["value"];
@@ -2439,6 +3965,11 @@ exprt numpy_call_expr::create_expr_from_call()
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    materialize_inline_numpy_constructor_call(arg, converter_.ast());
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arg, converter_))
+      arg = std::move(*row_view);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -2598,76 +4129,6 @@ exprt numpy_call_expr::create_expr_from_call()
       out["elts"].push_back(
         {{"_type", "Constant"}, {"value", value.value.real() == 0.0}});
     return converter_.get_expr(out);
-  }
-
-  if (function == "arange")
-  {
-    if (call_["args"].empty() || call_["args"].size() > 3)
-      throw std::runtime_error(
-        "TypeError: numpy.arange() expects 1 to 3 arguments");
-
-    std::vector<numeric_value> args;
-    args.reserve(call_["args"].size());
-    for (auto arg : call_["args"])
-    {
-      resolve_var(arg);
-      numeric_value value;
-      if (!try_extract_numeric_constant(arg, value))
-        throw std::runtime_error(
-          "TypeError: numpy.arange() currently supports constant numeric "
-          "inputs only");
-      args.push_back(value);
-    }
-
-    double start = 0.0;
-    double stop = 0.0;
-    double step = 1.0;
-    if (args.size() == 1)
-    {
-      stop = to_double(args[0]);
-    }
-    else
-    {
-      start = to_double(args[0]);
-      stop = to_double(args[1]);
-      if (args.size() == 3)
-        step = to_double(args[2]);
-    }
-
-    if (step == 0.0)
-      throw std::runtime_error(
-        "ValueError: numpy.arange() step must not be zero");
-
-    const bool any_float =
-      std::any_of(args.begin(), args.end(), [](const numeric_value &v) {
-        return !v.is_int;
-      });
-
-    std::vector<double> float_values;
-    std::vector<int64_t> int_values;
-    if (step > 0.0)
-    {
-      for (double current = start; current < stop; current += step)
-      {
-        if (any_float)
-          float_values.push_back(current);
-        else
-          int_values.push_back(static_cast<int64_t>(std::llround(current)));
-      }
-    }
-    else
-    {
-      for (double current = start; current > stop; current += step)
-      {
-        if (any_float)
-          float_values.push_back(current);
-        else
-          int_values.push_back(static_cast<int64_t>(std::llround(current)));
-      }
-    }
-    if (any_float)
-      return converter_.get_expr(create_list(float_values));
-    return converter_.get_expr(create_list(int_values));
   }
 
   if (
@@ -3235,6 +4696,7 @@ exprt numpy_call_expr::create_expr_from_call()
     }
 
     const auto &arg_type = call_["args"][0]["_type"];
+
     if (
       arg_type == "Constant" || arg_type == "UnaryOp" ||
       arg_type == "Subscript")
@@ -3331,7 +4793,8 @@ exprt numpy_call_expr::create_expr_from_call()
         }
 
         // Constant-fold transpose for fully constant 2D numeric lists.
-        // This avoids forcing integer-only backend transpose for float literals.
+        // This avoids forcing integer-only backend transpose for float
+        // literals.
         if (
           allow_numpy_fold && list_arg.contains("elts") &&
           !list_arg["elts"].empty() && list_arg["elts"][0].is_object() &&
@@ -3418,8 +4881,42 @@ exprt numpy_call_expr::create_expr_from_call()
     else if (arg_type == "Name")
     {
       auto arg = call_["args"][0];
-      resolve_var(arg);
       const std::string &function = function_id_.get_function();
+
+      if (function == "transpose")
+      {
+        nlohmann::json decl = json_utils::find_var_decl(
+          arg["id"], converter_.current_function_name(), converter_.ast());
+        if (
+          decl.contains("value") && decl["value"].is_object() &&
+          is_dynamic_list_backed_numpy_constructor(decl["value"]))
+        {
+          std::optional<nlohmann::json> materialized =
+            materialize_numpy_constructor_array(
+              decl["value"], converter_.ast());
+          if (!materialized)
+            throw std::runtime_error(
+              "TypeError: numpy.transpose() does not support this "
+              "constructor call (unsupported keywords or non-constant "
+              "arguments)");
+
+          if (
+            std::optional<exprt> folded =
+              try_fold_transpose_literal_2d(*materialized, converter_))
+          {
+            if (converter_.current_lhs)
+            {
+              converter_.current_lhs->type() = folded->type();
+              converter_.update_symbol(*converter_.current_lhs);
+            }
+            return *folded;
+          }
+          throw std::runtime_error(
+            "TypeError: numpy.transpose currently supports up to 2D arrays");
+        }
+      }
+
+      resolve_var(arg);
 
       if (function == "transpose")
       {
@@ -3640,7 +5137,8 @@ exprt numpy_call_expr::create_expr_from_call()
           }
         }
 
-        // Append array postfix to call array variants, e.g., ceil_array instead of ceil
+        // Append array postfix to call array variants, e.g., ceil_array instead
+        // of ceil
         std::string func_name = function_id_.get_function();
         if (func_name == "ceil")
           func_name = "__" + func_name + "_array";
@@ -3655,8 +5153,10 @@ exprt numpy_call_expr::create_expr_from_call()
             "assignment target");
         auto &current_lhs = *converter_.current_lhs;
 
-        // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
-        // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
+        // In a call like result = np.ceil(v), the type of 'result' is only
+        // known after processing the argument 'v'. At this point, we have the
+        // argument's type information, so we update the type of the LHS
+        // expression accordingly.
 
         if (t.subtype().is_array())
           current_lhs.type() = long_long_int_type();
@@ -3665,9 +5165,10 @@ exprt numpy_call_expr::create_expr_from_call()
 
         converter_.update_symbol(current_lhs);
 
-        // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
-        // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
-        // The lines below add the output array and size arguments to the call.
+        // NumPy math functions on arrays are translated to C-style calls with
+        // the signature: func(input, output, size). For example, result =
+        // np.ceil(v) becomes ceil_array(v, result, sizeof(v)). The lines below
+        // add the output array and size arguments to the call.
 
         // Add output argument
         call.arguments().push_back(np_address_of(current_lhs));
@@ -4106,6 +5607,17 @@ exprt numpy_call_expr::create_expr_from_call()
           }
         }
 
+        // The runtime backend call below writes its result through the
+        // address of current_lhs; a bare expression statement (result
+        // discarded, e.g. `np.dot(a, b)` with no assignment) has no
+        // current_lhs and previously crashed dereferencing a null pointer
+        // instead of producing this diagnostic (matches the existing
+        // arccos/transpose/ceil convention for the same requirement).
+        if (!converter_.current_lhs)
+          throw std::runtime_error(
+            "Internal error: numpy." + operation +
+            " runtime lowering requires an assignment target");
+
         // Determine dimensionality of both operands
         bool lhs_is_2d = type_handler_.is_2d_array(lhs);
         bool rhs_is_2d = type_handler_.is_2d_array(rhs);
@@ -4523,16 +6035,111 @@ exprt numpy_call_expr::create_expr_from_call()
   return converter_.get_expr(expr);
 }
 
+// A Name argument materialize_arange() cannot see through directly (e.g. the
+// `n` in `n = 3; np.arange(n)`) is resolved to its declaration's value here,
+// mirroring what the operational-model fallback used to do by plain
+// interpretation. Only a single-level lookup is attempted; anything that
+// does not resolve to a value (a genuinely non-constant parameter, a nondet
+// value, a further Name chain) is left untouched and correctly declines in
+// materialize_arange() afterwards.
+static nlohmann::json resolve_arange_call_args(
+  const nlohmann::json &args,
+  python_converter &converter)
+{
+  nlohmann::json resolved = args;
+  for (auto &arg : resolved)
+  {
+    if (!arg.is_object() || arg.value("_type", std::string()) != "Name")
+      continue;
+    const nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"].get<std::string>(),
+      converter.current_function_name(),
+      converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+  return resolved;
+}
+
+exprt numpy_call_expr::get_arange_expr()
+{
+  // A dtype= (or any other) keyword changes arange()'s output in ways the
+  // literal-materialization path below does not model; fall back to the
+  // operational model for that shape exactly like every arange call used
+  // to, rather than silently ignoring the keyword.
+  if (call_.contains("keywords") && !call_["keywords"].empty())
+    return function_call_expr::get();
+
+  const nlohmann::json resolved_args =
+    call_.contains("args") ? resolve_arange_call_args(call_["args"], converter_)
+                           : nlohmann::json::array();
+
+  // np.arange(...) with constant, small arguments is materialized to a
+  // literal list directly, avoiding the operational model's while-loop
+  // list-concatenation implementation (models/numpy.py's arange()), which
+  // is disproportionately expensive to symbolically execute even for a
+  // handful of elements. Although real np.arange() returns an ndarray, this
+  // frontend materializes it as a list-like runtime object for consistency
+  // with build_static_lists, disabled the same way full()/eye()/identity()/
+  // linspace() already do it -- a plain static array here would not
+  // compare equal to a `[]`-literal PyListObj.
+  const arange_materialize_result result = materialize_arange_ex(resolved_args);
+  if (result.list)
+  {
+    const bool old_build_static_lists = converter_.build_static_lists;
+    converter_.build_static_lists = false;
+    exprt expr = converter_.get_expr(*result.list);
+    converter_.build_static_lists = old_build_static_lists;
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = expr.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return expr;
+  }
+
+  switch (result.reason)
+  {
+  case arange_decline_reason::bad_arity:
+    throw std::runtime_error(
+      "TypeError: numpy.arange() expects 1 to 3 arguments");
+  case arange_decline_reason::zero_step:
+    throw std::runtime_error(
+      "ValueError: numpy.arange() step must not be zero");
+  case arange_decline_reason::too_many_elements:
+    throw std::runtime_error(
+      "TypeError: numpy.arange() range exceeds the supported element limit "
+      "of " +
+      std::to_string(max_materialized_arange_elements));
+  case arange_decline_reason::non_constant:
+  case arange_decline_reason::none:
+  default:
+    break;
+  }
+
+  // Non-constant arguments (e.g. a function parameter) cannot be
+  // materialized this way; falling back to the operational model here
+  // hangs past any practical timeout instead of producing a verdict, so
+  // this is rejected explicitly and quickly instead.
+  throw std::runtime_error(
+    "TypeError: numpy.arange() currently supports constant numeric inputs "
+    "only");
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
+  reject_symbolic_transpose_axes(function, call_);
+  reject_unsupported_transpose_axes_rank(function);
 
-  if (
-    function == "sum" || function == "prod" || function == "min" ||
-    function == "max" || function == "mean" || function == "argmin" ||
-    function == "argmax" || function == "arange")
+  static const std::set<std::string> reducer_and_arange_functions = {
+    "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
+  if (reducer_and_arange_functions.count(function))
   {
+    if (std::optional<exprt> descriptor = try_reduce_descriptor_call(function))
+      return *descriptor;
+
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
@@ -4547,6 +6154,19 @@ exprt numpy_call_expr::get()
             var = std::move(*numpy_call);
             return;
           }
+          if (
+            std::optional<nlohmann::json> materialized =
+              materialize_numpy_constructor_array(
+                var["value"], converter_.ast()))
+          {
+            var = std::move(*materialized);
+            return;
+          }
+          if (is_numpy_constructor_call_by_name(var["value"]))
+          {
+            var = var["value"];
+            return;
+          }
           if (var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
@@ -4557,12 +6177,15 @@ exprt numpy_call_expr::get()
       }
     };
     if (function == "arange")
-    {
-      return function_call_expr::get();
-    }
+      return get_arange_expr();
 
     nlohmann::json arg = call_["args"][0];
     resolve_var(arg);
+    materialize_inline_numpy_constructor_call(arg, converter_.ast());
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arg, converter_))
+      arg = std::move(*row_view);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -4689,7 +6312,15 @@ exprt numpy_call_expr::get()
           return;
         if (var["value"]["_type"] == "Call")
         {
-          if (var["value"].contains("args") && !var["value"]["args"].empty())
+          if (
+            std::optional<nlohmann::json> materialized =
+              materialize_numpy_constructor_array(
+                var["value"], converter_.ast()))
+            var = std::move(*materialized);
+          else if (is_numpy_constructor_call_by_name(var["value"]))
+            var = var["value"];
+          else if (
+            var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
             var = var["value"];
@@ -4756,6 +6387,18 @@ exprt numpy_call_expr::get()
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
+        // find_var_decl() below returns the first textual assignment to
+        // this name, not the one that actually reaches this use site. A
+        // reassigned name is left as-is (var stays the unresolved Name)
+        // rather than risk resolving a stale declaration -- the caller's
+        // own scalar/list extraction then raises an explicit diagnostic on
+        // it, exactly as it already does for any other unresolvable
+        // operand.
+        if (json_utils::has_multiple_assignments_in_scope(
+              var["id"].get<std::string>(),
+              converter_.current_function_name(),
+              converter_.ast()))
+          return;
         var = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
         if (!var.contains("value") || !var["value"].is_object())
@@ -4767,6 +6410,38 @@ exprt numpy_call_expr::get()
             var = std::move(*numpy_call);
             return;
           }
+          if (
+            std::optional<nlohmann::json> materialized =
+              materialize_numpy_constructor_array(
+                var["value"], converter_.ast()))
+          {
+            var = std::move(*materialized);
+            return;
+          }
+          if (is_numpy_constructor_call_by_name(var["value"]))
+          {
+            var = var["value"];
+            return;
+          }
+          if (is_numpy_logical_comparison_call(var["value"], converter_.ast()))
+          {
+            if (
+              std::optional<nlohmann::json> evaluated =
+                evaluate_numpy_logical_call(var["value"], converter_, 0))
+            {
+              var = std::move(*evaluated);
+              return;
+            }
+            // Recognized comparison/logical call shape but not evaluable
+            // (e.g. a wrong argument count): leave the call itself
+            // unresolved -- NOT the args[0] fallback below, which would
+            // silently misread its argument as if it were the call's
+            // actual (unevaluated) result, the exact bug this whole fix
+            // closes -- so the caller's own extraction raises its own
+            // diagnostic instead of a misleading chaining-depth error.
+            var = var["value"];
+            return;
+          }
           if (var["value"].contains("args") && !var["value"]["args"].empty())
             var = var["value"]["args"][0];
           else
@@ -4775,13 +6450,6 @@ exprt numpy_call_expr::get()
         else
           var = var["value"];
       }
-    };
-
-    auto make_constant = [](const auto &value) {
-      nlohmann::json out;
-      out["_type"] = "Constant";
-      out["value"] = value;
-      return out;
     };
 
     auto to_list_expr = [this](const nlohmann::json &node) {
@@ -4796,22 +6464,41 @@ exprt numpy_call_expr::get()
       return converter_.get_expr(node);
     };
 
+    auto get_arg = [&](std::size_t index) {
+      nlohmann::json arg = call_["args"][index];
+      resolve_var(arg);
+      materialize_inline_numpy_constructor_call(arg, converter_.ast());
+      if (
+        arg.value("_type", std::string()) == "Call" &&
+        is_numpy_logical_comparison_call(arg, converter_.ast()))
+      {
+        if (
+          std::optional<nlohmann::json> evaluated =
+            evaluate_numpy_logical_call(arg, converter_, 0))
+          arg = std::move(*evaluated);
+        // else: recognized shape but not evaluable (e.g. a wrong argument
+        // count) -- leave arg unresolved so the caller's own scalar/list
+        // extraction raises its own diagnostic for that failure.
+      }
+      return arg;
+    };
+
+    // Used by full()/eye()/identity()/linspace() below, which build
+    // numeric (not boolean) literals -- kept local since that shape
+    // materialization is unrelated to the comparison/logical evaluation
+    // above and out of this fix's scope.
+    auto make_constant = [](const auto &value) {
+      nlohmann::json out;
+      out["_type"] = "Constant";
+      out["value"] = value;
+      return out;
+    };
+
     auto make_list = [](const std::vector<nlohmann::json> &elts) {
       nlohmann::json out;
       out["_type"] = "List";
       out["elts"] = elts;
       return out;
-    };
-
-    auto as_bool = [](const nlohmann::json &node) {
-      numeric_value value;
-      if (try_extract_numeric_constant(node, value))
-        return to_double(value) != 0.0;
-      if (
-        node.is_object() && node.contains("value") &&
-        node["value"].is_boolean())
-        return node["value"].get<bool>();
-      return false;
     };
 
     auto as_double = [](const nlohmann::json &node) {
@@ -4821,34 +6508,6 @@ exprt numpy_call_expr::get()
       return 0.0;
     };
 
-    auto compare_scalar = [&](
-                            const std::string &op,
-                            const nlohmann::json &lhs,
-                            const nlohmann::json &rhs) {
-      const double left = as_double(lhs);
-      const double right = as_double(rhs);
-      bool result = false;
-      if (op == "greater")
-        result = left > right;
-      else if (op == "less")
-        result = left < right;
-      else if (op == "greater_equal")
-        result = left >= right;
-      else if (op == "less_equal")
-        result = left <= right;
-      else if (op == "equal")
-        result = left == right;
-      else
-        result = left != right;
-      return make_constant(result);
-    };
-
-    auto get_arg = [&](std::size_t index) {
-      nlohmann::json arg = call_["args"][index];
-      resolve_var(arg);
-      return arg;
-    };
-
     if (
       function == "greater" || function == "less" ||
       function == "greater_equal" || function == "less_equal" ||
@@ -4856,66 +6515,29 @@ exprt numpy_call_expr::get()
     {
       auto lhs = get_arg(0);
       auto rhs = get_arg(1);
-
-      if (lhs.contains("elts") && lhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
-        {
-          const auto &lhs_item = lhs["elts"][i];
-          const auto &rhs_item = rhs.contains("elts") && rhs["elts"].is_array()
-                                   ? rhs["elts"][i]
-                                   : rhs;
-          out_elts.push_back(compare_scalar(function, lhs_item, rhs_item));
-        }
-        return to_list_expr(make_list(out_elts));
-      }
-
-      if (rhs.contains("elts") && rhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (const auto &rhs_item : rhs["elts"])
-          out_elts.push_back(compare_scalar(function, lhs, rhs_item));
-        return to_list_expr(make_list(out_elts));
-      }
-
-      return to_expr(compare_scalar(function, lhs, rhs));
+      const nlohmann::json result = numpy_broadcast_binary(
+        lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+          return numpy_compare_scalar(function, a, b);
+        });
+      return result.value("_type", std::string()) == "List"
+               ? to_list_expr(result)
+               : to_expr(result);
     }
 
     if (function == "logical_and" || function == "logical_or")
     {
       auto lhs = get_arg(0);
       auto rhs = get_arg(1);
-      auto apply = [&](const nlohmann::json &a, const nlohmann::json &b) {
-        const bool left = as_bool(a);
-        const bool right = as_bool(b);
-        return make_constant(
-          function == "logical_and" ? (left && right) : (left || right));
-      };
-
-      if (lhs.contains("elts") && lhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (std::size_t i = 0; i < lhs["elts"].size(); ++i)
-        {
-          const auto &lhs_item = lhs["elts"][i];
-          const auto &rhs_item = rhs.contains("elts") && rhs["elts"].is_array()
-                                   ? rhs["elts"][i]
-                                   : rhs;
-          out_elts.push_back(apply(lhs_item, rhs_item));
-        }
-        return to_list_expr(make_list(out_elts));
-      }
-
-      if (rhs.contains("elts") && rhs["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (const auto &rhs_item : rhs["elts"])
-          out_elts.push_back(apply(lhs, rhs_item));
-        return to_list_expr(make_list(out_elts));
-      }
-
-      return to_expr(apply(lhs, rhs));
+      const nlohmann::json result = numpy_broadcast_binary(
+        lhs, rhs, [&](const nlohmann::json &a, const nlohmann::json &b) {
+          const bool l = numpy_logical_as_bool(a);
+          const bool r = numpy_logical_as_bool(b);
+          return make_bool_constant_node(
+            function == "logical_and" ? (l && r) : (l || r));
+        });
+      return result.value("_type", std::string()) == "List"
+               ? to_list_expr(result)
+               : to_expr(result);
     }
 
     if (function == "logical_not")
@@ -4925,10 +6547,11 @@ exprt numpy_call_expr::get()
       {
         std::vector<nlohmann::json> out_elts;
         for (const auto &item : arg["elts"])
-          out_elts.push_back(make_constant(!as_bool(item)));
-        return to_list_expr(make_list(out_elts));
+          out_elts.push_back(
+            make_bool_constant_node(!numpy_logical_as_bool(item)));
+        return to_list_expr(make_list_node(out_elts));
       }
-      return to_expr(make_constant(!as_bool(arg)));
+      return to_expr(make_bool_constant_node(!numpy_logical_as_bool(arg)));
     }
 
     if (function == "where")
@@ -4936,21 +6559,10 @@ exprt numpy_call_expr::get()
       auto cond = get_arg(0);
       auto x = get_arg(1);
       auto y = get_arg(2);
-      if (cond.contains("elts") && cond["elts"].is_array())
-      {
-        std::vector<nlohmann::json> out_elts;
-        for (std::size_t i = 0; i < cond["elts"].size(); ++i)
-        {
-          const bool choose_x = as_bool(cond["elts"][i]);
-          const auto &chosen =
-            choose_x
-              ? (x.contains("elts") && x["elts"].is_array() ? x["elts"][i] : x)
-              : (y.contains("elts") && y["elts"].is_array() ? y["elts"][i] : y);
-          out_elts.push_back(chosen);
-        }
-        return to_list_expr(make_list(out_elts));
-      }
-      return as_bool(cond) ? converter_.get_expr(x) : converter_.get_expr(y);
+      const nlohmann::json result = numpy_where_select(cond, x, y);
+      return result.value("_type", std::string()) == "List"
+               ? to_list_expr(result)
+               : to_expr(result);
     }
 
     auto parse_shape = [&](const nlohmann::json &shape_node) {
@@ -5090,10 +6702,18 @@ exprt numpy_call_expr::get()
     }
   }
 
+  if (std::optional<exprt> copied = try_materialize_descriptor_copy_call())
+    return *copied;
+
   // Create array from numpy.array()
   if (function == "array")
   {
     nlohmann::json array_arg = call_["args"][0];
+    if (
+      std::optional<exprt> copied =
+        try_materialize_descriptor_array_call(array_arg))
+      return *copied;
+
     const std::string dtype = get_dtype();
     if (!dtype.empty())
       array_arg = cast_numpy_literal_to_dtype(array_arg, dtype);
@@ -5433,7 +7053,13 @@ exprt numpy_call_expr::get()
         return;
       if (var["value"]["_type"] == "Call")
       {
-        if (var["value"].contains("args") && !var["value"]["args"].empty())
+        if (
+          std::optional<nlohmann::json> materialized =
+            materialize_numpy_constructor_array(var["value"], converter_.ast()))
+          var = std::move(*materialized);
+        else if (is_numpy_constructor_call_by_name(var["value"]))
+          var = var["value"];
+        else if (var["value"].contains("args") && !var["value"]["args"].empty())
           var = var["value"]["args"][0];
         else
           var = var["value"];
@@ -5494,8 +7120,13 @@ exprt numpy_call_expr::get()
       }
     }
 
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+    nlohmann::json arr_arg = call_["args"][0];
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(arr_arg, converter_))
+      arr_arg = std::move(*row_view);
+    else
+      arr_arg = resolve_literal_numpy_array_input(arr_arg, function, true);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape))
@@ -5808,7 +7439,20 @@ exprt numpy_call_expr::get()
       throw std::runtime_error(
         "TypeError: numpy.reshape() requires array and shape arguments");
 
-    nlohmann::json arr_arg = call_["args"][0];
+    const nlohmann::json &original_arr_arg = call_["args"][0];
+    if (
+      original_arr_arg.is_object() &&
+      original_arr_arg.value("_type", "") == "Name" &&
+      original_arr_arg.contains("id"))
+    {
+      const std::string source_id = converter_.resolve_name_symbol_id(
+        original_arr_arg["id"].get<std::string>());
+      if (!source_id.empty() && converter_.is_tracked_numpy_view_id(source_id))
+        throw std::runtime_error(
+          "TypeError: numpy.reshape() requires contiguous input");
+    }
+
+    nlohmann::json arr_arg = original_arr_arg;
     resolve_numpy_var(arr_arg);
 
     std::vector<std::size_t> old_shape;
@@ -5846,6 +7490,33 @@ exprt numpy_call_expr::get()
       for (const auto &e : shape_arg["elts"])
       {
         int64_t d = parse_reshape_dim(e);
+        if (d == INT64_MIN)
+          throw std::runtime_error(
+            "TypeError: numpy.reshape() shape must contain concrete integers");
+        raw_shape.push_back(d);
+      }
+    }
+    else if (call_["args"].size() > 2)
+    {
+      // Method form with each dimension as its own positional argument
+      // (a.reshape(d1, d2, ...)), equivalent to a.reshape((d1, d2, ...)).
+      // Only reachable here (not the single-tuple-arg branch above) because
+      // a single dimension can't be split into more than one argument, so
+      // more than one argument past the array itself always means this
+      // form -- for the method-form rewrite. A genuine module-function call
+      // numpy.reshape(a, 2, 3) has no such form: numpy's real signature is
+      // reshape(a, newshape, order='C'), so the third positional argument
+      // is `order`, not another dimension. Reject that case explicitly
+      // instead of silently reinterpreting it as split dimensions.
+      if (!call_.value("_numpy_method_form", false))
+        throw std::runtime_error(
+          "TypeError: numpy.reshape() does not accept dimensions as "
+          "separate positional arguments; pass a tuple, or use the "
+          "a.reshape(d1, d2, ...) method form");
+
+      for (std::size_t i = 1; i < call_["args"].size(); ++i)
+      {
+        int64_t d = parse_reshape_dim(call_["args"][i]);
         if (d == INT64_MIN)
           throw std::runtime_error(
             "TypeError: numpy.reshape() shape must contain concrete integers");
@@ -5908,32 +7579,31 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(result);
   }
 
+  if (std::optional<exprt> ravel_view = handle_ravel_pointer_view_attempt())
+    return *ravel_view;
+
   if (function == "ravel" || function == "flatten" || function == "nditer")
   {
     if (call_["args"].empty())
       throw std::runtime_error(
         "TypeError: numpy." + function + "() requires an array argument");
 
-    if (function == "nditer" && call_.contains("keywords"))
-    {
-      for (const auto &kw : call_["keywords"])
-      {
-        if (kw["_type"] != "keyword" || kw["arg"].is_null())
-          continue;
-
-        if (kw["arg"] == "op_flags")
-          throw std::runtime_error(
-            "TypeError: numpy.nditer() op_flags are not supported");
-
-        throw std::runtime_error(
-          "TypeError: numpy.nditer() keyword '" + kw["arg"].get<std::string>() +
-          "' is not supported");
-      }
-    }
-
     nlohmann::json arr_arg = call_["args"][0];
+    if (
+      function == "nditer" && arr_arg.is_object() &&
+      arr_arg.value("_type", "") == "List")
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() currently supports a single operand");
+
     if (function == "nditer")
     {
+      reject_unsupported_nditer_keywords(arr_arg);
+
+      if (
+        std::optional<exprt> descriptor_list =
+          try_build_nditer_descriptor_list(arr_arg))
+        return *descriptor_list;
+
       auto literal_arg = get_literal_numpy_array_arg(arr_arg);
       if (literal_arg.has_value())
         arr_arg = std::move(*literal_arg);
@@ -5943,13 +7613,32 @@ exprt numpy_call_expr::get()
     else
     {
       resolve_numpy_var(arr_arg);
+      materialize_inline_numpy_constructor_call(arr_arg, converter_.ast());
     }
 
     std::vector<std::size_t> old_shape;
     if (!get_literal_shape(arr_arg, old_shape))
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() currently supports only constant arrays");
+    {
+      nlohmann::json original_arg = call_["args"][0];
+      if (original_arg.is_object() && original_arg.value("_type", "") == "Name")
+      {
+        nlohmann::json decl = json_utils::find_var_decl(
+          original_arg["id"],
+          converter_.current_function_name(),
+          converter_.ast());
+        if (decl.contains("value"))
+        {
+          auto literal_arg = get_literal_numpy_array_arg(decl["value"]);
+          if (literal_arg.has_value())
+            arr_arg = std::move(*literal_arg);
+        }
+      }
+
+      if (!get_literal_shape(arr_arg, old_shape))
+        throw std::runtime_error(
+          "TypeError: numpy." + function +
+          "() currently supports only constant arrays");
+    }
 
     std::vector<nlohmann::json> flat;
     flatten_json_list(arr_arg, flat);
@@ -5959,6 +7648,51 @@ exprt numpy_call_expr::get()
     result["elts"] = nlohmann::json::array();
     for (const auto &elem : flat)
       result["elts"].push_back(elem);
+    return converter_.get_expr(result);
+  }
+
+  if (
+    std::optional<exprt> pointer_view_result =
+      try_get_pointer_view_call_result())
+    return *pointer_view_result;
+
+  if (function == "expand_dims")
+  {
+    if (call_["args"].size() < 2)
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() requires array and axis arguments");
+
+    nlohmann::json arr_arg = call_["args"][0];
+    resolve_numpy_var(arr_arg);
+
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(call_["args"][1], axis_value) ||
+      !axis_value.is_int)
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() axis must be a concrete integer");
+
+    std::vector<std::size_t> old_shape;
+    if (!get_literal_shape(arr_arg, old_shape))
+      throw std::runtime_error(
+        "TypeError: numpy.expand_dims() currently supports only constant "
+        "arrays");
+
+    std::optional<std::size_t> axis =
+      normalize_numpy_axis(axis_value.int_value, old_shape.size(), true);
+    if (!axis)
+      throw std::runtime_error(
+        "AxisError: axis " + std::to_string(axis_value.int_value) +
+        " is out of bounds for array of dimension " +
+        std::to_string(old_shape.size() + 1));
+
+    std::vector<std::size_t> new_shape = old_shape;
+    new_shape.insert(new_shape.begin() + *axis, 1);
+
+    std::vector<nlohmann::json> flat;
+    flatten_json_list(arr_arg, flat);
+    std::size_t offset = 0;
+    nlohmann::json result = reshape_flat_to_json(flat, new_shape, 0, offset);
     return converter_.get_expr(result);
   }
 
@@ -5972,28 +7706,56 @@ exprt numpy_call_expr::get()
     nlohmann::json arr_arg = call_["args"][0];
     resolve_numpy_var(arr_arg);
 
-    // Recursively strip List wrappers that contain exactly one element, which
-    // is a nested List (i.e. the axis has size 1).
-    std::function<nlohmann::json(const nlohmann::json &)> do_squeeze =
-      [&](const nlohmann::json &node) -> nlohmann::json {
-      if (
-        !node.is_object() || node.value("_type", std::string()) != "List" ||
-        !node.contains("elts"))
-        return node;
-      const auto &elts = node["elts"];
-      if (
-        elts.size() == 1 && elts[0].is_object() &&
-        elts[0].value("_type", std::string()) == "List")
-        return do_squeeze(elts[0]);
-      nlohmann::json out = node;
-      out["elts"] = nlohmann::json::array();
-      for (const auto &e : elts)
-        out["elts"].push_back(do_squeeze(e));
-      return out;
-    };
+    std::vector<std::size_t> old_shape;
+    if (!get_literal_shape(arr_arg, old_shape))
+      throw std::runtime_error(
+        "TypeError: numpy.squeeze() currently supports only constant arrays");
 
-    return converter_.get_expr(do_squeeze(arr_arg));
+    std::vector<std::size_t> new_shape;
+    if (call_["args"].size() > 1)
+    {
+      numeric_value axis_value;
+      if (
+        !try_extract_numeric_constant(call_["args"][1], axis_value) ||
+        !axis_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy.squeeze() axis must be a concrete integer");
+
+      std::optional<std::size_t> axis =
+        normalize_numpy_axis(axis_value.int_value, old_shape.size(), false);
+      if (!axis)
+        throw std::runtime_error(
+          "AxisError: axis " + std::to_string(axis_value.int_value) +
+          " is out of bounds for array of dimension " +
+          std::to_string(old_shape.size()));
+      if (old_shape[*axis] != 1)
+        throw std::runtime_error(
+          "ValueError: cannot select an axis to squeeze out which has size not "
+          "equal to one");
+
+      for (std::size_t i = 0; i < old_shape.size(); ++i)
+        if (i != *axis)
+          new_shape.push_back(old_shape[i]);
+    }
+    else
+    {
+      for (std::size_t dim : old_shape)
+        if (dim != 1)
+          new_shape.push_back(dim);
+    }
+
+    std::vector<nlohmann::json> flat;
+    flatten_json_list(arr_arg, flat);
+    std::size_t offset = 0;
+    nlohmann::json result = reshape_flat_to_json(flat, new_shape, 0, offset);
+    return converter_.get_expr(result);
   }
+
+  if (function == "swapaxes" || function == "moveaxis")
+    return handle_axis_permutation_view_call(function);
+
+  if (function == "broadcast_to")
+    return handle_broadcast_to_call();
 
   // np.stack(arrays[, axis]) — join arrays along a new first axis.
   // Only axis=0 is fully supported; other axes are accepted but also lower
@@ -6383,7 +8145,6 @@ exprt numpy_call_expr::get()
 
       return expr;
     }
-
     broadcast_check(call_["args"]);
 
     exprt expr = create_expr_from_call();

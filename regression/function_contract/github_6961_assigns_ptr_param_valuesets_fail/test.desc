@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract clr --unwind 10 --add-symex-value-sets
+^VERIFICATION FAILED$

@@ -207,9 +207,19 @@ def main(*, deps: CliDeps) -> int | None:
         ),
     )
 
+    for module_name, imported_preprocessor in import_resolver.imported_signature_sources:
+        import_info = import_resolver.module_imports.get(module_name)
+        if import_info is None or import_info['import_all']:
+            continue
+        # A model's simplified constructor must not arity-check real calls.
+        include_methods = not import_resolver.is_imported_model(module_name)
+        preprocessor.adopt_module_signatures(imported_preprocessor, import_info['specific_names'],
+                                             include_methods)
+
     alias_seed, wrapper_seed = deps.compute_range_seed(tree, import_resolver)
     preprocessor.apply_range_rewrites(tree, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
     tree = preprocessor.finalize_module(tree)
+    import_resolver.ensure_default_helper_imports(tree)
 
     processed_submodules = set()
     for node in ast.walk(tree):

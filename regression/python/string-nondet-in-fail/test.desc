@@ -1,3 +1,5 @@
 CORE
 main.py
+--nondet-str-length 11 --unwind 12
+main\.py line 3 column 0
 ^VERIFICATION FAILED$

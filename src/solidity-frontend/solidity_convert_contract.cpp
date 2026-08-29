@@ -179,7 +179,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   code_typet ft;
   typet tmp_rtn_type("constructor");
   ft.return_type() = tmp_rtn_type;
-  ft.set("#member_name", prefix + c_name);
+  ft.member_name(prefix + c_name);
   ft.set("#inlined", true);
   symbolt fs;
   locationt l;

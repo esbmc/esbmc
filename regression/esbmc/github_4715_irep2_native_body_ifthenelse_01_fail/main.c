@@ -2,7 +2,7 @@
 // Phase C, esbmc/esbmc#4715). Pins that consuming if/else natively neither
 // corrupts branch results nor suppresses bug detection: classify(-5) is -1, so
 // the wrong-value assertion is a reachable violation reported as VERIFICATION
-// FAILED under --irep2-native-body.
+// FAILED under native conversion.
 #include <assert.h>
 
 int classify(int x)

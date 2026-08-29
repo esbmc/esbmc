@@ -1,0 +1,8 @@
+CORE
+main.c
+--result-only
+^ +PASSED .*line +5 +addition commutes$
+^ +PASSED .*line +6 +zero annihilates$
+^\*\* 0 of 2 properties failed, 2 passed$
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*NOT CHECKED)[\s\S]*\Z

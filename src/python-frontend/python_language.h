@@ -10,6 +10,9 @@
 class python_languaget : public languaget
 {
 public:
+  /** @brief Registers the bundled parser scripts with file_operations. */
+  static void register_bundled();
+
   bool parse(const std::string &path) override;
 
   bool final(contextt &context) override;

@@ -145,8 +145,10 @@ public:
   expr2tc tuple_get(const expr2tc &expr) override;
   expr2tc tuple_get(const type2tc &type, smt_astt a) override;
 
-  expr2tc
-  tuple_get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype);
+  expr2tc tuple_get_array_elem(
+    smt_astt array,
+    uint64_t index,
+    const type2tc &subtype) override;
 
   tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;

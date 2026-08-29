@@ -193,10 +193,12 @@ std::string cmdlinet::expand_user(std::string const path) const
 {
   std::string result = std::string(path);
 
-  // Case ~
-  const std::optional<std::string> home_path = std::getenv(HOME_ENV_NAME);
+  // Case ~. Test the pointer, not an optional wrapping it: an unset variable
+  // yields nullptr, and std::optional<std::string> would construct the string
+  // from it before the guard runs, which is UB (#6238).
+  const char *home_path = std::getenv(HOME_ENV_NAME);
   if (!result.empty() && result[0] == '~' && home_path)
-    result.replace(0, 1, home_path.value());
+    result.replace(0, 1, home_path);
 
   return std::filesystem::absolute(result).string();
 }
@@ -325,9 +327,27 @@ bool cmdlinet::parse(
         .run(),
       vm);
   }
+  // Boost throws program_options errors as boost::wrapexcept<...>, whose
+  // typeinfo does not match this translation unit's std::exception across the
+  // library boundary, so a catch(std::exception&) misses them: they escaped to
+  // main's catch(...), and repeating any option (`--unwind 2 --unwind 2`)
+  // reached the user as a mangled boost::wrapexcept type name and nothing
+  // else. Catching the boost type keeps what(), which names the offending
+  // option. It derives from std::exception, so it has to precede the handler
+  // below -- behind it the compiler reports it as already caught.
+  catch (const boost::program_options::error &e)
+  {
+    log_error("Invalid command line: {}", e.what());
+    return true;
+  }
   catch (std::exception &e)
   {
     log_error("{}", e.what());
+    return true;
+  }
+  catch (...)
+  {
+    log_error("Invalid command line");
     return true;
   }
 

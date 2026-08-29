@@ -65,7 +65,15 @@ public:
   // Entry points exercised by callers outside python_annotation.h.
   void preprocess_constructor_calls(const Json &node);
   void preprocess_method_calls(const Json &node);
-  void preprocess_function_calls(Json &root);
+  /// Sentinel recorded for a call-site argument this pass cannot type; never
+  /// a valid Python type name, so it can only block, never be annotated.
+  static const std::string &unresolved_arg_type()
+  {
+    static const std::string s = "<unresolved>";
+    return s;
+  }
+  /// @return true if this pass wrote at least one parameter annotation.
+  bool preprocess_function_calls(Json &root);
   void collect_function_call_arg_types(
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>
@@ -105,6 +113,8 @@ private:
 
   // ----- type inspectors -----
   std::string get_current_func_name();
+  bool is_rebound_in_scope(const std::string &var_name);
+  unsigned arg_type_depth_ = 0;
   std::string get_type_from_constant(const Json &element);
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
@@ -151,6 +161,11 @@ private:
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name);
+  // The type a parameter's default value implies, or empty.
+  std::string infer_type_from_parameter_default(
+    const Json &function_element,
+    size_t param_index,
+    size_t param_count);
   // Return type of a FunctionDef @p member: its declared `-> T` (or `-> T[...]`)
   // annotation, else the type inferred from its return statements, else "Any".
   std::string
@@ -278,6 +293,10 @@ private:
   bool annotating_function_entry_point_ = false;
   std::vector<Json> referenced_global_elements;
   std::set<std::string> functions_in_analysis_;
+  // Functions whose recursive-branch inference is itself running. A second
+  // re-entry means the self-reference is indirect (the returned name's binding
+  // calls the function), which the return-expression scan cannot see.
+  std::set<std::string> functions_reentered_;
   std::set<std::string> resolving_rhs_vars_;
   std::string current_func_name_context_;
   std::string current_class_name_;

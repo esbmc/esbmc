@@ -29,6 +29,14 @@
 //                    subheaders. Include the ones we use.
 //
 // We use Boost.Process to run the Python interpreter in a separate process.
+//
+// v1's locale.hpp uses std::codecvt_utf8, deprecated in C++17. Boost is not
+// ours to fix and the include lists it with -I rather than -isystem (the
+// nlohmann pin needs that precedence, see ExternalDependencies.cmake), so
+// -Werror would stop on a third-party header. Silence it across the include
+// only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #if defined(__APPLE__) || (BOOST_VERSION == 108700)
 #  include <boost/process/v1.hpp>
 namespace bp = boost::process::v1;
@@ -41,6 +49,7 @@ namespace bp = boost::process::v1;
 #  include <boost/process.hpp>
 namespace bp = boost::process;
 #endif
+#pragma GCC diagnostic pop
 
 namespace fs = boost::filesystem;
 
@@ -50,29 +59,21 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
-// TODO: Rename this function as it is dumping other files now.
-static const std::string &dump_python_script()
-{
-  // Dump all Python (.py) files from src/python-frontend into a temporary directory
-  static bool dumped = false;
-  static auto p =
-    file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
-  if (!dumped)
-  {
-    dumped = true;
-#define ESBMC_FLAIL(body, size, ...)                                           \
-  {                                                                            \
-    fs::path filePath(fs::path(p.path()) / #__VA_ARGS__);                      \
-    fs::path directory = filePath.parent_path();                               \
-    if (!directory.empty() && !fs::exists(directory))                          \
-      fs::create_directories(directory);                                       \
-    std::ofstream(filePath.string()).write(body, size);                        \
-  }
+static const std::string vfs_prefix =
+  std::string(file_operations::ESBMC_VFS_ROOT) + "/python";
 
+void python_languaget::register_bundled()
+{
+  static bool done = false;
+  if (done)
+    return;
+  done = true;
+
+#define ESBMC_FLAIL(body, size, ...)                                           \
+  file_operations::filesystemt::get().add_bundled(                             \
+    vfs_prefix + "/" #__VA_ARGS__, body, size);
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
-  }
-  return p.path();
 }
 
 languaget *new_python_language()
@@ -88,7 +89,10 @@ bool python_languaget::parse(const std::string &path)
   if (!fs::exists(script))
     return true;
 
-  ast_output_dir = dump_python_script();
+  // The parser runs in a forked python3, which can only read real files.
+  register_bundled();
+  ast_output_dir = file_operations::filesystemt::get().materialize(
+    vfs_prefix, "esbmc-python-astgen-%%%%-%%%%-%%%%");
   fs::path parser_path(ast_output_dir);
   parser_path /= "parser/__main__.py";
 
@@ -290,12 +294,12 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
 
   // V.4 hop-off: with --python-irep2-adjust-only the IREP2-native adjuster
   // *replaces* clang_cpp_adjust on the Python path (the B.5 "sole adjuster"
-  // milestone, gated behind a default-off flag). A 2026-07-24 corrected census
-  // over regression/python (228/228 on the a-b prefix, 290/291 on an unbiased
-  // strided whole-corpus sample) showed verdict parity with the legacy pass and
-  // zero wrong verdicts; docs/scope-v1k-adjuster.md records the method. The one
-  // known non-parity case (boolop-len-or) is a load-dependent solver-time
-  // timeout, not a type-resolution defect, so the hop-off stays experimental.
+  // milestone, gated behind a default-off flag). It stays default-off: a
+  // whole-corpus legacy-vs-hop-off census (2026-07-29) found the missing
+  // assignment/operand conversion documented in docs/roadmap/scope-v1k-adjuster.md
+  // ("the assignment-conversion trap") reaches the solver as an ill-typed term
+  // and crashes it, so the flip waits on the coupled arithmetic-reconciliation
+  // effort that section sizes.
   if (config.options.get_bool_option("python-irep2-adjust-only"))
   {
     python_adjust py_adjuster(context);

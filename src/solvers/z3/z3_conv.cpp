@@ -50,8 +50,16 @@ z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
+    /* `smt` is incomplete for nonlinear real arithmetic, which the
+     * integer/real encoding (--ir) produces from a float multiplication, and
+     * the relevancy=0 below makes it give up rather than grind: it reports
+     * "incomplete (theory arithmetic)", which reaches the user as "SMT solver
+     * failed" with no verdict. Fall back to the complete NRA procedure, which
+     * declines any goal outside QF_NRA and leaves the result unknown exactly
+     * as before. */
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
-            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
+            z3::tactic(z3_ctx, "simplify") &
+            (z3::tactic(z3_ctx, "smt") | z3::tactic(z3_ctx, "qfnra-nlsat")))
              .mk_solver())
 {
   z3::params p(z3_ctx);
@@ -1770,6 +1778,14 @@ smt_astt z3_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
   return new_ast(
     z3::to_expr(z3_ctx, Z3_mk_fpa_div(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  const z3_smt_ast *mlhs = to_solver_smt_ast<z3_smt_ast>(lhs);
+  const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, mlhs->a, mrhs->a)), lhs->sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)

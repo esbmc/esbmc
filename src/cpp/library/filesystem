@@ -1,8 +1,17 @@
 #ifndef ESBMC_FILESYSTEM
 #define ESBMC_FILESYSTEM
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
+#include "cstddef" /* ptrdiff_t */
 #include "cstring"
+#include "iterator_tags.h"
 #include "string"
+/* [filesystem.syn] declares an error_code& overload of nearly every
+ * operation, so <filesystem> is where code expects std::error_code to
+ * become visible. */
+#include "system_error"
 
 // Minimal C++17 <filesystem> operational model.
 //
@@ -13,9 +22,15 @@
 // state-querying functions like exists() return non-deterministic
 // values so symex explores both branches.
 //
-// Per [filesystem] in N4861.  Out of scope: directory_iterator, the
+// Per [filesystem] in N4861.  Out of scope: recursive_directory_iterator,
+// directory_options, directory_entry's assign/refresh and comparisons, the
 // permissions / file_status / file_time_type / weakly_canonical APIs,
-// formatter integration, and the noexcept-overload set.
+// formatter integration, and the noexcept-overload set.  The error_code
+// overloads accept a code but never set one, so a caller's failure branch is
+// not explored.
+
+extern bool nondet_bool();
+extern unsigned int nondet_uint();
 
 namespace std
 {
@@ -69,6 +84,18 @@ public:
   {
     return __p_;
   }
+  /* [fs.path.native.obs]: u8string returns the path in UTF-8. This model
+   * stores a narrow string, so it is the same sequence as string(); the C++20
+   * std::u8string return type is not modelled. generic_string is the same
+   * again, since the generic and native formats coincide here. */
+  ::std::string u8string() const
+  {
+    return __p_;
+  }
+  ::std::string generic_string() const
+  {
+    return __p_;
+  }
   bool empty() const noexcept
   {
     return __p_.empty();
@@ -78,11 +105,69 @@ public:
     __p_ = ::std::string();
   }
 
-  // filename / parent_path / extension / stem omitted: ESBMC's <string>
-  // OM does not provide a const-qualified two-argument substr(), which
-  // these helpers would need to slice the underlying buffer.  Code that
-  // wants those decompositions can call into ::std::string directly via
-  // native()/string().
+  /* [fs.path.decompose]/7: dot and dot-dot have no extension, and neither
+   * does a name whose only period is a leading one (".bashrc"). */
+  static ::std::string::size_type __ext_pos(const ::std::string &f)
+  {
+    if (f == "." || f == "..")
+      return ::std::string::npos;
+    ::std::string::size_type i = f.find_last_of('.');
+    if (i == 0)
+      return ::std::string::npos;
+    return i;
+  }
+
+  /* [fs.path.decompose]. */
+  path filename() const
+  {
+    ::std::string::size_type i = __p_.find_last_of('/');
+    if (i == ::std::string::npos)
+      return path(__p_);
+    return path(__p_.substr(i + 1));
+  }
+
+  path parent_path() const
+  {
+    ::std::string::size_type i = __p_.find_last_of('/');
+    if (i == ::std::string::npos)
+      return path();
+    /* Strip the whole trailing separator run, so "a//b" yields "a"; if it
+     * reaches the front the run *is* the root and is kept whole ("//b"). */
+    ::std::string::size_type j = i;
+    while (j > 0 && __p_[j - 1] == '/')
+      --j;
+    if (j == 0)
+      return path(__p_.substr(0, i + 1));
+    return path(__p_.substr(0, j));
+  }
+
+  path extension() const
+  {
+    ::std::string f = filename().__p_;
+    ::std::string::size_type i = __ext_pos(f);
+    if (i == ::std::string::npos)
+      return path();
+    return path(f.substr(i));
+  }
+
+  path stem() const
+  {
+    ::std::string f = filename().__p_;
+    ::std::string::size_type i = __ext_pos(f);
+    if (i == ::std::string::npos)
+      return path(f);
+    return path(f.substr(0, i));
+  }
+
+  bool has_filename() const
+  {
+    return !filename().empty();
+  }
+
+  bool has_extension() const
+  {
+    return !extension().empty();
+  }
 
   friend bool operator==(const path &a, const path &b) noexcept
   {
@@ -129,7 +214,172 @@ inline bool equivalent(const path &a, const path &b)
   return a == b;
 }
 
+/* [fs.path.factory]: u8path builds a path from UTF-8 encoded source. This
+ * model's path already stores a narrow string, so it is the path constructor.
+ * The iterator-pair overload is deliberately absent rather than declared
+ * without a body, which would convert as a nondeterministic return. */
+template <class Source>
+inline path u8path(const Source &source)
+{
+  return path(source);
+}
+
+/* [fs.class.directory.entry] / [fs.class.directory.iterator]. Entry names are
+ * synthesised under the base path so that filename()/extension() have
+ * something well-formed to decompose. */
+
+class directory_entry
+{
+public:
+  directory_entry() = default;
+  explicit directory_entry(const filesystem::path &p) : __p_(p)
+  {
+  }
+
+  const filesystem::path &path() const noexcept
+  {
+    return __p_;
+  }
+  // [fs.dir.entry.obs]; this is what makes is_regular_file(*it) compile.
+  operator const filesystem::path &() const noexcept
+  {
+    return __p_;
+  }
+
+  bool exists() const
+  {
+    return filesystem::exists(__p_);
+  }
+  bool is_regular_file() const
+  {
+    return filesystem::is_regular_file(__p_);
+  }
+  bool is_directory() const
+  {
+    return filesystem::is_directory(__p_);
+  }
+
+  filesystem::path __p_;
+};
+
+class directory_iterator
+{
+public:
+  typedef directory_entry value_type;
+  typedef const directory_entry &reference;
+  typedef const directory_entry *pointer;
+  typedef ::std::ptrdiff_t difference_type;
+  typedef ::std::input_iterator_tag iterator_category;
+
+  /* A directory yields an unknown number of entries; the bound is what keeps
+   * symex terminating on `for (auto &e : directory_iterator(d))`. Unlike an
+   * --unwind bound it raises no unwinding assertion, so a defect needing more
+   * than __max_entries entries is not reported. */
+  static constexpr unsigned __max_entries = 3;
+  static_assert(
+    __max_entries < 10,
+    "entry-name synthesis in __refresh() assumes a single digit");
+
+  // The default-constructed iterator is the end sentinel [fs.dir.itr.members].
+  directory_iterator() : __n_(0), __i_(0), __id_(0)
+  {
+  }
+
+  explicit directory_iterator(const path &p) : __base_(p), __i_(0)
+  {
+    __open();
+  }
+
+  directory_iterator(const path &p, error_code &ec) : __base_(p), __i_(0)
+  {
+    ec.clear();
+    __open();
+  }
+
+  const directory_entry &operator*() const
+  {
+    __ESBMC_assert(__i_ < __n_, "dereferencing a past-the-end directory_iterator");
+    return __e_;
+  }
+  const directory_entry *operator->() const
+  {
+    __ESBMC_assert(__i_ < __n_, "dereferencing a past-the-end directory_iterator");
+    return &__e_;
+  }
+
+  directory_iterator &operator++()
+  {
+    ++__i_;
+    __refresh();
+    return *this;
+  }
+  directory_iterator operator++(int)
+  {
+    directory_iterator t = *this;
+    ++*this;
+    return t;
+  }
+
+  directory_iterator &increment(error_code &ec)
+  {
+    ec.clear();
+    return ++*this;
+  }
+
+  /* Both past-the-end iterators compare equal whatever they were built from,
+   * which is what `it != end` in a loop relies on. Two separate constructions
+   * over one directory are distinct objects, so their identity is left
+   * non-deterministic rather than asserted equal. */
+  bool operator==(const directory_iterator &o) const
+  {
+    bool a = __i_ >= __n_;
+    bool b = o.__i_ >= o.__n_;
+    if (a || b)
+      return a && b;
+    return __i_ == o.__i_ && __id_ == o.__id_ && __base_ == o.__base_;
+  }
+  bool operator!=(const directory_iterator &o) const
+  {
+    return !(*this == o);
+  }
+
+  path __base_;
+  directory_entry __e_;
+  unsigned __n_;
+  unsigned __i_;
+  unsigned __id_;
+
+private:
+  void __open()
+  {
+    __n_ = nondet_uint();
+    __ESBMC_assume(__n_ <= __max_entries);
+    __id_ = nondet_uint();
+    __ESBMC_assume(__id_ != 0);
+    __refresh();
+  }
+
+  void __refresh()
+  {
+    if (__i_ < __n_)
+    {
+      char name[3] = {'f', (char)('0' + __i_), '\0'};
+      __e_ = directory_entry(__base_ / path(name));
+    }
+  }
+};
+
+inline directory_iterator begin(directory_iterator it) noexcept
+{
+  return it;
+}
+inline directory_iterator end(directory_iterator) noexcept
+{
+  return directory_iterator();
+}
+
 } // namespace filesystem
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif

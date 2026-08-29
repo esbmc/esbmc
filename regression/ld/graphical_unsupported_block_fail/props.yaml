@@ -1,0 +1,10 @@
+properties:
+
+  # The alarm coil is driven by a GT comparison block, which the graphical
+  # resolver does not model. The real program violates this invariant whenever
+  # the havoc'd level input exceeds limit, so a SUCCESSFUL verdict here means
+  # the resolver silently dropped the rung and verified a weaker program.
+  - id: P1
+    kind: invariant
+    expression: "!alarm"
+    description: "Alarm coil never energises"

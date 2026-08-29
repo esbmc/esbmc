@@ -194,6 +194,11 @@ prepare_platform_config() {
           "-DENABLE_CVC5=Off"
         )
         BASE_ARGS+=("-DENABLE_BUNDLE_LIBC_32BIT=OFF")
+        # c2goto stubs sol64 out on ARM64, where clang has no _BitInt > 128
+        # (src/c2goto/CMakeLists.txt), so the frontend would build against an
+        # empty model and every esbmc-solidity test would abort. Off here also
+        # unregisters that suite in regression/CMakeLists.txt.
+        BASE_ARGS+=("-DENABLE_SOLIDITY_FRONTEND=OFF")
       fi
       ;;
 
@@ -260,7 +265,11 @@ collect_ubuntu_packages() {
   if [[ "$ARCH" != "aarch64" ]]; then
     UBUNTU_PACKAGES+=(g++-multilib)
   else
-    log "Skipping g++-multilib on aarch64"
+    # No multilib on aarch64, but plain g++ still has to be there: the tests
+    # passing --no-abstracted-cpp-includes reach for the system <cctype>,
+    # <cassert> and friends, which only libstdc++-dev provides.
+    log "Skipping g++-multilib on aarch64; installing g++ for libstdc++ headers"
+    UBUNTU_PACKAGES+=(g++)
   fi
 
   if [[ "$COVERAGE" == "ON" ]]; then
@@ -272,6 +281,8 @@ collect_ubuntu_packages() {
       "llvm-$CLANG_VERSION-dev"
       "libclang-$CLANG_VERSION-dev"
       "libclang-cpp${CLANG_VERSION}-dev"
+      # Ships /usr/lib/cmake/clang-N (ClangConfig.cmake); no -dev package has it.
+      "clang-$CLANG_VERSION"
       libz3-dev
     )
   fi
@@ -548,7 +559,9 @@ $0 [-OPTS] [deps] [build] [install]
 Options [defaults]:
   -h         display this help message
   -b BTYPE   set cmake build type to BTYPE [RelWithDebInfo]
-  -s STYPE   enable sanitizer STYPE and compile with clang [disabled]
+  -s STYPE   enable sanitizer STYPE (asan/tsan/lsan/msan/ubsan, or the
+             clang spellings address/thread/leak/memory/undefined; comma-
+             separated for several) and compile with clang [disabled]
   -e ON|OFF  enable/disable -Werror [OFF]
   -r ON|OFF  enable/disable 'benchbringup' [OFF]
   -d         enable debug output for this script and c2goto
@@ -585,7 +598,7 @@ while getopts "hb:s:e:r:dS:c:CB:x:k:" flag; do
       BASE_ARGS+=("-DCMAKE_BUILD_TYPE=${OPTARG}")
       ;;
     s)
-      BASE_ARGS+=("-DSANITIZER_TYPE=${OPTARG}")
+      BASE_ARGS+=("-DENABLE_SANITIZERS=${OPTARG}")
       COMPILER_ENV=(CC=clang CXX=clang++)
       ;;
     e)

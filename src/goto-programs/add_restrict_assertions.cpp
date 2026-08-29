@@ -81,12 +81,20 @@ static expr2tc
 disjoint_assertion(const restrict_paramt &a, const restrict_paramt &b)
 {
   const type2tc offset_type = get_int_type(config.ansi_c.address_width);
-  expr2tc off_a = pointer_offset2tc(offset_type, a.pointer);
-  expr2tc off_b = pointer_offset2tc(offset_type, b.pointer);
+  // Entry-point parameters have unconstrained offsets, so forming oa+sa at the
+  // address width lets a solver pick an offset near the signed maximum and wrap
+  // the sum negative. That makes the ranges look disjoint, which is harmless
+  // when this is asserted (a violating model still exists and is found) but
+  // satisfies it vacuously when it is assumed. Widen so no offset can wrap.
+  const type2tc wide_type = get_int_type(config.ansi_c.address_width * 2);
+  expr2tc off_a =
+    typecast2tc(wide_type, pointer_offset2tc(offset_type, a.pointer));
+  expr2tc off_b =
+    typecast2tc(wide_type, pointer_offset2tc(offset_type, b.pointer));
   expr2tc end_a =
-    add2tc(offset_type, off_a, constant_int2tc(offset_type, a.element_size));
+    add2tc(wide_type, off_a, constant_int2tc(wide_type, a.element_size));
   expr2tc end_b =
-    add2tc(offset_type, off_b, constant_int2tc(offset_type, b.element_size));
+    add2tc(wide_type, off_b, constant_int2tc(wide_type, b.element_size));
 
   expr2tc both_non_null = and2tc(
     notequal2tc(a.pointer, gen_zero(a.pointer->type)),
@@ -101,7 +109,14 @@ disjoint_assertion(const restrict_paramt &a, const restrict_paramt &b)
   return not2tc(overlap);
 }
 
-void add_restrict_assertions(contextt &context, goto_functionst &goto_functions)
+// Shared walker. `entry` empty means "every function" (the checking pass);
+// otherwise only the named function is instrumented, which is what the assuming
+// pass needs -- see the header for why it must not be applied program-wide.
+static void add_restrict_constraints(
+  contextt &context,
+  goto_functionst &goto_functions,
+  bool assume,
+  const std::string &entry)
 {
   const namespacet ns(context);
 
@@ -115,6 +130,9 @@ void add_restrict_assertions(contextt &context, goto_functionst &goto_functions)
     if (func_symbol == nullptr || !func_symbol->get_type().is_code())
       continue;
 
+    if (!entry.empty() && func_symbol->name.as_string() != entry)
+      continue;
+
     std::vector<restrict_paramt> params =
       collect_restrict_params(*func_symbol, ns);
     if (params.size() < 2)
@@ -125,7 +143,11 @@ void add_restrict_assertions(contextt &context, goto_functionst &goto_functions)
       for (std::size_t j = i + 1; j < params.size(); j++)
       {
         goto_programt::targett t = body.insert(first);
-        t->make_assertion(disjoint_assertion(params[i], params[j]));
+        expr2tc disjoint = disjoint_assertion(params[i], params[j]);
+        if (assume)
+          t->make_assumption(disjoint);
+        else
+          t->make_assertion(disjoint);
         t->location = first->location;
         t->location.user_provided(false);
         t->location.comment("restrict pointer aliasing");
@@ -133,4 +155,17 @@ void add_restrict_assertions(contextt &context, goto_functionst &goto_functions)
   }
 
   goto_functions.update();
+}
+
+void add_restrict_assertions(contextt &context, goto_functionst &goto_functions)
+{
+  add_restrict_constraints(context, goto_functions, false, "");
+}
+
+void add_restrict_assumptions(
+  contextt &context,
+  goto_functionst &goto_functions,
+  const std::string &entry)
+{
+  add_restrict_constraints(context, goto_functions, true, entry);
 }

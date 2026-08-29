@@ -2,6 +2,7 @@
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
 #include <pointer-analysis/value_sets.h>
+#include <optional>
 #include <set>
 #include <irep2/irep2.h>
 #include <util/arith/mp_arith.h>
@@ -609,9 +610,18 @@ public:
    *         This only affects how constants are interpreted: if enabled, the
    *         expression 0 becomes a null_object2t reference in the value-set,
    *         while other constants are invalid2t/unknown2t; when disabled,
-   *         constant expressions do not generate any references in the
-   *         value-set.
+   *         constant expressions generate no references, except that a member
+   *         of a constant aggregate is still selected, since navigating to it
+   *         inserts nothing by itself.
    */
+  /// Stop an operand whose set is only `unknown` from vetoing the other's;
+  /// the `unknown` moves into @p dest. See
+  /// docs/design/pointer-integer-provenance.md.
+  void retire_objectless_operand(
+    object_mapt &op0_set,
+    object_mapt &op1_set,
+    object_mapt &dest) const;
+
   void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
@@ -620,6 +630,58 @@ public:
     bool under_deref = true) const;
 
 protected:
+  /** The byte offset a constant operand of pointer arithmetic contributes,
+   *  already signed by @p subtracting; nullopt when the operand is not a
+   *  compile-time constant or its element size is not statically known. */
+  std::optional<BigInt> constant_pointer_arith_offset(
+    const expr2tc &non_ptr_op,
+    const type2tc &subtype,
+    bool subtracting) const;
+
+  /** Fold @p total_offs into every object of @p pointer_expr_set, tracking
+   *  alignment where the offset or the object's own offset is nondet, and
+   *  store the results into @p dest. */
+  void offset_pointer_arith_objects(
+    const object_mapt &pointer_expr_set,
+    const expr2tc &ptr_op,
+    const std::optional<BigInt> &total_offs,
+    object_mapt &dest) const;
+
+  /** What @p sym points at: the values keyed under the path the read spells,
+   *  falling back to the paths a union arm it crosses aliases. Returns whether
+   *  anything was found. */
+  bool get_symbol_value_set(
+    const symbol2t &sym,
+    const expr2tc &expr,
+    const std::string &suffix,
+    const type2tc &original_type,
+    object_mapt &dest) const;
+
+  /** The constant cases of get_value_set_rec: what a value reaches this code as
+   *  once constant propagation has substituted it. */
+  void get_constant_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  /** The two aggregate literals of get_constant_value_set. Each consumes the
+   *  one suffix component naming the member it holds, since a literal has no
+   *  suffixed symbol name for the symbol case to look up. */
+  void get_constant_struct_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
+
+  void get_constant_union_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(

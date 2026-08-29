@@ -45,6 +45,12 @@ void goto_symext::intrinsic_switch_from(reachability_treet &art)
   // Mark switching back to this thread as already having been explored
   art.mark_active_thread_explored();
 
+  // Unlike create_next_state's marking, this suppresses a successor without
+  // exploring it, so the frame is not exhausted and nothing may sleep against
+  // it (issue #6831). Reached independently of --direct-interleavings, which is
+  // why the sleep-set force-off there does not cover this.
+  art.mark_search_truncated();
+
   // And force a context switch.
   art.get_cur_state().force_cswitch();
 }
@@ -260,7 +266,9 @@ void goto_symext::intrinsic_register_monitor(
   }
 
   unsigned int tid = to_constant_int2t(threadid).value.to_uint64();
-  assert(art.get_cur_state().threads_state.size() >= tid);
+  // The monitor must be *in* threads_state: check_if_ileaves_blocked discounts
+  // it from the thread count and check_thread_viable indexes by it.
+  assert(art.get_cur_state().threads_state.size() > tid);
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;
 }

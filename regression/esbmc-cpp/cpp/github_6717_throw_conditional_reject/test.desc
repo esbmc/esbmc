@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+^ERROR: ESBMC currently does not support a throw-expression in a class-typed conditional$
+\A(?![\s\S]*Unrecognized address_of operand)[\s\S]*\Z

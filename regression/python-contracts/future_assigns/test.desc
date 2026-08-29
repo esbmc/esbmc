@@ -1,0 +1,4 @@
+FUTURE
+main.py
+--enforce-contract touch
+^VERIFICATION SUCCESSFUL$

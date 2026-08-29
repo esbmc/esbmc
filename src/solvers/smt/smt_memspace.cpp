@@ -52,15 +52,21 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
    * antisymmetry of <=) still hold; comparing only the offsets would let
    * p<=q and q<=p be satisfied simultaneously for distinct objects.
    *
-   * The offsets are typecast to unsigned for the comparison because objects
-   * could be larger than half the address space, in which case offsets could
-   * flip sign. */
+   * The offsets are compared signed, as the rest of the model reads them:
+   * __ESBMC_POINTER_OFFSET, the bounds checks and pointer subtraction all
+   * treat a pointer below its object's base as a negative offset. Reading them
+   * unsigned here made p >= b hold for p = b - 1, so a reverse iteration never
+   * terminated (R36). An object larger than half the address space still
+   * mis-orders — pointer_struct's offset member is ptraddr_type2(), full
+   * unsigned width, so the signed annotation here is a reading convention and
+   * not a bound — but that costs an 8 EiB allocation, where the unsigned
+   * reading cost every below-base pointer (R37). */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
   expr2tc o1 = pointer_object2tc(type, side1);
   expr2tc o2 = pointer_object2tc(type, side2);
-  expr2tc s1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  expr2tc s2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc s1 = pointer_offset2tc(stype, side1);
+  expr2tc s2 = pointer_offset2tc(stype, side2);
   expr2tc same_obj = equality2tc(o1, o2);
 
   // Lexicographic step: the object ids decide the order; on a tie the offsets
@@ -367,6 +373,38 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
   return a;
 }
 
+/* Whether a type opts out of alignment entirely: `packed` and `#pragma
+ * pack(n)` both leave members at offsets their own types do not require, and
+ * the dereference check honours that (dereferencet::is_aligned_member). The
+ * recursion mirrors alignment()'s: ns.follow() resolves symbol types only, so
+ * an array of packed structs has to be reached through its subtype. */
+static bool declines_alignment(const typet &type, const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+
+  if (t.is_array())
+    return declines_alignment(t.subtype(), ns);
+
+  return t.get_bool("packed") || !t.get_string("max_field_alignment").empty();
+}
+
+/* The largest power-of-two alignment an access to an object of this size can
+ * demand, capped at the ABI's fundamental alignment. A symbolic size (VLA,
+ * dynamic object) admits any access the type allows, so assume the cap. */
+static BigInt base_alignment_bump(const expr2tc &size)
+{
+  const BigInt cap(config.ansi_c.max_alignment());
+
+  if (!is_constant_int2t(size))
+    return cap;
+
+  const BigInt &bytes = to_constant_int2t(size).value;
+  BigInt a = 1;
+  while (a * 2 <= bytes && a < cap)
+    a *= 2;
+  return a;
+}
+
 smt_astt smt_solver_baset::init_pointer_obj(
   unsigned int obj_num,
   const expr2tc &size,
@@ -427,7 +465,17 @@ smt_astt smt_solver_baset::init_pointer_obj(
    * yields a spurious counterexample. Types of alignment 1 constrain nothing. */
   if (type)
   {
-    const BigInt a = alignment(*type, ns);
+    BigInt a = alignment(*type, ns);
+
+    /* dereferencet::check_alignment() reads a scalar access as aligned from its
+     * offset alone, so it assumes the base carries the access width; without
+     * the same assumption here the two disagree on whether one pointer can be
+     * misaligned (#6951). check_data_obj_access() bounds-checks the access
+     * first, so the width never exceeds the object's size -- hence the bump is
+     * capped by size as well as by the ABI's fundamental alignment. */
+    if (!declines_alignment(*type, ns))
+      a = std::max(a, base_alignment_bump(size));
+
     if (a > 1)
     {
       expr2tc mod =

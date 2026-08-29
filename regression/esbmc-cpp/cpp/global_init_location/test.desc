@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--goto-functions-only
+^\s*// \d+ file .*main\.cpp line 7 column 1$
+^\s*ASSIGN A=NONDET\(signed int\);$

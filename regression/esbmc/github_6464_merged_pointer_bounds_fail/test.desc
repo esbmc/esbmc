@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-propagation
+^VERIFICATION FAILED$
+^.*dereference failure: array bounds violated: heap object$

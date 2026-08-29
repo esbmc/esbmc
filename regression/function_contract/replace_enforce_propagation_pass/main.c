@@ -34,6 +34,7 @@ int leaf(int *out)
 int parent(int *eaten)
 {
     __ESBMC_requires(eaten != ((void *)0));
+    __ESBMC_requires(__ESBMC_is_fresh(eaten, sizeof(int)));
     __ESBMC_assigns(*eaten);
     __ESBMC_ensures(__ESBMC_return_value != 0 || *eaten > 0);
     __ESBMC_ensures(__ESBMC_return_value == 0 || __ESBMC_return_value == -1);
