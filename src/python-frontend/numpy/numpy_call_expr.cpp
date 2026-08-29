@@ -4189,16 +4189,23 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (var["value"]["_type"] == "Call")
       {
+        // `y = make()` where make() is a pure, zero/param user function
+        // that itself returns a numpy array (e.g. `def make(): return
+        // np.array(...)`): not a direct numpy constructor call, so inline
+        // it the same way a reducer's own nested-call argument is (see
+        // try_inline_pure_call_arg) before falling back to the generic
+        // "first argument" heuristic below.
+        nlohmann::json call_value = try_inline_pure_call_arg(var["value"]);
         if (
           std::optional<nlohmann::json> materialized =
-            materialize_numpy_constructor_array(var["value"], converter_.ast()))
+            materialize_numpy_constructor_array(call_value, converter_.ast()))
           var = std::move(*materialized);
-        else if (is_numpy_constructor_call_by_name(var["value"]))
-          var = var["value"];
-        else if (var["value"].contains("args") && !var["value"]["args"].empty())
-          var = var["value"]["args"][0];
+        else if (is_numpy_constructor_call_by_name(call_value))
+          var = call_value;
+        else if (call_value.contains("args") && !call_value["args"].empty())
+          var = call_value["args"][0];
         else
-          var = var["value"];
+          var = call_value;
       }
       else
       {
@@ -4258,7 +4265,7 @@ exprt numpy_call_expr::create_expr_from_call()
       throw std::runtime_error(
         "TypeError: numpy." + function + "() missing argument");
 
-    nlohmann::json arg = call_["args"][0];
+    nlohmann::json arg = try_inline_pure_call_arg(call_["args"][0]);
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
@@ -6463,6 +6470,13 @@ nlohmann::json numpy_call_expr::resolve_literal_numpy_array_input(
       arr_arg = resolved["value"];
   }
 
+  // `np.sort(identity(x))`/`np.sort(y)` with `y = identity(x)`: the argument
+  // (after the Name resolution above) may itself be a Call to a simple, pure
+  // user function -- the same nested-call shape try_inline_pure_call_arg
+  // already resolves for the reducers' own literal-array-input path. A
+  // no-op for anything that isn't a Call.
+  arr_arg = try_inline_pure_call_arg(arr_arg);
+
   auto literal_arg = get_literal_numpy_array_arg(arr_arg);
   if (!literal_arg.has_value())
     throw std::runtime_error(
@@ -6515,28 +6529,32 @@ exprt numpy_call_expr::get()
         var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
-          if (auto numpy_call = try_build_numpy_arange_list(var["value"]))
+          // `y = make()` where make() is a pure user function returning a
+          // numpy array: inline it the same way a reducer's own nested-call
+          // argument is (try_inline_pure_call_arg) before falling back to
+          // the arange/constructor/first-argument heuristics below.
+          nlohmann::json call_value = try_inline_pure_call_arg(var["value"]);
+          if (auto numpy_call = try_build_numpy_arange_list(call_value))
           {
             var = std::move(*numpy_call);
             return;
           }
           if (
             std::optional<nlohmann::json> materialized =
-              materialize_numpy_constructor_array(
-                var["value"], converter_.ast()))
+              materialize_numpy_constructor_array(call_value, converter_.ast()))
           {
             var = std::move(*materialized);
             return;
           }
-          if (is_numpy_constructor_call_by_name(var["value"]))
+          if (is_numpy_constructor_call_by_name(call_value))
           {
-            var = var["value"];
+            var = call_value;
             return;
           }
-          if (var["value"].contains("args") && !var["value"]["args"].empty())
-            var = var["value"]["args"][0];
+          if (call_value.contains("args") && !call_value["args"].empty())
+            var = call_value["args"][0];
           else
-            var = var["value"];
+            var = call_value;
         }
         else
           var = var["value"];
@@ -7417,16 +7435,23 @@ exprt numpy_call_expr::get()
         return;
       if (var["value"]["_type"] == "Call")
       {
+        // `y = make()` where make() is a pure, zero/param user function
+        // that itself returns a numpy array (e.g. `def make(): return
+        // np.array(...)`): not a direct numpy constructor call, so inline
+        // it the same way a reducer's own nested-call argument is (see
+        // try_inline_pure_call_arg) before falling back to the generic
+        // "first argument" heuristic below.
+        nlohmann::json call_value = try_inline_pure_call_arg(var["value"]);
         if (
           std::optional<nlohmann::json> materialized =
-            materialize_numpy_constructor_array(var["value"], converter_.ast()))
+            materialize_numpy_constructor_array(call_value, converter_.ast()))
           var = std::move(*materialized);
-        else if (is_numpy_constructor_call_by_name(var["value"]))
-          var = var["value"];
-        else if (var["value"].contains("args") && !var["value"]["args"].empty())
-          var = var["value"]["args"][0];
+        else if (is_numpy_constructor_call_by_name(call_value))
+          var = call_value;
+        else if (call_value.contains("args") && !call_value["args"].empty())
+          var = call_value["args"][0];
         else
-          var = var["value"];
+          var = call_value;
       }
       else
       {
@@ -7738,21 +7763,8 @@ exprt numpy_call_expr::get()
       }
     }
 
-    nlohmann::json arr_arg = call_["args"][0];
-    if (arr_arg.value("_type", std::string()) == "Name")
-    {
-      nlohmann::json resolved = json_utils::find_var_decl(
-        arr_arg["id"], converter_.current_function_name(), converter_.ast());
-      if (resolved.contains("value") && resolved["value"].is_object())
-        arr_arg = resolved["value"];
-    }
-
-    auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-    if (!literal_arg.has_value())
-      throw std::runtime_error(
-        "TypeError: numpy.sort() currently supports only literal numpy.array "
-        "inputs");
-    arr_arg = std::move(*literal_arg);
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.empty())

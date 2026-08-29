@@ -3691,10 +3691,30 @@ void python_converter::update_numpy_array_binding(
   if (unconditional_assignment || numpy_view_copy_sources_.count(lhs_id) == 0)
     clear_numpy_view_copy(lhs);
 
-  if (is_numpy_array_constructor_expr(rhs_node))
+  // `y = identity(x)`: a call to a locally-defined function returning a numpy
+  // array used to fall through to the erase below -- registering `y`'s type
+  // correctly as an array (Commit 4's own array-return fix) but leaving it
+  // untracked for method-form dispatch, so `y.tolist()`/`y.sum()` misread as
+  // a call to an undefined function named "tolist"/"sum".
+  if (
+    is_numpy_array_constructor_expr(rhs_node) ||
+    is_array_returning_call_expr(rhs_node, lhs))
     numpy_array_symbols_.insert(lhs_id);
   else
     numpy_array_symbols_.erase(lhs_id);
+}
+
+bool python_converter::is_array_returning_call_expr(
+  const nlohmann::json &rhs_node,
+  const exprt &lhs) const
+{
+  // A Python str is also represented as a (char) array, so array-ness alone
+  // is not numpy-ness: `def greet(): return "hi"` must not register `s` in
+  // numpy_array_symbols_, or `s.tolist()` would misdispatch to the ndarray
+  // method model instead of failing as the string method it isn't.
+  const typet &lhs_type = ns.follow(lhs.type());
+  return rhs_node.value("_type", "") == "Call" && lhs_type.is_array() &&
+         !type_handler_.is_string_type(lhs_type);
 }
 
 bool python_converter::record_numpy_view_copy_from_returned_argument(

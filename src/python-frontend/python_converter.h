@@ -1078,6 +1078,17 @@ private:
 
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
 
+  // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
+  // itself returns a numpy array is never an is_numpy_array_constructor_expr
+  // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type
+  // already reflects the array-return fix by the time update_numpy_array_
+  // binding runs, so trust it instead of duplicating that resolution here.
+  // Split out of update_numpy_array_binding to keep its own decision count
+  // from growing further.
+  bool is_array_returning_call_expr(
+    const nlohmann::json &rhs_node,
+    const exprt &lhs) const;
+
   bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
 
   std::string
