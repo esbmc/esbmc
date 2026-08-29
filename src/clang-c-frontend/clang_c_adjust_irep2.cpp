@@ -98,6 +98,15 @@ static bool is_arith_or_bitwise(const expr2tc &expr)
          is_bitor2t(expr) || is_bitxor2t(expr);
 }
 
+/// The shifts clang_c_adjust routes through adjust_expr_shifts. They are not
+/// in is_arith_or_bitwise: C11 6.5.7p3 promotes each operand on its own and
+/// takes the result type from the left, where the usual arithmetic conversions
+/// would bring the two to a common type.
+static bool is_shift(const expr2tc &expr)
+{
+  return is_shl2t(expr) || is_ashr2t(expr) || is_lshr2t(expr);
+}
+
 /// The statements whose controlling expression clang_c_adjust converts to bool
 /// (adjust_ifthenelse, adjust_while, adjust_for). `switch` is not among them:
 /// its selector is an integer.
@@ -282,6 +291,8 @@ void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
 
   if (is_arith_or_bitwise(expr))
     adjust_binary_arith_operands(expr);
+  else if (is_shift(expr))
+    adjust_shift_operands(expr);
 
   if (is_sideeffect_assign2t(expr))
   {
@@ -689,6 +700,39 @@ void clang_c_adjust_irep2::adjust_binary_arith_operands(expr2tc &expr)
   // other and still disagree with the node.
   if (
     op0->type == op1->type && is_number_type(op0->type) &&
+    expr->type != op0->type)
+    expr = expr->with_type(op0->type);
+}
+
+/// IREP2 form of clang_c_adjust::adjust_expr_shifts. C11 6.5.7p3 performs the
+/// integer promotions on each operand separately -- not the usual arithmetic
+/// conversions -- and 6.5.7p4 gives the result the promoted left operand's
+/// type. A `_Bool` left operand left unpromoted reaches bitwuzla as a
+/// one-bit sort where the shift wants a bitvector, and aborts it.
+///
+/// The `shr` to `lshr`/`ashr` selection legacy also does here has no IREP2
+/// counterpart: there is no `shr2t`, so the migration has already chosen.
+void clang_c_adjust_irep2::adjust_shift_operands(expr2tc &expr)
+{
+  expr2tc op0 = *expr->get_sub_expr(0);
+  expr2tc op1 = *expr->get_sub_expr(1);
+  if (is_nil_expr(op0) || is_nil_expr(op1))
+    return;
+
+  const expr2tc before0 = op0, before1 = op1;
+  c_typecastt c_typecast(ns);
+  c_typecast.implicit_typecast_arithmetic(op0);
+  c_typecast.implicit_typecast_arithmetic(op1);
+
+  if (op0 != before0 || op1 != before1)
+  {
+    unsigned i = 0;
+    expr->Foreach_operand(
+      [&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  }
+
+  if (
+    is_number_type(op0->type) && is_number_type(op1->type) &&
     expr->type != op0->type)
     expr = expr->with_type(op0->type);
 }
