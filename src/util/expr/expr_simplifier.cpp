@@ -1586,16 +1586,16 @@ expr2tc pointer_offset2t::do_simplify() const
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
-  {
-    if (is_pointer_type(ptr_obj->type))
-    {
-      const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
-      // Allow NULL simplification for pointer types to primitives
-      if (!is_symbol_type(ptr_type.subtype))
-        return gen_zero(type);
-    }
-  }
+  // NULL is object 0 at offset 0 whatever it is a pointer to, so the pointee
+  // does not gate this. It used to: #2803 restricted the fold to non-symbol
+  // subtypes with no reason recorded, and offsetof lowers to
+  // `(char *)(struct S *)NULL + k`, so a struct pointee — the only shape
+  // offsetof ever produces — never folded and a loop bounded by an offsetof
+  // never exited (#6779).
+  if (
+    is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL" &&
+    is_pointer_type(ptr_obj->type))
+    return gen_zero(type);
 
   if (is_address_of2t(ptr_obj))
   {

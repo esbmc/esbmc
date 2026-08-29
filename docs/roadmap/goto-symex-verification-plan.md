@@ -726,6 +726,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (KNOWNBUG) | Open: capping allocations at `PTRDIFF_MAX` would make the signed reading exact — C11 6.5.6p9 already requires `ptrdiff_t` to represent any in-object difference, and the model computes that difference signed. Verify the glibc precedent before citing it |
 | **R43** | **Medium–High (no verdict, default configuration)** — found by a loop-bound spelling census, §15 M9 (R43); **FIXED**, same entry | **A loop whose end is spelled `&a[n]` never terminates.** `for (int *p = a; p != &a[4]; ++p)` unwinds forever under default flags: `expr2t::simplify` returned nil for every `address_of`, so `&a[4]` never became `&a[0] + 4` and the guard was never decided against the `a + k` the induction variable carries. Spelling the same bound `a + 4` folds, which is why the shape survived — one spelling of the idiom works and the other hangs | `expr2t::simplify`'s `address_of_id` early return, `src/util/expr/expr_simplifier.cpp`; the skipped fold is `address_of2t::do_simplify` in the same file | `regression/esbmc/addressof_index_bound{,_fail}` | **Fixed**: normalise `&base[c]` to `&base[0] + c` on the operands of `equality2t`/`notequal2t` only, so the two spellings of a bound meet at the comparison that has to decide them. The `address_of_id` early return stays — running the fold on *every* address_of costs the value-set analysis the concrete offset and k-induction stops converging, see the entry |
 | **R45** | **Medium–High (no verdict, default configuration)** — found by a trip-count *bound* census rather than an address one, §15 M9 (R45); **FIXED**, same entry | **A pointer difference stops folding as soon as a cast or a member is involved.** R30's fold (#6783) matched a bare `address_of` of an `index2t`, so `(char *)&a[4] - (char *)&a[0]` — the idiomatic byte distance — and `&p.b - &p.a` both stayed unfolded and a loop bounded by either never exited. The value is available throughout: `assert(n == 4)` on the same bound proves on an unpatched build | `fold_index_difference`, `src/util/expr/expr_simplifier.cpp`; 16-shape bound census plus 8 difference-shape probes | `regression/esbmc/{member,byte}_address_difference{,_fail}` | **Fixed**: decompose both operands into root object plus constant byte offset, through casts and members alike, and divide the distance by the operands' own pointee type. Residual: `offsetof` lowers to `POINTER_OFFSET(&0->b)`, and `pointer_offset2t` over a constant-offset address has no fold at all |
+| **R46** | **Medium (no verdict, default configuration)** — R45's named residual, closed the next hour, §15 M9 (R46); **FIXED**, same entry | **A loop bounded by `offsetof` never exits.** `offsetof` lowers to `(char *)(struct S *)NULL + k`, and `pointer_offset2t`'s NULL arm folded to zero only when the pointee was *not* a symbol type — which is every struct and union, so the only shape `offsetof` produces was the only shape the fold refused. The guard arrived with the arm in #2803 with no rationale recorded, and NULL is object 0 at offset 0 whatever it points to | `pointer_offset2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; 8-shape `offsetof` census | `regression/esbmc/offsetof_loop_bound{,_nested,_fail}` | **Fixed**: drop the pointee restriction. Removing a live guard is not a C-Dead obligation — the census names the five shapes that change and the suite sweep shows nothing else does |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -6281,6 +6282,76 @@ answer, and it is the one the rest of the model already gives.
 | `regression/esbmc/ptr_rel_below_base_fail` | default | `FAILED` on `below >= b` — the pre-fix reading, asserted directly |
 | `regression/esbmc/ptr_rel_huge_object` | default | `KNOWNBUG` — pins R37, the residual this fix accepts. Weak by construction: `testing_tool.py` counts a timeout as satisfying a `KNOWNBUG`, and the expectation is only that `VERIFICATION SUCCESSFUL` is absent, so a future crash or timeout on the 8 EiB `malloc` would keep it green while R37 stopped being what is measured. It is exact today; it will not stay exact under drift |
 | `-L esbmc/`, `-L esbmc-unix` | as recorded | 1846/1846 and 624/624 (`01_pthread60` passes alone at 95.4 s; its parallel failure is the documented load artefact) |
+
+### M9 (R46) — 2026-08-29, the guard that only ever fired on the shape that needed it
+
+R45 left `offsetof(struct P, b)` as a loop bound hanging and called it a third
+mechanism. It is, and it is one line.
+
+**Where it was lost.** `offsetof` does not survive to symex as a member access
+at all. The frontend lowers it to `(char *)(struct P *)NULL + 4`, so what
+reaches `pointer_offset2t::do_simplify` is an `add2t`, not the
+`address_of(member(...))` its member arm was written for. The add arm rewrites
+that to `pointer_offset((struct P *)NULL) + 4 * 1` and recurses; the typecast
+arm strips the cast and recurses again; and the NULL arm then declined:
+
+```
+if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
+  if (is_pointer_type(ptr_obj->type))
+  {
+    const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
+    // Allow NULL simplification for pointer types to primitives
+    if (!is_symbol_type(ptr_type.subtype))
+      return gen_zero(type);
+  }
+```
+
+`offsetof` is only ever written on a struct or union, so the pointee is always a
+symbol type and the guard always held. The one shape the fold existed to serve
+was the one shape it refused.
+
+**The guard has no recorded reason.** It arrived with the arm itself in #2803,
+whose commit body is empty; the comment states the restriction rather than a
+rationale. NULL is object 0 at offset 0 whatever it points to — the arm returns
+a literal zero and computes no size — so the pointee cannot bear on the answer.
+Removed rather than special-cased.
+
+**The census.** `offsetof` as a loop bound, no flags, 15 s cap; base is R45's
+build, since this sits on top of it.
+
+| # | bound | base | patched |
+|---|---|---|---|
+| o01 | `offsetof(struct P, b)` | **hangs** | `SUCCESSFUL` |
+| o02 | `offsetof(struct P, in.y)`, nested struct | **hangs** | `SUCCESSFUL` |
+| o03 | `offsetof(struct P, v[2])`, array member after padding | **hangs** | `SUCCESSFUL` |
+| o04 | `offsetof(union U, b)` | **hangs** | `SUCCESSFUL` |
+| o05 | `offsetof(struct P, a)`, offset 0 | **hangs** | `SUCCESSFUL` |
+| o06 | `assert(offsetof(struct P, b) == 4)` | `SUCCESSFUL` | `SUCCESSFUL` |
+| o07 | `assert(offsetof(struct P, b) == 8)` | `FAILED` | `FAILED` |
+| o08 | `container_of` round trip | `SUCCESSFUL` | `SUCCESSFUL` |
+
+o05 is the row worth reading twice: the bound is *zero*, so the loop body never
+executes, and it still hung — the guard has to fold for the exit to be decided
+at all, whatever the trip count turns out to be. o06 and o07 are the same pair
+R30 and R45 produced on their own bounds: the value was always available to the
+solver, and only the syntactic guard was not.
+
+**On removing a branch.** This deletes a live condition rather than a dead one,
+so *C-Dead* is not the obligation and cannot be discharged — the guard was
+reachable, and that it fired is the defect. What replaces that proof is the
+census above naming exactly which behaviour changes, plus the whole-suite sweep
+below showing nothing else does, and a Phase-2 contract pair that fails if the
+guard returns.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `regression/esbmc/offsetof_loop_bound` | `--unwind 6` | `SUCCESSFUL`, pinned on `Generated 1 VCC(s), 0 remaining after simplification`; the base reports 2/2 and needs an unwinding assertion the folded run does not |
+| `regression/esbmc/offsetof_loop_bound_nested` | `--unwind 16` | same pin, on `offsetof(struct P, v[2])` — an array member behind a padding byte, so a fold that only handled a first-level scalar member would not satisfy it |
+| `regression/esbmc/offsetof_loop_bound_fail` | `--unwind 6` | `FAILED`, naming its own assertion text, so a fold returning some *other* constant would not satisfy it. It fails on the base too, so it is a guard rather than a mutation pin |
+| `regression/esbmc/pointer-offset2` | #2803's own test | passes — the arm this narrows was introduced with that test, and it does not depend on the restriction |
+| `regression/esbmc` | `ctest -j8`, 120 s cap | 1954 tests, 1 failure: `bundled_headers_from_vfs`, environmental and identical on the base build. Zero attributable |
+| `esbmc-unix`, `esbmc-unix2`, `esbmc-cpp11`, `esbmc-cpp14`, `esbmc-cpp17` | `ctest -j8`, 120 s cap | the NULL fold is not C-specific, so the pointer-heavy siblings were swept too: 862 tests, 5 failures, each re-run against the base build and failing there identically — `04_valgrind`, `error`, `error2`, and the `builtin-template` pair |
+
 
 ### M9 (R45) — 2026-08-29, the distance the cast made unmeasurable
 
