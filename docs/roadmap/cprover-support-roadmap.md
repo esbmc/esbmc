@@ -120,6 +120,7 @@ and the symbol/function table layout.
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
 | `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
 | `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_equal` |
+| Fatal-signal reporting on by default: a SIGSEGV/SIGBUS no longer leaves rc=139 as its only trace, and an alternate signal stack keeps a stack-exhaustion fault reportable (corpus sweep ranked item 3) | ✅ (PR #TBD) | `util/base/signal_catcher.cpp::install_fatal_signal_reporter` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -1606,8 +1607,14 @@ Ranked by harnesses recovered per fix:
 1. **`rvalue reference to array` in `dereference.cpp`** — 44 crashes, one dereference
    limitation, the whole `align_offset`/`align_to` family.
 2. **Solver performance on `slice`** — 83 N/A in one module.
-3. **The `nonzero_*` silent segfault** — 12 crashes with no diagnostic at all, so the first
-   task is making it fail loudly.
+3. **The `nonzero_*` silent segfault** — 12 crashes with no diagnostic at all. **The silence
+   is fixed:** the crash handler was opt-in behind `--segfault-handler`, so an unflagged run
+   left rc=139 as its only trace. A concise SIGSEGV/SIGBUS report is now installed
+   unconditionally on the worker thread, on an alternate signal stack so a stack-exhaustion
+   fault — the shape ESBMC's recursive walks produce — can still run a handler at all
+   (`util/base/signal_catcher.cpp::install_fatal_signal_reporter`). `--segfault-handler`
+   keeps its meaning: the full backtrace and memory map. Re-running the 12 with the flag is
+   the next step, and needs the corpus.
 4. **`Bitwuzla error encountered`** — 12 crashes, all `non_null_check_write_unaligned_*`;
    worth checking against Z3 to establish whether it is solver-specific.
 5. **The `ptr::unique` false alarm** — only 3 harnesses, but it is the corpus's *only*
