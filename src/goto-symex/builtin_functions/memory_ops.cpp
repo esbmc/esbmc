@@ -3,6 +3,7 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
 #include <string>
+#include <vector>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -415,33 +416,68 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   return result;
 }
 
-// Walk @p root's type down to the sub-object that occupies exactly
-// [offset, offset+n) bytes and return it as an expression; the walk stops at
-// the shallowest match, so a member whose padded size equals n is preferred
-// over its own leading member. Null if the range straddles sub-objects.
-static expr2tc
-extract_subobject(const expr2tc &root, uint64_t offset, uint64_t n)
+/* Byte range of struct member @p i, false when it has none: member_offset
+ * rounds bits down and type_byte_size rounds them up, so a bitfield reports a
+ * range it does not own -- `unsigned b : 29` after `unsigned a : 3` claims all
+ * four bytes of its struct. Grafting one drops its byte-sharing siblings (the
+ * over-counting PR #6667 guarded memset against). */
+static bool member_byte_range(
+  const struct_type2t &st,
+  const type2tc &root_type,
+  size_t i,
+  uint64_t &offset,
+  uint64_t &size)
+{
+  uint64_t offset_bits =
+    member_offset_bits(root_type, st.member_names[i]).to_uint64();
+  uint64_t size_bits = type_byte_size_bits(st.members[i]).to_uint64();
+  if (offset_bits % 8 || size_bits % 8)
+    return false;
+  offset = offset_bits / 8;
+  size = size_bits / 8;
+  return true;
+}
+
+// Whether @p type occupies exactly @p n whole bytes.
+static bool spans_bytes(const type2tc &type, uint64_t n)
+{
+  return type_byte_size_bits(type).to_uint64() == n * 8;
+}
+
+// Collect, shallowest first, every sub-object of @p root that occupies exactly
+// [offset, offset+n) bytes. A struct shares its byte range with a sole member,
+// so the shallowest match is not always the one whose type the destination
+// expects: the caller tries each in turn until one matches that type.
+static void collect_subobjects(
+  const expr2tc &root,
+  uint64_t offset,
+  uint64_t n,
+  std::vector<expr2tc> &out)
 {
   try
   {
-    if (offset == 0 && type_byte_size(root->type).to_uint64() == n)
-      return root;
+    if (offset == 0 && spans_bytes(root->type, n))
+      out.push_back(root);
 
     if (is_struct_type(root->type))
     {
       const struct_type2t &st = to_struct_type(root->type);
       for (size_t i = 0; i < st.members.size(); i++)
       {
-        uint64_t moff =
-          member_offset(root->type, st.member_names[i]).to_uint64();
-        uint64_t msize = type_byte_size(st.members[i]).to_uint64();
+        uint64_t moff, msize;
+        if (!member_byte_range(st, root->type, i, moff, msize))
+          continue;
         if (offset >= moff && offset + n <= moff + msize)
-          return extract_subobject(
+        {
+          collect_subobjects(
             member2tc(st.members[i], root, st.member_names[i]),
             offset - moff,
-            n);
+            n,
+            out);
+          return;
+        }
       }
-      return expr2tc();
+      return;
     }
 
     if (is_array_type(root->type))
@@ -449,12 +485,12 @@ extract_subobject(const expr2tc &root, uint64_t offset, uint64_t n)
       const array_type2t &at = to_array_type(root->type);
       uint64_t esize = type_byte_size(at.subtype).to_uint64();
       if (esize == 0)
-        return expr2tc();
+        return;
       uint64_t rel = offset % esize;
       if (rel + n > esize)
-        return expr2tc();
-      return extract_subobject(
-        index2tc(at.subtype, root, gen_ulong(offset / esize)), rel, n);
+        return;
+      collect_subobjects(
+        index2tc(at.subtype, root, gen_ulong(offset / esize)), rel, n, out);
     }
   }
   catch (const array_type2t::dyn_sized_array_excp &)
@@ -463,12 +499,55 @@ extract_subobject(const expr2tc &root, uint64_t offset, uint64_t n)
   catch (const array_type2t::inf_sized_array_excp &)
   {
   }
+}
+
+static expr2tc replace_subobject(
+  const expr2tc &root,
+  uint64_t offset,
+  uint64_t n,
+  const expr2tc &value);
+
+// The struct arm of replace_subobject: the sole member whose byte range
+// contains [offset, offset+n) is descended into, and the `with` naming it
+// wraps whatever that returns.
+static expr2tc replace_in_struct(
+  const expr2tc &root,
+  uint64_t offset,
+  uint64_t n,
+  const expr2tc &value)
+{
+  const struct_type2t &st = to_struct_type(root->type);
+  for (size_t i = 0; i < st.members.size(); i++)
+  {
+    uint64_t moff, msize;
+    if (!member_byte_range(st, root->type, i, moff, msize))
+      continue;
+    if (offset < moff || offset + n > moff + msize)
+      continue;
+
+    expr2tc updated = replace_subobject(
+      member2tc(st.members[i], root, st.member_names[i]),
+      offset - moff,
+      n,
+      value);
+    if (!updated)
+      return expr2tc();
+
+    const irep_idt &name = st.member_names[i];
+    type2tc str_type = array_type2tc(
+      get_uint8_type(), gen_ulong(name.as_string().size() + 1), false);
+    return with2tc(
+      root->type,
+      root,
+      constant_string2tc(str_type, name, constant_string_kindt::DEFAULT),
+      updated);
+  }
   return expr2tc();
 }
 
 // @p root with the sub-object at [offset, offset+n) replaced by @p value,
 // built as a chain of `with` updates; null when the range does not land on a
-// sub-object of value's type.
+// whole-byte sub-object of value's type.
 static expr2tc replace_subobject(
   const expr2tc &root,
   uint64_t offset,
@@ -477,38 +556,11 @@ static expr2tc replace_subobject(
 {
   try
   {
-    if (offset == 0 && type_byte_size(root->type).to_uint64() == n)
-      return root->type == value->type ? value : expr2tc();
+    if (offset == 0 && spans_bytes(root->type, n) && root->type == value->type)
+      return value;
 
     if (is_struct_type(root->type))
-    {
-      const struct_type2t &st = to_struct_type(root->type);
-      for (size_t i = 0; i < st.members.size(); i++)
-      {
-        uint64_t moff =
-          member_offset(root->type, st.member_names[i]).to_uint64();
-        uint64_t msize = type_byte_size(st.members[i]).to_uint64();
-        if (offset >= moff && offset + n <= moff + msize)
-        {
-          expr2tc updated = replace_subobject(
-            member2tc(st.members[i], root, st.member_names[i]),
-            offset - moff,
-            n,
-            value);
-          if (!updated)
-            return expr2tc();
-          const irep_idt &name = st.member_names[i];
-          type2tc str_type = array_type2tc(
-            get_uint8_type(), gen_ulong(name.as_string().size() + 1), false);
-          return with2tc(
-            root->type,
-            root,
-            constant_string2tc(str_type, name, constant_string_kindt::DEFAULT),
-            updated);
-        }
-      }
-      return expr2tc();
-    }
+      return replace_in_struct(root, offset, n, value);
 
     if (is_array_type(root->type))
     {
@@ -565,8 +617,9 @@ static inline expr2tc do_memcpy_expression(
     // every downstream assertion under --no-unwinding-assertions.
     if (!is_union_type(dst->type) && !is_union_type(src->type))
     {
-      expr2tc src_sub = extract_subobject(src, src_offset, num_of_bytes);
-      if (src_sub)
+      std::vector<expr2tc> src_subs;
+      collect_subobjects(src, src_offset, num_of_bytes, src_subs);
+      for (const expr2tc &src_sub : src_subs)
       {
         expr2tc updated =
           replace_subobject(dst, dst_offset, num_of_bytes, src_sub);
