@@ -687,8 +687,17 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 #ifndef _WIN32
   if (cmdline.isset("segfault-handler"))
   {
-    signal(SIGSEGV, segfault_handler);
-    signal(SIGABRT, segfault_handler);
+    // Replaces the concise reporter installed at startup. SA_ONSTACK keeps the
+    // alternate stack that reporter set up, without which a stack-exhaustion
+    // fault cannot run a handler at all.
+    struct sigaction act;
+    act.sa_handler = segfault_handler;
+    act.sa_flags = SA_ONSTACK;
+    sigemptyset(&(act.sa_mask));
+
+    sigaction(SIGSEGV, &act, nullptr);
+    sigaction(SIGBUS, &act, nullptr);
+    sigaction(SIGABRT, &act, nullptr);
   }
 #endif
 
