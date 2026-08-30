@@ -4497,10 +4497,38 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
   return c.is_zero();
 }
 
+// A value that is provably non-negative by type structure alone: an
+// unsigned bitvector, or an unsigned bitvector zero-extended into a
+// STRICTLY wider signed type (the C promotion `(int)a_u16` shape —
+// the sign bit can never be set). Comparisons of such a value against
+// zero are decidable, but the plain unsigned-vs-zero rule misses them
+// because the promoted comparison happens in the signed domain.
+static bool is_provably_nonneg(const expr2tc &e)
+{
+  if (is_unsignedbv_type(e))
+    return true;
+  if (is_typecast2t(e))
+  {
+    const typecast2t &tc = to_typecast2t(e);
+    if (
+      is_signedbv_type(tc.type) && is_unsignedbv_type(tc.from) &&
+      tc.type->get_width() > tc.from->type->get_width())
+      return true;
+  }
+  return false;
+}
+
 expr2tc lessthan2t::do_simplify() const
 {
   // Self-comparison: x < x is always false (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
+  // (wider-signed)(unsigned) < 0 is always false: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero() &&
+    is_provably_nonneg(side_1))
     return gen_false_expr();
 
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
@@ -4653,6 +4681,13 @@ expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // (wider-signed)(unsigned) >= 0 is always true: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero() &&
+    is_provably_nonneg(side_1))
     return gen_true_expr();
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
