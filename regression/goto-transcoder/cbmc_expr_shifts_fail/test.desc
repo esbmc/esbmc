@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_shifts_fail.goto
+--binary
+^VERIFICATION FAILED$
