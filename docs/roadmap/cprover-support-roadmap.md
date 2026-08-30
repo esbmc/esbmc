@@ -839,6 +839,31 @@ third row. It is a CORE test here. The lesson is narrower than "measure before b
 when two independent fixes are in flight, a harness that touches both has **no meaningful
 verdict on either branch alone**, and reporting one is worse than reporting nothing.
 
+#### Object size is a property of the object, not the pointer (§4.4) — ✅ (PR #TBD)
+
+`intrinsic_builtin_object_size` derived the extent from the **pointer's subtype** whenever the
+resolved object was not an array. Type-0 `__builtin_object_size` and `__CPROVER_OBJECT_SIZE`
+both mean "how big is the thing this addresses", so the object has to win. Taking the subtype
+reported `sizeof(*p)` instead:
+
+- `0` through a `void *` — `__CPROVER_OBJECT_SIZE(&scalar_static)` FAILED where CBMC proves it;
+- `1` through the `signed char *` CPROVER's write-set checks cast to — so a stack `int` came
+  back as one byte and `Check that i is valid` FAILED on every
+  `goto-instrument --apply-loop-contracts` binary, again where CBMC proves it.
+
+Both are fixed by preferring the dereferenced object's type. **The array-only tests hid it**:
+`cbmc_object_size{,_bytes,_static}` all address arrays, where the old code already preferred
+the object. `cbmc_object_size_scalar` and `cbmc_loop_invariant` cover the two shapes it missed;
+reverting the fix fails seven tests.
+
+Also measured while probing contracts, and *not* defects:
+
+- `__CPROVER_old` in an `ensures` agrees in both directions once the arithmetic is bounded.
+- **CBMC checks signed overflow by default and ESBMC does not.** An unbounded `*p + 1` makes
+  CBMC report FAILED and ESBMC SUCCESSFUL on the *same* contract — a defaults difference, not a
+  contracts gap. Bound the arithmetic, or pass `--overflow-check`, before reading anything into
+  such a divergence.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).

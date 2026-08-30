@@ -104,17 +104,17 @@ void goto_symext::intrinsic_builtin_object_size(
           }
           else
           {
-            // A void* carries no size, so when the pointer's subtype is empty
-            // the resolved object is the only thing that knows how big it is.
-            // Falling back to the subtype there made every scalar reached
-            // through a void* report the unknown-size fallback -- visible as
-            // __CPROVER_OBJECT_SIZE(&scalar_static) failing where CBMC proves
-            // it, since the CPROVER lowering always casts to void* first.
-            const type2tc &resolved = internal_deref_items.front().object->type;
-            addressed_type =
-              (is_array_type(resolved) || is_empty_type(ptr_subtype))
-                ? resolved
-                : ptr_subtype;
+            // The size of the whole object is a property of the object, not
+            // of the pointer that reaches it: type-0 __builtin_object_size and
+            // __CPROVER_OBJECT_SIZE both mean "how big is the thing this
+            // addresses". Taking the pointer's subtype instead reported
+            // sizeof(*p) -- 1 for the `signed char *` CPROVER's write-set
+            // checks cast to, 0 for a `void *` -- so a stack `int` came back as
+            // 1 byte and the check failed where CBMC proves it. Prefer the
+            // resolved object whenever the dereference produced one.
+            addressed_type = internal_deref_items.front().object->type;
+            if (is_nil_type(addressed_type))
+              addressed_type = ptr_subtype;
           }
         }
       }
