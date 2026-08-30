@@ -120,7 +120,7 @@ and the symbol/function table layout.
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
 | `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
 | `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_equal` |
-| Contracts `requires` bridge: `__CPROVER_enforce_requires_is_fresh(&p, n, map)` -> `__cbmc_is_fresh_impl(&p, n)` in the additions, which allocates and writes through; closes a FAILED-vs-SUCCESSFUL false alarm. Separation map dropped (§4.6, Phase 4) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp::synthesize_cprover_additions` |
+| Contracts `requires` bridge: `__CPROVER_enforce_requires_is_fresh(&p, n, map)` -> `__cbmc_is_fresh_impl(&p, n)` in the additions, which allocates and writes through; closes a FAILED-vs-SUCCESSFUL false alarm. Separation map dropped (§4.6, Phase 4) | ✅ (PR #7405) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp::synthesize_cprover_additions` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -807,7 +807,7 @@ through `&p`, and losing that leaves `p` unconstrained. Measured with `cbmc`/`go
 *"dereference failure: Incorrect alignment when accessing data object"*. A dropped precondition
 over a pointer manufactures a **false alarm** — a parity defect, not imprecision.
 
-**Closed for the `requires` direction (PR #TBD).** `cbmc_adapter.cpp::fix_builtin_call`
+**Closed for the `requires` direction (PR #7405).** `cbmc_adapter.cpp::fix_builtin_call`
 retargets the 3-argument `__CPROVER_enforce_requires_is_fresh(&p, n, map)` to the additions'
 2-argument `__cbmc_is_fresh_impl(&p, n)`, which mallocs `n` bytes, assumes non-null and writes
 through — the `memcpy`-family retarget pattern of §4.8. The bridge is deliberately *not* named
