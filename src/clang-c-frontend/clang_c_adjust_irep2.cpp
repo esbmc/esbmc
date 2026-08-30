@@ -910,7 +910,12 @@ static bool binds_by_reference(
   if (is_address_of2t(arg) || !is_pointer_type(param) || arg->type == param)
     return false;
 
-  if (ns.follow(to_pointer_type(param).subtype)->type_id != arg->type->type_id)
+  // Both sides are followed: a `struct __va_list` va_list (aarch64) reaches
+  // here as a symbol type on the argument and a struct type under the
+  // parameter, and comparing them unfollowed misses the binding.
+  if (
+    ns.follow(to_pointer_type(param).subtype)->type_id !=
+    ns.follow(arg->type)->type_id)
     return false;
 
   if (!is_symbol2t(callee))
