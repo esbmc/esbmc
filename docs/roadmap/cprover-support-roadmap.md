@@ -927,12 +927,22 @@ Still open in `is_fresh`, now measured rather than guessed:
   | `return 0` | FAILED | FAILED |
   | `return &static_obj` with n = 1000 | FAILED — the check *is* size-sensitive | FAILED |
 
-  So CBMC accepts a static object as "fresh" but does enforce the extent. Matching it needs no
-  memory map, only a **check-side** bridge — the mirror of the assume-side one above, reporting
-  whether the pointer already denotes an object that big, and deliberately never allocating.
-  The same bridge serves `__CPROVER_replace_requires_is_fresh`. It cannot be built on this
-  branch alone: the extent has to come from `__ESBMC_builtin_object_size`, which arrives with
-  the `object_size` work, so this waits until both lines are on `master`.
+  So CBMC accepts a static object as "fresh" but does enforce the extent. **Closed (PR #TBD)**
+  by a check-side bridge `__cbmc_is_fresh_check_impl` — the mirror of the assume-side one,
+  reporting whether the pointer already denotes an object that big and deliberately never
+  allocating, since satisfying a check-side variant by allocating would mask the violation it
+  exists to catch. It serves `__CPROVER_enforce_ensures_is_fresh` and
+  `__CPROVER_replace_requires_is_fresh`; all four rows above now agree with CBMC.
+
+  Two things this turned up. **The check-side variants take the pointer by value**
+  (`f((void *)tmp_cc, 4)`), not by address like the assume-side ones (`f(&(void *)tmp, 4, map)`)
+  — reusing the by-address signature made the bridge dereference a pointer value, which showed
+  up as a spurious out-of-bounds inside the bridge itself. And the bridge only started
+  discriminating once a **latent `object_size` gap** was fixed: for a `void *` to a *non-array*
+  object the intrinsic fell back to the pointer's subtype, so every scalar reached through a
+  `void *` reported the unknown-size fallback. `__CPROVER_OBJECT_SIZE(&scalar_static)` failed
+  where CBMC proves it — the `object_size` tests all used arrays and missed it
+  (`cbmc_object_size_scalar` now covers it).
 - **Separation** between two `is_fresh`'d pointers is unmodelled but not currently a
   divergence: the bridge mallocs per call, so two pointers are distinct by construction, and
   `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on

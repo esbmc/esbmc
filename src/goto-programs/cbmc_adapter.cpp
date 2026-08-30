@@ -1643,6 +1643,23 @@ bool fix_builtin_call(irept &code)
     return false;
   }
 
+  // The check-side pair: enforce_ensures asks whether the body really returned
+  // something fresh, replace_requires whether the caller really passed
+  // something fresh. Left bodyless they returned nondet and the following
+  // ASSERT could always pick false, so the check failed for a correct body as
+  // readily as a wrong one. The bridge reports whether the pointer already
+  // denotes an object that big -- and never allocates, which is the whole point
+  // of the check side.
+  if (
+    (callee == "__CPROVER_enforce_ensures_is_fresh" ||
+     callee == "__CPROVER_replace_requires_is_fresh") &&
+    sub[2].get_sub().size() == 3)
+  {
+    code.get_sub()[1].set("identifier", "c:@F@__cbmc_is_fresh_check_impl");
+    code.get_sub()[2].get_sub().resize(2);
+    return false;
+  }
+
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
