@@ -820,7 +820,7 @@ applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to *
 — the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
 divergence when it is a missing flag.
 
-#### Contract write-set clauses need both CPROVER work-streams — ✅ (PR #TBD)
+#### Contract write-set clauses need both CPROVER work-streams — ✅ (PR #7415)
 
 `__CPROVER_assigns(__CPROVER_object_whole(p))`, with or without `__CPROVER_frees(p)`, verifies
 SUCCESSFUL under CBMC and under ESBMC — **but only with the `is_fresh` bridge and the
