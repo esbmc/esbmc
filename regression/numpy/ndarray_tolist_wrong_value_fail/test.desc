@@ -2,3 +2,4 @@ CORE
 main.py
 --incremental-bmc
 ^VERIFICATION FAILED$
+^  assertion \*\(signed long int \*\)return_value\$___ESBMC_list_at\$1->value == 999$
