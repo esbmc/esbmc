@@ -825,12 +825,25 @@ exist to catch.
 
 Still open in `is_fresh`, now measured rather than guessed:
 
-- **`is_fresh` in an `ensures` under `--enforce-contract` is a systematic false alarm.** The
+- **`is_fresh` in an `ensures` under `--enforce-contract` discriminates nothing.** The
   bodyless `__CPROVER_enforce_ensures_is_fresh` returns nondet and the following `ASSERT` can
-  always pick false, so `Check ensures clause` FAILS for a body returning a genuine `malloc`
-  exactly as it does for one returning a static — it discriminates nothing. CBMC reports
-  SUCCESSFUL on both, so its own check looks weak here too; closing this needs the memory map
-  ("was this pointer allocated fresh during this call?"), not another bridge.
+  always pick false, so `Check ensures clause` FAILS whatever the body does. CBMC's own check,
+  measured on 6.5.0 rather than assumed — an earlier revision of this section asserted a CBMC
+  verdict that had not been run, and got it backwards:
+
+  | body, `__CPROVER_ensures(__CPROVER_is_fresh(ret, n))` | CBMC | ESBMC |
+  |---|---|---|
+  | `return malloc(sizeof(int))` | FAILED — `malloc` may return NULL | FAILED |
+  | `return &static_obj` (n = 4) | **SUCCESSFUL** | FAILED |
+  | `return 0` | FAILED | FAILED |
+  | `return &static_obj` with n = 1000 | FAILED — the check *is* size-sensitive | FAILED |
+
+  So CBMC accepts a static object as "fresh" but does enforce the extent. Matching it needs no
+  memory map, only a **check-side** bridge — the mirror of the assume-side one above, reporting
+  whether the pointer already denotes an object that big, and deliberately never allocating.
+  The same bridge serves `__CPROVER_replace_requires_is_fresh`. It cannot be built on this
+  branch alone: the extent has to come from `__ESBMC_builtin_object_size`, which arrives with
+  the `object_size` work, so this waits until both lines are on `master`.
 - **Separation** between two `is_fresh`'d pointers is unmodelled but not currently a
   divergence: the bridge mallocs per call, so two pointers are distinct by construction, and
   `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on
