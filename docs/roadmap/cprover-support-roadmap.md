@@ -838,6 +838,26 @@ The outer cast's target is `empty` — a cast **to `void`**, i.e. a discarded va
 encoder has no case for. It should not reach the solver as a value at all; the fix belongs
 where the discard is built, not in `smt_casts.cpp`.
 
+**Narrowed: `__CPROVER_object_whole` alone is the trigger** — the `frees` clause is
+irrelevant, and a plain `__CPROVER_assigns(*p)` does not reproduce it.
+
+**Four hypotheses, all refuted by measurement — do not repeat them.**
+
+1. *The cast is in the CBMC binary and the adapter should drop it.* No: instrumenting
+   `fix_expression` to print every `typecast` target it sees yields `integer` (18), `pointer`
+   (12), `signedbv` (11), `c_bool` (6), `unsignedbv` (1) — and **no `empty`**.
+2. *CBMC's `integer` type falls through `migrate_type0` to the empty type.* No:
+   `migrate_type0` **throws** `Unexpected type` on an id it does not know, and no such error
+   appears. Mapping `integer` to a pointer-width `signedbv` in `fix_type` changes nothing.
+3. *`migrate_expr`'s typecast case builds it.* No: a probe logging every `typecast2tc` whose
+   migrated type is empty never fires on this input.
+4. *It is a discarded-expression statement.* No: `symex_other.cpp` only *dereferences* a
+   `code_expression2t` operand; it never encodes it.
+
+So the node is created somewhere after migration, on a path none of the above covers. The next
+step is to catch it at construction — an assertion or breakpoint on building a `typecast2tc`
+with an empty type — rather than another guess about which pass is responsible.
+
 **This is a second layer, exposed by fixing the first.** On `master` the same binary dies
 earlier with the `object_size` SIGSEGV; once that is fixed the run gets as far as the encoder
 and hits this. Anyone re-measuring must say which build they used — the failure mode changes
