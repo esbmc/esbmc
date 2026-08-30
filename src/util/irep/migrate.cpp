@@ -2891,8 +2891,19 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind}),
       extent);
 
-    expr2tc offset = pointer_offset2tc(size->type, ptr);
-    expr2tc last = add2tc(size->type, offset, size);
+    // pointer_offset2t requires a signed, address-width result type -- the
+    // same rule the __CPROVER_POINTER_OFFSET case above follows. Taking the
+    // type from the size operand instead put a void-typed pointer_offset into
+    // the formula whenever CBMC's own lowering (__CPROVER_object_whole) left
+    // that operand untyped, and the simplifier then built a typecast to void
+    // that aborted the solver.
+    type2tc offs_type = get_int_type(config.ansi_c.address_width);
+    expr2tc offset = pointer_offset2tc(offs_type, ptr);
+    if (size->type != offs_type)
+      size = typecast2tc(offs_type, size);
+    if (extent->type != offs_type)
+      extent = typecast2tc(offs_type, extent);
+    expr2tc last = add2tc(offs_type, offset, size);
 
     // not(invalid_pointer) rather than valid_object: the latter is
     // __ESBMC_alloc[obj], which symex only maintains for dynamic objects, so a

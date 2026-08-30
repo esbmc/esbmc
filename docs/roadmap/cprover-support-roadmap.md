@@ -819,53 +819,29 @@ applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to *
 — the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
 divergence when it is a missing flag.
 
-#### A cast to `void` reaches the SMT encoder on a `frees` contract (§4.4, open — `cbmc_contract_frees`)
+#### `__CPROVER_object_whole` in an `assigns` clause — a false alarm (§4.4, open — `cbmc_contract_frees`)
 
-Measured 2026-08-30. A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` and
-`__CPROVER_frees(p)` over a `free(p)` body verifies SUCCESSFUL under CBMC and **aborts** ESBMC
-in the solver backend:
+A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` verifies SUCCESSFUL under
+CBMC and **FAILED** under ESBMC. The `frees` clause is irrelevant — `object_whole` alone
+reproduces it, and a plain `__CPROVER_assigns(*p)` does not.
 
-```
-ERROR: Typecast for unexpected type      (smt_casts.cpp:809)
-typecast
-* from : typecast
-    * from : pointer_offset { pointer_obj : release::p }
-    * type : unsignedbv, width 64
-* type : empty
-```
+**A void-typed cast used to abort this before it could report a verdict, and that was
+self-inflicted.** The `r_ok` encoding took its pointer-offset result type from the predicate's
+*size* operand; `__CPROVER_object_whole`'s lowering leaves that operand untyped, so the formula
+carried a `pointer_offset` of void type, and `pointer_offset2t::do_simplify`
+(`expr_simplifier.cpp`) then built a `typecast` to void that the encoder aborted on
+("Typecast for unexpected type"). `pointer_offset2t` requires a **signed, address-width**
+result type — the rule the `__CPROVER_POINTER_OFFSET` case already followed — and the encoding
+now obeys it. With that fixed the run reaches a verdict, and the verdict divergence above is
+what remains.
 
-The outer cast's target is `empty` — a cast **to `void`**, i.e. a discarded value, which the
-encoder has no case for. It should not reach the solver as a value at all; the fix belongs
-where the discard is built, not in `smt_casts.cpp`.
-
-**Narrowed: `__CPROVER_object_whole` alone is the trigger** — the `frees` clause is
-irrelevant, and a plain `__CPROVER_assigns(*p)` does not reproduce it.
-
-**Four hypotheses, all refuted by measurement — do not repeat them.**
-
-1. *The cast is in the CBMC binary and the adapter should drop it.* No: instrumenting
-   `fix_expression` to print every `typecast` target it sees yields `integer` (18), `pointer`
-   (12), `signedbv` (11), `c_bool` (6), `unsignedbv` (1) — and **no `empty`**.
-2. *CBMC's `integer` type falls through `migrate_type0` to the empty type.* No:
-   `migrate_type0` **throws** `Unexpected type` on an id it does not know, and no such error
-   appears. Mapping `integer` to a pointer-width `signedbv` in `fix_type` changes nothing.
-3. *`migrate_expr`'s typecast case builds it.* No: a probe logging every `typecast2tc` whose
-   migrated type is empty never fires on this input.
-4. *It is a discarded-expression statement.* No: `symex_other.cpp` only *dereferences* a
-   `code_expression2t` operand; it never encodes it.
-
-So the node is created somewhere after migration, on a path none of the above covers. The next
-step is to catch it at construction — an assertion or breakpoint on building a `typecast2tc`
-with an empty type — rather than another guess about which pass is responsible.
-
-**This is a second layer, exposed by fixing the first.** On `master` the same binary dies
-earlier with the `object_size` SIGSEGV; once that is fixed the run gets as far as the encoder
-and hits this. Anyone re-measuring must say which build they used — the failure mode changes
-from rc=139 to rc=134 across that fix.
-
-Also measured, and *not* a divergence: removing the `__CPROVER_frees(p)` clause entirely leaves
-CBMC still reporting SUCCESSFUL, so the clause is not what its absence would suggest — do not
-build a negative test on that shape without checking it bites.
+**How it was found, after four cheaper guesses failed.** The cast is not in the CBMC binary
+(instrumenting `fix_expression` prints targets `integer`, `pointer`, `signedbv`, `c_bool`,
+`unsignedbv` — never `empty`), `migrate_type0` *throws* rather than falling through to the
+empty type, `migrate_expr`'s typecast case never builds one, and `symex_other.cpp` only
+dereferences a discarded expression. What settled it was an `abort()` in **both**
+`typecast2t` constructors — the first probe instrumented only the primary one and caught
+nothing — plus `--segfault-handler` and `addr2line`, which named the simplifier directly.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
