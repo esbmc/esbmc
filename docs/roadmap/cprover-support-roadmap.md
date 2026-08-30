@@ -121,6 +121,7 @@ and the symbol/function table layout.
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
 | `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
 | `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_equal` |
+| Contracts `requires` bridge: `__CPROVER_enforce_requires_is_fresh(&p, n, map)` -> `__cbmc_is_fresh_impl(&p, n)` in the additions, which allocates and writes through; closes a FAILED-vs-SUCCESSFUL false alarm. Separation map dropped (§4.6, Phase 4) | ✅ (PR #7405) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp::synthesize_cprover_additions` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
@@ -890,10 +891,57 @@ the `__CPROVER_contracts_*` helpers, and the object/write-set machinery are **re
 CBMC's own contracts library at analysis time** (verified: the function is *called* in the
 instrumented body and its body is visible under `cbmc --show-goto-functions`, but the reader
 finds **zero serialised instructions** for it — exactly the libm/libc situation of §4.8, one
-subsystem up). So ESBMC sees `__CPROVER_enforce_requires_is_fresh` as a **bodyless external
-returning nondet**: `is_fresh` in a `requires` becomes an unconstrained assumption. That is
-**sound but imprecise** (dropping an assumption only widens the checked behaviour), not a
-miss — but it defeats the point of an `is_fresh` precondition. The bridge is to synthesise or
+subsystem up). So ESBMC saw `__CPROVER_enforce_requires_is_fresh` as a **bodyless external
+returning nondet**. Calling that "sound but imprecise" — as this section did until 2026-08-30
+— was **wrong in one direction**: dropping the requires *assumption* only widens the checked
+behaviour, but the same call is what **allocates** the fresh object and writes its address
+through `&p`, and losing that leaves `p` unconstrained. Measured with `cbmc`/`goto-cc` 6.5.0 on
+`int read_first(int *p) __CPROVER_requires(__CPROVER_is_fresh(p, sizeof(int)))`: CBMC
+`0 of 21 failed` / SUCCESSFUL, ESBMC `2 of 5 properties failed` / FAILED on
+*"dereference failure: Incorrect alignment when accessing data object"*. A dropped precondition
+over a pointer manufactures a **false alarm** — a parity defect, not imprecision.
+
+**Closed for the `requires` direction (PR #7405).** `cbmc_adapter.cpp::fix_builtin_call`
+retargets the 3-argument `__CPROVER_enforce_requires_is_fresh(&p, n, map)` to the additions'
+2-argument `__cbmc_is_fresh_impl(&p, n)`, which mallocs `n` bytes, assumes non-null and writes
+through — the `memcpy`-family retarget pattern of §4.8. The bridge is deliberately *not* named
+`__ESBMC_*`: symex routes every `c:@F@__ESBMC*` callee to `run_intrinsic`, which `abort()`s on
+a name it does not know. CBMC's third argument is the memory map it threads through to state
+separation between two `is_fresh`'d pointers; that is dropped.
+
+**Closed for the `replace`/`ensures` direction too (PR #7407).** CBMC splits `is_fresh` four
+ways, and only the two **assume**-side variants may be bridged: `enforce_requires` and
+`replace_ensures` both state something the verifier is entitled to take for granted, so both
+allocate. Their **check**-side counterparts — `enforce_ensures` ("did the body really return
+something fresh?") and `replace_requires` ("did the caller really pass something fresh?") —
+stay bodyless deliberately: satisfying them by allocating would mask the very violation they
+exist to catch.
+
+Still open in `is_fresh`, now measured rather than guessed:
+
+- **`is_fresh` in an `ensures` under `--enforce-contract` discriminates nothing.** The
+  bodyless `__CPROVER_enforce_ensures_is_fresh` returns nondet and the following `ASSERT` can
+  always pick false, so `Check ensures clause` FAILS whatever the body does. CBMC's own check,
+  measured on 6.5.0 rather than assumed — an earlier revision of this section asserted a CBMC
+  verdict that had not been run, and got it backwards:
+
+  | body, `__CPROVER_ensures(__CPROVER_is_fresh(ret, n))` | CBMC | ESBMC |
+  |---|---|---|
+  | `return malloc(sizeof(int))` | FAILED — `malloc` may return NULL | FAILED |
+  | `return &static_obj` (n = 4) | **SUCCESSFUL** | FAILED |
+  | `return 0` | FAILED | FAILED |
+  | `return &static_obj` with n = 1000 | FAILED — the check *is* size-sensitive | FAILED |
+
+  So CBMC accepts a static object as "fresh" but does enforce the extent. Matching it needs no
+  memory map, only a **check-side** bridge — the mirror of the assume-side one above, reporting
+  whether the pointer already denotes an object that big, and deliberately never allocating.
+  The same bridge serves `__CPROVER_replace_requires_is_fresh`. It cannot be built on this
+  branch alone: the extent has to come from `__ESBMC_builtin_object_size`, which arrives with
+  the `object_size` work, so this waits until both lines are on `master`.
+- **Separation** between two `is_fresh`'d pointers is unmodelled but not currently a
+  divergence: the bridge mallocs per call, so two pointers are distinct by construction, and
+  `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on
+  both engines. The bridge is to synthesise or
 retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
 mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
 yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
