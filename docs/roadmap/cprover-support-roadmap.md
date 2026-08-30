@@ -793,7 +793,7 @@ into `tmp = call(...)` inserted before it, and replace the node with `tmp`. That
 irep2 and `goto_programt` insertion is available; the adapter itself cannot express the 1->N
 rewrite.
 
-#### IEEE-754 rounding mode — ✅ FIXED (PR #TBD)
+#### IEEE-754 rounding mode — ✅ FIXED (PR #7428)
 
 Listed as open in §4.4; it was two distinct gaps, both now closed.
 
