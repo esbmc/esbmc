@@ -813,8 +813,41 @@ retargets the 3-argument `__CPROVER_enforce_requires_is_fresh(&p, n, map)` to th
 through — the `memcpy`-family retarget pattern of §4.8. The bridge is deliberately *not* named
 `__ESBMC_*`: symex routes every `c:@F@__ESBMC*` callee to `run_intrinsic`, which `abort()`s on
 a name it does not know. CBMC's third argument is the memory map it threads through to state
-separation between two `is_fresh`'d pointers; that is dropped, so **separation is still not
-modelled**. The `ensures` direction and `--replace-call-with-contract` remain bodyless. The bridge is to synthesise or
+separation between two `is_fresh`'d pointers; that is dropped.
+
+**Closed for the `replace`/`ensures` direction too (PR #7407).** CBMC splits `is_fresh` four
+ways, and only the two **assume**-side variants may be bridged: `enforce_requires` and
+`replace_ensures` both state something the verifier is entitled to take for granted, so both
+allocate. Their **check**-side counterparts — `enforce_ensures` ("did the body really return
+something fresh?") and `replace_requires` ("did the caller really pass something fresh?") —
+stay bodyless deliberately: satisfying them by allocating would mask the very violation they
+exist to catch.
+
+Still open in `is_fresh`, now measured rather than guessed:
+
+- **`is_fresh` in an `ensures` under `--enforce-contract` discriminates nothing.** The
+  bodyless `__CPROVER_enforce_ensures_is_fresh` returns nondet and the following `ASSERT` can
+  always pick false, so `Check ensures clause` FAILS whatever the body does. CBMC's own check,
+  measured on 6.5.0 rather than assumed — an earlier revision of this section asserted a CBMC
+  verdict that had not been run, and got it backwards:
+
+  | body, `__CPROVER_ensures(__CPROVER_is_fresh(ret, n))` | CBMC | ESBMC |
+  |---|---|---|
+  | `return malloc(sizeof(int))` | FAILED — `malloc` may return NULL | FAILED |
+  | `return &static_obj` (n = 4) | **SUCCESSFUL** | FAILED |
+  | `return 0` | FAILED | FAILED |
+  | `return &static_obj` with n = 1000 | FAILED — the check *is* size-sensitive | FAILED |
+
+  So CBMC accepts a static object as "fresh" but does enforce the extent. Matching it needs no
+  memory map, only a **check-side** bridge — the mirror of the assume-side one above, reporting
+  whether the pointer already denotes an object that big, and deliberately never allocating.
+  The same bridge serves `__CPROVER_replace_requires_is_fresh`. It cannot be built on this
+  branch alone: the extent has to come from `__ESBMC_builtin_object_size`, which arrives with
+  the `object_size` work, so this waits until both lines are on `master`.
+- **Separation** between two `is_fresh`'d pointers is unmodelled but not currently a
+  divergence: the bridge mallocs per call, so two pointers are distinct by construction, and
+  `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on
+  both engines. The bridge is to synthesise or
 retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
 mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
 yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
