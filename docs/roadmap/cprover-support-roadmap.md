@@ -938,12 +938,22 @@ Still open in `is_fresh`, now measured rather than guessed:
   `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on
   both engines. The bridge is to synthesise or
 retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
-mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
-yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
-without the contracts-library link does not actually fire the `ensures` check (a deliberately
-violated `ensures` verifies SUCCESSFUL under *CBMC itself* in this setup), so contract-*enforcement*
-parity cannot be validated until the library is linked on both sides. Loadability and the
-`requires`/`ensures` → `ASSUME`/`ASSERT` lowering are the parts confirmed working.
+mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). **The "missing local oracle" recorded here until 2026-08-30 was wrong.** Re-measured
+with `cbmc`/`goto-cc` **6.5.0**: a deliberately violated `ensures` under bare
+`goto-instrument --enforce-contract` fires normally (`1 of 3 failed` / FAILED), so
+enforcement parity *can* be validated locally. Six shapes now measured, and ESBMC agrees with
+CBMC on every one — `ensures` enforce (SUCCESSFUL and FAILED), `--replace-call-with-contract`
+in both directions (the caller really does use the `ensures`: its assertion is checked, and
+its negation fails), an undeclared write against an `assigns` clause (both name
+*"Check that g is assignable"*), and a composite `requires(is_fresh) + assigns + ensures`
+(`0 of 17` / `0 of 13`, both SUCCESSFUL). Five of these are pinned by
+`regression/goto-transcoder/cbmc_contract_{ensures,replace}{,_fail}` and
+`cbmc_contract_assigns_fail`; the composite needs the `is_fresh` bridge above.
+
+What is genuinely open is narrower than this section implied: **separation** between two
+`is_fresh`'d pointers (CBMC's memory-map argument is dropped by the bridge), `is_fresh` in an
+`ensures` clause, and the `__CPROVER_contracts_*` object/write-set helpers beyond the
+`assigns` checks measured above.
 
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
