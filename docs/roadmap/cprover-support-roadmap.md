@@ -839,7 +839,7 @@ third row. It is a CORE test here. The lesson is narrower than "measure before b
 when two independent fixes are in flight, a harness that touches both has **no meaningful
 verdict on either branch alone**, and reporting one is worse than reporting nothing.
 
-#### Object size is a property of the object, not the pointer (§4.4) — ✅ (PR #TBD)
+#### Object size is a property of the object, not the pointer (§4.4) — ✅ (PR #7417)
 
 `intrinsic_builtin_object_size` derived the extent from the **pointer's subtype** whenever the
 resolved object was not an array. Type-0 `__builtin_object_size` and `__CPROVER_OBJECT_SIZE`
