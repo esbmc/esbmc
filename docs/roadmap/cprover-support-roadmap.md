@@ -536,8 +536,14 @@ Verdict parity with CBMC, dual-solver (Bitwuzla + Z3), across a holding `forall`
 (`cbmc_forall` SUCCESSFUL), a violated `forall` (`cbmc_forall_fail` FAILED — confirms the body
 is really evaluated, not vacuously skipped), and an `exists` witness (`cbmc_exists` SUCCESSFUL).
 
-Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
-rather than instruction-level ASSUME/ASSERT, unconfirmed),
+**`__CPROVER_assume`/`assert` — confirmed not applicable (2026-08-30).** The note guarded this
+on "only relevant if they surface as expressions rather than instruction-level ASSUME/ASSERT";
+they do not. `--goto-functions-only` on a binary using both shows them as bare `ASSUME x > 0 &&
+x < 10` / `ASSERT y > 0` instructions, and the statement census over 38 binaries finds no
+`code/assume` or `code/assert` at all. Semantics agree too: an assumption constraining a later
+assertion (`cbmc_assume_assert`), an assertion the assumption does not license
+(`..._fail`), and contradictory assumptions making an `assert(0)` vacuously pass on both
+engines (`cbmc_assume_contradiction`). Remaining in this list:
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
