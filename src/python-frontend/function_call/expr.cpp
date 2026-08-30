@@ -4,6 +4,7 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
@@ -4149,23 +4150,19 @@ std::optional<exprt> function_call_expr::try_materialize_numpy_tolist()
 }
 
 // Literal axis= only (matches every other axis-aware reducer's own recut):
-// no positional axis, no symbolic axis. A plain Constant int or a UnaryOp
-// USub over one (for axis=-1/-2) resolves; anything else is a caller error.
+// no positional axis, no symbolic axis. Delegates to the same
+// try_extract_numeric_constant every other reducer's own literal-axis
+// parsing (extract_literal_axis_keyword, numpy_call_expr.cpp) uses, so this
+// accepts exactly the same spellings instead of hand-rolling a narrower
+// Constant/UnaryOp(USub) check that could silently drift out of sync with
+// it.
 static std::optional<long long>
 extract_any_all_axis_literal(const nlohmann::json &node)
 {
-  if (
-    node.value("_type", "") == "Constant" && node.contains("value") &&
-    node["value"].is_number_integer())
-    return node["value"].get<long long>();
-  if (
-    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
-    node["op"].value("_type", "") == "USub" && node.contains("operand") &&
-    node["operand"].value("_type", "") == "Constant" &&
-    node["operand"].contains("value") &&
-    node["operand"]["value"].is_number_integer())
-    return -node["operand"]["value"].get<long long>();
-  return std::nullopt;
+  numeric_value axis_value;
+  if (!try_extract_numeric_constant(node, axis_value) || !axis_value.is_int)
+    return std::nullopt;
+  return axis_value.int_value;
 }
 
 static const nlohmann::json *
@@ -4190,36 +4187,6 @@ numpy_any_all_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
   return false;
 }
 
-// Normalizes a literal axis against a known rank and validates it lands in
-// range, throwing AxisError (matching numpy_call_expr's own wording for the
-// other reducers) otherwise.
-static long long normalize_any_all_axis(long long axis, std::size_t rank)
-{
-  const long long normalized =
-    axis < 0 ? axis + static_cast<long long>(rank) : axis;
-  if (normalized < 0 || normalized >= static_cast<long long>(rank))
-    throw std::runtime_error(
-      "AxisError: axis " + std::to_string(axis) +
-      " is out of bounds for array of dimension " + std::to_string(rank));
-  return normalized;
-}
-
-// Builds a 1-D array_typet value from already-converted elements, the same
-// way numpy_call_expr.cpp's own build_1d_numpy_array_value does -- that
-// helper has internal linkage in a different translation unit, so this is a
-// small local counterpart rather than a shared one. Shared by any()/all()'s
-// axis reduction and sort()'s in-place rebuild.
-static exprt build_1d_numpy_array_value_from_elems(
-  const std::vector<exprt> &elems,
-  const type_handler &th)
-{
-  typet result_type = th.build_array(elems.front().type(), elems.size());
-  exprt value = gen_zero(result_type);
-  for (std::size_t i = 0; i < elems.size(); ++i)
-    value.operands().at(i) = elems[i];
-  return value;
-}
-
 exprt function_call_expr::reduce_any_all_axis_slice(
   const std::vector<exprt> &elems,
   const std::vector<std::size_t> &shape,
@@ -4239,6 +4206,34 @@ exprt function_call_expr::reduce_any_all_axis_slice(
   return result;
 }
 
+exprt function_call_expr::reduce_any_all_rank1(
+  const std::vector<exprt> &elems,
+  ReduceOp op) const
+{
+  exprt result = compute_element_truthiness(elems.front());
+  for (std::size_t i = 1; i < elems.size(); ++i)
+    result =
+      combine_truthiness(result, compute_element_truthiness(elems[i]), op);
+  return result;
+}
+
+void function_call_expr::validate_any_all_axis_shape(
+  const std::vector<std::size_t> &shape,
+  const std::string &func_name,
+  const std::string &qualifier)
+{
+  const std::size_t rank = shape.size();
+  if (rank != 1 && rank != 2)
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name +
+      "() axis requires a 1-D or 2-D array");
+
+  if (shape[0] == 0 || (rank == 2 && shape[1] == 0))
+    throw std::runtime_error(
+      "ValueError: zero-size array to " + qualifier + func_name +
+      "() reduction has no identity");
+}
+
 std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
   const std::string &func_name,
   const std::string &qualifier,
@@ -4246,7 +4241,13 @@ std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
   std::size_t positional_offset)
 {
   const nlohmann::json *axis_kw = find_any_all_axis_keyword(call_);
-  if (axis_kw == nullptr || axis_kw->is_null())
+  // axis=None (a Constant node whose value is JSON null, not a bare JSON
+  // null at this position) means "flatten", falling through to the
+  // no-axis path -- axis_kw->is_null() alone never matches that shape, so
+  // an explicit axis=None fell into extract_any_all_axis_literal() and
+  // threw "requires a literal axis" instead.
+  if (
+    axis_kw == nullptr || axis_kw->is_null() || is_json_none_literal(*axis_kw))
     return std::nullopt;
 
   std::optional<long long> axis = extract_any_all_axis_literal(*axis_kw);
@@ -4261,20 +4262,16 @@ std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
       "TypeError: " + qualifier + func_name +
       "() does not support keepdims, where or out arguments yet");
 
-  if (materialized.first.size() != 2)
-    throw std::runtime_error(
-      "TypeError: " + qualifier + func_name + "() axis requires a 2-D array");
+  validate_any_all_axis_shape(materialized.first, func_name, qualifier);
+  const std::size_t rank = materialized.first.size();
+  const long long normalized = normalize_reducer_axis(*axis, rank);
+  const ReduceOp op = func_name == "any" ? ReduceOp::Any : ReduceOp::All;
 
-  if (materialized.first[0] == 0 || materialized.first[1] == 0)
-    throw std::runtime_error(
-      "ValueError: zero-size array to " + qualifier + func_name +
-      "() reduction has no identity");
+  if (rank == 1)
+    return reduce_any_all_rank1(materialized.second, op);
 
-  const long long normalized =
-    normalize_any_all_axis(*axis, materialized.first.size());
   const std::size_t out_len =
     normalized == 0 ? materialized.first[1] : materialized.first[0];
-  const ReduceOp op = func_name == "any" ? ReduceOp::Any : ReduceOp::All;
 
   std::vector<exprt> results;
   results.reserve(out_len);
@@ -4282,7 +4279,7 @@ std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
     results.push_back(reduce_any_all_axis_slice(
       materialized.second, materialized.first, normalized, k, op));
 
-  return build_1d_numpy_array_value_from_elems(results, type_handler_);
+  return build_1d_numpy_array_value(results, type_handler_);
 }
 
 std::optional<function_call_expr::any_all_receiver>
@@ -4335,9 +4332,16 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
       func_name, qualifier, materialized, positional_offset))
     return axis_result;
 
+  // An "axis" keyword can only still be present here with value None:
+  // try_reduce_any_all_along_axis() above already handled (accepted or
+  // rejected) any other axis value, returning nullopt for axis=None
+  // specifically -- meaning "flatten", which is exactly the fallback below.
+  // numpy_any_all_has_unsupported_keywords_besides_axis() already tolerates
+  // an axis keyword for that reason; reuse it instead of rejecting every
+  // keyword unconditionally.
   if (
     call_["args"].size() > positional_offset ||
-    (call_.contains("keywords") && !call_["keywords"].empty()))
+    numpy_any_all_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
       "TypeError: " + qualifier + func_name +
       "() does not support axis, keepdims, where or out arguments yet");
@@ -4354,6 +4358,15 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
       combine_truthiness(result, compute_element_truthiness(elems[i]), op);
   return result;
 }
+
+// bubble_sort_numpy_elems() below unrolls an O(n^2) network of if_exprt
+// swaps at conversion time -- fine for the small concrete arrays this
+// recut targets, but a large n would blow up both frontend time and the
+// resulting SMT formula. Reject explicitly past this bound rather than
+// letting it silently degrade (ADR-NP-003 principle 3), the same way
+// numpy.arange()'s own max_materialized_arange_elements does for its
+// unrelated blow-up risk.
+static constexpr std::size_t max_inplace_sort_elements = 64;
 
 // A conversion-time-unrolled bubble sort over already-converted elements,
 // swapping via if_exprt rather than extracting a C++ comparison key -- the
@@ -4374,6 +4387,20 @@ static void bubble_sort_numpy_elems(std::vector<exprt> &elems)
       elems[j + 1] = hi;
     }
   }
+}
+
+void function_call_expr::reject_numpy_sort_write_through_view(
+  const nlohmann::json &receiver_node) const
+{
+  if (receiver_node.value("_type", "") != "Name")
+    return;
+
+  const std::string root_id =
+    converter_.resolve_name_symbol_id(receiver_node["id"].get<std::string>());
+  if (!root_id.empty() && converter_.is_tracked_numpy_view_id(root_id))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() does not support writing through a "
+      "numpy view yet");
 }
 
 std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
@@ -4397,20 +4424,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
   // to materialize and sort the copy's own storage.
   converter_.reject_numpy_view_mutating_method_call(call_);
 
-  // reject_numpy_view_mutating_method_call above only covers a *copied*
-  // view; a transpose/reshape view is not a copy (writes to it are
-  // meaningful) but this method has no support for writing through one
-  // yet, so reject explicitly rather than silently sorting whatever was
-  // just materialized for reading.
-  if (receiver_node.value("_type", "") == "Name")
-  {
-    const std::string root_id =
-      converter_.resolve_name_symbol_id(receiver_node["id"].get<std::string>());
-    if (!root_id.empty() && converter_.is_tracked_numpy_view_id(root_id))
-      throw std::runtime_error(
-        "TypeError: numpy.ndarray.sort() does not support writing through a "
-        "numpy view yet");
-  }
+  reject_numpy_sort_write_through_view(receiver_node);
 
   // Keywords/positional args are rejected ahead of the shape check so a 2-D
   // receiver called with an unsupported argument reports the argument
@@ -4428,6 +4442,14 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
       "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
 
   std::vector<exprt> elems = materialized->second;
+  if (elems.empty())
+    return gen_zero(none_type()); // sorting an empty array is a no-op
+
+  if (elems.size() > max_inplace_sort_elements)
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() currently supports arrays up to " +
+      std::to_string(max_inplace_sort_elements) + " elements");
+
   bubble_sort_numpy_elems(elems);
 
   exprt receiver = converter_.get_expr(receiver_node);
@@ -4437,7 +4459,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
       "TypeError: numpy.ndarray.sort() requires a named array variable");
 
   code_assignt assign(
-    receiver, build_1d_numpy_array_value_from_elems(elems, type_handler_));
+    receiver, build_1d_numpy_array_value(elems, type_handler_));
   assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(assign);
 

@@ -600,6 +600,14 @@ private:
   // unchanged.
   std::optional<exprt> try_numpy_inplace_sort();
 
+  // reject_numpy_view_mutating_method_call (called from
+  // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
+  // reshape view is not a copy (writes to it are meaningful) but sort() has
+  // no support for writing through one yet. Split out to keep
+  // try_numpy_inplace_sort's own decision count down.
+  void reject_numpy_sort_write_through_view(
+    const nlohmann::json &receiver_node) const;
+
   // One-line dispatch guard combining the two numpy method fast paths above
   // so handle_general_function_call()'s own decision count does not grow
   // with each one -- same reasoning as numpy_call_expr.cpp's
@@ -626,6 +634,23 @@ private:
     long long normalized_axis,
     std::size_t k,
     ReduceOp op) const;
+
+  // np.any(a_1d, axis=0)/np.all(a_1d, axis=0): the only valid axis for a
+  // 1-D array reduces the whole array to a single scalar (matching real
+  // numpy's 0-d result), not a 1-element array. Split out of
+  // try_reduce_any_all_along_axis for the same reason as
+  // reduce_any_all_axis_slice.
+  exprt
+  reduce_any_all_rank1(const std::vector<exprt> &elems, ReduceOp op) const;
+
+  // Validates the materialized receiver's rank (1-D or 2-D only) and rejects
+  // a zero-size array (no reduction identity for any/all). Split out of
+  // try_reduce_any_all_along_axis to keep that function's own decision
+  // count down.
+  static void validate_any_all_axis_shape(
+    const std::vector<std::size_t> &shape,
+    const std::string &func_name,
+    const std::string &qualifier);
 
   // Who any()/all()'s array operand is, and how the rest of
   // try_reduce_numpy_descriptor_method must read the call: the method
