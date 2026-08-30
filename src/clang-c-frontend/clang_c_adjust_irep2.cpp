@@ -1035,6 +1035,7 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
 /// `*v` on one ("indirection requires pointer operand"), so no input reaches
 /// that half and it is not reproduced here. Incomplete arrays need no arm of
 /// their own -- migrate_type gives them array_type2t with size_is_infinite.
+/// Not every shape aborts: `*"abc"` returned a wrong verdict instead.
 ///
 /// Then: dereferencing a pointer to a function yields a function designator,
 /// which converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`,

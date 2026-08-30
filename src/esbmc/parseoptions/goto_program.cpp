@@ -393,8 +393,9 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "strcat",        "strncat",       "strchr",    "strrchr",  "__fpclassifyf",
     "__fpclassifyd", "__fpclassifyl", "isalnum",   "isalpha",  "isblank",
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
-    "ispunct",       "isspace",       "isupper",   "isxdigit", "tolower",
-    "toupper",       "atoi",          "atol",      "strtol"};
+    "fesetround",    "fegetround",    "ispunct",   "isspace",  "isupper",
+    "isxdigit",      "tolower",       "toupper",   "atoi",     "atol",
+    "strtol"};
 
   for (const char *name : libc)
   {
@@ -454,11 +455,24 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "#include <string.h>\n"
     "#include <ctype.h>\n"
     "#include <stdlib.h>\n"
+    "#include <fenv.h>\n"
     // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
     // __fpclassifyd is new here -- glibc's <math.h> already declares
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
     // that is guaranteed across libcs/feature-test macros, so declare all three
     // explicitly to take their addresses (bodies live in libm/fpclassify.c).
+    // CBMC re-links __CPROVER_enforce_requires_is_fresh from its contracts
+    // library at analysis time and does not serialise a body, so the adapter
+    // retargets the call here. Deliberately not named __ESBMC_*: symex sends
+    // every c:@F@__ESBMC* callee to run_intrinsic, which abort()s on a name it
+    // does not know.
+    "_Bool __cbmc_is_fresh_impl(void **p, __SIZE_TYPE__ n)\n"
+    "{\n"
+    "  void *q = malloc(n);\n"
+    "  __ESBMC_assume(q != 0);\n"
+    "  *p = q;\n"
+    "  return 1;\n"
+    "}\n"
     "extern int __fpclassifyf(float);\n"
     "extern int __fpclassifyd(double);\n"
     "extern int __fpclassifyl(long double);\n"
@@ -485,6 +499,8 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    "  (void *)__cbmc_is_fresh_impl,\n"
+    "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
