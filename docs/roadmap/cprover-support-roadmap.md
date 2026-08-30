@@ -818,6 +818,7 @@ cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
 applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to **both** engines
 — the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
 divergence when it is a missing flag.
+cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
