@@ -801,12 +801,23 @@ both polarities. **All eight agree**, and all sixteen harnesses are now pinned a
 `isfinite`, `pointer_object`, `ieee_sqrt`, `struct`/`array_of` aggregate literals, and
 `byte_extract_little_endian` (reached by union punning).
 
+A fourth pass closed the list: `lshr`/`ashr`, `address_of` + `index` + `dereference`,
+`nearbyint`/`ieee_fma`/`abs`, `isnormal`, and `array_of` on a **nondet** extent (a VLA). All
+five agree in both polarities, pinned as `cbmc_expr_{shifts,pointer_index,libm_ops,isnormal,
+vla_extent}{,_fail}` — that pass was measured against a clean `master` build rather than the
+branch stack, so the agreement is not an artefact of the fixes above. **The allow-list now has
+per-id coverage end to end**; what it produced along the way was one crash (§`object_size`) and
+one unsound miss (`r_ok`), both fixed.
+
 **Two harness traps worth repeating.** A verdict that *agrees* can still be vacuous: CBMC
 reports `no body for callee` and fails the assertion for that reason, which looks like
 agreement when ESBMC fails for its own. Check the failing claim, and grep the CBMC run for
 `no body`. In particular `__CPROVER_signbit` and `__CPROVER_isfinite` do not exist —
 `signbit()` from `<math.h>` works, but `isfinite()` lowers to `__builtin_isfinite`, which
-cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
+cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`. The same
+applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to **both** engines
+— the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
+divergence when it is a missing flag.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
