@@ -819,6 +819,34 @@ applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to *
 — the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
 divergence when it is a missing flag.
 
+#### A cast to `void` reaches the SMT encoder on a `frees` contract (§4.4, open — `cbmc_contract_frees`)
+
+Measured 2026-08-30. A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` and
+`__CPROVER_frees(p)` over a `free(p)` body verifies SUCCESSFUL under CBMC and **aborts** ESBMC
+in the solver backend:
+
+```
+ERROR: Typecast for unexpected type      (smt_casts.cpp:809)
+typecast
+* from : typecast
+    * from : pointer_offset { pointer_obj : release::p }
+    * type : unsignedbv, width 64
+* type : empty
+```
+
+The outer cast's target is `empty` — a cast **to `void`**, i.e. a discarded value, which the
+encoder has no case for. It should not reach the solver as a value at all; the fix belongs
+where the discard is built, not in `smt_casts.cpp`.
+
+**This is a second layer, exposed by fixing the first.** On `master` the same binary dies
+earlier with the `object_size` SIGSEGV; once that is fixed the run gets as far as the encoder
+and hits this. Anyone re-measuring must say which build they used — the failure mode changes
+from rc=139 to rc=134 across that fix.
+
+Also measured, and *not* a divergence: removing the `__CPROVER_frees(p)` clause entirely leaves
+CBMC still reporting SUCCESSFUL, so the clause is not what its absence would suggest — do not
+build a negative test on that shape without checking it bites.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
