@@ -1055,7 +1055,23 @@ and the growth is now computed in `size_t` for the case where the stream is not 
 the guard declines to guess. 140 corrupted binaries (3- and 8-byte flips) and 300 truncation
 offsets now produce no hang and no signal; `native_bad_string_id` pins it.
 
-**Still open:** multi-version tolerance (accept/adapt versions other than 6).
+**The sweep is now a script: `scripts/fuzz_goto_binary.py`.** It truncates a goto-binary at
+every Nth byte and flips random bytes, and reports any run that hangs or dies from a signal.
+Both readers parse untrusted input, so a malformed file must produce a diagnostic — never a
+crash, never an unbounded loop. Current status, 2026-08-30: **597 malformed inputs across a
+native pair, a plain CBMC binary and a contract-instrumented one, zero bad.** The script is
+self-checking in the sense that matters: reverting any of the five fixes above makes it report
+again (verified against the `read_string` EOF fix, which brings the hangs straight back).
+
+Worth running against a *new* input shape rather than only re-running it: every defect it found
+came from a shape not previously fed to the reader, not from more iterations of the same one.
+
+**Still open:** multi-version tolerance (accept/adapt versions other than 6). One level up from
+the irep layer — the symbol-table and function-table loops in `read_bin_goto_object.cpp` —
+was swept and is clean: corrupted counts (`0xffffffff`, `0x00ffffff`, `0xffff`) all fail in
+under a second, because the irep layer beneath now stops at the first bad record. The
+`assert(count == 0)` there is an invariant on ESBMC's *own* bundled libraries, read from
+`.rodata` by `cprover_library.cpp`, not on user input — correctly an assert.
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`realloc`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level
