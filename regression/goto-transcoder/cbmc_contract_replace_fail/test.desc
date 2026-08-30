@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_replace_fail.goto
+--binary --function main
+^VERIFICATION FAILED$
