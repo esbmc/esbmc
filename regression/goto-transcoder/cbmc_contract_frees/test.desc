@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 cbmc_contract_frees.goto
 --binary --function release
 ^VERIFICATION SUCCESSFUL$

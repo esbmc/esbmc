@@ -465,6 +465,32 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
     // that is guaranteed across libcs/feature-test macros, so declare all three
     // explicitly to take their addresses (bodies live in libm/fpclassify.c).
+    // CBMC re-links __CPROVER_enforce_requires_is_fresh from its contracts
+    // library at analysis time and does not serialise a body, so the adapter
+    // retargets the call here. Deliberately not named __ESBMC_*: symex sends
+    // every c:@F@__ESBMC* callee to run_intrinsic, which abort()s on a name it
+    // does not know.
+    // The check-side counterpart. It must never allocate: these two variants
+    // ask whether the pointer *already* denotes an object that big, and
+    // satisfying them by allocating would mask the violation they exist to
+    // catch. Mirrors what CBMC's own check accepts -- a static object passes,
+    // a null one does not, and the extent is enforced.
+    // Takes the pointer *by value*: unlike the assume-side variants, which get
+    // &p so they can write a fresh object back through it, CBMC hands the
+    // check-side ones the pointer itself.
+    "_Bool __cbmc_is_fresh_check_impl(void *q, __SIZE_TYPE__ n)\n"
+    "{\n"
+    "  if (q == 0)\n"
+    "    return 0;\n"
+    "  return __ESBMC_builtin_object_size(q, 0) >= n;\n"
+    "}\n"
+    "_Bool __cbmc_is_fresh_impl(void **p, __SIZE_TYPE__ n)\n"
+    "{\n"
+    "  void *q = malloc(n);\n"
+    "  __ESBMC_assume(q != 0);\n"
+    "  *p = q;\n"
+    "  return 1;\n"
+    "}\n"
     "extern int __fpclassifyf(float);\n"
     "extern int __fpclassifyd(double);\n"
     "extern int __fpclassifyl(long double);\n"
@@ -491,6 +517,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
+    "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
