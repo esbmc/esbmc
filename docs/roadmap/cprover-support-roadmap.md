@@ -2174,6 +2174,16 @@ _RNvNtNtCsfemxtvIyyHd_4core5slice6verify13check_reverse
 
 ---
 
+**Narrowed 2026-08-30: the C-expressible subset is not the problem.** In-place reversal of an
+`int` array matches CBMC, and so does a hand-rolled `{ptr, len}` slice struct summed over both
+the whole buffer and a borrowed sub-slice (`buf + 2`). The closest shape to what Kani generates
+— reversal over a **symbolic** length, `__CPROVER_assume(n >= 1 && n <= 6)`, asserting the ends
+swap — also agrees. Pinned as `cbmc_slice_{reverse,borrow,symbolic_len}`.
+
+That covers slice reversal, slice borrowing and symbolic extents, i.e. the three things
+"Affected Operations" names, so the residue is `Option<T>::as_slice()` and Rust's own slice
+representation rather than the operations themselves — the same conclusion as #4 and #5.
+
 ## UMBRELLA #7: Contract System Causes Aborts (Parse Succeeds, Verify Fails)
 
 **Status**: 🟠 PARTIAL
