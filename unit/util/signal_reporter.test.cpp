@@ -56,11 +56,13 @@ stderr_of(void (*body)(), int &sig, const char *advice = "advice line\n")
   REQUIRE(pid > 0);
 
   close(fds[1]);
+  FILE *from_child = fdopen(fds[0], "r");
+  REQUIRE(from_child != nullptr);
   std::string out;
   char buf[512];
-  for (ssize_t n; (n = read(fds[0], buf, sizeof(buf))) > 0;)
+  for (size_t n; (n = fread(buf, 1, sizeof(buf), from_child)) > 0;)
     out.append(buf, n);
-  close(fds[0]);
+  fclose(from_child);
 
   int status = 0;
   REQUIRE(waitpid(pid, &status, 0) == pid);
@@ -68,9 +70,14 @@ stderr_of(void (*body)(), int &sig, const char *advice = "advice line\n")
   return out;
 }
 
+/// Reached through a volatile pointer rather than written as a literal
+/// `*(int *)nullptr`, whose target the optimiser is free to fold into a trap
+/// instruction -- that raises SIGILL, not the SIGSEGV this test is about.
+int *volatile null_target = nullptr;
+
 void null_deref()
 {
-  *(volatile int *)nullptr = 1;
+  *null_target = 1;
 }
 
 /** Eat the stack. The array is written and read so the frame cannot be
@@ -108,7 +115,7 @@ void truncated_mapping()
   void *p = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
   if (p == MAP_FAILED || ftruncate(fd, 0) != 0)
     _exit(3);
-  *(volatile char *)p = 1;
+  *static_cast<volatile char *>(p) = 1;
 }
 
 void no_fault()
