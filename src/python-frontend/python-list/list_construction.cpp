@@ -121,7 +121,10 @@ exprt python_list::get()
   const std::string &list_id = list_symbol.id.as_string();
   locationt location = converter_.get_location_from_decl(list_value_);
 
-  auto materialize_list_elem = [&](const exprt &elem) -> exprt {
+  auto materialize_list_elem = [&](const exprt &raw_elem) -> exprt {
+    // Must precede the is_symbol() return: a bare function symbol (#6640).
+    const exprt elem = decay_function_to_pointer(raw_elem);
+
     if (elem.is_symbol())
       return elem;
 

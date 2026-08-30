@@ -1165,6 +1165,40 @@ bool __ESBMC_list_slice_assign(
   return true;
 }
 
+/* Find the first element equal to item and shift the tail left over it.
+ * Search and shift are kept in separate loops: nesting them makes symex
+ * emit one full shift per candidate index, which is quadratic in the list
+ * length (see #7361). */
+static bool __ESBMC_list_remove_first(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      break;
+    i++;
+  }
+
+  if (i == l->size)
+    return false;
+
+  size_t j = i;
+  while (j < l->size - 1)
+  {
+    l->items[j] = l->items[j + 1];
+    j++;
+  }
+  l->size--;
+  return true;
+}
+
 bool __ESBMC_list_remove(
   PyListObject *l,
   const void *item,
@@ -1173,31 +1207,7 @@ bool __ESBMC_list_remove(
 {
   __ESBMC_assert(l != NULL, "ValueError: list is null");
 
-  size_t i = 0;
-  while (i < l->size)
-  {
-    const PyObject *elem = &l->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        /* Shift elements left to fill the gap */
-        size_t j = i;
-        while (j < l->size - 1)
-        {
-          l->items[j] = l->items[j + 1];
-          j++;
-        }
-        l->size--;
-        return true; /* found and removed */
-      }
-    }
-    i++;
-  }
-
-  /* Item not found */
-  return false;
+  return __ESBMC_list_remove_first(l, item, item_type_id, item_size);
 }
 
 /* set.add(elem) — append elem to the underlying list iff it is not
@@ -1226,29 +1236,7 @@ bool __ESBMC_set_discard(
 {
   __ESBMC_assert(s != NULL, "ValueError: set is null");
 
-  size_t i = 0;
-  while (i < s->size)
-  {
-    const PyObject *elem = &s->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        size_t j = i;
-        while (j < s->size - 1)
-        {
-          s->items[j] = s->items[j + 1];
-          j++;
-        }
-        s->size--;
-        return true;
-      }
-    }
-    i++;
-  }
-
-  return false;
+  return __ESBMC_list_remove_first(s, item, item_type_id, item_size);
 }
 
 void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)

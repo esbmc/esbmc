@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_ensures.goto
+--binary --function twice
+^VERIFICATION SUCCESSFUL$

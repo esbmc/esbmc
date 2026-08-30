@@ -74,7 +74,14 @@ jobs:
           status=$?
           set -e
           python3 scripts/plant_unsound_fold.py remove src/util/expr/expr_simplifier.cpp
+          # Before the rebuild, which runs under set -e: this log is the whole
+          # output of the step and a failing rebuild must not swallow it.
           cat mutation.log
+          # Removing the fold from the source leaves it in the binary, and every
+          # later step uses that binary. The slice below reported 23 mul
+          # rewrites as unsound when this rebuild was missing, all of them the
+          # planted fold (esbmc/esbmc#7327).
+          cmake --build build -j2
           if [ "$status" -eq 0 ]; then
             echo "::error::the planted unsound fold did not fail the run"
             exit 1
@@ -85,17 +92,27 @@ jobs:
       - name: Regression slice under the equivalence check
         run: |
           cd build
-          # Bounded, and the bound is a finding rather than a budget. 500 is
-          # where the label's next test (github_1210-2-array) reports a
-          # disagreement the check cannot arbitrate -- a `member` over a
-          # bitcast/byte_update chain -- and github_1600 further on costs 1201s
-          # against 8s uninstrumented. Both are esbmc/esbmc#7326; raise this when
-          # they close. A violation exits the run, so one unscreened shape would
-          # end the job before it reached anything after it.
-          ctest -j2 --output-on-failure -L '^esbmc/$' -I 1,500
+          # Bounded, and the bound is a finding rather than a budget. Shortly
+          # past it github_1210-2-array reports a disagreement the check cannot
+          # arbitrate -- a `member` over a bitcast/byte_update chain -- and
+          # github_1600 further on costs 1201s against 8s uninstrumented. Both
+          # are esbmc/esbmc#7326; raise this when they close, one test at a
+          # time: the three between the bound and -2-array (github_1210-1-struct
+          # and -1-union, then -2-array itself) have not been measured under the
+          # check. A violation exits the run, so one unscreened shape would end
+          # the job before it reached anything after it.
+          # 12_lms_new, inside the slice, is that same cost finding: 0.3s
+          # uninstrumented, and past the 1200s per-test cap once every peephole
+          # costs a query. Excluding it and dropping the bound to 499 leaves the
+          # slice ending exactly where it did.
+          ctest -j2 --output-on-failure -L '^esbmc/$' \
+            -E 'regression/esbmc/12_lms_new$' -I 1,499
 
       # Not run here either: regression/floats/ and regression/floats-regression/.
-      # The check finds two real simplifier bugs there -- isnormal(+INFINITY)
-      # folding to true (esbmc/esbmc#7320) and if(c, -0.0, +0.0) folding to -0.0
-      # (esbmc/esbmc#7321). Add both suites when those close; until then the bugs
-      # are tracked rather than watched, and this comment is the record of it.
+      # The check finds a real simplifier bug there -- isnormal(+INFINITY)
+      # folding to true (esbmc/esbmc#7320). Add both suites when it closes;
+      # until then the bug is tracked rather than watched, and this comment is
+      # the record of it. Its sibling esbmc/esbmc#7321 is fixed, but only its
+      # if2t half is watched here: the with2t half rewrites an aggregate, and
+      # is_checkable_type() declines every aggregate-typed rewrite, so
+      # regression/esbmc/github_7321 is what pins it rather than this job.

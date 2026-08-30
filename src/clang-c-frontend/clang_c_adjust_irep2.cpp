@@ -116,6 +116,48 @@ static bool is_relational(const expr2tc &expr)
          is_greaterthanequal2t(expr);
 }
 
+/// The source location of `expr` when it is a statement that can hold a call
+/// in a sub-expression, empty otherwise. sideeffect2t carries none of its own,
+/// so a call in one takes the enclosing statement's -- which is what
+/// clang_c_adjust reads off the side_effect_expr_function_callt it is handed
+/// (§130.3). Every kind whose operands can be an expression is listed: a
+/// condition is as much a call site as an assignment's right-hand side, and
+/// omitting one leaves the counterexample with no file and line 0.
+static locationt statement_location(const expr2tc &expr)
+{
+  switch (expr->expr_id)
+  {
+  case expr2t::code_expression_id:
+    return to_code_expression2t(expr).location;
+  case expr2t::code_assign_id:
+    return to_code_assign2t(expr).location;
+  case expr2t::code_decl_id:
+    return to_code_decl2t(expr).location;
+  case expr2t::code_return_id:
+    return to_code_return2t(expr).location;
+  case expr2t::code_function_call_id:
+    return to_code_function_call2t(expr).location;
+  case expr2t::code_ifthenelse_id:
+    return to_code_ifthenelse2t(expr).location;
+  case expr2t::code_while_id:
+    return to_code_while2t(expr).location;
+  case expr2t::code_dowhile_id:
+    return to_code_dowhile2t(expr).location;
+  case expr2t::code_for_id:
+    return to_code_for2t(expr).location;
+  case expr2t::code_switch_id:
+    return to_code_switch2t(expr).location;
+  case expr2t::code_assert_id:
+    return to_code_assert2t(expr).location;
+  case expr2t::code_assume_id:
+    return to_code_assume2t(expr).location;
+  case expr2t::code_printf_id:
+    return to_code_printf2t(expr).location;
+  default:
+    return locationt();
+  }
+}
+
 void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 {
   if (is_nil_expr(expr))
@@ -129,6 +171,12 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     declare_implicit_callee(stmt.operand, stmt.location);
   }
 
+  // A call reached below a statement takes that statement's location; a
+  // sideeffect2t has none of its own.
+  const locationt saved_location = enclosing_location;
+  if (const locationt l = statement_location(expr); !l.get_line().empty())
+    enclosing_location = l;
+
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
 
   if (is_index2t(expr))
@@ -137,13 +185,22 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     adjust_member(expr);
   else if (
     sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
+  {
+    // Before declare_implicit_callee: the polymorphic name is repointed at the
+    // concrete instance here, and it is that symbol the callee check must see.
+    // Before adjust_function_designators too, which wraps a code-typed callee
+    // in an address_of2t that the symbol test below would then reject.
+    declare_polymorphic_builtin(expr);
     declare_implicit_callee(expr);
+  }
 
   if (sole_adjuster)
     adjust_sole_arms(expr);
 
   if (sole_adjuster && is_address_of2t(expr))
     adjust_address_of(expr);
+
+  enclosing_location = saved_location;
 }
 
 /// The arms that only run when this pass is the sole adjuster, gathered behind
@@ -924,17 +981,36 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
     stmt.location);
 }
 
-/// Dereferencing a pointer to a function yields a function designator, which
-/// converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`, and
-/// `******f` too. clang_c_adjust::adjust_dereference re-takes the address for
-/// exactly this case; left bare, the code-typed dereference reaches a consumer
+/// `*a` on an array is `a[0]` (C11 6.5.3.2p4 through the 6.3.2.1p3 decay), and
+/// clang_c_adjust::adjust_dereference rewrites it to that index. Left as a
+/// dereference the node reaches the encoder as a pointer built from an array
+/// rather than a named element, and it aborts there: `Unexpected type in
+/// int/ptr typecast`.
+///
+/// Legacy tests `is_array_like`, which also admits a vector; clang rejects
+/// `*v` on one ("indirection requires pointer operand"), so no input reaches
+/// that half and it is not reproduced here. Incomplete arrays need no arm of
+/// their own -- migrate_type gives them array_type2t with size_is_infinite.
+/// Not every shape aborts: `*"abc"` returned a wrong verdict instead.
+///
+/// Then: dereferencing a pointer to a function yields a function designator,
+/// which converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`,
+/// and `******f` too. Left bare, the code-typed dereference reaches a consumer
 /// that wants a pointer.
 ///
-/// Only that arm is ported: the array and pointer-subtype arms above it
-/// retype a node the migration already builds with the right type, so no
-/// corpus input distinguishes them.
+/// Legacy's remaining arm retypes the node to the pointer's subtype; the
+/// migration already builds that type, so no corpus input distinguishes it.
 void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
 {
+  const expr2tc pointer = to_dereference2t(expr).value;
+  const type2tc op_type = ns.follow(pointer->type);
+
+  if (is_array_type(op_type))
+    expr = index2tc(
+      to_array_type(op_type).subtype,
+      pointer,
+      gen_zero(migrate_type(index_type())));
+
   if (!is_code_type(expr->type))
     return;
 
@@ -1144,6 +1220,65 @@ void clang_c_adjust_irep2::adjust_complex_unary(expr2tc &expr)
   const expr2tc im = neg2tc(et, member2tc(et, op, "imag"));
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+void clang_c_adjust_irep2::declare_polymorphic_builtin(expr2tc &expr)
+{
+  // The caller admits these two kinds only, so there is no third arm to guard:
+  // to_sideeffect2t throws loudly on anything else rather than silently
+  // skipping a call that should have been declared.
+  expr2tc callee;
+  const std::vector<expr2tc> *args = nullptr;
+  locationt loc;
+  if (is_code_function_call2t(expr))
+  {
+    const code_function_call2t &call = to_code_function_call2t(expr);
+    callee = call.function;
+    args = &call.operands;
+    loc = call.location;
+  }
+  else
+  {
+    const sideeffect2t &se = to_sideeffect2t(expr);
+    if (se.kind != sideeffect_allockind::function_call)
+      return;
+    callee = se.operand;
+    args = &se.arguments;
+    loc = enclosing_location;
+  }
+
+  if (is_nil_expr(callee) || !is_symbol2t(callee))
+    return;
+
+  // Every arm of the matcher selects on the first argument's *type* alone, so
+  // the values need not cross the seam. A future arm that reads a value gets a
+  // nil operand and fails visibly rather than silently selecting wrong.
+  exprt::operandst arg_types;
+  arg_types.reserve(args->size());
+  for (const expr2tc &arg : *args)
+  {
+    if (is_nil_expr(arg))
+      return;
+    arg_types.emplace_back(exprt("nil", migrate_type_back(arg->type)));
+  }
+
+  const irep_idt id = to_symbol2t(callee).thename;
+
+  symbol_exprt legacy_callee(id, migrate_type_back(callee->type));
+  legacy_callee.name(get_pretty_name(id2string(id)));
+  legacy_callee.location() = loc;
+
+  const exprt poly = clang_c_adjust::declare_gcc_polymorphic_builtin(
+    legacy_callee, arg_types, loc, context);
+  if (poly.is_nil())
+    return;
+
+  expr2tc target;
+  migrate_expr(poly, target);
+  if (is_code_function_call2t(expr))
+    to_code_function_call2t(expr).function = target;
+  else
+    to_sideeffect2t(expr).operand = target;
 }
 
 void clang_c_adjust_irep2::declare_implicit_callee(

@@ -905,6 +905,14 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
+  // The scan records its decision at every position it steps over, so the copy
+  // loop below can reuse it instead of re-running strncmp there; under
+  // symbolic execution the second scan unwinds in full just like the first.
+  // Marking in place rather than pre-zeroing keeps this to one loop: the copy
+  // loop treats everything at or past scan_end as a non-match, which covers
+  // both the tail this loop cannot reach and an early exit on count.
+  char *is_match = __ESBMC_alloca(len_s + 1);
+
   int remaining = count;
   size_t occurrences = 0;
   size_t i = 0;
@@ -912,6 +920,7 @@ __ESBMC_HIDE:;
   {
     if ((remaining != 0) && strncmp(s + i, old_sub, old_len) == 0)
     {
+      is_match[i] = 1;
       occurrences++;
       i += old_len;
       if (remaining > 0)
@@ -920,8 +929,10 @@ __ESBMC_HIDE:;
         break;
       continue;
     }
+    is_match[i] = 0;
     i++;
   }
+  size_t scan_end = i;
 
   long long diff = (long long)new_len - (long long)old_len;
   long long result_len_signed =
@@ -931,25 +942,15 @@ __ESBMC_HIDE:;
   size_t result_len = (size_t)result_len_signed;
   char *buffer = __ESBMC_alloca(result_len + 1);
 
-  remaining = count;
   i = 0;
   size_t pos = 0;
 
-  // Main replacement loop - use bounded iteration
+  // Both loops walk the same positions with the same skip rule, so the marks
+  // left above land exactly where this one would have matched.
   while (i < len_s)
   {
-    // Check if replacement is possible at current position
-    int do_replace = 0;
-    if (remaining != 0 && i + old_len <= len_s)
+    if (i < scan_end && is_match[i])
     {
-      // Use strncmp for comparison (ESBMC handles this better)
-      if (strncmp(s + i, old_sub, old_len) == 0)
-        do_replace = 1;
-    }
-
-    if (do_replace)
-    {
-      // Copy new_sub to buffer
       size_t k = 0;
       while (k < new_len)
       {
@@ -957,15 +958,10 @@ __ESBMC_HIDE:;
         pos++;
         k++;
       }
-      // Skip old_sub in source
       i = i + old_len;
-      // Decrement remaining replacements
-      if (remaining > 0)
-        remaining = remaining - 1;
     }
     else
     {
-      // Copy single character
       buffer[pos] = s[i];
       pos++;
       i++;

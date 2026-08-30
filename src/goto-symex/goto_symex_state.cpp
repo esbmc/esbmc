@@ -4,10 +4,12 @@
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 
 goto_symex_statet::goto_symex_statet(
@@ -97,25 +99,113 @@ static bool type_has_constant_size(const type2tc &type)
   return true;
 }
 
+/* Above this many elements a multi-dimensional array is left symbolic; see
+ * constant_propagation() for the measurement behind the number. */
+static constexpr unsigned multidim_propagation_bound = 256;
+
+/* Total element count of a possibly nested array type, or nothing when any
+ * dimension is not a constant. */
+static std::optional<BigInt> array_element_count(const type2tc &t)
+{
+  const array_type2t &arr = to_array_type(t);
+  if (
+    arr.size_is_infinite || is_nil_expr(arr.array_size) ||
+    !is_constant_int2t(arr.array_size))
+    return {};
+
+  BigInt n = to_constant_int2t(arr.array_size).value;
+  if (!is_array_type(arr.subtype))
+    return n;
+
+  std::optional<BigInt> sub = array_element_count(arr.subtype);
+  if (!sub)
+    return {};
+  return n * *sub;
+}
+
+/* A nested constant array whose leaves are all constants. */
+static bool is_constant_array_value(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_constant_array_of2t(e))
+    return is_constant_array_value(to_constant_array_of2t(e).initializer);
+
+  if (is_constant_array2t(e))
+  {
+    for (const expr2tc &m : to_constant_array2t(e).datatype_members)
+      if (!is_constant_array_value(m))
+        return false;
+    return true;
+  }
+
+  return is_constant_expr(e);
+}
+
+/* Whether an array value is cheap and well-formed enough to carry as a
+ * propagated constant. */
+static bool array_may_propagate(const expr2tc &e)
+{
+  const array_type2t &arr = to_array_type(e->type);
+
+  // Infinite-size arrays are special modelling arrays needing their own
+  // handling at SMT or some other level, so optimising them is a Bad Plan (TM).
+  if (arr.size_is_infinite)
+    return false;
+
+  if (!is_array_type(arr.subtype))
+    return true;
+
+  // A multi-dimensional array propagates only as a whole constant. A `with`
+  // chain over one lets a second update land on an already-updated row, and
+  // the SMT flattening in convert_array_store()/decompose_store_chain() walks
+  // only the update-value spine: the earlier sibling store is dropped from the
+  // formula (silent wrong answers) or reaches mk_store()/mk_eq() with a row on
+  // one side and an element on the other. Folding the reads is what R42 needs;
+  // folding the writes is a separate, unfixed encoding gap.
+  if (!is_constant_array_value(e))
+    return false;
+
+  // And only while it stays small: a read at a symbolic index inlines the
+  // whole nested constant, so the cost grows with the element count. The cap
+  // is R42's (docs/roadmap/goto-symex-verification-plan.md).
+  std::optional<BigInt> elems = array_element_count(e->type);
+  return elems && *elems <= multidim_propagation_bound;
+}
+
+/// The operand a wrapper node's propagatability is decided by, or null when
+/// @p e is not one. sizeof2t folds to its own `value`, which already holds
+/// clang's computed byte size, so it propagates exactly when that does -- and
+/// declines for a VLA, whose value is a symbolic expression.
+static const expr2tc *propagation_passthrough(const expr2tc &e)
+{
+  if (is_typecast2t(e))
+    return &to_typecast2t(e).from;
+  if (is_sizeof2t(e))
+    return &to_sizeof2t(e).value;
+  return nullptr;
+}
+
+/// Arithmetic whose result is known once its operands are. Only add used to be
+/// treated that way, so `n = sizeof(a) / sizeof(a[0])` was not propagated and a
+/// loop bounded by n never exited under --no-simplify, where do_simplify no
+/// longer folds the division to a literal first (#6778). The stored value
+/// stays unfolded, so the flag still decides the encoding; it is
+/// branch_decision_guard that folds it to decide the exit.
+static bool is_const_foldable_arith(const expr2tc &e)
+{
+  return is_add2t(e) || is_sub2t(e) || is_mul2t(e) || is_div2t(e) ||
+         is_modulus2t(e);
+}
+
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   if (no_propagation)
     return false;
 
-  if (is_array_type(expr))
-  {
-    array_type2t arr = to_array_type(expr->type);
-
-    // Don't permit const propagation of infinite-size arrays. They're going to
-    // be special modelling arrays that require special handling either at SMT
-    // or some other level, so attempting to optimize them is a Bad Plan (TM).
-    if (arr.size_is_infinite)
-      return false;
-
-    // Don't propagate multi dimensional arrays
-    if (is_array_type(arr.subtype))
-      return false;
-  }
+  if (is_array_type(expr) && !array_may_propagate(expr))
+    return false;
 
   if (is_vector_type(expr))
     return true;
@@ -144,10 +234,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_address_of2t(expr))
     return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
 
-  if (is_typecast2t(expr))
-    return constant_propagation(to_typecast2t(expr).from);
+  if (const expr2tc *inner = propagation_passthrough(expr))
+    return constant_propagation(*inner);
 
-  if (is_add2t(expr))
+  if (is_const_foldable_arith(expr))
   {
     bool noconst = true;
 
@@ -413,19 +503,6 @@ void goto_symex_statet::rename_type(expr2tc &expr)
   }
 }
 
-/// Base name of the variable a forall2t/exists2t binds, or an empty id when
-/// @p binder is not the (typecast of) address_of(symbol) shape the solver
-/// expects.
-static irep_idt quantifier_bound_name(const expr2tc &binder)
-{
-  expr2tc sym = binder;
-  while (is_typecast2t(sym))
-    sym = to_typecast2t(sym).from;
-  if (is_address_of2t(sym))
-    sym = to_address_of2t(sym).ptr_obj;
-  return is_symbol2t(sym) ? to_symbol2t(sym).thename : irep_idt();
-}
-
 void goto_symex_statet::rename_quantified(
   expr2tc &expr,
   const std::set<irep_idt> &bound)
@@ -465,7 +542,8 @@ void goto_symex_statet::rename_quantified(
     rename(binder);
 
     std::set<irep_idt> inner = bound;
-    inner.insert(quantifier_bound_name(binder));
+    if (irep_idt name = quantifier_bound_name(binder); !name.empty())
+      inner.insert(name);
     rename_quantified(body, inner);
     return;
   }
