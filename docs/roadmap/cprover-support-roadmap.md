@@ -320,9 +320,13 @@ result `bool`. Verdict parity with CBMC, dual-solver, across unsigned/signed fie
 width-truncation (`s.a = 9` in a 3-bit field ⇒ `1`), signed wrap (`int a:3`, `5 ⇒ -3`),
 `_Bool:1`, and multi-field packing (`cbmc_bitfield`, `cbmc_bitfield_signed`,
 `cbmc_bitfield_bool`, `cbmc_bitfield_fail`). Bitfield members of a struct **defined inside a
-function body** additionally trip the pre-existing `struct_tag/union_tag should have been
-resolved` gap (§4.3 anon/tag resolution) — orthogonal to this fix and still open; the tests
-use file-scope struct definitions.
+function body** were recorded here as tripping the pre-existing `struct_tag/union_tag should
+have been resolved` gap. **Re-measured 2026-08-30: that is stale — they work.** Keying the tag
+cache by symbol name (PR #5925) resolved function-local tags, and this case with it. A
+function-local `struct { unsigned a : 3; unsigned b : 5; }` truncates `9` to `1` in agreement
+with CBMC, and so does a function-local struct carrying an **anonymous** bitfield struct *and*
+an anonymous union. Pinned as `cbmc_bitfield_local{,_fail}` and `cbmc_anon_local{,_fail}`, so
+the claim is now held by tests rather than by a note.
 
 **Enum type `c_enum_tag` — ✅ fixed.** CBMC references an enum type via a `c_enum_tag` node —
 the tag counterpart of `c_enum`, exactly as `struct_tag`/`union_tag` reference `struct`/`union`.
