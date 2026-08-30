@@ -749,7 +749,7 @@ perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3),
 `goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
 selected label rather than a nondet branch.
 
-#### `__CPROVER_OBJECT_SIZE` on the `--binary` path — ✅ FIXED (PR #TBD)
+#### `__CPROVER_OBJECT_SIZE` on the `--binary` path — ✅ FIXED (PR #7410)
 
 An eight-line harness — `char *p = malloc(16);`
 `__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verified SUCCESSFUL under CBMC and
