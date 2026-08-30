@@ -866,6 +866,43 @@ fold_common_addend(const expr2tc &a, const expr2tc &b, const type2tc &type)
   return expr2tc();
 }
 
+/// `p - c` -> `p + (-c)` for a signed constant c.
+///
+/// A decrementing walk otherwise never reaches the `base + offset` form an
+/// incrementing one has, and every shared-base cancellation that decides a
+/// pointer comparison matches add2t, so the guard of a `p--` loop stays
+/// undecidable and the loop never exits (#6779). An unsigned c is left alone:
+/// negating it is a wrap this rewrite has no reason to commit to.
+static expr2tc fold_pointer_minus_const(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (
+    !is_pointer_type(type) || !is_constant_int2t(side_2) ||
+    !is_signedbv_type(side_2->type))
+    return expr2tc();
+
+  return add2tc(
+    type,
+    side_1,
+    constant_int2tc(side_2->type, -to_constant_int2t(side_2).value));
+}
+
+/// The two folds a subtraction over addresses has: the distance between two of
+/// them, and a decrement re-spelled as an increment.
+static expr2tc fold_pointer_sub(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (expr2tc diff = fold_address_difference(side_1, side_2, type);
+      !is_nil_expr(diff))
+    return diff;
+
+  return fold_pointer_minus_const(type, side_1, side_2);
+}
+
 expr2tc sub2t::do_simplify() const
 {
   // x - 0 = x. Mirrors Subtor::simplify but short-circuits before
@@ -885,7 +922,7 @@ expr2tc sub2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(type);
 
-  if (expr2tc folded = fold_address_difference(side_1, side_2, type);
+  if (expr2tc folded = fold_pointer_sub(type, side_1, side_2);
       !is_nil_expr(folded))
     return folded;
 
@@ -3776,7 +3813,17 @@ static expr2tc flatten_nested_index_address(const address_of2t &ao)
 static expr2tc flatten_addressof_under_add(const expr2tc &e)
 {
   if (is_address_of2t(e))
-    return flatten_nested_index_address(to_address_of2t(e));
+  {
+    const address_of2t &ao = to_address_of2t(e);
+    if (expr2tc flat = flatten_nested_index_address(ao); !is_nil_expr(flat))
+      return flat;
+
+    // A single subscript is address_of2t::do_simplify's case, and the
+    // top-level operand already gets it; an address under pointer arithmetic
+    // did not, so `&a[4] + k` kept a base its bare `&a[0]` bound could never
+    // meet and a 1-D descending walk never exited (#6779).
+    return is_index2t(ao.ptr_obj) ? ao.do_simplify() : expr2tc();
+  }
 
   if (!is_add2t(e))
     return expr2tc();
