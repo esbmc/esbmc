@@ -543,9 +543,35 @@ rather than instruction-level ASSUME/ASSERT, unconfirmed),
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
-CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). Needs a
-systematic audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
-gap-by-gap discovery.
+CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). **That audit is done (2026-08-30, PR #7423).** Method: instrument `fix_expression` to print
+every irep id and every `statement` id it sees, run it over 38 goto-binaries spanning plain C,
+aggregates, bitfields, unions, enums, floats, quantifiers, and every contract shape, and count
+ids by how many *distinct* binaries they appear in — that separates the vocabulary from
+program identifiers, which a single-run id list does not.
+
+The statement vocabulary is complete and small:
+
+| container | statements seen |
+|---|---|
+| `code` | `return`, `function_call`, `assign`, `skip`, `decl`, `dead`, `label`, `ifthenelse`, `expression`, `block`, `free` |
+| `side_effect` | `function_call`, `assign`, `nondet` |
+
+All are handled. The two that looked most dangerous — `side_effect/function_call` and
+`side_effect/assign`, i.e. a call or an assignment in *expression* position, the shape that
+made `object_size` crash — turn out to be lowered by `goto-cc` before it persists them:
+`int x = (y = 3) + 1;` and `int x = bump() + bump();` both agree with CBMC
+(`cbmc_side_effect_{assign,call}`).
+
+Of the expression ids in wide use, exactly one is matched by neither the adapter's wrap-set nor
+`migrate`: **`integer`**, CBMC's unbounded mathematical integer. It is benign in practice —
+nothing throws on it, since it survives only as the type of nodes that are rewritten before
+migration — and an experimental mapping to a pointer-width `signedbv` changed no verdict.
+`infinity` is handled by `migrate`.
+
+**The audit's ceiling, stated so it is not mistaken for completeness:** this enumerates what
+`goto-cc` and `goto-instrument` *persist*. CBMC's symex-internal vocabulary — `byte_update`,
+`byte_extract_big_endian` — never reaches a `.goto` from those tools and still needs a
+Kani-derived binary to exercise.
 
 Confirmed **not** a gap: the `printf` family. CBMC inlines its own
 `<builtin-library-printf>` model (a bodied function returning `__VERIFIER_nondet_int`), so
