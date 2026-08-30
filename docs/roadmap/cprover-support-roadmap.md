@@ -120,7 +120,7 @@ and the symbol/function table layout.
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
 | `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
 | `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_equal` |
-| Fatal-signal reporting on by default: a SIGSEGV/SIGBUS no longer leaves rc=139 as its only trace, and an alternate signal stack keeps a stack-exhaustion fault reportable (corpus sweep ranked item 3) | ✅ (PR #TBD) | `util/base/signal_catcher.cpp::install_fatal_signal_reporter` |
+| Fatal-signal reporting on by default: a SIGSEGV/SIGBUS no longer leaves rc=139 as its only trace, and an alternate signal stack keeps a stack-exhaustion fault reportable (corpus sweep ranked item 3) | ✅ (PR #7404) | `util/base/signal_catcher.cpp::install_fatal_signal_reporter` |
 
 **Verified today:** every pre-built CBMC binary in the corpus loads to a goto program
 **byte-identical** to the goto-transcoder reference (6/7; the 7th, `mul_contract.goto`, is
