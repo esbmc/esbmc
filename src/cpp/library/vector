@@ -704,15 +704,15 @@ public:
   {
     if (n > _capacity)
     {
-      T *new_buf = static_cast<T *>(malloc(sizeof(T) * n));
-      __ESBMC_assume(new_buf);
-
-      // copy over existing values
-      for (int i = 0; i < _size; i++)
-        __construct_at(new_buf + i, buf[i]);
-
-      free(buf); // free old memory
-      buf = new_buf;
+      // realloc in place, as assign() already does: it preserves [0, _size),
+      // so no copy loop is needed, and buf keeps pointing at one dynamic
+      // object. malloc/copy/free gave buf a second candidate object, and a
+      // write through a multi-candidate pointer drops constant propagation for
+      // the sibling fields _size and _capacity -- after which push_back could
+      // not decide `_size == _capacity` and re-entered this loop on every
+      // call (docs/roadmap/symex-dead-work-cost-plan.md W5).
+      buf = static_cast<T *>(realloc(buf, sizeof(T) * n));
+      __ESBMC_assume(buf);
       _capacity = n;
     }
   }
