@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 6
+^VERIFICATION FAILED$
+b does not sit nine bytes into the struct
