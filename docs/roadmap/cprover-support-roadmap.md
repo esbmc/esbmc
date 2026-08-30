@@ -1046,10 +1046,14 @@ goes through (including goto-transcoder's Rust output), had not:
   which `read_goto_binary`'s caller turns into a graceful error exit.
 
 Measured on a 15.8 kB native binary: **300 truncation offsets, previously hangs and 76 aborts,
-now zero of either** (`native_truncated` pins one). **Still open:** *corrupted* — as opposed to
-truncated — native input, where 40 random 3-byte flips still produce 1 hang and 3 aborts. The
-CBMC reader guards this with `implausible_count`; the native reader has no equivalent, and
-adding one needs care with that format's count semantics.
+now zero of either** (`native_truncated` pins one). Corrupted — as opposed to truncated — native input is closed too (PR #TBD). All four residual
+failures had one cause: `read_string_ref` sized its table with `1 + id * 2` in **32-bit**
+arithmetic, so a corrupted id of `0x80000000` wrapped to `resize(1)` and the very next index
+ran off the end of the map. Guarded the way the CBMC reader guards counts — an id is a dense
+counter and each new one costs at least a byte, so an id past the end of the file is corrupt —
+and the growth is now computed in `size_t` for the case where the stream is not seekable and
+the guard declines to guess. 140 corrupted binaries (3- and 8-byte flips) and 300 truncation
+offsets now produce no hang and no signal; `native_bad_string_id` pins it.
 
 **Still open:** multi-version tolerance (accept/adapt versions other than 6).
 
