@@ -2925,8 +2925,20 @@ static bool is_module_level_import_alias(
     if (stmt.value("_type", "") != "Import" || !stmt.contains("names"))
       continue;
     for (const auto &name : stmt["names"])
-      if (name.value("asname", name.value("name", "")) == alias)
+    {
+      // A plain `import math` (no `as`) carries "asname": null -- present,
+      // not absent -- so name.value("asname", fallback) throws instead of
+      // using the fallback (nlohmann::json::value() only substitutes a
+      // default for a MISSING key, not a null one). Check is_string()
+      // explicitly rather than relying on the default-value overload.
+      const bool has_asname =
+        name.contains("asname") && name["asname"].is_string();
+      const std::string bound_name = has_asname
+                                       ? name["asname"].get<std::string>()
+                                       : name.value("name", std::string());
+      if (bound_name == alias)
         return true;
+    }
   }
   return false;
 }
