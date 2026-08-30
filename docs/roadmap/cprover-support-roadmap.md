@@ -866,6 +866,7 @@ from rc=139 to rc=134 across that fix.
 Also measured, and *not* a divergence: removing the `__CPROVER_frees(p)` clause entirely leaves
 CBMC still reporting SUCCESSFUL, so the clause is not what its absence would suggest — do not
 build a negative test on that shape without checking it bites.
+cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
