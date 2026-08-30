@@ -1032,7 +1032,7 @@ covered over-wide varints and implausible counts, but not a stream that simply *
   abort is indistinguishable from an ESBMC crash. Flipping three random bytes killed 1 run in
   40; 60 runs now produce no signal.
 
-**The same sweep on the *native* reader found three more, fixed in PR #TBD.** The CBMC reader
+**The same sweep on the *native* reader found three more, fixed in PR #7420.** The CBMC reader
 had been hardened; `irep_serialization.cpp`, which every `--binary` read of ESBMC's own format
 goes through (including goto-transcoder's Rust output), had not:
 
