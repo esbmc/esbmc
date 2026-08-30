@@ -1044,9 +1044,20 @@ across `double`/`float`/`long double`, and `cbmc_inf_fail` (`d == 0.0` ⇒ FAILE
 **Still open**: `malloc`, `sqrtf`/`sqrt`/`sqrtl`, `alloca`/`__builtin_alloca`, `free`,
 `fabsf`/`fabs`/`fabsl`, `realloc`, `nearbyint`, and `fma` are recognised — the
 malloc/free/alloca/realloc allocation family is now complete. The `printf`-family
-`goto_convertt::do_*` special-cases are the same class of gap and share the fix's shape
-(`fix_builtin_call` already dispatches on callee name — extending it is additive), but
-weren't attempted here to keep each change reviewable. `ceilf`/`floorf`/`truncf`/`roundf` are
+`goto_convertt::do_*` special-cases looked like the same class of gap — `fix_builtin_call`
+already dispatches on callee name, so extending it would be additive — but **measuring first
+(2026-08-30) shows the item does not serve verdict parity, which is this document's goal.**
+
+- `printf` already agrees: both engines carry it through with no bodyless-callee warning, and
+  an assertion either side of the call holds in both (`cbmc_printf{,_fail}`).
+- `sprintf` and `snprintf` are **bodyless in CBMC 6.5.0 too** — `[main.no-body.sprintf] no body
+  for callee sprintf: FAILURE` — so both engines fail `n == 2` and `buf[0] == '4'` for the same
+  reason. There is no divergence to close.
+
+Wiring ESBMC's `do_printf` family onto the `--binary` path would therefore make ESBMC *more
+precise than CBMC*, and would show up in the corpus as a **new** SUCCESSFUL-vs-FAILED
+mismatch rather than as a fix. That may still be worth doing for ESBMC's own sake, but it is
+not a CPROVER-parity item and should not be tracked here as one. `ceilf`/`floorf`/`truncf`/`roundf` are
 **out of shape** — they have no native expr form and route through the libm C operational
 model as bodied functions, a distinct mechanism.
 
