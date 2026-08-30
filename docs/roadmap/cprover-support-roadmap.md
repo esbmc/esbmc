@@ -543,9 +543,35 @@ rather than instruction-level ASSUME/ASSERT, unconfirmed),
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
-CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). Needs a
-systematic audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
-gap-by-gap discovery.
+CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). **That audit is done (2026-08-30, PR #7423).** Method: instrument `fix_expression` to print
+every irep id and every `statement` id it sees, run it over 38 goto-binaries spanning plain C,
+aggregates, bitfields, unions, enums, floats, quantifiers, and every contract shape, and count
+ids by how many *distinct* binaries they appear in — that separates the vocabulary from
+program identifiers, which a single-run id list does not.
+
+The statement vocabulary is complete and small:
+
+| container | statements seen |
+|---|---|
+| `code` | `return`, `function_call`, `assign`, `skip`, `decl`, `dead`, `label`, `ifthenelse`, `expression`, `block`, `free` |
+| `side_effect` | `function_call`, `assign`, `nondet` |
+
+All are handled. The two that looked most dangerous — `side_effect/function_call` and
+`side_effect/assign`, i.e. a call or an assignment in *expression* position, the shape that
+made `object_size` crash — turn out to be lowered by `goto-cc` before it persists them:
+`int x = (y = 3) + 1;` and `int x = bump() + bump();` both agree with CBMC
+(`cbmc_side_effect_{assign,call}`).
+
+Of the expression ids in wide use, exactly one is matched by neither the adapter's wrap-set nor
+`migrate`: **`integer`**, CBMC's unbounded mathematical integer. It is benign in practice —
+nothing throws on it, since it survives only as the type of nodes that are rewritten before
+migration — and an experimental mapping to a pointer-width `signedbv` changed no verdict.
+`infinity` is handled by `migrate`.
+
+**The audit's ceiling, stated so it is not mistaken for completeness:** this enumerates what
+`goto-cc` and `goto-instrument` *persist*. CBMC's symex-internal vocabulary — `byte_update`,
+`byte_extract_big_endian` — never reaches a `.goto` from those tools and still needs a
+Kani-derived binary to exercise.
 
 Confirmed **not** a gap: the `printf` family. CBMC inlines its own
 `<builtin-library-printf>` model (a bodied function returning `__VERIFIER_nondet_int`), so
@@ -1055,7 +1081,23 @@ and the growth is now computed in `size_t` for the case where the stream is not 
 the guard declines to guess. 140 corrupted binaries (3- and 8-byte flips) and 300 truncation
 offsets now produce no hang and no signal; `native_bad_string_id` pins it.
 
-**Still open:** multi-version tolerance (accept/adapt versions other than 6).
+**The sweep is now a script: `scripts/fuzz_goto_binary.py`.** It truncates a goto-binary at
+every Nth byte and flips random bytes, and reports any run that hangs or dies from a signal.
+Both readers parse untrusted input, so a malformed file must produce a diagnostic — never a
+crash, never an unbounded loop. Current status, 2026-08-30: **597 malformed inputs across a
+native pair, a plain CBMC binary and a contract-instrumented one, zero bad.** The script is
+self-checking in the sense that matters: reverting any of the five fixes above makes it report
+again (verified against the `read_string` EOF fix, which brings the hangs straight back).
+
+Worth running against a *new* input shape rather than only re-running it: every defect it found
+came from a shape not previously fed to the reader, not from more iterations of the same one.
+
+**Still open:** multi-version tolerance (accept/adapt versions other than 6). One level up from
+the irep layer — the symbol-table and function-table loops in `read_bin_goto_object.cpp` —
+was swept and is clean: corrupted counts (`0xffffffff`, `0x00ffffff`, `0xffff`) all fail in
+under a second, because the irep layer beneath now stops at the first bad record. The
+`assert(count == 0)` there is an invariant on ESBMC's *own* bundled libraries, read from
+`.rodata` by `cprover_library.cpp`, not on user input — correctly an assert.
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`realloc`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level
