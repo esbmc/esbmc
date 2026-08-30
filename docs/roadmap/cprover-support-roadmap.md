@@ -812,13 +812,22 @@ for when thread instructions land. Verdict parity with CBMC, dual-solver (Bitwuz
 `cbmc_thread_local` (TLS counter increment + a volatile global read) SUCCESSFUL /
 `cbmc_thread_local_fail` (wrong expected counter) FAILED.
 
-**Audited, still dropped (warn when set):** `is_volatile` — CBMC keeps the qualifier in the
-*type* (which migrates independently); the symbol-level flag never fired across the probe
-corpus, and CBMC's default verification treats volatile reads as ordinary memory anyway, so
-there is no verdict divergence to close. `is_weak` — weak/strong resolution already happened
-when goto-cc linked the `.goto`; it could only matter if a later link stage (e.g. the
-additions boilerplate) overrode a weak definition, so the warning stays as a tripwire.
-`is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
+**Audited, still dropped — re-measured 2026-08-30 rather than left as an assertion:**
+
+- **`is_volatile` never fires.** CBMC keeps the qualifier in the *type* (which migrates
+  independently); across a volatile global, a volatile pointer and a volatile struct member,
+  ESBMC emits no `dropping 'volatile'` warning at all. Neither engine models a volatile read as
+  nondet-per-read, so two consecutive reads agree on both — `cbmc_volatile_reads`,
+  `cbmc_volatile_shapes`.
+- **`is_weak` does fire, and dropping it is still harmless — including in the case this note
+  flagged as risky.** The concern was "a later link stage (e.g. the additions boilerplate)
+  overriding a weak definition". Constructed exactly that: a program defining
+  `__attribute__((weak)) size_t strlen(...)` returning 99, which the additions also supply.
+  Both engines resolve to the **program's** weak definition — CBMC reports `n == 99` SUCCESS /
+  `n == 3` FAILURE and ESBMC matches claim for claim, while emitting
+  `dropping 'weak' on symbol strlen`. goto-cc has already baked the resolution into the binary,
+  so the flag carries no information ESBMC needs. `cbmc_weak_override{,_fail}`.
+- `is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
 ### 4.6 Contracts subsystem (Phase 4) — 🔶 loads & verifies; gap is the unserialised contract library
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
