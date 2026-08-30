@@ -813,8 +813,28 @@ retargets the 3-argument `__CPROVER_enforce_requires_is_fresh(&p, n, map)` to th
 through — the `memcpy`-family retarget pattern of §4.8. The bridge is deliberately *not* named
 `__ESBMC_*`: symex routes every `c:@F@__ESBMC*` callee to `run_intrinsic`, which `abort()`s on
 a name it does not know. CBMC's third argument is the memory map it threads through to state
-separation between two `is_fresh`'d pointers; that is dropped, so **separation is still not
-modelled**. The `ensures` direction and `--replace-call-with-contract` remain bodyless. The bridge is to synthesise or
+separation between two `is_fresh`'d pointers; that is dropped.
+
+**Closed for the `replace`/`ensures` direction too (PR #TBD).** CBMC splits `is_fresh` four
+ways, and only the two **assume**-side variants may be bridged: `enforce_requires` and
+`replace_ensures` both state something the verifier is entitled to take for granted, so both
+allocate. Their **check**-side counterparts — `enforce_ensures` ("did the body really return
+something fresh?") and `replace_requires` ("did the caller really pass something fresh?") —
+stay bodyless deliberately: satisfying them by allocating would mask the very violation they
+exist to catch.
+
+Still open in `is_fresh`, now measured rather than guessed:
+
+- **`is_fresh` in an `ensures` under `--enforce-contract` is a systematic false alarm.** The
+  bodyless `__CPROVER_enforce_ensures_is_fresh` returns nondet and the following `ASSERT` can
+  always pick false, so `Check ensures clause` FAILS for a body returning a genuine `malloc`
+  exactly as it does for one returning a static — it discriminates nothing. CBMC reports
+  SUCCESSFUL on both, so its own check looks weak here too; closing this needs the memory map
+  ("was this pointer allocated fresh during this call?"), not another bridge.
+- **Separation** between two `is_fresh`'d pointers is unmodelled but not currently a
+  divergence: the bridge mallocs per call, so two pointers are distinct by construction, and
+  `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on
+  both engines. The bridge is to synthesise or
 retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
 mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
 yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
