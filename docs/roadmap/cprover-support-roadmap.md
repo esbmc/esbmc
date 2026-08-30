@@ -1011,8 +1011,28 @@ the parse (subsequent reads no-op, the S/N/C child loops stop) and surfaces thro
 The symbol/function/instruction table counts are also bounded against the bytes left in the
 stream before `reserve()` runs — each element is ≥1 byte, so a count larger than the remaining
 input is corrupt and rejected rather than driving a multi-gigabyte allocation or a
-multi-billion-iteration spin (PR #5812). **Still open:** multi-version tolerance (accept/adapt
-versions other than 6).
+multi-billion-iteration spin (PR #5812).
+
+**Version rejection verified, 2026-08-30 (PR #TBD).** Patching the version varint of a good
+binary to 0, 5 and 7 each produces `unsupported CBMC goto-binary version N (only 6 is
+supported)` and exit 6 — no crash. `cbmc_bad_version` pins it. Accepting versions other than 6
+still cannot be *validated* locally: cbmc 6.5.0 is the only CBMC here and it emits v6, so
+there is no v5 or v7 binary to adapt. That needs a second CBMC build.
+
+**Two malformed-input crashes found by sweeping and fixed (PR #TBD).** The hardening above
+covered over-wide varints and implausible counts, but not a stream that simply *ends*:
+
+- `read_word`'s `while (in.good())` loop exited at EOF **without setting `failed_`**, returning
+  the partial value. A truncated binary therefore parsed into ireps with no id, and
+  `migrate_expr` `abort()`ed on them ("migrate expr failed"). Truncating one 6.7 kB binary at
+  183 offsets aborted at 2 of them; it now fails cleanly at all 183.
+- `migrate_expr`'s fallback `abort()`ed where `migrate_type0` beside it *throws*. An id it does
+  not know is reachable from external input — a corrupted binary carries any bytes it likes —
+  and `create_goto_program`'s handler turns a throw into a graceful error exit, whereas an
+  abort is indistinguishable from an ESBMC crash. Flipping three random bytes killed 1 run in
+  40; 60 runs now produce no signal.
+
+**Still open:** multi-version tolerance (accept/adapt versions other than 6).
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`realloc`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level

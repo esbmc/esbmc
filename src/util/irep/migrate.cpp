@@ -2930,8 +2930,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   // TRANSCODER END
 
+  // Thrown rather than abort()ed, matching migrate_type0 below: an id this
+  // does not know is reachable from *external* input -- a corrupted or
+  // truncated goto-binary carries whatever byte sequence it likes -- and
+  // create_goto_program's handler turns a throw into a graceful error exit
+  // (roadmap 4.7), where an abort is indistinguishable from an ESBMC crash.
   log_error("{}\nmigrate expr failed", expr);
-  abort();
+  throw std::string("migrate expr failed: ") + id2string(expr.id());
 }
 
 typet migrate_type_back(const type2tc &ref)
