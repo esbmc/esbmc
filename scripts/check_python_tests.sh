@@ -107,6 +107,7 @@ ignored_dirs=(
   "input3"
   "input5"
   "input6"
+  "github_7377_input_len"
   "harness_os_listdir"
   "github_3712"
   "github_3713"
