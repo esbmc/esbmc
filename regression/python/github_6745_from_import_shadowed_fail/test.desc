@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Function .*main\.py@C@Square@F@total. not found$

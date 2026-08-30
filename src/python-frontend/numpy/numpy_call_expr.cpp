@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
@@ -75,13 +76,6 @@ exprt np_index(const exprt &arr, const exprt &idx, const typet &t)
 }
 } // namespace
 
-struct numeric_value
-{
-  bool is_int = true;
-  int64_t int_value = 0;
-  double double_value = 0.0;
-};
-
 struct scalar_value
 {
   bool is_complex = false;
@@ -96,22 +90,6 @@ static scalar_value apply_complex_binary(
   const std::string &function,
   const scalar_value &lhs,
   const scalar_value &rhs);
-
-static numeric_value make_int_value(int64_t value)
-{
-  return {true, value, static_cast<double>(value)};
-}
-
-static numeric_value make_float_value(double value)
-{
-  return {false, 0, value};
-}
-
-static double to_double(const numeric_value &value)
-{
-  return value.is_int ? static_cast<double>(value.int_value)
-                      : value.double_value;
-}
 
 static bool numpy_constant_folding_enabled()
 {
@@ -169,52 +147,6 @@ static void emit_numpy_overflow_assertion(
   overflow_assert.location().comment(
     "Integer overflow detected in " + function_id.get_function() + "() call");
   converter.add_instruction(overflow_assert);
-}
-
-static numeric_value extract_value(const nlohmann::json &arg);
-
-static bool
-try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
-{
-  if (!node.is_object() || !node.contains("_type"))
-    return false;
-
-  const std::string type = node["_type"];
-
-  // The boolean try_extract_* helpers must not depend on catching an exception
-  // for control flow: extract_value() raises std::runtime_error on non-numeric
-  // input, and relying on that as a flow-control signal is fragile. Pre-check
-  // that the payload is numeric and only call extract_value() when it is
-  // guaranteed to succeed, so a non-numeric literal (e.g. a str element in
-  // numpy.linalg.det's matrix) makes this helper return false cleanly instead
-  // of letting the internal "Unknown numeric type" error escape to the user
-  // (issue #5206).
-  if (type == "UnaryOp")
-  {
-    if (
-      !node.contains("operand") || !node["operand"].is_object() ||
-      !node["operand"].contains("value"))
-      return false;
-    // extract_value() only negates integer/float operands.
-    const auto &operand = node["operand"]["value"];
-    if (!operand.is_number_integer() && !operand.is_number_float())
-      return false;
-  }
-  else if (type == "Constant")
-  {
-    if (!node.contains("value"))
-      return false;
-    const auto &value = node["value"];
-    if (
-      !value.is_boolean() && !value.is_number_integer() &&
-      !value.is_number_float())
-      return false;
-  }
-  else
-    return false;
-
-  out = extract_value(node);
-  return true;
 }
 
 static bool is_numpy_literal_int_node(const nlohmann::json &node)
@@ -1522,13 +1454,6 @@ static bool try_extract_numeric_2d_list(
     values.push_back(row_values);
   }
   return true;
-}
-
-static bool is_json_none_literal(const nlohmann::json &node)
-{
-  return node.is_object() && node.contains("_type") &&
-         node["_type"] == "Constant" && node.contains("value") &&
-         node["value"].is_null();
 }
 
 static bool is_finite_numeric_value(const numeric_value &value)
@@ -2851,37 +2776,6 @@ static typet get_array_scalar_type(const typet &array_type)
   return scalar_type;
 }
 
-static numeric_value extract_value(const nlohmann::json &arg)
-{
-  if (!arg.contains("_type"))
-    throw std::runtime_error("Invalid JSON: missing _type");
-
-  if (arg["_type"] == "UnaryOp")
-  {
-    if (!arg.contains("operand") || !arg["operand"].contains("value"))
-      throw std::runtime_error("Invalid UnaryOp: missing operand/value");
-
-    auto operand = arg["operand"]["value"];
-    if (operand.is_number_integer())
-      return make_int_value(-operand.get<int64_t>());
-    if (operand.is_number_float())
-      return make_float_value(-operand.get<double>());
-  }
-
-  if (!arg.contains("value"))
-    throw std::runtime_error("Invalid JSON: missing value");
-
-  auto value = arg["value"];
-  if (value.is_boolean())
-    return make_int_value(value.get<bool>() ? 1 : 0);
-  if (value.is_number_integer())
-    return make_int_value(value.get<int64_t>());
-  if (value.is_number_float())
-    return make_float_value(value.get<double>());
-
-  throw std::runtime_error("Unknown numeric type in JSON");
-}
-
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
@@ -3230,9 +3124,20 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
   return converter_.build_numpy_descriptor_materialized_array(array_arg);
 }
 
+// An "axis" keyword can only still be present here with value None: any
+// other axis value is already handled (accepted or rejected) by the
+// axis-aware fast path this is called after declining (see
+// try_reduce_descriptor_call_along_axis / try_argmin_argmax_along_axis,
+// which return nullopt for axis=None specifically, meaning "flatten").
+// Reject every other keyword as before.
 static bool numpy_reducer_has_unsupported_keywords(const nlohmann::json &call)
 {
-  return call.contains("keywords") && !call["keywords"].empty();
+  if (!call.contains("keywords"))
+    return false;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") != "axis" || !is_json_none_literal(kw["value"]))
+      return true;
+  return false;
 }
 
 static exprt numpy_cast_to_double(const exprt &value)
@@ -3251,8 +3156,15 @@ static exprt reduce_numpy_descriptor_values(
     for (std::size_t i = 1; i < elems.size(); ++i)
       total = python_expr::build_add(
         total, numpy_cast_to_double(elems[i]), double_type());
-    return div_exprt(
+    // div_exprt's 2-arg constructor leaves .type() nil -- the scalar (no
+    // axis) caller relies on current_lhs retyping to fix that up
+    // downstream, but the axis-aware caller above consumes this result
+    // directly to build an array element type from it, so it needs a real
+    // type here.
+    exprt mean = div_exprt(
       total, from_double(static_cast<double>(elems.size()), double_type()));
+    mean.type() = double_type();
+    return mean;
   }
 
   if (function == "sum")
@@ -3278,6 +3190,224 @@ static exprt reduce_numpy_descriptor_values(
   throw std::runtime_error("unsupported numpy descriptor reducer");
 }
 
+// axis=0 reduces each column (one result per column, walking down rows);
+// axis=1 reduces each row (one result per row, walking across columns).
+// elems is row-major flat, matching
+// build_numpy_descriptor_materialized_elements's own iteration order, so a row
+// is a contiguous run and a column is a fixed-stride walk.
+static exprt reduce_numpy_descriptor_values_along_axis(
+  const std::string &function,
+  const std::vector<std::size_t> &shape,
+  const std::vector<exprt> &elems,
+  long long axis,
+  const type_handler &th)
+{
+  const std::size_t rows = shape[0];
+  const std::size_t cols = shape[1];
+  const std::size_t out_len = axis == 0 ? cols : rows;
+
+  std::vector<exprt> results;
+  results.reserve(out_len);
+  for (std::size_t k = 0; k < out_len; ++k)
+  {
+    std::vector<exprt> slice;
+    if (axis == 0)
+    {
+      slice.reserve(rows);
+      for (std::size_t row = 0; row < rows; ++row)
+        slice.push_back(elems[(row * cols) + k]);
+    }
+    else
+    {
+      slice.reserve(cols);
+      for (std::size_t col = 0; col < cols; ++col)
+        slice.push_back(elems[(k * cols) + col]);
+    }
+    results.push_back(reduce_numpy_descriptor_values(function, slice));
+  }
+  return build_1d_numpy_array_value(results, th);
+}
+
+// Literal axis= keyword only (Commit 6's recut: no positional axis, no
+// symbolic axis). Returns nullopt when absent or explicitly None -- both
+// mean "flatten", falling through to the existing no-axis path. Throws for
+// a present-but-non-literal axis.
+static std::optional<long long> extract_literal_axis_keyword(
+  const nlohmann::json *axis_kw,
+  const std::string &function)
+{
+  // axis=None is a Constant node whose value is JSON null, not a bare JSON
+  // null at this position -- axis_kw->is_null() alone never matches that
+  // shape, so an explicit axis=None fell through to the literal-axis
+  // extraction below and threw "requires a literal axis" instead of being
+  // treated as "flatten" like an absent axis= is.
+  if (
+    axis_kw == nullptr || axis_kw->is_null() || is_json_none_literal(*axis_kw))
+    return std::nullopt;
+
+  numeric_value axis_value;
+  if (!try_extract_numeric_constant(*axis_kw, axis_value) || !axis_value.is_int)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() requires a literal axis");
+  return axis_value.int_value;
+}
+
+// Split out of try_reduce_descriptor_call to keep that function's own
+// decision count low: returns nullopt when no axis= keyword is given (or
+// it's explicitly None), meaning the caller should fall through to its own
+// flattened reduction unchanged.
+std::optional<exprt> numpy_call_expr::try_reduce_descriptor_call_along_axis(
+  const std::string &function,
+  const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized)
+{
+  std::optional<long long> axis =
+    extract_literal_axis_keyword(find_keyword_arg("axis"), function);
+  if (!axis)
+    return std::nullopt;
+
+  if (
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_) ||
+    call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support keepdims, where, out, initial or dtype "
+      "arguments yet");
+
+  if (materialized.first.size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() axis requires a 2-D array");
+
+  if (materialized.first[0] == 0 || materialized.first[1] == 0)
+    throw std::runtime_error(
+      "ValueError: zero-size array to numpy." + function +
+      "() reduction has no identity");
+
+  const long long normalized =
+    normalize_reducer_axis(*axis, materialized.first.size());
+  return reduce_numpy_descriptor_values_along_axis(
+    function,
+    materialized.first,
+    materialized.second,
+    normalized,
+    type_handler_);
+}
+
+// argmin/argmax have no descriptor-call fast path (try_reduce_descriptor_call
+// only covers sum/mean/min/max), so this is checked directly against the
+// already-resolved array node from get()'s own flattened extraction, ahead
+// of reject_unsupported_flattened_reducer_keywords's generic rejection.
+// Scans the k-th output slot's inner_len-long run (a column when reducing
+// along axis 0, a row along axis 1) and returns the local index of its
+// best element. Split out of try_argmin_argmax_along_axis to keep that
+// function's own decision count down -- same reasoning as
+// get_arange_expr()/try_get_pointer_view_call_result().
+static std::size_t argmin_argmax_axis_best_index(
+  const std::string &function,
+  const std::vector<std::vector<numeric_value>> &values_2d,
+  long long normalized_axis,
+  std::size_t k,
+  std::size_t inner_len)
+{
+  std::size_t best_idx = 0;
+  double best =
+    to_double(normalized_axis == 0 ? values_2d[0][k] : values_2d[k][0]);
+  for (std::size_t i = 1; i < inner_len; ++i)
+  {
+    const double current =
+      to_double(normalized_axis == 0 ? values_2d[i][k] : values_2d[k][i]);
+    if (
+      (function == "argmin" && current < best) ||
+      (function == "argmax" && current > best))
+    {
+      best = current;
+      best_idx = i;
+    }
+  }
+  return best_idx;
+}
+
+std::optional<exprt> numpy_call_expr::try_argmin_argmax_along_axis(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  std::optional<long long> axis =
+    extract_literal_axis_keyword(find_keyword_arg("axis"), function);
+  if (!axis)
+    return std::nullopt;
+
+  if (
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_) ||
+    call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support keepdims, out, where, initial or dtype "
+      "arguments yet");
+
+  std::vector<std::vector<numeric_value>> values_2d;
+  if (
+    !try_extract_numeric_2d_list(arg, values_2d) || values_2d.empty() ||
+    values_2d.front().empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() axis requires a 2-D array");
+
+  const long long normalized = normalize_reducer_axis(*axis, 2);
+  const std::size_t rows = values_2d.size();
+  const std::size_t cols = values_2d.front().size();
+  const std::size_t out_len = normalized == 0 ? cols : rows;
+  const std::size_t inner_len = normalized == 0 ? rows : cols;
+
+  std::vector<exprt> results;
+  results.reserve(out_len);
+  for (std::size_t k = 0; k < out_len; ++k)
+  {
+    const std::size_t best_idx = argmin_argmax_axis_best_index(
+      function, values_2d, normalized, k, inner_len);
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = static_cast<int64_t>(best_idx);
+    results.push_back(converter_.get_expr(out));
+  }
+  return build_1d_numpy_array_value(results, type_handler_);
+}
+
+std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  if (function != "argmin" && function != "argmax")
+    return std::nullopt;
+  return try_argmin_argmax_along_axis(function, arg);
+}
+
+std::optional<exprt>
+numpy_call_expr::try_any_all_result(const std::string &function)
+{
+  if (function != "any" && function != "all")
+    return std::nullopt;
+  return function == "any" ? handle_any() : handle_all();
+}
+
+exprt numpy_call_expr::empty_reducer_identity_result(
+  const std::string &function) const
+{
+  if (function == "sum")
+  {
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = 0;
+    return converter_.get_expr(out);
+  }
+  if (function == "prod")
+  {
+    nlohmann::json out;
+    out["_type"] = "Constant";
+    out["value"] = 1;
+    return converter_.get_expr(out);
+  }
+  throw std::runtime_error(
+    "ValueError: numpy." + function + "() arg is an empty sequence");
+}
+
 std::optional<exprt>
 numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
 {
@@ -3295,6 +3425,11 @@ numpy_call_expr::try_reduce_descriptor_call(const std::string &function)
     "arrays");
   if (!materialized)
     return std::nullopt;
+
+  if (
+    std::optional<exprt> axis_result =
+      try_reduce_descriptor_call_along_axis(function, *materialized))
+    return axis_result;
 
   if (numpy_reducer_has_unsupported_keywords(call_) || call_["args"].size() > 1)
     throw std::runtime_error(
@@ -3371,6 +3506,24 @@ void numpy_call_expr::reject_unsupported_transpose_axes_rank(
     converter_.current_lhs = saved_lhs;
     throw;
   }
+}
+
+// try_reduce_descriptor_call already rejects unsupported keywords for
+// sum/mean/min/max when the argument is a tracked array/view; this covers
+// the flattened fallback path for those (a genuine inline literal, not a
+// tracked symbol) and the only path argmin/argmax ever take (they have no
+// descriptor-call fast path). Without it, a keyword here (e.g.
+// a.sum(initial=10), rewritten to np.sum(a, initial=10)) was silently
+// dropped by the extraction that follows instead of being honoured or
+// rejected (ADR-NP-003 principle 3).
+void numpy_call_expr::reject_unsupported_flattened_reducer_keywords(
+  const std::string &function) const
+{
+  if (numpy_reducer_has_unsupported_keywords(call_) || call_["args"].size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() does not support axis, keepdims, where, out, initial or dtype "
+      "arguments yet");
 }
 
 template <typename T>
@@ -3887,23 +4040,39 @@ exprt numpy_call_expr::create_expr_from_call()
   auto resolve_var = [this](nlohmann::json &var) {
     if (var["_type"] == "Name")
     {
-      var = json_utils::find_var_decl(
+      // A function parameter has no Assign declaration, so find_var_decl()
+      // returns its own "arg" AST node (no "value" field) rather than
+      // nlohmann::json{}. Resolve into a local first and only commit it to
+      // var on success: overwriting var unconditionally left a parameter
+      // permanently corrupted to that "arg" node once this early-outs,
+      // which get_expr() then rejects as an unsupported expression instead
+      // of converting the parameter's own (already correctly bound) symbol
+      // (regression: array_return_descriptor_success).
+      nlohmann::json decl = json_utils::find_var_decl(
         var["id"], converter_.current_function_name(), converter_.ast());
-      if (!var.contains("value") || !var["value"].is_object())
+      if (!decl.contains("value") || !decl["value"].is_object())
         return;
+      var = std::move(decl);
 
       if (var["value"]["_type"] == "Call")
       {
+        // `y = make()` where make() is a pure, zero/param user function
+        // that itself returns a numpy array (e.g. `def make(): return
+        // np.array(...)`): not a direct numpy constructor call, so inline
+        // it the same way a reducer's own nested-call argument is (see
+        // try_inline_pure_call_arg) before falling back to the generic
+        // "first argument" heuristic below.
+        nlohmann::json call_value = try_inline_pure_call_arg(var["value"]);
         if (
           std::optional<nlohmann::json> materialized =
-            materialize_numpy_constructor_array(var["value"], converter_.ast()))
+            materialize_numpy_constructor_array(call_value, converter_.ast()))
           var = std::move(*materialized);
-        else if (is_numpy_constructor_call_by_name(var["value"]))
-          var = var["value"];
-        else if (var["value"].contains("args") && !var["value"]["args"].empty())
-          var = var["value"]["args"][0];
+        else if (is_numpy_constructor_call_by_name(call_value))
+          var = call_value;
+        else if (call_value.contains("args") && !call_value["args"].empty())
+          var = call_value["args"][0];
         else
-          var = var["value"];
+          var = call_value;
       }
       else
       {
@@ -3963,7 +4132,7 @@ exprt numpy_call_expr::create_expr_from_call()
       throw std::runtime_error(
         "TypeError: numpy." + function + "() missing argument");
 
-    nlohmann::json arg = call_["args"][0];
+    nlohmann::json arg = try_inline_pure_call_arg(call_["args"][0]);
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
@@ -4935,6 +5104,35 @@ exprt numpy_call_expr::create_expr_from_call()
           }
 
           typet base_type = t.subtype().subtype();
+
+          // The C-call path below writes its result through *current_lhs
+          // (built as an output-buffer pointer, not a return value), so it
+          // requires a real assignment target to already exist. A type-only
+          // probe of this same call (e.g. resolve_call_argument_array_type,
+          // run before the target symbol is even created) has none yet;
+          // build the transposed value directly instead, the same
+          // current_lhs-free way handle_axis_permutation_view_call's own
+          // general axis swap already does (regression:
+          // array_return_descriptor_success crashed dereferencing a null
+          // current_lhs here).
+          if (!converter_.current_lhs)
+          {
+            // Materialize into a named temporary rather than returning the
+            // raw nested-literal value directly: an un-symbol'd 2-D literal
+            // read straight back through a subscript (any_subscript_array_
+            // needs_copy_'s row-by-row copy, triggered by a non-symbol RHS)
+            // tripped a bitwuzla array-store width assertion downstream.
+            exprt transposed =
+              build_numpy_axis_swapped_2d_expr(type_handler_, arg_expr, shape);
+            symbolt &tmp = converter_.create_tmp_symbol(
+              call_, "$compound-literal$", transposed.type(), transposed);
+            exprt tmp_expr = symbol_expr(tmp);
+            code_declt decl(tmp_expr);
+            decl.operands().push_back(transposed);
+            converter_.add_instruction(decl);
+            return tmp_expr;
+          }
+
           const bool is_float = base_type.is_floatbv();
           function_id_.set_function(
             is_float ? "transpose_double" : "transpose");
@@ -4946,11 +5144,8 @@ exprt numpy_call_expr::create_expr_from_call()
             type_handler_.build_array(base_type, shape[0]);
           typet result_type =
             type_handler_.build_array(result_row_type, shape[1]);
-          if (converter_.current_lhs)
-          {
-            converter_.current_lhs->type() = result_type;
-            converter_.update_symbol(*converter_.current_lhs);
-          }
+          converter_.current_lhs->type() = result_type;
+          converter_.update_symbol(*converter_.current_lhs);
 
           auto &args = call.arguments();
           typet flat_ptr_type =
@@ -6126,12 +6321,60 @@ exprt numpy_call_expr::get_arange_expr()
     "only");
 }
 
+nlohmann::json numpy_call_expr::resolve_literal_numpy_array_input(
+  nlohmann::json arr_arg,
+  const std::string &function_name,
+  bool inline_only)
+{
+  if (
+    !inline_only && arr_arg.value("_type", std::string()) == "Name" &&
+    !json_utils::has_multiple_assignments_in_scope(
+      arr_arg["id"], converter_.current_function_name(), converter_.ast()))
+  {
+    nlohmann::json resolved = json_utils::find_var_decl(
+      arr_arg["id"], converter_.current_function_name(), converter_.ast());
+    if (resolved.contains("value") && resolved["value"].is_object())
+      arr_arg = resolved["value"];
+  }
+
+  // `np.sort(identity(x))`/`np.sort(y)` with `y = identity(x)`: the argument
+  // (after the Name resolution above) may itself be a Call to a simple, pure
+  // user function -- the same nested-call shape try_inline_pure_call_arg
+  // already resolves for the reducers' own literal-array-input path. A
+  // no-op for anything that isn't a Call.
+  arr_arg = try_inline_pure_call_arg(arr_arg);
+
+  auto literal_arg = get_literal_numpy_array_arg(arr_arg);
+  if (!literal_arg.has_value())
+    throw std::runtime_error(
+      "TypeError: numpy." + function_name + "() currently supports only " +
+      (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
+  return std::move(*literal_arg);
+}
+
+nlohmann::json
+numpy_call_expr::try_inline_pure_call_arg(nlohmann::json arg) const
+{
+  if (arg.value("_type", "") != "Call")
+    return arg;
+
+  std::optional<nlohmann::json> ret_val =
+    converter_.select_return_value_for_call(arg);
+  if (!ret_val || !converter_.return_value_uses_call_argument(*ret_val, arg))
+    return arg;
+
+  return converter_.substitute_call_arguments(*ret_val, arg);
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
   const bool allow_numpy_fold = numpy_constant_folding_enabled();
   reject_symbolic_transpose_axes(function, call_);
   reject_unsupported_transpose_axes_rank(function);
+
+  if (std::optional<exprt> any_all_result = try_any_all_result(function))
+    return *any_all_result;
 
   static const std::set<std::string> reducer_and_arange_functions = {
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
@@ -6143,34 +6386,42 @@ exprt numpy_call_expr::get()
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
-        var = json_utils::find_var_decl(
+        // See create_expr_from_call()'s own resolve_var for why var is not
+        // overwritten until decl is confirmed to have a real declaration
+        // (a function parameter has none).
+        nlohmann::json decl = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
-        if (!var.contains("value") || !var["value"].is_object())
+        if (!decl.contains("value") || !decl["value"].is_object())
           return;
+        var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
-          if (auto numpy_call = try_build_numpy_arange_list(var["value"]))
+          // `y = make()` where make() is a pure user function returning a
+          // numpy array: inline it the same way a reducer's own nested-call
+          // argument is (try_inline_pure_call_arg) before falling back to
+          // the arange/constructor/first-argument heuristics below.
+          nlohmann::json call_value = try_inline_pure_call_arg(var["value"]);
+          if (auto numpy_call = try_build_numpy_arange_list(call_value))
           {
             var = std::move(*numpy_call);
             return;
           }
           if (
             std::optional<nlohmann::json> materialized =
-              materialize_numpy_constructor_array(
-                var["value"], converter_.ast()))
+              materialize_numpy_constructor_array(call_value, converter_.ast()))
           {
             var = std::move(*materialized);
             return;
           }
-          if (is_numpy_constructor_call_by_name(var["value"]))
+          if (is_numpy_constructor_call_by_name(call_value))
           {
-            var = var["value"];
+            var = call_value;
             return;
           }
-          if (var["value"].contains("args") && !var["value"]["args"].empty())
-            var = var["value"]["args"][0];
+          if (call_value.contains("args") && !call_value["args"].empty())
+            var = call_value["args"][0];
           else
-            var = var["value"];
+            var = call_value;
         }
         else
           var = var["value"];
@@ -6179,13 +6430,20 @@ exprt numpy_call_expr::get()
     if (function == "arange")
       return get_arange_expr();
 
-    nlohmann::json arg = call_["args"][0];
+    nlohmann::json arg = try_inline_pure_call_arg(call_["args"][0]);
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
     if (
       std::optional<nlohmann::json> row_view =
         resolve_literal_numpy_row_view(arg, converter_))
       arg = std::move(*row_view);
+
+    if (
+      std::optional<exprt> axis_result =
+        try_argmin_argmax_axis_result(function, arg))
+      return *axis_result;
+
+    reject_unsupported_flattened_reducer_keywords(function);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -6208,24 +6466,7 @@ exprt numpy_call_expr::get()
     }
 
     if (values.empty())
-    {
-      if (function == "sum")
-      {
-        nlohmann::json out;
-        out["_type"] = "Constant";
-        out["value"] = 0;
-        return converter_.get_expr(out);
-      }
-      if (function == "prod")
-      {
-        nlohmann::json out;
-        out["_type"] = "Constant";
-        out["value"] = 1;
-        return converter_.get_expr(out);
-      }
-      throw std::runtime_error(
-        "ValueError: numpy." + function + "() arg is an empty sequence");
-    }
+      return empty_reducer_identity_result(function);
 
     if (function == "argmin" || function == "argmax")
     {
@@ -6306,10 +6547,14 @@ exprt numpy_call_expr::get()
     auto resolve_var = [this](nlohmann::json &var) {
       if (var["_type"] == "Name")
       {
-        var = json_utils::find_var_decl(
+        // See create_expr_from_call()'s own resolve_var for why var is not
+        // overwritten until decl is confirmed to have a real declaration
+        // (a function parameter has none).
+        nlohmann::json decl = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
-        if (!var.contains("value") || !var["value"].is_object())
+        if (!decl.contains("value") || !decl["value"].is_object())
           return;
+        var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
           if (
@@ -6399,10 +6644,14 @@ exprt numpy_call_expr::get()
               converter_.current_function_name(),
               converter_.ast()))
           return;
-        var = json_utils::find_var_decl(
+        // See create_expr_from_call()'s own resolve_var for why var is not
+        // overwritten until decl is confirmed to have a real declaration
+        // (a function parameter has none).
+        nlohmann::json decl = json_utils::find_var_decl(
           var["id"], converter_.current_function_name(), converter_.ast());
-        if (!var.contains("value") || !var["value"].is_object())
+        if (!decl.contains("value") || !decl["value"].is_object())
           return;
+        var = std::move(decl);
         if (var["value"]["_type"] == "Call")
         {
           if (auto numpy_call = try_build_numpy_arange_list(var["value"]))
@@ -7053,42 +7302,29 @@ exprt numpy_call_expr::get()
         return;
       if (var["value"]["_type"] == "Call")
       {
+        // `y = make()` where make() is a pure, zero/param user function
+        // that itself returns a numpy array (e.g. `def make(): return
+        // np.array(...)`): not a direct numpy constructor call, so inline
+        // it the same way a reducer's own nested-call argument is (see
+        // try_inline_pure_call_arg) before falling back to the generic
+        // "first argument" heuristic below.
+        nlohmann::json call_value = try_inline_pure_call_arg(var["value"]);
         if (
           std::optional<nlohmann::json> materialized =
-            materialize_numpy_constructor_array(var["value"], converter_.ast()))
+            materialize_numpy_constructor_array(call_value, converter_.ast()))
           var = std::move(*materialized);
-        else if (is_numpy_constructor_call_by_name(var["value"]))
-          var = var["value"];
-        else if (var["value"].contains("args") && !var["value"]["args"].empty())
-          var = var["value"]["args"][0];
+        else if (is_numpy_constructor_call_by_name(call_value))
+          var = call_value;
+        else if (call_value.contains("args") && !call_value["args"].empty())
+          var = call_value["args"][0];
         else
-          var = var["value"];
+          var = call_value;
       }
       else
       {
         var = var["value"];
       }
     }
-  };
-
-  auto resolve_literal_numpy_array_input = [this](
-                                             nlohmann::json arr_arg,
-                                             const std::string &function_name,
-                                             bool inline_only = false) {
-    if (!inline_only && arr_arg.value("_type", std::string()) == "Name")
-    {
-      nlohmann::json resolved = json_utils::find_var_decl(
-        arr_arg["id"], converter_.current_function_name(), converter_.ast());
-      if (resolved.contains("value") && resolved["value"].is_object())
-        arr_arg = resolved["value"];
-    }
-
-    auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-    if (!literal_arg.has_value())
-      throw std::runtime_error(
-        "TypeError: numpy." + function_name + "() currently supports only " +
-        (inline_only ? "inline literal" : "literal") + " numpy.array inputs");
-    return std::move(*literal_arg);
   };
 
   if (function == "median")
@@ -7243,15 +7479,16 @@ exprt numpy_call_expr::get()
 
     if (call_.contains("keywords") && !call_["keywords"].empty())
       throw std::runtime_error(
-        "TypeError: numpy.argsort() keywords are not supported");
+        "TypeError: numpy.argsort() does not support axis, kind or order "
+        "arguments yet");
 
     nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
       throw std::runtime_error(
-        "TypeError: numpy.argsort() currently supports only 1-D arrays");
+        "TypeError: numpy.argsort() currently supports 1-D arrays only");
 
     const auto &elements = arr_arg["elts"];
     std::vector<std::size_t> indices(elements.size());
@@ -7317,26 +7554,26 @@ exprt numpy_call_expr::get()
     }
 
     nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, true);
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
       throw std::runtime_error(
-        "TypeError: numpy.searchsorted() currently supports only 1-D arrays");
+        "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
 
     if (!is_sorted_numeric_list(
           arr_arg,
           "TypeError: numpy.searchsorted() array must contain finite numeric "
           "values"))
       throw std::runtime_error(
-        "TypeError: numpy.searchsorted() requires a sorted 1-D array");
+        "ValueError: numpy.searchsorted() requires the input array to be "
+        "sorted");
 
     nlohmann::json position;
     position["_type"] = "Constant";
     nlohmann::json value_arg = call_["args"][1];
     numeric_to_key(
-      value_arg,
-      "TypeError: numpy.searchsorted() value must be a finite numeric literal");
+      value_arg, "TypeError: numpy.searchsorted() requires a literal value");
     position["value"] =
       static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
     return converter_.get_expr(position);
@@ -7393,21 +7630,8 @@ exprt numpy_call_expr::get()
       }
     }
 
-    nlohmann::json arr_arg = call_["args"][0];
-    if (arr_arg.value("_type", std::string()) == "Name")
-    {
-      nlohmann::json resolved = json_utils::find_var_decl(
-        arr_arg["id"], converter_.current_function_name(), converter_.ast());
-      if (resolved.contains("value") && resolved["value"].is_object())
-        arr_arg = resolved["value"];
-    }
-
-    auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-    if (!literal_arg.has_value())
-      throw std::runtime_error(
-        "TypeError: numpy.sort() currently supports only literal numpy.array "
-        "inputs");
-    arr_arg = std::move(*literal_arg);
+    nlohmann::json arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.empty())
