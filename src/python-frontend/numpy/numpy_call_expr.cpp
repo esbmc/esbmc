@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
@@ -75,13 +76,6 @@ exprt np_index(const exprt &arr, const exprt &idx, const typet &t)
 }
 } // namespace
 
-struct numeric_value
-{
-  bool is_int = true;
-  int64_t int_value = 0;
-  double double_value = 0.0;
-};
-
 struct scalar_value
 {
   bool is_complex = false;
@@ -96,22 +90,6 @@ static scalar_value apply_complex_binary(
   const std::string &function,
   const scalar_value &lhs,
   const scalar_value &rhs);
-
-static numeric_value make_int_value(int64_t value)
-{
-  return {true, value, static_cast<double>(value)};
-}
-
-static numeric_value make_float_value(double value)
-{
-  return {false, 0, value};
-}
-
-static double to_double(const numeric_value &value)
-{
-  return value.is_int ? static_cast<double>(value.int_value)
-                      : value.double_value;
-}
 
 static bool numpy_constant_folding_enabled()
 {
@@ -169,52 +147,6 @@ static void emit_numpy_overflow_assertion(
   overflow_assert.location().comment(
     "Integer overflow detected in " + function_id.get_function() + "() call");
   converter.add_instruction(overflow_assert);
-}
-
-static numeric_value extract_value(const nlohmann::json &arg);
-
-static bool
-try_extract_numeric_constant(const nlohmann::json &node, numeric_value &out)
-{
-  if (!node.is_object() || !node.contains("_type"))
-    return false;
-
-  const std::string type = node["_type"];
-
-  // The boolean try_extract_* helpers must not depend on catching an exception
-  // for control flow: extract_value() raises std::runtime_error on non-numeric
-  // input, and relying on that as a flow-control signal is fragile. Pre-check
-  // that the payload is numeric and only call extract_value() when it is
-  // guaranteed to succeed, so a non-numeric literal (e.g. a str element in
-  // numpy.linalg.det's matrix) makes this helper return false cleanly instead
-  // of letting the internal "Unknown numeric type" error escape to the user
-  // (issue #5206).
-  if (type == "UnaryOp")
-  {
-    if (
-      !node.contains("operand") || !node["operand"].is_object() ||
-      !node["operand"].contains("value"))
-      return false;
-    // extract_value() only negates integer/float operands.
-    const auto &operand = node["operand"]["value"];
-    if (!operand.is_number_integer() && !operand.is_number_float())
-      return false;
-  }
-  else if (type == "Constant")
-  {
-    if (!node.contains("value"))
-      return false;
-    const auto &value = node["value"];
-    if (
-      !value.is_boolean() && !value.is_number_integer() &&
-      !value.is_number_float())
-      return false;
-  }
-  else
-    return false;
-
-  out = extract_value(node);
-  return true;
 }
 
 static bool is_numpy_literal_int_node(const nlohmann::json &node)
@@ -1522,13 +1454,6 @@ static bool try_extract_numeric_2d_list(
     values.push_back(row_values);
   }
   return true;
-}
-
-static bool is_json_none_literal(const nlohmann::json &node)
-{
-  return node.is_object() && node.contains("_type") &&
-         node["_type"] == "Constant" && node.contains("value") &&
-         node["value"].is_null();
 }
 
 static bool is_finite_numeric_value(const numeric_value &value)
@@ -2851,37 +2776,6 @@ static typet get_array_scalar_type(const typet &array_type)
   return scalar_type;
 }
 
-static numeric_value extract_value(const nlohmann::json &arg)
-{
-  if (!arg.contains("_type"))
-    throw std::runtime_error("Invalid JSON: missing _type");
-
-  if (arg["_type"] == "UnaryOp")
-  {
-    if (!arg.contains("operand") || !arg["operand"].contains("value"))
-      throw std::runtime_error("Invalid UnaryOp: missing operand/value");
-
-    auto operand = arg["operand"]["value"];
-    if (operand.is_number_integer())
-      return make_int_value(-operand.get<int64_t>());
-    if (operand.is_number_float())
-      return make_float_value(-operand.get<double>());
-  }
-
-  if (!arg.contains("value"))
-    throw std::runtime_error("Invalid JSON: missing value");
-
-  auto value = arg["value"];
-  if (value.is_boolean())
-    return make_int_value(value.get<bool>() ? 1 : 0);
-  if (value.is_number_integer())
-    return make_int_value(value.get<int64_t>());
-  if (value.is_number_float())
-    return make_float_value(value.get<double>());
-
-  throw std::runtime_error("Unknown numeric type in JSON");
-}
-
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
@@ -3230,9 +3124,20 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
   return converter_.build_numpy_descriptor_materialized_array(array_arg);
 }
 
+// An "axis" keyword can only still be present here with value None: any
+// other axis value is already handled (accepted or rejected) by the
+// axis-aware fast path this is called after declining (see
+// try_reduce_descriptor_call_along_axis / try_argmin_argmax_along_axis,
+// which return nullopt for axis=None specifically, meaning "flatten").
+// Reject every other keyword as before.
 static bool numpy_reducer_has_unsupported_keywords(const nlohmann::json &call)
 {
-  return call.contains("keywords") && !call["keywords"].empty();
+  if (!call.contains("keywords"))
+    return false;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") != "axis" || !is_json_none_literal(kw["value"]))
+      return true;
+  return false;
 }
 
 // Same check, but tolerating a single "axis" keyword -- used once an axis=
@@ -3253,22 +3158,6 @@ static exprt numpy_cast_to_double(const exprt &value)
 {
   return value.type() == double_type() ? value
                                        : typecast_exprt(value, double_type());
-}
-
-// Builds a 1-D array_typet value from already-converted elements, the same
-// way build_numpy_descriptor_array_value (converter_stmt.cpp) does for its
-// own rank-1 case -- that helper has internal linkage in a different
-// translation unit, so this is a small, rank-1-only local counterpart
-// rather than a shared one.
-static exprt build_1d_numpy_array_value(
-  const std::vector<exprt> &elems,
-  const type_handler &th)
-{
-  typet result_type = th.build_array(elems.front().type(), elems.size());
-  exprt value = gen_zero(result_type);
-  for (std::size_t i = 0; i < elems.size(); ++i)
-    value.operands().at(i) = elems[i];
-  return value;
 }
 
 static exprt reduce_numpy_descriptor_values(
@@ -3361,7 +3250,13 @@ static std::optional<long long> extract_literal_axis_keyword(
   const nlohmann::json *axis_kw,
   const std::string &function)
 {
-  if (axis_kw == nullptr || axis_kw->is_null())
+  // axis=None is a Constant node whose value is JSON null, not a bare JSON
+  // null at this position -- axis_kw->is_null() alone never matches that
+  // shape, so an explicit axis=None fell through to the literal-axis
+  // extraction below and threw "requires a literal axis" instead of being
+  // treated as "flatten" like an absent axis= is.
+  if (
+    axis_kw == nullptr || axis_kw->is_null() || is_json_none_literal(*axis_kw))
     return std::nullopt;
 
   numeric_value axis_value;
@@ -3369,20 +3264,6 @@ static std::optional<long long> extract_literal_axis_keyword(
     throw std::runtime_error(
       "TypeError: numpy." + function + "() requires a literal axis");
   return axis_value.int_value;
-}
-
-// Normalizes a literal axis against a known rank and validates it lands in
-// range, throwing AxisError (matching handle_axis_permutation_view_call's
-// own wording) otherwise.
-static long long normalize_reducer_axis(long long axis, std::size_t rank)
-{
-  const long long normalized =
-    axis < 0 ? axis + static_cast<long long>(rank) : axis;
-  if (normalized < 0 || normalized >= static_cast<long long>(rank))
-    throw std::runtime_error(
-      "AxisError: axis " + std::to_string(axis) +
-      " is out of bounds for array of dimension " + std::to_string(rank));
-  return normalized;
 }
 
 // Split out of try_reduce_descriptor_call to keep that function's own
