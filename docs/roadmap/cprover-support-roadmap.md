@@ -2129,7 +2129,21 @@ _RNvNtNtCsfemxtvIyyHd_4core3num6verify31checked_f32_to_int_unchecked_i8
 ```
 (f32 to i8 conversion - simplest float-to-int case)
 
+**Narrowed 2026-08-30: the C-expressible subset is not the problem.** Float-to-integer
+conversion through a `goto-cc` binary works and matches CBMC — `f32`/`f64`/`long double`/
+`__float128` into `int8_t`/`int32_t`/`int64_t`/`uint32_t`, *including* out-of-range conversions
+that are UB in C (`(int8_t)1.0e30f`). Pinned as
+`cbmc_float_to_int{,_range,_wide}`. So whatever crashes here is in **what Kani emits and
+`goto-cc` does not** — the obvious suspects being `f16` (no C spelling here) and Rust's
+saturating-cast lowering, rather than float-to-int conversion as such. Do not go looking for
+this one in C.
+
 ---
+
+**Narrowed 2026-08-30: a C struct swap is fine.** Swapping two structs through three
+`memcpy`s — the shape `mem::swap` lowers to — matches CBMC, members and bytes
+(`cbmc_struct_swap`). As with #5, the failure is in Kani's own lowering rather than in the
+underlying operation.
 
 ## UMBRELLA #6: Slice and Collection Operations Crash
 
