@@ -891,7 +891,7 @@ when goto-cc linked the `.goto`; it could only matter if a later link stage (e.g
 additions boilerplate) overrode a weak definition, so the warning stays as a tripwire.
 `is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
-### 4.6 Contracts subsystem (Phase 4) — 🔶 loads & verifies; gap is the unserialised contract library
+### 4.6 Contracts subsystem (Phase 4) — 🟢 verdict parity across every shape measured
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
 whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`, including native
 `is_fresh` handling — `contracts.cpp::is_fresh_function`); the work is to bridge CBMC's encoding
@@ -979,6 +979,26 @@ without the contracts-library link does not actually fire the `ensures` check (a
 violated `ensures` verifies SUCCESSFUL under *CBMC itself* in this setup), so contract-*enforcement*
 parity cannot be validated until the library is linked on both sides. Loadability and the
 `requires`/`ensures` → `ASSUME`/`ASSERT` lowering are the parts confirmed working.
+
+**Status 2026-08-30: every contract shape probed now matches CBMC**, and each is pinned in
+`regression/goto-transcoder/`. The `is_fresh` bridges closed the unserialised-library gap in
+both directions (assume side and check side); the rest needed no bridge at all, only the
+`object_size` extent fix that the write-set checks depend on.
+
+| shape | pinned as |
+|---|---|
+| `requires(is_fresh)` / `ensures(is_fresh)`, enforce and replace | `cbmc_contract_is_fresh*`, `cbmc_ensures_fresh_*` |
+| `ensures` scalar, enforce and `--replace-call-with-contract` | `cbmc_contract_{ensures,replace}*` |
+| `assigns` — plain lvalue, `object_whole`, `object_upto`, a global | `cbmc_contract_{frees,object_upto,global_assigns}*`, `cbmc_expr_*` |
+| `frees` | `cbmc_contract_frees` |
+| `__CPROVER_old` in an `ensures` | `cbmc_contract_old{,_fail}` |
+| `--apply-loop-contracts` loop invariants | `cbmc_loop_invariant{,_fail}` |
+| a contract calling a contracted callee (nested) | `cbmc_contract_nested{,_fail}` |
+
+What remains open is narrow and named above: separation between two `is_fresh`'d pointers is
+unmodelled (CBMC's memory-map argument is dropped, and it is not currently a divergence), and
+the `__CPROVER_contracts_*` helpers beyond the `assigns`/`frees` checks measured here have not
+been exercised.
 
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
