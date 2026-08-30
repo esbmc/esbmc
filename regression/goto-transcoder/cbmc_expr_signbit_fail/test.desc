@@ -1,4 +1,4 @@
 CORE
-cbmc_w_ok_false.goto
+cbmc_expr_signbit_fail.goto
 --binary
 ^VERIFICATION FAILED$
