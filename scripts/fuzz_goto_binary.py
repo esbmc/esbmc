@@ -33,7 +33,9 @@ def run(esbmc, path, extra, timeout):
     aborts the sweep rather than the run under test."""
     cmd = [esbmc, str(path)] + (["--binary"] + extra if extra else ["--binary"])
     try:
-        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        # check=False: a non-zero exit is what this sweep reads, not an error.
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout,
+                           check=False)
     except subprocess.TimeoutExpired:
         return "hang"
     if r.returncode < 0:
