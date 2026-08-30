@@ -749,6 +749,31 @@ perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3),
 `goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
 selected label rather than a nondet branch.
 
+#### `__CPROVER_OBJECT_SIZE` crashes the `--binary` path (§4.4, open — `cbmc_object_size{,_bytes}`)
+
+Measured 2026-08-30 on master. An eight-line harness — `char *p = malloc(16);`
+`__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verifies SUCCESSFUL under CBMC and
+**SIGSEGVs** ESBMC during SMT encoding (`smt_solver.cpp::convert_assign` ->
+`hash_value(expr2tc)` on a null container). Two independent defects sit behind it:
+
+1. **A code node in an expression position.** `migrate.cpp:2781` maps CBMC's `object_size`
+   irep through `invoke_intrinsic`, which returns a `code_function_callt` — a *statement*.
+   CBMC serialises `object_size` as an expression inside an assignment's RHS, and nothing on
+   the `--binary` path lifts it: `remove_sideeffects` is a `goto_convertt` member and
+   goto_convert never runs on a loaded binary. The resulting code node reaches the solver as
+   a value and is dereferenced as one. Fixing it needs instruction-level lifting
+   (`tmp = __ESBMC_get_object_size(p)` emitted *before* the assignment), which the adapter's
+   current 1->1 rewrite framework cannot express.
+2. **Bytes versus elements.** Even lifted, the mapping is semantically wrong.
+   `__CPROVER_OBJECT_SIZE` is a **byte** count — CBMC proves
+   `__CPROVER_OBJECT_SIZE(p) == 16` for `int *p = malloc(16)` — while
+   `__ESBMC_get_object_size` returns the addressed array's **element count**
+   (`object_size.cpp:179`), which is 4 for the same object. The two agree only for `char`,
+   which is why a `char` harness would look correct if the crash were fixed alone.
+
+Both are pinned as KNOWNBUG so the reproducers cannot be lost; `cbmc_object_size_bytes` is the
+one that catches a crash-only fix.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
