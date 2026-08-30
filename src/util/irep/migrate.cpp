@@ -2783,9 +2783,20 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     type = migrate_type(expr.type());
 
-    const std::string function = "c:@F@__ESBMC_get_object_size";
-    const std::vector<exprt> args = {expr.op0()};
+    // __CPROVER_OBJECT_SIZE counts *bytes*, which is what
+    // __ESBMC_builtin_object_size's type-0 mode reports for heap, stack and
+    // static objects alike; __ESBMC_get_object_size returns the addressed
+    // array's element count, so it agreed only for char.
+    const std::string function = "c:@F@__ESBMC_builtin_object_size";
+    constant_exprt kind(expr.type());
+    kind.set_value(
+      integer2binary(0, atoi(expr.type().width().as_string().c_str())));
+    const std::vector<exprt> args = {expr.op0(), kind};
 
+    // The result is a *call*: object_size resolves its object by dereference,
+    // which is symex machinery, so there is no expression form. CBMC serialises
+    // object_size inside an expression, so lift_call_expressions() hoists this
+    // node out to statement level once the binary is loaded.
     migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
     return;
   }

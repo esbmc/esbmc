@@ -749,49 +749,46 @@ perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3),
 `goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
 selected label rather than a nondet branch.
 
-#### `__CPROVER_OBJECT_SIZE` crashes the `--binary` path (§4.4, open — `cbmc_object_size{,_bytes}`)
+#### `__CPROVER_OBJECT_SIZE` on the `--binary` path — ✅ FIXED (PR #TBD)
 
-Measured 2026-08-30 on master. An eight-line harness — `char *p = malloc(16);`
-`__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verifies SUCCESSFUL under CBMC and
-**SIGSEGVs** ESBMC during SMT encoding (`smt_solver.cpp::convert_assign` ->
-`hash_value(expr2tc)` on a null container). Two independent defects sit behind it:
+An eight-line harness — `char *p = malloc(16);`
+`__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verified SUCCESSFUL under CBMC and
+**SIGSEGV**'d ESBMC during SMT encoding (`smt_solver.cpp::convert_assign` ->
+`hash_value(expr2tc)` on a null container). Two defects sat behind it.
 
-1. **A code node in an expression position.** `migrate.cpp:2781` maps CBMC's `object_size`
-   irep through `invoke_intrinsic`, which returns a `code_function_callt` — a *statement*.
-   CBMC serialises `object_size` as an expression inside an assignment's RHS, and nothing on
-   the `--binary` path lifts it: `remove_sideeffects` is a `goto_convertt` member and
-   goto_convert never runs on a loaded binary. The resulting code node reaches the solver as
-   a value and is dereferenced as one. Fixing it needs instruction-level lifting
-   (`tmp = __ESBMC_get_object_size(p)` emitted *before* the assignment), which the adapter's
-   current 1->1 rewrite framework cannot express.
-2. **Bytes versus elements.** Even lifted, the mapping is semantically wrong.
-   `__CPROVER_OBJECT_SIZE` is a **byte** count — CBMC proves
-   `__CPROVER_OBJECT_SIZE(p) == 16` for `int *p = malloc(16)` — while
-   `__ESBMC_get_object_size` returns the addressed array's **element count**
-   (`object_size.cpp:179`), which is 4 for the same object. The two agree only for `char`,
-   which is why a `char` harness would look correct if the crash were fixed alone.
+1. **A code node in an expression position.** `migrate.cpp` maps CBMC's `object_size` irep
+   through `invoke_intrinsic`, which returns a `code_function_callt` — a *statement*. CBMC
+   serialises `object_size` inside an assignment's RHS, and nothing on the `--binary` path
+   lifted it: `remove_sideeffects` is a `goto_convertt` member and goto_convert never runs on a
+   loaded binary, so the code node reached the solver as a value.
+2. **Bytes versus elements.** `__CPROVER_OBJECT_SIZE` is a **byte** count;
+   `__ESBMC_get_object_size` returns the addressed array's **element count**. Measured, the two
+   coincide on *every heap* object — `malloc` yields a byte-array object, so element count is
+   already byte count, for `int *p = malloc(16)` as much as for `char *` — and diverge on a
+   **typed** array: `int garr[4]` is 16 bytes and 4 elements. A heap-only harness therefore
+   cannot tell the mappings apart; `cbmc_object_size_static` is the test that can.
 
-Both are pinned as KNOWNBUG so the reproducers cannot be lost; `cbmc_object_size_bytes` is the
-one that catches a crash-only fix.
+**Fix.** `object_size` now migrates to `__ESBMC_builtin_object_size(p, 0)` — byte-valued,
+GCC type-0 semantics, and it resolves heap, stack and static objects alike
+(`object_size.cpp:12`) — and a new `lift_call_expressions` pass
+(`src/goto-programs/lift_call_expressions.{h,cpp}`, run beside `link_cbmc_libc_bodies`) hoists
+any call nested inside an expression into `tmp = call(...)` before its instruction. The pass
+also registers the callee in `function_map` when absent: symex answers an intrinsic by name and
+needs no body, but `goto_inline` resolves every call through `function_map` first, and a
+*native* goto-binary (goto-transcoder's Rust output) compiles no C, so nothing else declares
+it. `__ESBMC_builtin_object_size` also gains the declaration it never had beside
+`__ESBMC_get_object_size`; the `__builtin_object_size` macro was already expanding to it.
 
-**The obvious fix is wrong — measured, so nobody need re-derive it.** Mapping `object_size` to
-`dynamic_size2tc` looks ideal: it is a plain expression (no lifting, no crash) and it lowers to
-`__ESBMC_alloc_size[POINTER_OBJECT(p)]`, a **byte** count, so both defects above appear to fall
-at once. Both heap harnesses do pass with it. But `__ESBMC_alloc_size` is populated only for
-*dynamic* objects, so a static or automatic one reads nothing: on
-`int garr[4]; int sarr[4];` CBMC proves `__CPROVER_OBJECT_SIZE(...) == 16` for both and ESBMC
-reports **FAILED** for both. That trades a loud crash for a quiet false alarm.
+**Ruled out — do not retry.** Mapping `object_size` to `dynamic_size2tc` is very tempting: a
+plain expression (no lifting, no crash) lowering to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, a
+byte count, and both heap harnesses pass with it. But `__ESBMC_alloc_size` is populated for
+*dynamic* objects only, so `int garr[4]; int sarr[4];` — which CBMC proves — comes back FAILED.
+No expression-level encoding can work: a stack or global object's byte size is not recoverable
+from the pointer's *type* (`int *` into `int[4]` gives 4, not 16), so the object has to be
+resolved by `dereference`, which is symex machinery.
 
-No expression-level encoding can work: the byte size of a stack or global object is not
-recoverable from the pointer's *type* (`int *` into `int[4]` gives 4, not 16), so the object
-has to be resolved by `dereference`, which is symex machinery. The correct target is therefore
-`__ESBMC_builtin_object_size(p, 0)` — byte-valued, GCC type-0 semantics, and it handles heap,
-stack and static alike (`object_size.cpp:12`) — reached through a **post-load lifting pass**:
-walk each loaded goto instruction, hoist any `code_function_call2t` nested inside an expression
-into `tmp = call(...)` inserted before it, and replace the node with `tmp`. That belongs beside
-`link_cbmc_libc_bodies` in `parseoptions/goto_program.cpp`, where instructions are already
-irep2 and `goto_programt` insertion is available; the adapter itself cannot express the 1->N
-rewrite.
+Pinned by `regression/goto-transcoder/cbmc_object_size{,_bytes,_static}` and the
+`{,_static}_fail` counterparts.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,

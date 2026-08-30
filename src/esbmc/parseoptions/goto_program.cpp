@@ -27,6 +27,7 @@
 #include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/lift_call_expressions.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -295,6 +296,11 @@ bool esbmc_parseoptionst::create_goto_program(
       // symex sees a bodyless call returning nondet.
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
+
+      // CBMC serialises some intrinsics (object_size) as expressions that
+      // migrate to calls; goto_convert never runs on a loaded binary, so
+      // nothing else lifts them out to statement level.
+      lift_call_expressions(context, goto_functions);
 
       if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
         return true;

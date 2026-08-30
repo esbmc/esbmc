@@ -538,6 +538,11 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
+/* The __builtin_object_size macro below already expands to this, and CBMC's
+ * object_size irep migrates to it; without a declaration it never becomes a
+ * goto function and goto_inline reports "failed to find function". */
+__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);
+
 /* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
  * names are implicitly declared as int-returning functions and havoc'd, so a
  * program written against CBMC verifies against nondet rather than against the
