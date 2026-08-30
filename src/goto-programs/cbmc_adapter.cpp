@@ -1615,6 +1615,25 @@ bool fix_builtin_call(irept &code)
     return false;
   }
 
+  // __CPROVER_enforce_requires_is_fresh(&p, n, map): CBMC re-links its
+  // contracts library at analysis time and serialises no body, so ESBMC sees a
+  // bodyless external. Dropping the requires *assumption* would only widen the
+  // checked behaviour, but the allocation this call performs -- writing a fresh
+  // object's address through &p -- goes with it, leaving p unconstrained and
+  // turning a proof CBMC completes into a false alarm on the first dereference
+  // (roadmap 4.6). Retarget it to the additions' __cbmc_is_fresh_impl, which
+  // allocates and writes through. CBMC's third argument is the memory map it
+  // threads through to state separation between two is_fresh'd pointers; the
+  // bridge does not model that yet, so it is dropped.
+  if (
+    callee == "__CPROVER_enforce_requires_is_fresh" &&
+    sub[2].get_sub().size() == 3)
+  {
+    code.get_sub()[1].set("identifier", "c:@F@__cbmc_is_fresh_impl");
+    code.get_sub()[2].get_sub().resize(2);
+    return false;
+  }
+
   // Copy out of `code` before mutating it below -- sub/args (and anything
   // referencing into them) alias code.get_sub(), which code.get_sub().clear()
   // invalidates.
