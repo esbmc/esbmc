@@ -749,6 +749,50 @@ perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3),
 `goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
 selected label rather than a nondet branch.
 
+#### `__CPROVER_OBJECT_SIZE` crashes the `--binary` path (§4.4, open — `cbmc_object_size{,_bytes}`)
+
+Measured 2026-08-30 on master. An eight-line harness — `char *p = malloc(16);`
+`__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verifies SUCCESSFUL under CBMC and
+**SIGSEGVs** ESBMC during SMT encoding (`smt_solver.cpp::convert_assign` ->
+`hash_value(expr2tc)` on a null container). Two independent defects sit behind it:
+
+1. **A code node in an expression position.** `migrate.cpp:2781` maps CBMC's `object_size`
+   irep through `invoke_intrinsic`, which returns a `code_function_callt` — a *statement*.
+   CBMC serialises `object_size` as an expression inside an assignment's RHS, and nothing on
+   the `--binary` path lifts it: `remove_sideeffects` is a `goto_convertt` member and
+   goto_convert never runs on a loaded binary. The resulting code node reaches the solver as
+   a value and is dereferenced as one. Fixing it needs instruction-level lifting
+   (`tmp = __ESBMC_get_object_size(p)` emitted *before* the assignment), which the adapter's
+   current 1->1 rewrite framework cannot express.
+2. **Bytes versus elements.** Even lifted, the mapping is semantically wrong.
+   `__CPROVER_OBJECT_SIZE` is a **byte** count — CBMC proves
+   `__CPROVER_OBJECT_SIZE(p) == 16` for `int *p = malloc(16)` — while
+   `__ESBMC_get_object_size` returns the addressed array's **element count**
+   (`object_size.cpp:179`), which is 4 for the same object. The two agree only for `char`,
+   which is why a `char` harness would look correct if the crash were fixed alone.
+
+Both are pinned as KNOWNBUG so the reproducers cannot be lost; `cbmc_object_size_bytes` is the
+one that catches a crash-only fix.
+
+**The obvious fix is wrong — measured, so nobody need re-derive it.** Mapping `object_size` to
+`dynamic_size2tc` looks ideal: it is a plain expression (no lifting, no crash) and it lowers to
+`__ESBMC_alloc_size[POINTER_OBJECT(p)]`, a **byte** count, so both defects above appear to fall
+at once. Both heap harnesses do pass with it. But `__ESBMC_alloc_size` is populated only for
+*dynamic* objects, so a static or automatic one reads nothing: on
+`int garr[4]; int sarr[4];` CBMC proves `__CPROVER_OBJECT_SIZE(...) == 16` for both and ESBMC
+reports **FAILED** for both. That trades a loud crash for a quiet false alarm.
+
+No expression-level encoding can work: the byte size of a stack or global object is not
+recoverable from the pointer's *type* (`int *` into `int[4]` gives 4, not 16), so the object
+has to be resolved by `dereference`, which is symex machinery. The correct target is therefore
+`__ESBMC_builtin_object_size(p, 0)` — byte-valued, GCC type-0 semantics, and it handles heap,
+stack and static alike (`object_size.cpp:12`) — reached through a **post-load lifting pass**:
+walk each loaded goto instruction, hoist any `code_function_call2t` nested inside an expression
+into `tmp = call(...)` inserted before it, and replace the node with `tmp`. That belongs beside
+`link_cbmc_libc_bodies` in `parseoptions/goto_program.cpp`, where instructions are already
+irep2 and `goto_programt` insertion is available; the adapter itself cannot express the 1->N
+rewrite.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
@@ -801,12 +845,22 @@ returning nondet**: `is_fresh` in a `requires` becomes an unconstrained assumpti
 **sound but imprecise** (dropping an assumption only widens the checked behaviour), not a
 miss — but it defeats the point of an `is_fresh` precondition. The bridge is to synthesise or
 retarget these onto ESBMC's native `is_fresh`/contracts machinery (the additions-boilerplate
-mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). Not
-yet attempted: a **local verdict oracle is missing** — bare `goto-instrument --enforce-contract`
-without the contracts-library link does not actually fire the `ensures` check (a deliberately
-violated `ensures` verifies SUCCESSFUL under *CBMC itself* in this setup), so contract-*enforcement*
-parity cannot be validated until the library is linked on both sides. Loadability and the
-`requires`/`ensures` → `ASSUME`/`ASSERT` lowering are the parts confirmed working.
+mechanism of §4.8, or a direct `c:@F@__ESBMC_is_fresh` retarget like the `memcpy` family). **The "missing local oracle" recorded here until 2026-08-30 was wrong.** Re-measured
+with `cbmc`/`goto-cc` **6.5.0**: a deliberately violated `ensures` under bare
+`goto-instrument --enforce-contract` fires normally (`1 of 3 failed` / FAILED), so
+enforcement parity *can* be validated locally. Six shapes now measured, and ESBMC agrees with
+CBMC on every one — `ensures` enforce (SUCCESSFUL and FAILED), `--replace-call-with-contract`
+in both directions (the caller really does use the `ensures`: its assertion is checked, and
+its negation fails), an undeclared write against an `assigns` clause (both name
+*"Check that g is assignable"*), and a composite `requires(is_fresh) + assigns + ensures`
+(`0 of 17` / `0 of 13`, both SUCCESSFUL). Five of these are pinned by
+`regression/goto-transcoder/cbmc_contract_{ensures,replace}{,_fail}` and
+`cbmc_contract_assigns_fail`; the composite needs the `is_fresh` bridge above.
+
+What is genuinely open is narrower than this section implied: **separation** between two
+`is_fresh`'d pointers (CBMC's memory-map argument is dropped by the bridge), `is_fresh` in an
+`ensures` clause, and the `__CPROVER_contracts_*` object/write-set helpers beyond the
+`assigns` checks measured above.
 
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
@@ -1528,6 +1582,33 @@ offset*, #6981) is already on `master` and does **not** cover this shape.
 the defect is in the encoding/symex layer, not in a solver. Precision-losing, never unsound:
 ESBMC only over-reports.
 
+### The same family reproduces on ordinary C: a pointer read back through a union arm
+
+Read as "a pointer held in an aggregate loses its object when it is recovered by a
+byte-identical reinterpretation", the defect is testable without a Kani binary. Three plain-C
+shapes of that reading are false alarms on `master` (`d1abfc8201`), under both solvers, over
+`union { struct S { int *p; } s; int *q; }`:
+
+| Written | Read | Verdict before |
+|---|---|---|
+| `u.s.p = &x` | `*u.q` | FAILED |
+| `u.q = &x` | `*u.s.p` | FAILED |
+| `u.a.p = &x` (two struct arms) | `*u.b.q` | FAILED |
+
+A union's arms overlay, so every one of these reads back the pointer that was written. The
+value set keys it under the path the write spelled, the read asks under its own, finds nothing,
+and hands the dereference an unconstrained value — the corpus trace's end state exactly.
+Closed by asking again under the paths that alias the one the read spells, with
+`regression/esbmc/union_pun_pointer{,_fail}` pinning it.
+
+**This is not the corpus harnesses.** Those recover the pointer through
+`byte_extract_little_endian({ .=&x }, 0)`, which `get_value_set_rec` follows into the constant
+struct under the read's own suffix rather than the one the byte offset names. CBMC binaries are
+the only local producer of that shape — `goto-cc` does not persist `byte_extract` — so it stays
+unmeasured here. ESBMC's own C path has a second, adjacent producer that is also still open:
+`int *q; memcpy(&q, &s, sizeof q)` over a struct holding `&x` yields `q = INVALID`, that one
+through the byte-loop write rather than the read.
+
 ### The three crash root causes are unchanged, in identity and in count
 
 | Root cause | 2026-08-26 | 2026-07-16 | Where (now) |
@@ -1584,7 +1665,26 @@ Ranked by harnesses recovered per fix:
 4. **`Bitwuzla error encountered`** — 12 crashes, all `non_null_check_write_unaligned_*`;
    worth checking against Z3 to establish whether it is solver-specific.
 5. **The `ptr::unique` false alarm** — only 3 harnesses, but it is the corpus's *only*
-   remaining correctness defect.
+   remaining correctness defect. Its union-punning sibling on ordinary C is closed (see above);
+   the corpus shape, which comes back through a `byte_extract` over a constant struct, is not.
+
+**Item 5's family reproduces on plain C, no Kani binary needed.** Both siblings lose a
+pointer's identity when it travels through raw bytes:
+
+- A pointer stored through one union arm was invisible to a read through another —
+  `value_sett::get_value_set_rec` keyed the object under the path the *write* spelled and
+  looked up the path the *read* spelled. PR #7369.
+- `memcpy` between a pointer object and a one-pointer struct fell back to `__memcpy_impl`'s
+  byte loop, which drops the pointer to an INVALID value. The structural graft that should
+  have caught it matched sub-objects by *depth* rather than by *type*: `extract_subobject`
+  stopped at the shallowest byte-range match (the whole struct) and `replace_subobject` then
+  rejected it against the destination's pointer leaf. Fixed in `memory_ops.cpp`;
+  `regression/esbmc/memcpy_pointer_subobject{,_fail}`.
+
+The corpus's own shape — `byte_extract_little_endian({ .=&x }, 0)` in `NonNull::as_ptr` — has
+no local producer: `migrate.cpp:1647` is the only path that builds it and `goto-cc` does not
+persist `byte_extract`. Building the Kani corpus locally therefore remains the enabler for
+items 2-4 as well as for the last leg of item 5.
 
 **Reproduce:** as before, the symbol is `_` + the text after `__` in the `.out` filename;
 `esbmc --binary <file>.out --function <symbol>` against

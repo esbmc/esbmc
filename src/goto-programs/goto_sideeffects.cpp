@@ -92,8 +92,10 @@ static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
 /// cannot be hoisted. Snapshot the array instead — `__ESBMC_old(base)[j]` —
 /// leaving an operand the bound variable does not reach, so the ordinary
 /// hoisting applies and the contract layer materialises one array snapshot in
-/// place of one per index (#4219). Only a base of array type is rewritten: a
-/// pointer with a symbolic extent has no whole object to snapshot.
+/// place of one per index (#4219). A pointer parameter base is also
+/// rewritten, snapshotting the pointer's value and deferring the actual
+/// region copy to the contracts pass, which is the only place the pointer's
+/// __ESBMC_is_fresh extent is known (#7057).
 /// The `__ESBMC_old_raw` call under \p deref, which the `__ESBMC_old` macro
 /// wraps as `*(T*)__ESBMC_old_raw(&x)`, or nullptr if this is not one.
 static exprt *old_raw_call_under(exprt &deref)
@@ -123,9 +125,51 @@ static exprt *old_raw_call_under(exprt &deref)
   return call->op1().operands().size() == 1 ? call : nullptr;
 }
 
+/// &(base[j]) is address_of(index_exprt(base, j)) when base has real array
+/// type -- the target's own type is already the element type.
+static const exprt *
+bound_array_index(const exprt &target, const std::set<irep_idt> &bound_vars)
+{
+  if (target.id() != exprt::index || target.operands().size() != 2)
+    return nullptr;
+  if (
+    !mentions_symbol(target.op1(), bound_vars) ||
+    !target.op0().type().is_array())
+    return nullptr;
+  return &target;
+}
+
+/// A decayed pointer's p[j] desugars at the frontend to *(p + j), so
+/// &(p[j]) is address_of(dereference(+(p, j))), not
+/// address_of(index_exprt(...)). No named object to snapshot here, only N
+/// bytes reachable through p, with N known only once the contracts pass
+/// resolves __ESBMC_is_fresh (#7057). Restrict to a bare symbol base so
+/// contracts.cpp can look it up in param_extents by identifier; an lvalue
+/// reached through a pointer (e.g. a struct field) is deferred (documented
+/// follow-up). Return the "+" node itself: like bound_array_index's
+/// index_exprt, it already has op0()=base, op1()=index -- but unlike the
+/// array case, its own type is the *pointer* type, not the element type
+/// (the caller must go through ->type().subtype() instead).
+static const exprt *bound_ptr_param_offset(
+  const exprt &target,
+  const std::set<irep_idt> &bound_vars)
+{
+  if (target.id() != exprt::deref || target.operands().size() != 1)
+    return nullptr;
+  const exprt &offset = target.op0();
+  if (offset.id() != "+" || offset.operands().size() != 2)
+    return nullptr;
+  if (
+    !mentions_symbol(offset.op1(), bound_vars) ||
+    offset.op0().type().id() != "pointer" || offset.op0().id() != "symbol")
+    return nullptr;
+  return &offset;
+}
+
 /// The array element \p addr addresses, when its index reaches \p bound_vars
-/// and its base is an array. A pointer with a symbolic extent has no whole
-/// object to snapshot, so it is left alone.
+/// and its base is an array or a pointer parameter. A pointer with a
+/// symbolic extent has no whole object to snapshot; bound_ptr_param_offset
+/// defers that to contracts.cpp once the extent is known.
 static const exprt *
 bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
 {
@@ -136,22 +180,18 @@ bound_array_element(const exprt &addr, const std::set<irep_idt> &bound_vars)
     return nullptr;
 
   const exprt &target = e->op0();
-  if (target.id() != exprt::index || target.operands().size() != 2)
-    return nullptr;
-
-  if (
-    !mentions_symbol(target.op1(), bound_vars) ||
-    !target.op0().type().is_array())
-    return nullptr;
-
-  return &target;
+  if (const exprt *array_elem = bound_array_index(target, bound_vars))
+    return array_elem;
+  return bound_ptr_param_offset(target, bound_vars);
 }
 
-static void
-lift_old_over_bound_index(exprt &expr, const std::set<irep_idt> &bound_vars)
+static void lift_old_over_bound_index(
+  exprt &expr,
+  const std::set<irep_idt> &bound_vars,
+  const namespacet &ns)
 {
   Forall_operands (it, expr)
-    lift_old_over_bound_index(*it, bound_vars);
+    lift_old_over_bound_index(*it, bound_vars, ns);
 
   exprt *call = old_raw_call_under(expr);
   if (!call)
@@ -162,11 +202,65 @@ lift_old_over_bound_index(exprt &expr, const std::set<irep_idt> &bound_vars)
   if (!target)
     return;
 
+  const exprt base = target->op0();
+  const exprt index = target->op1();
+
+  if (base.type().id() == "pointer")
+  {
+    // No named object to snapshot -- only N bytes reachable through base,
+    // and N is not known until the contracts pass resolves
+    // __ESBMC_is_fresh. Snapshot the pointer's *value* (exactly what a
+    // direct __ESBMC_old(ptr) would already produce -- always legal, no
+    // size needed here) and leave the element-wise copy to contracts.cpp.
+    // The result is deliberately dereference(add(...)), not
+    // index(dereference(...)): there is no array-typed rvalue to
+    // dereference into here, only a pointer, so the whole-object wrapping
+    // the array case uses below (dereference outside, index outside that)
+    // cannot be built. #7057.
+    exprt whole_snapshot = *call;
+    whole_snapshot.op1().operands()[0] = address_of_exprt(base);
+
+    // target->type() is the *pointer* type here (target is the "+" node,
+    // not an index_exprt) -- its subtype is the element type. A struct
+    // element's subtype is an unfollowed symbol_typet referencing its tag;
+    // the dereference layer requires the concrete struct_typet to resolve
+    // a member access, and this construction has no later chance to follow
+    // it (unlike contracts.cpp's own copy of the extent-aware snapshot,
+    // this raw shape also survives, unused, as dead residual code in the
+    // renamed original function body, where it still gets symbolically
+    // evaluated) (#7057).
+    const typet &elem_type = ns.follow(target->type().subtype());
+
+    typet elem_ptr_type("pointer");
+    elem_ptr_type.subtype() = elem_type; // T*
+
+    typet elem_ptr_ptr_type("pointer");
+    elem_ptr_ptr_type.subtype() = elem_ptr_type; // T**
+
+    // whole_snapshot's argument is &base (base = the pointer parameter
+    // itself), matching what a bare __ESBMC_old(base) already does -- the
+    // macro's own *(T*)old_raw(&x) shape, with x = base and T = base's own
+    // type (T*). So the raw result must first be reinterpreted as T** and
+    // dereferenced ONCE to recover the snapshotted *pointer value*, before
+    // any arithmetic on it -- casting straight to T* and dereferencing
+    // directly (as if base's own storage held the array) reads past base's
+    // few bytes instead of the region it points to.
+    exprt snapshot_ptr_cast = typecast_exprt(whole_snapshot, elem_ptr_ptr_type);
+    exprt snapshotted_ptr("dereference", elem_ptr_type);
+    snapshotted_ptr.copy_to_operands(snapshot_ptr_cast);
+
+    plus_exprt offset_ptr(snapshotted_ptr, index);
+    offset_ptr.type() = elem_ptr_type;
+
+    exprt element("dereference", elem_type);
+    element.copy_to_operands(offset_ptr);
+    expr.swap(element);
+    return;
+  }
+
   // Snapshotting an array through a dereference is an rvalue array read, which
   // the dereference layer refuses. Where the array is a struct member, take the
   // struct — a legal rvalue — and re-apply the member to the snapshot.
-  const exprt base = target->op0();
-  const exprt index = target->op1();
   const bool via_member = base.id() == exprt::member;
   const exprt object = via_member ? base.op0() : base;
 
@@ -1109,7 +1203,7 @@ void goto_convertt::convert_quantifier_calls(exprt &expr)
       convert_quantifier_calls(args[1]);
       const irep_idt bound = quantifier_bound_var_id(args[0]);
       if (!bound.empty())
-        lift_old_over_bound_index(args[1], {bound});
+        lift_old_over_bound_index(args[1], {bound}, ns);
       inline_calls_in_quantifier_body(args[1], max_quantifier_inline_depth);
       if (!has_sideeffect(args[1]))
       {

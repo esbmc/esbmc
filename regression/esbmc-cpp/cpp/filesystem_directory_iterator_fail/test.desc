@@ -1,0 +1,7 @@
+CORE
+main.cpp
+--std c++17 --unwind 8
+^Violated property:$
+^  file .*main\.cpp line 15 column 3 function main$
+^  assertion n > 0 && "directory always yields at least one entry"$
+^VERIFICATION FAILED$

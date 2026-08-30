@@ -68,12 +68,26 @@ ctest -R "regression/esbmc/00_big_endian_01" --output-on-failure
 
 `regression/esbmc/bundled_headers_from_vfs` and `regression/esbmc-cpp/cpp/om_source_from_vfs` pin this: the first asserts clang is handed `-isystem /esbmc-vfs/libc/headers` and `-resource-dir /esbmc-vfs/clang`, the second that an OM source location in a counterexample reads `/esbmc-vfs/cpp/vector`. Reintroducing extraction turns those paths back into a temp directory and both fail. Note that asserting the temp directory is *empty* after a run would not work: `tmp_path`'s destructor removes what it created, so a run that extracts and cleans up is indistinguishable from one that never extracted.
 
-Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every PR should include at least two regression tests (one passing, one failing).
+Regression test format (`test.desc`): line 1 is `CORE`/`KNOWNBUG`/`FUTURE`/`THOROUGH` (THOROUGH is Linux-only), line 2 is the source file, line 3 is ESBMC flags, line 4+ are expected output regexes. Every PR adds a *pair* of regression tests — see the "Regression tests come in pairs" bullet below.
 
 **Before committing:**
 
 - Always run the project's test suite. If tests fail, fix the failures before committing — never commit broken or untested code.
 - **Regression suite cap.** When running the full regression suite, cap the run at **10 minutes** (600000 ms) — pass the timeout to the `Bash` tool's `timeout` parameter, or wrap the invocation with `timeout 10m …`. If the suite cannot complete in 10 minutes, narrow the scope (e.g. run only the affected subset) or ask the user before extending the limit.
+- **Regression tests come in pairs, and both must bite.** A PR that changes
+  verification behaviour adds **two** regression tests over the same construct:
+  one pinning `^VERIFICATION SUCCESSFUL$` and one pinning
+  `^VERIFICATION FAILED$`. Adding only the passing half is the single most
+  common review rejection on this repo — write the failing counterpart at the
+  same time, not after a reviewer asks.
+- **Mutation-check every regression test you add.** Revert the source fix, re-run
+  each new test, and confirm it *changes verdict*; then restore the fix. A test
+  that passes both before and after pins nothing. This bites most often when the
+  property never reaches the code you changed — clang already inserted the cast,
+  the assertion was constant-folded away, the claim was never generated. Check
+  `--show-claims` output before and after: if it is byte-identical, the test is
+  not a gate. If no end-to-end test can be made to bite, say so explicitly in the
+  PR and name what does pin the change (e.g. a unit test).
 - **Lint and typecheck.** Run lint and typecheckers and fix any errors. For Python code, use `pylint`. For C++ code, ensure clang-format compliance (CI enforces this).
 - **Cyclomatic complexity.** `python3 scripts/complexity/ccn_report.py --gate` reports what the branch adds against its merge base, the same check the Complexity workflow runs on the PR (needs `pip install lizard==1.23.0`). It is advisory while the thresholds are being calibrated.
 
