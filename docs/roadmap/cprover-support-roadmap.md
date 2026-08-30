@@ -820,29 +820,24 @@ applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to *
 — the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
 divergence when it is a missing flag.
 
-#### `__CPROVER_object_whole` in an `assigns` clause — a false alarm (§4.4, open — `cbmc_contract_frees`)
+#### Contract write-set clauses need both CPROVER work-streams — ✅ (PR #TBD)
 
-A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` verifies SUCCESSFUL under
-CBMC and **FAILED** under ESBMC. The `frees` clause is irrelevant — `object_whole` alone
-reproduces it, and a plain `__CPROVER_assigns(*p)` does not.
+`__CPROVER_assigns(__CPROVER_object_whole(p))`, with or without `__CPROVER_frees(p)`, verifies
+SUCCESSFUL under CBMC and under ESBMC — **but only with the `is_fresh` bridge and the
+`object_size` lifting pass applied together**. Measured on each alone it looks like a defect,
+and it is not:
 
-**A void-typed cast used to abort this before it could report a verdict, and that was
-self-inflicted.** The `r_ok` encoding took its pointer-offset result type from the predicate's
-*size* operand; `__CPROVER_object_whole`'s lowering leaves that operand untyped, so the formula
-carried a `pointer_offset` of void type, and `pointer_offset2t::do_simplify`
-(`expr_simplifier.cpp`) then built a `typecast` to void that the encoder aborted on
-("Typecast for unexpected type"). `pointer_offset2t` requires a **signed, address-width**
-result type — the rule the `__CPROVER_POINTER_OFFSET` case already followed — and the encoding
-now obeys it. With that fixed the run reaches a verdict, and the verdict divergence above is
-what remains.
+| build | verdict | why |
+|---|---|---|
+| `master` | SIGSEGV | `object_size` reaches the solver as a code node |
+| `is_fresh` bridge only | SIGSEGV | same — that stream does not touch `object_size` |
+| `object_size` stream only | FAILED | `__CPROVER_is_fresh` in the `requires` is still bodyless, so the pointer is unconstrained and every dereference check fails |
+| **both** | **SUCCESSFUL** | matches CBMC |
 
-**How it was found, after four cheaper guesses failed.** The cast is not in the CBMC binary
-(instrumenting `fix_expression` prints targets `integer`, `pointer`, `signedbv`, `c_bool`,
-`unsignedbv` — never `empty`), `migrate_type0` *throws* rather than falling through to the
-empty type, `migrate_expr`'s typecast case never builds one, and `symex_other.cpp` only
-dereferences a discarded expression. What settled it was an `abort()` in **both**
-`typecast2t` constructors — the first probe instrumented only the primary one and caught
-nothing — plus `--segfault-handler` and `addr2line`, which named the simplifier directly.
+`regression/goto-transcoder/cbmc_contract_frees` was pinned KNOWNBUG on the strength of the
+third row. It is a CORE test here. The lesson is narrower than "measure before believing":
+when two independent fixes are in flight, a harness that touches both has **no meaningful
+verdict on either branch alone**, and reporting one is worse than reporting nothing.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
