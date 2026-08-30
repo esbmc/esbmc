@@ -838,6 +838,29 @@ and it is not:
 third row. It is a CORE test here. The lesson is narrower than "measure before believing":
 when two independent fixes are in flight, a harness that touches both has **no meaningful
 verdict on either branch alone**, and reporting one is worse than reporting nothing.
+#### `__CPROVER_object_whole` in an `assigns` clause — a false alarm (§4.4, open — `cbmc_contract_frees`)
+
+A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` verifies SUCCESSFUL under
+CBMC and **FAILED** under ESBMC. The `frees` clause is irrelevant — `object_whole` alone
+reproduces it, and a plain `__CPROVER_assigns(*p)` does not.
+
+**A void-typed cast used to abort this before it could report a verdict, and that was
+self-inflicted.** The `r_ok` encoding took its pointer-offset result type from the predicate's
+*size* operand; `__CPROVER_object_whole`'s lowering leaves that operand untyped, so the formula
+carried a `pointer_offset` of void type, and `pointer_offset2t::do_simplify`
+(`expr_simplifier.cpp`) then built a `typecast` to void that the encoder aborted on
+("Typecast for unexpected type"). `pointer_offset2t` requires a **signed, address-width**
+result type — the rule the `__CPROVER_POINTER_OFFSET` case already followed — and the encoding
+now obeys it. With that fixed the run reaches a verdict, and the verdict divergence above is
+what remains.
+
+**How it was found, after four cheaper guesses failed.** The cast is not in the CBMC binary
+(instrumenting `fix_expression` prints targets `integer`, `pointer`, `signedbv`, `c_bool`,
+`unsignedbv` — never `empty`), `migrate_type0` *throws* rather than falling through to the
+empty type, `migrate_expr`'s typecast case never builds one, and `symex_other.cpp` only
+dereferences a discarded expression. What settled it was an `abort()` in **both**
+`typecast2t` constructors — the first probe instrumented only the primary one and caught
+nothing — plus `--segfault-handler` and `addr2line`, which named the simplifier directly.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
