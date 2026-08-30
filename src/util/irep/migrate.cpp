@@ -2867,9 +2867,45 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "r_ok" || expr.id() == "w_ok" || expr.id() == "rw_ok")
   {
-    // FUTURE: call __ESBMC_r_ok / __ESBMC_w_ok / __ESBMC_rw_ok
-    true_exprt t;
-    migrate_expr(t, new_expr_ref);
+    // __CPROVER_{r,w,rw}_ok(p, n): the n bytes from p lie inside one live
+    // object. Migrating these to `true` made every assertion over them pass
+    // vacuously -- CBMC refutes __CPROVER_r_ok(malloc(8), 16) and ESBMC proved
+    // it. ESBMC draws no read/write distinction (it models no read-only
+    // storage), so all three get the same encoding.
+    assert(expr.operands().size() == 2);
+
+    expr2tc ptr, size;
+    migrate_expr(expr.op0(), ptr);
+    migrate_expr(expr.op1(), size);
+
+    // The extent comes from the same intrinsic __CPROVER_OBJECT_SIZE uses, so
+    // it covers heap, stack and static objects; lift_call_expressions hoists
+    // the call out of this predicate once the binary is loaded.
+    const typet size_t_type = expr.op1().type();
+    constant_exprt kind(size_t_type);
+    kind.set_value(
+      integer2binary(0, atoi(size_t_type.width().as_string().c_str())));
+    expr2tc extent;
+    migrate_expr(
+      invoke_intrinsic(
+        "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind}),
+      extent);
+
+    expr2tc offset = pointer_offset2tc(size->type, ptr);
+    expr2tc last = add2tc(size->type, offset, size);
+
+    // not(invalid_pointer) rather than valid_object: the latter is
+    // __ESBMC_alloc[obj], which symex only maintains for dynamic objects, so a
+    // stack or static object reads as invalid. invalid_pointer is restricted to
+    // dynamic objects and the INVALID object by construction
+    // (dynamic_allocation.cpp), which is the polarity wanted here.
+    // NULL is neither dynamic nor the INVALID object, so invalid_pointer does
+    // not exclude it; CBMC reports it as not readable, so say so explicitly.
+    expr2tc not_null = notequal2tc(ptr, gen_zero(ptr->type));
+
+    new_expr_ref = and2tc(
+      and2tc(not_null, not2tc(invalid_pointer2tc(ptr))),
+      lessthanequal2tc(last, extent));
     return;
   }
 
