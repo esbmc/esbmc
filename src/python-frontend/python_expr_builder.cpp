@@ -54,6 +54,13 @@ exprt build_address_of(const exprt &obj)
   return migrate_expr_back(address_of2tc(obj2->type, obj2));
 }
 
+exprt decay_function_to_pointer(const exprt &value)
+{
+  if (!value.type().is_code() || !value.is_symbol())
+    return value;
+  return build_address_of(value);
+}
+
 exprt build_dereference(const exprt &ptr, const typet &t)
 {
   if (contains_dyn_array(t))
