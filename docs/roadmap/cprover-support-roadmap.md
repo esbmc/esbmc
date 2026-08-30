@@ -815,7 +815,7 @@ through — the `memcpy`-family retarget pattern of §4.8. The bridge is deliber
 a name it does not know. CBMC's third argument is the memory map it threads through to state
 separation between two `is_fresh`'d pointers; that is dropped.
 
-**Closed for the `replace`/`ensures` direction too (PR #TBD).** CBMC splits `is_fresh` four
+**Closed for the `replace`/`ensures` direction too (PR #7407).** CBMC splits `is_fresh` four
 ways, and only the two **assume**-side variants may be bridged: `enforce_requires` and
 `replace_ensures` both state something the verifier is entitled to take for granted, so both
 allocate. Their **check**-side counterparts — `enforce_ensures` ("did the body really return
