@@ -774,6 +774,25 @@ Measured 2026-08-30 on master. An eight-line harness — `char *p = malloc(16);`
 Both are pinned as KNOWNBUG so the reproducers cannot be lost; `cbmc_object_size_bytes` is the
 one that catches a crash-only fix.
 
+**The obvious fix is wrong — measured, so nobody need re-derive it.** Mapping `object_size` to
+`dynamic_size2tc` looks ideal: it is a plain expression (no lifting, no crash) and it lowers to
+`__ESBMC_alloc_size[POINTER_OBJECT(p)]`, a **byte** count, so both defects above appear to fall
+at once. Both heap harnesses do pass with it. But `__ESBMC_alloc_size` is populated only for
+*dynamic* objects, so a static or automatic one reads nothing: on
+`int garr[4]; int sarr[4];` CBMC proves `__CPROVER_OBJECT_SIZE(...) == 16` for both and ESBMC
+reports **FAILED** for both. That trades a loud crash for a quiet false alarm.
+
+No expression-level encoding can work: the byte size of a stack or global object is not
+recoverable from the pointer's *type* (`int *` into `int[4]` gives 4, not 16), so the object
+has to be resolved by `dereference`, which is symex machinery. The correct target is therefore
+`__ESBMC_builtin_object_size(p, 0)` — byte-valued, GCC type-0 semantics, and it handles heap,
+stack and static alike (`object_size.cpp:12`) — reached through a **post-load lifting pass**:
+walk each loaded goto instruction, hoist any `code_function_call2t` nested inside an expression
+into `tmp = call(...)` inserted before it, and replace the node with `tmp`. That belongs beside
+`link_cbmc_libc_bodies` in `parseoptions/goto_program.cpp`, where instructions are already
+irep2 and `goto_programt` insertion is available; the adapter itself cannot express the 1->N
+rewrite.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
