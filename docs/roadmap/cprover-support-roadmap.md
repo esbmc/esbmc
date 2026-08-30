@@ -1046,7 +1046,7 @@ goes through (including goto-transcoder's Rust output), had not:
   which `read_goto_binary`'s caller turns into a graceful error exit.
 
 Measured on a 15.8 kB native binary: **300 truncation offsets, previously hangs and 76 aborts,
-now zero of either** (`native_truncated` pins one). Corrupted — as opposed to truncated — native input is closed too (PR #TBD). All four residual
+now zero of either** (`native_truncated` pins one). Corrupted — as opposed to truncated — native input is closed too (PR #7421). All four residual
 failures had one cause: `read_string_ref` sized its table with `1 + id * 2` in **32-bit**
 arithmetic, so a corrupted id of `0x80000000` wrapped to `resize(1)` and the very next index
 ran off the end of the map. Guarded the way the CBMC reader guards counts — an id is a dense
