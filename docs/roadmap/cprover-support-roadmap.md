@@ -543,7 +543,7 @@ rather than instruction-level ASSUME/ASSERT, unconfirmed),
 IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
-CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). **That audit is done (2026-08-30, PR #TBD).** Method: instrument `fix_expression` to print
+CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). **That audit is done (2026-08-30, PR #7423).** Method: instrument `fix_expression` to print
 every irep id and every `statement` id it sees, run it over 38 goto-binaries spanning plain C,
 aggregates, bitfields, unions, enums, floats, quantifiers, and every contract shape, and count
 ids by how many *distinct* binaries they appear in — that separates the vocabulary from
