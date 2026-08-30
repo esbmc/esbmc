@@ -791,6 +791,23 @@ resolved by `dereference`, which is symex machinery.
 Pinned by `regression/goto-transcoder/cbmc_object_size{,_bytes,_static}` and the
 `{,_static}_fail` counterparts.
 
+#### Expression-id sweep — 2026-08-30 (§4.4)
+
+The adapter's allow-list is the productive vein: two sittings over it produced a crash
+(`object_size`, PR #7410) and an unsound miss (`r_ok`, PR #7411). A third pass probed eight
+more ids with a small C harness each, `goto-cc`'d, run under `cbmc` against `esbmc --binary` in
+both polarities. **All eight agree**, and all sixteen harnesses are now pinned as
+`regression/goto-transcoder/cbmc_expr_*`: `overflow-shl`, `overflow-unary-`, `signbit`,
+`isfinite`, `pointer_object`, `ieee_sqrt`, `struct`/`array_of` aggregate literals, and
+`byte_extract_little_endian` (reached by union punning).
+
+**Two harness traps worth repeating.** A verdict that *agrees* can still be vacuous: CBMC
+reports `no body for callee` and fails the assertion for that reason, which looks like
+agreement when ESBMC fails for its own. Check the failing claim, and grep the CBMC run for
+`no body`. In particular `__CPROVER_signbit` and `__CPROVER_isfinite` do not exist —
+`signbit()` from `<math.h>` works, but `isfinite()` lowers to `__builtin_isfinite`, which
+cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
+
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
 `static_lifetime`, `file_local`, `is_extern`).
