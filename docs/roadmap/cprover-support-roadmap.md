@@ -927,7 +927,7 @@ Still open in `is_fresh`, now measured rather than guessed:
   | `return 0` | FAILED | FAILED |
   | `return &static_obj` with n = 1000 | FAILED — the check *is* size-sensitive | FAILED |
 
-  So CBMC accepts a static object as "fresh" but does enforce the extent. **Closed (PR #TBD)**
+  So CBMC accepts a static object as "fresh" but does enforce the extent. **Closed (PR #7416)**
   by a check-side bridge `__cbmc_is_fresh_check_impl` — the mirror of the assume-side one,
   reporting whether the pointer already denotes an object that big and deliberately never
   allocating, since satisfying a check-side variant by allocating would mask the violation it
