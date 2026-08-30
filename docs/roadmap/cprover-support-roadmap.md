@@ -538,7 +538,7 @@ is really evaluated, not vacuously skipped), and an `exists` witness (`cbmc_exis
 
 Still open: `__CPROVER_assume`/`assert` (only relevant if they surface as expressions
 rather than instruction-level ASSUME/ASSERT, unconfirmed),
-IEEE-754 rounding-mode operations, `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
+`byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
 CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). Needs a
@@ -792,6 +792,28 @@ into `tmp = call(...)` inserted before it, and replace the node with `tmp`. That
 `link_cbmc_libc_bodies` in `parseoptions/goto_program.cpp`, where instructions are already
 irep2 and `goto_programt` insertion is available; the adapter itself cannot express the 1->N
 rewrite.
+
+#### IEEE-754 rounding mode — ✅ FIXED (PR #TBD)
+
+Listed as open in §4.4; it was two distinct gaps, both now closed.
+
+1. **The symbol never connected.** A CBMC program sets `__CPROVER_rounding_mode`, but every
+   float operation `migrate` builds reads ESBMC's own `c:@__ESBMC_rounding_mode`
+   (`irep2_expr.h`). Two different symbols, so the write was inert: CBMC proves `1.0/3.0`
+   differs between `FE_DOWNWARD` and `FE_UPWARD`, ESBMC reported FAILED. `fix_expression` now
+   points the writes at the symbol the reads use.
+2. **`fesetround` had no body.** It arrives as a bodyless `FUNCTION_CALL`, so even with the
+   symbol connected the mode never changed. ESBMC has the operational model already
+   (`c2goto/library/fenv.c`); `fesetround`/`fegetround` join the libc body bridge, exactly as
+   `ceil`/`strlen` did.
+
+Both paths now agree with CBMC in both polarities — `cbmc_rounding_mode{,_fail}` (direct
+`__CPROVER_rounding_mode` writes) and `cbmc_fesetround{,_fail}` (the `<fenv.h>` route).
+
+**Also audited while here — `ceilf`/`floorf`/`truncf`/`roundf` "out of shape" is accurate but
+not a gap.** They do route through the libm operational model rather than an expression form,
+and they work: all of `ceil`/`floor`/`trunc`/`round` agree with CBMC across `f`, plain and `l`
+variants (`cbmc_libm_rounding{,_fail,_long}`).
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
 The adapter maps a subset of symbol flags (`is_type`, `is_macro`, `is_parameter`, `lvalue`,
