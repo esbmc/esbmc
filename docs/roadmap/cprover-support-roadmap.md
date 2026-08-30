@@ -818,6 +818,54 @@ cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
 applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to **both** engines
 — the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
 divergence when it is a missing flag.
+
+#### A cast to `void` reaches the SMT encoder on a `frees` contract (§4.4, open — `cbmc_contract_frees`)
+
+Measured 2026-08-30. A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` and
+`__CPROVER_frees(p)` over a `free(p)` body verifies SUCCESSFUL under CBMC and **aborts** ESBMC
+in the solver backend:
+
+```
+ERROR: Typecast for unexpected type      (smt_casts.cpp:809)
+typecast
+* from : typecast
+    * from : pointer_offset { pointer_obj : release::p }
+    * type : unsignedbv, width 64
+* type : empty
+```
+
+The outer cast's target is `empty` — a cast **to `void`**, i.e. a discarded value, which the
+encoder has no case for. It should not reach the solver as a value at all; the fix belongs
+where the discard is built, not in `smt_casts.cpp`.
+
+**Narrowed: `__CPROVER_object_whole` alone is the trigger** — the `frees` clause is
+irrelevant, and a plain `__CPROVER_assigns(*p)` does not reproduce it.
+
+**Four hypotheses, all refuted by measurement — do not repeat them.**
+
+1. *The cast is in the CBMC binary and the adapter should drop it.* No: instrumenting
+   `fix_expression` to print every `typecast` target it sees yields `integer` (18), `pointer`
+   (12), `signedbv` (11), `c_bool` (6), `unsignedbv` (1) — and **no `empty`**.
+2. *CBMC's `integer` type falls through `migrate_type0` to the empty type.* No:
+   `migrate_type0` **throws** `Unexpected type` on an id it does not know, and no such error
+   appears. Mapping `integer` to a pointer-width `signedbv` in `fix_type` changes nothing.
+3. *`migrate_expr`'s typecast case builds it.* No: a probe logging every `typecast2tc` whose
+   migrated type is empty never fires on this input.
+4. *It is a discarded-expression statement.* No: `symex_other.cpp` only *dereferences* a
+   `code_expression2t` operand; it never encodes it.
+
+So the node is created somewhere after migration, on a path none of the above covers. The next
+step is to catch it at construction — an assertion or breakpoint on building a `typecast2tc`
+with an empty type — rather than another guess about which pass is responsible.
+
+**This is a second layer, exposed by fixing the first.** On `master` the same binary dies
+earlier with the `object_size` SIGSEGV; once that is fixed the run gets as far as the encoder
+and hits this. Anyone re-measuring must say which build they used — the failure mode changes
+from rc=139 to rc=134 across that fix.
+
+Also measured, and *not* a divergence: removing the `__CPROVER_frees(p)` clause entirely leaves
+CBMC still reporting SUCCESSFUL, so the clause is not what its absence would suggest — do not
+build a negative test on that shape without checking it bites.
 cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`.
 
 ### 4.5 Symbol metadata (Phase 2) — 🔶 thread_local translated, remaining flags audited
