@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_ensures_fresh.goto
+--binary --function main
+^VERIFICATION SUCCESSFUL$
