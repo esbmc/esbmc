@@ -1032,6 +1032,25 @@ covered over-wide varints and implausible counts, but not a stream that simply *
   abort is indistinguishable from an ESBMC crash. Flipping three random bytes killed 1 run in
   40; 60 runs now produce no signal.
 
+**The same sweep on the *native* reader found three more, fixed in PR #TBD.** The CBMC reader
+had been hardened; `irep_serialization.cpp`, which every `--binary` read of ESBMC's own format
+goes through (including goto-transcoder's Rust output), had not:
+
+- `read_string` assigned `in.get()` — an `int` — to a `char`, so EOF (-1) narrowed to an
+  ordinary character and never matched the terminator. On a truncated stream the loop never
+  ended, doubling `read_buffer` until the process died: a **hang**, not a diagnostic.
+- `read_long` returned a partial word at EOF with nothing set, so counts and ids no longer
+  described the file. It now leaves the stream failed.
+- `read_irep` and `reference_convert` `abort()`ed on "irep not terminated" and a forward
+  reference — both statements about the *input*, both routine on a truncated file. They throw,
+  which `read_goto_binary`'s caller turns into a graceful error exit.
+
+Measured on a 15.8 kB native binary: **300 truncation offsets, previously hangs and 76 aborts,
+now zero of either** (`native_truncated` pins one). **Still open:** *corrupted* — as opposed to
+truncated — native input, where 40 random 3-byte flips still produce 1 hang and 3 aborts. The
+CBMC reader guards this with `implausible_count`; the native reader has no equivalent, and
+adding one needs care with that format's count semantics.
+
 **Still open:** multi-version tolerance (accept/adapt versions other than 6).
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`realloc`/`nearbyint`/`fma` landed, family audit still open
