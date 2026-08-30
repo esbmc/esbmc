@@ -732,34 +732,85 @@ static bool coerce_to_common_type(expr2tc &a, expr2tc &b)
   return true;
 }
 
-/// &base[i] - &base[j] = i - j, or nil when the operands are not two constant
-/// subscripts of one array. C23 6.5.6p9 defines pointer subtraction as the
-/// difference of the subscripts, so this is the standard's own answer rather
-/// than an optimisation; a differing base is undefined there and is left
-/// unfolded (#6779). Without this the difference stays a comparison operand
-/// symex cannot decide, and a loop bounded by it never exits.
-static expr2tc
-fold_index_difference(const expr2tc &a, const expr2tc &b, const type2tc &type)
+/// Decompose an address into the object it is rooted at and its constant byte
+/// offset within it, walking constant subscripts and members and looking
+/// through the pointer casts a byte-distance idiom spells. False when any step
+/// is not a compile-time constant, which leaves the difference unfolded.
+static bool
+address_root_and_offset(const expr2tc &e, expr2tc &root, BigInt &offset)
 {
-  if (!is_address_of2t(a) || !is_address_of2t(b))
+  expr2tc addr = e;
+  while (is_typecast2t(addr))
+    addr = to_typecast2t(addr).from;
+  if (!is_address_of2t(addr))
+    return false;
+
+  offset = 0;
+  expr2tc obj = to_address_of2t(addr).ptr_obj;
+  while (is_index2t(obj) || is_member2t(obj))
+  {
+    if (is_index2t(obj))
+    {
+      const index2t &idx = to_index2t(obj);
+      if (!is_constant_int2t(idx.index))
+        return false;
+      offset += to_constant_int2t(idx.index).value *
+                type_byte_size(idx.type, migrate_namespace_lookup);
+      obj = idx.source_value;
+      continue;
+    }
+    const member2t &mem = to_member2t(obj);
+    offset += member_offset(
+      mem.source_value->type, mem.member, migrate_namespace_lookup);
+    obj = mem.source_value;
+  }
+
+  root = obj;
+  return true;
+}
+
+/// &base.x - &base.y and &base[i] - &base[j] fold to the distance between the
+/// two sub-objects, in units of the operands' own pointee type. C23 6.5.6p9
+/// defines pointer subtraction as that difference, so this is the standard's
+/// own answer rather than an optimisation; a differing root is undefined there
+/// and is left unfolded (#6779). Without it the difference stays a comparison
+/// operand symex cannot decide, and a loop bounded by it never exits.
+static expr2tc
+fold_address_difference(const expr2tc &a, const expr2tc &b, const type2tc &type)
+{
+  if (a->type != b->type || !is_pointer_type(a->type))
     return expr2tc();
 
-  const expr2tc &obj_a = to_address_of2t(a).ptr_obj;
-  const expr2tc &obj_b = to_address_of2t(b).ptr_obj;
-  if (!is_index2t(obj_a) || !is_index2t(obj_b))
-    return expr2tc();
+  const type2tc &pointee = to_pointer_type(a->type).subtype;
+  if (is_empty_type(pointee))
+    return expr2tc(); // void *, whose difference has no unit to divide by
 
-  const index2t &idx_a = to_index2t(obj_a);
-  const index2t &idx_b = to_index2t(obj_b);
-  if (
-    idx_a.source_value != idx_b.source_value ||
-    !is_constant_int2t(idx_a.index) || !is_constant_int2t(idx_b.index))
-    return expr2tc();
+  // Only dyn_sized_array_excp is caught for the whole simplification; an
+  // unmeasurable type here means this fold has no answer, not that the rest of
+  // the expression is unsimplifiable.
+  try
+  {
+    expr2tc root_a, root_b;
+    BigInt off_a, off_b;
+    if (
+      !address_root_and_offset(a, root_a, off_a) ||
+      !address_root_and_offset(b, root_b, off_b) || root_a != root_b)
+      return expr2tc();
 
-  return constant_int2tc(
-    type,
-    to_constant_int2t(idx_a.index).value -
-      to_constant_int2t(idx_b.index).value);
+    // (char *)&a[4] - (char *)&a[0] is 16, not 4: the cast decides the unit,
+    // so the byte distance is scaled by the operands' own pointee type rather
+    // than by whatever the sub-objects happen to be.
+    const BigInt unit = type_byte_size(pointee, migrate_namespace_lookup);
+    const BigInt distance = off_a - off_b;
+    if (unit == 0 || distance % unit != 0)
+      return expr2tc();
+
+    return constant_int2tc(type, distance / unit);
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return expr2tc();
+  }
 }
 
 /// (w + x) - (y + z) with one shared addend cancels the common term; nil when
@@ -845,7 +896,7 @@ static expr2tc fold_pointer_sub(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if (expr2tc diff = fold_index_difference(side_1, side_2, type);
+  if (expr2tc diff = fold_address_difference(side_1, side_2, type);
       !is_nil_expr(diff))
     return diff;
 
@@ -1573,16 +1624,16 @@ expr2tc pointer_offset2t::do_simplify() const
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
-  {
-    if (is_pointer_type(ptr_obj->type))
-    {
-      const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
-      // Allow NULL simplification for pointer types to primitives
-      if (!is_symbol_type(ptr_type.subtype))
-        return gen_zero(type);
-    }
-  }
+  // NULL is object 0 at offset 0 whatever it is a pointer to, so the pointee
+  // does not gate this. It used to: #2803 restricted the fold to non-symbol
+  // subtypes with no reason recorded, and offsetof lowers to
+  // `(char *)(struct S *)NULL + k`, so a struct pointee — the only shape
+  // offsetof ever produces — never folded and a loop bounded by an offsetof
+  // never exited (#6779).
+  if (
+    is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL" &&
+    is_pointer_type(ptr_obj->type))
+    return gen_zero(type);
 
   if (is_address_of2t(ptr_obj))
   {
