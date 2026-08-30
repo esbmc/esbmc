@@ -2752,16 +2752,6 @@ exprt function_call_expr::handle_numpy_astype() const
   return build_symbol(result_sym);
 }
 
-/// A function name used as a value decays to a function pointer, as it already
-/// does in call-argument position. Storing the code symbol itself aborts
-/// conversion with "got invalid code for function" (#6640).
-static exprt decay_function_to_pointer(const exprt &value)
-{
-  if (!value.type().is_code() || !value.is_symbol())
-    return value;
-  return python_expr::build_address_of(value);
-}
-
 exprt function_call_expr::handle_list_append() const
 {
   const auto &args = call_["args"];
