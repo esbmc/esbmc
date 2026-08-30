@@ -1,0 +1,6 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION SUCCESSFUL$
+^\s*PASSED\s+\[assertEqual\.assertion\.1\]
+^\*\* 0 of 1 properties failed, 1 passed$
