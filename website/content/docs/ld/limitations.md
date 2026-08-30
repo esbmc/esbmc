@@ -50,6 +50,15 @@ supported and the known restrictions.
 
 - **Input format.** Programs must be supplied as PLCopen XML. Other LD
   serialisations are not parsed.
+- **POU body notations.** Only `<LD>` / `<ladderDiagram>` bodies, and the `<ST>`
+  body of a function block, are translated. A POU whose body is `<ST>`, `<FBD>`,
+  `<SFC>` or `<IL>` is rejected with
+  `UnsupportedConstruct(<notation> body of POU '<name>', tier=2)`. Ladder nested
+  in `<SFC>` step actions is rejected with the rest of the chart: the step and
+  transition sequencing that gates those actions is not modelled, so running
+  them is a different program. Rejecting rather than skipping is deliberate —
+  a body that is skipped leaves the scan cycle empty, and every property then
+  holds vacuously.
 - **`TP` pulse timers.** `TP` blocks are modelled with `TON` (on-delay)
   semantics: `Q` rises after `IN` has been held for `PT` ticks, rather than
   emitting a fixed-width pulse on a rising edge of `IN`. Properties that depend

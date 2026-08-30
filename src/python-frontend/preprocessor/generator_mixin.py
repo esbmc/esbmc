@@ -1249,6 +1249,20 @@ class GeneratorMixin:
             return False
         return not self._key_indexes_element(key_value)
 
+    def _lower_sorted_key_iterable(self, call_node):
+        """Lower a key'd ``sorted()`` standing where an iterable is expected.
+
+        Applies the same order as the expression rewriter -- constant fold
+        first, scan for what it could not fold -- on behalf of the loop
+        lowering, which builds its iterable assignment after that rewriter has
+        already run.
+        """
+        for lower in (self._lower_sorted_with_key_call, self._lower_sorted_key_scan):
+            lowered = lower(call_node)
+            if lowered is not None:
+                return lowered
+        return None
+
     def _lower_sorted_key_scan(self, call_node):
         """Lower ``sorted(iterable, key=f)`` to an explicit insertion sort.
 

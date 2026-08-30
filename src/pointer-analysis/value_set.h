@@ -647,6 +647,16 @@ protected:
     const std::optional<BigInt> &total_offs,
     object_mapt &dest) const;
 
+  /** What @p sym points at: the values keyed under the path the read spells,
+   *  falling back to the paths a union arm it crosses aliases. Returns whether
+   *  anything was found. */
+  bool get_symbol_value_set(
+    const symbol2t &sym,
+    const expr2tc &expr,
+    const std::string &suffix,
+    const type2tc &original_type,
+    object_mapt &dest) const;
+
   /** The constant cases of get_value_set_rec: what a value reaches this code as
    *  once constant propagation has substituted it. */
   void get_constant_value_set(

@@ -257,6 +257,14 @@ DYNAMIC_CAPABILITY_PROBES = {
     "bitint_wide": {
         "source": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
     },
+    # The `_BitInt(N)` spelling parses at all. Clang exposes bit-precise
+    # integers as `_ExtInt` before LLVM 14, so a source written with the
+    # standard C23 spelling is a parse error on the LLVM 11-13 builds the
+    # project still supports. Narrower than bitint_wide, which additionally
+    # requires a 1000-bit width the aarch64-darwin target caps out below.
+    "bitint": {
+        "source": "int main() { _BitInt(80) x = 0; return (int)x; }\n",
+    },
     # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
     # does not. Pins both tests spelling a char type in expected output
     # ("signed char c") and tests whose verdict turns on the range: CHAR_MIN,

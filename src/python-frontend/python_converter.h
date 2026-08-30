@@ -849,6 +849,14 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
+  /// @p method_name under @p base_class, as the module that defines the base
+  /// spells it, or null when the base is not imported.
+  symbolt *find_method_in_imported_base(
+    const nlohmann::json &base_class_node,
+    const std::string &base_class,
+    const std::string &method_name,
+    bool is_ctor) const;
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
@@ -955,6 +963,20 @@ private:
     const std::string &lhs_type,
     const nlohmann::json &ast_node,
     bool is_ctor_call);
+
+  /// Carries the list element-type map from @p rhs to @p lhs on a
+  /// container-level list assignment, resolving dict `.keys`/`.values`
+  /// members to the dict's internal list symbol.
+  void propagate_list_type_info(
+    const exprt &lhs,
+    const exprt &rhs,
+    symbolt *lhs_symbol);
+
+  /// Propagates the element-type map of the list backing a dict's `.keys` /
+  /// `.values` member expression @p rhs onto @p lhs_identifier.
+  void propagate_dict_member_list_type_info(
+    const exprt &rhs,
+    const std::string &lhs_identifier);
 
   // =========================================================================
   // Dictionary assignment helper methods
@@ -1732,6 +1754,19 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
+
+  // The assignment target node currently being converted, or null. Reads
+  // nested inside a target -- the index in `xs[idx[0]] = v`, the base in
+  // `xs[0][1] = v` -- are converted with is_converting_lhs set too, so only
+  // node identity picks out the slot actually being stored to.
+  const nlohmann::json *lhs_store_target_ = nullptr;
+
+  /// Is @p node the slot this assignment stores into? A store target must
+  /// stay an lvalue; a read may be bound to a temporary.
+  bool is_store_target(const nlohmann::json &node) const
+  {
+    return is_converting_lhs && lhs_store_target_ == &node;
+  }
   // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
   // where the division is really code-generated in its execution context.
   // Suppress it while a lambda body is converted at its definition (operands

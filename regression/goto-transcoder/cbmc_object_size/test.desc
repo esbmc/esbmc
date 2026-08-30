@@ -1,0 +1,4 @@
+KNOWNBUG
+cbmc_object_size.goto
+--binary
+^VERIFICATION SUCCESSFUL$
