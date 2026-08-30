@@ -124,6 +124,20 @@ inline bool is_json_none_literal(const nlohmann::json &node)
          node["value"].is_null();
 }
 
+// True when `call` carries any keyword besides "axis" -- used once an axis=
+// value has already been accepted (or explicitly declined as None), to
+// still reject keepdims/where/out/initial/dtype alongside it.
+inline bool
+numpy_reducer_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
+{
+  if (!call.contains("keywords"))
+    return false;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") != "axis")
+      return true;
+  return false;
+}
+
 // Builds a 1-D array_typet value from already-converted elements.
 inline exprt build_1d_numpy_array_value(
   const std::vector<exprt> &elems,

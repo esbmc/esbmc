@@ -3140,20 +3140,6 @@ static bool numpy_reducer_has_unsupported_keywords(const nlohmann::json &call)
   return false;
 }
 
-// Same check, but tolerating a single "axis" keyword -- used once an axis=
-// value has already been accepted, to still reject keepdims/where/out/
-// initial/dtype alongside it.
-static bool
-numpy_reducer_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
-{
-  if (!call.contains("keywords"))
-    return false;
-  for (const auto &kw : call["keywords"])
-    if (kw.value("arg", "") != "axis")
-      return true;
-  return false;
-}
-
 static exprt numpy_cast_to_double(const exprt &value)
 {
   return value.type() == double_type() ? value

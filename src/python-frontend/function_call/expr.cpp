@@ -4176,17 +4176,6 @@ find_any_all_axis_keyword(const nlohmann::json &call)
   return nullptr;
 }
 
-static bool
-numpy_any_all_has_unsupported_keywords_besides_axis(const nlohmann::json &call)
-{
-  if (!call.contains("keywords"))
-    return false;
-  for (const auto &kw : call["keywords"])
-    if (kw.value("arg", "") != "axis")
-      return true;
-  return false;
-}
-
 exprt function_call_expr::reduce_any_all_axis_slice(
   const std::vector<exprt> &elems,
   const std::vector<std::size_t> &shape,
@@ -4257,7 +4246,7 @@ std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
 
   if (
     call_["args"].size() > positional_offset ||
-    numpy_any_all_has_unsupported_keywords_besides_axis(call_))
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
       "TypeError: " + qualifier + func_name +
       "() does not support keepdims, where or out arguments yet");
@@ -4336,12 +4325,12 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
   // try_reduce_any_all_along_axis() above already handled (accepted or
   // rejected) any other axis value, returning nullopt for axis=None
   // specifically -- meaning "flatten", which is exactly the fallback below.
-  // numpy_any_all_has_unsupported_keywords_besides_axis() already tolerates
+  // numpy_reducer_has_unsupported_keywords_besides_axis() already tolerates
   // an axis keyword for that reason; reuse it instead of rejecting every
   // keyword unconditionally.
   if (
     call_["args"].size() > positional_offset ||
-    numpy_any_all_has_unsupported_keywords_besides_axis(call_))
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
       "TypeError: " + qualifier + func_name +
       "() does not support axis, keepdims, where or out arguments yet");
