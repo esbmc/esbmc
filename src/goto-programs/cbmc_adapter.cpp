@@ -236,6 +236,16 @@ irept complex_member(const irept &op, const char *name, const irept &elem)
 
 void fix_expression(irept &irep)
 {
+  // CBMC's programs set the rounding mode through __CPROVER_rounding_mode, but
+  // every float operation migrate builds reads ESBMC's own
+  // c:@__ESBMC_rounding_mode (irep2_expr.h). Two different symbols meant the
+  // write was inert: CBMC proves 1.0/3.0 differs between FE_DOWNWARD and
+  // FE_UPWARD, ESBMC did not. Point the writes at the symbol the reads use.
+  if (
+    irep.id() == "symbol" &&
+    irep.find("identifier").id() == "__CPROVER_rounding_mode")
+    irep.set("identifier", "c:@__ESBMC_rounding_mode");
+
   if (
     irep.id() == "address_of" && !irep.get_sub().empty() &&
     irep.get_sub()[0].id() == "label")

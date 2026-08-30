@@ -981,17 +981,36 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
     stmt.location);
 }
 
-/// Dereferencing a pointer to a function yields a function designator, which
-/// converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`, and
-/// `******f` too. clang_c_adjust::adjust_dereference re-takes the address for
-/// exactly this case; left bare, the code-typed dereference reaches a consumer
+/// `*a` on an array is `a[0]` (C11 6.5.3.2p4 through the 6.3.2.1p3 decay), and
+/// clang_c_adjust::adjust_dereference rewrites it to that index. Left as a
+/// dereference the node reaches the encoder as a pointer built from an array
+/// rather than a named element, and it aborts there: `Unexpected type in
+/// int/ptr typecast`.
+///
+/// Legacy tests `is_array_like`, which also admits a vector; clang rejects
+/// `*v` on one ("indirection requires pointer operand"), so no input reaches
+/// that half and it is not reproduced here. Incomplete arrays need no arm of
+/// their own -- migrate_type gives them array_type2t with size_is_infinite.
+/// Not every shape aborts: `*"abc"` returned a wrong verdict instead.
+///
+/// Then: dereferencing a pointer to a function yields a function designator,
+/// which converts straight back to a pointer (C11 6.3.2.1p4) -- so `*f` is `f`,
+/// and `******f` too. Left bare, the code-typed dereference reaches a consumer
 /// that wants a pointer.
 ///
-/// Only that arm is ported: the array and pointer-subtype arms above it
-/// retype a node the migration already builds with the right type, so no
-/// corpus input distinguishes them.
+/// Legacy's remaining arm retypes the node to the pointer's subtype; the
+/// migration already builds that type, so no corpus input distinguishes it.
 void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
 {
+  const expr2tc pointer = to_dereference2t(expr).value;
+  const type2tc op_type = ns.follow(pointer->type);
+
+  if (is_array_type(op_type))
+    expr = index2tc(
+      to_array_type(op_type).subtype,
+      pointer,
+      gen_zero(migrate_type(index_type())));
+
   if (!is_code_type(expr->type))
     return;
 

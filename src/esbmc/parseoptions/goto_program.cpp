@@ -399,8 +399,9 @@ static void link_cbmc_libc_bodies(goto_functionst &goto_functions)
     "strcat",        "strncat",       "strchr",    "strrchr",  "__fpclassifyf",
     "__fpclassifyd", "__fpclassifyl", "isalnum",   "isalpha",  "isblank",
     "iscntrl",       "isdigit",       "isgraph",   "islower",  "isprint",
-    "ispunct",       "isspace",       "isupper",   "isxdigit", "tolower",
-    "toupper",       "atoi",          "atol",      "strtol"};
+    "fesetround",    "fegetround",    "ispunct",   "isspace",  "isupper",
+    "isxdigit",      "tolower",       "toupper",   "atoi",     "atol",
+    "strtol"};
 
   for (const char *name : libc)
   {
@@ -460,6 +461,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "#include <string.h>\n"
     "#include <ctype.h>\n"
     "#include <stdlib.h>\n"
+    "#include <fenv.h>\n"
     // CBMC's <math.h> lowers fpclassify(x) to __fpclassify{f,d,l}(x). Only
     // __fpclassifyd is new here -- glibc's <math.h> already declares
     // __fpclassifyf/__fpclassifyl (and macOS's declares all three), but none of
@@ -518,6 +520,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
     "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
+    "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
     "int main(void) { return 0; }\n";
   if (fputs(boilerplate, tf.file()) == EOF || fflush(tf.file()) != 0)
