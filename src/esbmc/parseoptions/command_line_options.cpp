@@ -170,6 +170,22 @@ static void segfault_handler(int sig)
   }
   ::raise(sig);
 }
+
+/* Displaces the concise reporter installed before doit(): asking for the
+ * backtrace is explicit intent, so this one does not defer to a handler
+ * somebody else set. */
+static void install_verbose_crash_handler(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("segfault-handler"))
+    return;
+
+  for (int sig : {SIGSEGV, SIGBUS, SIGABRT})
+    install_altstack_handler(sig, segfault_handler, false);
+}
+#else
+static void install_verbose_crash_handler(const cmdlinet &)
+{
+}
 #endif
 
 // This transforms a string representation of a time interval
@@ -671,16 +687,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-#ifndef _WIN32
-  if (cmdline.isset("segfault-handler"))
-  {
-    // Displaces the concise reporter installed before doit(): asking for the
-    // backtrace is explicit intent, so this one does not defer to an existing
-    // handler.
-    for (int sig : {SIGSEGV, SIGBUS, SIGABRT})
-      install_altstack_handler(sig, segfault_handler, false);
-  }
-#endif
+  install_verbose_crash_handler(cmdline);
 
   // parallel solving activates "--multi-property"
   if (cmdline.isset("parallel-solving"))
