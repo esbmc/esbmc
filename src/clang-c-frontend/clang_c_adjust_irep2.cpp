@@ -98,6 +98,15 @@ static bool is_arith_or_bitwise(const expr2tc &expr)
          is_bitor2t(expr) || is_bitxor2t(expr);
 }
 
+/// The shifts clang_c_adjust routes through adjust_expr_shifts. They are not
+/// in is_arith_or_bitwise: C11 6.5.7p3 promotes each operand on its own and
+/// takes the result type from the left, where the usual arithmetic conversions
+/// would bring the two to a common type.
+static bool is_shift(const expr2tc &expr)
+{
+  return is_shl2t(expr) || is_ashr2t(expr) || is_lshr2t(expr);
+}
+
 /// The statements whose controlling expression clang_c_adjust converts to bool
 /// (adjust_ifthenelse, adjust_while, adjust_for). `switch` is not among them:
 /// its selector is an integer.
@@ -282,6 +291,8 @@ void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
 
   if (is_arith_or_bitwise(expr))
     adjust_binary_arith_operands(expr);
+  else if (is_shift(expr))
+    adjust_shift_operands(expr);
 
   if (is_sideeffect_assign2t(expr))
   {
@@ -693,6 +704,39 @@ void clang_c_adjust_irep2::adjust_binary_arith_operands(expr2tc &expr)
     expr = expr->with_type(op0->type);
 }
 
+/// IREP2 form of clang_c_adjust::adjust_expr_shifts. C11 6.5.7p3 performs the
+/// integer promotions on each operand separately -- not the usual arithmetic
+/// conversions -- and 6.5.7p4 gives the result the promoted left operand's
+/// type. A `_Bool` left operand left unpromoted reaches bitwuzla as a
+/// one-bit sort where the shift wants a bitvector, and aborts it.
+///
+/// The `shr` to `lshr`/`ashr` selection legacy also does here has no IREP2
+/// counterpart: there is no `shr2t`, so the migration has already chosen.
+void clang_c_adjust_irep2::adjust_shift_operands(expr2tc &expr)
+{
+  expr2tc op0 = *expr->get_sub_expr(0);
+  expr2tc op1 = *expr->get_sub_expr(1);
+  if (is_nil_expr(op0) || is_nil_expr(op1))
+    return;
+
+  const expr2tc before0 = op0, before1 = op1;
+  c_typecastt c_typecast(ns);
+  c_typecast.implicit_typecast_arithmetic(op0);
+  c_typecast.implicit_typecast_arithmetic(op1);
+
+  if (op0 != before0 || op1 != before1)
+  {
+    unsigned i = 0;
+    expr->Foreach_operand(
+      [&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  }
+
+  if (
+    is_number_type(op0->type) && is_number_type(op1->type) &&
+    expr->type != op0->type)
+    expr = expr->with_type(op0->type);
+}
+
 /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's "assign" case:
 /// the node takes the target's type and the source converts to it. The compound
 /// operators ("assign+", ...) are a larger arm carrying a complex lowering of
@@ -881,6 +925,54 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
     to_sideeffect2t(expr).operand = deref;
 }
 
+/// True when \p arg is bound to parameter \p i of \p callee rather than
+/// converted to its type -- `va_start(ap, n)` hands the callee `&ap`.
+///
+/// `pointer_type2t` has no field for the `#reference` bit
+/// `clang_c_convertert::get_type` sets, so `migrate_type` drops it and the rule
+/// `c_typecastt::implicit_typecast_followed` applies on the legacy path cannot
+/// be stated against the IREP2 types. It survives on the symbol's legacy
+/// `typet`, which is what this reads -- the same route the implicit-callee arm
+/// above already takes to recover a base name. The rest of the conjunction is
+/// legacy's own precondition, kept whole so the two paths decide alike.
+///
+/// Whether a parameter is a reference is a property of the target, not of the
+/// callee's name: clang's `A` builtin-type code is an lvalue reference where
+/// `__builtin_va_list` is a pointer or a struct, and an already-decayed
+/// pointer where it is an array (x86-64 Linux). Reading the bit follows the
+/// target; a name test would take the address on both.
+static bool binds_by_reference(
+  const expr2tc &callee,
+  const expr2tc &arg,
+  const type2tc &param,
+  std::size_t i,
+  const contextt &context,
+  const namespacet &ns)
+{
+  // address_of2t asserts its operand is not another address_of, so a caller
+  // that already took the address is left alone.
+  if (is_address_of2t(arg) || !is_pointer_type(param) || arg->type == param)
+    return false;
+
+  // Both sides are followed: a `struct __va_list` va_list (aarch64) reaches
+  // here as a symbol type on the argument and a struct type under the
+  // parameter, and comparing them unfollowed misses the binding.
+  if (
+    ns.follow(to_pointer_type(param).subtype)->type_id !=
+    ns.follow(arg->type)->type_id)
+    return false;
+
+  if (!is_symbol2t(callee))
+    return false;
+
+  const symbolt *s = context.find_symbol(to_symbol2t(callee).thename);
+  if (s == nullptr || !s->get_type().is_code())
+    return false;
+
+  const code_typet::argumentst &decl = to_code_type(s->get_type()).arguments();
+  return i < decl.size() && is_lvalue_or_rvalue_reference(decl[i].type());
+}
+
 void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
 {
   expr2tc callee;
@@ -924,6 +1016,15 @@ void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
       // conversion (§100.1).
       if (same_function_pointer_ignoring_argument_names(arg->type, params[i]))
         continue;
+
+      // Converted instead of bound, `va_start` gets the va_list's own value
+      // and the callee initialises whatever that value happens to point at.
+      if (binds_by_reference(callee, arg, params[i], i, context, ns))
+      {
+        arg = address_of2tc(arg->type, arg);
+        continue;
+      }
+
       c_implicit_typecast(arg, params[i], ns);
     }
     else if (is_array_type(ns.follow(arg->type)))
