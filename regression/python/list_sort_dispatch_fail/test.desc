@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 8
+^VERIFICATION FAILED$
+^ *FAILED .*assertion .*value == 7$
