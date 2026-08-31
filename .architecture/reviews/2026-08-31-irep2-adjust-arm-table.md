@@ -487,4 +487,97 @@ reviewer is entitled to weigh it differently.
 
 ## Design
 
-Written at step 4; see below.
+Three interfaces were designed in parallel by sub-agents briefed to differ
+radically, then adjudicated by a fourth that authored none of them, against
+depth, locality, seam placement, test surface and blast radius in that order.
+
+### A — minimal surface *(winner)*
+
+An ordered `static const arm arms[]` of `{name, run, when}`, walked by one loop.
+`adjust_sole_arms` becomes four lines; `adjust_sole_arms_tail` is deleted. A
+public `arm_order()` returns `{name, when}` only — the rewrite pointers stay
+private. An `ARM(member)` macro welds the name string to the member it names so
+the two cannot drift.
+
+### B — phase-tagged registry *(runner-up design)*
+
+The same table plus `arm_phase` (pre/post), `arm_mode` (always/sole), an
+`expr_ids` fast-path and name-based dependency edges, absorbing `adjust_expr`'s
+own dispatch as well as the chain.
+
+### C — optimised for the test surface
+
+The same table, contributing the diagnosis of why the pass had no unit tests and
+the Catch2 tests themselves.
+
+### Adjudication
+
+**A wins.** On **seam placement**, all 22 chain arms are already
+`void(expr2tc &)`, so a chain-scoped table needs *zero* adapters; absorbing
+`adjust_expr` forces one, because `declare_implicit_callee` takes a location and
+its pre-order call site passes a *different node* (`stmt.operand`), so that row
+is not an arm over `expr` at all. B's machinery is leverage bought for a
+variation point with one instance: `python_adjust` is not a second **adapter** —
+its `adjust_expr` is a single 347-NLOC, CCN-128 cascade of inline blocks and no
+member of it carries the arm signature. B's own author reached that conclusion
+mid-design and withdrew the shared-registry justification.
+
+On **locality**, B splits what it claims to concentrate: absorbing `adjust_expr`
+cannot absorb `adjust_expr`, because the nil guard, the pre-order call, the
+`enclosing_location` save/restore *around* the recursion and the recursion
+itself are not table-expressible. Behaviour would end up in two places that must
+be read together.
+
+On **depth measured as leverage**, A adds one public symbol. A publicly callable
+table — C's proposal — would publish invocable handles to 24 private arms, and
+buys nothing: `adjust_expr` is already public, and because the guards are
+kind-disjoint a hand-built node of the right kind is claimed by the one arm
+under test and passed over by the rest. So the arm-level tests drive
+`adjust_expr` and need no widening. The one thing exposing `when` *does* buy is
+asserting which arm **claims** a node, which is why `arm_order()` carries the
+predicate and not just the name.
+
+### Two decisions the designs left open
+
+**The table publishes `when`, not `run`.** Predicates are pure free functions
+over a public type and leak nothing already private; rewrite pointers would hand
+every caller a handle to run an arm out of order.
+
+**The one real exclusion is folded into a predicate, not carried as a flag.**
+`is_complex_unary` is a strict subset of `is_neg2t||is_bitnot2t`, so the chain's
+`else` was load-bearing; it becomes
+`is_promotable_unary = (neg||bitnot) && !is_complex_type`. The other `else` —
+`is_arith_or_bitwise` over `is_shift` — guards disjoint `expr_id`s and was only
+an optimisation, so both become plain rows and a test pins the disjointness.
+
+### The fold is pinned by the unit test, not by the regression suite
+
+The adjudication made the fold conditional: mutate it — drop `&& !is_complex_type`
+— and confirm `regression/esbmc/irep2_only_complex_unary_sideeffect` flips off
+`^VERIFICATION SUCCESSFUL$`; if it does not flip, fall back to carrying the
+exclusion as an `after_miss` flag on the row.
+
+**It does not flip.** All four `irep2_only_complex_unary*` tests still pass with
+the conjunct removed. The reason is not a coverage gap, and it is worth stating
+because it changes what the fold is for:
+
+```cpp
+void clang_c_adjust_irep2::promote_unary_bool_operand(expr2tc &expr)
+{
+  const expr2tc &op = *expr->get_sub_expr(0);
+  if (is_nil_expr(op) || !is_bool_type(op->type) || is_bool_type(expr->type))
+    return;
+```
+
+A complex-typed `neg2t` or `bitnot2t` has a complex-typed operand, never a bool
+one, so the arm returns immediately on exactly the nodes the exclusion excludes.
+The chain's `else`, an `after_miss` flag and the folded conjunct are therefore
+all three behaviourally identical, and **no end-to-end test can separate them**.
+
+The fold was kept. Its warrant is not that an integration test pins it — none
+can — but that it states structurally what is currently true only by accident of
+another arm's early return, and the new unit test pins it at the guard level:
+removing the conjunct fails the partition assertion. Carrying `after_miss`
+instead would reintroduce order-coupling between two rows for no behavioural
+difference. A reviewer who prefers the flag can have it; the change is local to
+one row and one predicate.
