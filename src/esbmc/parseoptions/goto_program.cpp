@@ -480,6 +480,14 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     // Takes the pointer *by value*: unlike the assume-side variants, which get
     // &p so they can write a fresh object back through it, CBMC hands the
     // check-side ones the pointer itself.
+    // Declared here rather than in the shared intrinsics preamble: a
+    // prototype visible to *every* translation unit makes each native
+    // __builtin_object_size call convert its argument to const void *, so the
+    // address-of a member arrives as a typecast and the object's own type is
+    // lost (regression/extensions/builtin_object_size8). Only this boilerplate
+    // calls it by name; the migrated CBMC irep gets its symbol from
+    // lift_call_expressions().
+    "__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);\n"
     "_Bool __cbmc_is_fresh_check_impl(void *q, __SIZE_TYPE__ n)\n"
     "{\n"
     "  if (q == 0)\n"
