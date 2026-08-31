@@ -23,8 +23,8 @@
 //     index needing a width the construction does not give it
 //
 // What this needs is for the snapshot to be taken of a pointed-to region rather
-// than of a named object; see github_4219_old_in_forall_array_param_knownbug,
-// which needs the same thing for a different reason.
+// than of a named object; see github_4219_old_in_forall_array_param, which
+// needed the same thing for a different reason (and now has it, #7057).
 #define N 4
 #define BOUND 100
 

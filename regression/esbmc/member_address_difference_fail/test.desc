@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 6
+^VERIFICATION FAILED$
+the members are not nine bytes apart

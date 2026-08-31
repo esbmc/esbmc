@@ -1165,6 +1165,40 @@ bool __ESBMC_list_slice_assign(
   return true;
 }
 
+/* Find the first element equal to item and shift the tail left over it.
+ * Search and shift are kept in separate loops: nesting them makes symex
+ * emit one full shift per candidate index, which is quadratic in the list
+ * length (see #7361). */
+static bool __ESBMC_list_remove_first(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      break;
+    i++;
+  }
+
+  if (i == l->size)
+    return false;
+
+  size_t j = i;
+  while (j < l->size - 1)
+  {
+    l->items[j] = l->items[j + 1];
+    j++;
+  }
+  l->size--;
+  return true;
+}
+
 bool __ESBMC_list_remove(
   PyListObject *l,
   const void *item,
@@ -1173,31 +1207,7 @@ bool __ESBMC_list_remove(
 {
   __ESBMC_assert(l != NULL, "ValueError: list is null");
 
-  size_t i = 0;
-  while (i < l->size)
-  {
-    const PyObject *elem = &l->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        /* Shift elements left to fill the gap */
-        size_t j = i;
-        while (j < l->size - 1)
-        {
-          l->items[j] = l->items[j + 1];
-          j++;
-        }
-        l->size--;
-        return true; /* found and removed */
-      }
-    }
-    i++;
-  }
-
-  /* Item not found */
-  return false;
+  return __ESBMC_list_remove_first(l, item, item_type_id, item_size);
 }
 
 /* set.add(elem) — append elem to the underlying list iff it is not
@@ -1226,29 +1236,7 @@ bool __ESBMC_set_discard(
 {
   __ESBMC_assert(s != NULL, "ValueError: set is null");
 
-  size_t i = 0;
-  while (i < s->size)
-  {
-    const PyObject *elem = &s->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        size_t j = i;
-        while (j < s->size - 1)
-        {
-          s->items[j] = s->items[j + 1];
-          j++;
-        }
-        s->size--;
-        return true;
-      }
-    }
-    i++;
-  }
-
-  return false;
+  return __ESBMC_list_remove_first(s, item, item_type_id, item_size);
 }
 
 void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
@@ -1276,45 +1264,71 @@ void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
 
       bool prev_greater = false;
 
-      if (prev->size == 8 && type_flag == 0)
+      // Dispatch on type_flag, not on prev->size. type_flag is a literal from
+      // the frontend, so symex decides it and never enters the arm it did not
+      // select; prev->size is a field read through the element array, which
+      // does not fold, so leading with it made every numeric comparison also
+      // symex the memcmp below and unwind its byte loop to --unwind (#7361's
+      // defect class, docs/roadmap/symex-dead-work-cost-plan.md §3).
+      if (type_flag != 2)
       {
-        // All-integer list: compare as int64_t.
-        // Stays entirely in integer arithmetic — fast for the SMT solver.
-        int64_t a = *(const int64_t *)prev->value;
-        int64_t b = *(const int64_t *)tmp.value;
-        prev_greater = (a > b);
-      }
-      else if (prev->size == 8 && type_flag == 1)
-      {
-        // All-float list: read bits directly as IEEE 754 double.
-        double a = *(const double *)prev->value;
-        double b = *(const double *)tmp.value;
-        prev_greater = (a > b);
-      }
-      else if (prev->size == 8 && type_flag == 3)
-      {
-        // Mixed int + float list.
-        // Per-element dispatch: check each element's own type_id.
-        //   float element → read bits as double
-        //   int element   → numeric cast (double)(int64_t)  [exact up to 2^53]
-        double a = (prev->type_id == float_type_id)
-                     ? (*(const double *)prev->value)
-                     : ((double)(*(const int64_t *)prev->value));
-        double b = (tmp.type_id == float_type_id)
-                     ? (*(const double *)tmp.value)
-                     : ((double)(*(const int64_t *)tmp.value));
-        prev_greater = (a > b);
+        // Numeric list: no lexicographic arm. The frontend widens every
+        // numeric element to 8 bytes (bools arrive as bool_as_long), so the
+        // size-1 arm below is currently unreachable and kept only because
+        // removing it is a separate change; a byte compare of two numbers
+        // would be wrong anyway, which is why the memcmp arm is gone.
+        if (prev->size == 8)
+        {
+          if (type_flag == 0)
+          {
+            // All-integer list: compare as int64_t.
+            // Stays entirely in integer arithmetic — fast for the SMT solver.
+            int64_t a = *(const int64_t *)prev->value;
+            int64_t b = *(const int64_t *)tmp.value;
+            prev_greater = (a > b);
+          }
+          else if (type_flag == 1)
+          {
+            // All-float list: read bits directly as IEEE 754 double.
+            double a = *(const double *)prev->value;
+            double b = *(const double *)tmp.value;
+            prev_greater = (a > b);
+          }
+          else if (type_flag == 3)
+          {
+            // Mixed int + float list.
+            // Per-element dispatch: check each element's own type_id.
+            //   float element → read bits as double
+            //   int element   → numeric cast (double)(int64_t) [exact to 2^53]
+            double a = (prev->type_id == float_type_id)
+                         ? (*(const double *)prev->value)
+                         : ((double)(*(const int64_t *)prev->value));
+            double b = (tmp.type_id == float_type_id)
+                         ? (*(const double *)tmp.value)
+                         : ((double)(*(const int64_t *)tmp.value));
+            prev_greater = (a > b);
+          }
+        }
+        else if (prev->size == 1)
+        {
+          // bool / single-byte
+          uint8_t a = *(const uint8_t *)prev->value;
+          uint8_t b = *(const uint8_t *)tmp.value;
+          prev_greater = (a > b);
+        }
       }
       else if (prev->size == 1)
       {
-        // bool / single-byte
+        // The empty string, whose only byte is the terminator. Kept ahead of
+        // the memcmp arm so this reads exactly as it did before the dispatch
+        // was reordered.
         uint8_t a = *(const uint8_t *)prev->value;
         uint8_t b = *(const uint8_t *)tmp.value;
         prev_greater = (a > b);
       }
       else
       {
-        // type_flag == 2: string / lexicographic comparison.
+        // String / lexicographic comparison.
         //
         // Must use min(prev->size, tmp->size) as the memcmp length.
         // Using prev->size alone reads past the end of tmp's buffer when

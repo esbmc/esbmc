@@ -4,6 +4,7 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
@@ -2449,6 +2450,40 @@ exprt function_call_expr::handle_set_method() const
     *set_symbol, other, call_, method_name);
 }
 
+// True when the receiver is a Name resolving to a tracked numpy view
+// (a copied row/column/diagonal, a transpose, or a reshape) rather than a
+// genuine list/other object. Split out of is_list_method_call() to keep
+// that already-large function's own decision count down.
+bool function_call_expr::receiver_is_tracked_numpy_view(
+  const std::string &recv_type) const
+{
+  if (recv_type != "Name")
+    return false;
+
+  const std::string root_id = converter_.resolve_name_symbol_id(
+    call_["func"]["value"]["id"].get<std::string>());
+  return !root_id.empty() && converter_.is_tracked_numpy_view_id(root_id);
+}
+
+// pop()/copy()/clear() are each shared between list and dict; disambiguate
+// by treating a BinOp receiver (dicts have no arithmetic operators) or one
+// resolving to a list-typed symbol as the list method, anything else as not
+// (falling through to handle_dict_method()). Split out of
+// is_list_method_call() -- shared by its three near-identical call sites --
+// to keep that function's own decision count down.
+bool function_call_expr::receiver_is_binop_or_list_symbol() const
+{
+  if (
+    call_["func"].contains("value") &&
+    call_["func"]["value"].contains("_type") &&
+    call_["func"]["value"]["_type"] == "BinOp")
+    return true;
+
+  std::string dummy;
+  const symbolt *sym = get_object_list_symbol(dummy);
+  return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -2482,64 +2517,16 @@ bool function_call_expr::is_list_method_call() const
     return sym != nullptr && sym->get_type() == list_type;
   }
 
-  // "pop" is shared between list and dict. Disambiguate using the actual
-  // symbol type: only treat as list.pop() when the receiver resolves to a
-  // symbol whose type is the list type.
-  if (method_name == "pop")
-  {
-    // A BinOp receiver (e.g., (s1 - s2).pop()) is always a set/list: dicts
-    // do not support arithmetic operators. handle_list_pop() already handles
-    // this case, so route it here before the symbol-type check.
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
-  }
-
-  // "copy" is shared between list and dict. Treat as list.copy() only when
-  // the receiver resolves to a list symbol; otherwise let dispatch fall
-  // through to handle_dict_method().
-  if (method_name == "copy")
-  {
-    // BinOp receivers (e.g. (s1 - s2).copy()) are list-like, since dicts do
-    // not support arithmetic operators.
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
-  }
-
-  // "clear" is shared between list and dict. Treat as list.clear() only when
-  // the receiver resolves to a list symbol; otherwise fall through to
-  // handle_dict_method(). Without this guard a dict receiver was claimed by
+  // "pop"/"copy"/"clear" are each shared between list and dict; a BinOp
+  // receiver (e.g. (s1 - s2).pop()) is always list-like, since dicts do not
+  // support arithmetic operators, and otherwise only a receiver resolving to
+  // a list-typed symbol counts -- see receiver_is_binop_or_list_symbol().
+  // Without the "clear" case of this guard a dict receiver was claimed by
   // the catch-all below and passed to __ESBMC_list_clear, which dereferenced
   // the dict struct as a PyListObject and reported a spurious out-of-bounds
   // (VERIFICATION FAILED).
-  if (method_name == "clear")
-  {
-    if (
-      call_["func"].contains("value") &&
-      call_["func"]["value"].contains("_type") &&
-      call_["func"]["value"]["_type"] == "BinOp")
-      return true;
-
-    std::string dummy;
-    const symbolt *sym = get_object_list_symbol(dummy);
-    const typet list_type = type_handler_.get_list_type();
-    return sym != nullptr && sym->get_type() == list_type;
-  }
+  if (method_name == "pop" || method_name == "copy" || method_name == "clear")
+    return receiver_is_binop_or_list_symbol();
 
   // append/insert/remove/extend/sort/reverse/appendleft/popleft are list-only
   // mutators. The #6264 crash is specifically a *character array* (str/bytes)
@@ -2567,6 +2554,20 @@ bool function_call_expr::is_list_method_call() const
     // get_object_list_symbol() in the handler, so claim it without converting.
     if (contains_call(call_["func"]["value"]))
       return true;
+
+    // A numpy view (a copied row/column/diagonal, a transpose, or a reshape)
+    // is never a PyListObject*, whatever its own resolved type looks like --
+    // a copied view in particular is backed by the same array_typet as a
+    // plain array, so the is_array() check below would otherwise still
+    // claim it here. Decline so a mutating call like sort() falls through to
+    // try_numpy_inplace_sort()'s own correct rejection ("writing through a
+    // copied numpy view is not supported") instead of being misrouted into
+    // the list model, which dereferences the array as a PyListObject* and
+    // crashes (confirmed: `row = a[0]; row.sort()` used as a value). Split
+    // out to keep this already-large function's own decision count down.
+    if (receiver_is_tracked_numpy_view(recv_type))
+      return false;
+
     const exprt recv = converter_.get_expr(call_["func"]["value"]);
     return !converter_.ns.follow(recv.type()).is_array();
   }
@@ -2752,16 +2753,6 @@ exprt function_call_expr::handle_numpy_astype() const
   converter_.add_instruction(while_stmt);
 
   return build_symbol(result_sym);
-}
-
-/// A function name used as a value decays to a function pointer, as it already
-/// does in call-argument position. Storing the code symbol itself aborts
-/// conversion with "got invalid code for function" (#6640).
-static exprt decay_function_to_pointer(const exprt &value)
-{
-  if (!value.type().is_code() || !value.is_symbol())
-    return value;
-  return python_expr::build_address_of(value);
 }
 
 exprt function_call_expr::handle_list_append() const
@@ -4015,8 +4006,8 @@ exprt function_call_expr::handle_general_function_call()
   const std::string &func_name = function_id_.get_function();
   std::string actual_func_name = func_name;
 
-  if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
-    return *materialized;
+  if (std::optional<exprt> numpy_method = try_numpy_tolist_or_inplace_sort())
+    return *numpy_method;
 
   // Fast-path: sorted() over a concrete int/tuple list can be materialized
   // directly in the frontend (see try_fold_sorted), avoiding the runtime
@@ -4150,6 +4141,157 @@ std::optional<exprt> function_call_expr::try_materialize_numpy_tolist()
   return std::nullopt;
 }
 
+// Literal axis= only (matches every other axis-aware reducer's own recut):
+// no positional axis, no symbolic axis. Delegates to the same
+// try_extract_numeric_constant every other reducer's own literal-axis
+// parsing (extract_literal_axis_keyword, numpy_call_expr.cpp) uses, so this
+// accepts exactly the same spellings instead of hand-rolling a narrower
+// Constant/UnaryOp(USub) check that could silently drift out of sync with
+// it.
+static std::optional<long long>
+extract_any_all_axis_literal(const nlohmann::json &node)
+{
+  numeric_value axis_value;
+  if (!try_extract_numeric_constant(node, axis_value) || !axis_value.is_int)
+    return std::nullopt;
+  return axis_value.int_value;
+}
+
+static const nlohmann::json *
+find_any_all_axis_keyword(const nlohmann::json &call)
+{
+  if (!call.contains("keywords"))
+    return nullptr;
+  for (const auto &kw : call["keywords"])
+    if (kw.value("arg", "") == "axis")
+      return &kw["value"];
+  return nullptr;
+}
+
+exprt function_call_expr::reduce_any_all_axis_slice(
+  const std::vector<exprt> &elems,
+  const std::vector<std::size_t> &shape,
+  long long normalized_axis,
+  std::size_t k,
+  ReduceOp op) const
+{
+  const std::size_t cols = shape[1];
+  const std::size_t count = normalized_axis == 0 ? shape[0] : cols;
+  const std::size_t first_idx = normalized_axis == 0 ? k : k * cols;
+  const std::size_t stride = normalized_axis == 0 ? cols : 1;
+
+  exprt result = compute_element_truthiness(elems[first_idx]);
+  for (std::size_t i = 1; i < count; ++i)
+    result = combine_truthiness(
+      result, compute_element_truthiness(elems[first_idx + (i * stride)]), op);
+  return result;
+}
+
+exprt function_call_expr::reduce_any_all_rank1(
+  const std::vector<exprt> &elems,
+  ReduceOp op) const
+{
+  exprt result = compute_element_truthiness(elems.front());
+  for (std::size_t i = 1; i < elems.size(); ++i)
+    result =
+      combine_truthiness(result, compute_element_truthiness(elems[i]), op);
+  return result;
+}
+
+void function_call_expr::validate_any_all_axis_shape(
+  const std::vector<std::size_t> &shape,
+  const std::string &func_name,
+  const std::string &qualifier)
+{
+  const std::size_t rank = shape.size();
+  if (rank != 1 && rank != 2)
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name +
+      "() axis requires a 1-D or 2-D array");
+
+  if (shape[0] == 0 || (rank == 2 && shape[1] == 0))
+    throw std::runtime_error(
+      "ValueError: zero-size array to " + qualifier + func_name +
+      "() reduction has no identity");
+}
+
+std::optional<exprt> function_call_expr::try_reduce_any_all_along_axis(
+  const std::string &func_name,
+  const std::string &qualifier,
+  const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized,
+  std::size_t positional_offset)
+{
+  const nlohmann::json *axis_kw = find_any_all_axis_keyword(call_);
+  // axis=None (a Constant node whose value is JSON null, not a bare JSON
+  // null at this position) means "flatten", falling through to the
+  // no-axis path -- axis_kw->is_null() alone never matches that shape, so
+  // an explicit axis=None fell into extract_any_all_axis_literal() and
+  // threw "requires a literal axis" instead.
+  if (
+    axis_kw == nullptr || axis_kw->is_null() || is_json_none_literal(*axis_kw))
+    return std::nullopt;
+
+  std::optional<long long> axis = extract_any_all_axis_literal(*axis_kw);
+  if (!axis)
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name + "() requires a literal axis");
+
+  if (
+    call_["args"].size() > positional_offset ||
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
+    throw std::runtime_error(
+      "TypeError: " + qualifier + func_name +
+      "() does not support keepdims, where or out arguments yet");
+
+  validate_any_all_axis_shape(materialized.first, func_name, qualifier);
+  const std::size_t rank = materialized.first.size();
+  const long long normalized = normalize_reducer_axis(*axis, rank);
+  const ReduceOp op = func_name == "any" ? ReduceOp::Any : ReduceOp::All;
+
+  if (rank == 1)
+    return reduce_any_all_rank1(materialized.second, op);
+
+  const std::size_t out_len =
+    normalized == 0 ? materialized.first[1] : materialized.first[0];
+
+  std::vector<exprt> results;
+  results.reserve(out_len);
+  for (std::size_t k = 0; k < out_len; ++k)
+    results.push_back(reduce_any_all_axis_slice(
+      materialized.second, materialized.first, normalized, k, op));
+
+  return build_1d_numpy_array_value(results, type_handler_);
+}
+
+std::optional<function_call_expr::any_all_receiver>
+function_call_expr::resolve_any_all_receiver(const std::string &func_name)
+{
+  // Method form `a.any(...)`: the receiver is the Attribute's own base and
+  // any real argument arrives via keywords (any/all are not in
+  // dispatch_rewrite_methods, so unlike sum/mean/..., this call is never
+  // normalized into the free-function shape first).
+  if (
+    auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+      call_["func"]["value"],
+      "TypeError: numpy.ndarray." + func_name +
+        "() currently supports rank 1 or 2 arrays"))
+    return any_all_receiver{std::move(*materialized), "numpy.ndarray.", 0};
+
+  // Free-function form `np.any(a, ...)`: the array is the first positional
+  // argument instead.
+  if (call_["args"].empty())
+    return std::nullopt;
+
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    call_["args"][0],
+    "TypeError: numpy." + func_name +
+      "() currently supports rank 1 or 2 arrays");
+  if (!materialized)
+    return std::nullopt;
+
+  return any_all_receiver{std::move(*materialized), "numpy.", 1};
+}
+
 std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
 {
   const std::string &func_name = function_id_.get_function();
@@ -4158,21 +4300,34 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
     return std::nullopt;
 
-  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
-    call_["func"]["value"],
-    "TypeError: numpy.ndarray." + func_name +
-      "() currently supports rank 1 or 2 arrays");
-  if (!materialized)
+  std::optional<any_all_receiver> receiver =
+    resolve_any_all_receiver(func_name);
+  if (!receiver)
     return std::nullopt;
+  const std::string &qualifier = receiver->qualifier;
+  const std::size_t positional_offset = receiver->positional_offset;
+  const auto &materialized = receiver->materialized;
 
   if (
-    !call_["args"].empty() ||
-    (call_.contains("keywords") && !call_["keywords"].empty()))
+    std::optional<exprt> axis_result = try_reduce_any_all_along_axis(
+      func_name, qualifier, materialized, positional_offset))
+    return axis_result;
+
+  // An "axis" keyword can only still be present here with value None:
+  // try_reduce_any_all_along_axis() above already handled (accepted or
+  // rejected) any other axis value, returning nullopt for axis=None
+  // specifically -- meaning "flatten", which is exactly the fallback below.
+  // numpy_reducer_has_unsupported_keywords_besides_axis() already tolerates
+  // an axis keyword for that reason; reuse it instead of rejecting every
+  // keyword unconditionally.
+  if (
+    call_["args"].size() > positional_offset ||
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
-      "TypeError: numpy.ndarray." + func_name +
+      "TypeError: " + qualifier + func_name +
       "() does not support axis, keepdims, where or out arguments yet");
 
-  const std::vector<exprt> &elems = materialized->second;
+  const std::vector<exprt> &elems = materialized.second;
   if (elems.empty())
     return func_name == "all" ? migrate_expr_back(gen_true_expr())
                               : migrate_expr_back(gen_false_expr());
@@ -4183,6 +4338,120 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     result =
       combine_truthiness(result, compute_element_truthiness(elems[i]), op);
   return result;
+}
+
+// bubble_sort_numpy_elems() below unrolls an O(n^2) network of if_exprt
+// swaps at conversion time -- fine for the small concrete arrays this
+// recut targets, but a large n would blow up both frontend time and the
+// resulting SMT formula. Reject explicitly past this bound rather than
+// letting it silently degrade (ADR-NP-003 principle 3), the same way
+// numpy.arange()'s own max_materialized_arange_elements does for its
+// unrelated blow-up risk.
+static constexpr std::size_t max_inplace_sort_elements = 64;
+
+// A conversion-time-unrolled bubble sort over already-converted elements,
+// swapping via if_exprt rather than extracting a C++ comparison key -- the
+// same style reduce_numpy_descriptor_values's own min/max branches use
+// (binary_relation_exprt directly on the elems), so this works uniformly
+// across every element type get_expr can produce here (int/float/bool),
+// concrete or symbolic alike, rather than only a literal-foldable one.
+static void bubble_sort_numpy_elems(std::vector<exprt> &elems)
+{
+  for (std::size_t pass = 0; pass + 1 < elems.size(); ++pass)
+  {
+    for (std::size_t j = 0; j + pass + 1 < elems.size(); ++j)
+    {
+      binary_relation_exprt out_of_order(elems[j], ">", elems[j + 1]);
+      exprt lo = if_exprt(out_of_order, elems[j + 1], elems[j]);
+      exprt hi = if_exprt(out_of_order, elems[j], elems[j + 1]);
+      elems[j] = lo;
+      elems[j + 1] = hi;
+    }
+  }
+}
+
+void function_call_expr::reject_numpy_sort_write_through_view(
+  const nlohmann::json &receiver_node) const
+{
+  if (receiver_node.value("_type", "") != "Name")
+    return;
+
+  const std::string root_id =
+    converter_.resolve_name_symbol_id(receiver_node["id"].get<std::string>());
+  if (!root_id.empty() && converter_.is_tracked_numpy_view_id(root_id))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() does not support writing through a "
+      "numpy view yet");
+}
+
+std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
+{
+  if (
+    function_id_.get_function() != "sort" ||
+    call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
+    return std::nullopt;
+
+  const nlohmann::json &receiver_node = call_["func"]["value"];
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    receiver_node,
+    "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
+  if (!materialized)
+    return std::nullopt;
+
+  // Writing through a copied view is rejected everywhere else this call
+  // shape mutates (fill()/the bare-statement form of sort() itself); this
+  // is the same check, reused so the assignment/expression-value form
+  // (`x = row.sort()`) is rejected identically instead of falling through
+  // to materialize and sort the copy's own storage.
+  converter_.reject_numpy_view_mutating_method_call(call_);
+
+  reject_numpy_sort_write_through_view(receiver_node);
+
+  // Keywords/positional args are rejected ahead of the shape check so a 2-D
+  // receiver called with an unsupported argument reports the argument
+  // error, matching argsort()/searchsorted()'s own validation order in
+  // this file.
+  if (
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() does not support axis, kind or order "
+      "arguments yet");
+
+  if (materialized->first.size() != 1)
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
+
+  std::vector<exprt> elems = materialized->second;
+  if (elems.empty())
+    return gen_zero(none_type()); // sorting an empty array is a no-op
+
+  if (elems.size() > max_inplace_sort_elements)
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() currently supports arrays up to " +
+      std::to_string(max_inplace_sort_elements) + " elements");
+
+  bubble_sort_numpy_elems(elems);
+
+  exprt receiver = converter_.get_expr(receiver_node);
+  if (
+    !receiver.is_symbol() || !converter_.ns.follow(receiver.type()).is_array())
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() requires a named array variable");
+
+  code_assignt assign(
+    receiver, build_1d_numpy_array_value(elems, type_handler_));
+  assign.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(assign);
+
+  return gen_zero(none_type()); // sort() mutates in place, returns None
+}
+
+std::optional<exprt> function_call_expr::try_numpy_tolist_or_inplace_sort()
+{
+  if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
+    return materialized;
+  return try_numpy_inplace_sort();
 }
 
 std::optional<exprt> function_call_expr::try_fold_sorted()

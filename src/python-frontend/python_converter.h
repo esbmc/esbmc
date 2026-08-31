@@ -860,6 +860,14 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
+  /// @p method_name under @p base_class, as the module that defines the base
+  /// spells it, or null when the base is not imported.
+  symbolt *find_method_in_imported_base(
+    const nlohmann::json &base_class_node,
+    const std::string &base_class,
+    const std::string &method_name,
+    bool is_ctor) const;
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
@@ -967,6 +975,20 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  /// Carries the list element-type map from @p rhs to @p lhs on a
+  /// container-level list assignment, resolving dict `.keys`/`.values`
+  /// members to the dict's internal list symbol.
+  void propagate_list_type_info(
+    const exprt &lhs,
+    const exprt &rhs,
+    symbolt *lhs_symbol);
+
+  /// Propagates the element-type map of the list backing a dict's `.keys` /
+  /// `.values` member expression @p rhs onto @p lhs_identifier.
+  void propagate_dict_member_list_type_info(
+    const exprt &rhs,
+    const std::string &lhs_identifier);
+
   // =========================================================================
   // Dictionary assignment helper methods
   // =========================================================================
@@ -1031,6 +1053,35 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
+  /**
+   * @brief Preserves the concrete result type of a np.<reducer>(a, axis=...)
+   * RHS instead of trusting the static annotator's guess.
+   *
+   * numpy.py necessarily declares sum/prod/mean/min/max/argmin/argmax's
+   * return type as `Any`, since their real shape is data-dependent (a scalar
+   * when flattened, an array along an axis); the static annotator resolves
+   * that ambiguity either to `Any` (void*) or, for some of these, to a plain
+   * scalar type guessed from the argument literal -- both wrong once axis=
+   * makes the real result a concrete array, and both would box/truncate the
+   * array numpy_call_expr's axis-aware fast paths actually produce, which
+   * can't be indexed afterwards. Unlike resolve_any_subscript_array_type,
+   * this does NOT gate on current_type being any_type() first: a wrong
+   * scalar guess needs overriding too. It is instead scoped narrowly by
+   * shape: a `Call` RHS whose callee is an attribute access on a name
+   * resolving to the imported numpy module, naming one of the functions
+   * above, and carrying a literal `axis=` keyword -- a shape that, on
+   * success, only ever produces a 1-D array result, so trusting a probe of
+   * the real call over the static guess is always correct here.
+   *
+   * @param ast_node The assignment AST node.
+   * @param current_type The current LHS type.
+   * @return The probed call result type, or the unmodified `current_type`
+   *   when the RHS does not match that shape.
+   */
+  typet resolve_numpy_reducer_call_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
   std::string resolve_name_symbol_id(const std::string &name) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
@@ -1045,6 +1096,17 @@ private:
   bool is_numpy_view_copy_call_node(const nlohmann::json &node) const;
 
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
+  // itself returns a numpy array is never an is_numpy_array_constructor_expr
+  // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type
+  // already reflects the array-return fix by the time update_numpy_array_
+  // binding runs, so trust it instead of duplicating that resolution here.
+  // Split out of update_numpy_array_binding to keep its own decision count
+  // from growing further.
+  bool is_array_returning_call_expr(
+    const nlohmann::json &rhs_node,
+    const exprt &lhs) const;
 
   bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
 
@@ -1161,6 +1223,15 @@ private:
   bool return_value_uses_call_argument(
     const nlohmann::json &return_value,
     const nlohmann::json &call_node) const;
+
+  // return <call>(<param>, ...), e.g. `def transposed(a): return
+  // np.transpose(a)`: true when every Name the call expression references is
+  // either one of `params` or an imported module alias. Split out of
+  // return_value_uses_call_argument to keep that function's own decision
+  // count down.
+  bool return_call_only_references_params_or_modules(
+    const nlohmann::json &return_value,
+    const nlohmann::json &params) const;
 
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
   void reject_unsafe_numpy_view_write_to(const std::string &root_id);
@@ -1744,6 +1815,19 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
+
+  // The assignment target node currently being converted, or null. Reads
+  // nested inside a target -- the index in `xs[idx[0]] = v`, the base in
+  // `xs[0][1] = v` -- are converted with is_converting_lhs set too, so only
+  // node identity picks out the slot actually being stored to.
+  const nlohmann::json *lhs_store_target_ = nullptr;
+
+  /// Is @p node the slot this assignment stores into? A store target must
+  /// stay an lvalue; a read may be bound to a temporary.
+  bool is_store_target(const nlohmann::json &node) const
+  {
+    return is_converting_lhs && lhs_store_target_ == &node;
+  }
   // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
   // where the division is really code-generated in its execution context.
   // Suppress it while a lambda body is converted at its definition (operands

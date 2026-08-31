@@ -3252,6 +3252,84 @@ typet python_list::bare_list_param_elem_type(
   return inferred.is_empty() ? annotated : inferred;
 }
 
+std::optional<exprt> python_list::resolve_nested_list_element(
+  const exprt &array,
+  const exprt &pos_expr,
+  size_t index,
+  typet &elem_type)
+{
+  // Check for nested list access
+  if (array.type() == converter_.get_type_handler().get_list_type())
+  {
+    const auto &key = array.identifier().as_string();
+    if (const auto *recorded = elem_types().find(key))
+    {
+      // Homogeneous lists (e.g. list comprehensions) record a single
+      // element-type entry; ESBMC models lists as homogeneous, so reuse
+      // that entry for any in-structure index.  Without this, a constant
+      // outer index >= 1 into a comprehension-built nested list skips the
+      // nested-element handling below, the inner element type (float) is
+      // lost, and the value reaches the SMT FP encoder as a non-FP sort
+      // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
+      // lists record one entry per element, so for an in-bounds index
+      // eff_index == index and behaviour is unchanged.  The runtime value
+      // is still read at pos_expr below, so only the static type is taken
+      // from the homogeneous entry.
+      const size_t eff_index =
+        index < recorded->size() ? index : recorded->size() - 1;
+      const std::string &elem_id = recorded->at(eff_index).first;
+      elem_type = recorded->at(eff_index).second;
+
+      if (elem_type == converter_.get_type_handler().get_list_type())
+      {
+        // Nested-list element.  The recorded elem_id names the inner-list
+        // symbol, but assign_from copies that id verbatim across a
+        // function-return boundary (Q = build()), where it is a *callee*
+        // frame local — returning build_symbol(elem_id) would reference a
+        // symbol that is never assigned in the caller's symex frame, so its
+        // value is nondet (float_buf OOB / wrong value, #5103/#5102).
+        //
+        // Instead, read the inner list pointer at runtime from `array`
+        // (valid in every scope: list_at returns the stored pointer, so
+        // aliasing/mutation semantics are preserved), bind it to a fresh
+        // caller-scope symbol, and copy the inner element-type map onto
+        // that symbol so deeper subscripts (Q[i][j]) still resolve
+        // int/float.  For parameter-annotation-only entries (elem_id
+        // empty) fall through to the dynamic __ESBMC_list_at path below.
+        if (!elem_id.empty())
+        {
+          exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
+          exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
+
+          // As a store target the subscript must stay an lvalue into the
+          // slot: binding it to the temporary below sends `xs[0] = xs[1]`
+          // into a dead local and leaves xs untouched, so len(xs[0]) keeps
+          // answering the overwritten element's length (#7360). Reads
+          // nested inside a target still take the temp path.
+          if (converter_.is_store_target(list_value_))
+            return inner_ptr;
+
+          const locationt loc = converter_.get_location_from_decl(list_value_);
+
+          symbolt &inner_sym = converter_.create_tmp_symbol(
+            list_value_, "$nested_list$", elem_type, exprt());
+          code_declt inner_decl(build_symbol(inner_sym));
+          inner_decl.location() = loc;
+          converter_.add_instruction(inner_decl);
+
+          code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
+          inner_assign.location() = loc;
+          converter_.add_instruction(inner_assign);
+
+          elem_types().assign_from(elem_id, inner_sym.id.as_string());
+          return build_symbol(inner_sym);
+        }
+      }
+    }
+  }
+  return std::nullopt;
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -3351,70 +3429,10 @@ exprt python_list::handle_index_access(
     // Handle list types (symbol-based)
     typet elem_type;
 
-    // Check for nested list access
-    if (array.type() == converter_.get_type_handler().get_list_type())
-    {
-      const auto &key = array.identifier().as_string();
-      const auto *recorded = elem_types().find(key);
-      if (recorded)
-      {
-        // Homogeneous lists (e.g. list comprehensions) record a single
-        // element-type entry; ESBMC models lists as homogeneous, so reuse
-        // that entry for any in-structure index.  Without this, a constant
-        // outer index >= 1 into a comprehension-built nested list skips the
-        // nested-element handling below, the inner element type (float) is
-        // lost, and the value reaches the SMT FP encoder as a non-FP sort
-        // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
-        // lists record one entry per element, so for an in-bounds index
-        // eff_index == index and behaviour is unchanged.  The runtime value
-        // is still read at pos_expr below, so only the static type is taken
-        // from the homogeneous entry.
-        const size_t eff_index =
-          index < recorded->size() ? index : recorded->size() - 1;
-        const std::string &elem_id = recorded->at(eff_index).first;
-        elem_type = recorded->at(eff_index).second;
-
-        if (elem_type == converter_.get_type_handler().get_list_type())
-        {
-          // Nested-list element.  The recorded elem_id names the inner-list
-          // symbol, but assign_from copies that id verbatim across a
-          // function-return boundary (Q = build()), where it is a *callee*
-          // frame local — returning build_symbol(elem_id) would reference a
-          // symbol that is never assigned in the caller's symex frame, so its
-          // value is nondet (float_buf OOB / wrong value, #5103/#5102).
-          //
-          // Instead, read the inner list pointer at runtime from `array`
-          // (valid in every scope: list_at returns the stored pointer, so
-          // aliasing/mutation semantics are preserved), bind it to a fresh
-          // caller-scope symbol, and copy the inner element-type map onto
-          // that symbol so deeper subscripts (Q[i][j]) still resolve
-          // int/float.  For parameter-annotation-only entries (elem_id
-          // empty) fall through to the dynamic __ESBMC_list_at path below.
-          if (!elem_id.empty())
-          {
-            const locationt loc =
-              converter_.get_location_from_decl(list_value_);
-
-            exprt list_at_call =
-              build_list_at_call(array, pos_expr, list_value_);
-            exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
-
-            symbolt &inner_sym = converter_.create_tmp_symbol(
-              list_value_, "$nested_list$", elem_type, exprt());
-            code_declt inner_decl(build_symbol(inner_sym));
-            inner_decl.location() = loc;
-            converter_.add_instruction(inner_decl);
-
-            code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
-            inner_assign.location() = loc;
-            converter_.add_instruction(inner_assign);
-
-            elem_types().assign_from(elem_id, inner_sym.id.as_string());
-            return build_symbol(inner_sym);
-          }
-        }
-      }
-    }
+    if (
+      std::optional<exprt> nested =
+        resolve_nested_list_element(array, pos_expr, index, elem_type))
+      return *nested;
 
     // Determine element type
     if (list_node.contains("_type") && list_node["_type"] == "arg")

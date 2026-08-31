@@ -35,6 +35,12 @@ exprt build_typecast(const exprt &from, const typet &t);
 // Address-of an lvalue `obj` (symbol/member/index source).
 exprt build_address_of(const exprt &obj);
 
+// A function name used as a value decays to a function pointer, as it already
+// does in call-argument position. Storing the code symbol itself aborts
+// conversion with "got invalid code for function" (#6640). Non-function
+// expressions are returned unchanged.
+exprt decay_function_to_pointer(const exprt &value);
+
 // Dereference `ptr` to a value of type `t`.
 exprt build_dereference(const exprt &ptr, const typet &t);
 

@@ -307,6 +307,19 @@ code_blockt python_converter::create_capture_cells(
   return bindings;
 }
 
+// A conversion call such as str("abc") yields its argument, so the argument's
+// length sizes the target. A method call does not, so it falls through to size
+// 0 -- the variable-length char[0] a non-literal argument already gives. Sizing
+// by the argument made "x".replace("a", "z") a scalar char (#7376). Only a Call
+// carries an array "args", so "func" is present here.
+static bool sizes_target_by_first_argument(const nlohmann::json &value)
+{
+  return value.contains("args") && value["args"].is_array() &&
+         value["args"].size() > 0 && value["args"][0].contains("value") &&
+         value["args"][0]["value"].is_string() &&
+         value["func"].value("_type", "") != "Attribute";
+}
+
 size_t python_converter::get_type_size(const nlohmann::json &ast_node)
 {
   size_t type_size = 0;
@@ -341,12 +354,7 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
     else if (ast_node["value"]["value"].is_string())
       type_size = ast_node["value"]["value"].get<std::string>().size();
   }
-  else if (
-    ast_node["value"].contains("args") &&
-    ast_node["value"]["args"].is_array() &&
-    ast_node["value"]["args"].size() > 0 &&
-    ast_node["value"]["args"][0].contains("value") &&
-    ast_node["value"]["args"][0]["value"].is_string())
+  else if (sizes_target_by_first_argument(ast_node["value"]))
   {
     type_size = ast_node["value"]["args"][0]["value"].get<std::string>().size();
   }
