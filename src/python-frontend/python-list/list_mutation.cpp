@@ -868,11 +868,11 @@ exprt python_list::list_repetition(
 
     // Mirror the type-map entries.
     // Make sure later element-type lookups see correct types.
-    if (src.is_symbol())
-    {
-      for (int64_t i = 0; i < repeat_count; ++i)
-        elem_types().append_from(src.identifier().as_string(), list_id);
-    }
+    if (src.is_symbol() && repeat_count > 0)
+      elem_types().append_from(
+        src.identifier().as_string(),
+        list_id,
+        static_cast<size_t>(repeat_count));
 
     return build_symbol(*list_symbol);
   }

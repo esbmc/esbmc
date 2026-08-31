@@ -154,16 +154,34 @@ TEST_CASE("copying between instances", "[python-frontend][types]")
     REQUIRE(registry.element_type("src", 3) == double_type());
   }
 
-  SECTION("copying into many fresh instances keeps the source readable")
+  SECTION("append_from repeats the source sequence")
   {
-    // Each insertion may rehash the underlying map; the source entries must
-    // survive it.
-    for (int i = 0; i < 512; ++i)
-      registry.append_from("src", "dst" + std::to_string(i));
+    registry.append_from("src", "dst", 3);
 
-    REQUIRE(registry.size("src") == 2);
-    REQUIRE(registry.element_type("dst511", 0) == int_type());
-    REQUIRE(registry.element_type("dst511", 1) == double_type());
+    REQUIRE(registry.size("dst") == 6);
+    for (size_t i = 0; i < 3; ++i)
+    {
+      REQUIRE(registry.element_type("dst", 2 * i) == int_type());
+      REQUIRE(registry.element_type("dst", 2 * i + 1) == double_type());
+    }
+  }
+
+  SECTION("repeating onto itself scales linearly, not exponentially")
+  {
+    // `l = l * 4`: the result holds 4 copies of the source, not 2^4.
+    registry.append_from("src", "src", 3);
+
+    REQUIRE(registry.size("src") == 8);
+    REQUIRE(registry.element_type("src", 6) == int_type());
+    REQUIRE(registry.element_type("src", 7) == double_type());
+  }
+
+  SECTION("append_from is a no-op for zero repetitions")
+  {
+    registry.record("dst", "old", string_type());
+    registry.append_from("src", "dst", 0);
+
+    REQUIRE(registry.size("dst") == 1);
   }
 
   SECTION("copies are independent of the source")

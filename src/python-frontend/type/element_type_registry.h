@@ -65,10 +65,13 @@ public:
     const std::string &to,
     type_slot slot = type_slot::elements);
 
-  /// Appends @p from's entries onto @p to's.
+  /// Appends @p from's entries onto @p to's, @p times over. @p from is read
+  /// once, so `to == from` (a `l = l * n` repetition) repeats the original
+  /// sequence rather than compounding what earlier repetitions appended.
   void append_from(
     const std::string &from,
     const std::string &to,
+    size_t times = 1,
     type_slot slot = type_slot::elements);
 
   /// Removes the most recently recorded entry, mirroring a pop from the end.

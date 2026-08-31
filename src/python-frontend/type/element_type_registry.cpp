@@ -39,8 +39,8 @@ void element_type_registry::assign_from(
   if (!source)
     return;
 
-  // Copy before touching @p to: inserting it may rehash the map and invalidate
-  // @p source, and @p from may be @p to.
+  // @p from may be @p to; copy first so the assignment does not overwrite the
+  // sequence being read.
   entries copied = *source;
   map_for(slot)[to] = std::move(copied);
 }
@@ -48,15 +48,21 @@ void element_type_registry::assign_from(
 void element_type_registry::append_from(
   const std::string &from,
   const std::string &to,
+  size_t times,
   type_slot slot)
 {
   const entries *source = find(from, slot);
-  if (!source)
+  if (!source || times == 0)
     return;
 
+  // Snapshot @p from: when @p to is @p from, appending would otherwise both
+  // invalidate the source iterators and let each repetition read back what the
+  // previous one appended, growing the sequence exponentially in @p times.
   const entries copied = *source;
   entries &target = map_for(slot)[to];
-  target.insert(target.end(), copied.begin(), copied.end());
+  target.reserve(target.size() + copied.size() * times);
+  for (size_t i = 0; i < times; ++i)
+    target.insert(target.end(), copied.begin(), copied.end());
 }
 
 void element_type_registry::pop_last(const std::string &id, type_slot slot)
