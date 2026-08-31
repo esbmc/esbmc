@@ -145,6 +145,27 @@ public:
   // Methods
 
   /**
+   *  Rewrite an expression onto the canonical basis of its copy chains:
+   *  every L2 symbol with an entry in copy_definitions is replaced by
+   *  the value it was assigned. Used by path-guard subsumption to
+   *  compare branch conditions from different scopes structurally; the
+   *  result is for comparison only and is never fed back into the
+   *  symex state or the SSA equation.
+   *  @param expr Expression to rewrite; modified in place.
+   *  @return true if any substitution was made.
+   */
+  bool chase_copies(expr2tc &expr) const;
+
+  /**
+   *  Record a copy chain for chase_copies after an unconditional
+   *  assignment, when the rhs is a (possibly typecast) L2 symbol.
+   *  The rhs is canonicalized through existing chains first.
+   *  @param renamed_lhs L2 symbol generation just assigned.
+   *  @param rhs Renamed, simplified assignment rhs.
+   */
+  void record_copy_definition(const expr2tc &renamed_lhs, const expr2tc &rhs);
+
+  /**
    *  Create a symex result for this run.
    */
   goto_symext::symex_resultt get_symex_result();
@@ -1351,6 +1372,30 @@ protected:
    *  @see guard_identifier
    */
   irep_idt guard_identifier_s;
+  /**
+   *  Defining condition of each L2 guard symbol generation, i.e. the
+   *  (renamed, simplified) rhs it was assigned in symex_goto. Guard
+   *  symbols are SSA: each generation is assigned exactly once, so a
+   *  single map for the whole symex object is sound; execution-state
+   *  forks copy it along with the rest of the object. symex_goto uses
+   *  it to resolve path-guard conjuncts back to branch conditions —
+   *  level2 renaming cannot do that, as it never substitutes into
+   *  symbols that are already level2.
+   */
+  std::map<expr2tc, expr2tc> guard_definitions;
+  /**
+   *  Copy chains between L2 symbol generations: lhs generation -> the
+   *  (possibly typecast) L2 symbol it was unconditionally assigned.
+   *  Values are canonicalized at insertion, so one substitution pass
+   *  reaches the root of a chain. Path-guard subsumption uses this to
+   *  rewrite branch conditions onto a common basis before structural
+   *  comparison — a value handed across a call boundary gets a fresh
+   *  symbol at every hop, and without the rewrite a callee's re-check
+   *  of a caller-established condition never matches. Deliberately NOT
+   *  fed into constant propagation: substituting copies globally slices
+   *  away the originals' assignments and degrades counterexamples.
+   */
+  std::map<expr2tc, expr2tc> copy_definitions;
   /** Loop numbers. */
   unsigned first_loop;
   /** Number of assertions executed. */
