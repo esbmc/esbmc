@@ -4,32 +4,24 @@ from .dataflow_solver import analyze_function, infer_type_from_expr, collect_kno
 from .lattice import *
 
 
+def derive_param_and_return_types(
+    func_node,
+    out_envs,
+    return_types,
+    context: InferenceContext,
+):
+    merged = merge_out_envs(out_envs)
 
-
-def derive_param_and_return_types(func_node: ast.FunctionDef, out_envs: list, return_types:dict, context: InferenceContext):
-    # derive return types by scanning Return nodes in the function body and infer their expr types
-    
-    # merge out_envs for params
-    merged = {}
     for be in out_envs:
         for k,v in be.items():
             if k in merged:
                 merged[k] = merged[k].join(v)
-            else:
-                merged[k] = v
 
-    ret_type = Unknown()
-    #context = InferenceContext(known_classes=known_classes,)
+    #Bottom type means that no type has been observed yet.
+    ret_type= Bottom()
 
-    #for node in ast.walk(func_node):
-       # if isinstance(node, ast.Return) and node.value is not None:
-        #    t = infer_type_from_expr(node.value, {}, context)  # limited: no env here
-         #   ret_type = t if isinstance(ret_type, Unknown) else ret_type.join(t)
     for typ in return_types.values():
-        if isinstance(ret_type, Unknown):
-            ret_type = typ
-        else:
-            ret_type = ret_type.join(typ)
+        ret_type = ret_type.join(typ)  
 
     param_types = {}
 
@@ -40,24 +32,43 @@ def derive_param_and_return_types(func_node: ast.FunctionDef, out_envs: list, re
 
 def annotate_parameters(funct_node: ast.FunctionDef, param_types):
     for arg in funct_node.args.args:
+        if arg.annotation is not None:
+            continue
+
         t = param_types.get(arg.arg, Unknown())
 
         if isinstance(t, Unknown):
             continue
 
-        arg.annotation = ast.Name(
-            id=t.to_ann_name(),
-            ctx=ast.Load()
-        )
+        annotation = type_to_ast_annotation(t)    
+
+        if annotation is None:
+            continue
+
+        if annotation is not None:
+            arg.annotation = annotation
 
 def annotate_return(func_node: ast.FunctionDef, ret_type):
-    if isinstance(ret_type, Unknown):
+
+    if ret_type is None:
         return
 
-    func_node.returns = ast.Name(
-        id = ret_type.to_ann_name(),
-        ctx=ast.Load()
-    )   
+    if isinstance(ret_type, Bottom):
+        return
+
+    if isinstance(ret_type, (Unknown, AnyType, Bottom)):
+        return
+
+    annotation = type_to_ast_annotation(ret_type)
+
+    if annotation is None:
+        return
+
+    if func_node.returns is not None:
+        return
+
+    func_node.returns = annotation
+    
 
 def merge_out_envs(out_envs):
     merged = {}
@@ -72,15 +83,17 @@ def merge_out_envs(out_envs):
     return merged        
 
 def convert_assign_to_annassign(stmt, inferred_type):
+    annotation = type_to_ast_annotation(inferred_type)
+
+    if annotation is None:
+        return stmt
+
     ann = ast.AnnAssign(
         target=ast.Name(
             id=stmt.targets[0].id,
             ctx=ast.Store()
         ),
-        annotation=ast.Name(
-            id=inferred_type.to_ann_name(),
-            ctx=ast.Load()
-        ),
+        annotation=annotation,
         value=stmt.value,
         simple=1
     )
@@ -121,6 +134,39 @@ def is_lambda_assignment(stmt):
         and isinstance(stmt.value, ast.Lambda)
     )    
 
+def collect_reassigned_names(func_node):
+    counts = {}
+
+    class WriteCollector(ast.NodeVisitor):
+        def visit_Name(self, node):
+            if isinstance(node.ctx, ast.Store):
+                counts[node.id] = counts.get(node.id, 0) + 1
+
+        def visit_FunctionDef(self, node):
+            pass
+
+        def visit_AsyncFunctionDef(self, node):
+            pass
+
+        def visit_ClassDef(self, node):
+            pass
+
+        def visit_Lambda(self, node):
+            pass
+
+    collector = WriteCollector()
+
+    for stmt in func_node.body:
+        collector.visit(stmt)
+
+    reassigned = set()
+
+    for name, count in counts.items():
+        if count > 1:
+            reassigned.add(name)
+
+    return reassigned
+
 def annotate_function_with_env_and_signatures(func_node, out_envs, return_types, context: InferenceContext):
     #context = InferenceContext(known_classes=known_classes)
     
@@ -130,6 +176,11 @@ def annotate_function_with_env_and_signatures(func_node, out_envs, return_types,
     annotate_return(func_node, ret_type)
 
     merged = merge_out_envs(out_envs)
+
+    reassigned = collect_reassigned_names(func_node)
+
+    for name in reassigned:
+        merged.pop(name, None)
 
     new_body = []
 
@@ -201,7 +252,7 @@ def process_statements(statements, merged, already_annotated):
     for stmt in statements:
         if isinstance(stmt, ast.If):
 
-            stmt.body = process_statements(stmt.orelse, merged, already_annotated.copy())
+            stmt.body = process_statements(stmt.body, merged, already_annotated.copy())
 
             stmt.orelse = process_statements(stmt.orelse, merged, already_annotated.copy())
 
@@ -261,17 +312,174 @@ def is_container_type(t):
         )
     )
 
-def annotate_module_with_outenvs(module_node: ast.Module, out_envs_by_func, return_types_by_func, context: InferenceContext, ):
-    for node in module_node.body:
-        if not isinstance(node, ast.FunctionDef):
-                continue
-        if node.name not in out_envs_by_func:
-                continue
+def type_to_ast_annotation(t: Type) ->ast.expr | None:
+
+    if isinstance(t, Bottom):
+        return ast.Name(id="Any", ctx=ast.Load())
+    
+    if isinstance(t, BoolType):
+        return ast.Name(id="bool", ctx=ast.Load())
+
+    if isinstance(t, IntType):
+        return ast.Name(id="int", ctx=ast.Load())
+
+    if isinstance(t, FloatType):
+        return ast.Name(id="float", ctx=ast.Load())
+
+    if isinstance(t, StrType):
+        return ast.Name(id="str", ctx=ast.Load())
+
+    if isinstance(t, ComplexType):
+        return ast.Name(id="complex", ctx=ast.Load())
+
+    if isinstance(t, NoneType):
+        return ast.Constant(value=None)
+
+    if isinstance(t, AnyType):
+        return ast.Name(id="Any", ctx=ast.Load())
+
+    if isinstance(t, Unknown):
+        return ast.Name(id="Any", ctx=ast.Load())
+
+    if isinstance(t, ListType):
+        elem = type_to_ast_annotation(t.elem)
+
+        if elem is None:
+            elem = ast.Name(id="Any", ctx=ast.Load())
+
+
+        return ast.Subscript(
+            value=ast.Name(id="list", ctx=ast.Load()),
+            slice=elem,
+            ctx=ast.Load(),
+        )
+
+    if isinstance(t, SetType):
+        elem = type_to_ast_annotation(t.elem)
+
+        if elem is None:
+            elem = ast.Name(id="Any", ctx=ast.Load())        
+
+        return ast.Subscript(
+            value=ast.Name(id="Set", ctx=ast.Load()),
+            slice=elem,
+            ctx=ast.Load(),
+        )
+
+    if isinstance(t, TupleType):
+        elements = [
+            type_to_ast_annotation(member)
+            for member in t.elems
+        ]
+
+        elements = [
+            elem if elem is not None
+            else ast.Name(id="Any", ctx=ast.Load())
+            for elem in elements
+        ]
+
+        if any(elem is None for elem in elements):
+            return ast.Name(id="tuple", ctx=ast.Load())
+
+        if not elements:
+            return ast.Name(id="tuple", ctx=ast.Load())
+
+        return ast.Subscript(
+            value=ast.Name(id="tuple", ctx=ast.Load()),
+            slice=ast.Tuple(
+                elts=elements,
+                ctx=ast.Load(),
+            ),
+            ctx=ast.Load(),
+        )
+
+    if isinstance(t, DictType):
+        key_type = type_to_ast_annotation(t.key_t)
+        value_type = type_to_ast_annotation(t.val_t)
+
+        if key_type is None:
+            key_type = ast.Name(id="Any", ctx=ast.Load())
+
+        if value_type is None:
+            value_type = ast.Name(id="Any", ctx=ast.Load())
+
+        return ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=ast.Tuple(
+                elts=[key_type, value_type],
+                ctx=ast.Load(),
+            ),
+            ctx=ast.Load(),
+        )
+
+    if isinstance(t, UnionType):
+        members = [
+            type_to_ast_annotation(member)
+            for member in t.members
+        ]
+
+        members = [m for m in members if m is not None]
+
+        if not members:
+            return ast.Name(id="Any", ctx=ast.Load())
+
+        result = members[0]
+
+        for member in members[1:]:
+            result = ast.BinOp(left=result, op=ast.BitOr(), right=member,)
+
+        return result    
         
-        out_envs = out_envs_by_func[node.name]
-        return_types = return_types_by_func.get(node.name, {})
+
+
+    if isinstance(t, CallableType):
+        param_nodes = []
+
+        for param in t.param_types:
+            node = type_to_ast_annotation(param)
+
+            if node is None:
+                node = ast.Name(id="Any", ctx=ast.Load())
+
+            param_nodes.append(node)
+
+        return_node = type_to_ast_annotation(t.ret)
+
+        if return_node is None:
+            return_node = ast.Name(id="Any", ctx = ast.Load())
+
+        param_list = ast.List(elts=param_nodes, ctx=ast.Load())
+
+        callable_args = ast.Tuple(elts=[param_list, return_node], ctx=ast.Load())        
+
+        return ast.Subscript(
+            value=ast.Name(id="Callable", ctx=ast.Load()),
+            slice=callable_args,
+            ctx=ast.Load(),
+        )
+
+    if isinstance(t, InstanceType):
+        return ast.Name(
+            id=t.class_name,
+            ctx=ast.Load(),
+        )
+
+    return None
+    
+
+    
+def annotate_module_with_outenvs(module_node: ast.Module, out_envs_by_func, return_types_by_func, context: InferenceContext, ):
+    for node, out_envs in out_envs_by_func.items():
+        return_types = return_types_by_func.get(node, {})
+       # if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        #        continue
+        #if node.name not in out_envs_by_func:
+         #       continue
+        
+       # out_envs = out_envs_by_func[node.name]
+        #return_types = return_types_by_func.get(node.name, {})
         #print(ast.dump(module_node, indent=4))
-        print(ast.unparse(module_node))
+        #print(ast.unparse(module_node))
 
         print(f"\n[ANNOTATE DEBUG] BEFORE function: {node.name}")
         print(ast.unparse(node))
@@ -287,19 +495,34 @@ def annotate_module_with_outenvs(module_node: ast.Module, out_envs_by_func, retu
 
 def annotate_ast(ast_node, opts=None):
     known_classes = collect_known_classes(ast_node)
-    context = InferenceContext(known_classes=known_classes, )
+    context = InferenceContext(known_classes=known_classes)
+
     out_envs_by_func = {}
     return_types_by_func = {}
-    for node in ast_node.body:
-        if isinstance(node, ast.FunctionDef):
-            cfg, in_envs, out_envs, return_types = analyze_function(node, context)
+
+    for node in ast.walk(ast_node):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            #try:
+            result = analyze_function(node, context)
+
+            if result is None: 
+                print(f"[PYTYPE] Skipping {node.name}: no convergence")
+                continue
+
+            print(f"[PYTYPE] Converged: {node.name}")
+            cfg, in_envs, out_envs, return_types = result
+            #except UnsupportedCFGError as exc:
+             #   print(f"f[PYTYPE] skipping {node.name}: {exc}")
+              #  continue
             print(cfg)
             print(out_envs)
-            out_envs_by_func[node.name] = out_envs
-            return_types_by_func[node.name] = return_types
+            out_envs_by_func[node] = out_envs
+            return_types_by_func[node] = return_types
 
            # param_types, ret_type = derive_param_and_return_types(node, out_envs, return_types, context,)
     annotate_module_with_outenvs(ast_node, out_envs_by_func, return_types_by_func, context, )
-
     ast.fix_missing_locations(ast_node)
+    print("[PYTYPE] FINAL SOURCE")
+    print(ast.unparse(ast_node))
+
     return ast_node
