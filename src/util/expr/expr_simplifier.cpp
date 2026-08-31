@@ -866,6 +866,43 @@ fold_common_addend(const expr2tc &a, const expr2tc &b, const type2tc &type)
   return expr2tc();
 }
 
+/// `p - c` -> `p + (-c)` for a signed constant c.
+///
+/// A decrementing walk otherwise never reaches the `base + offset` form an
+/// incrementing one has, and every shared-base cancellation that decides a
+/// pointer comparison matches add2t, so the guard of a `p--` loop stays
+/// undecidable and the loop never exits (#6779). An unsigned c is left alone:
+/// negating it is a wrap this rewrite has no reason to commit to.
+static expr2tc fold_pointer_minus_const(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (
+    !is_pointer_type(type) || !is_constant_int2t(side_2) ||
+    !is_signedbv_type(side_2->type))
+    return expr2tc();
+
+  return add2tc(
+    type,
+    side_1,
+    constant_int2tc(side_2->type, -to_constant_int2t(side_2).value));
+}
+
+/// The two folds a subtraction over addresses has: the distance between two of
+/// them, and a decrement re-spelled as an increment.
+static expr2tc fold_pointer_sub(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (expr2tc diff = fold_address_difference(side_1, side_2, type);
+      !is_nil_expr(diff))
+    return diff;
+
+  return fold_pointer_minus_const(type, side_1, side_2);
+}
+
 expr2tc sub2t::do_simplify() const
 {
   // x - 0 = x. Mirrors Subtor::simplify but short-circuits before
@@ -885,7 +922,7 @@ expr2tc sub2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(type);
 
-  if (expr2tc folded = fold_address_difference(side_1, side_2, type);
+  if (expr2tc folded = fold_pointer_sub(type, side_1, side_2);
       !is_nil_expr(folded))
     return folded;
 
@@ -3541,6 +3578,52 @@ expr2tc nearbyint2t::do_simplify() const
   return expr2tc();
 }
 
+/// Linearise the constant-indexed rows enclosing @p idx: for `&a[c1]..[cn][e]`
+/// return the same chain with every enclosing index zeroed, and set @p offset
+/// to `c1*s1 + .. + cn*sn` counted in elements of the innermost type. Nil when
+/// there is no enclosing index, when one is not constant, or when a dimension
+/// has no constant size — the caller then keeps the single-level form.
+///
+/// This is what lets a pointer walking `a` as flat memory meet a bound spelled
+/// `&a[1][2]`: both sides reduce to an offset off `&a[0][0]` (#6778).
+static expr2tc linearise_enclosing_indices(const index2t &idx, BigInt &offset)
+{
+  // The cursor stays a pointer into the chain `idx` owns: the non-const
+  // to_index2t overload goes through get(), whose detach() clones every shared
+  // node it walks past.
+  std::vector<type2tc> row_types;
+  BigInt linear = 0;
+  BigInt stride = 1;
+
+  const expr2tc *base = &idx.source_value;
+  while (is_index2t(*base))
+  {
+    const index2t &row = to_index2t(*base);
+    if (!is_constant_int2t(row.index) || !is_array_type(row.type))
+      return expr2tc();
+
+    const expr2tc &dim = to_array_type(row.type).array_size;
+    if (is_nil_expr(dim) || !is_constant_int2t(dim))
+      return expr2tc();
+
+    stride *= to_constant_int2t(dim).value;
+    linear += to_constant_int2t(row.index).value * stride;
+    row_types.push_back(row.type);
+    base = &row.source_value;
+  }
+
+  if (row_types.empty())
+    return expr2tc();
+
+  expr2tc zero = constant_int2tc(index_type2(), BigInt(0));
+  expr2tc rebuilt = *base;
+  for (auto row = row_types.rbegin(); row != row_types.rend(); ++row)
+    rebuilt = index2tc(*row, rebuilt, zero);
+
+  offset = linear;
+  return rebuilt;
+}
+
 expr2tc address_of2t::do_simplify() const
 {
   // NB: address_of never has its operands simplified below its feet for
@@ -3567,18 +3650,26 @@ expr2tc address_of2t::do_simplify() const
     const index2t &idx = to_index2t(ptr_obj);
     const pointer_type2t &ptr_type = to_pointer_type(type);
 
-    // Don't simplify &a[0]
-    if (
-      is_constant_int2t(idx.index) &&
-      to_constant_int2t(idx.index).value.is_zero())
+    BigInt extra = 0;
+    expr2tc zeroed = linearise_enclosing_indices(idx, extra);
+    const bool outer_is_zero = is_constant_int2t(idx.index) &&
+                               to_constant_int2t(idx.index).value.is_zero();
+
+    // Don't simplify &a[0]: with no enclosing row to linearise there is no
+    // offset to spell. This is also the fixpoint condition -- the rewrite below
+    // emits an all-zero index chain, which re-enters here and must stop.
+    if (outer_is_zero && extra.is_zero())
       return expr2tc();
 
-    expr2tc new_index = try_simplification(idx.index);
     expr2tc zero = constant_int2tc(index_type2(), BigInt(0));
-    expr2tc new_idx = index2tc(idx.type, idx.source_value, zero);
-    expr2tc sub_addr_of = address_of2tc(ptr_type.subtype, new_idx);
+    expr2tc src = is_nil_expr(zeroed) ? idx.source_value : zeroed;
+    expr2tc base =
+      address_of2tc(ptr_type.subtype, index2tc(idx.type, src, zero));
+    if (!extra.is_zero())
+      base = add2tc(type, base, from_integer(extra, index_type2()));
 
-    return add2tc(type, sub_addr_of, new_index);
+    return outer_is_zero ? base
+                         : add2tc(type, base, try_simplification(idx.index));
   }
 
   return expr2tc();
@@ -3776,7 +3867,17 @@ static expr2tc flatten_nested_index_address(const address_of2t &ao)
 static expr2tc flatten_addressof_under_add(const expr2tc &e)
 {
   if (is_address_of2t(e))
-    return flatten_nested_index_address(to_address_of2t(e));
+  {
+    const address_of2t &ao = to_address_of2t(e);
+    if (expr2tc flat = flatten_nested_index_address(ao); !is_nil_expr(flat))
+      return flat;
+
+    // A single subscript is address_of2t::do_simplify's case, and the
+    // top-level operand already gets it; an address under pointer arithmetic
+    // did not, so `&a[4] + k` kept a base its bare `&a[0]` bound could never
+    // meet and a 1-D descending walk never exited (#6779).
+    return is_index2t(ao.ptr_obj) ? ao.do_simplify() : expr2tc();
+  }
 
   if (!is_add2t(e))
     return expr2tc();
