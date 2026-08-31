@@ -989,14 +989,25 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = mk_bvsmod(args[0], args[1]);
     }
-    else if (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
-    {
-      a = mk_bvumod(args[0], args[1]);
-    }
     else
     {
-      assert(is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
-      a = mk_bvsmod(args[0], args[1]);
+      // Lower the remainder compositionally as a - (a / b) * b, its
+      // SMT-LIB defining identity (exact for every valuation: rem and
+      // div are co-defined for b == 0 and wrap consistently on
+      // MIN / -1). When the formula also contains the division of the
+      // same operands — remainder checks, spec renderings of the C99
+      // 6.5.5 identity, strength-reduced div/mod pairs — the solver's
+      // structural sharing collapses what would otherwise be a
+      // pointwise equivalence proof between two unrelated circuits,
+      // which is infeasible to bit-blast already at 32 bits.
+      assert(
+        is_unsignedbv_type(m.side_1) || is_unsignedbv_type(m.side_2) ||
+        is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
+      smt_astt quot =
+        (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
+          ? mk_bvudiv(args[0], args[1])
+          : mk_bvsdiv(args[0], args[1]);
+      a = mk_bvsub(args[0], mk_bvmul(quot, args[1]));
     }
     break;
   }
