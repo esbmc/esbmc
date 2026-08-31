@@ -499,20 +499,39 @@ public `arm_order()` returns `{name, when}` only — the rewrite pointers stay
 private. An `ARM(member)` macro welds the name string to the member it names so
 the two cannot drift.
 
-### B — phase-tagged registry *(runner-up design)*
+### B — phase-tagged registry *(third)*
 
 The same table plus `arm_phase` (pre/post), `arm_mode` (always/sole), an
 `expr_ids` fast-path and name-based dependency edges, absorbing `adjust_expr`'s
 own dispatch as well as the chain.
 
-### C — optimised for the test surface
+### C — optimised for the test surface *(runner-up design)*
 
 The same table, contributing the diagnosis of why the pass had no unit tests and
 the Catch2 tests themselves.
 
 ### Adjudication
 
-**A wins.** On **seam placement**, all 22 chain arms are already
+**A wins; C is the runner-up design and B is third.** B led the ranking on an
+earlier pass, before the two open questions below were settled; once `when` is
+exposed and the arm-level tests are rewritten against `adjust_expr`, C and the
+winner differ on exactly one decision, so C rises to second.
+
+**Why C lost, precisely.** It contributed the decisive analysis and the only
+real test code, and its table *is* A's table. It lost on the single decision its
+name is staked on: it published a callable handle to 24 private arms to buy
+tests the already-public `adjust_expr` delivers without widening anything at
+all. Because the guards are kind-disjoint by construction — `expr_ids` has one
+enumerator per kind and every `is_X2t` is `t->expr_id == expr2t::X_id` — a
+hand-built node of the right kind is claimed by the one arm under test and
+passed over by the rest, so driving `adjust_expr` asserts exactly what invoking
+the arm would. What the public table uniquely buys is running an arm *out of
+context*, which is a hazard rather than a feature: `adjust_call_callee` reads
+sugar `adjust_function_designators` must already have installed. C's own fixture
+concedes it, re-imposing the precondition by hand with `REQUIRE(a.applies(expr))`
+— reconstructing by convention the context the chain supplies for free.
+
+ On **seam placement**, all 22 chain arms are already
 `void(expr2tc &)`, so a chain-scoped table needs *zero* adapters; absorbing
 `adjust_expr` forces one, because `declare_implicit_callee` takes a location and
 its pre-order call site passes a *different node* (`stmt.operand`), so that row
