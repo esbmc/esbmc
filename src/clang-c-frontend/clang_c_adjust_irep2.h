@@ -136,6 +136,7 @@ private:
   /// own type. adjust_float_arith's ieee_* promotion is not part of this
   /// (§104.2).
   void adjust_binary_arith_operands(expr2tc &expr);
+  void adjust_shift_operands(expr2tc &expr);
 
   /// IREP2 form of clang_c_adjust::adjust_side_effect_assignment's plain
   /// "assign" case: the node takes the target's type, and the source converts

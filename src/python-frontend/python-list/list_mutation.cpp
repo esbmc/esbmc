@@ -1141,8 +1141,7 @@ exprt python_list::build_extend_list_call(
     }
   }
 
-  BigInt elem_size_bytes =
-    actual_list.is_symbol() ? uniform_scalar_elem_size(other_list_name) : 0;
+  BigInt elem_size_bytes = uniform_scalar_elem_size(actual_list);
 
   code_function_callt extend_func_call;
   extend_func_call.function() = build_symbol(*extend_func_sym);
