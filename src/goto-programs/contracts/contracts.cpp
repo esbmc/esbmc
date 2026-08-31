@@ -3819,6 +3819,50 @@ code_contractst::materialize_arr_elem_snapshots(
     const irep_idt &arr_id = to_symbol2t(arr_ptr).thename;
     const std::string &arr_name = id2string(arr_id);
 
+    // A clause names its targets in the pre-state: `__ESBMC_assigns(buf[head])`
+    // grants the element `head` denoted on entry. Read back after the body, a
+    // body that moves `head` -- itself in the clause, as the ring-buffer idiom
+    // needs -- chooses after the fact which element it had been granted, so an
+    // off-by-one write verifies. Same defect as #7103 on the global-array path.
+    //
+    // That path maps the index through `in_pre_state`, which resolves a symbol
+    // against `active_snapshots` -- the globals snapshotted at 3b-i. Not enough
+    // here: `collect_global_variables` skips pointer types, so an index reached
+    // through one (`__ESBMC_assigns(buf[*p], *p)`, the same idiom with the
+    // cursor passed in rather than global) resolves to nothing and is read back
+    // live. Capturing each index outright covers both.
+    std::vector<expr2tc> declared_indices;
+    for (const expr2tc &idx : group.indices)
+    {
+      std::string didx_sym_name = "__ESBMC_frame_arr_didx_" + func_name + "_" +
+                                  arr_name + "_" + cnt_str + "_" +
+                                  std::to_string(declared_indices.size());
+
+      symbolt didx_obj;
+      didx_obj.name = didx_sym_name;
+      didx_obj.id = didx_sym_name;
+      set_symbol_type(didx_obj, idx->type);
+      didx_obj.lvalue = true;
+      didx_obj.static_lifetime = false;
+      didx_obj.file_local = false;
+      symbolt *didx_added = context.move_symbol_to_context(didx_obj);
+      expr2tc didx = symbol2tc(idx->type, didx_added->id);
+
+      goto_programt::targett didx_decl = wrapper.add_instruction(DECL);
+      didx_decl->code = code_decl2tc(idx->type, didx_added->id);
+      didx_decl->location = location;
+      didx_decl->location.comment(
+        "frame: array-elem declared index (Phase 2B)");
+
+      goto_programt::targett didx_assign = wrapper.add_instruction(ASSIGN);
+      didx_assign->code = code_assign2tc(didx, idx);
+      didx_assign->location = location;
+      didx_assign->location.comment(
+        "frame: capture declared index pre-state (Phase 2B)");
+
+      declared_indices.push_back(didx);
+    }
+
     // Create nondet witness index j
     std::string j_sym_name =
       "__ESBMC_frame_arr_j_" + func_name + "_" + arr_name + "_" + cnt_str;
@@ -3879,7 +3923,7 @@ code_contractst::materialize_arr_elem_snapshots(
           greaterthanequal2tc(witness_j, gen_zero(j_type)),
           lessthan2tc(witness_j, j_hi)),
         witness_j,
-        idx_expr));
+        declared_indices.front()));
     j_clamp->location = location;
     j_clamp->location.comment(
       "frame: clamp witness index to valid array range (Phase 2B)");
@@ -3917,7 +3961,7 @@ code_contractst::materialize_arr_elem_snapshots(
     entry.arr_ptr = arr_ptr;
     entry.arr_add_type = arr_add_type;
     entry.elem_type = elem_type;
-    entry.declared_indices = group.indices;
+    entry.declared_indices = declared_indices;
     entry.witness_idx = witness_j;
     entry.snapshot_sym = snapshot_sym;
     result.push_back(entry);
