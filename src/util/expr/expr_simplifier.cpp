@@ -3364,137 +3364,174 @@ static bool address_of_is_provably_non_null(const expr2tc &e)
   return !is_dereference2t(to_address_of2t(e).ptr_obj);
 }
 
-/// Constant-operand typecasts, folded by source and destination type.
+/// Typecast of a constant bool to a number type; nullopt when no arm matches.
+static std::optional<expr2tc> fold_constant_bool_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // bool to int
+  if (is_bv_type(type))
+    return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
+
+  if (is_fixedbv_type(type))
+  {
+    fixedbvt fbv;
+    fbv.spec = fixedbv_spect(to_fixedbv_type(type));
+    fbv.from_integer(to_constant_bool2t(simp).value);
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_floatbv_type(type))
+  {
+    if (!is_constant_int2t(rounding_mode))
+      return expr2tc();
+
+    ieee_floatt fpbv;
+
+    BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+    // Bool -> float: convert the bool's integer value (0 or 1) into
+    // a float of the destination type.
+    fpbv.spec = ieee_float_spect(to_floatbv_type(type));
+    fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
+
+    return constant_floatbv2tc(fpbv);
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant integer to a number type; nullopt when no arm
+/// matches.
+static std::optional<expr2tc> fold_constant_bv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // int to int/float/double
+  const constant_int2t &theint = to_constant_int2t(simp);
+
+  if (is_bv_type(type))
+  {
+    // Typecasting an integer constant to a (possibly smaller) integer
+    // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
+    // destination width via the same binary round-trip the legacy
+    // from_integer + to_integer pair performed.
+    return from_integer(theint.value, type);
+  }
+
+  if (is_fixedbv_type(type))
+  {
+    fixedbvt fbv;
+    fbv.spec = fixedbv_spect(to_fixedbv_type(type));
+    fbv.from_integer(theint.value);
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_bool_type(type))
+  {
+    const constant_int2t &theint = to_constant_int2t(simp);
+    return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
+  }
+
+  if (is_floatbv_type(type))
+  {
+    if (!is_constant_int2t(rounding_mode))
+      return expr2tc();
+
+    ieee_floatt fpbv;
+
+    BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+    fpbv.spec = ieee_float_spect(to_floatbv_type(type));
+    fpbv.from_integer(to_constant_int2t(simp).value);
+
+    return constant_floatbv2tc(fpbv);
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant fixed-point value to a number type; nullopt when no
+/// arm matches.
+static std::optional<expr2tc> fold_constant_fixedbv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  (void)rounding_mode;
+  // float/double to int/float/double
+  fixedbvt fbv(to_constant_fixedbv2t(simp).value);
+
+  if (is_bv_type(type))
+    return constant_int2tc(type, fbv.to_integer());
+
+  if (is_fixedbv_type(type))
+  {
+    fbv.round(fixedbv_spect(to_fixedbv_type(type)));
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_bool_type(type))
+  {
+    const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
+    return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant float to a number type; nullopt when no arm matches.
+static std::optional<expr2tc> fold_constant_floatbv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // float/double to int/float/double
+  if (!is_constant_int2t(rounding_mode))
+    return expr2tc();
+
+  ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
+
+  BigInt rm_value = to_constant_int2t(rounding_mode).value;
+  fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+  if (is_bv_type(type))
+    return constant_int2tc(type, fpbv.to_integer());
+
+  if (is_floatbv_type(type))
+  {
+    fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
+    return constant_floatbv2tc(fpbv);
+  }
+
+  if (is_bool_type(type))
+    return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
+  return std::nullopt;
+}
+
+/// Constant-operand typecasts, dispatched on the source type.
 ///
-/// nullopt when no arm matches, so the caller falls through to the non-constant
-/// cases exactly as the inline chain did; a nil expr2tc means an arm matched
-/// and declined (a non-constant rounding mode), which is do_simplify's own "no
-/// simplification" answer.
+/// nullopt when no arm matches, so the caller falls through to the
+/// non-constant cases exactly as the inline chain did; a nil expr2tc means an
+/// arm matched and declined (a non-constant rounding mode), which is
+/// do_simplify's own "no simplification" answer.
 static std::optional<expr2tc> fold_constant_typecast(
   const type2tc &type,
   const expr2tc &simp,
   const expr2tc &rounding_mode)
 {
-  // Casts from constant operands can be done here.
-  if (is_bool_type(simp) && is_number_type(type))
-  {
-    // bool to int
-    if (is_bv_type(type))
-      return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
+  if (!is_number_type(type))
+    return std::nullopt;
 
-    if (is_fixedbv_type(type))
-    {
-      fixedbvt fbv;
-      fbv.spec = fixedbv_spect(to_fixedbv_type(type));
-      fbv.from_integer(to_constant_bool2t(simp).value);
-      return constant_fixedbv2tc(fbv);
-    }
-
-    if (is_floatbv_type(type))
-    {
-      if (!is_constant_int2t(rounding_mode))
-        return expr2tc();
-
-      ieee_floatt fpbv;
-
-      BigInt rm_value = to_constant_int2t(rounding_mode).value;
-      fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-      // Bool -> float: convert the bool's integer value (0 or 1) into
-      // a float of the destination type.
-      fpbv.spec = ieee_float_spect(to_floatbv_type(type));
-      fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
-
-      return constant_floatbv2tc(fpbv);
-    }
-  }
-  else if (is_bv_type(simp) && is_number_type(type))
-  {
-    // int to int/float/double
-    const constant_int2t &theint = to_constant_int2t(simp);
-
-    if (is_bv_type(type))
-    {
-      // Typecasting an integer constant to a (possibly smaller) integer
-      // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
-      // destination width via the same binary round-trip the legacy
-      // from_integer + to_integer pair performed.
-      return from_integer(theint.value, type);
-    }
-
-    if (is_fixedbv_type(type))
-    {
-      fixedbvt fbv;
-      fbv.spec = fixedbv_spect(to_fixedbv_type(type));
-      fbv.from_integer(theint.value);
-      return constant_fixedbv2tc(fbv);
-    }
-
-    if (is_bool_type(type))
-    {
-      const constant_int2t &theint = to_constant_int2t(simp);
-      return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
-    }
-
-    if (is_floatbv_type(type))
-    {
-      if (!is_constant_int2t(rounding_mode))
-        return expr2tc();
-
-      ieee_floatt fpbv;
-
-      BigInt rm_value = to_constant_int2t(rounding_mode).value;
-      fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-      fpbv.spec = ieee_float_spect(to_floatbv_type(type));
-      fpbv.from_integer(to_constant_int2t(simp).value);
-
-      return constant_floatbv2tc(fpbv);
-    }
-  }
-  else if (is_fixedbv_type(simp) && is_number_type(type))
-  {
-    // float/double to int/float/double
-    fixedbvt fbv(to_constant_fixedbv2t(simp).value);
-
-    if (is_bv_type(type))
-      return constant_int2tc(type, fbv.to_integer());
-
-    if (is_fixedbv_type(type))
-    {
-      fbv.round(fixedbv_spect(to_fixedbv_type(type)));
-      return constant_fixedbv2tc(fbv);
-    }
-
-    if (is_bool_type(type))
-    {
-      const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
-      return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
-    }
-  }
-  else if (is_floatbv_type(simp) && is_number_type(type))
-  {
-    // float/double to int/float/double
-    if (!is_constant_int2t(rounding_mode))
-      return expr2tc();
-
-    ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
-
-    BigInt rm_value = to_constant_int2t(rounding_mode).value;
-    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-    if (is_bv_type(type))
-      return constant_int2tc(type, fpbv.to_integer());
-
-    if (is_floatbv_type(type))
-    {
-      fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
-      return constant_floatbv2tc(fpbv);
-    }
-
-    if (is_bool_type(type))
-      return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
-  }
+  if (is_bool_type(simp))
+    return fold_constant_bool_source(type, simp, rounding_mode);
+  if (is_bv_type(simp))
+    return fold_constant_bv_source(type, simp, rounding_mode);
+  if (is_fixedbv_type(simp))
+    return fold_constant_fixedbv_source(type, simp, rounding_mode);
+  if (is_floatbv_type(simp))
+    return fold_constant_floatbv_source(type, simp, rounding_mode);
   return std::nullopt;
 }
 
