@@ -7,7 +7,7 @@ class Type:
     def widen(self, other: 'Type') -> 'Type':
         return self.join(other)
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
-        return Unknown()
+        return Bottom()
     def remove_isinstance(self, cls_name: str) -> 'Type':
         # complement of narrow: remove members matching cls_name (used for false-branch)
         return self
@@ -53,10 +53,40 @@ class TopType(Type):
 class Unknown(Type):
     def join(self, other: 'Type') -> 'Type':
         return other
+    def widen(self, other: 'Type') -> 'Type':
+        return self.join(other)
+    def narrow_with_isinstance(self, cls_name: str) -> 'Type':
+        return self
+    def remove_isinstance(self, cls_name: str) -> 'Type':
+        return self
     def is_subtype_of_name(self, cls_name: str) -> bool:
         return False
     def to_ann_name(self) -> str:
         return 'unknown'
+
+class Bottom(Type):
+
+    def join(self, other: 'Type') -> 'Type':
+        return other
+
+    def widen(self, other: 'Type') -> 'Type':
+        return other
+
+    def narrow_with_isinstance(self, cls_name: str) -> Type:
+        return self 
+
+    def is_subtype_of_name(self, cls_name: str) -> bool:
+        return True
+
+    def remove_isinstance(self, cls_name: str) -> 'Type':
+        return self
+
+    def to_ann_name(self) -> str:
+        return 'Never'
+
+    def __repr__(self):
+        return "Bottom"
+    
 
 class NoneType(Type):
     def join(self, other: 'Type') -> 'Type':
@@ -70,12 +100,31 @@ class NoneType(Type):
     def is_subtype_of_name(self, cls_name: str) -> bool:
         return cls_name.lower() in ('none','nonetype','type(None)')
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
-        return self if self.is_subtype_of_name(cls_name) else Unknown()
+        return self if self.is_subtype_of_name(cls_name) else Bottom()
     def remove_isinstance(self, cls_name: str) -> 'Type':
         # remove None if cls_name refers to None
-        return Unknown() if self.is_subtype_of_name(cls_name) else self
+        return Bottom() if self.is_subtype_of_name(cls_name) else self
     def to_ann_name(self) -> str:
         return 'None'
+
+class AnyType(Type):
+
+    def join(self, other: 'Type') -> 'Type':
+        return self
+
+    def is_subtype_of_name(self, cls_name: str) -> bool:
+        return cls_name.lower() in {
+            "any", "object"
+        }
+
+    def narrow_with_isinstance(self, cls_name: str) -> 'Type':
+        return self
+
+    def remove_isinstance(self, cls_name: str) -> 'Type':
+        return self
+
+    def to_ann_name(self) -> str:
+        return 'Any'    
 
 class BoolType(Type):
     def join(self, other: 'Type') -> 'Type':
@@ -113,9 +162,9 @@ class IntType(Type):
     def to_ann_name(self) -> str:
         return 'int'
     def narrow_with_isinstance(self, cls_name: str) -> 'Type':
-        return self if self.is_subtype_of_name(cls_name) else Unknown()
+        return self if self.is_subtype_of_name(cls_name) else Bottom()
     def remove_isinstance(self, cls_name: str) -> 'Type':
-        return Unknown() if self.is_subtype_of_name(cls_name) else self
+        return Bottom() if self.is_subtype_of_name(cls_name) else self
 
 class FloatType(Type):
     def join(self, other: 'Type') -> 'Type':
@@ -234,6 +283,7 @@ class TupleType(Type):
     def widen(self, other: 'Type') -> 'Type':
         if isinstance(other, Unknown):
             return self
+        
         if isinstance(other, TupleType):
             if len(self.elems) == len(other.elems):
                 return TupleType([a.widen(b) for a,b in zip(self.elems, other.elems)])
@@ -427,15 +477,15 @@ class UnionType(Type):
             return self
         if isinstance(other, UnionType):
             return UnionType(self.members + other.members)
-        if any(isinstance(m, FloatType) for m in self.members) and isinstance(other, IntType):
-            new_members: List[Type] = []
+        # if any(isinstance(m, FloatType) for m in self.members) and isinstance(other, IntType):
+        #     new_members: List[Type] = []
 
-            for member in self.members:
-                if isinstance(member, IntType):
-                    new_members.append(FloatType())
-                else:
-                    new_members.append(member)   
-            return UnionType(new_members)
+        #     for member in self.members:
+        #         if isinstance(member, IntType):
+        #             new_members.append(FloatType())
+        #         else:
+        #             new_members.append(member)   
+        #     return UnionType(new_members)
         return UnionType(self.members + [other])
     
     def widen(self, other: 'Type') -> 'Type':
