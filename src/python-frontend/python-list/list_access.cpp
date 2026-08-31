@@ -2833,9 +2833,7 @@ exprt python_list::handle_range_slice(
   // the per-element copy length is the symbolic o->size and each copy unwinds
   // memcpy's byte loop to --unwind, which is what made slicing the most
   // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
-  BigInt slice_elem_size =
-    array.is_symbol() ? uniform_scalar_elem_size(array.identifier().as_string())
-                      : BigInt(0);
+  BigInt slice_elem_size = uniform_scalar_elem_size(array);
 
   exprt push_call = build_call_expr(
     *push_func,

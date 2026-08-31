@@ -926,6 +926,13 @@ BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
   return width;
 }
 
+BigInt python_list::uniform_scalar_elem_size(const exprt &list) const
+{
+  if (!list.is_symbol())
+    return 0;
+  return uniform_scalar_elem_size(list.identifier().as_string());
+}
+
 exprt python_list::build_extend_list_call(
   const symbolt &list,
   const nlohmann::json &op,
