@@ -9,6 +9,62 @@
 #include <util/irep/migrate.h>
 #include <util/irep/std_types.h>
 
+namespace
+{
+/// The type of the object `ptr` addresses, for type-0 object-size purposes.
+///
+/// `deref_items` is the non-empty resolution of `ptr`; `deref` is the
+/// dereference expression, consulted for a struct at a constant offset.
+type2tc addressed_object_type(
+  const expr2tc &ptr,
+  const expr2tc &deref,
+  const std::list<dereference_callbackt::internal_item> &deref_items,
+  const namespacet &ns)
+{
+  // An address-of names its object directly.
+  if (is_address_of2t(ptr))
+  {
+    const address_of2t &addrof = to_address_of2t(ptr);
+    if (is_index2t(addrof.ptr_obj))
+    {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if (is_symbol2t(idx.source_value) || is_member2t(idx.source_value))
+        return idx.source_value->type;
+    }
+    else if (is_member2t(addrof.ptr_obj) || is_symbol2t(addrof.ptr_obj))
+      return addrof.ptr_obj->type;
+  }
+
+  const type2tc &resolved = deref_items.front().object->type;
+  if (!is_pointer_type(ptr->type))
+    return resolved;
+
+  const type2tc ptr_subtype = to_pointer_type(ptr->type).subtype;
+  const auto &item = deref_items.front();
+
+  if (
+    is_constant_int2t(item.offset) && is_struct_type(item.object->type) &&
+    !is_nil_expr(deref) && !is_empty_type(deref->type))
+    return deref->type;
+
+  if (is_symbol_type(ptr_subtype))
+  {
+    const symbol_type2t &symtype = to_symbol_type(ptr_subtype);
+    const symbolt *symbol = ns.lookup(symtype.symbol_name);
+    return symbol != nullptr ? migrate_symbol_type(*symbol) : resolved;
+  }
+
+  // A void* carries no size, so when the pointer's subtype is empty the
+  // resolved object is the only thing that knows how big it is. Falling back to
+  // the subtype there made every scalar reached through a void* report the
+  // unknown-size fallback -- visible as __CPROVER_OBJECT_SIZE(&scalar_static)
+  // failing where CBMC proves it, since the CPROVER lowering always casts to
+  // void* first.
+  return (is_array_type(resolved) || is_empty_type(ptr_subtype)) ? resolved
+                                                                 : ptr_subtype;
+}
+} // namespace
+
 void goto_symext::intrinsic_builtin_object_size(
   const code_function_call2t &func_call,
   reachability_treet &)
@@ -61,66 +117,8 @@ void goto_symext::intrinsic_builtin_object_size(
   }
   else
   {
-    type2tc addressed_type;
-
-    // Determine addressed type from address_of expressions
-    if (is_address_of2t(ptr))
-    {
-      const address_of2t &addrof = to_address_of2t(ptr);
-      if (is_index2t(addrof.ptr_obj))
-      {
-        const index2t &idx = to_index2t(addrof.ptr_obj);
-        if (is_symbol2t(idx.source_value) || is_member2t(idx.source_value))
-          addressed_type = idx.source_value->type;
-      }
-      else if (is_member2t(addrof.ptr_obj) || is_symbol2t(addrof.ptr_obj))
-        addressed_type = addrof.ptr_obj->type;
-    }
-
-    // Handle nil addressed type cases
-    if (is_nil_type(addressed_type))
-    {
-      if (is_pointer_type(ptr->type))
-      {
-        type2tc ptr_subtype = to_pointer_type(ptr->type).subtype;
-        const auto &item = internal_deref_items.front();
-
-        if (
-          is_constant_int2t(item.offset) && is_struct_type(item.object->type) &&
-          !is_nil_expr(deref) && !is_empty_type(deref->type))
-        {
-          addressed_type = deref->type;
-        }
-
-        if (is_nil_type(addressed_type))
-        {
-          if (is_symbol_type(ptr_subtype))
-          {
-            const symbol_type2t &symtype = to_symbol_type(ptr_subtype);
-            const symbolt *symbol = ns.lookup(symtype.symbol_name);
-            addressed_type = (symbol != nullptr)
-                               ? migrate_symbol_type(*symbol)
-                               : internal_deref_items.front().object->type;
-          }
-          else
-          {
-            // A void* carries no size, so when the pointer's subtype is empty
-            // the resolved object is the only thing that knows how big it is.
-            // Falling back to the subtype there made every scalar reached
-            // through a void* report the unknown-size fallback -- visible as
-            // __CPROVER_OBJECT_SIZE(&scalar_static) failing where CBMC proves
-            // it, since the CPROVER lowering always casts to void* first.
-            const type2tc &resolved = internal_deref_items.front().object->type;
-            addressed_type =
-              (is_array_type(resolved) || is_empty_type(ptr_subtype))
-                ? resolved
-                : ptr_subtype;
-          }
-        }
-      }
-      else
-        addressed_type = internal_deref_items.front().object->type;
-    }
+    const type2tc addressed_type =
+      addressed_object_type(ptr, deref, internal_deref_items, ns);
 
     // Note: type_byte_size returns the allocated object size, not just the sum
     // of fields. For structs/unions this includes alignment and padding, which
