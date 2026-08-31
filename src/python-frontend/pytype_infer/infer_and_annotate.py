@@ -1,4 +1,4 @@
-import ast, argparse, sys
+import ast, argparse
 from .annotate_ast import annotate_ast
 
 def annotate_tree(tree: ast.Module, filename: str | None = None) -> ast.Module:
@@ -16,14 +16,7 @@ def main():
     src = open(args.infile,'r',encoding='utf-8').read()
     tree = ast.parse(src)
     annotated = annotate_tree(tree, filename=args.infile)
-    try:
-        s = ast.unparse(annotated)
-    except Exception:
-        try:
-            import astor
-            s = astor.to_source(annotated)
-        except Exception:
-            s = '# could not unparse annotated AST\n' + ast.dump(annotated)
+    s = ast.unparse(annotated)
     open(args.outfile,'w',encoding='utf-8').write(s)
     print('Wrote', args.outfile)
 
