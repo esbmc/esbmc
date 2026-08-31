@@ -1296,6 +1296,8 @@ class CoreVisitorsMixin:
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        import ast
+
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
         # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
@@ -1319,6 +1321,7 @@ class CoreVisitorsMixin:
             return None
 
         node = self.generic_visit(node)
+
         self._update_known_literal_for_simple_assign(node)
         self._track_static_seq_binding(node)
         self._maybe_track_seq_iterator(node)

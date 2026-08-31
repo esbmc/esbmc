@@ -16,11 +16,11 @@ class ModuleLifecycleMixin:
             node = self.generic_visit(node)
                    # try:
             ast.fix_missing_locations(node)
-            print("Before pytype module annotations:")
-            print(ast.unparse(node))
+           # print("Before pytype module annotations:")
+           # print(ast.unparse(node))
             node =  pytype_infer.annotate_tree(node)
-            print("After pytype annotation module:")
-            print(ast.unparse(node))
+          #  print("After pytype annotation module:")
+          #  print(ast.unparse(node))
 
             if self._needs_dataclass_initvar_import:
                 self._ensure_dataclass_initvar_import(node)
