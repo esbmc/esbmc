@@ -417,6 +417,8 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        self.expand_unittest_main(node)
+
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)

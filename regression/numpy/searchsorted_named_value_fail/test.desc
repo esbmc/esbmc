@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.searchsorted\(\) value must be a finite numeric literal$
+^ERROR: TypeError: numpy.searchsorted\(\) requires a literal value$

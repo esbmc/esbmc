@@ -6720,3 +6720,123 @@ whole guard kills all five; dropping only the pointer half kills the three that
 exercise it, so each half is separately load-bearing. This is the same family as §110's
 base-name defect: the matcher's name test is a prefix where it means an exact
 name, and each shape that reaches it wrongly has to be closed as it is found.
+
+
+## 132. The unported dereference arm was an encoder abort (2026-08-29)
+
+§131.4 named the array decay as the next cause, on the strength of two tests
+sharing a tag. They do not share a mechanism, and they point in opposite
+directions:
+
+| test | legacy | hop-off |
+|---|---|---|
+| `github_169` | `ASSIGN b[0]=…` | `ASSIGN *b=…` |
+| `github_1210-1-struct` | `memcpy(&JJ, …)` | `memcpy(&JJ[0], …)` |
+
+The first is the hop-off failing to decay, the second is the hop-off decaying
+where legacy does not. `github_1210-1-struct` declares `extern struct
+incomplete JJ;`, so it is a question about following a symbol type to an
+incomplete one, not about decay at all. It keeps its own slice. This section is
+`github_169`.
+
+### 132.1 The comment was wrong, and not by a spelling
+
+`clang_c_adjust::adjust_dereference` has three arms: rewrite `*a` to `a[0]`
+when the operand `is_array_like`, retype to the pointer's subtype otherwise,
+and re-take the address when the result is code-typed.
+`clang_c_adjust_irep2::adjust_dereference` ported only the third, above a
+comment saying the other two "retype a node the migration already builds with
+the right type, so no corpus input distinguishes them".
+
+`github_169` distinguishes them, and reducing it shows the difference is not a
+rendering. It has three symptoms, not one:
+
+| symptom | shapes |
+|---|---|
+| `ERROR: Unexpected type in int/ptr typecast`, exit 134 | 1-D, VLA, 2-D, struct and union member, typedef, compound literal, `extern`/`static`/`const` array, and `github_169`'s own `char *b[argc]` |
+| `ERROR: Can't construct rvalue reference to array type during dereference`, exit 134 | `*p->v` through a struct pointer, `**a` on an array-typed parameter |
+| `VERIFICATION FAILED` -- a **wrong verdict, no crash** | `*"abc"`, `&*a` |
+
+The loud one first:
+
+```c
+int main(void) { int a[3]; *a = 7; __ESBMC_assert(a[0] == 7, "x"); }
+```
+
+Under `--clang-c-irep2-adjust-only` on master this **aborts**:
+
+```
+Generated 6 VCC(s), 4 remaining after simplification
+ERROR: Unexpected type in int/ptr typecast          (exit 134)
+```
+
+The dereference reaches the encoder as a pointer built from an array rather
+than a named element. A VLA -- `github_169`'s own shape, `char *b[argc]` --
+aborts the same way. The goto-level census scored this as two diverging lines;
+it is a crash.
+
+### 132.2 The vector half is not reproduced
+
+Legacy's guard is `is_array_like`, which is `vector || array ||
+incomplete_array`. Only the array half is ported:
+
+- **vector** -- clang rejects `*v` on one: `indirection requires pointer
+  operand ('v4' (vector of 4 'int' values) invalid)`. No accepted C input
+  reaches the arm, so reproducing it would be dead instrumentation. Measured,
+  not assumed.
+- **incomplete_array** -- needs no arm of its own: `migrate_type` turns it into
+  `array_type2t` with `size_is_infinite` (`util/irep/migrate.cpp`'s
+  `incomplete_array` arm), which
+  `is_array_type` already admits.
+
+### 132.3 Result
+
+The stride-7 residue goes 11 -> 10. Three tests, each failing on a master
+control binary built from this same tree:
+
+| test | pins |
+|---|---|
+| `irep2_only_deref_array` | the rewrite on a fixed-size array |
+| `irep2_only_deref_array_fail` | `*a` writes `a[0]`, not `a[1]` -- names the property |
+| `irep2_only_deref_array_vla` | the variably-modified shape `github_169` reduced to |
+| `irep2_only_deref_array_strlit` | the **wrong-verdict** class, which the other three cannot reach |
+
+The first three all fail on the control the same way -- the process aborts --
+so together they distinguish only "crashes" from "does not crash". That is not
+enough: `char c = *"abc"; assert(c == 'a');` is `SUCCESSFUL` on legacy and
+`FAILED` on the unpatched hop-off, with no crash at all. A regression that
+reintroduced only the quiet half would pass all three. `..._strlit` is the one
+that guards it, and it is the test this section nearly shipped without --
+the first draft asserted the arm "aborted rather than diverging quietly",
+which the reduction above refutes.
+
+The divergence is always in the safe direction: the unpatched hop-off reports
+`FAILED` where legacy reports `SUCCESSFUL`, never the reverse, so the cost was
+precision rather than soundness.
+
+### 132.4 Next
+
+`github_1210-1-struct`, split out above. Reduced and confirmed rather than
+inferred this time:
+
+```c
+struct incomplete;
+extern struct incomplete JJ;
+void take(void *p);
+int main(void) { take(&JJ); }
+```
+
+```
+legacy:  FUNCTION_CALL:  take((void *)(&JJ))
+hop-off: FUNCTION_CALL:  take((void *)(&JJ[0]))
+```
+
+The suspect is that legacy's `adjust_address_of` tests
+`is_array_like(op.type())` on the *unfollowed* type, so a symbol type naming an
+incomplete struct does not match, while the migration resolves it and the
+IREP2 arm decays. Which of the two is right is the open question -- unlike
+§132, the hop-off is the side doing more work here, so the answer may be to
+stop decaying rather than to port an arm.
+
+Four tags have now dissolved on inspection in this scope, and every one of them
+was read from a census table rather than from a reduction. Reduce first.

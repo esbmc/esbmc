@@ -5,20 +5,23 @@
 
 namespace
 {
-/// The first call strictly below `expr`; a call that *is* `expr` is already at
-/// statement level and stays there.
-expr2tc find_nested_call(const expr2tc &expr, bool nested)
+/// The first expression-context call below `expr`. Migration spells these
+/// `sideeffect2t`/function_call, so a statement-level `code_function_call2t`
+/// is never one of them and needs no special case.
+expr2tc find_nested_call(const expr2tc &expr)
 {
   if (is_nil_expr(expr))
     return expr2tc();
 
-  if (nested && is_code_function_call2t(expr))
+  if (
+    is_sideeffect2t(expr) &&
+    to_sideeffect2t(expr).kind == sideeffect2t::allockind::function_call)
     return expr;
 
   expr2tc found;
   expr->foreach_operand([&found](const expr2tc &op) {
     if (is_nil_expr(found))
-      found = find_nested_call(op, true);
+      found = find_nested_call(op);
   });
   return found;
 }
@@ -53,17 +56,18 @@ void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
 
     Forall_goto_program_instructions (it, fn.body)
     {
-      // A call already at statement level is fine; only operands can hide one.
+      // One instruction can hide more than one, and substituting the first
+      // can expose the next, so drain each instruction before moving on.
       for (;;)
       {
-        expr2tc nested = find_nested_call(it->code, false);
+        expr2tc nested = find_nested_call(it->code);
         if (is_nil_expr(nested))
-          nested = find_nested_call(it->guard, false);
+          nested = find_nested_call(it->guard);
         if (is_nil_expr(nested))
           break;
 
-        const code_function_call2t &call = to_code_function_call2t(nested);
-        const type2tc &ret_type = to_code_type(call.function->type).ret_type;
+        const sideeffect2t &call = to_sideeffect2t(nested);
+        const type2tc &ret_type = call.type;
 
         symbolt &tmp =
           gen.new_symbol(context, migrate_type_back(ret_type), "lifted");
@@ -76,18 +80,18 @@ void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
         call_inst->type = FUNCTION_CALL;
         call_inst->location = it->location;
         call_inst->code =
-          code_function_call2tc(tmp_expr, call.function, call.operands);
+          code_function_call2tc(tmp_expr, call.operand, call.arguments);
         lifted = true;
 
         // The callee is an ESBMC intrinsic that symex answers by name, so it
         // needs no body -- but goto_inline resolves every call through
         // function_map first and errors out on a name that is not there. A
         // native goto-binary compiles no C, so nothing else declares it.
-        const irep_idt callee = to_symbol2t(call.function).thename;
+        const irep_idt callee = to_symbol2t(call.operand).thename;
         if (!goto_functions.function_map.count(callee))
         {
           goto_functiont &decl = goto_functions.function_map[callee];
-          decl.type = call.function->type;
+          decl.type = call.operand->type;
           decl.body_available = false;
         }
         if (!context.find_symbol(callee))
@@ -96,7 +100,7 @@ void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
           fsym.mode = "C";
           fsym.name = callee;
           fsym.id = callee;
-          fsym.set_type(migrate_type_back(call.function->type));
+          fsym.set_type(migrate_type_back(call.operand->type));
           fsym.is_extern = true;
           context.add(fsym);
         }
