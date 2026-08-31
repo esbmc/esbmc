@@ -413,7 +413,6 @@ regression/numpy/empty_no_shape_fail
 regression/numpy/empty_object_dtype_fail
 regression/numpy/empty_zero_size_edge
 regression/numpy/fancy_index_var_reassigned_fail
-regression/numpy/flat_mutation_diagnostic_fail
 regression/numpy/flatten_constructor_unsupported_fail
 regression/numpy/fmod_broadcast
 regression/numpy/github_5498_scalar_array_fail
@@ -1218,7 +1217,6 @@ regression/python/string-lstrip-chars-runtime-success
 regression/function_contract/contract_fn_name_cpp_paramspp
 regression/python/str_rsplit_fail
 regression/python/abs_bool
-regression/numpy/view_transpose_write_source_fail
 regression/esbmc-unix/github_1628_4
 regression/python/github_3642_fail
 regression/esbmc-cpp/cpp/github_2296
@@ -1726,7 +1724,6 @@ regression/numpy/view_mutation_inplace_sort_fail
 regression/numpy/det_4x4_unsupported_fail
 regression/numpy/numpy_var_2d_fail_empty
 regression/python/github_3825_6
-regression/numpy/view_function_swapaxes_write_fail
 regression/humaneval/humaneval_20
 regression/numpy/complex_div_zero_scalar_fail
 regression/esbmc/cswitch_skip_readonly_globals
@@ -1740,7 +1737,6 @@ regression/python/string-splitlines-crlf
 regression/python/list_extend17_fail
 regression/python/math_edge_fsum_fail
 regression/python/set_from_param
-regression/numpy/view_mutation_augassign_fail
 regression/numpy/unique_nan_edge
 regression/numpy/det4
 regression/numpy/np_smt_array_small_write_success
