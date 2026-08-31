@@ -2,5 +2,5 @@ CORE
 main.cpp
 --multi-property
 ^VERIFICATION FAILED$
-^  FAILED       \[main\.assertion\.[0-9]+\] +line +5 +uncaught exception: std::runtime_error$
-^  FAILED       \[main\.assertion\.[0-9]+\] +line +6 +uncaught exception: std::bad_alloc$
+^  FAILED       \[main\.assertion\.[0-9]+\] +line +5 +uncaught exception: class std::runtime_error$
+^  FAILED       \[main\.assertion\.[0-9]+\] +line +6 +uncaught exception: class std::bad_alloc$
