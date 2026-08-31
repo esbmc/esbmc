@@ -14,6 +14,13 @@ code is out of scope no matter how shallow it looks. The top code hot spots were
 project's quality gate (cmake/ninja + ctest) configured and green at baseline
 (720/720 unit tests, 91/91 `regression/esbmc/irep2_only_*`).
 
+**Method note**: candidates came from two independent passes — a direct hot-spot
+analysis and a sub-agent sweep — which were then reconciled. The sweep surfaced
+four candidates the direct pass missed, including the one that came closest to
+taking the pick. Both passes independently identified `irep2-adjust-arm-table`.
+Twelve candidates are recorded in `.architecture/backlog.md`; the four cards
+below plus the runner-up are the ones that materially affected the decision.
+
 **Diagram convention**: in every before/after pair, solid edges are the
 **interface** — what a caller or a maintainer adding behaviour must know — and
 dashed edges are inside the **implementation**.
@@ -127,6 +134,106 @@ graph LR
   R -.-> D[dispatch loop]
   D -.-> A1[adjust_X]
   D -.-> A2[adjust_Y]
+```
+
+---
+
+### `address-decomposition-single-walk` — five walks, four disagreeing contracts · Worth exploring · score 20/25
+
+**Files**
+
+- `src/util/expr/expr_simplifier.cpp:740` — `address_root_and_offset`
+- `src/util/expr/expr_simplifier.cpp:779` — `fold_address_difference`
+- `src/util/expr/expr_simplifier.cpp:3589` — `linearise_enclosing_indices`
+- `src/util/expr/expr_simplifier.cpp:3771` — `subscript_offset_in_units`
+- `src/util/expr/expr_simplifier.cpp:3932` — `cancel_shared_pointer_base`
+- `src/util/expr/type_byte_size.cpp` — `pointer_offset_bits`, `compute_pointer_offset`
+- File-count estimate: **4**
+
+**Score** 20/25
+
+| Axis | Score | Justification |
+|---|---|---|
+| Leverage | 3 | Revised down from 5 — see *Problem*. There is a genuinely shared core (typecast peeling, the walk skeleton, `member_offset`), but the five contracts differ deliberately along four orthogonal axes, so a single entry point reconciling them needs a knob per axis. Callers would trade five named walks for one function plus four knobs they must still choose correctly. |
+| Locality | 5 | The decision "what counts as a base, in what unit, and does the member path stay in the base" is genuinely made five times. |
+| Blast radius | 2 | Three or four files if the module gets its own header. Deliberately *not* placed in `type_byte_size.h`, which 29 files across `goto-symex`, `pointer-analysis`, `solvers`, `clang-c-frontend` and `goto2c` include — putting it there would make this a 4. |
+| Heat | 5 | 9 touches in the last 300 commits, and six of them are one cluster landed inside ten days: #7346, #7391, #7392, #7393, #7394, #7395. Most recent 2026-08-31. |
+
+**Problem**
+
+This is the best-evidenced *friction* in the repository. Six pull requests in ten
+days each hand-rolled part of the same operation — turn an address into a base
+object plus an offset — and none of them could reuse the others, because each
+existing walk answers a different question:
+
+| Walk | Subscripts | Units | Members | Base returned |
+|---|---|---|---|---|
+| `address_root_and_offset:740` | constant only | bytes | counted via `member_offset` | unzeroed root |
+| `linearise_enclosing_indices:3589` | constant, *and* constant array dims | linear elements | not handled | rebuilt, zeroed |
+| `subscript_offset_in_units:3771` | symbolic permitted | the pointer's own pointee | deliberately skipped | caller rebuilds |
+
+Each presents a raw `expr2tc` in and out, so no caller can tell from the
+**interface** which rules it just got.
+
+**Deletion test**
+
+Concentrates — the walk skeleton is real shared behaviour. But *the proposed
+deepening does not follow from that*, which is why this card is `Worth
+exploring` rather than `Strong`.
+
+**Solution — and why it was not taken**
+
+The obvious move is one `decompose_address(expr, unit_choice)` returning a
+base/offset struct. Reading the code, the differences are load-bearing, not
+accidental: `subscript_offset_in_units` skips members *precisely because* its
+caller rebuilds a base that keeps the member path (its comment notes counting
+them twice would surface once a struct has padding before the member), while
+`address_root_and_offset` counts them *precisely because* it returns an unzeroed
+root. Those two cannot share one contract without a knob meaning "did you
+rebuild the base?", plus knobs for units and for constant-vs-symbolic. That is a
+**union**, not a deepening: the resulting interface is nearly as complex as the
+implementations it replaces, and every caller still has to choose correctly — so
+**leverage** per unit of interface goes *down*, not up.
+
+The right change is narrower: extract only the genuinely common core and leave
+the four contracts as named, documented entry points over it. Scoping that is a
+judgement call about which differences are essential, and it lands in
+soundness-critical code where a wrong unification yields unsound verdicts that
+the regression suite would not catch — the repository maintains a dedicated
+SMT-backed simplifier equivalence checker (`ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK`,
+and #7351 "fix the simplifier equivalence job and the bugs it found") for exactly
+this reason. That is a decision for a human, and it would warrant
+`needs-svcomp-run`.
+
+One claim from the sweep did not survive checking: that the `array_size_excp`
+catch is present in two places and missing in a third.
+`linearise_enclosing_indices` never calls `type_byte_size` — it reads constant
+`array_size` values directly — so it has no exception path to guard. There are
+two catch sites, at lines 810 and 3803, and both are correct.
+
+**Benefits** (of the narrower change) **Locality** for the walk skeleton;
+**leverage** only if the entry points stay named.
+
+**Before**
+
+```mermaid
+graph LR
+  F1[fold_address_difference] --> W1["address_root_and_offset<br/>const, bytes, members counted"]
+  F2[pointer_offset do_simplify] --> W2["compute_pointer_offset"]
+  F3[address_of do_simplify] --> W3["linearise_enclosing_indices<br/>const dims, elements"]
+  F4[flatten_nested_index_address] --> W4["subscript_offset_in_units<br/>symbolic, pointee, members skipped"]
+```
+
+**After** (the narrower change, not the union)
+
+```mermaid
+graph LR
+  F1[fold_address_difference] --> W1[root_and_offset]
+  F3[address_of do_simplify] --> W3[linearise_indices]
+  F4[flatten_nested_index_address] --> W4[offset_in_units]
+  W1 -.-> C[shared walk core]
+  W3 -.-> C
+  W4 -.-> C
 ```
 
 ---
@@ -299,6 +406,8 @@ graph LR
 |---|---|
 | `cpp-om-library-headers` | Leverage 1 — fails the deletion test. `src/cpp/library/{string,vector,type_traits,map,…}` is the hottest directory in the repo (92 touches), but these are operational models that deliberately mirror libc++'s shape, including its `_LIBCPP_STD_VER` gating. Their interface is fixed by the C++ standard; making it "deeper" would make ESBMC diverge from the thing it models. The shape is a requirement, not a defect. |
 | `python-converter-god-class` | Blast radius 5 — see *Too large to automate*. |
+| `preprocessor-state-ownership` | Blast radius 5, and its deletion test comes out *moves* — see *Too large to automate*. |
+| `list-element-types-owned-module` | Already in flight. PR #7366, "[python] Give per-instance element types one owned home", is open against this exact friction (`list_type_map` as a symbol-id-keyed process-global with ~59 raw access sites). Scored 19/25 and would otherwise rank second; dropped to avoid a competing PR, not on merit. Reconsider once #7366 lands. |
 
 ## Too large to automate
 
@@ -318,29 +427,63 @@ a time behind its own seam, with `function-call-expr-split` and
 ("[python] Give per-instance element types one owned home") is already moving in
 this direction.
 
+**`preprocessor-state-ownership`** (blast radius 5). `Preprocessor` in
+`src/python-frontend/preprocessor/` composes 19 mixins that all read and write
+the same ~110 attributes declared in one flat `_init_preprocessor_state`, so
+there is no **interface** between any two of them. Note its deletion test comes
+out *moves*, not concentrates: collapsing the 19 mixins into one class makes
+nothing worse, because nothing is hidden today. The file split is cosmetic
+rather than a **seam**, and the real fix is state ownership — a programme, not a
+PR. The sequence-iterator slice (3 files) is the automatable entry point if a
+future run wants one.
+
 ## Pick
 
 **`irep2-adjust-arm-table`**, at 23/25.
 
-It outranks the runner-up **candidate**, `contracts-single-file-seam`, by 8
-points — this was not close, and the tie-break rules were not needed. Three
-things separate them:
+The runner-up **candidate** is `address-decomposition-single-walk` at 20/25.
+**The top two were within 1 point on first scoring and the pick changed hands
+once**, so the reasoning is recorded in full.
 
-1. **Heat.** 48 touches across the `clang_c_adjust_irep2` pair in the last 300
-   commits versus 6 for `contracts.cpp`. Deepening pays back through future
-   change, and this is where the change is.
-2. **Blast radius.** Two source files and no published interface, against a
-   class-splitting change reaching several modules. An unattended PR should be
-   reviewable in one sitting.
+`address-decomposition-single-walk` initially scored 24/25 — leverage 5, on the
+strength of six pull requests in ten days each hand-rolling the same address
+walk, which is the single strongest recurring-friction signal in the repository.
+On that number it would have been the pick, and the arm-table candidate would
+have been the runner-up.
+
+Reading the five walks changed the leverage score to 3. Their contracts differ
+along four orthogonal axes — constant-only versus symbolic subscripts, byte
+versus linear-element versus pointee units, member offsets counted versus
+skipped, unzeroed root versus rebuilt zeroed base — and the differences are
+deliberate and documented against issue numbers (#6778, #6779), not accidental
+duplication. A single entry point reconciling them needs one knob per axis,
+which is a union rather than a deepening: the interface ends up nearly as
+complex as the implementation, and callers must still choose correctly. Leverage
+per unit of interface would *fall*. That re-score, not a preference for the
+incumbent, is what settled it.
+
+Three things then separate the winner:
+
+1. **The deepening is well-posed.** The arm table replaces positional control
+   flow with ordered data and nothing else; there is no contract to reconcile
+   and no semantic judgement call left open. The runner-up's correct scope is
+   still an open question, which is a reason to hand it to a human rather than
+   to an unattended run.
+2. **Heat.** 48 touches across the `clang_c_adjust_irep2` pair in the last 300
+   commits — the hottest code pair in the repository, and both passes found it
+   independently.
 3. **A dated forcing function.** `adjust_sole_arms_tail` sits at exactly the
-   `core` CCN threshold of 15. The next arm added to it violates gate rule R1 and
-   forces a third arbitrary split. The other candidates get worse slowly; this
-   one gets worse on the next commit that touches it.
+   `core` CCN threshold of 15. The next arm added to it violates gate rule R1
+   and forces a third arbitrary split. The other candidates degrade slowly; this
+   one degrades on the next commit that touches it.
 
-It is also the only candidate whose behaviour is already densely pinned — 91
-`regression/esbmc/irep2_only_*` tests, all passing at baseline — which is what
-makes a behaviour-preserving refactor safe to do unattended, and the only one
-where the *new* test pins something that cannot be expressed today.
+The honest cost of this pick, stated plainly: because the change is
+behaviour-preserving by construction, the 91 existing regression tests cannot
+distinguish before from after, so they are a safety net rather than a pin. The
+new test pins the arm *ordering*, which is real and cannot be expressed today,
+but it pins metadata rather than verification behaviour. The runner-up would
+have offered a stronger behavioural pin — that is the trade accepted here, and a
+reviewer is entitled to weigh it differently.
 
 ## Design
 
