@@ -3,6 +3,7 @@
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
+#include <vector>
 
 /// Phase 6 (C.3) IREP2-native adjuster for the C frontend.
 ///
@@ -49,6 +50,24 @@ public:
   bool adjust();
 
   void adjust_expr(expr2tc &expr);
+
+  /// One arm of the dispatch, as much of it as a caller may see: what it is
+  /// called, and the guard deciding whether it claims a node. The rewrite
+  /// itself stays private -- an arm run out of its place in the order produces
+  /// a wrongly-adjusted expression, so there is nothing to gain by exposing it,
+  /// and adjust_expr already reaches every arm's behaviour.
+  struct arm_info
+  {
+    const char *name;
+    /// Null for an arm that is offered every node and guards itself.
+    bool (*when)(const expr2tc &);
+  };
+
+  /// The arms in the order adjust_expr applies them. The order is load-bearing
+  /// -- the reasons are stated on the rows in clang_c_adjust_irep2.cpp -- and
+  /// was previously legible only as statement position, which no test could
+  /// read. unit/clang-c-frontend/adjust_arms.test.cpp reads this.
+  static std::vector<arm_info> arm_order();
 
 private:
   /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
@@ -174,10 +193,29 @@ private:
   /// (§100).
   void adjust_function_designators(expr2tc &expr);
 
-  /// Arms that run only when this pass is the sole adjuster.
+  /// Arms that run only when this pass is the sole adjuster, applied in the
+  /// order `arms` lists them.
   void adjust_sole_arms(expr2tc &expr);
 
-  void adjust_sole_arms_tail(expr2tc &expr);
+  /// A comma expression takes its right operand's type (C11 6.5.17p2). Clang
+  /// hands it the *decayed* type when the right operand is an array, so leaving
+  /// it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
+  /// the named array-bounds check for the generic dereference one. Same rewrite
+  /// as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
+  void adjust_comma_type(expr2tc &expr);
+
+  /// One arm of adjust_sole_arms' dispatch: its name, the guard that decides
+  /// whether it claims a node, and the rewrite it then applies. A null `when`
+  /// is offered every node and guards itself.
+  struct arm
+  {
+    const char *name;
+    void (clang_c_adjust_irep2::*run)(expr2tc &);
+    bool (*when)(const expr2tc &);
+  };
+
+  /// The dispatch in application order, defined beside the predicates it names.
+  static const std::vector<arm> arms;
 
   contextt &context;
   const bool sole_adjuster;
