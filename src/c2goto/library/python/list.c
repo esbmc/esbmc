@@ -100,6 +100,11 @@ size_t __ESBMC_list_size(const PyListObject *l)
   // case reported, which is closer to CPython's TypeError than silently
   // answering 0.
   __ESBMC_assert(l != NULL, "TypeError: object of this type has no len()");
+  // The claim above reports the null case; without also assuming it away the
+  // read below still runs on the failing path (--multi-property keeps going
+  // past a violated claim), dereferencing NULL for a garbage size and a
+  // spurious out-of-bounds report downstream.
+  __ESBMC_assume(l != NULL);
   return l->size;
 }
 
