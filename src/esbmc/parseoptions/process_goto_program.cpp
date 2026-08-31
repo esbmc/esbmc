@@ -32,6 +32,7 @@
 #include <esbmc/ranking_synthesis.h>
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
+#include <goto-programs/goto_invariant_synthesis.h>
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
@@ -441,16 +442,25 @@ bool esbmc_parseoptionst::process_goto_program(
     }
     else
     {
+      // --synthesise-loop-invariants supplies the invariants that
+      // --loop-invariant-check discharges, so it implies that mode.
+      const bool wants_loop_invariant =
+        cmdline.isset("loop-invariant-check") ||
+        cmdline.isset("synthesise-loop-invariants");
+
       // --k-induction and --loop-invariant-check are independent and may
       // both be specified.  remove_no_op only needs to run once.
-      if (is_k_induction || cmdline.isset("loop-invariant-check"))
+      if (is_k_induction || wants_loop_invariant)
         remove_no_op(goto_functions);
 
       if (is_k_induction)
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
-      if (cmdline.isset("loop-invariant-check"))
+      if (wants_loop_invariant)
       {
+        if (cmdline.isset("synthesise-loop-invariants"))
+          goto_synthesise_loop_invariants(goto_functions);
+
         bool use_frame_rule = cmdline.isset("loop-frame-rule");
         goto_loop_invariant(goto_functions, context, use_frame_rule);
       }

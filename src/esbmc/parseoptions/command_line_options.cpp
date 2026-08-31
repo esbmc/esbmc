@@ -576,6 +576,23 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("inductive-step"))
     options.set_option("add-symex-value-sets", true);
 
+  // The invariant schema emits establishment, preservation and the post-loop
+  // use as three independent obligations. Bundling them into one query makes
+  // the solver carry every multiplier term at once: on the accumulator loop in
+  // regression/esbmc/synth_loop_invariant_sum each obligation discharges in
+  // about a second alone, while the bundle does not finish in 120s. Solve them
+  // separately by default.
+  //
+  // base-case is set alongside it for the same reason the explicit
+  // --multi-property does below: multi_property_check only runs when both are
+  // on, so setting multi-property alone would silently leave the bundled
+  // encoding in place.
+  if (cmdline.isset("synthesise-loop-invariants"))
+  {
+    options.set_option("multi-property", true);
+    options.set_option("base-case", true);
+  }
+
   // Default-enable the vacuity probe under --loop-invariant-check (the
   // standalone Hoare-rewrite mode). A loop invariant that implies the guard
   // makes the post-loop continuation unreachable; without this probe every
@@ -588,7 +605,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("no-vacuity-check"))
     options.set_option("check-vacuity", false);
   else if (
-    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check"))
+    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check") ||
+    cmdline.isset("synthesise-loop-invariants"))
     options.set_option("check-vacuity", true);
 
   // Conflicting strategies: --termination checks a different property and
