@@ -11,6 +11,28 @@
 
 namespace
 {
+/// The object an `address_of` names directly, or nil when `ptr` is not one or
+/// does not name an object whose type is the whole object's.
+type2tc address_of_object_type(const expr2tc &ptr)
+{
+  if (!is_address_of2t(ptr))
+    return type2tc();
+
+  const address_of2t &addrof = to_address_of2t(ptr);
+  if (is_index2t(addrof.ptr_obj))
+  {
+    const index2t &idx = to_index2t(addrof.ptr_obj);
+    if (is_symbol2t(idx.source_value) || is_member2t(idx.source_value))
+      return idx.source_value->type;
+    return type2tc();
+  }
+
+  if (is_member2t(addrof.ptr_obj) || is_symbol2t(addrof.ptr_obj))
+    return addrof.ptr_obj->type;
+
+  return type2tc();
+}
+
 /// The type of the object `ptr` addresses, for type-0 object-size purposes.
 ///
 /// `deref_items` is the non-empty resolution of `ptr`; `deref` is the
@@ -21,19 +43,8 @@ type2tc addressed_object_type(
   const std::list<dereference_callbackt::internal_item> &deref_items,
   const namespacet &ns)
 {
-  // An address-of names its object directly.
-  if (is_address_of2t(ptr))
-  {
-    const address_of2t &addrof = to_address_of2t(ptr);
-    if (is_index2t(addrof.ptr_obj))
-    {
-      const index2t &idx = to_index2t(addrof.ptr_obj);
-      if (is_symbol2t(idx.source_value) || is_member2t(idx.source_value))
-        return idx.source_value->type;
-    }
-    else if (is_member2t(addrof.ptr_obj) || is_symbol2t(addrof.ptr_obj))
-      return addrof.ptr_obj->type;
-  }
+  if (type2tc named = address_of_object_type(ptr); !is_nil_type(named))
+    return named;
 
   const type2tc &resolved = deref_items.front().object->type;
   if (!is_pointer_type(ptr->type))
