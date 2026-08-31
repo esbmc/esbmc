@@ -7,7 +7,12 @@
 [#7437](https://github.com/esbmc/esbmc/pull/7437),
 [#7438](https://github.com/esbmc/esbmc/pull/7438)). **W4 was re-scoped after
 measurement and not implemented as written**: §6 records why, and what replaces
-it. W5.2 is still an unlocalised investigation.
+it — the revised item landed as
+[#7440](https://github.com/esbmc/esbmc/pull/7440), with the underlying
+simplifier gap fixed by [#7441](https://github.com/esbmc/esbmc/pull/7441).
+§6.4 records the one taxed operation deliberately left alone, `remove`, and the
+measurement that rejected the obvious fix. W5.2 is still an unlocalised
+investigation.
 **Origin:** [#7361](https://github.com/esbmc/esbmc/pull/7361), *"[python] Avoid
 duplicated shifts in `list.remove()`"*, which split a search loop and a shift
 loop that had been nested. This plan generalises that fix into a screening test
@@ -292,11 +297,45 @@ times. The **shift** loop still unwinds to the bound, because after the search
 residue of it behind.
 
 **W4 (revised).** Give a list model's loop a bound symex can decide when the
-list length is statically known. One change, four operations, and it is the
-same residual already flagged in #7436's description for slicing. `remove`
-needs more than a constant length — its start index is genuinely symbolic
-whenever the searched-for element is — so it may not fall to the same fix and
-should be measured separately before being assumed in scope.
+list length is statically known. One change, three of the four operations, and
+it is the same residual already flagged in #7436's description for slicing.
+Landed as [#7440](https://github.com/esbmc/esbmc/pull/7440): `__ESBMC_list_size`
+returned `l ? l->size : 0`, and a conditional on a pointer does not
+constant-propagate even when `l` is a concrete address, so every `len()`-bounded
+loop unwound to the bound. `sum` and `max` are flat afterwards.
+[#7441](https://github.com/esbmc/esbmc/pull/7441) fixes the underlying
+simplifier gap for C code, where the guard is syntactically an address-of.
+
+### 6.4 `remove` — measured, and deliberately not fixed
+
+The fourth taxed row does not fall to the same treatment, and the attempt is
+recorded here so it is not repeated. Walking every slot and guarding the shift
+on the found index does make the trip count concrete, and it works:
+
+| `xs.remove(0)`, 8 elements | u20 | u40 | u60 |
+|---|---:|---:|---:|
+| start the shift at `i` (master) | 2,122 | 2,382 | 2,642 |
+| start at 0, guard on `j >= i` | 2,041 | 2,041 | 2,041 |
+
+A 28-case differential agreed throughout, and Mode C discharged both arms of the
+new guard under Bitwuzla and Z3. **`regression/python/list_remove1` then failed,
+and the failure was real.** That test removes from a five-element list at
+`--unwind 4`: starting the shift at `i` needs `size - 1 - i` = 3 iterations,
+starting at 0 needs `size - 1` = 4, so the model reports
+`unwinding assertion loop 144` and only passes from `--unwind 5`.
+
+That is a user-visible change to the bound every `remove` requires, not merely
+a cost trade — an existing program with a tight `--unwind` would begin reporting
+a spurious unwinding violation. Against it, `remove` is the *smallest* of the
+four taxed rows at +13 assignments per unit of `--unwind`. The trade is bad, so
+the change was reverted.
+
+**What this row would actually need** is a decidable *start* index, not a
+decidable length: `i` is the search's result and is genuinely symbolic whenever
+the removed element is. Folding the search for a constant list and a constant
+argument would give that, which is the original W4's constant-folding idea
+arriving by another route — and it belongs in the same frontend-performance item
+(§6.1), not here.
 
 **The original W4 is not dropped, but it is not this plan.** Constant-folding
 list operations remains worthwhile on its own terms; it belongs in a
