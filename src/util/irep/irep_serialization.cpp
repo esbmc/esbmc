@@ -1,3 +1,5 @@
+#include <new>
+#include <stdexcept>
 #include <sstream>
 #include <util/irep/irep_serialization.h>
 #include <util/message/message.h>
@@ -180,24 +182,6 @@ void irep_serializationt::write_string_ref(std::ostream &out, const irep_idt &s)
   }
 }
 
-/// Whether `id` is too large to be a real index into a table this stream can
-/// describe. Ids are assigned by a dense counter, and each new one costs at
-/// least a byte of input, so an id past the end of the file is corrupt.
-static bool implausible_id(std::istream &in, unsigned id)
-{
-  const std::streampos pos = in.tellg();
-  if (pos == std::streampos(-1))
-    return false; // not seekable; do not guess
-
-  in.seekg(0, std::ios::end);
-  const std::streampos end = in.tellg();
-  in.seekg(pos);
-  if (in.tellg() != pos)
-    return false;
-
-  return static_cast<std::streamoff>(id) > end - pos;
-}
-
 irep_idt irep_serializationt::read_string_ref(std::istream &in)
 {
   unsigned id = read_long(in);
@@ -206,16 +190,30 @@ irep_idt irep_serializationt::read_string_ref(std::istream &in)
   {
     // `1 + id * 2` was computed in 32 bits: a corrupted id of 0x80000000
     // wrapped to resize(1), and the indexing below then ran off the end of the
-    // map -- a SIGSEGV on any goto-binary with a flipped byte here. Size the
-    // growth in size_t, and reject an id the file is too small to justify.
-    if (implausible_id(in, id))
+    // map -- a SIGSEGV on any goto-binary with a flipped byte here.
+    //
+    // The id is deliberately not checked against the input length. It is the
+    // writer's *string-pool* number (write_string_ref stores
+    // irep_idt::get_no()), not a dense per-stream counter, so a small binary
+    // produced by a process that has interned many strings carries ids far
+    // past its own size; bounding by the file rejects valid input. A corrupt
+    // id instead surfaces as a table this allocator cannot serve.
+    try
     {
-      log_error("goto binary: string id {} exceeds input size", id);
+      ireps_container.string_rev_map.resize(
+        1 + static_cast<std::size_t>(id) * 2,
+        std::pair<bool, irep_idt>(false, irep_idt()));
+    }
+    catch (const std::bad_alloc &)
+    {
+      log_error("goto binary: string id {} needs an unservable table", id);
       throw std::string("goto binary: implausible string id");
     }
-    ireps_container.string_rev_map.resize(
-      1 + static_cast<std::size_t>(id) * 2,
-      std::pair<bool, irep_idt>(false, irep_idt()));
+    catch (const std::length_error &)
+    {
+      log_error("goto binary: string id {} needs an unservable table", id);
+      throw std::string("goto binary: implausible string id");
+    }
   }
   if (ireps_container.string_rev_map[id].first)
   {
