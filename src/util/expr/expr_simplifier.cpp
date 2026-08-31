@@ -1481,9 +1481,28 @@ expr2tc member2t::do_simplify() const
       // which member was initialized.
       const constant_union2t &uni = to_constant_union2t(source_value);
 
-      // Only the active union member can be simplified away.
+      // A cross-member read between INTEGER members of the same width is
+      // an exact bit reinterpretation: two's-complement integers of one
+      // width share their representation, so { .r=v }.s is (s-type)v.
+      // Without this fold the tagged-slot idiom never resolves — the
+      // dereference layer normalizes union accesses to the first member,
+      // so a value written via .r and read via .r still arrives here as
+      // a .s read of an .r-initialized literal. Anything wider, or any
+      // non-integer member, stays unfolded.
       if (uni.init_field != member)
+      {
+        if (uni.datatype_members.empty())
+          return expr2tc();
+        const expr2tc &val = uni.datatype_members[0];
+        if (
+          is_bv_type(type) && is_bv_type(val->type) &&
+          type->get_width() == val->type->get_width())
+        {
+          expr2tc cast = typecast2tc(type, val);
+          return try_simplification(cast);
+        }
         return expr2tc();
+      }
 
       // The value is always stored at position 0
       if (uni.datatype_members.empty())
