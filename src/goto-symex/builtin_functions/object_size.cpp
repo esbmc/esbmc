@@ -61,7 +61,6 @@ type2tc addressed_object_type(
   // `signed char *` CPROVER's write-set checks cast to, 0 for a `void *` -- so
   // a stack `int` came back as 1 byte and the check failed where CBMC proves
   // it.
-  (void)ptr_subtype;
   return resolved;
 }
 } // namespace
