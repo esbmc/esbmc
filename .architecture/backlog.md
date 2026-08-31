@@ -7,12 +7,13 @@ ideas. See `.architecture/reviews/` for the run that scored each one.
 
 ## irep2-adjust-arm-table
 
-- **Status**: proposed
+- **Status**: in-flight
 - **Score**: 23/25 (leverage 4, locality 5, blast radius 1, heat 5)
 - **Files**: ~4 estimated
 - **Modules**: `src/clang-c-frontend/clang_c_adjust_irep2.h`, `src/clang-c-frontend/clang_c_adjust_irep2.cpp`
 - **Summary**: The IREP2 adjust pass dispatches its rewrites through a hand-ordered `if`-chain split across two functions; make the arm set an ordered table so an arm's predicate, action and ordering constraint live in one place and a test can read them.
 - **First seen**: 2026-08-31
+- **PR**: #7455
 
 ## contracts-single-file-seam
 
