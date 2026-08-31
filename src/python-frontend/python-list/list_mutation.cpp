@@ -898,6 +898,31 @@ exprt python_list::list_repetition(
   return build_symbol(*list_symbol);
 }
 
+BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
+{
+  auto types = list_type_map.find(list_id);
+  if (types == list_type_map.end())
+    return 0;
+
+  BigInt width = 0;
+  bool seen = false;
+  for (const auto &entry : types->second)
+  {
+    const typet &elem_type = converter_.ns.follow(entry.second);
+    if (!(elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
+          elem_type.is_floatbv() || elem_type.is_bool()))
+      return 0;
+
+    BigInt entry_width =
+      type_byte_size(migrate_type(elem_type), &converter_.name_space());
+    if (seen && entry_width != width)
+      return 0;
+    width = entry_width;
+    seen = true;
+  }
+  return width;
+}
+
 exprt python_list::build_extend_list_call(
   const symbolt &list,
   const nlohmann::json &op,
@@ -1111,34 +1136,8 @@ exprt python_list::build_extend_list_call(
   // element to be the same scalar width: extend applies one length to all of
   // them, so a mixed-width list must keep the model's symbolic elem->size
   // fallback (0).
-  BigInt elem_size_bytes = 0;
-  auto other_types = list_type_map.find(other_list_name);
-  if (actual_list.is_symbol() && other_types != list_type_map.end())
-  {
-    bool uniform = true;
-    bool seen = false;
-    for (const auto &entry : other_types->second)
-    {
-      const typet &elem_type = converter_.ns.follow(entry.second);
-      if (!(elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
-            elem_type.is_floatbv() || elem_type.is_bool()))
-      {
-        uniform = false;
-        break;
-      }
-      BigInt width =
-        type_byte_size(migrate_type(elem_type), &converter_.name_space());
-      if (seen && width != elem_size_bytes)
-      {
-        uniform = false;
-        break;
-      }
-      elem_size_bytes = width;
-      seen = true;
-    }
-    if (!uniform)
-      elem_size_bytes = 0;
-  }
+  BigInt elem_size_bytes =
+    actual_list.is_symbol() ? uniform_scalar_elem_size(other_list_name) : 0;
 
   code_function_callt extend_func_call;
   extend_func_call.function() = build_symbol(*extend_func_sym);
