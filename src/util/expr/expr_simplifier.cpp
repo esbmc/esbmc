@@ -1481,6 +1481,10 @@ expr2tc member2t::do_simplify() const
       // which member was initialized.
       const constant_union2t &uni = to_constant_union2t(source_value);
 
+      // The value is always stored at position 0
+      if (uni.datatype_members.empty())
+        return expr2tc();
+
       // A cross-member read between INTEGER members of the same width is
       // an exact bit reinterpretation: two's-complement integers of one
       // width share their representation, so { .r=v }.s is (s-type)v.
@@ -1491,8 +1495,6 @@ expr2tc member2t::do_simplify() const
       // non-integer member, stays unfolded.
       if (uni.init_field != member)
       {
-        if (uni.datatype_members.empty())
-          return expr2tc();
         const expr2tc &val = uni.datatype_members[0];
         if (
           is_bv_type(type) && is_bv_type(val->type) &&
@@ -1503,10 +1505,6 @@ expr2tc member2t::do_simplify() const
         }
         return expr2tc();
       }
-
-      // The value is always stored at position 0
-      if (uni.datatype_members.empty())
-        return expr2tc();
 
       s = uni.datatype_members[0];
 
