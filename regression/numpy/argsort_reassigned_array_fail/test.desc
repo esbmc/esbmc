@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.argsort\(\) currently supports only inline literal numpy.array inputs$
+^ERROR: TypeError: numpy.argsort\(\) currently supports only literal numpy.array inputs$

@@ -1045,6 +1045,15 @@ void python_converter::convert()
 
   main_body.copy_to_operands(make_hook_call("__ESBMC_pthread_end_main_hook"));
 
+  // goto_convert takes END_FUNCTION's location from here, and the synthesized
+  // uncaught-exception properties are anchored on it; leaving it nil reports
+  // them with no file at all, which places nothing (issue #7433). This names
+  // the file but no line: a Module carries no line of its own, and its body is
+  // no substitute — the frontend rewrites statements (a `for` becomes a
+  // `While`) and the rewrites carry null or stale line fields, so the last
+  // top-level statement does not mark where the module ends.
+  main_body.end_location(get_location_from_decl(*ast_json));
+
   {
     exprt v = main_symbol.get_value();
     v.swap(main_body);

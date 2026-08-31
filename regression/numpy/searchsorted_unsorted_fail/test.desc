@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.searchsorted\(\) requires a sorted 1-D array$
+^ERROR: ValueError: numpy.searchsorted\(\) requires the input array to be sorted$

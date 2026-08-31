@@ -14,36 +14,43 @@
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
 
-inline code_function_callt invoke_intrinsic(
+/// An ESBMC intrinsic invoked from an *expression* position, as a
+/// `sideeffect2t` of allockind::function_call carrying the call's result type.
+///
+/// It has to be an expression node, not a `code_function_call2t`: the latter is
+/// void-typed, and an enclosing arithmetic constructor asserts on an operand
+/// whose type is not its own -- CBMC serialises `object_size` under `+`, so the
+/// abort landed while the binary was still being read, long before
+/// lift_call_expressions() gets a chance to hoist the call out (#7410).
+inline expr2tc invoke_intrinsic(
   const std::string &name,
   const typet &type,
   const std::vector<exprt> &args)
 {
   assert(has_prefix(name, "c:@F@__ESBMC"));
-  code_function_callt call;
   code_typet code_type;
   code_type.return_type() = type;
   code_type.type() = type;
   for (const exprt &arg : args)
     code_type.arguments().push_back(arg.type());
 
-  symbolt symbol;
-  symbol.mode = "C";
-  symbol.set_type(code_type);
-  symbol.name = name;
-  symbol.id = name;
-  symbol.is_extern = false;
-  symbol.file_local = false;
+  exprt fn("symbol", code_type);
+  fn.identifier(name);
+  fn.name(name);
 
-  exprt tmp("symbol", symbol.get_type());
-  tmp.identifier(symbol.id);
-  tmp.name(symbol.name);
+  expr2tc callee;
+  migrate_expr(fn, callee);
 
-  call.function() = tmp;
+  std::vector<expr2tc> arguments;
+  arguments.reserve(args.size());
   for (const exprt &arg : args)
-    call.arguments().push_back(arg);
+  {
+    expr2tc migrated;
+    migrate_expr(arg, migrated);
+    arguments.push_back(migrated);
+  }
 
-  return call;
+  return side_effect_function_call2tc(migrate_type(type), callee, arguments);
 }
 
 // File for old irep -> new irep conversions.
@@ -974,11 +981,8 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
   constant_exprt kind(size_t_type);
   kind.set_value(
     integer2binary(0, atoi(size_t_type.width().as_string().c_str())));
-  expr2tc extent;
-  migrate_expr(
-    invoke_intrinsic(
-      "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind}),
-    extent);
+  expr2tc extent = invoke_intrinsic(
+    "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind});
 
   // pointer_offset2t requires a signed, address-width result type -- the same
   // rule the __CPROVER_POINTER_OFFSET case follows. Taking the type from the
@@ -2849,10 +2853,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     const std::vector<exprt> args = {expr.op0(), kind};
 
     // The result is a *call*: object_size resolves its object by dereference,
-    // which is symex machinery, so there is no expression form. CBMC serialises
-    // object_size inside an expression, so lift_call_expressions() hoists this
-    // node out to statement level once the binary is loaded.
-    migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
+    // which is symex machinery, so there is nothing to evaluate in place. CBMC
+    // serialises it inside an expression, so it is spelled as an
+    // expression-context call and lift_call_expressions() hoists it out to
+    // statement level once the binary is loaded.
+    new_expr_ref = invoke_intrinsic(function, expr.type(), args);
     return;
   }
 
