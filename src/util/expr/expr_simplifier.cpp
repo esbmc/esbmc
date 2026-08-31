@@ -3350,6 +3350,19 @@ expr2tc bitcast2t::do_simplify() const
   return expr2tc();
 }
 
+/* &x is the address of a real object and is never NULL. The one shape that
+ * looks like an address-of but need not be non-null is a &*p round-trip, which
+ * reduces to p -- and expr2t::simplify deliberately leaves address_of's operand
+ * alone, so that shape reaches the callers intact. */
+static bool is_null_pointer(const expr2tc &expr);
+
+static bool address_of_is_provably_non_null(const expr2tc &e)
+{
+  if (!is_address_of2t(e))
+    return false;
+  return !is_dereference2t(to_address_of2t(e).ptr_obj);
+}
+
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
@@ -3362,6 +3375,14 @@ expr2tc typecast2t::do_simplify() const
   // expr2t::simplify walks operands bottom-up before invoking do_simplify,
   // so `from` is already simplified.
   const expr2tc &simp = from;
+
+  // Casting the address of a declared object to bool is true. Without this a
+  // `p ? a : b` guard on such an address stays symbolic, so the value it
+  // selects is not propagated as a constant and any loop bounded by it unwinds
+  // to --unwind rather than its real trip count
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4).
+  if (is_bool_type(type) && address_of_is_provably_non_null(simp))
+    return gen_true_expr();
 
   if (is_constant_expr(simp))
   {
@@ -4355,6 +4376,12 @@ expr2tc notequal2t::do_simplify() const
       !is_nil_expr(b))
     return b;
 
+  // &x != NULL is true, the mirror of the == NULL rule equality2t already has.
+  if (is_null_pointer(side_1) && address_of_is_provably_non_null(side_2))
+    return gen_true_expr();
+  if (is_null_pointer(side_2) && address_of_is_provably_non_null(side_1))
+    return gen_true_expr();
+
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
   // preserves equality also preserves inequality.
@@ -5113,15 +5140,6 @@ expr2tc same_object2t::do_simplify() const
   // doesn't simplify operands of address_of, so this shape can reach us
   // unchanged. Fold to false only when the address_of target isn't a
   // dereference of a pointer that could itself be NULL.
-  auto address_of_is_provably_non_null = [](const expr2tc &e) -> bool {
-    if (!is_address_of2t(e))
-      return false;
-    const expr2tc &target = to_address_of2t(e).ptr_obj;
-    // &*p reduces to p, which may be NULL — refuse the fold.
-    if (is_dereference2t(target))
-      return false;
-    return true;
-  };
   if (op1_is_null && address_of_is_provably_non_null(op2))
     return gen_false_expr();
   if (op2_is_null && address_of_is_provably_non_null(op1))
