@@ -13,6 +13,8 @@ simplifier gap fixed by [#7441](https://github.com/esbmc/esbmc/pull/7441).
 §6.4 records the one taxed operation deliberately left alone, `remove`, and the
 measurement that rejected the obvious fix. W5.2 is now localised to a single
 condition (§7) but is still not a specified change.
+measurement that rejected the obvious fix. W5.2 is still an unlocalised
+investigation.
 **Origin:** [#7361](https://github.com/esbmc/esbmc/pull/7361), *"[python] Avoid
 duplicated shifts in `list.remove()`"*, which split a search loop and a shift
 loop that had been nested. This plan generalises that fix into a screening test
