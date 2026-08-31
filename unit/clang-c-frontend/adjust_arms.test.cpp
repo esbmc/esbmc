@@ -86,6 +86,17 @@ SCENARIO(
         position_of("hoist_for_init"));
     }
 
+    THEN("the self-gating arm runs first and the address decay runs last")
+    {
+      // adjust_function_designators installs sugar every later arm may read, so
+      // nothing may be inserted before it. adjust_address_of ran after the
+      // chain returned, so it stays last.
+      const std::vector<arm_info> arms = chain();
+      REQUIRE(arms.size() == 24);
+      REQUIRE(std::string(arms.front().name) == "adjust_function_designators");
+      REQUIRE(std::string(arms.back().name) == "adjust_address_of");
+    }
+
     THEN("every arm is named exactly once")
     {
       std::vector<std::string> names;

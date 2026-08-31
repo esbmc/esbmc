@@ -217,8 +217,7 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     adjust_index(expr);
   else if (is_member2t(expr))
     adjust_member(expr);
-  else if (
-    sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
+  else if (sole_adjuster && is_call_site(expr))
   {
     // Before declare_implicit_callee: the polymorphic name is repointed at the
     // concrete instance here, and it is that symbol the callee check must see.
@@ -230,9 +229,6 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
 
   if (sole_adjuster)
     adjust_sole_arms(expr);
-
-  if (sole_adjuster && is_address_of2t(expr))
-    adjust_address_of(expr);
 
   enclosing_location = saved_location;
 }
@@ -255,7 +251,7 @@ void clang_c_adjust_irep2::adjust_comma_type(expr2tc &expr)
 /// re-evaluated against the current node, so an arm that rewrites a node into
 /// another kind hands it to that kind's arm below -- which is how
 /// adjust_index's `p[i]` becomes a dereference the dereference arm then sees.
-const std::vector<clang_c_adjust_irep2::arm> clang_c_adjust_irep2::arms = {
+const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   // First: the sugar has to be in place before adjust_call_callee decides
   // whether this call is direct, since that is what it reads. It is offered
   // every node and guards itself on an address_of2t.
@@ -287,6 +283,9 @@ const std::vector<clang_c_adjust_irep2::arm> clang_c_adjust_irep2::arms = {
   {ARM(adjust_shift_operands), is_shift},
   {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
   {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
+  // Ran after the chain returned; as the last row it runs at the same point,
+  // and under !sole_adjuster the table is never entered either way.
+  {ARM(adjust_address_of), is_address_of2t},
 };
 
 #undef ARM
@@ -294,7 +293,7 @@ const std::vector<clang_c_adjust_irep2::arm> clang_c_adjust_irep2::arms = {
 std::vector<clang_c_adjust_irep2::arm_info> clang_c_adjust_irep2::arm_order()
 {
   std::vector<arm_info> order;
-  order.reserve(arms.size());
+  order.reserve(std::size(arms));
   for (const arm &a : arms)
     order.push_back({a.name, a.when});
   return order;

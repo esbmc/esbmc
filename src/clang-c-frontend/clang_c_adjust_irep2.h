@@ -214,8 +214,11 @@ private:
     bool (*when)(const expr2tc &);
   };
 
-  /// The dispatch in application order, defined beside the predicates it names.
-  static const std::vector<arm> arms;
+  /// The chain in application order. Defined in clang_c_adjust_irep2.cpp,
+  /// beside the predicates it names. An unknown-bound declaration completed
+  /// out of line: every initialiser is an address constant, so the table is
+  /// constant-initialised rather than built at start-up.
+  static const arm arms[];
 
   contextt &context;
   const bool sole_adjuster;
