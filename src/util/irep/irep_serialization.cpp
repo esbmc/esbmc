@@ -44,8 +44,11 @@ void irep_serializationt::reference_convert(std::istream &in, irept &irep)
    * forward reference the format cannot express, i.e. a corrupt stream. */
   if (id != ireps_on_read.size())
   {
+    // Thrown, not abort()ed: this is a statement about the *input*, and
+    // read_goto_binary's caller turns a throw into a graceful error exit. A
+    // truncated file reaches here routinely.
     log_error("goto binary: irep {} referenced before it is defined", id);
-    abort();
+    throw std::string("goto binary: irep referenced before it is defined");
   }
 
   ireps_on_read.emplace_back(); // claim the slot before the nested ids are read
@@ -79,10 +82,7 @@ void irep_serializationt::read_irep(std::istream &in, irept &irep)
   }
 
   if (in.get() != 0)
-  {
-    assert(0 && "irep not terminated");
-    abort();
-  }
+    throw std::string("goto binary: irep not terminated");
 }
 
 void irep_serializationt::reference_convert(
@@ -109,8 +109,19 @@ unsigned irep_serializationt::read_long(std::istream &in)
 {
   unsigned res = 0;
 
-  for (unsigned i = 0; i < 4 && in.good(); i++)
-    res = (res << 8) | in.get();
+  for (unsigned i = 0; i < 4; i++)
+  {
+    const int c = in.get();
+    if (c == EOF)
+    {
+      // Leave the stream failed so the caller stops rather than building ireps
+      // out of a partial word; returning the partial value silently produced
+      // counts and ids that no longer describe the file.
+      in.setstate(std::ios::failbit);
+      return 0;
+    }
+    res = (res << 8) | static_cast<unsigned>(c);
+  }
 
   return res;
 }
@@ -129,17 +140,20 @@ void write_string(std::ostream &out, const std::string &s)
 
 irep_idt irep_serializationt::read_string(std::istream &in)
 {
-  char c;
   unsigned i = 0;
 
-  while ((c = in.get()) != 0)
+  // int, not char: get() signals end-of-input with EOF (-1), which narrows to
+  // a perfectly ordinary char and never compares equal to the terminator. On a
+  // truncated stream the loop therefore never ended, doubling read_buffer until
+  // the process died -- a hang, not a diagnostic, on any short goto-binary.
+  for (int c; (c = in.get()) != 0 && c != EOF;)
   {
     if (i >= read_buffer.size())
       read_buffer.resize(read_buffer.size() * 2, 0);
     if (c == '\\') // escaped chars
-      read_buffer[i] = in.get();
+      read_buffer[i] = static_cast<char>(in.get());
     else
-      read_buffer[i] = c;
+      read_buffer[i] = static_cast<char>(c);
     i++;
   }
 
