@@ -199,6 +199,21 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
+/// A (possibly typecast) SSA symbol: it never changes meaning after the
+/// point of assignment, so a union carrying one propagates as soundly as
+/// one carrying a constant. Refusing it de-constants the WHOLE containing
+/// aggregate -- one nondet stored into any slot of a tagged-union stack
+/// leaves every later member fold (loop bounds, branch guards) symbolic,
+/// and symex unrolls data-independent loops to the unwind bound.
+static bool is_immutable_value(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+  return is_symbol2t(*b);
+}
+
+
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   if (no_propagation)
@@ -364,7 +379,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       {
         const with2t &w = to_with2t(current);
 
-        if (!is_constant_expr(w.update_value))
+        if (
+          !is_constant_expr(w.update_value) &&
+          !is_immutable_value(w.update_value))
         {
           all_constant_updates = false;
           break;
@@ -402,10 +419,14 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
     is_constant_array2t(expr))
   {
+    // A union literal may carry a (typecast) symbol as its initializing
+    // member -- an immutable L2 value whose reads fold soundly. Cross-
+    // member reinterpretation stays with the same-field discipline the
+    // union with-chain enforces above.
     bool noconst = true;
 
     expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
+      if (noconst && !is_immutable_value(e) && !constant_propagation(e))
         noconst = false;
     });
     return noconst;
