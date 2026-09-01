@@ -4,8 +4,8 @@
  * unreached claim is silently not a failing one. Reduced from
  * regression/k-induction/github_1092_6_false, where this reported VERIFICATION
  * SUCCESSFUL. Houdini must notice it lost a claim and decline to call it a
- * proof. Reproducible without Houdini with a hand-written invariant under
- * --loop-invariant-check, so the schema defect is the underlying one. */
+ * proof. The underlying schema defect is issue #7478: it reproduces on master
+ * with a hand-written invariant and no Houdini code involved. */
 #include <assert.h>
 
 int main()

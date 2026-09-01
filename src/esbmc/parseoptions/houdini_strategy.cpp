@@ -193,9 +193,12 @@ int esbmc_parseoptionst::do_houdini_strategy(
   // havoc-and-assume path. Where the frontend hoisted a loop guard's side
   // effects above the havoc -- `while (cnt--)` -- the exit edge tests a
   // pre-havoc temporary and is infeasible, and every post-loop claim is then
-  // dropped without ever being solved. An unreached claim is not a discharged
-  // one, so a run that lost any of the program's own claims has not proved the
-  // program and must not say SUCCESSFUL.
+  // dropped without ever being solved (issue #7478, a --loop-invariant-check
+  // defect that reproduces on master with a hand-written invariant). An
+  // unreached claim is not a discharged one, so a run that lost any of the
+  // program's own claims has not proved the program and must not say
+  // SUCCESSFUL. Keep this guard after #7478 is fixed: it is cheap, and it
+  // bounds any future way of making post-loop code unreachable.
   const size_t decided = user_claims_decided();
   if (result == 0 && decided < user_claims)
   {
