@@ -4583,6 +4583,13 @@ expr2tc greaterthan2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
+  // 0 > (wider-signed)(unsigned) is always false: the mirror of the
+  // `< 0` fold below, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero() &&
+    is_provably_nonneg(side_2))
+    return gen_false_expr();
+
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
   // Require the constant to share the variable side's type.
   if (
@@ -4629,6 +4636,13 @@ struct Lessthanequaltor
 
 expr2tc lessthanequal2t::do_simplify() const
 {
+  // 0 <= (wider-signed)(unsigned) is always true: the mirror of the
+  // `>= 0` fold below, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero() &&
+    is_provably_nonneg(side_2))
+    return gen_true_expr();
+
   // Self-comparison: x <= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
