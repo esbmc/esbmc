@@ -2787,6 +2787,15 @@ static const expr2tc &with_chain_base(const expr2tc &e)
   return *p;
 }
 
+/* The expression a select chain is rooted at. */
+static const expr2tc &select_chain_root(const expr2tc &e)
+{
+  const expr2tc *p = &e;
+  while (is_index2t(*p))
+    p = &to_index2t(*p).source_value;
+  return *p;
+}
+
 /* Whether @p e denotes a *row* of a multi-dimensional array: an array-typed
  * expression the SMT layer has no term for, because flatten_array_type()
  * collapses the enclosing array and a partial index into the flat form selects
@@ -2807,45 +2816,74 @@ static bool is_flattened_row(const expr2tc &e)
   if (is_with2t(e))
     return is_flattened_row(to_with2t(e).source_value);
 
+  if (is_if2t(e))
+    return is_flattened_row(to_if2t(e).true_value) ||
+           is_flattened_row(to_if2t(e).false_value);
+
   return false;
 }
 
-/* Select-over-store, for a read out of a row of a flattened multi-dimensional
- * array: `(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`. Repeated, this
- * drives the read down to an index chain decompose_select_chain() can flatten.
- * Nil when @p index does not read out of such a row. */
-static expr2tc lower_flattened_row_select(const index2t &index)
+/* A read of @p row at @p i, pushed inside the row's own structure so that no
+ * term for the row itself is needed: select-over-store for a `with`
+ * (`(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`), distribution over an
+ * `ite`, and the inner read first for a row read out of a deeper one.
+ * Repeated, this drives the read down to an index chain
+ * decompose_select_chain() can flatten. Nil when @p row is a plain select
+ * chain, which that flattener already handles. */
+static expr2tc
+push_row_read(const type2tc &t, const expr2tc &row, const expr2tc &i)
 {
-  const expr2tc &src = index.source_value;
-  /* Only a read down to an element: a read that itself yields a row leaves the
-   * unencodable shape in place, so there is nothing to gain by rewriting it.
-   * That first test cannot decide while array_may_propagate() stops at two
-   * dimensions: a source that is itself a row makes the whole array at least
-   * three deep, so wherever is_flattened_row() holds the read is to an
-   * element. It becomes live when that bound is lifted. */
-  if (is_array_type(index.type) || !is_flattened_row(src))
-    return expr2tc();
-
-  if (is_with2t(src))
+  if (is_with2t(row))
   {
-    const with2t &w = to_with2t(src);
+    const with2t &w = to_with2t(row);
 
     /* Compared one bit wider than either operand. A narrowing comparison
      * would let an out-of-range write alias an in-range read, so the widening
      * is unconditional rather than a branch nothing exercises. */
-    unsigned w1 = index.index->type->get_width();
+    unsigned w1 = i->type->get_width();
     unsigned w2 = w.update_field->type->get_width();
     type2tc common = get_uint_type((w1 > w2 ? w1 : w2) + 1);
 
     return if2tc(
-      index.type,
-      equality2tc(
-        typecast2tc(common, index.index), typecast2tc(common, w.update_field)),
+      t,
+      equality2tc(typecast2tc(common, i), typecast2tc(common, w.update_field)),
       w.update_value,
-      index2tc(index.type, w.source_value, index.index));
+      index2tc(t, w.source_value, i));
+  }
+
+  if (is_if2t(row))
+  {
+    const if2t &c = to_if2t(row);
+    return if2tc(
+      t, c.cond, index2tc(t, c.true_value, i), index2tc(t, c.false_value, i));
+  }
+
+  /* A read out of a row that is itself read out of a deeper one: lower the
+   * inner read first, so the subscript this level adds lands on a shape that
+   * has somewhere to go. Only when the chain roots at a row -- otherwise
+   * decompose_select_chain() already flattens it against a real array. The
+   * root is a `with` or an `ite`, select_chain_root() having walked past every
+   * index node, so the recursion always has an arm to take. */
+  if (is_index2t(row) && is_flattened_row(select_chain_root(row)))
+  {
+    const index2t &in = to_index2t(row);
+    return index2tc(t, push_row_read(row->type, in.source_value, in.index), i);
   }
 
   return expr2tc();
+}
+
+static expr2tc lower_flattened_row_select(const index2t &index)
+{
+  /* Only a read down to an element: a read that itself yields a row leaves the
+   * unencodable shape in place, so there is nothing to gain by rewriting it.
+   * That first test could not decide while array_may_propagate() stopped at
+   * two dimensions -- a source that is itself a row makes the array at least
+   * three deep -- and lifting that bound is what puts it in play. */
+  if (is_array_type(index.type) || !is_flattened_row(index.source_value))
+    return expr2tc();
+
+  return push_row_read(index.type, index.source_value, index.index);
 }
 
 /* Name every element of @p row, a row being written whole, as a store of the
@@ -2955,8 +2993,8 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
 
-  /* A `with` over a row of a flattened multi-dimensional array has no term of
-   * its own, so push the read inside it rather than building one. */
+  /* A `with` or `ite` over a row of a flattened multi-dimensional array has no
+   * term of its own, so push the read inside it rather than building one. */
   expr2tc lowered = lower_flattened_row_select(index);
   if (!is_nil_expr(lowered))
     return convert_ast(lowered);
