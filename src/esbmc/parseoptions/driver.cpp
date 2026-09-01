@@ -175,6 +175,36 @@ static bool incompatible_flags(const cmdlinet &cmdline)
         return true;
       }
 
+  // --houdini-loop-invariants owns the outer loop too: it re-derives the
+  // program once per filtering round from a pristine copy and applies the
+  // loop-invariant schema itself. Combining it with another driver is not
+  // merely redundant -- goto_k_induction has already havoc'd the loops by the
+  // time the strategy runs, and layering the schema on that produced a
+  // *wrong* verdict: regression/k-induction/trex02_bug, a program with a real
+  // bug, reported VERIFICATION SUCCESSFUL under --k-induction
+  // --houdini-loop-invariants while reporting FAILED under either alone.
+  // The invariant-source flags are listed for a different reason: this flag
+  // supplies the invariants itself, so passing another source silently does
+  // nothing.
+  if (cmdline.isset("houdini-loop-invariants"))
+    for (const char *incompatible :
+         {"termination",
+          "incremental-bmc",
+          "falsification",
+          "k-induction",
+          "k-induction-parallel",
+          "loop-invariant",
+          "loop-invariant-check",
+          "synthesise-loop-invariants",
+          "incremental-context-bound"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--houdini-loop-invariants cannot be combined with --{}",
+          incompatible);
+        return true;
+      }
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).
