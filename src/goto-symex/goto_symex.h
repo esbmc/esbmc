@@ -2,6 +2,7 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <goto-programs/goto_functions.h>
+#include <util/base/threeval.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
@@ -155,6 +156,23 @@ public:
    *  @return true if any substitution was made.
    */
   bool chase_copies(expr2tc &expr) const;
+
+  /**
+   *  Whether the accumulated path guard already decides a branch
+   *  condition: TV_TRUE when a conjunct matches it, TV_FALSE when one
+   *  matches its negation, TV_UNKNOWN otherwise. See symex_goto.cpp
+   *  for the matching discipline.
+   */
+  tvt::tv_enumt path_guard_decides(
+    const expr2tc &new_guard,
+    bool already_false,
+    bool already_true);
+
+  /**
+   *  Remember a guard generation's defining condition for
+   *  path_guard_decides, up to subsumption_map_capacity.
+   */
+  void record_guard_definition(const expr2tc &guard_expr, const expr2tc &rhs);
 
   /**
    *  Record a copy chain for chase_copies after an unconditional
@@ -1392,9 +1410,11 @@ protected:
    *  single map for the whole symex object is sound. symex_goto uses
    *  it to resolve path-guard conjuncts back to branch conditions —
    *  level2 renaming cannot do that, as it never substitutes into
-   *  symbols that are already level2.
+   *  symbols that are already level2. Keyed by the L2-qualified symbol
+   *  name (an interned irep_idt with a cached hash) rather than the
+   *  expression, so a lookup never deep-compares expression trees.
    */
-  std::map<expr2tc, expr2tc> guard_definitions;
+  std::unordered_map<irep_idt, expr2tc> guard_definitions;
   /**
    *  Copy chains between L2 symbol generations: lhs generation -> the
    *  (possibly typecast) L2 symbol it was unconditionally assigned.
@@ -1407,7 +1427,7 @@ protected:
    *  fed into constant propagation: substituting copies globally slices
    *  away the originals' assignments and degrades counterexamples.
    */
-  std::map<expr2tc, expr2tc> copy_definitions;
+  std::unordered_map<irep_idt, expr2tc> copy_definitions;
   /** Loop numbers. */
   unsigned first_loop;
   /** Number of assertions executed. */

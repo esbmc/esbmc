@@ -1975,31 +1975,6 @@ expr2tc not2t::do_simplify() const
   if (is_constant_bool2t(simp))
     return constant_bool2tc(!to_constant_bool2t(simp).value);
 
-  // Negated integer comparisons flip: !(a >= b) is a < b, and so on.
-  // This canonicalizes the two spellings of one branch condition — a
-  // caller's `if (x >= 0) return` and a callee's own `x < 0` check —
-  // so path-guard subsumption can match them structurally. Floats are
-  // excluded: NaN breaks the complement relation between < and >=.
-  if (
-    (is_lessthan2t(simp) || is_greaterthan2t(simp) ||
-     is_lessthanequal2t(simp) || is_greaterthanequal2t(simp)) &&
-    !is_floatbv_type(*simp->get_sub_expr(0)) &&
-    !is_floatbv_type(*simp->get_sub_expr(1)))
-  {
-    const expr2tc &a = *simp->get_sub_expr(0);
-    const expr2tc &b = *simp->get_sub_expr(1);
-    expr2tc flipped;
-    if (is_lessthan2t(simp))
-      flipped = greaterthanequal2tc(a, b);
-    else if (is_greaterthanequal2t(simp))
-      flipped = lessthan2tc(a, b);
-    else if (is_greaterthan2t(simp))
-      flipped = lessthanequal2tc(a, b);
-    else
-      flipped = greaterthan2tc(a, b);
-    return try_simplification(flipped);
-  }
-
   // De Morgan's laws for logical operations
   // !(x && y) = !x || !y
   if (is_and2t(simp))
