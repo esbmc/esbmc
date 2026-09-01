@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s+the else arm.s store is still readable$
+^VERIFICATION FAILED$

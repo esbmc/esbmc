@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s+the row.s first store is still readable$
+^VERIFICATION FAILED$

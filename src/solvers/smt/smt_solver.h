@@ -907,6 +907,25 @@ public:
   /** Like decompose_select_chain, but for multidimensional stores. */
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
 
+  /** One element update an array `with` denotes, as an index into the array's
+   *  flattened form and the value stored there. */
+  struct flat_storet
+  {
+    expr2tc index;
+    expr2tc value;
+  };
+
+  bool expand_row_stores(
+    const expr2tc &row,
+    const expr2tc &offset,
+    std::vector<flat_storet> &stores);
+
+  bool decompose_stores(
+    const expr2tc &expr,
+    const expr2tc &offset,
+    std::vector<flat_storet> &stores,
+    expr2tc &base);
+
   /** Prepare an array_of expression by flattening its dimensions, if it
    *  has more than one. */
   smt_astt convert_array_of_prep(const expr2tc &expr);

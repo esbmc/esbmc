@@ -2778,9 +2778,204 @@ expr2tc smt_solver_baset::decompose_store_chain(
   return output;
 }
 
+/* The expression an array `with` chain is rooted at. */
+static const expr2tc &with_chain_base(const expr2tc &e)
+{
+  const expr2tc *p = &e;
+  while (is_with2t(*p))
+    p = &to_with2t(*p).source_value;
+  return *p;
+}
+
+/* Whether @p e denotes a *row* of a multi-dimensional array: an array-typed
+ * expression the SMT layer has no term for, because flatten_array_type()
+ * collapses the enclosing array and a partial index into the flat form selects
+ * an element rather than a row. Infinite arrays (Solidity's nested mappings)
+ * are not flattened, so they are encodable and excluded. */
+static bool is_flattened_row(const expr2tc &e)
+{
+  if (!is_array_type(e->type) || to_array_type(e->type).size_is_infinite)
+    return false;
+
+  if (is_index2t(e))
+  {
+    const expr2tc &src = to_index2t(e).source_value;
+    return is_array_type(src->type) &&
+           !to_array_type(src->type).size_is_infinite;
+  }
+
+  if (is_with2t(e))
+    return is_flattened_row(to_with2t(e).source_value);
+
+  if (is_if2t(e))
+    return is_flattened_row(to_if2t(e).true_value) ||
+           is_flattened_row(to_if2t(e).false_value);
+
+  return false;
+}
+
+/* Select-over-store, for a read out of a row of a flattened multi-dimensional
+ * array: `(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`, and a read out of an
+ * ite distributes over its arms. Repeated, this drives the read down to an
+ * index chain decompose_select_chain() can flatten. Nil when @p index does not
+ * read out of such a row. */
+static expr2tc lower_flattened_row_select(const index2t &index)
+{
+  const expr2tc &src = index.source_value;
+  /* Only a read down to an element: a read that itself yields a row leaves the
+   * unencodable shape in place, so there is nothing to gain by rewriting it. */
+  if (is_array_type(index.type) || !is_flattened_row(src))
+    return expr2tc();
+
+  if (is_with2t(src))
+  {
+    const with2t &w = to_with2t(src);
+
+    /* One bit wider than either operand, so neither index loses a value to the
+     * comparison and a signed and an unsigned spelling of the same subscript
+     * still meet. */
+    expr2tc lhs = index.index;
+    expr2tc rhs = w.update_field;
+    if (lhs->type != rhs->type)
+    {
+      unsigned w1 = lhs->type->get_width();
+      unsigned w2 = rhs->type->get_width();
+      type2tc common = get_uint_type((w1 > w2 ? w1 : w2) + 1);
+      lhs = typecast2tc(common, lhs);
+      rhs = typecast2tc(common, rhs);
+    }
+
+    return if2tc(
+      index.type,
+      equality2tc(lhs, rhs),
+      w.update_value,
+      index2tc(index.type, w.source_value, index.index));
+  }
+
+  if (is_if2t(src))
+  {
+    const if2t &i = to_if2t(src);
+    return if2tc(
+      index.type,
+      i.cond,
+      index2tc(index.type, i.true_value, index.index),
+      index2tc(index.type, i.false_value, index.index));
+  }
+
+  return expr2tc();
+}
+
+/* Name every element of @p row, a row being written whole, as a store of the
+ * corresponding read out of it. Correct whatever the row denotes -- the read
+ * is of the row expression itself -- which is what makes it the general case
+ * behind decompose_stores()' in-place fast path. False when the row's length
+ * is not a compile-time constant, which leaves nothing to enumerate. */
+bool smt_solver_baset::expand_row_stores(
+  const expr2tc &row,
+  const expr2tc &offset,
+  std::vector<flat_storet> &stores)
+{
+  const array_type2t &rowtype = to_array_type(row->type);
+  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+    return false;
+
+  const type2tc &dom = offset->type;
+  const bool nested = is_array_type(rowtype.subtype);
+
+  BigInt stride = 1;
+  if (nested)
+  {
+    type2tc flat = flatten_array_type(rowtype.subtype);
+    const array_type2t &sub = to_array_type(flat);
+    if (is_nil_expr(sub.array_size) || !is_constant_int2t(sub.array_size))
+      return false;
+    stride = to_constant_int2t(sub.array_size).value;
+  }
+
+  BigInt n = to_constant_int2t(rowtype.array_size).value;
+  for (BigInt k = 0; k < n; k = k + 1)
+  {
+    expr2tc off = add2tc(dom, offset, constant_int2tc(dom, k * stride));
+    expr2tc elem =
+      index2tc(rowtype.subtype, row, constant_int2tc(index_type2(), k));
+    if (nested)
+    {
+      if (!expand_row_stores(elem, off, stores))
+        return false;
+    }
+    else
+      stores.push_back({off, elem});
+  }
+
+  return true;
+}
+
+/* Decompose an array `with` into the flat element updates it denotes, oldest
+ * first, and give back the array the chain is rooted at. @p offset is the flat
+ * position of @p expr's own base within the outermost flattened array.
+ *
+ * decompose_store_chain() walks only the newest update's spine, so a row
+ * carrying more than one update -- which is what propagating a
+ * multi-dimensional array composes out of `a[1][0] = 5; a[1][1] = 4;` -- keeps
+ * its last store and silently loses the rest. This walks the chain *and* each
+ * row it updates. A row whose own chain is rooted at exactly the row being
+ * replaced is updated in place, which keeps the ordinary `a[i][j] = v` a
+ * single store; any other row is written out element by element. */
+bool smt_solver_baset::decompose_stores(
+  const expr2tc &expr,
+  const expr2tc &offset,
+  std::vector<flat_storet> &stores,
+  expr2tc &base)
+{
+  if (!is_with2t(expr))
+  {
+    base = expr;
+    return true;
+  }
+
+  const with2t &w = to_with2t(expr);
+  if (!decompose_stores(w.source_value, offset, stores, base))
+    return false;
+
+  const type2tc &dom = offset->type;
+  expr2tc field = typecast2tc(dom, w.update_field);
+
+  if (!is_array_type(w.update_value->type))
+  {
+    stores.push_back({add2tc(dom, offset, field), w.update_value});
+    return true;
+  }
+
+  type2tc flatrow = flatten_array_type(w.update_value->type);
+  const array_type2t &rowtype = to_array_type(flatrow);
+  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+    return false;
+
+  expr2tc origin = add2tc(
+    dom, offset, mul2tc(dom, field, typecast2tc(dom, rowtype.array_size)));
+
+  const expr2tc &rowbase = with_chain_base(w.update_value);
+  if (
+    is_index2t(rowbase) && to_index2t(rowbase).source_value == w.source_value &&
+    to_index2t(rowbase).index == w.update_field)
+  {
+    expr2tc rowbase_out;
+    return decompose_stores(w.update_value, origin, stores, rowbase_out);
+  }
+
+  return expand_row_stores(w.update_value, origin, stores);
+}
+
 smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
+
+  /* A `with` or `ite` over a row of a flattened multi-dimensional array has no
+   * term of its own, so push the read inside it rather than building one. */
+  expr2tc lowered = lower_flattened_row_select(index);
+  if (!is_nil_expr(lowered))
+    return convert_ast(lowered);
+
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
@@ -2833,8 +3028,32 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     is_array_type(to_array_type(with.type).subtype) &&
     !to_array_type(with.type).size_is_infinite)
   {
-    // Finite multi-dimensional arrays: flatten into single array with extended
-    // domain via decompose_store_chain.
+    // Finite multi-dimensional arrays: flatten into a single array with an
+    // extended domain. Prefer the element-wise decomposition, which keeps
+    // every store a row carries; decompose_store_chain() keeps only the last.
+    type2tc dom =
+      make_array_domain_type(to_array_type(flatten_array_type(with.type)));
+    std::vector<flat_storet> stores;
+    expr2tc base;
+    if (decompose_stores(expr, gen_zero(dom), stores, base))
+    {
+      const bool bools_as_bv =
+        is_bool_type(get_flattened_array_subtype(expr->type)) &&
+        !array_api->supports_bools_in_arrays;
+
+      smt_astt src = convert_ast(base);
+      for (const flat_storet &s : stores)
+      {
+        expr2tc idx = s.index;
+        simplify(idx);
+        expr2tc val = bools_as_bv
+                        ? expr2tc(typecast2tc(get_uint_type(1), s.value))
+                        : s.value;
+        src = src->update(this, convert_ast(val), 0, idx);
+      }
+      return src;
+    }
+
     newidx = decompose_store_chain(expr, update_val);
   }
   else
