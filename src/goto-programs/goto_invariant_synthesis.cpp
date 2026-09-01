@@ -339,17 +339,14 @@ static bool classify_accumulators(
   return true;
 }
 
-/// Match the loop against the affine counter/accumulator shape. Every rejection
-/// here costs only a missed invariant, so the tests are deliberately strict.
-bool recognise_affine_loop(
-  goto_functiont &goto_function,
-  const loopst &loop,
-  bool overflow_checks_enabled,
-  goto_programt::targett &head_out,
+/// The syntactic shape of the head: guard, counter and bound, before the body
+/// is read. Fills `out.cond`, `out.counter`, `out.bound` and `out.inclusive`.
+bool match_counter_and_bound(
+  const goto_programt::targett &head,
+  const goto_programt::targett &exit,
+  const loopst::loop_varst &modified,
   affine_loopt &out)
 {
-  goto_programt::targett head = loop.effective_loop_head();
-  const goto_programt::targett exit = loop.get_original_loop_exit();
   if (!head->is_goto() || head == exit)
     return false;
 
@@ -358,28 +355,21 @@ bool recognise_affine_loop(
   if (!split_bound(out.cond, out.counter, out.bound, out.inclusive))
     return false;
 
-  const auto &modified = loop.get_modified_loop_vars();
   if (!is_symbol2t(out.counter) || modified.find(out.counter) == modified.end())
     return false;
   if (!is_integer(out.counter) || !is_integer(out.bound))
     return false;
-  if (mentions_modified_var(out.bound, modified))
-    return false;
+  return !mentions_modified_var(out.bound, modified);
+}
 
-  std::map<std::string, std::pair<expr2tc, expr2tc>> writes;
-  bool body_asserts = false;
-  if (!summarise_body(head, exit, out.counter, writes, body_asserts))
-    return false;
-
-  const goto_programt::targett begin = goto_function.body.instructions.begin();
-  if (!entry_value(head, begin, out.counter, out.counter_entry))
-    return false;
-
-  // Classify first: whether any addend is symbolic decides which bound shape is
-  // affordable, and that in turn decides how strict the counter has to be.
-  if (!classify_accumulators(head, begin, modified, writes, out))
-    return false;
-
+/// Whether the regime the accumulators put us in admits this counter. Which
+/// bound shape is affordable decides how strict the counter has to be, so this
+/// runs only once classify_accumulators has set `out.constant_addends`.
+bool regime_admits_counter(
+  const affine_loopt &out,
+  bool body_asserts,
+  bool overflow_checks_enabled)
+{
   // Symbolic addend: two disjuncts only, so an unsigned counter entering at 0
   // or 1. See the header.
   if (!out.constant_addends)
@@ -405,14 +395,49 @@ bool recognise_affine_loop(
   // at each accumulator's type, not the counter's, so an unsigned counter with
   // a signed accumulator would still emit signed arithmetic and draw claims on
   // operations the user never wrote.
-  if (overflow_checks_enabled)
-  {
-    if (!is_unsigned_integer(out.counter))
+  if (!overflow_checks_enabled)
+    return true;
+
+  if (!is_unsigned_integer(out.counter))
+    return false;
+  for (const auto &acc : out.accumulators)
+    if (!is_unsigned_integer(acc.var))
       return false;
-    for (const auto &acc : out.accumulators)
-      if (!is_unsigned_integer(acc.var))
-        return false;
-  }
+  return true;
+}
+
+/// Match the loop against the affine counter/accumulator shape. Every rejection
+/// here costs only a missed invariant, so the tests are deliberately strict.
+bool recognise_affine_loop(
+  goto_functiont &goto_function,
+  const loopst &loop,
+  bool overflow_checks_enabled,
+  goto_programt::targett &head_out,
+  affine_loopt &out)
+{
+  goto_programt::targett head = loop.effective_loop_head();
+  const goto_programt::targett exit = loop.get_original_loop_exit();
+  const auto &modified = loop.get_modified_loop_vars();
+
+  if (!match_counter_and_bound(head, exit, modified, out))
+    return false;
+
+  std::map<std::string, std::pair<expr2tc, expr2tc>> writes;
+  bool body_asserts = false;
+  if (!summarise_body(head, exit, out.counter, writes, body_asserts))
+    return false;
+
+  const goto_programt::targett begin = goto_function.body.instructions.begin();
+  if (!entry_value(head, begin, out.counter, out.counter_entry))
+    return false;
+
+  // Classify first: whether any addend is symbolic decides which bound shape is
+  // affordable, and that in turn decides how strict the counter has to be.
+  if (!classify_accumulators(head, begin, modified, writes, out))
+    return false;
+
+  if (!regime_admits_counter(out, body_asserts, overflow_checks_enabled))
+    return false;
 
   head_out = head;
   return true;
