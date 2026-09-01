@@ -11,15 +11,41 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
 
-/// A (possibly typecast) SSA symbol: it never changes meaning after
-/// its assignment, so a copy chain built from one is a stable renaming
-/// of the same value.
+/// A (possibly typecast) SSA symbol, or a pure bitvector computation
+/// over such leaves: neither changes meaning after its operands'
+/// assignments, so a copy chain built from one is a stable renaming of
+/// the same value. The computation form covers the operand-split idiom
+/// `m = (mn >> 4) & 0x0F` a caller and a callee both derive from one
+/// byte — without it their range checks never match and the callee's
+/// already-decided branches fork anyway.
 static bool is_stable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
   while (is_typecast2t(*b))
     b = &to_typecast2t(*b).from;
-  return is_symbol2t(*b);
+  if (is_symbol2t(*b) || is_constant_expr(*b))
+    return true;
+  switch ((*b)->expr_id)
+  {
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::shl_id:
+  case expr2t::lshr_id:
+  case expr2t::ashr_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  {
+    bool ok = true;
+    (*b)->foreach_operand([&ok](const expr2tc &e) {
+      if (ok && !is_stable_value(e))
+        ok = false;
+    });
+    return ok;
+  }
+  default:
+    return false;
+  }
 }
 
 bool goto_symext::chase_copies(expr2tc &expr) const
