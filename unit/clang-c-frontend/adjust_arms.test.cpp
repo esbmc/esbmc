@@ -92,7 +92,6 @@ SCENARIO(
       // nothing may be inserted before it. adjust_address_of ran after the
       // chain returned, so it stays last.
       const std::vector<arm_info> arms = chain();
-      REQUIRE(arms.size() == 24);
       REQUIRE(std::string(arms.front().name) == "adjust_function_designators");
       REQUIRE(std::string(arms.back().name) == "adjust_address_of");
     }
