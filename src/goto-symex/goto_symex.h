@@ -647,6 +647,25 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /** Models a memcpy/memmove whose length is not a constant, the case
+   *  intrinsic_memcpy_impl otherwise defers to the C byte loop (which then
+   *  unwinds --unwind times per call). Mirrors intrinsic_memcmp's symbolic-n
+   *  path: bound the copy by the objects' own widths, guard each byte position
+   *  with i < n, and claim n <= that bound so an over-long copy is still
+   *  reported. Returns false when the operands cannot be resolved, leaving the
+   *  caller to bump. */
+  bool memcpy_symbolic_length(
+    const expr2tc &dst_arg,
+    const expr2tc &src_arg,
+    const expr2tc &n_arg);
+
+  /** The NULL checks and return-value assignment shared by both of
+   *  intrinsic_memcpy_impl's paths. */
+  void memcpy_finish(
+    const code_function_call2t &func_call,
+    const expr2tc &dst_arg,
+    const expr2tc &src_arg);
+
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
@@ -656,7 +675,8 @@ protected:
     unsigned long number_of_bytes,
     expr2tc &object,
     uint64_t &offset,
-    uint64_t &avail_bytes);
+    uint64_t &avail_bytes,
+    bool rename_object = true);
 
   /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
    *  is built from the current src/dst bytes before assigning, so overlapping
