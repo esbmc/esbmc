@@ -2807,18 +2807,13 @@ static bool is_flattened_row(const expr2tc &e)
   if (is_with2t(e))
     return is_flattened_row(to_with2t(e).source_value);
 
-  if (is_if2t(e))
-    return is_flattened_row(to_if2t(e).true_value) ||
-           is_flattened_row(to_if2t(e).false_value);
-
   return false;
 }
 
 /* Select-over-store, for a read out of a row of a flattened multi-dimensional
- * array: `(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`, and a read out of an
- * ite distributes over its arms. Repeated, this drives the read down to an
- * index chain decompose_select_chain() can flatten. Nil when @p index does not
- * read out of such a row. */
+ * array: `(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`. Repeated, this
+ * drives the read down to an index chain decompose_select_chain() can flatten.
+ * Nil when @p index does not read out of such a row. */
 static expr2tc lower_flattened_row_select(const index2t &index)
 {
   const expr2tc &src = index.source_value;
@@ -2831,35 +2826,19 @@ static expr2tc lower_flattened_row_select(const index2t &index)
   {
     const with2t &w = to_with2t(src);
 
-    /* One bit wider than either operand, so neither index loses a value to the
-     * comparison and a signed and an unsigned spelling of the same subscript
-     * still meet. */
-    expr2tc lhs = index.index;
-    expr2tc rhs = w.update_field;
-    if (lhs->type != rhs->type)
-    {
-      unsigned w1 = lhs->type->get_width();
-      unsigned w2 = rhs->type->get_width();
-      type2tc common = get_uint_type((w1 > w2 ? w1 : w2) + 1);
-      lhs = typecast2tc(common, lhs);
-      rhs = typecast2tc(common, rhs);
-    }
+    /* Compared one bit wider than either operand. A narrowing comparison
+     * would let an out-of-range write alias an in-range read, so the widening
+     * is unconditional rather than a branch nothing exercises. */
+    unsigned w1 = index.index->type->get_width();
+    unsigned w2 = w.update_field->type->get_width();
+    type2tc common = get_uint_type((w1 > w2 ? w1 : w2) + 1);
 
     return if2tc(
       index.type,
-      equality2tc(lhs, rhs),
+      equality2tc(
+        typecast2tc(common, index.index), typecast2tc(common, w.update_field)),
       w.update_value,
       index2tc(index.type, w.source_value, index.index));
-  }
-
-  if (is_if2t(src))
-  {
-    const if2t &i = to_if2t(src);
-    return if2tc(
-      index.type,
-      i.cond,
-      index2tc(index.type, i.true_value, index.index),
-      index2tc(index.type, i.false_value, index.index));
   }
 
   return expr2tc();
