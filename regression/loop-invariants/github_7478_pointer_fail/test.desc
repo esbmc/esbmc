@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^WARNING: loop invariant at .* not checked: the loop writes through a pointer
+^\s+FAILED\s+\[main\.assertion\.3\]\s+line\s+15\s+assertion 0$
+^VERIFICATION FAILED$

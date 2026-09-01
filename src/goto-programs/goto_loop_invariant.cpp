@@ -189,6 +189,21 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   if (invariants.empty())
     return;
 
+  // The schema replaces the loop with a havoc of its modified symbols. A write
+  // through a dereference has no named symbol to havoc, so the loop would be
+  // symex'd from its concrete pre-loop state: the exit edge turns infeasible,
+  // the invariant is discharged against one concrete iteration and every claim
+  // after the loop is dropped without being solved (issue #7478). Leave the
+  // loop for the unwinder rather than report a proof we did not make.
+  if (loop.writes_through_pointer())
+  {
+    log_warning(
+      "loop invariant at {} not checked: the loop writes through a pointer, "
+      "which the havoc cannot cover",
+      loop.get_original_loop_head()->location.as_string());
+    return;
+  }
+
   log_status(
     "Processing {} loop invariant{}",
     invariants.size(),

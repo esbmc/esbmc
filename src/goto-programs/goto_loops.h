@@ -47,6 +47,9 @@ protected:
     /// Propagated to the calling loop so the inductive step is disabled
     /// (see loopst::set_modifies_pointer_array and issue #5224).
     bool modifies_pointer_array = false;
+    /// True iff the callee writes a scalar through a dereference.
+    /// See loopst::set_writes_through_pointer and issue #7478.
+    bool writes_through_pointer = false;
   };
   std::unordered_map<irep_idt, function_summaryt, irep_id_hash>
     function_summary_cache;
@@ -77,12 +80,10 @@ protected:
   /// is actually written goes to `modified`, sub-expressions used to
   /// locate that storage (pointer in `*p`, index in `arr[i]`) go to
   /// `unmodified`. Sets `modifies_pointer_array` when the write is to an
-  /// array element reached through a pointer (issue #5224).
-  void collect_lhs_symbols(
-    const expr2tc &expr,
-    loopst::loop_varst &modified,
-    loopst::loop_varst &unmodified,
-    bool &modifies_pointer_array) const;
+  /// array element reached through a pointer (issue #5224), and
+  /// `writes_through_pointer` when it is to a scalar reached through one
+  /// (issue #7478).
+  void collect_lhs_symbols(const expr2tc &expr, function_summaryt &out) const;
 
   void add_modified_var(loopst &loop, const expr2tc &expr);
   void add_unmodified_var(loopst &loop, const expr2tc &expr);
