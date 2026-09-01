@@ -1,5 +1,6 @@
 CORE
 main.py
 --multi-property --unwind 2 --no-bounds-check --no-pointer-check
-^\*\* 1 of 4 properties failed, 3 passed$
+^\*\* 2 of 5 properties failed, 3 passed$
 ^ +FAILED .*line +6 +assertion l != 0$
+^ +FAILED .*TypeError: object of this type has no len\(\)$

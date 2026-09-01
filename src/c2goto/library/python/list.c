@@ -92,7 +92,20 @@ PyListObject *__ESBMC_list_create()
 
 size_t __ESBMC_list_size(const PyListObject *l)
 {
-  return l ? l->size : 0;
+  // Assert the null case rather than folding it to 0 with a conditional: a
+  // `l ? l->size : 0` return does not constant-propagate even when l is a
+  // concrete address, so every loop bounded by len() -- sum(), max(), the
+  // slice lowering -- unwound to --unwind instead of the list's own length
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4). An assert keeps the null
+  // case reported, which is closer to CPython's TypeError than silently
+  // answering 0.
+  __ESBMC_assert(l != NULL, "TypeError: object of this type has no len()");
+  // The claim above reports the null case; without also assuming it away the
+  // read below still runs on the failing path (--multi-property keeps going
+  // past a violated claim), dereferencing NULL for a garbage size and a
+  // spurious out-of-bounds report downstream.
+  __ESBMC_assume(l != NULL);
+  return l->size;
 }
 
 // ptr_free=1: payload has no pointer field, so we can reinterpret it as
