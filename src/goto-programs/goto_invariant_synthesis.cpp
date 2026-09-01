@@ -127,6 +127,21 @@ bool is_unsigned_integer(const expr2tc &expr)
   return expr && is_unsignedbv_type(expr->type);
 }
 
+/// Signed counters are admissible only when no accumulator multiplies by a
+/// symbolic value. The reason is the bound's shape, not the sign: a signed
+/// bound can be negative, the loop is then never entered, and the two-disjunct
+/// bound `(i <op> B) || i == E` is false at entry -- so establishment needs the
+/// third disjunct `i == i0`. That third arm is exactly what the symbolic-
+/// multiplier case cannot afford (see the header), but with every addend a
+/// literal there is no multiplier to miter and it costs nothing: measured on
+/// the sum01 exit obligation, three disjuncts with a constant addend discharge
+/// in 0s where the same shape with a symbolic addend does not finish in 45s.
+bool is_integer(const expr2tc &expr)
+{
+  return expr &&
+         (is_unsignedbv_type(expr->type) || is_signedbv_type(expr->type));
+}
+
 bool is_constant_one(const expr2tc &expr)
 {
   return is_constant_int2t(expr) && to_constant_int2t(expr).value == 1;
@@ -241,6 +256,10 @@ struct affine_loopt
   /// error path and risked the two spellings drifting apart.
   expr2tc cond;
   bool inclusive = true;
+  /// True when every accumulator's addend is a literal, so the closed form
+  /// contains no symbolic multiplier. Licenses the three-disjunct bound, and
+  /// with it signed counters and any literal entry value.
+  bool constant_addends = true;
   std::vector<accumulatort> accumulators;
 };
 
@@ -252,12 +271,19 @@ static bool summarise_body(
   goto_programt::targett head,
   goto_programt::targett exit,
   const expr2tc &counter,
-  std::map<std::string, std::pair<expr2tc, expr2tc>> &writes)
+  std::map<std::string, std::pair<expr2tc, expr2tc>> &writes,
+  bool &body_asserts)
 {
+  body_asserts = false;
   for (goto_programt::targett it = std::next(head); it != exit; ++it)
   {
     if (breaks_straight_line(it))
       return false;
+    if (it->is_assert())
+    {
+      body_asserts = true;
+      continue;
+    }
     if (!it->is_assign())
       continue;
 
@@ -306,10 +332,12 @@ static bool classify_accumulators(
     accumulatort acc;
     acc.var = var;
     acc.addend = write->second.second;
-    if (!is_unsigned_integer(acc.var) || !is_unsigned_integer(acc.addend))
+    if (!is_integer(acc.var) || !is_integer(acc.addend))
       return false;
     if (mentions_modified_var(acc.addend, modified))
       return false;
+    if (!is_constant_int2t(acc.addend))
+      out.constant_addends = false;
     if (!entry_value(head, begin, acc.var, acc.entry))
       return false;
 
@@ -332,6 +360,7 @@ static bool classify_accumulators(
 bool recognise_affine_loop(
   goto_functiont &goto_function,
   const loopst &loop,
+  bool overflow_checks_enabled,
   goto_programt::targett &head_out,
   affine_loopt &out)
 {
@@ -348,22 +377,48 @@ bool recognise_affine_loop(
   const auto &modified = loop.get_modified_loop_vars();
   if (!is_symbol2t(out.counter) || modified.find(out.counter) == modified.end())
     return false;
-  if (!is_unsigned_integer(out.counter) || !is_unsigned_integer(out.bound))
+  if (!is_integer(out.counter) || !is_integer(out.bound))
     return false;
   if (mentions_modified_var(out.bound, modified))
     return false;
 
   std::map<std::string, std::pair<expr2tc, expr2tc>> writes;
-  if (!summarise_body(head, exit, out.counter, writes))
+  bool body_asserts = false;
+  if (!summarise_body(head, exit, out.counter, writes, body_asserts))
     return false;
 
   const goto_programt::targett begin = goto_function.body.instructions.begin();
   if (!entry_value(head, begin, out.counter, out.counter_entry))
     return false;
-  if (!entry_admits_two_disjunct_bound(out.counter_entry, out.inclusive))
+
+  // Classify first: whether any addend is symbolic decides which bound shape is
+  // affordable, and that in turn decides how strict the counter has to be.
+  if (!classify_accumulators(head, begin, modified, writes, out))
     return false;
 
-  if (!classify_accumulators(head, begin, modified, writes, out))
+  // A symbolic multiplier confines us to the two-disjunct bound, which is only
+  // establishable for an unsigned counter starting at 0 or 1. With every addend
+  // a literal the third disjunct is affordable and neither restriction applies.
+  if (!out.constant_addends)
+  {
+    if (!is_unsigned_integer(out.counter) || !is_unsigned_integer(out.bound))
+      return false;
+    if (!entry_admits_two_disjunct_bound(out.counter_entry, out.inclusive))
+      return false;
+  }
+
+  // A signed counter cannot carry the `i >= i0` conjunct (its `i + 1` wraps at
+  // the type maximum while still inside the guard), so the havoc is free to
+  // pick i < i0, where `i - i0` is negative and the closed form describes a
+  // state the loop never reaches. That is invisible unless something reads the
+  // accumulator mid-loop -- so decline exactly when the body asserts. Measured:
+  // without this, a correct signed loop with an in-loop `assert(sn <= 2 * n)`
+  // reports FAILED on the user's own assertion while both invariant claims
+  // pass. Unsigned counters keep the conjunct and are unaffected.
+  if (body_asserts && !is_unsigned_integer(out.counter))
+    return false;
+
+  if (overflow_checks_enabled && !is_unsigned_integer(out.counter))
     return false;
 
   head_out = head;
@@ -384,6 +439,16 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
     cond,
     equality2tc(shape.counter, typecast2tc(shape.counter->type, exit_value)));
 
+  // The loop-never-entered arm. Establishment needs it whenever the entry value
+  // may sit past the exit value -- which a signed or arbitrary literal entry
+  // can. Only emitted when no symbolic multiplier is present, because a third
+  // live arm at the exit is what makes the miter case non-terminating.
+  if (shape.constant_addends)
+    inv = or2tc(
+      inv,
+      equality2tc(
+        shape.counter, typecast2tc(shape.counter->type, shape.counter_entry)));
+
   // The counter never goes below its entry value, and saying so matters: the
   // havoc is otherwise free to pick i < i0, where (i - i0) wraps and the
   // accumulator's closed form describes a state the loop can never reach. That
@@ -392,10 +457,19 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
   // and no extra multiplier branch; for i0 == 0 it simplifies away entirely, so
   // with today's admitted entry values it does work only in the `<=`, i0 == 1
   // case. Relaxing entry_admits_two_disjunct_bound would widen that.
-  inv = and2tc(
-    inv,
-    greaterthanequal2tc(
-      shape.counter, typecast2tc(shape.counter->type, shape.counter_entry)));
+  // Unsigned counters only. The conjunct prunes havoced states with i < i0,
+  // where `i - i0` wraps and the closed form describes a state the loop cannot
+  // reach -- without it a correct program draws a false alarm (see the
+  // lowerbnd and entrytwo tests). But a signed counter cannot carry it: `i == n
+  // == INT_MAX` still satisfies `i <= n`, so the body's `i + 1` wraps to
+  // INT_MIN and `i >= i0` is *false* after a legitimate iteration. Emitting it
+  // there would be emitting something untrue, and the preservation claim duly
+  // rejects it. Signed loops therefore get the weaker bound.
+  if (is_unsignedbv_type(shape.counter->type))
+    inv = and2tc(
+      inv,
+      greaterthanequal2tc(
+        shape.counter, typecast2tc(shape.counter->type, shape.counter_entry)));
 
   simplify(inv);
   return inv;
@@ -455,7 +529,9 @@ void emit_invariant(
 
 } // namespace
 
-void goto_synthesise_loop_invariants(goto_functionst &goto_functions)
+void goto_synthesise_loop_invariants(
+  goto_functionst &goto_functions,
+  bool overflow_checks_enabled)
 {
   size_t synthesised = 0;
 
@@ -472,7 +548,8 @@ void goto_synthesise_loop_invariants(goto_functionst &goto_functions)
 
       goto_programt::targett head;
       affine_loopt shape;
-      if (!recognise_affine_loop(it->second, loop, head, shape))
+      if (!recognise_affine_loop(
+            it->second, loop, overflow_checks_enabled, head, shape))
         continue;
 
       // goto_loop_invariant's extractor walks backwards from the *original*

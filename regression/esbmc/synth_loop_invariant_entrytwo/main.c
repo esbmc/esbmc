@@ -1,7 +1,6 @@
-/* Counter enters at 2 under a `<` guard. The two-disjunct bound is not
- * establishable for that entry value (it needs the third disjunct i == i0),
- * so the recogniser declines instead of emitting a claim that fails at
- * establishment on a correct program. */
+/* Entry value 2 is outside the two-disjunct range, but with a literal addend
+ * the three-disjunct bound is affordable and the loop is summarised. The
+ * i >= i0 conjunct is still emitted here because the counter is unsigned. */
 #include <assert.h>
 
 int main(void)

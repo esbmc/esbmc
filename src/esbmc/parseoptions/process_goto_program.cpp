@@ -203,7 +203,10 @@ void esbmc_parseoptionst::apply_loop_invariants(
   contextt &context)
 {
   if (cmdline.isset("synthesise-loop-invariants"))
-    goto_synthesise_loop_invariants(goto_functions);
+    goto_synthesise_loop_invariants(
+      goto_functions,
+      cmdline.isset("overflow-check") ||
+        cmdline.isset("unsigned-overflow-check"));
 
   bool use_frame_rule = cmdline.isset("loop-frame-rule");
   goto_loop_invariant(goto_functions, context, use_frame_rule);

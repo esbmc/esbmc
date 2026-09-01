@@ -1,5 +1,5 @@
 CORE
 main.c
 --synthesise-loop-invariants --unwind 14
-^Synthesised loop invariants for 1 loop$
+\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
 ^VERIFICATION SUCCESSFUL$

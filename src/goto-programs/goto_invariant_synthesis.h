@@ -34,6 +34,13 @@
 /// disjuncts discharge in ~1s where three do not finish in 120s. Synthesis is
 /// therefore restricted to the entry values for which two disjuncts are already
 /// establishable — see entry_admits_two_disjunct_bound.
-void goto_synthesise_loop_invariants(goto_functionst &goto_functions);
+/// @param overflow_checks_enabled  when true, decline signed loops. goto_check
+///        instruments every instruction guard, including the ones this pass
+///        emits, so the synthesised `(i - i0) * e` draws overflow claims on
+///        arithmetic the user never wrote. Unsigned wrap is well defined and
+///        unaffected; only the signed form invents claims.
+void goto_synthesise_loop_invariants(
+  goto_functionst &goto_functions,
+  bool overflow_checks_enabled);
 
 #endif /* GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_ */
