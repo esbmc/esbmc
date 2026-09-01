@@ -665,6 +665,11 @@ public:
    */
   BigInt uniform_scalar_elem_size(const std::string &list_id) const;
 
+  /** Same, for a list reached as an expression: a non-symbol operand names no
+   *  list to look up, so it has no single width and yields 0.
+   */
+  BigInt uniform_scalar_elem_size(const exprt &list) const;
+
   /** Compute the type_flag and float_type_id for a list, using the same
    *  encoding as __ESBMC_list_sort and __ESBMC_list_lt:
    *    0 = all-integer, 1 = all-float, 2 = string, 3 = mixed int+float.
