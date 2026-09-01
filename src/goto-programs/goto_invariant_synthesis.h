@@ -16,24 +16,50 @@
 ///   i = i + 1                  counter, unit step
 ///   s = s + e                  accumulator, e free of loop-modified vars
 ///
-/// yields, with i0/s0 the entry values and E the exit value of i,
+/// yields, with i0/s0 the entry values and E the exit value of i:
 ///
-///   (i <op> B) || i == E                   counter bound
 ///   s == s0 + (i - i0) * e                 accumulator closed form
+///   (i <op> B) || i == E                   counter bound
+///   (+ i == i0)                            third arm, constant-addend regime
+///   (+ i0 <op> B || i == i0)               never-entered, constant-addend
+///   (+ i >= i0)                            unsigned counters only
 ///
-/// The bound is emitted as a disjunction rather than the tighter `i <= B + 1`
-/// so that negating the guard at the loop exit yields the *equality* i == E by
-/// disjunct elimination. Substituting that equality lets the two `* e` terms
-/// share a multiplier; the inequality form instead leaves the solver proving
-/// two 64-bit multiplier circuits equivalent, which does not terminate.
+/// THE ONE DESIGN CONSTRAINT, from which every restriction below follows.
 ///
-/// For the same reason the bound stays at exactly two disjuncts. A third arm
-/// covering a loop that never runs (`i == i0`) is what a general entry value
-/// would need, but it leaves two multiplier branches alive at the exit and the
-/// query stops terminating; measured on the accumulator loop above, two
-/// disjuncts discharge in ~1s where three do not finish in 120s. Synthesis is
-/// therefore restricted to the entry values for which two disjuncts are already
-/// establishable — see entry_admits_two_disjunct_bound.
+/// The bound is a disjunction rather than the tighter `i <= B + 1` so that
+/// negating the guard at the exit yields the *equality* i == E by disjunct
+/// elimination. Substituting that equality lets the two `* e` terms share a
+/// multiplier. The inequality form instead leaves the solver proving two
+/// 64-bit multiplier circuits equivalent, which does not terminate — and every
+/// additional live arm at the exit costs the same way. Measured on the
+/// accumulator loop above: two disjuncts discharge in ~1s, three do not finish
+/// in 120s.
+///
+/// That cost exists only when an addend is *symbolic*. With every addend a
+/// literal there is no multiplier to miter and extra arms are free: measured on
+/// the sum01 exit obligation, three disjuncts with a constant addend discharge
+/// in 0s against 45s-and-counting for the same shape with a symbolic one.
+/// Hence two regimes:
+///
+///   symbolic addend   two disjuncts only. Establishment then needs an
+///                     unsigned counter entering at 0 or 1 — see
+///                     entry_admits_two_disjunct_bound for the case analysis.
+///
+///   literal addends   the third arm `i == i0` is affordable, which makes
+///                     establishment unconditional, which in turn admits
+///                     signed counters and any literal entry value. Also
+///                     carries the never-entered arm, without which the exit
+///                     admits i == E for a bound that never satisfied the
+///                     guard and the closed form reports an accumulator the
+///                     loop could not produce.
+///
+/// `i >= i0` prunes havoced states below the entry value, where `i - i0` wraps.
+/// It is emitted for unsigned counters only: a signed `i == n == INT_MAX` still
+/// satisfies the guard, so the body's `i + 1` wraps and the conjunct is false
+/// after a legitimate iteration. Signed loops therefore carry a weaker bound
+/// and are declined where that weakness is observable — a body that asserts, or
+/// a run with overflow checking on.
+///
 /// @param overflow_checks_enabled  when true, decline signed loops. goto_check
 ///        instruments every instruction guard, including the ones this pass
 ///        emits, so the synthesised `(i - i0) * e` draws overflow claims on

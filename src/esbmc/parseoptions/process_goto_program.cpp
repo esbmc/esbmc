@@ -200,13 +200,19 @@ bool esbmc_parseoptionst::wants_loop_invariants() const
 /// them.
 void esbmc_parseoptionst::apply_loop_invariants(
   goto_functionst &goto_functions,
-  contextt &context)
+  contextt &context,
+  const optionst &options)
 {
   if (cmdline.isset("synthesise-loop-invariants"))
+    // Read from `options`, the same object goto_check consults
+    // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
+    // instead happens to agree today only because nothing calls
+    // set_option on these two, which is a property of the current code
+    // rather than an enforced one.
     goto_synthesise_loop_invariants(
       goto_functions,
-      cmdline.isset("overflow-check") ||
-        cmdline.isset("unsigned-overflow-check"));
+      options.get_bool_option("overflow-check") ||
+        options.get_bool_option("unsigned-overflow-check"));
 
   bool use_frame_rule = cmdline.isset("loop-frame-rule");
   goto_loop_invariant(goto_functions, context, use_frame_rule);
@@ -476,7 +482,7 @@ bool esbmc_parseoptionst::process_goto_program(
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (wants_loop_invariants())
-        apply_loop_invariants(goto_functions, context);
+        apply_loop_invariants(goto_functions, context, options);
     }
 
     // --termination: reduce non-termination to a reachability safety

@@ -109,33 +109,17 @@ bool is_self_increment(
   return false;
 }
 
-/// Every variable the closed form arithmetises over must be an unsigned
-/// integer. Two reasons, both observed as defects:
-///
-///   * a pointer accumulator (`p = p + 1`) would build mul2t/add2t over pointer
-///     types, which assert_arith_2ops_consistency rejects outright — ESBMC
-///     aborts in a Debug build and emits a malformed expression in Release;
-///   * the entry-value case analysis in entry_admits_two_disjunct_bound is only
-///     valid for a non-negative bound. With `int n` and n < 0 the loop is never
-///     entered and the two-disjunct bound is false at entry, so the synthesised
-///     claim fails on a correct program.
-///
-/// Pointer walks are out of scope entirely; signed counters are admitted only
-/// on the constant-addend path, where the third disjunct is affordable.
+/// Gate for the symbolic-addend regime and for the `i >= i0` conjunct; see the
+/// header. Also keeps pointers out of the arithmetic builders entirely, where a
+/// `p = p + 1` accumulator would build mul2t over pointer types and trip
+/// assert_arith_2ops_consistency.
 bool is_unsigned_integer(const expr2tc &expr)
 {
   return expr && is_unsignedbv_type(expr->type);
 }
 
-/// Signed counters are admissible only when no accumulator multiplies by a
-/// symbolic value. The reason is the bound's shape, not the sign: a signed
-/// bound can be negative, the loop is then never entered, and the two-disjunct
-/// bound `(i <op> B) || i == E` is false at entry -- so establishment needs the
-/// third disjunct `i == i0`. That third arm is exactly what the symbolic-
-/// multiplier case cannot afford (see the header), but with every addend a
-/// literal there is no multiplier to miter and it costs nothing: measured on
-/// the sum01 exit obligation, three disjuncts with a constant addend discharge
-/// in 0s where the same shape with a symbolic addend does not finish in 45s.
+/// Type gate for the constant-addend regime, which admits signed counters; see
+/// the header for why the sign is not what the restriction was ever about.
 bool is_integer(const expr2tc &expr)
 {
   return expr &&
@@ -227,8 +211,8 @@ bool entry_value(
 ///   `<`,  E = B:   establishment fails iff i0 > B, which only i0 == 0 rules
 ///                  out.
 ///
-/// Anything else would need the third disjunct `i == i0`, and that costs the
-/// solver the equality it needs at the loop exit — see the header.
+/// Anything else needs the third disjunct, which only the constant-addend
+/// regime can afford; see the header.
 bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive)
 {
   if (!is_constant_int2t(entry))
@@ -396,9 +380,8 @@ bool recognise_affine_loop(
   if (!classify_accumulators(head, begin, modified, writes, out))
     return false;
 
-  // A symbolic multiplier confines us to the two-disjunct bound, which is only
-  // establishable for an unsigned counter starting at 0 or 1. With every addend
-  // a literal the third disjunct is affordable and neither restriction applies.
+  // Symbolic addend: two disjuncts only, so an unsigned counter entering at 0
+  // or 1. See the header.
   if (!out.constant_addends)
   {
     if (!is_unsigned_integer(out.counter) || !is_unsigned_integer(out.bound))
@@ -449,10 +432,8 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
     cond,
     equality2tc(shape.counter, typecast2tc(shape.counter->type, exit_value)));
 
-  // The loop-never-entered arm. Establishment needs it whenever the entry value
-  // may sit past the exit value -- which a signed or arbitrary literal entry
-  // can. Only emitted when no symbolic multiplier is present, because a third
-  // live arm at the exit is what makes the miter case non-terminating.
+  // Third arm: makes establishment unconditional when the entry value may sit
+  // past the exit value. Constant-addend regime only — see the header.
   const expr2tc entry_as_counter =
     typecast2tc(shape.counter->type, shape.counter_entry);
 
@@ -480,14 +461,9 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
   // shows up as a false alarm on the user's own in-loop assertions, and as
   // overflow claims on arithmetic the user never wrote. Costs one comparison
   // and no extra multiplier branch; for i0 == 0 it simplifies away entirely.
-  // Unsigned counters only. The conjunct prunes havoced states with i < i0,
-  // where `i - i0` wraps and the closed form describes a state the loop cannot
-  // reach -- without it a correct program draws a false alarm (see the
-  // lowerbnd and entrytwo tests). But a signed counter cannot carry it: `i == n
-  // == INT_MAX` still satisfies `i <= n`, so the body's `i + 1` wraps to
-  // INT_MIN and `i >= i0` is *false* after a legitimate iteration. Emitting it
-  // there would be emitting something untrue, and the preservation claim duly
-  // rejects it. Signed loops therefore get the weaker bound.
+  // Unsigned counters only; a signed counter's `i + 1` wraps at the type
+  // maximum while still inside the guard, making this false after a legitimate
+  // iteration. See the header. Pinned by the lowerbnd and entrytwo tests.
   if (is_unsignedbv_type(shape.counter->type))
     inv = and2tc(
       inv,
