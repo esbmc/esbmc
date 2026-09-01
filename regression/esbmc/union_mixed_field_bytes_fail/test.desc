@@ -1,5 +1,5 @@
 CORE
 main.c
-
+--little-endian
 ^\s+the narrow field must not survive the wide write$
 ^VERIFICATION FAILED$
