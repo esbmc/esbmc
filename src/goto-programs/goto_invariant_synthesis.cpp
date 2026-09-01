@@ -120,8 +120,8 @@ bool is_self_increment(
 ///     entered and the two-disjunct bound is false at entry, so the synthesised
 ///     claim fails on a correct program.
 ///
-/// Signed counters and pointer walks are simply out of scope for this revision
-/// rather than mis-handled.
+/// Pointer walks are out of scope entirely; signed counters are admitted only
+/// on the constant-addend path, where the third disjunct is affordable.
 bool is_unsigned_integer(const expr2tc &expr)
 {
   return expr && is_unsignedbv_type(expr->type);
@@ -418,8 +418,18 @@ bool recognise_affine_loop(
   if (body_asserts && !is_unsigned_integer(out.counter))
     return false;
 
-  if (overflow_checks_enabled && !is_unsigned_integer(out.counter))
-    return false;
+  // goto_check instruments the guards this pass emits. The closed form is built
+  // at each accumulator's type, not the counter's, so an unsigned counter with
+  // a signed accumulator would still emit signed arithmetic and draw claims on
+  // operations the user never wrote.
+  if (overflow_checks_enabled)
+  {
+    if (!is_unsigned_integer(out.counter))
+      return false;
+    for (const auto &acc : out.accumulators)
+      if (!is_unsigned_integer(acc.var))
+        return false;
+  }
 
   head_out = head;
   return true;
@@ -443,20 +453,33 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
   // may sit past the exit value -- which a signed or arbitrary literal entry
   // can. Only emitted when no symbolic multiplier is present, because a third
   // live arm at the exit is what makes the miter case non-terminating.
+  const expr2tc entry_as_counter =
+    typecast2tc(shape.counter->type, shape.counter_entry);
+
   if (shape.constant_addends)
-    inv = or2tc(
-      inv,
-      equality2tc(
-        shape.counter, typecast2tc(shape.counter->type, shape.counter_entry)));
+  {
+    inv = or2tc(inv, equality2tc(shape.counter, entry_as_counter));
+
+    // "Either the loop was entered, or the counter is still its entry value."
+    // Without this the exit admits i == E for a bound that never satisfied the
+    // guard: for a signed loop that is i == n < i0, and the closed form then
+    // reports an accumulator value the loop could never produce -- a false
+    // alarm on the user's own assertion after the loop. Costs no arithmetic on
+    // i, so unlike `i >= i0` it survives the wrap that makes that conjunct
+    // unusable for a signed counter.
+    const expr2tc entered =
+      shape.inclusive ? expr2tc(lessthanequal2tc(entry_as_counter, shape.bound))
+                      : expr2tc(lessthan2tc(entry_as_counter, shape.bound));
+    inv =
+      and2tc(inv, or2tc(entered, equality2tc(shape.counter, entry_as_counter)));
+  }
 
   // The counter never goes below its entry value, and saying so matters: the
   // havoc is otherwise free to pick i < i0, where (i - i0) wraps and the
   // accumulator's closed form describes a state the loop can never reach. That
   // shows up as a false alarm on the user's own in-loop assertions, and as
   // overflow claims on arithmetic the user never wrote. Costs one comparison
-  // and no extra multiplier branch; for i0 == 0 it simplifies away entirely, so
-  // with today's admitted entry values it does work only in the `<=`, i0 == 1
-  // case. Relaxing entry_admits_two_disjunct_bound would widen that.
+  // and no extra multiplier branch; for i0 == 0 it simplifies away entirely.
   // Unsigned counters only. The conjunct prunes havoced states with i < i0,
   // where `i - i0` wraps and the closed form describes a state the loop cannot
   // reach -- without it a correct program draws a false alarm (see the
