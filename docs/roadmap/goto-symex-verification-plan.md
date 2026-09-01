@@ -730,6 +730,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R44** | **Medium–High (no verdict, default configuration)** — found by R43's own open census row, §15 M9 (R44); **FIXED**, same entry | **A flat walk across a 2-D array never terminates.** `address_of2t::do_simplify` rebases only the innermost subscript, so `&a[1][2]` becomes `&(a[1])[0] + 2` while a pointer started at `&a[0][0]` carries `&(a[0])[0] + k`; the two bases differ and the guard is never decided. Two addresses in the same row already met, which is what made the shape read as a rank problem. R43's `<` row (c08) was also unmeasured: the ordered relations never had the normalisation at all | `normalize_addressof_index` and `simplify_relations`, `src/util/expr/expr_simplifier.cpp`; R43's own c06 census row | `regression/esbmc/nested_index_bound{,_lt,_fail}`, `nested_member_index_bound{,_fail}` | **Fixed**: rebase both operands on a chain with every subscript zeroed, counting the offset in the pointer's own pointee type so member steps join the same rewrite; reach it through pointer arithmetic so both sides move together; and give the ordered relations the normalisation `equality2t`/`notequal2t` already had. Residual: a walk whose two ends reach *different* members does not share a base |
 | **R47** | **Medium (no verdict, default configuration)** — found by a guard-*shape* census rather than a bound one, §15 M9 (R47); **FIXED**, same entry | **Every descending pointer walk hangs; every ascending twin folds.** The guard is `add(&a[4], k) != &a[0]`: the add's base keeps its own subscript, so it never meets the bare bound beside it. A decrement also never reaches the `base + offset` shape an increment has. Four other mechanisms were measured and refuted first, including a real missing `sub2t` arm in `constant_propagation` that changes no verdict | 18-shape guard census; `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp` | `regression/esbmc/descending_pointer_walk{,_fail}` | **Fixed**, in two steps: `p - c -> p + (-c)` for a signed constant gives a decrementing walk the shape an incrementing one has, and giving `flatten_addressof_under_add` the single-subscript fallback the top level already had rebases the `&a[4]` inside `&a[4] + k`. 18/18 of the census folds |
 | **R48** | **Medium–High (no verdict, default configuration)** — found by a bound-*storage* census extending R42–R47, §15 M9 (R48); **FIXED**, same entry | **A nested member write into a struct with no propagated value drops the whole struct.** `struct S{struct I in;}; struct S x; x.in.n = 4;` then `for (i = 0; i < x.in.n; i++)` never terminates under default flags, while the flat `x.n = 4` spelling of the same program proves `SUCCESSFUL` in 0.4 s. `constant_propagation`'s struct arm walks the `with` chain and then requires its base not to be a `member2t`, and a nested member write spells that base as exactly that — `x#1.in`, the old value of the field being updated — so the inner update is refused, the outer one becomes non-constant, and the bound stays symbolic. The equation is right: a bare `assert(x.in.n == 4)` on the same program proves. Only `symex_goto`'s syntactic exit decision (R30) cannot see the value. | the 20-shape storage census and its 6 controls, §15 M9 (R48); `goto_symex_state.cpp:322`; `regression/esbmc/nested_member_loop_bound{,_fail}` | **H-C2** | Fixed by removing the clause. The base is already renamed, so the propagated value is as self-contained as the flat `with(x#1, n, 4)` the same arm already keeps, and the array arm added by the same commit (#2845) never carried the restriction. Eight nested shapes hang on the base build and decide on the patched one. |
+| **R49** | **Medium–High (no verdict, default configuration)** — found by probing the sibling arms of R48's fix, §15 M9 (R49, R50); **FIXED**, same entry | **A union `with` chain touching two fields is refused, so a bound stored in the last-written field never folds.** `union U{int a; short b;}; u.b=1; u.a=4;` then `for (i = 0; i < u.a; i++)` never terminates. The arm requires every update in the chain to name the same field, reasoning that union members alias — which is true and already enforced by `member2t::do_simplify`, which refuses to step past a `with` whose source is a union. The gate was denying itself a value the simplifier handles correctly. | seven before/after probes, §15 M9 (R49, R50); `goto_symex_state.cpp:351-393`; `regression/esbmc/union_mixed_field_{bound,bound_fail,aliased_fail}` | **H-C2** | Fixed by dropping the same-field requirement. Every read aliased by a *later* sibling write still refuses to fold, at all three widths probed (`int` over `int`, `short` over `int`, a `char[4]` byte over `int`), so the relaxation buys termination and not a wrong answer. The residual is a struct-typed update into a union, which the arm still declines because it gates on `is_constant_expr` where the struct arm gates on `constant_propagation`. |
+| **R50** | **Medium (no verdict, default configuration; latent solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **open, and the fix belongs in the solver** | **A bound stored in a multi-dimensional array never folds, because propagating the array would crash the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declines any multi-dimensional array that is not wholly constant; ablating that clause makes the bound fold **and** makes three probes that read the updated row at a nondet index abort with `bitwuzla: error: ... expected array term at index 0`. ESBMC flattens `int[2][2]` to a flat `int[4]`, so `a#1[1]` — a *partial* index — lowers to a `select` returning an element where the enclosing `with` needs a row; a row-valued expression has no encoding. **Latent, not live:** five other routes to a row-valued expression on the shipped build all return correct verdicts, so the gate is the only producer. | ablation measurement and the VCC `(a#1[1] WITH [0:=5] WITH [1:=4])[i]`, §15 M9 (R49, R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724` | **H-C2** | Do **not** relax the propagation gate: it is what keeps symex from building a shape the encoder cannot lower. Fix `decompose_store_chain` / `convert_array_index` first — either give a partial index an encoding, or normalise `with(index(A, i), j, v)` into a flat store on `A` before the solver sees it. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -7583,6 +7585,104 @@ hangs on both builds, because there is no constant to propagate in the first
 place. That is R28's stated residual: a genuinely symbolic bound is
 `--smt-symex-guard`'s question, not constant propagation's, and this entry does
 not narrow it.
+
+---
+
+
+### M9 (R49, R50) — 2026-09-01, the same shape in the two sibling arms, and only one of them is a defect
+
+R48 closed the struct arm of `constant_propagation`. The obvious follow-up is
+whether the array and union arms beside it refuse the same shape, and both do —
+but for opposite reasons, and only one of them should be changed. Recording both
+together is the point of the entry: the two look identical from the outside, and
+the cheap read of "R48 again, twice" is wrong.
+
+| Probe | Shape | Base |
+|---|---|---|
+| u02 | `union U{int a; short b;}; u.b=1; u.a=4;` looped to `u.a` | **hangs** |
+| a02 | `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` | **hangs** |
+
+**R49 — the union arm's same-field rule is redundant, and it is the defect.**
+The arm refuses any chain touching two different fields, reasoning in-code that
+"union members alias each other in memory: writing to one field affects what you
+read from another field." That is true, and it is already enforced one layer
+down: `member2t::do_simplify` returns nil rather than stepping past a `with`
+whose source is a union, for exactly that reason. So the chain
+`with(with(u#1, b, 1), a, 4)` is safe to carry — a read of `a` folds to 4
+because the outermost update names `a` and is therefore the last write, and a
+read of anything else stops at the `with` and stays symbolic. The propagation
+gate was denying itself a value the simplifier would have handled correctly.
+
+Five probes hold the direction, measured before and after:
+
+| Probe | Program | Base | Patched |
+|---|---|---|---|
+| s1 | `u.a=4; u.b=1;` then `assert(u.a==4)` | `FAILED` | `FAILED` |
+| s2 | same, `b` a `short` — a partial-width clobber | `FAILED` | `FAILED` |
+| s3 | `u.a=0; u.c[0]=1;` through a `char[4]` member | `FAILED` | `FAILED` |
+| s4 | `u.b=1; u.a=4;` then `assert(u.a==4)` | `SUCCESSFUL` | `SUCCESSFUL` |
+| s5 | same width both ways, `assert(u.b==4)` | `SUCCESSFUL` | `SUCCESSFUL` |
+| s6 | the R49 bound | **hangs** | `SUCCESSFUL` |
+| s7 | the same bound asserted as 5 | **hangs** | `FAILED` |
+
+s1–s3 are the rows that matter: every read aliased by a *later* sibling write
+still refuses to fold, in all three widths, so the relaxation buys termination
+without buying a wrong answer. s3 is the one that would catch a fold reasoning
+about field names rather than bytes.
+
+**R50 — the array arm's refusal is load-bearing, and removing it crashes the
+solver.** `array_may_propagate` declines a multi-dimensional array unless the
+whole value is a constant, citing an encoding gap. That citation was checked
+rather than trusted: with the clause ablated and the binary rebuilt, a02 decides
+— and three probes that read the updated row at a **nondet** index abort with
+
+```
+bitwuzla: error: invalid call to ... expected array term at index 0
+```
+
+The mechanism is visible in the VCC: the guard is
+`(a#1[1] WITH [0:=5] WITH [1:=4])[i]`, a `with` chain whose base is `a#1[1]` —
+a *partial* index into a 2-D array. ESBMC flattens `int[2][2]` to a flat
+`int[4]` in the SMT encoding, so `convert_array_index` lowers `a#1[1]` to a
+`select` and hands back an **element** where the enclosing `with` needs a
+**row**. The flattening assumes every index chain runs all the way down to an
+element; a row-valued expression has no encoding. R42's `is_constant_array_value`
+gate is what keeps symex from ever building one, and it is correct.
+
+**R50 is latent, not live.** Five routes to a row-valued expression on the
+shipped build — a pointer to a row (`int (*r)[2] = &a[1]`), a decayed row
+pointer (`int *r = a[1]`), a row passed to a function, the direct
+`a[1][0]=5; a[1][1]=4`, and the same inside a struct — all return the correct
+verdict, because none of them produces a `with` over a partial index. The gate
+is the only producer, so the gap is reachable only by removing it. It is
+therefore recorded as an open **encoder** defect, not a propagation one, and the
+fix belongs in `decompose_store_chain` / `convert_array_index`: either give a
+partial index an encoding, or normalise `with(index(A, i), j, v)` into a flat
+store on `A` before it reaches the solver. Not attempted here.
+
+**Measured.**
+
+| Artefact | Invocation | Verdict | Mutation it kills |
+|---|---|---|---|
+| `regression/esbmc/union_mixed_field_bound` | default | `CORE`, `SUCCESSFUL`, pinned on `Generated 1 VCC(s), 0 remaining after simplification` | the same-field requirement restored: the base build does not terminate on this file |
+| `regression/esbmc/union_mixed_field_bound_fail` | default | `CORE`, `FAILED`, naming its own assertion text | a fold that invented a trip count |
+| `regression/esbmc/union_mixed_field_aliased_fail` | default | `CORE`, `FAILED` — `u.a=4; u.b=1;` then `assert(u.a==4)` | **the unsound direction**: a relaxation that let an aliased read fold would turn this `SUCCESSFUL` |
+| the 7 union probes | per-file, 20 s cap | 5/7 base (2 hang), 7/7 patched, **s1–s5 unchanged** | — |
+| the R50 ablation | rebuilt binary, nondet-index reads | 3 solver aborts | — |
+| `-L esbmc/` | `ctest -j6`, 120 s cap | **2024/2024, 0 failures**, 414 s | — |
+| unit tests | `ctest -LE regression -j6` | 771/771 | — |
+
+The third artefact is the one to keep. The passing pair only shows the bound
+now folds; `union_mixed_field_aliased_fail` is what shows the fold stops where
+the aliasing starts, and it is the test that would break first if someone later
+relaxed `member2t::do_simplify`'s union arm to match this one.
+
+**The trap this entry nearly fell into.** The first pass read `x.a[1][0]=5;
+x.a[1][1]=4;` proving `SUCCESSFUL` as evidence the ablation was safe. It is not
+evidence of anything: both probes report `0 remaining after simplification`, so
+the claim was folded at symex time and the encoder never saw the chain. Only a
+read at a nondet index keeps the store chain alive to the solver, and that is
+what turned a clean-looking ablation into three aborts.
 
 ---
 
