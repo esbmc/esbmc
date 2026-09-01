@@ -744,22 +744,42 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
       active_loop_assigns, dest, loop_exit->location, frame_modet::ASSERT);
   }
 
+  // A `do`-`while` back edge carries the loop's own exit test, so unlike the
+  // unconditional back edge of a `while` or `for` loop it cannot be cut with
+  // ASSUME(false): the fall-through is the exit path, and killing it drops
+  // every claim after the loop (issue #7478). Assume the negated condition
+  // instead and drop the back edge outright, and guard the inductive step by
+  // that condition so it is required only of an iteration that would actually
+  // follow -- the same correction the combined pass made for do-while in
+  // PR #3777.
+  const bool conditional_back_edge =
+    loop_exit->is_goto() && !is_true(loop_exit->guard);
+  const expr2tc exit_cond =
+    conditional_back_edge ? not2tc(loop_exit->guard) : gen_false_expr();
+
   // 3. ASSERT for inductive step.
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = invariant;
+    t->guard =
+      conditional_back_edge ? expr2tc(or2tc(exit_cond, invariant)) : invariant;
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
     t->location.property("invariant-inductive-step");
   }
 
-  // 4. Insert ASSUME(FALSE) to terminate the loop
+  // 4. Cut the back edge: the havoc already covers every iteration.
   goto_programt::targett t = dest.add_instruction(ASSUME);
-  t->guard = gen_false_expr();
+  t->guard = exit_cond;
   t->location = loop_exit->location;
   t->location.comment("loop termination");
+
+  // ASSUME(false) leaves an unconditional back edge statically unreachable, but
+  // a conditional one still has a satisfiable guard and symex would unwind it
+  // forever. Remove it; the ASSUME above already constrains the exit path.
+  if (conditional_back_edge)
+    loop_exit->make_skip();
 
   // Insert at the insert point
   goto_function.body.insert_swap(insert_point, dest);
