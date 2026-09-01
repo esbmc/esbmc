@@ -3,14 +3,17 @@
 Data behind the two-tier CI of [#6735](https://github.com/esbmc/esbmc/issues/6735).
 Everything here is generated and committed by a workflow; nothing is hand-edited.
 
-Rollout steps 1 and 2 only — **no PR check consumes these files yet**. The PR
-lane still runs the full suite.
+Rollout steps 1–3. **Nothing gates on them yet**: the PR lane still runs the
+full suite, and shadow mode only measures what a fast lane *would* have missed.
 
 | File | Written by | What it is |
 | --- | --- | --- |
 | `test-timings.json` | `test-timings.yml` (nightly) | measured duration of every test |
 | `selected-tests-<year>-W<week>.txt` | `test-timings.yml` (first run of the week) | the week's fast-lane sample |
 | `core-set.txt` | `core-set.yml` (monthly) | always-run tests, solved from coverage |
+
+Shadow mode holds no committed data — its per-PR reports are run artifacts, and
+`shadow-aggregate.yml` posts the running total to #6735 weekly.
 
 ## Reproducing a fast-lane failure locally
 
@@ -51,3 +54,27 @@ be sampled without bound.
   tests that the build does not contain.
 - **`core-set.txt` is built from a `CORE_REGRESSION_ONLY` coverage build**, so
   `KNOWNBUG` and `FUTURE` tests are never candidates for the always-run set.
+
+## Shadow mode (rollout step 3)
+
+The Linux PR leg runs the week's subset first, cold and timed, then the full
+suite, then compares the two. It answers the two questions step 4 needs:
+
+- **What does the fast lane really cost?** A projection from durations measured
+  on another machine at another parallelism is not an answer; running it is.
+- **What would it have missed?** A test that failed in the full run and was
+  never sampled is an escaped regression.
+
+A test the fast lane *ran and passed* that then failed in the full run is
+counted as **unstable**, not escaped — it is flaky or order-dependent, and
+blaming the sampling for it would overstate the escape rate. The issue calls
+flakiness out as the thing most likely to derail the later bisect loop, so it is
+worth counting on its own from the start.
+
+The shadow selection excludes `regression/python-intensive/`, because the PR leg
+does too and the comparison is only meaningful over one universe. Same week
+seed, so it is the nightly's draw minus that suite.
+
+Both the shadow steps and the digest workflow are temporary. Remove
+`shadow-fast-lane` from `pull_request.yml` and delete `shadow-aggregate.yml`
+once the rate is known and step 4 is decided.

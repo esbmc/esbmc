@@ -25,6 +25,7 @@ import hashlib
 import json
 import random
 import statistics
+import subprocess
 import sys
 from datetime import date
 
@@ -72,6 +73,16 @@ def stratum_of(name):
     rest = name[len("regression/"):]
     suite, sep, _ = rest.rpartition("/")
     return suite if sep else "unit"
+
+
+def ctest_test_names(build_dir):
+    """List a configured build's tests in ctest numbering order (test #N is entry N-1)."""
+    out = subprocess.run(["ctest", "--show-only=json-v1"],
+                         cwd=build_dir,
+                         check=True,
+                         capture_output=True,
+                         text=True).stdout
+    return [t["name"] for t in json.loads(out)["tests"]]
 
 
 def read_lines(path):
@@ -242,6 +253,11 @@ def main(argv=None):
                         default="ci/test-timings.json",
                         help="measured per-test durations")
     parser.add_argument("--tests", help="newline-delimited universe; defaults to the timed tests")
+    parser.add_argument("--build-dir", help="take the universe from this configured build instead")
+    parser.add_argument("--exclude-prefix",
+                        action="append",
+                        default=[],
+                        help="drop tests whose name starts with this (repeatable)")
     parser.add_argument("--week", default=None, help="ISO year-week seed (default: this week)")
     parser.add_argument("--budget-seconds", type=float, default=900.0, help="wall-clock budget")
     parser.add_argument("--jobs", type=int, default=2, help="ctest -j the budget assumes")
@@ -258,7 +274,17 @@ def main(argv=None):
         table = json.load(handle)
     measured = {n: t["seconds"] for n, t in table.get("tests", {}).items()}
 
-    universe = read_lines(args.tests) if args.tests else sorted(measured)
+    if args.build_dir:
+        universe = ctest_test_names(args.build_dir)
+    elif args.tests:
+        universe = read_lines(args.tests)
+    else:
+        universe = sorted(measured)
+    # Prefix, not ctest label: run_selected_tests.py resolves names to ctest
+    # numbers against the unfiltered build, so the universe must never be
+    # narrowed in a way that could renumber it.
+    for prefix in args.exclude_prefix:
+        universe = [n for n in universe if not n.startswith(prefix)]
     if not universe:
         print("error: empty test universe", file=sys.stderr)
         return 1

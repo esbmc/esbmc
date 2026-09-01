@@ -19,6 +19,11 @@ on:
         required: false
         default: false
         type: boolean
+      shadow-fast-lane:
+        description: "Time the weekly fast-lane subset before the full suite (esbmc/esbmc#6735)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build:
@@ -66,6 +71,43 @@ jobs:
         chmod +x scripts/check_python_tests.sh
         ./scripts/check_python_tests.sh
 
+    # Rollout step 3 of esbmc/esbmc#6735: shadow mode. The subset runs first and
+    # cold, which is the condition it would run under in production, and the
+    # full suite below then says what the subset missed. Non-blocking -- a
+    # measurement must never be the reason a PR goes red.
+    - name: Time the fast-lane subset (shadow)
+      if: ${{ inputs.testing == true && inputs.shadow-fast-lane == true }}
+      continue-on-error: true
+      run: |
+        week=$(python3 -c 'import datetime; y,w,_ = datetime.date.today().isocalendar(); print(f"{y}-W{w:02d}")')
+        echo "FAST_LANE_WEEK=$week" >> "$GITHUB_ENV"
+        # Same per-test cap the full run below applies, so the two runs are
+        # measured under one timeout regime (ctest --timeout is ignored when
+        # tests set TIMEOUT themselves).
+        cmake -DESBMC_REGRESS_TIMEOUT=120 build
+        # Derived here rather than read from the nightly's committed list: the
+        # comparison below is only meaningful if both runs draw from the same
+        # universe, and the PR leg excludes python-intensive. Same week seed,
+        # so this is the nightly's draw minus that suite.
+        selection="$RUNNER_TEMP/selected-tests-$week.txt"
+        python3 scripts/ci/select_tests.py \
+          --timings ci/test-timings.json \
+          --build-dir build \
+          --week "$week" \
+          --budget-seconds 900 \
+          --jobs 2 \
+          --always-run ci/core-set.txt \
+          --exclude-prefix regression/python-intensive/ \
+          --output "$selection"
+        echo "FAST_LANE_SELECTION=$selection" >> "$GITHUB_ENV"
+        start=$(date +%s)
+        python3 scripts/ci/run_selected_tests.py \
+          --build-dir build \
+          --tests "$selection" \
+          -j2 --output-junit "$RUNNER_TEMP/fast-lane.xml" || true
+        echo "FAST_LANE_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
+        rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-*
+
     - name: Run tests
       if: ${{ inputs.testing == true }}
       run: |
@@ -96,10 +138,44 @@ jobs:
         # "runner received a shutdown signal" (OOM). Run the Linux legs with -j2
         # to bound peak concurrent memory. The macOS leg runs the light python/
         # suite plus a handful of platform-sensitive tests, and keeps -j4.
+        junit=()
+        if [[ "${{ inputs.shadow-fast-lane }}" == "true" ]]; then
+          junit=(--output-junit "$RUNNER_TEMP/full.xml")
+        fi
         if [[ "${{ inputs.operating-system }}" =~ ^macos ]]; then
           ctest -j4 --output-on-failure --progress -L '^python/$|^platform-sensitive$'
         elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
-          ctest -j2 --output-on-failure --progress -LE python-intensive .
+          ctest -j2 --output-on-failure --progress -LE python-intensive "${junit[@]}" .
         else
-          ctest -j2 --output-on-failure --progress .
+          ctest -j2 --output-on-failure --progress "${junit[@]}" .
         fi
+
+    - name: Report what the fast lane missed (shadow)
+      # always(): the comparison is most interesting precisely when the full
+      # suite above went red.
+      if: ${{ always() && inputs.testing == true && inputs.shadow-fast-lane == true }}
+      continue-on-error: true
+      run: |
+        test -f "$RUNNER_TEMP/fast-lane.xml" -a -f "$RUNNER_TEMP/full.xml" || {
+          echo "shadow: one of the two runs produced no report; nothing to compare"
+          exit 0
+        }
+        python3 scripts/ci/shadow_report.py compare \
+          --fast-lane "$RUNNER_TEMP/fast-lane.xml" \
+          --full "$RUNNER_TEMP/full.xml" \
+          --selection "$FAST_LANE_SELECTION" \
+          --fast-lane-seconds "$FAST_LANE_SECONDS" \
+          --week "$FAST_LANE_WEEK" \
+          --commit "${{ github.event.pull_request.head.sha || github.sha }}" \
+          --json "$RUNNER_TEMP/shadow.json" \
+          --summary "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload the shadow report
+      if: ${{ always() && inputs.testing == true && inputs.shadow-fast-lane == true }}
+      continue-on-error: true
+      uses: actions/upload-artifact@v7
+      with:
+        name: shadow-report
+        path: ${{ runner.temp }}/shadow.json
+        retention-days: 30
+        if-no-files-found: ignore

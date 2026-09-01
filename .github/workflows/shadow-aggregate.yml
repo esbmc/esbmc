@@ -1,0 +1,64 @@
+name: Shadow mode digest
+
+# Rollout step 3 of esbmc/esbmc#6735 only produces its answer in aggregate: one
+# PR's shadow run says little, but a fortnight of them gives the
+# escaped-regression rate that step 4 is meant to be decided on. This collects
+# the per-PR reports and posts the running total to the issue.
+#
+# Delete this workflow together with the shadow-fast-lane input once that
+# decision is made.
+
+on:
+  schedule:
+    # Monday 07:00, so the digest is waiting at the start of the week.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days of shadow reports to include"
+        default: '14'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  issues: write
+
+jobs:
+  digest:
+    name: Collect shadow reports
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download the shadow reports of recent PR runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAYS: ${{ inputs.days || '14' }}
+        run: |
+          mkdir -p reports
+          since=$(date -u -d "$DAYS days ago" +%Y-%m-%d)
+          # One artifact per PR run; a run that predates the artifact's
+          # retention, or never produced one, is simply absent.
+          gh run list --workflow PR --created ">=$since" --limit 200 \
+            --json databaseId --jq '.[].databaseId' > runs.txt
+          while read -r id; do
+            gh run download "$id" --name shadow-report --dir "reports/$id" 2>/dev/null || true
+          done < runs.txt
+          echo "collected $(find reports -name '*.json' | wc -l) reports"
+
+      - name: Aggregate
+        run: |
+          python3 scripts/ci/shadow_report.py aggregate \
+            --inputs reports \
+            --json digest.json \
+            --summary digest.md || echo "no reports yet" > digest.md
+          cat digest.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post the running total to the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 6735 --body-file digest.md

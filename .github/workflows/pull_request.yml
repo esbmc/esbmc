@@ -24,6 +24,9 @@ jobs:
       operating-system: ubuntu-24.04
       build-flags: '-b DebugOpt -e ON'
       testing: true
+      # Rollout step 3 of esbmc/esbmc#6735. Temporary: remove once the
+      # escaped-regression rate has been measured and step 4 decided.
+      shadow-fast-lane: true
 
   build-windows:
     uses: ./.github/workflows/build-windows.yml

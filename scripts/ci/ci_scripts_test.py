@@ -28,8 +28,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import coverage_core_set as ccs  # noqa: E402
 import ctest_timings as timings  # noqa: E402
-import run_selected_tests as runner  # noqa: E402
+import run_selected_tests as runner  # noqa: E402  (imported for resolve())
 import select_tests as sel  # noqa: E402
+import shadow_report as shadow  # noqa: E402
 
 JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
 <testsuite name="Linux-c++" tests="3">
@@ -251,6 +252,19 @@ class SelectorCli(TempDirCase):
         path = self.write("l.txt", "# header\n\nregression/a/x\n  regression/a/y  # trailing\n")
         self.assertEqual(sel.read_lines(path), ["regression/a/x", "regression/a/y"])
 
+    def test_exclude_prefix_narrows_the_universe(self):
+        names = universe(3, 20) + ["regression/python-intensive/heavy"]
+        table = {"schema": 1, "tests": {n: {"seconds": 1.0} for n in names}}
+        out = os.path.join(self.tmp, "selected.txt")
+        sel.main([
+            "--timings", self.write("t.json", json.dumps(table)), "--week", "2026-W36",
+            "--budget-seconds", "600", "--jobs", "4", "--exclude-prefix",
+            "regression/python-intensive/", "--output", out
+        ])
+        selected = sel.read_lines(out)
+        self.assertTrue(selected)
+        self.assertNotIn("regression/python-intensive/heavy", selected)
+
     def test_empty_universe_is_an_error(self):
         timings_path = self.write("t.json", json.dumps({"schema": 1, "tests": {}}))
         rc = sel.main(["--timings", timings_path, "--output", os.path.join(self.tmp, "o.txt")])
@@ -451,6 +465,144 @@ int main(int argc, char **argv) {
                 "--jobs", "1", "--llvm-cov", self.llvm_cov, "--llvm-profdata", self.llvm_profdata
             ]), 0)
         self.assertNotIn("regression/toy/crashed", ccs.load_bitsets(os.path.join(out, ccs.BITSETS)))
+
+
+def junit(cases):
+    """Build a CTest-shaped JUnit report from {name: status}."""
+    body = []
+    for name, status in cases.items():
+        child = {"fail": "<failure message=\"boom\">trace</failure>",
+                 "skip": "<skipped/>"}.get(status, "")
+        body.append(f'  <testcase name="{name}" time="1.0" status="{status}">{child}</testcase>')
+    return '<?xml version="1.0"?>\n<testsuite tests="%d">\n%s\n</testsuite>\n' % (
+        len(cases), "\n".join(body))
+
+
+class ShadowCompare(TempDirCase):
+
+    def report(self, fast, full, selection=None):
+        return shadow.compare_runs(fast, full, selection or [])
+
+    def test_a_failure_the_fast_lane_never_ran_escaped(self):
+        out = self.report({"a": "run"}, {"a": "run", "b": "fail"})
+        self.assertEqual(out["escaped"], ["b"])
+        self.assertEqual(out["caught"], [])
+
+    def test_a_failure_the_fast_lane_also_saw_was_caught(self):
+        out = self.report({"b": "fail"}, {"b": "fail"})
+        self.assertEqual(out["caught"], ["b"])
+        self.assertEqual(out["escaped"], [])
+
+    def test_disagreement_is_unstable_not_escaped(self):
+        # Ran by the fast lane, passed, then failed in the full run. Calling
+        # this an escape would blame the sampling for flakiness.
+        out = self.report({"b": "run"}, {"b": "fail"})
+        self.assertEqual(out["unstable"], ["b"])
+        self.assertEqual(out["escaped"], [])
+        self.assertEqual(out["caught"], [])
+
+    def test_failing_only_in_the_fast_lane_is_also_unstable(self):
+        out = self.report({"b": "fail"}, {"b": "run"})
+        self.assertEqual(out["unstable"], ["b"])
+        self.assertEqual(out["failures_full"], 0)
+
+    def test_rate_is_escaped_over_all_real_failures(self):
+        self.assertEqual(shadow.escaped_rate(4, 1), 0.25)
+
+    def test_rate_of_a_green_run_is_zero_not_a_division(self):
+        self.assertEqual(shadow.escaped_rate(0, 0), 0.0)
+
+    def test_compare_end_to_end(self):
+        fast = self.write("fast.xml", junit({"a": "run", "b": "run"}))
+        full = self.write("full.xml", junit({"a": "run", "b": "fail", "c": "fail"}))
+        selection = self.write("sel.txt", "a\nb\n")
+        out_json = os.path.join(self.tmp, "shadow.json")
+        summary = os.path.join(self.tmp, "s.md")
+        rc = shadow.main([
+            "compare", "--fast-lane", fast, "--full", full, "--selection", selection,
+            "--fast-lane-seconds", "600", "--week", "2026-W36", "--json", out_json,
+            "--summary", summary
+        ])
+        self.assertEqual(rc, 0)
+        with open(out_json, encoding="utf-8") as handle:
+            report = json.load(handle)
+        self.assertEqual(report["escaped"], ["c"])
+        self.assertEqual(report["unstable"], ["b"])
+        self.assertEqual(report["escaped_rate"], 0.5)
+        with open(summary, encoding="utf-8") as handle:
+            self.assertIn("Fast-lane shadow run", handle.read())
+
+    def test_summary_is_appended_not_clobbered(self):
+        # It is written to $GITHUB_STEP_SUMMARY, which other steps also use.
+        fast = self.write("fast.xml", junit({"a": "run"}))
+        full = self.write("full.xml", junit({"a": "run"}))
+        summary = self.write("s.md", "earlier content\n")
+        shadow.main(["compare", "--fast-lane", fast, "--full", full, "--summary", summary])
+        with open(summary, encoding="utf-8") as handle:
+            self.assertIn("earlier content", handle.read())
+
+
+class ShadowAggregate(TempDirCase):
+
+    def write_report(self, name, **fields):
+        report = {
+            "schema": shadow.SCHEMA,
+            "failures_full": 0,
+            "caught": [],
+            "escaped": [],
+            "unstable": [],
+            "fast_lane_seconds": 600.0,
+        }
+        report.update(fields)
+        return self.write(name, json.dumps(report))
+
+    def test_totals_across_runs(self):
+        self.write_report("a.json", failures_full=2, escaped=["x"], fast_lane_seconds=600.0)
+        self.write_report("b.json", failures_full=2, escaped=["y", "z"], fast_lane_seconds=900.0)
+        out = os.path.join(self.tmp, "agg.json")
+        self.assertEqual(shadow.main(["aggregate", "--inputs", self.tmp, "--json", out]), 0)
+        with open(out, encoding="utf-8") as handle:
+            totals = json.load(handle)
+        self.assertEqual(totals["failures_full"], 4)
+        self.assertEqual(totals["escaped"], 3)
+        self.assertEqual(totals["escaped_rate"], 0.75)
+        self.assertEqual(totals["fast_lane_seconds_median"], 750.0)
+        self.assertEqual(totals["fast_lane_seconds_max"], 900.0)
+
+    def test_green_runs_do_not_read_as_a_proven_safe_fast_lane(self):
+        self.write_report("a.json")
+        self.write_report("b.json")
+        reports = []
+        for name in ("a.json", "b.json"):
+            with open(os.path.join(self.tmp, name), encoding="utf-8") as handle:
+                reports.append(json.load(handle))
+        totals = shadow.aggregate_reports(reports)
+        self.assertEqual(totals["runs_with_failures"], 0)
+        self.assertIn("no evidence", shadow.format_aggregate(totals))
+
+    def test_no_reports_is_an_error(self):
+        empty = os.path.join(self.tmp, "empty")
+        os.makedirs(empty)
+        self.assertEqual(shadow.main(["aggregate", "--inputs", empty]), 1)
+
+    def test_unrelated_json_is_ignored(self):
+        self.write("noise.json", json.dumps({"hello": "world"}))
+        self.write_report("a.json", failures_full=1, escaped=["x"])
+        totals_path = os.path.join(self.tmp, "agg.json")
+        self.assertEqual(
+            shadow.main(["aggregate", "--inputs", self.tmp, "--json", totals_path]), 0)
+        with open(totals_path, encoding="utf-8") as handle:
+            self.assertEqual(json.load(handle)["runs"], 1)
+
+
+class Universe(unittest.TestCase):
+
+    def test_build_dir_universe_matches_ctest_numbering(self):
+        # ctest_test_names must stay index-aligned with resolve(), since the
+        # runner turns names back into ctest numbers.
+        names = ["alpha", "beta", "gamma"]
+        numbers, _ = runner.resolve(names, names)
+        self.assertEqual(numbers, [1, 2, 3])
 
 
 if __name__ == "__main__":
