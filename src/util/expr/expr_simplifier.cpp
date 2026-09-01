@@ -1456,67 +1456,66 @@ expr2tc with2t::do_simplify() const
   return expr2tc();
 }
 
+/// Project a member read out of a constant union literal, or return
+/// nothing when it cannot fold. The value always sits at position 0
+/// with init_field naming the member it initializes. A cross-member
+/// read between INTEGER members of the same width is an exact bit
+/// reinterpretation — two's-complement integers of one width share
+/// their representation, so { .r=v }.s is (s-type)v. Without that fold
+/// the tagged-slot idiom never resolves: the dereference layer
+/// normalizes union accesses to the first member, so a value written
+/// via .r and read via .r still arrives here as a .s read of an
+/// .r-initialized literal. Anything wider, or any non-integer member,
+/// stays unfolded.
+static expr2tc fold_union_member_read(
+  const constant_union2t &uni,
+  const irep_idt &member,
+  const type2tc &type)
+{
+  if (uni.datatype_members.empty())
+    return expr2tc();
+
+  const expr2tc &val = uni.datatype_members[0];
+  if (uni.init_field != member)
+  {
+    if (
+      is_bv_type(type) && is_bv_type(val->type) &&
+      type->get_width() == val->type->get_width())
+    {
+      expr2tc cast = typecast2tc(type, val);
+      return try_simplification(cast);
+    }
+    return expr2tc();
+  }
+
+  /* If the selected type isn't compatible, whatever field is in the
+   * constant union isn't the field being selected; don't simplify. */
+  if (
+    !is_pointer_type(type) &&
+    !base_type_eq(type, val->type, *migrate_namespace_lookup))
+    return expr2tc();
+
+  return val;
+}
+
 expr2tc member2t::do_simplify() const
 {
-  if (is_constant_struct2t(source_value) || is_constant_union2t(source_value))
+  if (is_constant_union2t(source_value))
+    return fold_union_member_read(
+      to_constant_union2t(source_value), member, type);
+
+  if (is_constant_struct2t(source_value))
   {
     unsigned no =
       struct_union_get_component_number(source_value->type, member).value();
 
-    // Project the selected member value out of the constant aggregate.
-    expr2tc s;
-    if (is_constant_struct2t(source_value))
-    {
-      s = to_constant_struct2t(source_value).datatype_members[no];
-      // Be defensive: if member extraction type doesn't match, skip
-      // simplification instead of aborting in the simplifier.
-      if (
-        !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, *migrate_namespace_lookup))
-        return expr2tc();
-    }
-    else
-    {
-      // constant_union stores the value at position 0 with init_field indicating
-      // which member was initialized.
-      const constant_union2t &uni = to_constant_union2t(source_value);
-
-      // The value is always stored at position 0
-      if (uni.datatype_members.empty())
-        return expr2tc();
-
-      // A cross-member read between INTEGER members of the same width is
-      // an exact bit reinterpretation: two's-complement integers of one
-      // width share their representation, so { .r=v }.s is (s-type)v.
-      // Without this fold the tagged-slot idiom never resolves — the
-      // dereference layer normalizes union accesses to the first member,
-      // so a value written via .r and read via .r still arrives here as
-      // a .s read of an .r-initialized literal. Anything wider, or any
-      // non-integer member, stays unfolded.
-      if (uni.init_field != member)
-      {
-        const expr2tc &val = uni.datatype_members[0];
-        if (
-          is_bv_type(type) && is_bv_type(val->type) &&
-          type->get_width() == val->type->get_width())
-        {
-          expr2tc cast = typecast2tc(type, val);
-          return try_simplification(cast);
-        }
-        return expr2tc();
-      }
-
-      s = uni.datatype_members[0];
-
-      /* If the type we just selected isn't compatible, it means that whatever
-       * field is in the constant union /isn't/ the field we're selecting from
-       * it. So don't simplify it, because we can't. */
-
-      if (
-        !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, *migrate_namespace_lookup))
-        return expr2tc();
-    }
+    expr2tc s = to_constant_struct2t(source_value).datatype_members[no];
+    // Be defensive: if member extraction type doesn't match, skip
+    // simplification instead of aborting in the simplifier.
+    if (
+      !is_pointer_type(type) &&
+      !base_type_eq(type, s->type, *migrate_namespace_lookup))
+      return expr2tc();
 
     return s;
   }
