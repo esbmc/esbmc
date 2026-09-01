@@ -157,17 +157,7 @@ static bool array_may_propagate(const expr2tc &e)
   if (!is_array_type(arr.subtype))
     return true;
 
-  // A multi-dimensional array propagates only as a whole constant. A `with`
-  // chain over one lets a second update land on an already-updated row, and
-  // the SMT flattening in convert_array_store()/decompose_store_chain() walks
-  // only the update-value spine: the earlier sibling store is dropped from the
-  // formula (silent wrong answers) or reaches mk_store()/mk_eq() with a row on
-  // one side and an element on the other. Folding the reads is what R42 needs;
-  // folding the writes is a separate, unfixed encoding gap.
-  if (!is_constant_array_value(e))
-    return false;
-
-  // And only while it stays small: a read at a symbolic index inlines the
+  // Only while it stays small: a read at a symbolic index inlines the
   // whole nested constant, so the cost grows with the element count. The cap
   // is R42's (docs/roadmap/goto-symex-verification-plan.md).
   std::optional<BigInt> elems = array_element_count(e->type);
