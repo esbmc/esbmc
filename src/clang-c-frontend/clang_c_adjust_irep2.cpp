@@ -255,9 +255,7 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   // First: the sugar has to be in place before adjust_call_callee decides
   // whether this call is direct, since that is what it reads. It is offered
   // every node and guards itself on an address_of2t.
-  {"adjust_function_designators",
-   &clang_c_adjust_irep2::adjust_function_designators,
-   nullptr},
+  {ARM(adjust_function_designators), nullptr},
   {ARM(adjust_boolean_operands), is_short_circuit},
   {ARM(adjust_call_callee), is_call_site},
   {ARM(adjust_call_arguments), is_call_site},
