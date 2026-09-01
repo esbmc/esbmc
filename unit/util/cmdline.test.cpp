@@ -17,7 +17,6 @@
 
 // Reaching config-file location resolution is what matters here: parse()
 // expands the default config path before it can consult the home variable.
-// parse() takes each table exactly once, so every case below brings its own.
 static std::vector<group_opt_templ> make_test_options()
 {
   return {
@@ -37,9 +36,6 @@ enum test_caset
   repeat_parse
 };
 
-// One table per case, each at an address that stays put for the run: parse()
-// remembers the tables it has seen, and a freed one could be replaced by a
-// later table at the same address.
 template <test_caset>
 static const std::vector<group_opt_templ> &test_options()
 {
@@ -134,9 +130,6 @@ TEST_CASE("an option table is parsed at most once", "[cmdline]")
   REQUIRE_FALSE(first.parse(2, argv, test_options<repeat_parse>().data()));
   REQUIRE(first.args[0] == "main.c");
 
-  // Refused rather than attempted: boost owns the table's value_semantics, so
-  // a second description over them would leave one of the two reading freed
-  // memory once the other died.
   cmdlinet second;
   CHECK(second.parse(2, argv, test_options<repeat_parse>().data()));
 }
