@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_shifts.goto
+--binary
+^VERIFICATION SUCCESSFUL$

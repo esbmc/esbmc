@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 20
+^VERIFICATION FAILED$
+^ *FAILED .*assertion dst\[3\] == 4$

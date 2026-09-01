@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc --function integer_squareroot --unwind 8 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

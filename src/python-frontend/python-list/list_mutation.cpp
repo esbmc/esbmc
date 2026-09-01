@@ -892,6 +892,31 @@ exprt python_list::list_repetition(
   return build_symbol(*list_symbol);
 }
 
+BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
+{
+  const element_type_registry::entries *entries = elem_types().find(list_id);
+  if (!entries)
+    return 0;
+
+  BigInt width = 0;
+  bool seen = false;
+  for (const auto &entry : *entries)
+  {
+    const typet &elem_type = converter_.ns.follow(entry.second);
+    if (!(elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
+          elem_type.is_floatbv() || elem_type.is_bool()))
+      return 0;
+
+    BigInt entry_width =
+      type_byte_size(migrate_type(elem_type), &converter_.name_space());
+    if (seen && entry_width != width)
+      return 0;
+    width = entry_width;
+    seen = true;
+  }
+  return width;
+}
+
 exprt python_list::build_extend_list_call(
   const symbolt &list,
   const nlohmann::json &op,
@@ -1094,10 +1119,20 @@ exprt python_list::build_extend_list_call(
   // Copy all type entries from actual_list to the end of list
   elem_types().append_from(other_list_name, list_name);
 
+  // The constant copy length for the model. Unlike build_shallow_copy_call,
+  // which reads only the last type-map entry, this requires *every* recorded
+  // element to be the same scalar width: extend applies one length to all of
+  // them, so a mixed-width list must keep the model's symbolic elem->size
+  // fallback (0).
+  BigInt elem_size_bytes =
+    actual_list.is_symbol() ? uniform_scalar_elem_size(other_list_name) : 0;
+
   code_function_callt extend_func_call;
   extend_func_call.function() = build_symbol(*extend_func_sym);
   extend_func_call.arguments().push_back(build_symbol(list));
   extend_func_call.arguments().push_back(actual_list);
+  extend_func_call.arguments().push_back(
+    from_integer(elem_size_bytes, size_type()));
   extend_func_call.type() = empty_typet();
   extend_func_call.location() = location;
 

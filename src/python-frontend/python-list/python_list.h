@@ -557,6 +557,18 @@ public:
     const std::string &method_name);
 
   /**
+   * @brief The element byte width every recorded element of @p list_id shares,
+   *        or 0 when there is no single answer.
+   *
+   * The list models apply one copy length to every element, so a width is only
+   * usable when all of them agree. Non-scalar elements (nested lists, dicts)
+   * and mixed widths both yield 0, which keeps the model on its symbolic
+   * o->size path. Distinct from build_shallow_copy_call, which reads only the
+   * last type-map entry.
+   */
+  BigInt uniform_scalar_elem_size(const std::string &list_id) const;
+
+  /**
    * @brief Unpack a list variable into multiple targets, supporting starred
    * expressions.
    *

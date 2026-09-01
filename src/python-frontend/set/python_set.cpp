@@ -748,6 +748,9 @@ exprt python_set::build_set_union_call(
   extend_call.arguments().push_back(build_symbol(result_set));
   extend_call.arguments().push_back(
     lhs.type().is_pointer() ? lhs : build_address_of(lhs));
+  // No type map for a set built here, so no static width: 0 keeps the model on
+  // its symbolic elem->size path.
+  extend_call.arguments().push_back(from_integer(BigInt(0), size_type()));
   extend_call.type() = empty_typet();
   extend_call.location() = loc;
   converter_.add_instruction(extend_call);

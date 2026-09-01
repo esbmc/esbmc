@@ -92,7 +92,20 @@ PyListObject *__ESBMC_list_create()
 
 size_t __ESBMC_list_size(const PyListObject *l)
 {
-  return l ? l->size : 0;
+  // Assert the null case rather than folding it to 0 with a conditional: a
+  // `l ? l->size : 0` return does not constant-propagate even when l is a
+  // concrete address, so every loop bounded by len() -- sum(), max(), the
+  // slice lowering -- unwound to --unwind instead of the list's own length
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4). An assert keeps the null
+  // case reported, which is closer to CPython's TypeError than silently
+  // answering 0.
+  __ESBMC_assert(l != NULL, "TypeError: object of this type has no len()");
+  // The claim above reports the null case; without also assuming it away the
+  // read below still runs on the failing path (--multi-property keeps going
+  // past a violated claim), dereferencing NULL for a garbage size and a
+  // spurious out-of-bounds report downstream.
+  __ESBMC_assume(l != NULL);
+  return l->size;
 }
 
 // ptr_free=1: payload has no pointer field, so we can reinterpret it as
@@ -695,7 +708,17 @@ size_t __ESBMC_list_index_range(
 
 /* ---------- extend list ---------- */
 
-void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
+// elem_size: the statically-known element byte width from the frontend, used
+// as the copy length so __ESBMC_copy_value sees a compile-time constant and
+// takes its branch-free fast path. Without it the length is the symbolic field
+// read elem->size, which drops the copy into memcpy's per-byte loop and
+// unwinds it once per element (__ESBMC_list_store_elem threads the same
+// constant for the same reason, see above). 0 means the frontend could not
+// supply a width and reproduces the previous behaviour exactly.
+void __ESBMC_list_extend(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t elem_size)
 {
   if (!l || !other)
     return;
@@ -706,8 +729,9 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
     const PyObject *elem = &other->items[i];
 
     // Reuse the float-aware copier so the SMT model tracks size.
+    size_t copy_size = (elem_size != 0) ? elem_size : elem->size;
     void *copied_value =
-      __ESBMC_copy_value(elem->value, elem->size, elem->type_id, 0, NULL, 0);
+      __ESBMC_copy_value(elem->value, copy_size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
     l->items[l->size].float_idx = elem->float_idx;
