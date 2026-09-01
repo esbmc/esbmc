@@ -51,6 +51,7 @@ extern "C"
 #include <esbmc/non_termination.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/goto_houdini_invariants.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -255,6 +256,12 @@ int esbmc_parseoptionst::run_chosen_strategy(
 {
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
+
+  // Houdini owns the loop-invariant schema itself: it re-derives the program
+  // once per round with a different candidate set, so process_goto_program
+  // deliberately left the loops untouched.
+  if (cmdline.isset("houdini-loop-invariants"))
+    return do_houdini_strategy(options, goto_functions);
 
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||

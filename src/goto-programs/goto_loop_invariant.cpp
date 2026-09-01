@@ -50,6 +50,7 @@
 static constexpr size_t kMaxInvariantSearchBack = 10;
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+const char *const kHoudiniCandidatePrefix = "houdini-candidate:";
 
 /// Instructions that may sit between a synthesised marker and the loop head it
 /// was emitted for. The marker is inserted immediately before that head, so
@@ -61,13 +62,59 @@ static bool is_inert_before_loop_head(goto_programt::const_targett t)
          t->is_assume();
 }
 
+/// True for a name the frontend generated rather than the user: ESBMC spells
+/// those with a '$' (e.g. return_value$___ESBMC_forall$N).
+static bool is_generated_name(const irep_idt &name)
+{
+  return id2string(name).find('$') != std::string::npos;
+}
+
+/// Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
+/// FUNCTION_CALL.  These may legitimately appear between consecutive
+/// __ESBMC_loop_invariant() calls.  FUNCTION_CALL instructions arise when
+/// remove_function_call emits a DECL + FUNCTION_CALL pair for helper functions
+/// called inside an invariant.
+static bool is_compiler_temp(goto_programt::const_targett t)
+{
+  if (t->is_decl() && is_code_decl2t(t->code))
+    return is_generated_name(to_code_decl2t(t->code).value);
+
+  if (t->is_assign() && is_code_assign2t(t->code))
+  {
+    const expr2tc &target = to_code_assign2t(t->code).target;
+    return is_symbol2t(target) && is_generated_name(to_symbol2t(target).thename);
+  }
+
+  if (t->is_function_call() && is_code_function_call2t(t->code))
+  {
+    const expr2tc &ret = to_code_function_call2t(t->code).ret;
+    return !is_nil_expr(ret) && is_symbol2t(ret) &&
+           is_generated_name(to_symbol2t(ret).thename);
+  }
+
+  return false;
+}
+
+/// A Houdini candidate marker, as opposed to a user-written or affine
+/// invariant. Houdini emits a whole pool immediately before the head, so these
+/// are exempt from the proximity window that bounds the backwards scan.
+static bool is_houdini_marker(goto_programt::const_targett t)
+{
+  const std::string p = t->location.property().as_string();
+  return p.rfind(kHoudiniCandidatePrefix, 0) == 0;
+}
+
 /// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
 /// Multiple conjuncts are folded into a single and2tc.  Returns an empty
 /// vector when no annotated LOOP_INVARIANT is in range.
+///
+/// @p tags, when non-null, receives each returned invariant's source marker
+/// property, positionally aligned with the result.
 static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett loop_head,
-  goto_programt::targett begin)
+  goto_programt::targett begin,
+  std::vector<std::string> *tags = nullptr)
 {
   std::vector<expr2tc> invariants;
 
@@ -79,45 +126,15 @@ static std::vector<expr2tc> extract_invariants_near(
 
   // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
   // Multiple sub-expressions are combined with &&.
-  auto collect = [&](const std::list<expr2tc> &lst) {
-    if (lst.size() == 1)
-    {
-      invariants.push_back(lst.front());
-    }
-    else
-    {
-      auto jt = lst.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != lst.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-  };
-
-  // Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
-  // FUNCTION_CALL (name contains '$', e.g. return_value$___ESBMC_forall$N).
-  // These may legitimately appear between consecutive __ESBMC_loop_invariant()
-  // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
-  // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
-  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
-    if (t->is_decl() && is_code_decl2t(t->code))
-      return id2string(to_code_decl2t(t->code).value).find('$') !=
-             std::string::npos;
-    if (t->is_assign() && is_code_assign2t(t->code))
-    {
-      const auto &assign = to_code_assign2t(t->code);
-      return is_symbol2t(assign.target) &&
-             id2string(to_symbol2t(assign.target).thename).find('$') !=
-               std::string::npos;
-    }
-    if (t->is_function_call() && is_code_function_call2t(t->code))
-    {
-      const auto &call = to_code_function_call2t(t->code);
-      return !is_nil_expr(call.ret) && is_symbol2t(call.ret) &&
-             id2string(to_symbol2t(call.ret).thename).find('$') !=
-               std::string::npos;
-    }
-    return false;
+  auto collect = [&](goto_programt::const_targett src) {
+    const std::list<expr2tc> &lst = src->get_loop_invariants();
+    auto jt = lst.begin();
+    expr2tc combined = *jt;
+    for (++jt; jt != lst.end(); ++jt)
+      combined = and2tc(combined, *jt);
+    invariants.push_back(combined);
+    if (tags)
+      tags->push_back(src->location.property().as_string());
   };
 
   // Phase 1: skip non-invariant instructions (including for-init assignments)
@@ -165,7 +182,7 @@ static std::vector<expr2tc> extract_invariants_near(
       return invariants;
     }
 
-    collect(inv_list);
+    collect(it);
 
     // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
     // to the same loop.  These arise when the user writes multiple separate
@@ -181,9 +198,14 @@ static std::vector<expr2tc> extract_invariants_near(
       ++dist;
       if (it->is_loop_invariant())
       {
-        const std::list<expr2tc> &extra = it->get_loop_invariants();
-        if (!extra.empty())
-          collect(extra);
+        // A Houdini pool is one contiguous run of markers emitted immediately
+        // before this head, so it is a single group however long it is. The
+        // window bounds the scan over *ordinary* instructions; counting the
+        // pool against it would silently truncate the pool instead.
+        if (is_houdini_marker(it))
+          --dist;
+        if (!it->get_loop_invariants().empty())
+          collect(it);
         continue;
       }
       if (is_compiler_temp(it))
@@ -264,8 +286,22 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
+  active_invariant_tags.clear();
   return extract_invariants_near(
-    loop.get_original_loop_head(), goto_function.body.instructions.begin());
+    loop.get_original_loop_head(),
+    goto_function.body.instructions.begin(),
+    &active_invariant_tags);
+}
+
+std::string goto_loop_invariantt::invariant_claim_comment(
+  const char *base,
+  size_t i) const
+{
+  if (
+    i < active_invariant_tags.size() &&
+    active_invariant_tags[i].rfind(kHoudiniCandidatePrefix, 0) == 0)
+    return std::string(base) + " [" + active_invariant_tags[i] + "]";
+  return base;
 }
 
 std::vector<expr2tc>
@@ -584,13 +620,13 @@ void goto_loop_invariantt::insert_assert_before_loop(
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
-  for (const auto &invariant : invariants)
+  for (size_t i = 0; i < invariants.size(); ++i)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = invariant;
+    t->guard = invariants[i];
     t->location = loop_head->location;
-    t->location.comment("loop invariant base case");
+    t->location.comment(invariant_claim_comment("loop invariant base case", i));
     t->location.property("invariant-base-case");
   }
 
@@ -785,13 +821,14 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   }
 
   // 3. ASSERT for inductive step.
-  for (const auto &invariant : invariants)
+  for (size_t i = 0; i < invariants.size(); ++i)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = invariant;
+    t->guard = invariants[i];
     t->location = loop_exit->location;
-    t->location.comment("loop invariant inductive step");
+    t->location.comment(
+      invariant_claim_comment("loop invariant inductive step", i));
     t->location.property("invariant-inductive-step");
   }
 

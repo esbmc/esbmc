@@ -19,6 +19,12 @@
 /// to whichever loop happens to be nearby.
 extern const char *const kSynthesisedInvariantProperty;
 
+/// Prefix of the property tag on a LOOP_INVARIANT emitted as a Houdini
+/// candidate; the per-candidate id follows it. Lives here rather than with the
+/// Houdini pass because the schema is what reads it: it exempts a candidate
+/// pool from the proximity window and copies the tag onto the claims it emits.
+extern const char *const kHoudiniCandidatePrefix;
+
 // Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
 class frame_enforcert;
 
@@ -74,6 +80,12 @@ protected:
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
   /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
   std::vector<expr2tc> active_loop_assigns;
+  /// Per-invariant property tag for the current loop, positionally aligned with
+  /// the invariants vector, empty where the source marker carried no tag.
+  /// Stamped onto each emitted ASSERT so a failing claim names the invariant it
+  /// came from; Houdini needs that to know which candidate to delete, and the
+  /// vector loses the source instruction long before the ASSERT is built.
+  std::vector<std::string> active_invariant_tags;
   /// Maximum number of instructions to search backwards from the loop head
   /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
   /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
@@ -91,6 +103,13 @@ protected:
 
   // Extract loop assigns targets from LOOP_INVARIANT instructions
   std::vector<expr2tc> extract_loop_assigns(const loopst &loop);
+
+  /// Comment for claim @p i of the current loop. A Houdini candidate appends
+  /// its own tag so a failing claim names the candidate to delete; every other
+  /// invariant keeps the historical fixed text. The tag rides on the comment
+  /// rather than the property because the verdict table keys on the comment
+  /// (claim_cstr, goto-symex/slice.cpp).
+  std::string invariant_claim_comment(const char *base, size_t i) const;
 
   /** Collect all symbol names reachable from an expression tree. */
   static void collect_symbols(const expr2tc &expr, std::set<irep_idt> &symbols);
