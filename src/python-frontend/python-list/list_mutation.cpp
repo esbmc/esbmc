@@ -1141,6 +1141,11 @@ exprt python_list::build_extend_list_call(
     }
   }
 
+  // The constant copy length for the model. Unlike build_shallow_copy_call,
+  // which reads only the last type-map entry, this requires *every* recorded
+  // element to be the same scalar width: extend applies one length to all of
+  // them, so a mixed-width list must keep the model's symbolic elem->size
+  // fallback (0).
   BigInt elem_size_bytes = uniform_scalar_elem_size(actual_list);
 
   code_function_callt extend_func_call;
