@@ -25,8 +25,9 @@
  * needed here.
  *
  * When --loop-frame-rule is enabled, the havoc step is enhanced with:
- *   Snapshot -> Havoc -> FrameRule(Assume unchanged == snapshot) -> Assume invariants
- * This preserves the relationship between modified and unmodified variables.
+ *   Snapshot -> Havoc -> FrameRule(Assume unchanged == snapshot) -> Assume
+ * invariants This preserves the relationship between modified and unmodified
+ * variables.
  */
 
 #include <goto-programs/goto_loop_invariant.h>
@@ -48,6 +49,18 @@
 /// Maximum number of instructions to search backwards from the loop head
 /// when locating the LOOP_INVARIANT instruction.
 static constexpr size_t kMaxInvariantSearchBack = 10;
+
+const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+
+/// Instructions that may sit between a synthesised marker and the loop head it
+/// was emitted for. The marker is inserted immediately before that head, so
+/// only bookkeeping and the assumes a later pass (--interval-analysis) injects
+/// can legitimately intervene.
+bool is_inert_before_loop_head(goto_programt::const_targett t)
+{
+  return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
+         t->is_assume();
+}
 
 /// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
@@ -110,17 +123,39 @@ static std::vector<expr2tc> extract_invariants_near(
 
   // Phase 1: skip non-invariant instructions (including for-init assignments)
   // until we find the closest LOOP_INVARIANT for this loop.
+  // Whether the walk has stepped over an instruction that does real work. A
+  // synthesised marker is only ever emitted immediately before its own loop
+  // head, so crossing one means this marker belongs to a *different* loop and
+  // the proximity window has run past that loop's end. Without this check an
+  // affine loop followed by an unrecognised one had the first loop's invariant
+  // applied to the second, which was then havoc'd and cut under an invariant
+  // saying nothing about its variables -- a spurious failure on a correct
+  // program (regression/esbmc/synth_loop_invariant_adjacent).
+  bool crossed_real_instruction = false;
+
   while (it != begin && dist < kMaxInvariantSearchBack)
   {
     --it;
     ++dist;
 
     if (!it->is_loop_invariant())
+    {
+      if (!is_inert_before_loop_head(it) && !is_compiler_temp(it))
+        crossed_real_instruction = true;
       continue;
+    }
 
     const std::list<expr2tc> &inv_list = it->get_loop_invariants();
     if (inv_list.empty())
       continue;
+
+    // A user-written invariant keeps the historical proximity-only behaviour:
+    // the frontend may legitimately place it further from the head, and #3936
+    // depends on that latitude.
+    if (
+      it->location.property().as_string() == kSynthesisedInvariantProperty &&
+      crossed_real_instruction)
+      return invariants;
 
     collect(inv_list);
 
@@ -302,9 +337,10 @@ static bool is_trivial_rhs(const expr2tc &expr)
   return false;
 }
 
-/// Heuristic: compiler-generated temporaries (e.g. for short-circuit evaluation)
-/// typically have '$' in their name; user variables do not. Used to avoid
-/// moving user variable DECLs/ASSIGNs while still collecting compiler temps.
+/// Heuristic: compiler-generated temporaries (e.g. for short-circuit
+/// evaluation) typically have '$' in their name; user variables do not. Used to
+/// avoid moving user variable DECLs/ASSIGNs while still collecting compiler
+/// temps.
 static bool is_likely_compiler_temp(const irep_idt &id)
 {
   return id2string(id).find('$') != std::string::npos;
@@ -562,7 +598,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   const std::vector<expr2tc> &loop_assigns,
   goto_programt &side_effects)
 {
-  // Find the loop condition (IF instruction) - this should be right at loop_head
+  // Find the loop condition (IF instruction) - this should be right at
+  // loop_head
   goto_programt::targett condition_it = loop_head;
   while (condition_it != goto_function.body.instructions.end() &&
          !condition_it->is_goto())
@@ -627,7 +664,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
   // =========================================================
   // Frame Rule Step 3: Enforce Frame Conditions (if enabled)
-  // ASSUME: for vars NOT in assigns set, assume var == snapshot (k-induction hypothesis)
+  // ASSUME: for vars NOT in assigns set, assume var == snapshot (k-induction
+  // hypothesis)
   // =========================================================
   if (use_frame_rule && active_frame_enforcer && !loop_assigns.empty())
   {
@@ -669,10 +707,10 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     return false;
   };
 
-  // Flatten top-level conjunctions so a pure conjunct can be split out even when
-  // the frontend folded it together with a side-effecting one into `a && b`.
-  // The conjunct guards are themselves pure: any embedded call has already been
-  // hoisted into the side_effects block (see file header).
+  // Flatten top-level conjunctions so a pure conjunct can be split out even
+  // when the frontend folded it together with a side-effecting one into `a &&
+  // b`. The conjunct guards are themselves pure: any embedded call has already
+  // been hoisted into the side_effects block (see file header).
   std::function<void(const expr2tc &)> partition;
   std::vector<expr2tc> pure, impure;
   partition = [&](const expr2tc &e) {

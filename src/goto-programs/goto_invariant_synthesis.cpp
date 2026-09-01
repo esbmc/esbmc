@@ -1,4 +1,5 @@
 #include <goto-programs/goto_invariant_synthesis.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/goto_loops.h>
 #include <goto-programs/loopst.h>
 #include <irep2/irep2_expr.h>
@@ -427,6 +428,9 @@ void emit_invariant(
   inv.type = LOOP_INVARIANT;
   inv.location = head->location;
   inv.function = head->function;
+  // Claim ownership: the extractor accepts this marker only for the loop head
+  // it sits immediately before. See kSynthesisedInvariantProperty.
+  inv.location.property(kSynthesisedInvariantProperty);
 
   inv.add_loop_invariant(build_bound_invariant(shape, cond));
   for (const auto &acc : shape.accumulators)
