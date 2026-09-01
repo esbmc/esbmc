@@ -2818,7 +2818,11 @@ static expr2tc lower_flattened_row_select(const index2t &index)
 {
   const expr2tc &src = index.source_value;
   /* Only a read down to an element: a read that itself yields a row leaves the
-   * unencodable shape in place, so there is nothing to gain by rewriting it. */
+   * unencodable shape in place, so there is nothing to gain by rewriting it.
+   * That first test cannot decide while array_may_propagate() stops at two
+   * dimensions: a source that is itself a row makes the whole array at least
+   * three deep, so wherever is_flattened_row() holds the read is to an
+   * element. It becomes live when that bound is lifted. */
   if (is_array_type(index.type) || !is_flattened_row(src))
     return expr2tc();
 
@@ -2847,17 +2851,19 @@ static expr2tc lower_flattened_row_select(const index2t &index)
 /* Name every element of @p row, a row being written whole, as a store of the
  * corresponding read out of it. Correct whatever the row denotes -- the read
  * is of the row expression itself -- which is what makes it the general case
- * behind decompose_stores()' in-place fast path. False when the row's length
- * is not a compile-time constant, which leaves nothing to enumerate. */
+ * behind decompose_stores()' in-place fast path. False when a nested row's
+ * length is not a compile-time constant, which leaves nothing to enumerate.
+ *
+ * @p row's own length is a caller's precondition, not something to re-test:
+ * both call sites reach here only after requiring the flattened form of this
+ * very type to have a constant size, and a flattened size is the product of
+ * the dimensions. */
 bool smt_solver_baset::expand_row_stores(
   const expr2tc &row,
   const expr2tc &offset,
   std::vector<flat_storet> &stores)
 {
   const array_type2t &rowtype = to_array_type(row->type);
-  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
-    return false;
-
   const type2tc &dom = offset->type;
   const bool nested = is_array_type(rowtype.subtype);
 
@@ -2949,8 +2955,8 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
 
-  /* A `with` or `ite` over a row of a flattened multi-dimensional array has no
-   * term of its own, so push the read inside it rather than building one. */
+  /* A `with` over a row of a flattened multi-dimensional array has no term of
+   * its own, so push the read inside it rather than building one. */
   expr2tc lowered = lower_flattened_row_select(index);
   if (!is_nil_expr(lowered))
     return convert_ast(lowered);

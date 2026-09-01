@@ -915,11 +915,18 @@ public:
     expr2tc value;
   };
 
+  /** Name every element of a row being written whole as a store of the
+   *  corresponding read out of it, at @p offset in the flattened array.
+   *  Requires the row's flattened size to be a compile-time constant, which
+   *  both call sites establish; false when a nested row's is not. */
   bool expand_row_stores(
     const expr2tc &row,
     const expr2tc &offset,
     std::vector<flat_storet> &stores);
 
+  /** Decompose an array `with` into the flat element updates it denotes,
+   *  oldest first, giving back the array the chain is rooted at. Unlike
+   *  decompose_store_chain(), keeps every store a row carries. */
   bool decompose_stores(
     const expr2tc &expr,
     const expr2tc &offset,
