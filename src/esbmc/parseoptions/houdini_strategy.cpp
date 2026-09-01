@@ -78,6 +78,43 @@ void reset_run_state()
   goto_functionst::reached_mul_claims.clear();
 }
 
+/// The program's own ASSERTs, before the schema rewrites anything. Invariant
+/// claims are not in here: they do not exist yet.
+size_t count_user_claims(const goto_functionst &goto_functions)
+{
+  size_t n = 0;
+  forall_goto_functions (f, goto_functions)
+  {
+    if (!f->second.body_available)
+      continue;
+    forall_goto_program_instructions (i, f->second.body)
+      if (i->is_assert())
+        ++n;
+  }
+  return n;
+}
+
+/// How many of the program's own claims reached a verdict in the run just
+/// finished. The invariant obligations the schema emits are excluded by their
+/// property tag: they are the proof, not the thing being proved.
+size_t user_claims_decided()
+{
+  size_t n = 0;
+  for (const auto &[claim, result] :
+       goto_functionst::property_verdicts.snapshot())
+  {
+    (void)claim;
+    if (
+      result.loc.description.find("loop invariant base case") ==
+        std::string::npos &&
+      result.loc.description.find("loop invariant inductive step") ==
+        std::string::npos &&
+      result.verdict != property_verdictt::NotChecked)
+      ++n;
+  }
+  return n;
+}
+
 } // namespace
 
 /// Houdini fixpoint: guess a pool of candidate invariants, then let the solver
@@ -131,13 +168,51 @@ int esbmc_parseoptionst::do_houdini_strategy(
     keep ? keep->size() : size_t{0},
     rounds);
 
+  const size_t user_claims = count_user_claims(pristine);
+
   // Final run: the surviving set is inductive, so this verdict is about the
   // program's own properties.
   goto_functions = pristine;
   goto_houdini_emit_candidates(goto_functions, keep);
   goto_loop_invariant(goto_functions, context, false);
 
+  // The verdict is deferred to this level: do_bmc would otherwise print
+  // SUCCESSFUL before the unchecked-claim guard below has run, leaving two
+  // contradictory verdict lines in the output. parse_result() in
+  // scripts/competitions/svcomp/esbmc-wrapper.py matches the first, so this is
+  // an interface question as much as a readability one. The per-property table
+  // still prints; only the one-line verdict is ours to emit.
+  optionst final_options = options;
+  final_options.set_option("houdini-defer-verdict", true);
+
   reset_run_state();
-  bmct bmc(goto_functions, options, context);
-  return do_bmc(bmc);
+  bmct bmc(goto_functions, final_options, context);
+  const int result = do_bmc(bmc);
+
+  // The schema cuts the loop, so a claim after it is reached only through the
+  // havoc-and-assume path. Where the frontend hoisted a loop guard's side
+  // effects above the havoc -- `while (cnt--)` -- the exit edge tests a
+  // pre-havoc temporary and is infeasible, and every post-loop claim is then
+  // dropped without ever being solved. An unreached claim is not a discharged
+  // one, so a run that lost any of the program's own claims has not proved the
+  // program and must not say SUCCESSFUL.
+  const size_t decided = user_claims_decided();
+  if (result == 0 && decided < user_claims)
+  {
+    log_error(
+      "Houdini: {} of the program's {} claim(s) were never checked -- the "
+      "invariant schema made them unreachable. Reporting UNKNOWN rather than a "
+      "proof that rests on code the run never reached.",
+      user_claims - decided,
+      user_claims);
+    log_result("\nVERIFICATION UNKNOWN");
+    return 1;
+  }
+
+  if (result == 0)
+    log_result("\nVERIFICATION SUCCESSFUL");
+  else
+    log_fail("\nVERIFICATION FAILED");
+
+  return result;
 }

@@ -1700,7 +1700,8 @@ static bool suppresses_global_verdict(const optionst &options)
   return options.get_bool_option("k-induction-parallel") ||
          options.get_bool_option("diagnose-unknown-properties") ||
          options.get_bool_option("coverage-measurement") ||
-         options.get_bool_option("houdini-probe");
+         options.get_bool_option("houdini-probe") ||
+         options.get_bool_option("houdini-defer-verdict");
 }
 
 void bmct::report_result(smt_resultt &res)
