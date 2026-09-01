@@ -554,9 +554,35 @@ engines (`cbmc_assume_contradiction`). Remaining in this list:
 `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
-CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). Needs a
-systematic audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
-gap-by-gap discovery.
+CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). **That audit is done (2026-08-30, PR #7423).** Method: instrument `fix_expression` to print
+every irep id and every `statement` id it sees, run it over 38 goto-binaries spanning plain C,
+aggregates, bitfields, unions, enums, floats, quantifiers, and every contract shape, and count
+ids by how many *distinct* binaries they appear in — that separates the vocabulary from
+program identifiers, which a single-run id list does not.
+
+The statement vocabulary is complete and small:
+
+| container | statements seen |
+|---|---|
+| `code` | `return`, `function_call`, `assign`, `skip`, `decl`, `dead`, `label`, `ifthenelse`, `expression`, `block`, `free` |
+| `side_effect` | `function_call`, `assign`, `nondet` |
+
+All are handled. The two that looked most dangerous — `side_effect/function_call` and
+`side_effect/assign`, i.e. a call or an assignment in *expression* position, the shape that
+made `object_size` crash — turn out to be lowered by `goto-cc` before it persists them:
+`int x = (y = 3) + 1;` and `int x = bump() + bump();` both agree with CBMC
+(`cbmc_side_effect_{assign,call}`).
+
+Of the expression ids in wide use, exactly one is matched by neither the adapter's wrap-set nor
+`migrate`: **`integer`**, CBMC's unbounded mathematical integer. It is benign in practice —
+nothing throws on it, since it survives only as the type of nodes that are rewritten before
+migration — and an experimental mapping to a pointer-width `signedbv` changed no verdict.
+`infinity` is handled by `migrate`.
+
+**The audit's ceiling, stated so it is not mistaken for completeness:** this enumerates what
+`goto-cc` and `goto-instrument` *persist*. CBMC's symex-internal vocabulary — `byte_update`,
+`byte_extract_big_endian` — never reaches a `.goto` from those tools and still needs a
+Kani-derived binary to exercise.
 
 Confirmed **not** a gap: the `printf` family. CBMC inlines its own
 `<builtin-library-printf>` model (a bodied function returning `__VERIFIER_nondet_int`), so
@@ -1052,6 +1078,26 @@ unmodelled (CBMC's memory-map argument is dropped, and it is not currently a div
 the `__CPROVER_contracts_*` helpers beyond the `assigns`/`frees` checks measured here have not
 been exercised.
 
+**Status 2026-08-30: every contract shape probed now matches CBMC**, and each is pinned in
+`regression/goto-transcoder/`. The `is_fresh` bridges closed the unserialised-library gap in
+both directions (assume side and check side); the rest needed no bridge at all, only the
+`object_size` extent fix that the write-set checks depend on.
+
+| shape | pinned as |
+|---|---|
+| `requires(is_fresh)` / `ensures(is_fresh)`, enforce and replace | `cbmc_contract_is_fresh*`, `cbmc_ensures_fresh_*` |
+| `ensures` scalar, enforce and `--replace-call-with-contract` | `cbmc_contract_{ensures,replace}*` |
+| `assigns` — plain lvalue, `object_whole`, `object_upto`, a global | `cbmc_contract_{frees,object_upto,global_assigns}*`, `cbmc_expr_*` |
+| `frees` | `cbmc_contract_frees` |
+| `__CPROVER_old` in an `ensures` | `cbmc_contract_old{,_fail}` |
+| `--apply-loop-contracts` loop invariants | `cbmc_loop_invariant{,_fail}` |
+| a contract calling a contracted callee (nested) | `cbmc_contract_nested{,_fail}` |
+
+What remains open is narrow and named above: separation between two `is_fresh`'d pointers is
+unmodelled (CBMC's memory-map argument is dropped, and it is not currently a divergence), and
+the `__CPROVER_contracts_*` helpers beyond the `assigns`/`frees` checks measured here have not
+been exercised.
+
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
 already a clean `log_error` + `return true`). The low-level reader no longer `abort()`s on
@@ -1098,12 +1144,32 @@ goes through (including goto-transcoder's Rust output), had not:
   which `read_goto_binary`'s caller turns into a graceful error exit.
 
 Measured on a 15.8 kB native binary: **300 truncation offsets, previously hangs and 76 aborts,
-now zero of either** (`native_truncated` pins one). **Still open:** *corrupted* — as opposed to
-truncated — native input, where 40 random 3-byte flips still produce 1 hang and 3 aborts. The
-CBMC reader guards this with `implausible_count`; the native reader has no equivalent, and
-adding one needs care with that format's count semantics.
+now zero of either** (`native_truncated` pins one). Corrupted — as opposed to truncated — native input is closed too (PR #7421). All four residual
+failures had one cause: `read_string_ref` sized its table with `1 + id * 2` in **32-bit**
+arithmetic, so a corrupted id of `0x80000000` wrapped to `resize(1)` and the very next index
+ran off the end of the map. Guarded the way the CBMC reader guards counts — an id is a dense
+counter and each new one costs at least a byte, so an id past the end of the file is corrupt —
+and the growth is now computed in `size_t` for the case where the stream is not seekable and
+the guard declines to guess. 140 corrupted binaries (3- and 8-byte flips) and 300 truncation
+offsets now produce no hang and no signal; `native_bad_string_id` pins it.
 
-**Still open:** multi-version tolerance (accept/adapt versions other than 6).
+**The sweep is now a script: `scripts/fuzz_goto_binary.py`.** It truncates a goto-binary at
+every Nth byte and flips random bytes, and reports any run that hangs or dies from a signal.
+Both readers parse untrusted input, so a malformed file must produce a diagnostic — never a
+crash, never an unbounded loop. Current status, 2026-08-30: **597 malformed inputs across a
+native pair, a plain CBMC binary and a contract-instrumented one, zero bad.** The script is
+self-checking in the sense that matters: reverting any of the five fixes above makes it report
+again (verified against the `read_string` EOF fix, which brings the hangs straight back).
+
+Worth running against a *new* input shape rather than only re-running it: every defect it found
+came from a shape not previously fed to the reader, not from more iterations of the same one.
+
+**Still open:** multi-version tolerance (accept/adapt versions other than 6). One level up from
+the irep layer — the symbol-table and function-table loops in `read_bin_goto_object.cpp` —
+was swept and is clean: corrupted counts (`0xffffffff`, `0x00ffffff`, `0xffff`) all fail in
+under a second, because the irep layer beneath now stops at the first bad record. The
+`assert(count == 0)` there is an invariant on ESBMC's *own* bundled libraries, read from
+`.rodata` by `cprover_library.cpp`, not on user input — correctly an assert.
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`realloc`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level

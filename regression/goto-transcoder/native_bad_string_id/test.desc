@@ -1,0 +1,4 @@
+KNOWNBUG
+main.goto
+--binary library.goto
+goto binary: string id [0-9]+ exceeds input size
