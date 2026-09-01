@@ -303,6 +303,13 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   edgenode.add("<xmlattr>.id", edge.id);
   edgenode.add("<xmlattr>.source", edge.from_node->id);
   edgenode.add("<xmlattr>.target", edge.to_node->id);
+  if (!edge.origin_file.empty())
+  {
+    xmlnodet data_originFileName;
+    data_originFileName.add("<xmlattr>.key", "originfile");
+    data_originFileName.put_value(edge.origin_file);
+    edgenode.add_child("data", data_originFileName);
+  }
   if (edge.start_line != c_nonset)
   {
     xmlnodet data_lineNumberInOrigin;
@@ -515,6 +522,15 @@ void create_graphml(xmlnodet &graphml)
     xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
   source_code_node.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", source_code_node);
+
+  xmlnodet origin_file_node;
+  origin_file_node.add("<xmlattr>.id", "originfile");
+  origin_file_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'), "originFileName");
+  origin_file_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
+  origin_file_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", origin_file_node);
 
   xmlnodet start_line_node;
   start_line_node.add("<xmlattr>.id", "startline");
@@ -952,7 +968,7 @@ bool is_valid_witness_expr(
 }
 
 BigInt get_line_number(
-  std::string &verified_file,
+  const std::string &verified_file,
   BigInt relative_line_number,
   optionst &options)
 {

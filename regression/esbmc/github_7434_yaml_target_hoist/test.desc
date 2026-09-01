@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+file_name: "[^"]*main\.c"
+line: 12$
