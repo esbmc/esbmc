@@ -44,10 +44,16 @@ SCENARIO("converting a nil operand slot is reported, not crashed on",
 
     THEN("convert_ast aborts with a diagnostic instead of segfaulting")
     {
+      // The child marks the pipe once the solver exists and it is about to
+      // call convert_ast, so an abort in create_solver cannot satisfy this.
+      int fds[2];
+      REQUIRE(pipe(fds) == 0);
+
       pid_t pid = fork();
       REQUIRE(pid >= 0);
       if (pid == 0)
       {
+        close(fds[0]);
         // Silence the diagnostic and Catch2's signal report. Consume the
         // freopen results to satisfy -Werror=unused-result.
         if (
@@ -58,12 +64,23 @@ SCENARIO("converting a nil operand slot is reported, not crashed on",
         namespacet ns(ctx);
         optionst options;
         std::unique_ptr<smt_convt> solver{create_solver("", ns, options)};
+        const char mark = 'x';
+        if (write(fds[1], &mark, 1) != 1)
+          _exit(3);
         (void)solver->convert_ast(nondet);
         _exit(0); // unreachable: the kind is unsupported
       }
 
+      close(fds[1]);
+      char mark = 0;
+      const ssize_t got = read(fds[0], &mark, 1);
+      close(fds[0]);
+
       int status = 0;
       REQUIRE(waitpid(pid, &status, 0) == pid);
+      // Reached convert_ast: the abort below is its doing, not the solver's.
+      REQUIRE(got == 1);
+      REQUIRE(mark == 'x');
       REQUIRE(WIFSIGNALED(status));
       // The point of the fix: SIGABRT (reported) rather than SIGSEGV (crash).
       REQUIRE(WTERMSIG(status) != SIGSEGV);
