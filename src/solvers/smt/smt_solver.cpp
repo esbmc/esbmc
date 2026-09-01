@@ -1000,9 +1000,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       // structural sharing collapses what would otherwise be a
       // pointwise equivalence proof between two unrelated circuits,
       // which is infeasible to bit-blast already at 32 bits.
-      assert(
-        is_unsignedbv_type(m.side_1) || is_unsignedbv_type(m.side_2) ||
-        is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
+      assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
       smt_astt quot =
         (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
           ? mk_bvudiv(args[0], args[1])
