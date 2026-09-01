@@ -135,6 +135,23 @@ candidates_for_var(const expr2tc &var, const std::vector<expr2tc> &constants)
   return out;
 }
 
+/// Order relations between two variables the loop modifies together.
+///
+/// Without these the pool is non-relational and the schema, which throws away
+/// everything the invariants do not capture, turns provable programs into false
+/// alarms: `for (i = 0; i < 3; i++) s++; assert(s == 3)` needs `s == i`, and no
+/// amount of `v <op> constant` expresses it. Both directions are emitted rather
+/// than an equality, because their conjunction is the equality and each half
+/// survives on its own where the loop only bounds one side.
+void build_relational_templates(
+  const expr2tc &a,
+  const expr2tc &b,
+  std::vector<expr2tc> &out)
+{
+  out.push_back(lessthanequal2tc(a, b));
+  out.push_back(lessthanequal2tc(b, a));
+}
+
 /// Candidates over every scalar the loop modifies, ordered so the pool is
 /// identical between runs (loop_varst hashes on the string-pool index, which
 /// varies).
@@ -150,7 +167,21 @@ candidates_for_loop(const loopst &loop, const std::vector<expr2tc> &constants)
     return a->pretty() < b->pretty();
   });
 
+  // Relational candidates first: they are what the schema cannot recover on its
+  // own, and there are only O(V^2) of them against O(V * constants) unary ones,
+  // so filling the budget with unary guesses starves exactly the templates that
+  // decide whether a provable program stays provable.
   std::vector<expr2tc> out;
+  for (size_t i = 0; i < vars.size(); ++i)
+    for (size_t j = i + 1; j < vars.size(); ++j)
+    {
+      if (vars[i]->type != vars[j]->type)
+        continue;
+      if (out.size() >= kMaxCandidatesPerLoop)
+        return out;
+      build_relational_templates(vars[i], vars[j], out);
+    }
+
   for (const expr2tc &var : vars)
   {
     for (expr2tc &cand : candidates_for_var(var, constants))
@@ -160,6 +191,7 @@ candidates_for_loop(const loopst &loop, const std::vector<expr2tc> &constants)
       out.push_back(cand);
     }
   }
+
   return out;
 }
 
