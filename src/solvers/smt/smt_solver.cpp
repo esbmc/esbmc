@@ -639,10 +639,14 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
 
   default:
   {
-    // Convert all the arguments and store them in 'args'.
+    // Convert all the arguments and store them in 'args'. foreach_operand
+    // visits nil slots too; converting one hashes a null container, and the
+    // per-kind handler below reports an unsupported kind anyway.
     args.reserve(expr->get_num_sub_exprs());
-    expr->foreach_operand(
-      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
+    expr->foreach_operand([this, &args](const expr2tc &e) {
+      if (!is_nil_expr(e))
+        args.push_back(convert_ast(e));
+    });
   }
   }
 

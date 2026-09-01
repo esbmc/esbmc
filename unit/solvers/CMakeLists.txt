@@ -49,3 +49,6 @@ new_unit_test(simplification_equivalence_test
 # it. `solvers` rather than a named backend -- whichever is built in answers.
 new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
               "solvers;util_esbmc;filesystem;bigint")
+
+new_unit_test(nil_operand_test "nil_operand.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
