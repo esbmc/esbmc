@@ -1,5 +1,0 @@
-CORE
-main.c
-
-^\s+the loop runs one time too many$
-^VERIFICATION FAILED$

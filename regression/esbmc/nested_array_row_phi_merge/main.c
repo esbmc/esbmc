@@ -15,6 +15,6 @@ int main(void)
     a[1][1] = 7;
 
   __ESBMC_assert(p[1][i] == 1 || p[1][i] == 5 || p[1][i] == 7,
-                 "an ite over rows keeps every arm's stores");
+                 "a phi-merged array keeps every arm's stores");
   return 0;
 }

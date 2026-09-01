@@ -157,7 +157,18 @@ static bool array_may_propagate(const expr2tc &e)
   if (!is_array_type(arr.subtype))
     return true;
 
-  // Only while it stays small: a read at a symbolic index inlines the
+  // Past two dimensions a `with` chain propagates only as a whole constant.
+  // convert_array_store() decomposes a 2-D chain into flat element stores, but
+  // a deeper one names its leaves as reads out of a row, and
+  // decompose_select_chain() flattens straight past the enclosing `with` and
+  // hands the solver an element where a row is needed. Lifting this needs the
+  // encoder to lower a nested row read first (R50 residual).
+  if (
+    is_array_type(to_array_type(arr.subtype).subtype) &&
+    !is_constant_array_value(e))
+    return false;
+
+  // And only while it stays small: a read at a symbolic index inlines the
   // whole nested constant, so the cost grows with the element count. The cap
   // is R42's (docs/roadmap/goto-symex-verification-plan.md).
   std::optional<BigInt> elems = array_element_count(e->type);

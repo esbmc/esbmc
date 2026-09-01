@@ -15,6 +15,6 @@ int main(void)
     a[1][1] = 7;
 
   __ESBMC_assert(p[1][i] == 1 || p[1][i] == 5,
-                 "the else arm's store is still readable");
+                 "the else arm's store survives the merge");
   return 0;
 }
