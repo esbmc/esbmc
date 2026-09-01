@@ -222,4 +222,44 @@ None at blast radius 5 (no repo-wide rename or migration surfaced). `function-ca
 
 ## Design
 
-*Filled in step 4 (design-it-twice + adjudication).*
+Three interfaces were designed in parallel by independent sub-agents, then adjudicated by the orchestrator (which authored none of them) against the fixed criteria in priority order: **depth → locality → seam placement → test surface → blast radius**.
+
+A fact both A and C established by reading the code is load-bearing for every design: **`Modtor<ieee_floatt>` does not compile** — `ieee_floatt` (`src/util/arith/ieee_float.h`) has no `operator%=`, and `DivModtor::simplify` does `get_value(c1) %= get_value(c2)`. An always-four-arm seam would odr-use `Modtor<ieee_floatt>` via `simplify_arith_2ops<Modtor,…>`. So the floatbv arm **must be removable at compile time** for the arith caller; this is why `simplify_arith_2ops` asserts `!is_floatbv_type(type)` today. C additionally corrected the brief's efficiency premise: the current `is_constant`/`get_value` are a function pointer and a captureless lambda, both of which fit `std::function`'s small-buffer optimisation, so **there is no heap allocation to remove** — the only cost is a non-inlined indirect call, marginal against expr-node allocation and SMT solving. The true two-operand functor count on this seam is **14** (8 arith/logic + 6 relation), not the ~26 structs in the file.
+
+### Design A — minimal surface (WINNER)
+
+- **Interface** — one file-local seam:
+  ```cpp
+  template <class V> using by_value = V;    // arith, logic
+  template <class V> using by_ref   = V &;  // relation
+  template <template <class> class TFunctor,
+            template <class> class Wrap  = by_value,
+            bool                   Floats = true>
+  static std::optional<expr2tc> dispatch_binary_fold(const expr2tc &s1, const expr2tc &s2);
+  ```
+  Two orthogonal template knobs — `Wrap` (value vs reference functor instantiation) and `Floats` (`if constexpr` excludes the floatbv arm so `Modtor<ieee_floatt>` is never formed) — are the floor: each names exactly one of the two ways the callers deviate from the shared `{bv, fixedbv, floatbv, bool}` core. `std::optional` carries three states (`nullopt` = no arm matched; `optional{nil}` = matched, functor declined; `optional{expr}` = folded).
+- **What it hides** — the entire four-arm runtime type ladder *and* the 12→1 collapse of the per-kind `(predicate, accessor, carrier, Wrap)` mapping. A caller learns one function plus at most two named knobs.
+- **Dependency strategy** — functor and both knobs are compile-time template parameters; per-kind traits are internal, so the caller never names them.
+- **Trade-offs** — keeps `std::function` (no functor rewrite, no allocation change); `std::optional` is a third return state, but only `simplify_constant_relation` branches on it — and it *must*, to preserve the pointer arm's `else-if` fidelity.
+
+### Design B — trait registry (eliminated)
+
+- **Interface** — `enum class ckind`, `constant_kind_traits<K>` specialisations (bv/fixedbv/floatbv/boolean/**pointer**), a `functor_arg<F,K>` value-vs-reference metafunction, `kind_set<Ks...>` ordered packs, and `dispatch(kind_set, a, b) -> fold_outcome{result, kind, matched}`. The pointer/NULL arm becomes a registry row.
+- **Strength** — adding a constant kind is a one-line trait + alias edit; the accepted-kinds set and order are inspectable in one place.
+- **Why it lost** — most machinery of the three (largest diff, still blast 1); its own author flagged **over-engineering** — `git log` shows the last constant kind (floatbv) was added 2016, ~9 years stable — and the design is allocation-neutral, so the flexibility optimises an axis that has not moved. Folding the bespoke pointer/NULL arm into a uniform registry row is a **forced seam** where the thing does not actually vary uniformly ("the odd row"). Loses on seam placement and blast radius; ties depth but at a larger interface.
+
+### Design C — common-caller / efficiency (RUNNER-UP DESIGN)
+
+- **Interface** — named descriptor structs (`int_kind`/`fixedbv_kind`/`floatbv_kind`/`bool_kind`, each with `value_type` + `is()` + `value()`) and two 3-line seam helpers, `fold_2op<TFunctor, Kind>` (value) and `fold_rel<TFunctor, Kind>` (reference). The caller keeps its own `if (is_bv_type…) else if …` ladder; only each arm's *body* collapses to one line. Recommended the conservative variant (function-pointer descriptors, **zero** functor-signature edits) over an aggressive variant that templatises 14 functor signatures to drop `std::function` — correctly, since there is no allocation to remove.
+- **Why it is the runner-up and not the winner** — it is the lowest-risk to verify (it preserves each caller's `if/else` ladder literally, so behaviour-preservation is trivially inspectable) and its descriptor structs cleanly drop the C-style overload-resolution casts. But on the **top two criteria** it loses: it leaves the four-arm type-dispatch **ladder triplicated across the three callers**, so it deepens the arm body without concentrating the dispatch. Depth and locality are exactly the axes this refactor exists to move, and C only half-moves them.
+
+### Verdict and the design that is implemented
+
+**Design A wins on the two highest-priority criteria (depth, locality)** — it is the only design that removes the triplicated type-dispatch ladder from the callers, which *is* the shallowness the pick set out to fix — with well-placed seam knobs that name verified variation, at blast radius 1. It is implemented with one refinement borrowed from **C**: source each kind's `(is_const, value)` pair from small file-local descriptor structs rather than inline C-style casts, dropping the `(bool (*)(const expr2tc &))` / `(constant_int2t & (*)(expr2tc &))` disambiguation casts. The refined spec step 5 implements:
+
+- File-local `constant_kind_traits` descriptors per kind (bv→BigInt, fixedbv→fixedbvt, floatbv→ieee_floatt, bool→bool), each exposing `is_type`, `is_const`, `value` with unambiguous signatures.
+- `dispatch_binary_fold<TFunctor, Wrap = by_value, bool Floats = true>(s1, s2) -> std::optional<expr2tc>`, four arms, `if constexpr (Floats)` guarding the floatbv arm.
+- Callers keep, caller-side: `simplify_arith_2ops` — its vector arm, `assert(!floatbv)`, `from_integer` bv fixup, and `Floats = false`; `simplify_constant_relation` — its pointer/NULL arm, `Wrap = by_ref`, and the `optional`-guarded fall-through; `simplify_logic_2ops` — nothing, it becomes one call.
+- `simplify_arith_1op` (one operand, whole-constant accessor, no bool arm) is **scoped out** — a distinct contract; folding it in would force a functor rewrite.
+
+Behaviour is preserved: no functor struct is rewritten, and each caller's residue reproduces its original special-casing exactly. Verification is through the existing public interface `expr->simplify()` (Catch2 `unit/util/simplify2t.test.cpp`), after first adding the currently-absent `fixedbv`/`floatbv` fold pins and mutation-checking them.
