@@ -219,8 +219,7 @@ std::set<std::string> goto_houdini_emit_candidates(
     for (auto &loop : loops.get_loops())
     {
       const goto_programt::targett anchor = loop.get_original_loop_head();
-      const goto_programt::targett begin =
-        it->second.body.instructions.begin();
+      const goto_programt::targett begin = it->second.body.instructions.begin();
 
       if (has_existing_invariant(anchor, begin))
         continue;

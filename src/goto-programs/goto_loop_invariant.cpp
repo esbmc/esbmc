@@ -82,7 +82,8 @@ static bool is_compiler_temp(goto_programt::const_targett t)
   if (t->is_assign() && is_code_assign2t(t->code))
   {
     const expr2tc &target = to_code_assign2t(t->code).target;
-    return is_symbol2t(target) && is_generated_name(to_symbol2t(target).thename);
+    return is_symbol2t(target) &&
+           is_generated_name(to_symbol2t(target).thename);
   }
 
   if (t->is_function_call() && is_code_function_call2t(t->code))
@@ -293,9 +294,8 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
     &active_invariant_tags);
 }
 
-std::string goto_loop_invariantt::invariant_claim_comment(
-  const char *base,
-  size_t i) const
+std::string
+goto_loop_invariantt::invariant_claim_comment(const char *base, size_t i) const
 {
   if (
     i < active_invariant_tags.size() &&
