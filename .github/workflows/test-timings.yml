@@ -1,0 +1,92 @@
+name: Test timings
+
+# Step 1 of the CI overhaul in esbmc/esbmc#6735: measure how long each test
+# actually takes, so the per-PR fast lane can size its sample by wall-clock
+# instead of by test count. Nothing downstream can be sized without this.
+#
+# It also freezes the week's fast-lane selection: the first run of an ISO week
+# writes ci/selected-tests-<year>-W<week>.txt and later runs leave it alone, so
+# every PR opened that week sees the same list.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  # The budget the fast lane is being sized for, and the parallelism the PR
+  # Linux leg actually runs at (-j2, bounded by runner memory -- see the
+  # comment in build-unix.yml).
+  FAST_LANE_BUDGET_SECONDS: 900
+  FAST_LANE_JOBS: 2
+
+jobs:
+  measure:
+    name: Measure the full suite
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+
+      # Same configuration as the PR Linux leg, so the durations describe the
+      # binary the fast lane will actually run.
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b DebugOpt -e ON
+
+      - name: Run the full suite
+        # Failures are the nightly gate's business (tier 2), not this job's:
+        # a red suite still yields valid timings.
+        run: |
+          cd build
+          ctest -j"$(nproc)" --output-junit "$RUNNER_TEMP/junit.xml" . || true
+
+      - name: Update the timing table
+        # --merge so a partial run narrows the table's freshness rather than
+        # dropping every test it did not reach, and so a test skipped on this
+        # host keeps the duration an earlier run measured.
+        run: |
+          python3 scripts/ci/ctest_timings.py \
+            --junit "$RUNNER_TEMP/junit.xml" \
+            --output ci/test-timings.json \
+            --merge \
+            --commit "${{ github.sha }}" \
+            --runner "${{ runner.name }}" \
+            --jobs "$(nproc)"
+
+      - name: Freeze this week's fast-lane selection
+        run: |
+          week=$(python3 -c 'import datetime; y,w,_ = datetime.date.today().isocalendar(); print(f"{y}-W{w:02d}")')
+          out="ci/selected-tests-$week.txt"
+          if [ -f "$out" ]; then
+            echo "$out already exists; leaving this week's selection frozen."
+            exit 0
+          fi
+          python3 scripts/ci/select_tests.py \
+            --timings ci/test-timings.json \
+            --week "$week" \
+            --budget-seconds "$FAST_LANE_BUDGET_SECONDS" \
+            --jobs "$FAST_LANE_JOBS" \
+            --always-run ci/core-set.txt \
+            --output "$out" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up temp directories
+        if: always()
+        run: rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-*
+
+      - name: Commit the timing table and selection
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: '[ci] refresh per-test timings'
+          file_pattern: |
+            ci/test-timings.json
+            ci/selected-tests-*.txt
+          commit_user_name: 'github-actions'
+          commit_user_email: 'github-actions@github.com'
