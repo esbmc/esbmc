@@ -731,7 +731,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R47** | **Medium (no verdict, default configuration)** — found by a guard-*shape* census rather than a bound one, §15 M9 (R47); **FIXED**, same entry | **Every descending pointer walk hangs; every ascending twin folds.** The guard is `add(&a[4], k) != &a[0]`: the add's base keeps its own subscript, so it never meets the bare bound beside it. A decrement also never reaches the `base + offset` shape an increment has. Four other mechanisms were measured and refuted first, including a real missing `sub2t` arm in `constant_propagation` that changes no verdict | 18-shape guard census; `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp` | `regression/esbmc/descending_pointer_walk{,_fail}` | **Fixed**, in two steps: `p - c -> p + (-c)` for a signed constant gives a decrementing walk the shape an incrementing one has, and giving `flatten_addressof_under_add` the single-subscript fallback the top level already had rebases the `&a[4]` inside `&a[4] + k`. 18/18 of the census folds |
 | **R48** | **Medium–High (no verdict, default configuration)** — found by a bound-*storage* census extending R42–R47, §15 M9 (R48); **FIXED**, same entry | **A nested member write into a struct with no propagated value drops the whole struct.** `struct S{struct I in;}; struct S x; x.in.n = 4;` then `for (i = 0; i < x.in.n; i++)` never terminates under default flags, while the flat `x.n = 4` spelling of the same program proves `SUCCESSFUL` in 0.4 s. `constant_propagation`'s struct arm walks the `with` chain and then requires its base not to be a `member2t`, and a nested member write spells that base as exactly that — `x#1.in`, the old value of the field being updated — so the inner update is refused, the outer one becomes non-constant, and the bound stays symbolic. The equation is right: a bare `assert(x.in.n == 4)` on the same program proves. Only `symex_goto`'s syntactic exit decision (R30) cannot see the value. | the 20-shape storage census and its 6 controls, §15 M9 (R48); `goto_symex_state.cpp:322`; `regression/esbmc/nested_member_loop_bound{,_fail}` | **H-C2** | Fixed by removing the clause. The base is already renamed, so the propagated value is as self-contained as the flat `with(x#1, n, 4)` the same arm already keeps, and the array arm added by the same commit (#2845) never carried the restriction. Eight nested shapes hang on the base build and decide on the patched one. |
 | **R49** | **Medium–High (no verdict, default configuration)** — found by probing the sibling arms of R48's fix, §15 M9 (R49, R50); **FIXED**, same entry | **A union `with` chain touching two fields is refused, so a bound stored in the last-written field never folds.** `union U{int a; short b;}; u.b=1; u.a=4;` then `for (i = 0; i < u.a; i++)` never terminates. The arm requires every update in the chain to name the same field, reasoning that union members alias — which is true and already enforced by `member2t::do_simplify`, which refuses to step past a `with` whose source is a union. The gate was denying itself a value the simplifier handles correctly. | seven before/after probes, §15 M9 (R49, R50); `goto_symex_state.cpp:351-393`; `regression/esbmc/union_mixed_field_{bound,bound_fail,aliased_fail}` | **H-C2** | Fixed by dropping the same-field requirement. Every read aliased by a *later* sibling write still refuses to fold, at all three widths probed (`int` over `int`, `short` over `int`, a `char[4]` byte over `int`), so the relaxation buys termination and not a wrong answer. The residual is a struct-typed update into a union, which the arm still declines because it gates on `is_constant_expr` where the struct arm gates on `constant_propagation`. |
-| **R50** | **Medium (no verdict, default configuration; latent solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **open, and the fix belongs in the solver** | **A bound stored in a multi-dimensional array never folds, because propagating the array would crash the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declines any multi-dimensional array that is not wholly constant; ablating that clause makes the bound fold **and** makes three probes that read the updated row at a nondet index abort with `bitwuzla: error: ... expected array term at index 0`. ESBMC flattens `int[2][2]` to a flat `int[4]`, so `a#1[1]` — a *partial* index — lowers to a `select` returning an element where the enclosing `with` needs a row; a row-valued expression has no encoding. **Latent, not live:** five other routes to a row-valued expression on the shipped build all return correct verdicts, so the gate is the only producer. | ablation measurement and the VCC `(a#1[1] WITH [0:=5] WITH [1:=4])[i]`, §15 M9 (R49, R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724` | **H-C2** | Do **not** relax the propagation gate: it is what keeps symex from building a shape the encoder cannot lower. Fix `decompose_store_chain` / `convert_array_index` first — either give a partial index an encoding, or normalise `with(index(A, i), j, v)` into a flat store on `A` before the solver sees it. |
+| **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED**, §15 M9 (R50) | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs; so does the 3-D spelling. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and — worse — a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. That second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,3d_bound,row_alias,row_ite,row_via_pointer}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with`/`ite` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. With both in place the **dimension** restriction is unnecessary: the gate reverts to R42's own framing, bounded by element count alone, which fixes 3-D as well. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -7683,6 +7683,108 @@ evidence of anything: both probes report `0 remaining after simplification`, so
 the claim was folded at symex time and the encoder never saw the chain. Only a
 read at a nondet index keeps the store chain alive to the solver, and that is
 what turned a clean-looking ablation into three aborts.
+
+---
+
+### M9 (R50) — 2026-09-01, the guard was right, and the thing it was guarding was worse than advertised
+
+R50 closed as *latent*: the propagation gate was the only producer of a
+row-valued `with`, so the encoding gap behind it could not be reached on a
+shipped build. This entry fixes the encoder and then removes the gate. The
+sequence matters — the row's own recommendation was "do **not** relax the
+propagation gate ... fix `decompose_store_chain` / `convert_array_index`
+first" — and following it turned up a second failure the ablation had hidden.
+
+**The ablation understated the defect.** R50 recorded three solver aborts, and
+concluded the gap was an abort. Re-run with the gate relaxed and the encoder
+untouched, two of the shapes do something worse than abort:
+
+| Probe | gate relaxed, encoder unfixed |
+|---|---|
+| `a[1][0]=5; a[1][1]=4;` read at nondet `i` | **abort** — `expected array term at index 0` |
+| the same read through a row pointer `p[1][i]` | **`VERIFICATION FAILED` on a correct program** |
+| the same under a branch merge (`ite` over rows) | **`VERIFICATION FAILED` on a correct program** |
+
+The wrong answer is the more serious of the two, and it has a different cause
+than the abort. It was not a surprise to the gate's author — the comment being
+deleted here names it, "the earlier sibling store is dropped from the formula
+(silent wrong answers)". It was a surprise to R50, whose ablation only ever
+produced aborts, and which therefore recorded the gap as an abort. The lesson is
+narrow and worth keeping: an ablation measures the shapes it happens to reach,
+and here the code's own comment was the better inventory.
+
+The mechanism is separate from the abort's. `decompose_store_chain` walks
+`update_value` — the *newest* update's spine — and never visits `source_value`.
+A row carrying two stores is exactly what `a[1][0]=5; a[1][1]=4;` composes, so
+the older store is dropped from the formula and the solver is free to invent a
+counterexample. An abort is loud; this is not.
+
+**Two encoder changes, each answering one of the row's two suggestions.**
+
+- `lower_flattened_row_select` gives a read out of a row an encoding instead of a
+  term: `(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`, and a read out of an
+  `ite` distributes over its arms. Repeated, this drives the read down to an
+  index chain `decompose_select_chain` already flattens. The two subscripts are
+  compared one bit wider than either operand, so a signed and an unsigned
+  spelling of the same subscript still meet and no two distinct values collide.
+- `decompose_stores` normalises a chain into flat element stores, walking the
+  chain *and* each row it updates. A row whose own chain is rooted at exactly the
+  row being replaced is updated in place — which keeps the ordinary `a[i][j] = v`
+  a single store — and any other row is written out element by element, which is
+  correct whatever the row denotes because every element is named from the row
+  expression itself.
+
+**Then the gate does not need a dimension bound at all.** The first patch allowed
+`with` chains at exactly two dimensions, on the stated grounds that the flattening
+"has no term for" a row. With the encoder fixed that reason is measurably false:
+
+| Probe | master | 2-D-only gate | no dimension gate |
+|---|---|---|---|
+| 3-D loop bound `a[1][1][1]` | hangs | **hangs** | `SUCCESSFUL` |
+| 3-D row read at nondet index | `SUCCESSFUL` | `SUCCESSFUL` | `SUCCESSFUL` |
+| 3-D row read through a pointer | `SUCCESSFUL` | `SUCCESSFUL` | `SUCCESSFUL` |
+
+The encoder handled 3-D already; only the gate was refusing it. Dropping the
+dimension clause is three lines shorter, fixes the 3-D bound too, and returns the
+gate to R42's own framing — bounded by **element count**, not by dimension, with
+R42's 256-element cap still doing the cost limiting.
+
+**Measured.** Every new test is either a mutation-killer or the anti-vacuity twin
+of one. The two halves of the patch are killed by different tests, which is why
+the matrix has three columns and not two:
+
+| Test | master | gate only, encoder unfixed | full fix | what it kills |
+|---|---|---|---|---|
+| `nested_array_loop_bound{,_fail}` | **hangs** | `SUCCESSFUL`/`FAILED` | `SUCCESSFUL`/`FAILED` | the gate half |
+| `nested_array_3d_bound{,_fail}` | **hangs** | `SUCCESSFUL`/`FAILED` | `SUCCESSFUL`/`FAILED` | the gate half, at 3-D |
+| `nested_array_row_alias` | `SUCCESSFUL` | **abort** | `SUCCESSFUL` | the row-read encoding |
+| `nested_array_row_alias_fail` | `FAILED` | **abort** | `FAILED` | same, anti-vacuity |
+| `nested_array_row_via_pointer` | `SUCCESSFUL` | **`FAILED`** | `SUCCESSFUL` | the dropped-store wrong answer |
+| `nested_array_row_ite` | `SUCCESSFUL` | **`FAILED`** | `SUCCESSFUL` | the same, through an `ite` arm |
+| `nested_array_row_{via_pointer,ite}_fail` | `FAILED` | `FAILED` | `FAILED` | anti-vacuity twins |
+
+| Artefact | Invocation | Result |
+|---|---|---|
+| the 10 new tests | default, and again `--z3` | identical verdicts under both solvers |
+| `-L esbmc/` | `ctest -j6`, 120 s cap | **2036/2036, 0 failures**, 404 s (master baseline 403 s, same tree minus the patch) |
+| unit tests | `ctest -LE regression -j6` | 771/771 |
+| `-L esbmc-solidity` | `ctest -j6` | 2 failures, **both pre-existing** — see below |
+| `git clang-format --diff HEAD` | changed lines only | clean |
+
+**The two Solidity failures are not this patch.** `nested_array_deep_1` and
+`delegate_shadow_3` are `KNOWNBUG` tests that now return `SUCCESSFUL`, so ctest
+reports them as failures. The obvious reading — a nested-array patch broke a
+nested-array test — is wrong: rebuilt with this patch stashed, both XPASS on the
+baseline too. They are master drift and want a separate flip to `CORE`.
+
+**The trap this entry nearly fell into.** Four of the ten tests report
+`0 remaining after simplification`: their claims fold at symex time and the
+encoder never sees them. Those four pin the *propagation* half and nothing else —
+had the set stopped there, the encoder could have been reverted wholesale with
+every test still green. The row tests carry 5–7 live VCCs precisely because they
+read at a **nondet** index, and that is the only reason the wrong-answer column
+above is observable at all. This is R49's lesson recurring one entry later: check
+the VCC count before believing a test gates the solver.
 
 ---
 
