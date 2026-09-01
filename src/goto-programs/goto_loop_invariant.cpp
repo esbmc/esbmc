@@ -202,12 +202,18 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   goto_programt side_effects;
   extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
 
+  // insert_assert_before_loop swaps the base case into the loop-head slot and
+  // moves the head's own instruction to a fresh node behind it, so the
+  // `loop_head` iterator no longer denotes the loop head afterwards. Anchor the
+  // instruction that follows it, which no insertion before the head can move.
+  goto_programt::targett after_head = std::next(loop_head);
+
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
 
-  // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
+  // 2. Insert HAVOC and ASSUME at the loop head, ahead of the guard
   insert_havoc_and_assume_before_condition(
-    loop_head, loop, invariants, loop_assigns, side_effects);
+    std::prev(after_head), loop, invariants, loop_assigns, side_effects);
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
@@ -556,23 +562,20 @@ void goto_loop_invariantt::insert_assert_before_loop(
 }
 
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
-  goto_programt::targett &loop_head,
+  goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   const std::vector<expr2tc> &loop_assigns,
   goto_programt &side_effects)
 {
-  // Find the loop condition (IF instruction) - this should be right at loop_head
-  goto_programt::targett condition_it = loop_head;
-  while (condition_it != goto_function.body.instructions.end() &&
-         !condition_it->is_goto())
-    ++condition_it;
-
-  if (condition_it == goto_function.body.instructions.end())
-    return; // No loop condition found
-
-  // Insert BEFORE the loop condition (after the base case assert)
-  goto_programt::targett insert_point = condition_it;
+  // The havoc models an arbitrary iteration, so it belongs at the loop head,
+  // where the base case and the inductive step already anchor the invariant --
+  // not at the guard's IF. A guard with a side effect (`while (cnt--)`), a call
+  // (`while (f(&x))`) or a short circuit is lowered to instructions that sit
+  // between the two; havoc'ing after them leaves the IF testing a pre-havoc
+  // temporary, which makes the loop-exit edge infeasible and silently drops
+  // every claim after the loop (issue #7478).
+  goto_programt::targett insert_point = loop_head;
 
   goto_programt dest;
 
