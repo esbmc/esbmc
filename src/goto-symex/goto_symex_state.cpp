@@ -354,9 +354,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // A chain touching several fields is safe to carry: member2t::do_simplify
       // refuses to step past a `with` whose source is a union, so only a read
       // of the last-written field folds and every aliased read stays symbolic.
-      for (expr2tc current = expr; is_with2t(current);
-           current = to_with2t(current).source_value)
-        if (!is_constant_expr(to_with2t(current).update_value))
+      for (const expr2tc *current = &expr; is_with2t(*current);
+           current = &to_with2t(*current).source_value)
+        if (!is_constant_expr(to_with2t(*current).update_value))
           return false;
 
       return true;

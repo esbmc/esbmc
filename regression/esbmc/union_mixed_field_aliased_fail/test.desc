@@ -1,5 +1,5 @@
 CORE
 main.c
 
-^\s+a read aliased by a later sibling write must not fold$
+^\s+an aliased read must not fold$
 ^VERIFICATION FAILED$

@@ -7,9 +7,11 @@ union u
 int main(void)
 {
   union u u;
-  u.a = 4;
+  u.a = 0x12345678;
   u.b = 1;
 
-  __ESBMC_assert(u.a == 4, "a read aliased by a later sibling write must not fold");
+  /* Guards member2t::do_simplify's union arm (src/util/expr/expr_simplifier.cpp):
+     dropping it folds this read past the sibling write and flips the verdict. */
+  __ESBMC_assert(u.a == 0x12345678, "an aliased read must not fold");
   return 0;
 }
