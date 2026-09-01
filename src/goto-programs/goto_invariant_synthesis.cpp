@@ -108,6 +108,24 @@ bool is_self_increment(
   return false;
 }
 
+/// Every variable the closed form arithmetises over must be an unsigned
+/// integer. Two reasons, both observed as defects:
+///
+///   * a pointer accumulator (`p = p + 1`) would build mul2t/add2t over pointer
+///     types, which assert_arith_2ops_consistency rejects outright — ESBMC
+///     aborts in a Debug build and emits a malformed expression in Release;
+///   * the entry-value case analysis in entry_admits_two_disjunct_bound is only
+///     valid for a non-negative bound. With `int n` and n < 0 the loop is never
+///     entered and the two-disjunct bound is false at entry, so the synthesised
+///     claim fails on a correct program.
+///
+/// Signed counters and pointer walks are simply out of scope for this revision
+/// rather than mis-handled.
+bool is_unsigned_integer(const expr2tc &expr)
+{
+  return expr && is_unsignedbv_type(expr->type);
+}
+
 bool is_constant_one(const expr2tc &expr)
 {
   return is_constant_int2t(expr) && to_constant_int2t(expr).value == 1;
@@ -148,7 +166,11 @@ bool entry_value(
   {
     --it;
 
-    if (breaks_straight_line(it))
+    // Stepping over a jump target would leave the other incoming edge
+    // unexamined, and the assignment we then report is only the value that
+    // reaches the head along one path. `if (c) s = 5;` before the loop is
+    // enough to make the reported entry value wrong on the other branch.
+    if (it->is_target() || breaks_straight_line(it))
       return false;
 
     if (!it->is_assign())
@@ -158,7 +180,10 @@ bool entry_value(
     if (assign.target != var)
       continue;
 
-    if (mentions_modified_var(assign.source, modified))
+    // M-4: only a literal is safe. A symbolic RHS records an *expression*, not
+    // a value, and any write to one of its symbols between here and the loop
+    // head silently changes what the closed form means (`s = k; k = 7;`).
+    if (!is_constant_int2t(assign.source))
       return false;
 
     value = assign.source;
@@ -267,6 +292,8 @@ static bool classify_accumulators(
     accumulatort acc;
     acc.var = var;
     acc.addend = write->second.second;
+    if (!is_unsigned_integer(acc.var) || !is_unsigned_integer(acc.addend))
+      return false;
     if (mentions_modified_var(acc.addend, modified))
       return false;
     if (!entry_value(head, begin, acc.var, modified, acc.entry))
@@ -308,6 +335,8 @@ bool recognise_affine_loop(
   const auto &modified = loop.get_modified_loop_vars();
   if (!is_symbol2t(out.counter) || modified.find(out.counter) == modified.end())
     return false;
+  if (!is_unsigned_integer(out.counter) || !is_unsigned_integer(out.bound))
+    return false;
   if (mentions_modified_var(out.bound, modified))
     return false;
 
@@ -341,6 +370,18 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
   expr2tc inv = or2tc(
     cond,
     equality2tc(shape.counter, typecast2tc(shape.counter->type, exit_value)));
+
+  // The counter never goes below its entry value, and saying so matters: the
+  // havoc is otherwise free to pick i < i0, where (i - i0) wraps and the
+  // accumulator's closed form describes a state the loop can never reach. That
+  // shows up as a false alarm on the user's own in-loop assertions, and as
+  // overflow claims on arithmetic the user never wrote. Costs one comparison
+  // and no extra multiplier branch; for i0 == 0 it simplifies away entirely.
+  inv = and2tc(
+    inv,
+    greaterthanequal2tc(
+      shape.counter, typecast2tc(shape.counter->type, shape.counter_entry)));
+
   simplify(inv);
   return inv;
 }

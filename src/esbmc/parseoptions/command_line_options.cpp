@@ -357,7 +357,17 @@ static std::string format_target()
 static void
 set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
 {
-  if (cmdline.isset("synthesise-loop-invariants"))
+  // Only when no phase has been selected explicitly. --base-case,
+  // --forward-condition and --inductive-step each drive one k-induction phase
+  // themselves, and process_goto_program treats --inductive-step as
+  // k-induction, so it stamps inductive_step_instruction on the havoc. Forcing
+  // base-case on top of that reaches the (base_case || forward_condition) &&
+  // inductive_step_instruction arm with k_induction false, which symex asserts
+  // against (execution_state.cpp) -- ESBMC aborts.
+  if (
+    cmdline.isset("synthesise-loop-invariants") && !options.is_kind() &&
+    !cmdline.isset("base-case") && !cmdline.isset("forward-condition") &&
+    !cmdline.isset("inductive-step"))
   {
     options.set_option("multi-property", true);
     options.set_option("base-case", true);
