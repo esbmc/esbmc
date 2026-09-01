@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <set>
 #include <sstream>
 
 #include <stdexcept>
@@ -237,6 +238,19 @@ bool cmdlinet::parse(
   const char **argv,
   const struct group_opt_templ *opts)
 {
+  // An option table describes one program's command line, and argv does not
+  // change while the process runs, so it is parsed exactly once. Enforced
+  // rather than documented because boost takes ownership of every
+  // value_semantic the table holds: a second parse builds a second owner of
+  // the same objects, and whichever description dies first leaves the other
+  // reading freed memory.
+  static std::set<const struct group_opt_templ *> parsed;
+  if (!parsed.insert(opts).second)
+  {
+    log_error("option table parsed more than once");
+    return true;
+  }
+
   clear();
   unsigned int i = 0;
   for (; opts[i].groupname != "end"; i++)
