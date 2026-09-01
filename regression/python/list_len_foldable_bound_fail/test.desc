@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 12
+^VERIFICATION FAILED$
+^ *FAILED .*assertion .*sum.* == 88$

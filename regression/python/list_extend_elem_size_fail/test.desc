@@ -1,5 +1,5 @@
 CORE
 main.py
---unwind 12
+--unwind 6
 ^VERIFICATION FAILED$
 ^ *FAILED .*assertion .*value == 99$

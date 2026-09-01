@@ -31,6 +31,44 @@ bool is_pointer_catch(const irep_idt &type)
   return type.as_string().find("_ptr") != std::string::npos;
 }
 
+/// Maintain \p open_handlers across one instruction, reading the positional
+/// CATCH push/pop nesting the same way collect() does: a CATCH with targets
+/// opens a try region and carries its clause types, one without closes it.
+static void track_open_handlers(
+  goto_programt::const_targett it,
+  std::vector<std::vector<irep_idt>> &open_handlers)
+{
+  if (it->type != CATCH)
+    return;
+  if (!it->targets.empty())
+  {
+    const code_cpp_catch2t &c = to_code_cpp_catch2t(it->code);
+    open_handlers.emplace_back(
+      c.exception_list.begin(), c.exception_list.end());
+  }
+  else if (!open_handlers.empty())
+    open_handlers.pop_back();
+}
+
+/// Whether an enclosing handler in the same function catches this raise: an
+/// ellipsis clause, or one naming a type on the throw's own chain (which runs
+/// dynamic type first, then its bases). Such a raise cannot be the one that
+/// escapes, so it must not narrow -- or clear -- the type's anchor: a
+/// `try: raise ValueError / except ValueError` beside an escaping raise of the
+/// same type otherwise reported at the caught line (#7433).
+static bool locally_caught(
+  const std::vector<std::vector<irep_idt>> &open_handlers,
+  const std::vector<irep_idt> &chain)
+{
+  for (const std::vector<irep_idt> &clause : open_handlers)
+    for (const irep_idt &h : clause)
+      if (
+        h == ellipsis_id ||
+        std::find(chain.begin(), chain.end(), h) != chain.end())
+        return true;
+  return false;
+}
+
 /// One catch clause: its static type (or "ellipsis"), the instruction that
 /// begins its handler, and — once lowered — the landing instruction the
 /// dispatch branches to (which clears the in-flight flag before the body).
@@ -137,8 +175,13 @@ public:
         for (const irep_idt &ty : fn.second.exception_spec.allowed_types)
           registry.register_chain({ty});
       const goto_programt::instructionst &body = fn.second.body.instructions;
+      // Handler types of the try regions open at the current instruction,
+      // recovered from the positional CATCH push/pop nesting the same way
+      // collect() does.
+      std::vector<std::vector<irep_idt>> open_handlers;
       for (auto it = body.begin(); it != body.end(); ++it)
       {
+        track_open_handlers(it, open_handlers);
         if (it->type == THROW)
         {
           const code_cpp_throw2t &t = to_code_cpp_throw2t(it->code);
@@ -156,7 +199,12 @@ public:
               thrown_dynamic_types_.push_back(dyn);
             const locationt loc = raise_location(body, it);
             raise_location_[&*it] = loc;
-            record_throw_site(fn.first, fn.second.body.hide, dyn, loc);
+            record_throw_site(
+              fn.first,
+              fn.second.body.hide,
+              dyn,
+              loc,
+              locally_caught(open_handlers, t.exception_list));
           }
         }
         else if (it->type == FUNCTION_CALL)
@@ -466,6 +514,9 @@ private:
   /// are stamped with the *user's* filename and their own line numbers, so
   /// nothing in the location distinguishes them.
   ///
+  /// \p caught marks a raise an enclosing handler in the same function takes,
+  /// which therefore cannot be the escaping one (see \ref locally_caught).
+  ///
   /// An unlocated raise is recorded rather than skipped: it is a site the
   /// property must account for, and letting it clear the anchor is what stops
   /// the located sites from naming a raise that may not be the escaping one.
@@ -473,10 +524,11 @@ private:
     const irep_idt &fn,
     bool hidden,
     const irep_idt &type,
-    const locationt &loc)
+    const locationt &loc,
+    bool caught)
   {
     if (
-      hidden || !entry_reachable_.count(fn) ||
+      hidden || caught || !entry_reachable_.count(fn) ||
       file_operations::is_bundled_source(loc.get_file().as_string()))
       return;
     auto [it, fresh] = type_throw_location_.emplace(type, loc);
