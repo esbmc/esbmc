@@ -74,7 +74,8 @@ and the symbol/function table layout.
 | Parity harness vs goto-transcoder reference | ✅ | `goto-transcoder/scripts/esbmc_parity.sh` |
 | CBMC→ESBMC instruction-type mapping table (§4.1, Phase 1) | ✅ (PR #5717) | `cbmc_adapter.{h,cpp}::map_cbmc_instruction_type` |
 | Entry-point bridging: `__ESBMC_main` dispatches into `__CPROVER__start` (§4.2, Phase 1) | ✅ (PR #5719) | `esbmc_parseoptions.cpp::retarget_esbmc_main` |
-| Pointer predicates: `pointer_offset` operand-wrap crash fix, `w_ok`/`rw_ok` stubs (§4.4, Phase 2, partial) | ✅ (PR #5737) | `cbmc_adapter.cpp`, `migrate.cpp` |
+| Pointer predicates: `pointer_offset` operand-wrap crash fix (§4.4, Phase 2) | ✅ (PR #5737) | `cbmc_adapter.cpp`, `migrate.cpp` |
+| `r_ok`/`w_ok`/`rw_ok` given a real encoding — they migrated to literal `true`, so every assertion over them passed vacuously (an **unsound miss**: ESBMC proved `__CPROVER_r_ok(malloc(8), 16)`, which CBMC refutes) (§4.4, Phase 2) | ✅ (PR #7411) | `migrate.cpp` |
 | Float-classification predicates: `isnan`/`isinf`/`isnormal` crash fix + verdict parity (ieee arith promotion, `sign`→`signbit(x)!=0` rewrite) (§4.4, Phase 2) | ✅ (PR #5741) | `cbmc_adapter.cpp` |
 | Pointer subtype double-wrap fix (§4.3) — every local pointer DECL without an immediate initializer was silently downgraded to `void*` | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_type` |
 | Builtin-call rewrite for `malloc`/`sqrtf` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5750) | `cbmc_adapter.cpp::fix_builtin_call` |
@@ -760,49 +761,116 @@ perturbs native handling. Verdict parity with CBMC, dual-solver (Bitwuzla + Z3),
 `goto *t[1]` asserted to land on label `a` ⇒ FAILED), confirming the jump really targets the
 selected label rather than a nondet branch.
 
-#### `__CPROVER_OBJECT_SIZE` crashes the `--binary` path (§4.4, open — `cbmc_object_size{,_bytes}`)
+#### `__CPROVER_OBJECT_SIZE` on the `--binary` path — ✅ FIXED (PR #7410)
 
-Measured 2026-08-30 on master. An eight-line harness — `char *p = malloc(16);`
-`__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verifies SUCCESSFUL under CBMC and
-**SIGSEGVs** ESBMC during SMT encoding (`smt_solver.cpp::convert_assign` ->
-`hash_value(expr2tc)` on a null container). Two independent defects sit behind it:
+An eight-line harness — `char *p = malloc(16);`
+`__CPROVER_assert(__CPROVER_OBJECT_SIZE(p) == 16, ...)` — verified SUCCESSFUL under CBMC and
+**SIGSEGV**'d ESBMC during SMT encoding (`smt_solver.cpp::convert_assign` ->
+`hash_value(expr2tc)` on a null container). Two defects sat behind it.
 
-1. **A code node in an expression position.** `migrate.cpp:2781` maps CBMC's `object_size`
-   irep through `invoke_intrinsic`, which returns a `code_function_callt` — a *statement*.
-   CBMC serialises `object_size` as an expression inside an assignment's RHS, and nothing on
-   the `--binary` path lifts it: `remove_sideeffects` is a `goto_convertt` member and
-   goto_convert never runs on a loaded binary. The resulting code node reaches the solver as
-   a value and is dereferenced as one. Fixing it needs instruction-level lifting
-   (`tmp = __ESBMC_get_object_size(p)` emitted *before* the assignment), which the adapter's
-   current 1->1 rewrite framework cannot express.
-2. **Bytes versus elements.** Even lifted, the mapping is semantically wrong.
-   `__CPROVER_OBJECT_SIZE` is a **byte** count — CBMC proves
-   `__CPROVER_OBJECT_SIZE(p) == 16` for `int *p = malloc(16)` — while
-   `__ESBMC_get_object_size` returns the addressed array's **element count**
-   (`object_size.cpp:179`), which is 4 for the same object. The two agree only for `char`,
-   which is why a `char` harness would look correct if the crash were fixed alone.
+1. **A code node in an expression position.** `migrate.cpp` maps CBMC's `object_size` irep
+   through `invoke_intrinsic`, which returns a `code_function_callt` — a *statement*. CBMC
+   serialises `object_size` inside an assignment's RHS, and nothing on the `--binary` path
+   lifted it: `remove_sideeffects` is a `goto_convertt` member and goto_convert never runs on a
+   loaded binary, so the code node reached the solver as a value.
+2. **Bytes versus elements.** `__CPROVER_OBJECT_SIZE` is a **byte** count;
+   `__ESBMC_get_object_size` returns the addressed array's **element count**. Measured, the two
+   coincide on *every heap* object — `malloc` yields a byte-array object, so element count is
+   already byte count, for `int *p = malloc(16)` as much as for `char *` — and diverge on a
+   **typed** array: `int garr[4]` is 16 bytes and 4 elements. A heap-only harness therefore
+   cannot tell the mappings apart; `cbmc_object_size_static` is the test that can.
 
-Both are pinned as KNOWNBUG so the reproducers cannot be lost; `cbmc_object_size_bytes` is the
-one that catches a crash-only fix.
+**Fix.** `object_size` now migrates to `__ESBMC_builtin_object_size(p, 0)` — byte-valued,
+GCC type-0 semantics, and it resolves heap, stack and static objects alike
+(`object_size.cpp:12`) — and a new `lift_call_expressions` pass
+(`src/goto-programs/lift_call_expressions.{h,cpp}`, run beside `link_cbmc_libc_bodies`) hoists
+any call nested inside an expression into `tmp = call(...)` before its instruction. The pass
+also registers the callee in `function_map` when absent: symex answers an intrinsic by name and
+needs no body, but `goto_inline` resolves every call through `function_map` first, and a
+*native* goto-binary (goto-transcoder's Rust output) compiles no C, so nothing else declares
+it. `__ESBMC_builtin_object_size` also gains the declaration it never had beside
+`__ESBMC_get_object_size`; the `__builtin_object_size` macro was already expanding to it.
 
-**The obvious fix is wrong — measured, so nobody need re-derive it.** Mapping `object_size` to
-`dynamic_size2tc` looks ideal: it is a plain expression (no lifting, no crash) and it lowers to
-`__ESBMC_alloc_size[POINTER_OBJECT(p)]`, a **byte** count, so both defects above appear to fall
-at once. Both heap harnesses do pass with it. But `__ESBMC_alloc_size` is populated only for
-*dynamic* objects, so a static or automatic one reads nothing: on
-`int garr[4]; int sarr[4];` CBMC proves `__CPROVER_OBJECT_SIZE(...) == 16` for both and ESBMC
-reports **FAILED** for both. That trades a loud crash for a quiet false alarm.
+**Ruled out — do not retry.** Mapping `object_size` to `dynamic_size2tc` is very tempting: a
+plain expression (no lifting, no crash) lowering to `__ESBMC_alloc_size[POINTER_OBJECT(p)]`, a
+byte count, and both heap harnesses pass with it. But `__ESBMC_alloc_size` is populated for
+*dynamic* objects only, so `int garr[4]; int sarr[4];` — which CBMC proves — comes back FAILED.
+No expression-level encoding can work: a stack or global object's byte size is not recoverable
+from the pointer's *type* (`int *` into `int[4]` gives 4, not 16), so the object has to be
+resolved by `dereference`, which is symex machinery.
 
-No expression-level encoding can work: the byte size of a stack or global object is not
-recoverable from the pointer's *type* (`int *` into `int[4]` gives 4, not 16), so the object
-has to be resolved by `dereference`, which is symex machinery. The correct target is therefore
-`__ESBMC_builtin_object_size(p, 0)` — byte-valued, GCC type-0 semantics, and it handles heap,
-stack and static alike (`object_size.cpp:12`) — reached through a **post-load lifting pass**:
-walk each loaded goto instruction, hoist any `code_function_call2t` nested inside an expression
-into `tmp = call(...)` inserted before it, and replace the node with `tmp`. That belongs beside
-`link_cbmc_libc_bodies` in `parseoptions/goto_program.cpp`, where instructions are already
-irep2 and `goto_programt` insertion is available; the adapter itself cannot express the 1->N
-rewrite.
+Pinned by `regression/goto-transcoder/cbmc_object_size{,_bytes,_static}` and the
+`{,_static}_fail` counterparts.
+
+#### Expression-id sweep — 2026-08-30 (§4.4)
+
+The adapter's allow-list is the productive vein: two sittings over it produced a crash
+(`object_size`, PR #7410) and an unsound miss (`r_ok`, PR #7411). A third pass probed eight
+more ids with a small C harness each, `goto-cc`'d, run under `cbmc` against `esbmc --binary` in
+both polarities. **All eight agree**, and all sixteen harnesses are now pinned as
+`regression/goto-transcoder/cbmc_expr_*`: `overflow-shl`, `overflow-unary-`, `signbit`,
+`isfinite`, `pointer_object`, `ieee_sqrt`, `struct`/`array_of` aggregate literals, and
+`byte_extract_little_endian` (reached by union punning).
+
+A fourth pass closed the list: `lshr`/`ashr`, `address_of` + `index` + `dereference`,
+`nearbyint`/`ieee_fma`/`abs`, `isnormal`, and `array_of` on a **nondet** extent (a VLA). All
+five agree in both polarities, pinned as `cbmc_expr_{shifts,pointer_index,libm_ops,isnormal,
+vla_extent}{,_fail}` — that pass was measured against a clean `master` build rather than the
+branch stack, so the agreement is not an artefact of the fixes above. **The allow-list now has
+per-id coverage end to end**; what it produced along the way was one crash (§`object_size`) and
+one unsound miss (`r_ok`), both fixed.
+
+**Two harness traps worth repeating.** A verdict that *agrees* can still be vacuous: CBMC
+reports `no body for callee` and fails the assertion for that reason, which looks like
+agreement when ESBMC fails for its own. Check the failing claim, and grep the CBMC run for
+`no body`. In particular `__CPROVER_signbit` and `__CPROVER_isfinite` do not exist —
+`signbit()` from `<math.h>` works, but `isfinite()` lowers to `__builtin_isfinite`, which
+cbmc 6.5.0 does not model, so the only usable spelling is `__CPROVER_isfinited`. The same
+applies to `isnormal` (`__CPROVER_isnormald`). Second trap: pass `--unwind` to **both** engines
+— the VLA harness returned no CBMC verdict at all until CBMC got one too, which reads as a
+divergence when it is a missing flag.
+
+#### Contract write-set clauses need both CPROVER work-streams — ✅ (PR #7415)
+
+`__CPROVER_assigns(__CPROVER_object_whole(p))`, with or without `__CPROVER_frees(p)`, verifies
+SUCCESSFUL under CBMC and under ESBMC — **but only with the `is_fresh` bridge and the
+`object_size` lifting pass applied together**. Measured on each alone it looks like a defect,
+and it is not:
+
+| build | verdict | why |
+|---|---|---|
+| `master` | SIGSEGV | `object_size` reaches the solver as a code node |
+| `is_fresh` bridge only | SIGSEGV | same — that stream does not touch `object_size` |
+| `object_size` stream only | FAILED | `__CPROVER_is_fresh` in the `requires` is still bodyless, so the pointer is unconstrained and every dereference check fails |
+| **both** | **SUCCESSFUL** | matches CBMC |
+
+`regression/goto-transcoder/cbmc_contract_frees` was pinned KNOWNBUG on the strength of the
+third row. It is a CORE test here. The lesson is narrower than "measure before believing":
+when two independent fixes are in flight, a harness that touches both has **no meaningful
+verdict on either branch alone**, and reporting one is worse than reporting nothing.
+#### `__CPROVER_object_whole` in an `assigns` clause — a false alarm (§4.4, open — `cbmc_contract_frees`)
+
+A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` verifies SUCCESSFUL under
+CBMC and **FAILED** under ESBMC. The `frees` clause is irrelevant — `object_whole` alone
+reproduces it, and a plain `__CPROVER_assigns(*p)` does not.
+
+**A void-typed cast used to abort this before it could report a verdict, and that was
+self-inflicted.** The `r_ok` encoding took its pointer-offset result type from the predicate's
+*size* operand; `__CPROVER_object_whole`'s lowering leaves that operand untyped, so the formula
+carried a `pointer_offset` of void type, and `pointer_offset2t::do_simplify`
+(`expr_simplifier.cpp`) then built a `typecast` to void that the encoder aborted on
+("Typecast for unexpected type"). `pointer_offset2t` requires a **signed, address-width**
+result type — the rule the `__CPROVER_POINTER_OFFSET` case already followed — and the encoding
+now obeys it. With that fixed the run reaches a verdict, and the verdict divergence above is
+what remains.
+
+**How it was found, after four cheaper guesses failed.** The cast is not in the CBMC binary
+(instrumenting `fix_expression` prints targets `integer`, `pointer`, `signedbv`, `c_bool`,
+`unsignedbv` — never `empty`), `migrate_type0` *throws* rather than falling through to the
+empty type, `migrate_expr`'s typecast case never builds one, and `symex_other.cpp` only
+dereferences a discarded expression. What settled it was an `abort()` in **both**
+`typecast2t` constructors — the first probe instrumented only the primary one and caught
+nothing — plus `--segfault-handler` and `addr2line`, which named the simplifier directly.
 
 #### IEEE-754 rounding mode — ✅ FIXED (PR #7428)
 
@@ -923,12 +991,22 @@ Still open in `is_fresh`, now measured rather than guessed:
   | `return 0` | FAILED | FAILED |
   | `return &static_obj` with n = 1000 | FAILED — the check *is* size-sensitive | FAILED |
 
-  So CBMC accepts a static object as "fresh" but does enforce the extent. Matching it needs no
-  memory map, only a **check-side** bridge — the mirror of the assume-side one above, reporting
-  whether the pointer already denotes an object that big, and deliberately never allocating.
-  The same bridge serves `__CPROVER_replace_requires_is_fresh`. It cannot be built on this
-  branch alone: the extent has to come from `__ESBMC_builtin_object_size`, which arrives with
-  the `object_size` work, so this waits until both lines are on `master`.
+  So CBMC accepts a static object as "fresh" but does enforce the extent. **Closed (PR #7416)**
+  by a check-side bridge `__cbmc_is_fresh_check_impl` — the mirror of the assume-side one,
+  reporting whether the pointer already denotes an object that big and deliberately never
+  allocating, since satisfying a check-side variant by allocating would mask the violation it
+  exists to catch. It serves `__CPROVER_enforce_ensures_is_fresh` and
+  `__CPROVER_replace_requires_is_fresh`; all four rows above now agree with CBMC.
+
+  Two things this turned up. **The check-side variants take the pointer by value**
+  (`f((void *)tmp_cc, 4)`), not by address like the assume-side ones (`f(&(void *)tmp, 4, map)`)
+  — reusing the by-address signature made the bridge dereference a pointer value, which showed
+  up as a spurious out-of-bounds inside the bridge itself. And the bridge only started
+  discriminating once a **latent `object_size` gap** was fixed: for a `void *` to a *non-array*
+  object the intrinsic fell back to the pointer's subtype, so every scalar reached through a
+  `void *` reported the unknown-size fallback. `__CPROVER_OBJECT_SIZE(&scalar_static)` failed
+  where CBMC proves it — the `object_size` tests all used arrays and missed it
+  (`cbmc_object_size_scalar` now covers it).
 - **Separation** between two `is_fresh`'d pointers is unmodelled but not currently a
   divergence: the bridge mallocs per call, so two pointers are distinct by construction, and
   `requires(is_fresh(p)) + requires(is_fresh(q)) + assigns(*p, *q)` verifies SUCCESSFUL on
