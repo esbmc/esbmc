@@ -13,7 +13,9 @@ repository's testing rules.
 # pylint: disable=wrong-import-position,invalid-name
 
 import base64
+import contextlib
 import gzip
+import io
 import json
 import os
 import shutil
@@ -29,6 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import coverage_core_set as ccs  # noqa: E402
 import ctest_timings as timings  # noqa: E402
 import run_selected_tests as runner  # noqa: E402
+import nightly_bisect as bisect  # noqa: E402
+import nightly_report as nightly  # noqa: E402
 import select_tests as sel  # noqa: E402
 
 JUNIT = """<?xml version="1.0" encoding="UTF-8"?>
@@ -451,6 +455,342 @@ int main(int argc, char **argv) {
                 "--jobs", "1", "--llvm-cov", self.llvm_cov, "--llvm-profdata", self.llvm_profdata
             ]), 0)
         self.assertNotIn("regression/toy/crashed", ccs.load_bitsets(os.path.join(out, ccs.BITSETS)))
+
+
+FAILING_JUNIT = """<?xml version="1.0"?>
+<testsuite tests="4">
+  <testcase name="regression/esbmc/ok" time="1.0" status="run">
+    <system-out>fine</system-out>
+  </testcase>
+  <testcase name="regression/esbmc/broken" time="2.0" status="fail">
+    <failure message="boom">t</failure>
+    <system-out>%s</system-out>
+  </testcase>
+  <testcase name="regression/python/flaky" time="1.0" status="fail">
+    <failure message="boom">t</failure>
+    <system-out>sometimes</system-out>
+  </testcase>
+  <testcase name="regression/esbmc/skipped" time="0.0" status="notrun">
+    <skipped/>
+  </testcase>
+</testsuite>
+""" % "\n".join(f"line {i}" for i in range(100))
+
+
+class TempRepo(TempDirCase):
+    """A real git repository, so the git-facing code is exercised, not simulated."""
+
+    def setUp(self):
+        super().setUp()
+        self.repo = os.path.join(self.tmp, "repo")
+        os.makedirs(self.repo)
+        self.git("init", "-q", "-b", "main")
+        self.git("config", "user.email", "t@example.com")
+        self.git("config", "user.name", "Tester")
+
+    def git(self, *args):
+        return subprocess.run(["git", "-C", self.repo, *args],
+                              check=True,
+                              capture_output=True,
+                              text=True).stdout
+
+    def commit(self, message, marker="clean"):
+        # marker.txt is what the bisect predicate reads; log.txt only guarantees
+        # every commit changes something, so repeating a marker still commits.
+        with open(os.path.join(self.repo, "marker.txt"), "w", encoding="utf-8") as handle:
+            handle.write(marker + "\n")
+        with open(os.path.join(self.repo, "log.txt"), "a", encoding="utf-8") as handle:
+            handle.write(message + "\n")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", message)
+        return self.git("rev-parse", "HEAD").strip()
+
+
+class NightlyFailures(TempDirCase):
+
+    def test_only_failing_tests_are_reported(self):
+        cases = dict((n, out) for n, _, out in
+                     nightly.failing_cases(self.write("j.xml", FAILING_JUNIT)))
+        self.assertEqual(set(cases), {"regression/esbmc/broken", "regression/python/flaky"})
+
+    def test_a_skipped_test_is_not_a_failure(self):
+        names = [n for n, _, _ in nightly.failing_cases(self.write("j.xml", FAILING_JUNIT))]
+        self.assertNotIn("regression/esbmc/skipped", names)
+
+    def test_output_is_truncated_to_the_tail(self):
+        cases = dict((n, out) for n, _, out in
+                     nightly.failing_cases(self.write("j.xml", FAILING_JUNIT), tail_lines=5))
+        tail = cases["regression/esbmc/broken"].splitlines()
+        self.assertEqual(len(tail), 5)
+        self.assertEqual(tail[-1], "line 99")
+
+    def test_quarantined_failures_are_split_out_and_do_not_drive_the_verdict(self):
+        out = os.path.join(self.tmp, "r.json")
+        rc = nightly.main([
+            "--junit", self.write("j.xml", FAILING_JUNIT), "--commit", "deadbeef",
+            "--quarantine", self.write("q.txt", "regression/python/flaky\n"),
+            "--json", out
+        ])
+        self.assertEqual(rc, 0)
+        with open(out, encoding="utf-8") as handle:
+            report = json.load(handle)
+        self.assertEqual(report["quarantined"], ["regression/python/flaky"])
+        self.assertEqual([f["test"] for f in report["failures"]], ["regression/esbmc/broken"])
+
+
+class NightlyOutputs(TempDirCase):
+
+    def test_print_failures_lists_only_unquarantined_names(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            nightly.main([
+                "--junit", self.write("j.xml", FAILING_JUNIT), "--commit", "abc",
+                "--quarantine", self.write("q.txt", "regression/python/flaky\n"),
+                "--print-failures"
+            ])
+        self.assertEqual(buf.getvalue().split(), ["regression/esbmc/broken"])
+
+    def test_github_output_names_one_test_to_bisect(self):
+        out = os.path.join(self.tmp, "gh.txt")
+        nightly.main([
+            "--junit", self.write("j.xml", FAILING_JUNIT), "--commit", "abc",
+            "--github-output", out
+        ])
+        with open(out, encoding="utf-8") as handle:
+            written = dict(line.strip().split("=", 1) for line in handle if "=" in line)
+        self.assertEqual(written["action"], "escalate")  # no baseline on record
+        self.assertEqual(written["test"], "regression/esbmc/broken")
+
+    def test_github_output_on_a_green_run_names_no_test(self):
+        green = self.write("g.xml", '<?xml version="1.0"?><testsuite tests="1">'
+                           '<testcase name="a" time="1.0" status="run"/></testsuite>')
+        out = os.path.join(self.tmp, "gh.txt")
+        nightly.main(["--junit", green, "--commit", "abc", "--github-output", out])
+        with open(out, encoding="utf-8") as handle:
+            written = dict(line.strip().split("=", 1) for line in handle if "=" in line)
+        self.assertEqual(written["action"], "none")
+        self.assertEqual(written["test"], "")
+
+
+@unittest.skipUnless(shutil.which("cmake") and shutil.which("ctest"), "needs cmake and ctest")
+class Deflaking(TempDirCase):
+    """Runs the de-flake pass against a real ctest project with a real flaky test."""
+
+    PROJECT = """cmake_minimum_required(VERSION 3.18)
+project(deflake NONE)
+enable_testing()
+add_test(NAME always_fails COMMAND sh -c "exit 1")
+# Passes on exactly the second run: a counter file in the build directory
+# survives between ctest invocations, which is what makes it intermittent.
+add_test(NAME sometimes_passes COMMAND sh -c
+         "n=0; [ -f c ] && n=$(cat c); n=$((n+1)); echo $n > c; test $n -eq 2")
+"""
+
+    def setUp(self):
+        super().setUp()
+        source = os.path.join(self.tmp, "src")
+        os.makedirs(source)
+        with open(os.path.join(source, "CMakeLists.txt"), "w", encoding="utf-8") as handle:
+            handle.write(self.PROJECT)
+        self.build = os.path.join(self.tmp, "build")
+        done = subprocess.run(["cmake", "-S", source, "-B", self.build],
+                              capture_output=True,
+                              text=True,
+                              check=False)
+        if done.returncode:
+            self.skipTest(f"cmake configure failed: {done.stderr.strip()[:120]}")
+
+    def test_a_test_that_never_passes_is_a_stable_failure(self):
+        stable, passes = bisect.deflake_one(
+            "always_fails", 3, lambda t: bisect.run_ctest_test(self.build, t))
+        self.assertTrue(stable)
+        self.assertEqual(passes, 0)
+
+    def test_an_intermittent_test_is_caught_by_repeating_it(self):
+        stable, passes = bisect.deflake_one(
+            "sometimes_passes", 3, lambda t: bisect.run_ctest_test(self.build, t))
+        self.assertFalse(stable)
+        self.assertEqual(passes, 1)
+
+    def test_a_name_that_matches_nothing_is_not_a_pass(self):
+        # ctest exits 0 when its filter matches no test, which would otherwise
+        # read as the test having passed.
+        self.assertFalse(bisect.run_ctest_test(self.build, "no_such_test"))
+
+    def test_flaky_tests_are_quarantined_and_stable_ones_are_not(self):
+        quarantine = self.write("q.txt", "# header\nalways_fails\n")
+        report = os.path.join(self.tmp, "deflake.json")
+        rc = bisect.main([
+            "deflake", "--test", "always_fails", "--test", "sometimes_passes", "--build-dir",
+            self.build, "--attempts", "3", "--quarantine", quarantine, "--json", report
+        ])
+        self.assertEqual(rc, 0)
+        with open(report, encoding="utf-8") as handle:
+            result = json.load(handle)
+        self.assertEqual(result["stable"], ["always_fails"])
+        self.assertEqual(result["flaky"], ["sometimes_passes"])
+
+        entries = sel.read_lines(quarantine)
+        self.assertIn("sometimes_passes", entries)
+        # already listed by hand, and stable anyway -- must not be duplicated
+        self.assertEqual(entries.count("always_fails"), 1)
+
+    def test_deflake_needs_at_least_one_test(self):
+        self.assertEqual(bisect.main(["deflake", "--build-dir", self.build]), 1)
+
+
+class BisectComment(unittest.TestCase):
+
+    def test_a_culprit_comment_names_the_commit_and_disclaims_a_fix(self):
+        text = bisect.format_comment({
+            "action": "culprit", "commit": "abc1234", "reason": "r",
+            "subject": "broke it", "author": "Someone"
+        })
+        self.assertIn("abc1234", text)
+        self.assertIn("broke it", text)
+        self.assertIn("human call", text)
+
+    def test_an_escalation_comment_says_why_instead_of_naming_a_commit(self):
+        text = bisect.format_comment({"action": "escalate", "reason": "merge commit"})
+        self.assertIn("merge commit", text)
+        self.assertNotIn("points at", text)
+
+
+class NightlyVerdict(unittest.TestCase):
+
+    def test_green_needs_no_action(self):
+        self.assertEqual(nightly.verdict([], "abc", [])[0], "none")
+
+    def test_a_single_failure_over_a_range_is_bisectable(self):
+        self.assertEqual(nightly.verdict(["t"], "abc", [("s", "a", "m")])[0], "bisect")
+
+    def test_a_wall_of_failures_is_an_environment_problem(self):
+        action, reason = nightly.verdict([f"t{i}" for i in range(50)], "abc",
+                                         [("s", "a", "m")], max_failures=25)
+        self.assertEqual(action, "escalate")
+        self.assertIn("environment", reason)
+
+    def test_no_baseline_means_nothing_to_bisect(self):
+        action, reason = nightly.verdict(["t"], "", [])
+        self.assertEqual(action, "escalate")
+        self.assertIn("baseline", reason)
+
+    def test_an_unchanged_tree_that_changed_verdict_is_not_deterministic(self):
+        action, reason = nightly.verdict(["t"], "abc", [])
+        self.assertEqual(action, "escalate")
+        self.assertIn("not deterministic", reason)
+
+
+class NightlyCommitRange(TempRepo):
+
+    def test_lists_commits_since_the_baseline_with_authors(self):
+        first = self.commit("one")
+        self.commit("two")
+        head = self.commit("three")
+        commits = nightly.commit_range(self.repo, first, head)
+        self.assertEqual([subject for _, _, subject in commits], ["three", "two"])
+        self.assertEqual({author for _, author, _ in commits}, {"Tester"})
+
+    def test_an_unreachable_baseline_reports_no_range_rather_than_crashing(self):
+        head = self.commit("one")
+        self.assertEqual(nightly.commit_range(self.repo, "0" * 40, head), [])
+
+
+class Deflake(unittest.TestCase):
+
+    def test_a_test_that_never_passes_is_a_stable_failure(self):
+        stable, passes = bisect.deflake_one("t", 3, lambda _: False)
+        self.assertTrue(stable)
+        self.assertEqual(passes, 0)
+
+    def test_one_pass_out_of_three_makes_it_flaky(self):
+        # The issue's rule: intermittent tests are quarantined, never bisected.
+        results = iter([False, True, False])
+        stable, passes = bisect.deflake_one("t", 3, lambda _: next(results))
+        self.assertFalse(stable)
+        self.assertEqual(passes, 1)
+
+
+class BisectResult(TempRepo):
+
+    def test_parses_the_culprit_from_git_output(self):
+        text = "abc1234567 is the first bad commit\ncommit abc1234567\n"
+        self.assertEqual(bisect.parse_first_bad(text), "abc1234567")
+
+    def test_no_culprit_in_the_output(self):
+        self.assertEqual(bisect.parse_first_bad("nothing here"), "")
+
+    def test_a_merge_commit_is_detected(self):
+        base = self.commit("base")
+        self.git("checkout", "-q", "-b", "side")
+        self.commit("side work", marker="side")
+        self.git("checkout", "-q", "main")
+        self.commit("main work", marker="main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge", "side", "-X", "ours")
+        merge = self.git("rev-parse", "HEAD").strip()
+        self.assertTrue(bisect.is_merge_commit(self.repo, merge))
+        self.assertFalse(bisect.is_merge_commit(self.repo, base))
+
+    def test_a_merge_commit_is_escalated_not_blamed(self):
+        self.commit("base")
+        self.git("checkout", "-q", "-b", "side")
+        self.commit("side", marker="side")
+        self.git("checkout", "-q", "main")
+        self.commit("main", marker="main")
+        self.git("merge", "-q", "--no-ff", "-m", "merge", "side", "-X", "ours")
+        merge = self.git("rev-parse", "HEAD").strip()
+        action, reason = bisect.classify(self.repo, merge, True)
+        self.assertEqual(action, "escalate")
+        self.assertIn("merge commit", reason)
+
+    def test_a_broken_baseline_is_escalated(self):
+        sha = self.commit("base")
+        action, reason = bisect.classify(self.repo, sha, False)
+        self.assertEqual(action, "escalate")
+        self.assertIn("baseline is wrong", reason)
+
+    def test_a_plain_commit_is_reported_as_the_culprit(self):
+        sha = self.commit("base")
+        self.assertEqual(bisect.classify(self.repo, sha, True)[0], "culprit")
+
+
+class BisectEndToEnd(TempRepo):
+    """Drives a real `git bisect run` over a real history."""
+
+    def test_finds_the_commit_that_broke_the_predicate(self):
+        good = self.commit("c0")
+        for i in range(1, 5):
+            self.commit(f"c{i}")
+        culprit = self.commit("c5 breaks it", marker="BUG")
+        for i in range(6, 9):
+            self.commit(f"c{i}", marker="BUG")
+        bad = self.git("rev-parse", "HEAD").strip()
+
+        out = os.path.join(self.tmp, "b.json")
+        rc = bisect.main([
+            "bisect", "--repo", self.repo, "--good", good, "--bad", bad, "--predicate",
+            "! grep -q BUG marker.txt", "--verify-good", "--json", out
+        ])
+        self.assertEqual(rc, 0)
+        with open(out, encoding="utf-8") as handle:
+            report = json.load(handle)
+        self.assertEqual(report["action"], "culprit")
+        self.assertEqual(report["commit"], culprit)
+        self.assertEqual(report["subject"], "c5 breaks it")
+
+    def test_a_predicate_already_failing_at_good_is_escalated_without_bisecting(self):
+        good = self.commit("c0", marker="BUG")
+        bad = self.commit("c1", marker="BUG")
+        out = os.path.join(self.tmp, "b.json")
+        bisect.main([
+            "bisect", "--repo", self.repo, "--good", good, "--bad", bad, "--predicate",
+            "! grep -q BUG marker.txt", "--verify-good", "--json", out
+        ])
+        with open(out, encoding="utf-8") as handle:
+            report = json.load(handle)
+        self.assertEqual(report["action"], "escalate")
+        self.assertIn("last known-good", report["reason"])
+        self.assertEqual(report["commit"], "")
 
 
 if __name__ == "__main__":

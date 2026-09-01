@@ -1,0 +1,2 @@
+# Commit of the last nightly whose full suite was green. Written by
+# .github/workflows/nightly.yml; the bisect range starts here.

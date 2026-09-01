@@ -1,0 +1,262 @@
+name: Nightly
+
+# Tier 2 and rollout step 5 of esbmc/esbmc#6735: the full suite runs once a
+# night against master, and when it goes red the run works out what broke and
+# which commit did it, without touching the test and without an agent.
+#
+# One suite run serves both tiers. It gates, and the same JUnit report feeds the
+# per-test timings the fast lane sizes itself from -- measuring and gating
+# separately would mean paying for the four-hour suite twice a night.
+#
+# On red: re-run the failures in isolation to separate real breakage from
+# flakiness, then bisect the commits since the last green nightly using the
+# failing test as the predicate, then open an issue naming the commit. Nothing
+# here writes a fix; a human decides what to do about it.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  FAST_LANE_BUDGET_SECONDS: 900
+  FAST_LANE_JOBS: 2
+  DEFLAKE_ATTEMPTS: 3
+
+jobs:
+  suite:
+    name: Full suite
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    timeout-minutes: 360
+    outputs:
+      action: ${{ steps.report.outputs.action }}
+      test: ${{ steps.report.outputs.test }}
+      last-green: ${{ steps.baseline.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The report needs the commit range since the last green nightly.
+          fetch-depth: 0
+
+      - name: Read the last green baseline
+        id: baseline
+        run: |
+          sha=$(grep -v '^#' ci/last-green-nightly.txt | tr -d '[:space:]' | head -1)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "last green: ${sha:-none on record}"
+
+      # Same configuration as the PR Linux leg, so the durations describe the
+      # binary the fast lane will actually run.
+      - name: Build ESBMC
+        run: ./scripts/build.sh -b DebugOpt -e ON
+
+      - name: Run the full suite
+        id: suite
+        # This step must not fail: a red suite is the interesting case, and
+        # every step below has to run for it.
+        run: |
+          cd build
+          ctest -j"$(nproc)" --output-junit "$RUNNER_TEMP/junit.xml" . && rc=0 || rc=$?
+          echo "exit-code=$rc" >> "$GITHUB_OUTPUT"
+          echo "ctest exited $rc"
+
+      - name: Update the timing table
+        run: |
+          python3 scripts/ci/ctest_timings.py \
+            --junit "$RUNNER_TEMP/junit.xml" \
+            --output ci/test-timings.json \
+            --merge \
+            --commit "${{ github.sha }}" \
+            --runner "${{ runner.name }}" \
+            --jobs "$(nproc)"
+
+      - name: Freeze this week's fast-lane selection
+        run: |
+          week=$(python3 -c 'import datetime; y,w,_ = datetime.date.today().isocalendar(); print(f"{y}-W{w:02d}")')
+          out="ci/selected-tests-$week.txt"
+          if [ -f "$out" ]; then
+            echo "$out already exists; leaving this week's selection frozen."
+            exit 0
+          fi
+          python3 scripts/ci/select_tests.py \
+            --timings ci/test-timings.json \
+            --week "$week" \
+            --budget-seconds "$FAST_LANE_BUDGET_SECONDS" \
+            --jobs "$FAST_LANE_JOBS" \
+            --always-run ci/core-set.txt \
+            --output "$out" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      # Done here rather than in the bisect job because the build still exists:
+      # re-running a handful of tests costs seconds, rebuilding costs half an
+      # hour. Newly flaky tests are appended to the quarantine list, which the
+      # report below then excludes from its verdict.
+      - name: Separate real failures from flaky ones
+        if: ${{ steps.suite.outputs.exit-code != '0' }}
+        run: |
+          mapfile -t failing < <(python3 scripts/ci/nightly_report.py \
+            --junit "$RUNNER_TEMP/junit.xml" \
+            --commit "${{ github.sha }}" \
+            --quarantine ci/quarantine.txt \
+            --print-failures)
+          if [ "${#failing[@]}" -eq 0 ]; then
+            echo "every failure is already quarantined; nothing to de-flake"
+            exit 0
+          fi
+          args=()
+          for test in "${failing[@]}"; do args+=(--test "$test"); done
+          python3 scripts/ci/nightly_bisect.py deflake \
+            "${args[@]}" \
+            --build-dir build \
+            --attempts "$DEFLAKE_ATTEMPTS" \
+            --quarantine ci/quarantine.txt \
+            --json "$RUNNER_TEMP/deflake.json"
+
+      - name: Build the nightly report
+        id: report
+        run: |
+          python3 scripts/ci/nightly_report.py \
+            --junit "$RUNNER_TEMP/junit.xml" \
+            --commit "${{ github.sha }}" \
+            --last-green "${{ steps.baseline.outputs.sha }}" \
+            --quarantine ci/quarantine.txt \
+            --json "$RUNNER_TEMP/nightly.json" \
+            --issue-body "$RUNNER_TEMP/issue.md" \
+            --github-output "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/issue.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Record a new green baseline
+        if: ${{ steps.suite.outputs.exit-code == '0' }}
+        run: |
+          {
+            echo "# Commit of the last nightly whose full suite was green. Written by"
+            echo "# .github/workflows/nightly.yml; the bisect range starts here."
+            echo "${{ github.sha }}"
+          } > ci/last-green-nightly.txt
+
+      - name: Clean up temp directories
+        if: always()
+        run: rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-*
+
+      - name: Commit the nightly state
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: '[ci] nightly: timings, selection and baseline'
+          file_pattern: |
+            ci/test-timings.json
+            ci/selected-tests-*.txt
+            ci/last-green-nightly.txt
+            ci/quarantine.txt
+          commit_user_name: 'github-actions'
+          commit_user_email: 'github-actions@github.com'
+
+      - name: Upload the nightly report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-report
+          path: |
+            ${{ runner.temp }}/nightly.json
+            ${{ runner.temp }}/deflake.json
+            ${{ runner.temp }}/issue.md
+          retention-days: 30
+          if-no-files-found: ignore
+
+      # Filed before the bisect runs, so a red master is visible immediately
+      # rather than after several hours of rebuilds. The bisect job comments its
+      # answer onto this same issue when it finishes.
+      - name: Open an issue for the red nightly
+        if: ${{ steps.report.outputs.action != 'none' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "Nightly full suite failed on $(git rev-parse --short HEAD)" \
+            --label CI \
+            --body-file "$RUNNER_TEMP/issue.md" > nightly-issue.txt
+          cat nightly-issue.txt
+
+      - name: Pass the issue URL to the bisect job
+        if: ${{ steps.report.outputs.action == 'bisect' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-issue
+          path: nightly-issue.txt
+
+  bisect:
+    name: Bisect the regression
+    needs: suite
+    if: ${{ needs.suite.outputs.action == 'bisect' && needs.suite.outputs.test != '' }}
+    runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
+    # Every bisect step is a full rebuild, so this is hours rather than the
+    # minutes #6735 estimates from test runtime alone. ccache absorbs most of
+    # it, and a commit that fails to build is skipped, not blamed.
+    timeout-minutes: 720
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: nightly-issue
+
+      - name: Bisect
+        env:
+          BISECT_TEST: ${{ needs.suite.outputs.test }}
+        run: |
+          python3 scripts/ci/nightly_bisect.py bisect \
+            --repo . \
+            --good "${{ needs.suite.outputs.last-green }}" \
+            --bad "${{ github.sha }}" \
+            --predicate scripts/ci/bisect_predicate.sh \
+            --verify-good \
+            --json "$RUNNER_TEMP/bisect.json" \
+            --log "$RUNNER_TEMP/bisect.log" \
+            --comment "$RUNNER_TEMP/comment.md"
+
+      - name: Comment the result on the nightly issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue=$(cat nightly-issue.txt)
+          if [ ! -f "$RUNNER_TEMP/comment.md" ]; then
+            gh issue comment "$issue" \
+              --body "Automated bisect did not complete; see the workflow run."
+            exit 0
+          fi
+          cp "$RUNNER_TEMP/comment.md" comment.md
+          # Resolve the commit's GitHub login so the author is actually
+          # notified: a git author name is not a handle.
+          sha=$(jq -r '.commit // empty' "$RUNNER_TEMP/bisect.json")
+          if [ -n "$sha" ]; then
+            login=$(gh api "repos/${{ github.repository }}/commits/$sha" \
+                      --jq '.author.login // empty' || true)
+            if [ -n "$login" ]; then
+              printf '\ncc @%s\n' "$login" >> comment.md
+            fi
+          fi
+          gh issue comment "$issue" --body-file comment.md
+
+      - name: Upload the bisect log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bisect-log
+          path: |
+            ${{ runner.temp }}/bisect.json
+            ${{ runner.temp }}/bisect.log
+          retention-days: 30
+          if-no-files-found: ignore

@@ -1,0 +1,6 @@
+# Tests the nightly found to be intermittent: they failed, then passed on a
+# re-run in the same build. They are excluded from the nightly verdict, because
+# bisecting a flaky test finds a commit at random.
+#
+# Appended by `nightly_bisect.py deflake`. Entries are not removed
+# automatically -- take one out when the flakiness is actually fixed.
