@@ -1,3 +1,5 @@
+#pragma once
+
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/loop_unroll.h>
