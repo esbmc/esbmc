@@ -318,8 +318,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         current = w.source_value;
       }
 
-      // If we reached a symbol and all updates were constants, propagate
-      if (all_constant_updates && !is_member2t(current))
+      // The chain's base may itself be a member of an unpropagated symbol —
+      // that is how a nested member write `x.in.n = 4` spells itself — and the
+      // value stays self-contained because the base is already renamed.
+      if (all_constant_updates)
         return true;
     }
 
