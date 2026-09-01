@@ -235,6 +235,11 @@ struct affine_loopt
   expr2tc counter;
   expr2tc bound;
   expr2tc counter_entry;
+  /// The loop's entry condition, as computed by guard_condition. Carried out of
+  /// the recogniser rather than recomputed: a second call cannot fail once the
+  /// first succeeded on the same head, so recomputing it left an unreachable
+  /// error path and risked the two spellings drifting apart.
+  expr2tc cond;
   bool inclusive = true;
   std::vector<accumulatort> accumulators;
 };
@@ -335,10 +340,9 @@ bool recognise_affine_loop(
   if (!head->is_goto() || head == exit)
     return false;
 
-  expr2tc cond;
-  if (!guard_condition(head, cond))
+  if (!guard_condition(head, out.cond))
     return false;
-  if (!split_bound(cond, out.counter, out.bound, out.inclusive))
+  if (!split_bound(out.cond, out.counter, out.bound, out.inclusive))
     return false;
 
   const auto &modified = loop.get_modified_loop_vars();
@@ -483,11 +487,7 @@ void goto_synthesise_loop_invariants(goto_functionst &goto_functions)
       if (has_user_invariant(anchor, it->second.body.instructions.begin()))
         continue;
 
-      expr2tc cond;
-      if (!guard_condition(head, cond))
-        continue;
-
-      emit_invariant(it->second, anchor, head, shape, cond);
+      emit_invariant(it->second, anchor, head, shape, shape.cond);
       ++synthesised;
     }
   }

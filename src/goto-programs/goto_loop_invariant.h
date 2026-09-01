@@ -19,8 +19,7 @@
 /// to whichever loop happens to be nearby.
 extern const char *const kSynthesisedInvariantProperty;
 
-// Forward declaration: full definition is in frame_enforcer.h (included in
-// .cpp)
+// Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
 class frame_enforcert;
 
 /// \brief Entry point: process loop invariants for all functions.
@@ -73,8 +72,7 @@ protected:
   /// convert_loop_with_invariant after insert_inductive_step_and_termination.
   frame_enforcert *active_frame_enforcer = nullptr;
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
-  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT
-  /// step).
+  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
   std::vector<expr2tc> active_loop_assigns;
   /// Maximum number of instructions to search backwards from the loop head
   /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
@@ -152,10 +150,9 @@ protected:
  *   ASSUME(INV)
  *   ASSUME(loop_entry_cond)
  *   <copy of one loop-body iteration>
- *   ASSERT(INV)          [step case – tagged
- * property="invariant-inductive-step"] ASSUME(false)        [terminate Branch 1
- * – never fall through] original_loop_head:  [unchanged; k-induction will
- * transform this]
+ *   ASSERT(INV)          [step case – tagged property="invariant-inductive-step"]
+ *   ASSUME(false)        [terminate Branch 1 – never fall through]
+ *   original_loop_head:  [unchanged; k-induction will transform this]
  *
  * The branch uses std::list::splice() rather than insert_swap() so that
  * existing backward-GOTO targets (which point to original_loop_head) are
