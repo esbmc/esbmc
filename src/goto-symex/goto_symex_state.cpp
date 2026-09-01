@@ -233,6 +233,30 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
+/// Whether a constant aggregate literal may propagate: every element
+/// must itself propagate. A union literal may additionally carry a
+/// (typecast) symbol as its initializing member: constant_union records
+/// init_field, so a later cross-member read of the propagated literal
+/// is still visible as one -- the simplifier declines it and the SMT
+/// union encoding interprets it -- and propagation never loses which
+/// member was written. Struct and array literals keep the plain
+/// recursion: no measured workload needs more there.
+static bool aggregate_literal_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &expr)
+{
+  const bool is_union_literal = is_constant_union2t(expr);
+  bool noconst = true;
+
+  expr->foreach_operand([&](const expr2tc &e) {
+    if (
+      noconst && !(is_union_literal && is_immutable_value(e)) &&
+      !state.constant_propagation(e))
+      noconst = false;
+  });
+  return noconst;
+}
+
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   if (no_propagation)
@@ -437,26 +461,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
     is_constant_array2t(expr))
-  {
-    // A union literal may additionally carry a (typecast) symbol as its
-    // initializing member: constant_union records init_field, so a later
-    // cross-member read of the propagated literal is still visible as
-    // one -- the simplifier declines it and the SMT union encoding
-    // interprets it -- and propagation never loses which member was
-    // written. Struct and array literals keep the plain recursion: no
-    // measured workload needs more there.
-    const bool is_union_literal = is_constant_union2t(expr);
-    bool noconst = true;
-
-    expr->foreach_operand(
-      [this, &noconst, is_union_literal](const expr2tc &e) {
-        if (
-          noconst && !(is_union_literal && is_immutable_value(e)) &&
-          !constant_propagation(e))
-          noconst = false;
-      });
-    return noconst;
-  }
+    return aggregate_literal_may_propagate(*this, expr);
 
   if (is_constant_expr(expr))
     return true;
