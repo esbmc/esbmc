@@ -1,0 +1,5 @@
+CORE
+main.c
+--synthesise-loop-invariants --bitwuzla
+^Synthesised loop invariants for 1 loop$
+^VERIFICATION SUCCESSFUL$
