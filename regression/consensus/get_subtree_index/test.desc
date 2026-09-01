@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--incremental-bmc --function get_subtree_index
+^VERIFICATION FAILED$
