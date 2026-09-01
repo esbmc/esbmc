@@ -1373,11 +1373,23 @@ protected:
    */
   irep_idt guard_identifier_s;
   /**
+   *  Cap on guard_definitions and copy_definitions. Both grow linearly
+   *  with symex length (one entry per branching goto, one per bare
+   *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
+   *  copied whenever an execution state forks, so an interleaving-heavy
+   *  run would otherwise pay an unbounded per-fork cost. Past the cap,
+   *  recording stops: subsumption keeps matching against what was
+   *  recorded and never decides wrongly, it merely stops improving,
+   *  and the per-fork copy is bounded by the cap (~8 MB worst case).
+   *  Single-threaded runs never fork an execution state and only pay
+   *  the recording itself.
+   */
+  static constexpr size_t subsumption_map_capacity = 1 << 16;
+  /**
    *  Defining condition of each L2 guard symbol generation, i.e. the
    *  (renamed, simplified) rhs it was assigned in symex_goto. Guard
    *  symbols are SSA: each generation is assigned exactly once, so a
-   *  single map for the whole symex object is sound; execution-state
-   *  forks copy it along with the rest of the object. symex_goto uses
+   *  single map for the whole symex object is sound. symex_goto uses
    *  it to resolve path-guard conjuncts back to branch conditions —
    *  level2 renaming cannot do that, as it never substitutes into
    *  symbols that are already level2.

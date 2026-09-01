@@ -63,6 +63,8 @@ void goto_symext::record_copy_definition(
   // chase.
   if (!is_stable_value(rhs) || is_constant_expr(rhs))
     return;
+  if (copy_definitions.size() >= subsumption_map_capacity)
+    return;
 
   // Canonicalize so chains resolve in one substitution pass.
   expr2tc value = rhs;
@@ -386,7 +388,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       // assignment() renamed guard_expr to its fresh L2 generation;
       // remember what that generation stands for so later gotos can
       // resolve path-guard conjuncts back to branch conditions.
-      guard_definitions[guard_expr] = new_rhs;
+      if (guard_definitions.size() < subsumption_map_capacity)
+        guard_definitions[guard_expr] = new_rhs;
 
       target->assignment(
         gen_true_expr(),
