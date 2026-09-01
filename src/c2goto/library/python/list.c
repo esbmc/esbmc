@@ -695,7 +695,17 @@ size_t __ESBMC_list_index_range(
 
 /* ---------- extend list ---------- */
 
-void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
+// elem_size: the statically-known element byte width from the frontend, used
+// as the copy length so __ESBMC_copy_value sees a compile-time constant and
+// takes its branch-free fast path. Without it the length is the symbolic field
+// read elem->size, which drops the copy into memcpy's per-byte loop and
+// unwinds it once per element (__ESBMC_list_store_elem threads the same
+// constant for the same reason, see above). 0 means the frontend could not
+// supply a width and reproduces the previous behaviour exactly.
+void __ESBMC_list_extend(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t elem_size)
 {
   if (!l || !other)
     return;
@@ -706,8 +716,9 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
     const PyObject *elem = &other->items[i];
 
     // Reuse the float-aware copier so the SMT model tracks size.
+    size_t copy_size = (elem_size != 0) ? elem_size : elem->size;
     void *copied_value =
-      __ESBMC_copy_value(elem->value, elem->size, elem->type_id, 0, NULL, 0);
+      __ESBMC_copy_value(elem->value, copy_size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
     l->items[l->size].float_idx = elem->float_idx;

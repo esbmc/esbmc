@@ -27,6 +27,7 @@
 #include <goto-programs/add_restrict_assertions.h>
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/lift_call_expressions.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
@@ -296,6 +297,11 @@ bool esbmc_parseoptionst::create_goto_program(
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
+      // CBMC serialises some intrinsics (object_size) as expressions that
+      // migrate to calls; goto_convert never runs on a loaded binary, so
+      // nothing else lifts them out to statement level.
+      lift_call_expressions(context, goto_functions);
+
       if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
         return true;
 
@@ -466,6 +472,28 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     // retargets the call here. Deliberately not named __ESBMC_*: symex sends
     // every c:@F@__ESBMC* callee to run_intrinsic, which abort()s on a name it
     // does not know.
+    // The check-side counterpart. It must never allocate: these two variants
+    // ask whether the pointer *already* denotes an object that big, and
+    // satisfying them by allocating would mask the violation they exist to
+    // catch. Mirrors what CBMC's own check accepts -- a static object passes,
+    // a null one does not, and the extent is enforced.
+    // Takes the pointer *by value*: unlike the assume-side variants, which get
+    // &p so they can write a fresh object back through it, CBMC hands the
+    // check-side ones the pointer itself.
+    // Declared here rather than in the shared intrinsics preamble: a
+    // prototype visible to *every* translation unit makes each native
+    // __builtin_object_size call convert its argument to const void *, so the
+    // address-of a member arrives as a typecast and the object's own type is
+    // lost (regression/extensions/builtin_object_size8). Only this boilerplate
+    // calls it by name; the migrated CBMC irep gets its symbol from
+    // lift_call_expressions().
+    "__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);\n"
+    "_Bool __cbmc_is_fresh_check_impl(void *q, __SIZE_TYPE__ n)\n"
+    "{\n"
+    "  if (q == 0)\n"
+    "    return 0;\n"
+    "  return __ESBMC_builtin_object_size(q, 0) >= n;\n"
+    "}\n"
     "_Bool __cbmc_is_fresh_impl(void **p, __SIZE_TYPE__ n)\n"
     "{\n"
     "  void *q = malloc(n);\n"
@@ -499,7 +527,7 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
     "  (void *)isspace,   (void *)isupper,  (void *)isxdigit,\n"
     "  (void *)tolower,   (void *)toupper,\n"
     "  (void *)atoi,      (void *)atol,     (void *)strtol,\n"
-    "  (void *)__cbmc_is_fresh_impl,\n"
+    "  (void *)__cbmc_is_fresh_impl, (void *)__cbmc_is_fresh_check_impl,\n"
     "  (void *)fesetround, (void *)fegetround,\n"
     "};\n"
     "int main(void) { return 0; }\n";
