@@ -704,15 +704,16 @@ public:
   {
     if (n > _capacity)
     {
-      T *new_buf = static_cast<T *>(malloc(sizeof(T) * n));
-      __ESBMC_assume(new_buf);
-
-      // copy over existing values
-      for (int i = 0; i < _size; i++)
-        __construct_at(new_buf + i, buf[i]);
-
-      free(buf); // free old memory
-      buf = new_buf;
+      // realloc in place, as assign() already does: it preserves [0, _size),
+      // so no copy loop is needed, and it does not assign a fresh heap pointer
+      // into buf. That assignment is what cost us: a struct propagates as a
+      // constant only when every field does, and a malloc'd address never
+      // does, so storing one into buf dropped the constants of the sibling
+      // fields _size and _capacity. push_back could then not decide
+      // `_size == _capacity` and re-entered this loop on every call
+      // (docs/roadmap/symex-dead-work-cost-plan.md W5).
+      buf = static_cast<T *>(realloc(buf, sizeof(T) * n));
+      __ESBMC_assume(buf);
       _capacity = n;
     }
   }

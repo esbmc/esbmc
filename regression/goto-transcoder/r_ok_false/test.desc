@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.goto
 --binary library.goto
 ^VERIFICATION FAILED$

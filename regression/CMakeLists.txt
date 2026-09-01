@@ -240,6 +240,7 @@ endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
     set(REGRESSIONS_PYTHON_INTENSIVE python-intensive)
+    set(REGRESSIONS_CONSENSUS consensus)
     set(REGRESSIONS_MOPSA mopsa)
     set(REGRESSIONS_NUMPY numpy)
     set(REGRESSIONS_HUMANEVAL humaneval)
@@ -354,6 +355,7 @@ if(APPLE)
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
+                    ${REGRESSIONS_CONSENSUS}
                     ${REGRESSIONS_MOPSA}
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}
@@ -429,6 +431,7 @@ else()
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_PYTHON_INTENSIVE}
+                    ${REGRESSIONS_CONSENSUS}
                     ${REGRESSIONS_MOPSA}
                     ${REGRESSIONS_NUMPY}
                     ${REGRESSIONS_HUMANEVAL}

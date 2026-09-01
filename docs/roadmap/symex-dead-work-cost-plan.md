@@ -7,7 +7,14 @@
 [#7437](https://github.com/esbmc/esbmc/pull/7437),
 [#7438](https://github.com/esbmc/esbmc/pull/7438)). **W4 was re-scoped after
 measurement and not implemented as written**: §6 records why, and what replaces
-it. W5.2 is still an unlocalised investigation.
+it — the revised item landed as
+[#7440](https://github.com/esbmc/esbmc/pull/7440), with the underlying
+simplifier gap fixed by [#7441](https://github.com/esbmc/esbmc/pull/7441).
+§6.4 records the one taxed operation deliberately left alone, `remove`, and the
+measurement that rejected the obvious fix. W5.2 is now localised to a single
+condition (§7) but is still not a specified change.
+measurement that rejected the obvious fix. W5.2 is still an unlocalised
+investigation.
 **Origin:** [#7361](https://github.com/esbmc/esbmc/pull/7361), *"[python] Avoid
 duplicated shifts in `list.remove()`"*, which split a search loop and a shift
 loop that had been nested. This plan generalises that fix into a screening test
@@ -292,11 +299,45 @@ times. The **shift** loop still unwinds to the bound, because after the search
 residue of it behind.
 
 **W4 (revised).** Give a list model's loop a bound symex can decide when the
-list length is statically known. One change, four operations, and it is the
-same residual already flagged in #7436's description for slicing. `remove`
-needs more than a constant length — its start index is genuinely symbolic
-whenever the searched-for element is — so it may not fall to the same fix and
-should be measured separately before being assumed in scope.
+list length is statically known. One change, three of the four operations, and
+it is the same residual already flagged in #7436's description for slicing.
+Landed as [#7440](https://github.com/esbmc/esbmc/pull/7440): `__ESBMC_list_size`
+returned `l ? l->size : 0`, and a conditional on a pointer does not
+constant-propagate even when `l` is a concrete address, so every `len()`-bounded
+loop unwound to the bound. `sum` and `max` are flat afterwards.
+[#7441](https://github.com/esbmc/esbmc/pull/7441) fixes the underlying
+simplifier gap for C code, where the guard is syntactically an address-of.
+
+### 6.4 `remove` — measured, and deliberately not fixed
+
+The fourth taxed row does not fall to the same treatment, and the attempt is
+recorded here so it is not repeated. Walking every slot and guarding the shift
+on the found index does make the trip count concrete, and it works:
+
+| `xs.remove(0)`, 8 elements | u20 | u40 | u60 |
+|---|---:|---:|---:|
+| start the shift at `i` (master) | 2,122 | 2,382 | 2,642 |
+| start at 0, guard on `j >= i` | 2,041 | 2,041 | 2,041 |
+
+A 28-case differential agreed throughout, and Mode C discharged both arms of the
+new guard under Bitwuzla and Z3. **`regression/python/list_remove1` then failed,
+and the failure was real.** That test removes from a five-element list at
+`--unwind 4`: starting the shift at `i` needs `size - 1 - i` = 3 iterations,
+starting at 0 needs `size - 1` = 4, so the model reports
+`unwinding assertion loop 144` and only passes from `--unwind 5`.
+
+That is a user-visible change to the bound every `remove` requires, not merely
+a cost trade — an existing program with a tight `--unwind` would begin reporting
+a spurious unwinding violation. Against it, `remove` is the *smallest* of the
+four taxed rows at +13 assignments per unit of `--unwind`. The trade is bad, so
+the change was reverted.
+
+**What this row would actually need** is a decidable *start* index, not a
+decidable length: `i` is the search's result and is genuinely symbolic whenever
+the removed element is. Folding the search for a constant list and a constant
+argument would give that, which is the original W4's constant-folding idea
+arriving by another route — and it belongs in the same frontend-performance item
+(§6.1), not here.
 
 **The original W4 is not dropped, but it is not this plan.** Constant-folding
 list operations remains worthwhile on its own terms; it belongs in a
@@ -335,9 +376,11 @@ That constant propagation is the mechanism is confirmed directly: passing
 `--no-propagation` to the cheap `reserve(8)` case reproduces the expensive
 behaviour (1 trace line → 151).
 
-**Root cause, reduced.** The reduction removes C++, templates, `std::vector` and
-`free` entirely. What breaks propagation is a struct field acquiring a *second*
-candidate dynamic object:
+**Root cause, reduced and then corrected.** The reduction removes C++,
+templates, `std::vector` and `free` entirely. The first write-up of this section
+blamed *a write through a pointer with two candidate objects*. A finer ablation
+shows that is wrong on both counts: the write is not involved, and neither is
+the number of candidate objects.
 
 ```c
 struct V { int *buf; int size; };
@@ -345,37 +388,55 @@ struct V { int *buf; int size; };
 v.buf = malloc(40); __ESBMC_assume(v.buf); v.size = 0;
 
 int *nb = malloc(44); __ESBMC_assume(nb);
-v.buf = nb;                     /* buf now has two candidate objects */
+v.buf = nb;                     /* this line alone is the trigger */
 
-v.buf[v.size] = 7; v.size++;    /* a write through it ... */
-int j = 0; while (j < v.size - 1) j++;   /* ... drops size's constant */
-assert(j == 0);                 /* loop unwinds to the bound */
+v.size++;
+int j = 0; while (j < v.size - 1) j++;   /* unwinds to the bound */
+assert(j == 0);
 ```
 
 Ablation, `--unwind 20`, counting all loop-unwinding lines:
 
 | variant | unwinds |
 |---|---:|
-| baseline, no reallocation | 0 |
-| second `malloc`, result unused | 0 |
-| **second `malloc`, assigned to `v.buf`** | **20** |
-| `free(v.buf)` then `malloc` into `v.buf` | 20 |
-| full free-and-swap | 20 |
+| `v.size++` alone | 0 |
+| write through `v.buf`, constant index | 0 |
+| write through `v.buf`, index is `v.size` | 0 |
+| **`v.buf = <malloc'd pointer>`, no write at all** | **20** |
+| `v.buf = &local` | 0 |
+| `v.buf = NULL` | 0 |
+| `v.buf = nb` where `nb` holds `&local` | 0 |
 
-`free` is not involved. The write through the two-candidate pointer clobbers the
-propagated constant of `size`, an *unrelated field of the same struct*.
+The value sets are identical in the folding and non-folding cases — NULL plus
+one dynamic object either way — so "two candidate objects" was never the
+mechanism.
+
+**The mechanism.** `goto_symex_statet::constant_propagation` propagates a
+struct only when *every* update in its `with` chain is itself propagatable
+(`goto_symex_state.cpp:313`). A malloc'd address is not propagatable, an
+`address_of` or NULL is. So storing a heap pointer into one field silently
+drops the propagated constants of **every other field of that struct** — which
+is why `_size` and `_capacity` stopped folding the moment `reserve` allocated.
+The existing comment there already anticipates half of this ("a propagatable
+pointer-typed field update ... does not poison the whole struct"); the gap is
+that a heap pointer is never propagatable, so it still poisons.
 
 **Fix, two levels, independently useful.**
 
 1. *In the model.* `reserve` should `realloc` in place the way `assign()`
    already does — `vector:467` records that "realloc preserves the existing
-   objects, so `[0, min(_size, n))` stays live". One dynamic object, no copy
-   loop, and the trigger in the reduction never fires.
-2. *In symex.* A write through a pointer whose value set resolves to a single
-   known object should not drop propagation for sibling fields. **This half is
-   not yet traced to a line in symex** — the reduction above localises the
-   trigger, not the code that acts on it. Treat level 2 as a scoped
-   investigation, not a specified change.
+   objects, so `[0, min(_size, n))` stays live". No fresh heap pointer is
+   stored into `buf`, so the trigger never fires. Landed as
+   [#7437](https://github.com/esbmc/esbmc/pull/7437).
+2. *In symex.* Aggregate propagation is all-or-nothing, and it need not be: a
+   `with` chain whose unknown field is left symbolic would still answer reads
+   of the other fields correctly. **Now localised to one condition**, which is
+   the advance over the previous draft — but still not a specified change. The
+   obstacle is representational: propagated values stand in for a symbol later,
+   so embedding a non-constant sub-expression is only sound if that
+   sub-expression is a fixed L2 snapshot. Anyone taking this on should treat
+   the soundness of that substitution as the whole problem, and should expect
+   to need the full regression suite rather than a subset.
 
 Level 1 is sufficient to fix `std::vector` and is the smaller change. Every
 container model that reallocates is exposed to the same trigger and should be
@@ -456,8 +517,10 @@ Python gains.
 - **No verdict changes were observed or looked for.** Every program measured
   returns `VERIFICATION SUCCESSFUL` on master; this plan is about cost, and none
   of the items is a soundness finding.
-- **W5's symex half (§7, level 2) is unlocalised.** The reduction identifies the
-  trigger; it does not identify the code that responds to it.
+- **W5's symex half (§7, level 2) is localised but unfixed.** It is the
+  all-or-nothing aggregate rule at `goto_symex_state.cpp:313`. What is not
+  established is whether propagating a partially-symbolic aggregate is sound;
+  that, not finding the line, is the remaining work.
 - **The regression-suite impact is unmeasured.** How much of the suite's wall
   time these items account for has not been quantified, so the ordering in §9
   was by reach and cost of the change, not by measured suite savings — which is
