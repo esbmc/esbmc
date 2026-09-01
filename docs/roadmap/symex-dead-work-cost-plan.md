@@ -1,13 +1,26 @@
 # Plan — cost paid for paths that cannot execute (the #7361 defect class)
 
-**Status:** survey complete, six work items identified, **none started**. No
-patch has been written or verified against any of them.
+**Status:** W1, W2, W3, W5.1 and W6 implemented and in review (PRs
+[#7432](https://github.com/esbmc/esbmc/pull/7432),
+[#7435](https://github.com/esbmc/esbmc/pull/7435),
+[#7436](https://github.com/esbmc/esbmc/pull/7436) — stacked on #7435 —
+[#7437](https://github.com/esbmc/esbmc/pull/7437),
+[#7438](https://github.com/esbmc/esbmc/pull/7438)). **W4 was re-scoped after
+measurement and not implemented as written**: §6 records why, and what replaces
+it — the revised item landed as
+[#7440](https://github.com/esbmc/esbmc/pull/7440), with the underlying
+simplifier gap fixed by [#7441](https://github.com/esbmc/esbmc/pull/7441).
+§6.4 records the one taxed operation deliberately left alone, `remove`, and the
+measurement that rejected the obvious fix. W5.2 is now localised to a single
+condition (§7) but is still not a specified change.
+measurement that rejected the obvious fix. W5.2 is still an unlocalised
+investigation.
 **Origin:** [#7361](https://github.com/esbmc/esbmc/pull/7361), *"[python] Avoid
 duplicated shifts in `list.remove()`"*, which split a search loop and a shift
 loop that had been nested. This plan generalises that fix into a screening test
 (§2) and applies it across the Python and C++ operational models and the
 `memcpy`/`memcmp` intrinsics.
-**Last updated:** 2026-08-30.
+**Last updated:** 2026-08-30 (§6 re-scoped against measurement).
 
 **Measurement environment.** All numbers below were measured on an aarch64 macOS
 host against `build/src/esbmc/esbmc`, ESBMC 8.5.0, built from master
@@ -214,18 +227,20 @@ Python frontend does not produce.
 
 ---
 
-## 6. W4 — constant lists are not folded, though constant strings are
+## 6. W4 — re-scoped: folding is not this plan's defect class
 
-**Where.** `src/python-frontend/`. The constant folding added for `str` in
-PRs #7373, #7374 and #7375 has no `list` counterpart.
+**This item is not what the survey said it was.** As first written, W4 proposed
+constant-folding list operations, on the strength of the `str`-versus-`list`
+table below. Re-running §2's screening test against a build carrying W1, W2 and
+W3 shows that the operations it named do **not** pay an unwind tax, so they are
+outside the class this plan is about. What replaces W4 is stated at the end of
+this section.
 
-A Python program whose lists are entirely literal is decidable at conversion
-time. Strings already are; lists are handed to the C model and symbolically
-executed in full. This is the widest single gap in the Python frontend's cost
-profile, and it subsumes the common case of W1 and W3 without touching the
-model.
+### 6.1 The original observation, which still holds
 
-`str` operations over constant operands, `--unwind 24`, assignments:
+`str` operations over constant operands are decided at conversion time and cost
+essentially nothing, flat in the length of the string; `list` operations are
+handed to the C model. `--unwind 24`, assignments:
 
 | operation | n=4 | n=8 | n=16 |
 |---|---:|---:|---:|
@@ -235,27 +250,99 @@ model.
 | `s.split(…)` | 196 | 196 | 249 |
 | `s.upper()` | 129 | 161 | 225 |
 
-`list` operations over constant lists, `--unwind 60`, assignments:
+That asymmetry is real, and folding list operations would still be a speedup.
+It is simply a *different* optimisation: it removes real work by evaluating it
+early, rather than removing work that can never run.
 
-| operation | n=4 | n=8 | n=16 |
+### 6.2 What the screening test says
+
+§2's test is the arbiter: hold the program constant and raise `--unwind`; any
+growth is work on a path that cannot execute. Applied to every list operation
+at n=16, on a build carrying W1+W2+W3:
+
+| operation | u20 | u40 | u60 | unwind tax |
+|---|---:|---:|---:|---|
+| `append` | 996 | 996 | 996 | no |
+| `insert(0, …)` | 1,291 | 1,291 | 1,291 | no |
+| `pop(0)` | 1,165 | 1,165 | 1,165 | no |
+| `index` / `count` | 939 | 939 | 939 | no |
+| `reverse` | 1,172 | 1,172 | 1,172 | no |
+| `x in xs` | 1,894 | 1,894 | 1,894 | no |
+| `xs == ys` | 3,671 | 3,671 | 3,671 | no |
+| `copy` | 3,513 | 3,513 | 3,513 | no |
+| `sorted(xs)` | 1,877 | 1,877 | 1,877 | no |
+| **`remove`** | 2,122 | 2,382 | **2,642** | **yes** |
+| **`sum`** | 2,637 | 4,337 | **6,037** | **yes** |
+| **`max`** | 2,762 | 4,502 | **6,242** | **yes** |
+| **`xs[1:]`** | 4,556 | 8,136 | **11,716** | **yes** |
+
+Every operation W4 named — `index`, `count`, `in`, `==` — is flat. Two of them
+are moot for a further reason: `[10, 20, 30].index(20)` is **already folded**
+today (77 assignments, 1 VCC), and `x in [1, 2, 3]` costs 361 assignments.
+
+### 6.3 What is actually left, and why it is one item
+
+The four taxed rows share a single cause, confirmed from their unwinding
+profiles: **a loop whose trip count symex cannot decide.**
+
+| operation | the loop | why the bound does not fold |
+|---|---|---|
+| `sum` | injected Python model, line 265 | bound is the list length read at runtime |
+| `max` | injected Python model, line 41 | same |
+| `xs[1:]` | the slice lowering's own loop | bound is `__ESBMC_list_size(...)` |
+| `remove` | `list.c:1208`, the **shift** loop | starts at the symbolic found-index, so `j < l->size - 1` stays open |
+
+The `remove` row is worth stating plainly: #7361, the origin of this plan, split
+that routine's search and shift loops. The **search** loop now runs exactly *n*
+times. The **shift** loop still unwinds to the bound, because after the search
+`j` begins at a symbolic index. The fix that named this defect class left a
+residue of it behind.
+
+**W4 (revised).** Give a list model's loop a bound symex can decide when the
+list length is statically known. One change, three of the four operations, and
+it is the same residual already flagged in #7436's description for slicing.
+Landed as [#7440](https://github.com/esbmc/esbmc/pull/7440): `__ESBMC_list_size`
+returned `l ? l->size : 0`, and a conditional on a pointer does not
+constant-propagate even when `l` is a concrete address, so every `len()`-bounded
+loop unwound to the bound. `sum` and `max` are flat afterwards.
+[#7441](https://github.com/esbmc/esbmc/pull/7441) fixes the underlying
+simplifier gap for C code, where the guard is syntactically an address-of.
+
+### 6.4 `remove` — measured, and deliberately not fixed
+
+The fourth taxed row does not fall to the same treatment, and the attempt is
+recorded here so it is not repeated. Walking every slot and guarding the shift
+on the found index does make the trip count concrete, and it works:
+
+| `xs.remove(0)`, 8 elements | u20 | u40 | u60 |
 |---|---:|---:|---:|
-| `xs.append(…)` | 360 | 572 | 996 |
-| `xs.index` / `xs.count` | 303 | 515 | 939 |
-| `x in xs` | 454 | 870 | 1,894 |
-| `xs == ys` | 707 | 1,503 | 3,671 |
-| `xs.copy()` | 837 | 1,633 | 3,513 |
-| `xs.extend(ys)` | 5,478 | 14,970 | 46,338 |
-| `xs.sort()` | 15,683 | 99,609 | error |
-| `xs[1:]` | 86,368 | 117,544 | timeout |
+| start the shift at `i` (master) | 2,122 | 2,382 | 2,642 |
+| start at 0, guard on `j >= i` | 2,041 | 2,041 | 2,041 |
 
-**The two tables use different bounds and their absolute values are not
-comparable.** What is comparable is the shape: the `str` rows are flat in *n*,
-the `list` rows are flat in nothing. (`timeout` is the 200 s cap; `error` is
-`xs.sort()` at n=16 under `--unwind 60`.)
+A 28-case differential agreed throughout, and Mode C discharged both arms of the
+new guard under Bitwuzla and Z3. **`regression/python/list_remove1` then failed,
+and the failure was real.** That test removes from a five-element list at
+`--unwind 4`: starting the shift at `i` needs `size - 1 - i` = 3 iterations,
+starting at 0 needs `size - 1` = 4, so the model reports
+`unwinding assertion loop 144` and only passes from `--unwind 5`.
 
-**Fix.** Extend constant folding to list operations whose receiver and arguments
-are compile-time constants, in increasing order of difficulty: `index`, `count`,
-`in`, `==`, slicing with constant bounds, `sort`.
+That is a user-visible change to the bound every `remove` requires, not merely
+a cost trade — an existing program with a tight `--unwind` would begin reporting
+a spurious unwinding violation. Against it, `remove` is the *smallest* of the
+four taxed rows at +13 assignments per unit of `--unwind`. The trade is bad, so
+the change was reverted.
+
+**What this row would actually need** is a decidable *start* index, not a
+decidable length: `i` is the search's result and is genuinely symbolic whenever
+the removed element is. Folding the search for a constant list and a constant
+argument would give that, which is the original W4's constant-folding idea
+arriving by another route — and it belongs in the same frontend-performance item
+(§6.1), not here.
+
+**The original W4 is not dropped, but it is not this plan.** Constant-folding
+list operations remains worthwhile on its own terms; it belongs in a
+frontend-performance item, not here, and should not be justified by this plan's
+screening test.
 
 ---
 
@@ -289,9 +376,11 @@ That constant propagation is the mechanism is confirmed directly: passing
 `--no-propagation` to the cheap `reserve(8)` case reproduces the expensive
 behaviour (1 trace line → 151).
 
-**Root cause, reduced.** The reduction removes C++, templates, `std::vector` and
-`free` entirely. What breaks propagation is a struct field acquiring a *second*
-candidate dynamic object:
+**Root cause, reduced and then corrected.** The reduction removes C++,
+templates, `std::vector` and `free` entirely. The first write-up of this section
+blamed *a write through a pointer with two candidate objects*. A finer ablation
+shows that is wrong on both counts: the write is not involved, and neither is
+the number of candidate objects.
 
 ```c
 struct V { int *buf; int size; };
@@ -299,37 +388,55 @@ struct V { int *buf; int size; };
 v.buf = malloc(40); __ESBMC_assume(v.buf); v.size = 0;
 
 int *nb = malloc(44); __ESBMC_assume(nb);
-v.buf = nb;                     /* buf now has two candidate objects */
+v.buf = nb;                     /* this line alone is the trigger */
 
-v.buf[v.size] = 7; v.size++;    /* a write through it ... */
-int j = 0; while (j < v.size - 1) j++;   /* ... drops size's constant */
-assert(j == 0);                 /* loop unwinds to the bound */
+v.size++;
+int j = 0; while (j < v.size - 1) j++;   /* unwinds to the bound */
+assert(j == 0);
 ```
 
 Ablation, `--unwind 20`, counting all loop-unwinding lines:
 
 | variant | unwinds |
 |---|---:|
-| baseline, no reallocation | 0 |
-| second `malloc`, result unused | 0 |
-| **second `malloc`, assigned to `v.buf`** | **20** |
-| `free(v.buf)` then `malloc` into `v.buf` | 20 |
-| full free-and-swap | 20 |
+| `v.size++` alone | 0 |
+| write through `v.buf`, constant index | 0 |
+| write through `v.buf`, index is `v.size` | 0 |
+| **`v.buf = <malloc'd pointer>`, no write at all** | **20** |
+| `v.buf = &local` | 0 |
+| `v.buf = NULL` | 0 |
+| `v.buf = nb` where `nb` holds `&local` | 0 |
 
-`free` is not involved. The write through the two-candidate pointer clobbers the
-propagated constant of `size`, an *unrelated field of the same struct*.
+The value sets are identical in the folding and non-folding cases — NULL plus
+one dynamic object either way — so "two candidate objects" was never the
+mechanism.
+
+**The mechanism.** `goto_symex_statet::constant_propagation` propagates a
+struct only when *every* update in its `with` chain is itself propagatable
+(`goto_symex_state.cpp:313`). A malloc'd address is not propagatable, an
+`address_of` or NULL is. So storing a heap pointer into one field silently
+drops the propagated constants of **every other field of that struct** — which
+is why `_size` and `_capacity` stopped folding the moment `reserve` allocated.
+The existing comment there already anticipates half of this ("a propagatable
+pointer-typed field update ... does not poison the whole struct"); the gap is
+that a heap pointer is never propagatable, so it still poisons.
 
 **Fix, two levels, independently useful.**
 
 1. *In the model.* `reserve` should `realloc` in place the way `assign()`
    already does — `vector:467` records that "realloc preserves the existing
-   objects, so `[0, min(_size, n))` stays live". One dynamic object, no copy
-   loop, and the trigger in the reduction never fires.
-2. *In symex.* A write through a pointer whose value set resolves to a single
-   known object should not drop propagation for sibling fields. **This half is
-   not yet traced to a line in symex** — the reduction above localises the
-   trigger, not the code that acts on it. Treat level 2 as a scoped
-   investigation, not a specified change.
+   objects, so `[0, min(_size, n))` stays live". No fresh heap pointer is
+   stored into `buf`, so the trigger never fires. Landed as
+   [#7437](https://github.com/esbmc/esbmc/pull/7437).
+2. *In symex.* Aggregate propagation is all-or-nothing, and it need not be: a
+   `with` chain whose unknown field is left symbolic would still answer reads
+   of the other fields correctly. **Now localised to one condition**, which is
+   the advance over the previous draft — but still not a specified change. The
+   obstacle is representational: propagated values stand in for a symbol later,
+   so embedding a non-constant sub-expression is only sound if that
+   sub-expression is a fixed L2 snapshot. Anyone taking this on should treat
+   the soundness of that substitution as the whole problem, and should expect
+   to need the full regression suite rather than a subset.
 
 Level 1 is sufficient to fix `std::vector` and is the smaller change. Every
 container model that reallocates is exposed to the same trigger and should be
@@ -382,28 +489,51 @@ treatment is open.
 | W2 | Python OM + frontend | W6 | fix pattern already in the same file |
 | W3 | Python OM | W2 | shares W2's mechanism |
 | W5.1 | C++ OM | all others | `realloc` in `reserve` |
-| W4 | Python frontend | W1, W3 | largest, subsumes their common case |
+| W4 (revised) | Python models + frontend | W1–W3, W6 | decidable loop bounds; see §6.3 |
 | W5.2 | symex core | W5.1 | investigation, not a specified change |
 
 W6 and W1–W3 overlap deliberately: W6 makes the fallback cheap, W1–W3 stop
 reaching it. Either alone is an improvement; both together are the correct end
 state, because a model should not depend on an intrinsic's cap to be affordable.
 
+The order above was written before anything was built, and §10 warned it was
+ranked by reach rather than measured savings. W6 was ranked first for widest
+reach; that was wrong for the Python models, because a pointer with more than
+one candidate object defeats `memcmp_resolve_operand` before `n` is considered
+at all — 8 unwindings with two candidates against 0 with one, at *constant* `n`.
+Every Python list payload is its own `alloca`, so W6 does not fire there. W1–W3
+sidestep the intrinsic instead of relying on it, which is why they carried the
+Python gains.
+
 ---
 
 ## 10. What this plan does *not* establish
 
-- **No fix has been written, built or verified.** Every "fix" above is a
-  proposal derived from the measurement, not a tested change.
+- **W1, W2, W3, W5.1 and W6 are implemented and in review; nothing is merged.**
+  The measurements quoted inside each section are the survey's, taken before any
+  patch; the before/after numbers live in the pull requests. W4 was re-scoped
+  rather than implemented (§6) and W5.2 is still unlocalised, so two of the
+  seven items remain proposals.
 - **No verdict changes were observed or looked for.** Every program measured
   returns `VERIFICATION SUCCESSFUL` on master; this plan is about cost, and none
   of the items is a soundness finding.
-- **W5's symex half (§7, level 2) is unlocalised.** The reduction identifies the
-  trigger; it does not identify the code that responds to it.
+- **W5's symex half (§7, level 2) is localised but unfixed.** It is the
+  all-or-nothing aggregate rule at `goto_symex_state.cpp:313`. What is not
+  established is whether propagating a partially-symbolic aggregate is sound;
+  that, not finding the line, is the remaining work.
 - **The regression-suite impact is unmeasured.** How much of the suite's wall
-  time these items account for has not been quantified, so the ordering in §9 is
-  by reach and cost of the change, not by measured suite savings.
+  time these items account for has not been quantified, so the ordering in §9
+  was by reach and cost of the change, not by measured suite savings — which is
+  why it needed the correction recorded there.
 - **Per the repo's own rule, each item needs a regression *pair* and a
   mutation check.** For cost-only changes the pair pins the semantics the fix
-  must preserve, not the cost; a cost regression needs its own counted oracle,
-  which does not yet exist in `regression/`.
+  must preserve, and passes both before and after — so it cannot be
+  mutation-checked by reverting the fix, and must be checked against a
+  deliberately *wrong* version of the change instead.
+- **The counted cost oracle this section called for now exists.** Each
+  implemented item carries a test pinning `^Generated [0-9]{1,N} VCC\(s\)` at a
+  bound chosen so the digit count separates the patched binary from the
+  unpatched one, following the exact-count precedent in
+  `regression/esbmc/descending_pointer_walk`. Pick N by measurement: at
+  `--unwind 40` W5.1's control still fitted four digits and the oracle did not
+  bite, which `--unwind 80` fixed.
