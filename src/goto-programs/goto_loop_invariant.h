@@ -1,15 +1,6 @@
 #ifndef GOTO_PROGRAMS_GOTO_LOOP_INVARIANT_H_
 #define GOTO_PROGRAMS_GOTO_LOOP_INVARIANT_H_
 
-/// Property tag that goto_synthesise_loop_invariants stamps on the
-/// LOOP_INVARIANT markers it emits. The extractor here accepts a tagged marker
-/// only when it sits immediately before the loop head it is being extracted
-/// for; a user-written __ESBMC_loop_invariant carries no tag and keeps the
-/// looser proximity rule. Without the tag the two passes share nothing but a
-/// 10-instruction window, and a synthesised invariant silently attaches itself
-/// to whichever loop happens to be nearby.
-extern const char *const kSynthesisedInvariantProperty;
-
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
 #include <irep2/irep2_guard.h>
@@ -18,6 +9,15 @@ extern const char *const kSynthesisedInvariantProperty;
 #include <set>
 #include <unordered_set>
 #include <vector>
+
+/// Property tag that goto_synthesise_loop_invariants stamps on the
+/// LOOP_INVARIANT markers it emits. The extractor here accepts a tagged marker
+/// only when it sits immediately before the loop head it is being extracted
+/// for; a user-written __ESBMC_loop_invariant carries no tag and keeps the
+/// looser proximity rule. Without the tag the two passes share nothing but a
+/// 10-instruction window, and a synthesised invariant silently attaches itself
+/// to whichever loop happens to be nearby.
+extern const char *const kSynthesisedInvariantProperty;
 
 // Forward declaration: full definition is in frame_enforcer.h (included in
 // .cpp)

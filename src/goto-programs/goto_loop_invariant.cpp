@@ -56,7 +56,7 @@ const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 /// was emitted for. The marker is inserted immediately before that head, so
 /// only bookkeeping and the assumes a later pass (--interval-analysis) injects
 /// can legitimately intervene.
-bool is_inert_before_loop_head(goto_programt::const_targett t)
+static bool is_inert_before_loop_head(goto_programt::const_targett t)
 {
   return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
          t->is_assume();
@@ -155,7 +155,17 @@ static std::vector<expr2tc> extract_invariants_near(
     if (
       it->location.property().as_string() == kSynthesisedInvariantProperty &&
       crossed_real_instruction)
+    {
+      // Today this only fires on a marker emitted for a different loop, and the
+      // count line has already reported it as synthesised. Say so rather than
+      // drop it silently: the rule leans on the marker sitting immediately
+      // before its own head, so if a future pass ever inserts real work there,
+      // invariants would start disappearing with no signal at all.
+      log_debug(
+        "loop-invariant",
+        "ignoring a synthesised loop invariant that belongs to another loop");
       return invariants;
+    }
 
     collect(inv_list);
 

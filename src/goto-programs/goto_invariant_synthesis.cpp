@@ -152,14 +152,13 @@ bool has_user_invariant(
 }
 
 /// Value of `var` on entry to the loop: the nearest preceding assignment in the
-/// straight-line prologue, provided its RHS cannot change inside the loop.
+/// straight-line prologue, and only when its RHS is a literal.
 /// Returns false when the scan meets control flow first, so the value we would
 /// report might not be the one that reaches the head.
 bool entry_value(
   const goto_programt::targett &head,
   const goto_programt::targett &begin,
   const expr2tc &var,
-  const loopst::loop_varst &modified,
   expr2tc &value)
 {
   goto_programt::targett it = head;
@@ -178,6 +177,15 @@ bool entry_value(
       continue;
 
     const auto &assign = to_code_assign2t(it->code);
+
+    // A write through a dereference, member or index (`*p = 5`, `q->v = 5`,
+    // `w[0] = 9`) may land on `var` itself. It compares unequal, so skipping it
+    // would let the scan walk past and report an older, stale constant -- the
+    // same defect as a symbolic RHS, reached by a different spelling. We cannot
+    // show it does not alias, so stop.
+    if (!is_symbol2t(assign.target))
+      return false;
+
     if (assign.target != var)
       continue;
 
@@ -297,7 +305,7 @@ static bool classify_accumulators(
       return false;
     if (mentions_modified_var(acc.addend, modified))
       return false;
-    if (!entry_value(head, begin, acc.var, modified, acc.entry))
+    if (!entry_value(head, begin, acc.var, acc.entry))
       return false;
 
     out.accumulators.push_back(acc);
@@ -346,7 +354,7 @@ bool recognise_affine_loop(
     return false;
 
   const goto_programt::targett begin = goto_function.body.instructions.begin();
-  if (!entry_value(head, begin, out.counter, modified, out.counter_entry))
+  if (!entry_value(head, begin, out.counter, out.counter_entry))
     return false;
   if (!entry_admits_two_disjunct_bound(out.counter_entry, out.inclusive))
     return false;
@@ -377,7 +385,9 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
   // accumulator's closed form describes a state the loop can never reach. That
   // shows up as a false alarm on the user's own in-loop assertions, and as
   // overflow claims on arithmetic the user never wrote. Costs one comparison
-  // and no extra multiplier branch; for i0 == 0 it simplifies away entirely.
+  // and no extra multiplier branch; for i0 == 0 it simplifies away entirely, so
+  // with today's admitted entry values it does work only in the `<=`, i0 == 1
+  // case. Relaxing entry_admits_two_disjunct_bound would widen that.
   inv = and2tc(
     inv,
     greaterthanequal2tc(
