@@ -953,6 +953,13 @@ protected:
    *  @param expr Expression we're replacing the contents of.
    */
   void replace_dynamic_allocation(expr2tc &expr);
+
+  /// The named object \p ptr addresses, resolved through the value set, or nil.
+  expr2tc value_set_named_object(const expr2tc &ptr);
+  bool resolve_valid_object_by_value_set(expr2tc &expr, const expr2tc &obj_ref);
+  bool resolve_dynamic_size_by_value_set(expr2tc &expr);
+  void replace_valid_object(expr2tc &expr);
+  void replace_dynamic_size(expr2tc &expr);
   void default_replace_dynamic_allocation(expr2tc &expr);
 
   /**
