@@ -7,6 +7,8 @@
 #include <boost/multi_index_container.hpp>
 #include <memory>
 #include <mutex>
+#include <set>
+#include <utility>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
@@ -810,6 +812,18 @@ public:
   smt_astt convert_bitcast(const expr2tc &expr);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
+  /** Record every division's operand pair in @p expr, recursively. The
+   *  modulus conversion consults these: a remainder whose operands are
+   *  also divided somewhere in the formula lowers compositionally as
+   *  a - (a / b) * b, sharing the division term, which turns a
+   *  rem-vs-div equivalence from a pointwise circuit comparison into a
+   *  structural one. A remainder with no matching division keeps the
+   *  solver's rem primitive and its native rewrites -- lowering those
+   *  too costs 3-5x on rem-heavy proofs (math.gcd-style loops). */
+  void note_division_operands(const expr2tc &expr);
+  /** Encode a remainder: compositional via the matching division when
+   *  one exists in the formula, the solver's rem primitive otherwise. */
+  smt_astt convert_modulus(const modulus2t &m, smt_astt a, smt_astt b);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
 
@@ -828,6 +842,9 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
+
+  /** Operand pairs of every division seen by note_division_operands. */
+  std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
   /** Create and assert address space constraints on the given object ID
    *  number. Essentially, this asserts that all the objects to date don't
    *  overlap with /this/ one. */

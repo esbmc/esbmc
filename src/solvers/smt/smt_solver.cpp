@@ -978,37 +978,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::modulus_id:
-  {
-    auto m = to_modulus2t(expr);
-
-    if (int_encoding)
-    {
-      a = mk_mod(args[0], args[1]);
-    }
-    else if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
-    {
-      a = mk_bvsmod(args[0], args[1]);
-    }
-    else
-    {
-      // Lower the remainder compositionally as a - (a / b) * b, its
-      // SMT-LIB defining identity (exact for every valuation: rem and
-      // div are co-defined for b == 0 and wrap consistently on
-      // MIN / -1). When the formula also contains the division of the
-      // same operands — remainder checks, spec renderings of the C99
-      // 6.5.5 identity, strength-reduced div/mod pairs — the solver's
-      // structural sharing collapses what would otherwise be a
-      // pointwise equivalence proof between two unrelated circuits,
-      // which is infeasible to bit-blast already at 32 bits.
-      assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
-      smt_astt quot =
-        (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
-          ? mk_bvudiv(args[0], args[1])
-          : mk_bvsdiv(args[0], args[1]);
-      a = mk_bvsub(args[0], mk_bvmul(quot, args[1]));
-    }
+    a = convert_modulus(to_modulus2t(expr), args[0], args[1]);
     break;
-  }
   case expr2t::index_id:
   {
     a = convert_array_index(expr);
@@ -1841,6 +1812,50 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     smt_cache.insert(entry);
   }
   return a;
+}
+
+/// Encode a remainder. When the formula also divides the SAME operands
+/// — remainder checks, spec renderings of the C99 6.5.5 identity,
+/// strength-reduced div/mod pairs — the remainder lowers
+/// compositionally as a - (a / b) * b, its SMT-LIB defining identity
+/// (exact for every valuation: rem and div are co-defined for b == 0
+/// and wrap consistently on MIN / -1). The shared division term turns
+/// a rem-vs-div equivalence from a pointwise circuit comparison,
+/// infeasible to bit-blast already at 32 bits, into a structural one.
+/// A remainder with no matching division keeps the solver's rem
+/// primitive: its native rewrites are 3-5x faster on rem-heavy proofs
+/// (math.gcd-style loops), where the lowering would introduce division
+/// circuits the program never asked for.
+smt_astt
+smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return mk_mod(a, b);
+  if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
+    return mk_bvsmod(a, b);
+
+  assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
+  const bool both_unsigned =
+    is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2);
+  if (divided_operand_pairs.count({m.side_1, m.side_2}))
+  {
+    smt_astt quot = both_unsigned ? mk_bvudiv(a, b) : mk_bvsdiv(a, b);
+    return mk_bvsub(a, mk_bvmul(quot, b));
+  }
+  return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+void smt_solver_baset::note_division_operands(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_div2t(expr))
+  {
+    const div2t &d = to_div2t(expr);
+    divided_operand_pairs.emplace(d.side_1, d.side_2);
+  }
+  expr->foreach_operand(
+    [this](const expr2tc &e) { note_division_operands(e); });
 }
 
 void smt_solver_baset::assert_expr(const expr2tc &e)
