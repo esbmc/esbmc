@@ -102,7 +102,10 @@ void goto_loopst::find_function_loops()
       // This means something like:
       // A: if(g) goto A;
       // Convert it into: assume(!g);
-      if (loop_head->location_number == loop_exit->location_number)
+      // Identity is the list node, not the location number: numbers go stale
+      // whenever a pass inserts instructions, and two distinct instructions
+      // sharing one would rewrite a real branch into assume(!g).
+      if (loop_head == loop_exit)
       {
         // For `A: goto A;` (unconditional self-loop) this rewrite produces
         // assume(false), which erases an infinite empty loop. That is fine for
