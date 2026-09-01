@@ -659,6 +659,95 @@ static void offset_simplifier(expr2tc &e)
 // and then assigns it, so overlapping regions are handled correctly — i.e. it
 // already has memmove semantics. memcpy and memmove therefore differ only in
 // the C fallback they bump to (@p bump_name) when the optimisation can't apply.
+void goto_symext::memcpy_finish(
+  const code_function_call2t &func_call,
+  const expr2tc &dst_arg,
+  const expr2tc &src_arg)
+{
+  if (!options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
+
+    expr2tc dst_null_check = not2tc(same_object2tc(dst_arg, null_sym));
+    cur_state->guard.guard_expr(dst_null_check);
+    claim(dst_null_check, " dereference failure: NULL pointer on DST");
+
+    expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_sym));
+    cur_state->guard.guard_expr(src_null_check);
+    claim(src_null_check, " dereference failure: NULL pointer on SRC");
+  }
+
+  expr2tc ret_ref = func_call.ret;
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
+  }
+}
+
+bool goto_symext::memcpy_symbolic_length(
+  const expr2tc &dst_arg,
+  const expr2tc &src_arg,
+  const expr2tc &n_arg)
+{
+  // Same cap and rationale as intrinsic_memcmp's: past this the ite chain
+  // costs more than the C loop it replaces.
+  static const uint64_t MAX_MEMCPY_UNROLL = 64;
+
+  // Passing 0 for the length puts the resolver in its symbolic-length mode:
+  // it reports the bytes available in each object instead of range-checking a
+  // constant read. (Named for memcmp, but the resolution is generic.)
+  expr2tc src_obj, dst_obj;
+  uint64_t src_off, dst_off, src_avail, dst_avail;
+  if (
+    !memcmp_resolve_operand(src_arg, 0, src_obj, src_off, src_avail) ||
+    !memcmp_resolve_operand(dst_arg, 0, dst_obj, dst_off, dst_avail, false))
+    return false;
+
+  const uint64_t nbytes = std::min(src_avail, dst_avail);
+  if (nbytes == 0 || nbytes > MAX_MEMCPY_UNROLL)
+    return false;
+
+  // Soundness: only the first nbytes bytes are modelled, so if n could exceed
+  // that the real memcpy would run past an object. Claim the bound rather than
+  // silently dropping the access, exactly as intrinsic_memcmp does.
+  if (
+    !options.get_bool_option("no-bounds-check") &&
+    !options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc in_bounds =
+      lessthanequal2tc(n_arg, constant_int2tc(n_arg->type, BigInt(nbytes)));
+    guard2tc g = cur_state->guard;
+    claim(
+      implies2tc(g.as_expr(), in_bounds),
+      "dereference failure: memcpy length exceeds object bounds");
+  }
+
+  // Rebuild the destination a byte at a time, taking the source byte only
+  // where i < n. Both sides are read from the values *before* the assignment,
+  // so an overlapping copy keeps the memmove semantics the constant-length
+  // path already has.
+  const type2tc byte_t = get_uint_type(8);
+  const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+  const type2tc n_t = n_arg->type;
+
+  expr2tc res = dst_obj;
+  for (uint64_t i = 0; i < nbytes; ++i)
+  {
+    expr2tc src_byte =
+      byte_extract2tc(byte_t, src_obj, gen_ulong(src_off + i), be);
+    expr2tc dst_byte =
+      byte_extract2tc(byte_t, dst_obj, gen_ulong(dst_off + i), be);
+    expr2tc within = lessthan2tc(constant_int2tc(n_t, BigInt(i)), n_arg);
+    expr2tc new_byte = if2tc(byte_t, within, src_byte, dst_byte);
+    res =
+      byte_update2tc(dst_obj->type, res, gen_ulong(dst_off + i), new_byte, be);
+  }
+
+  symex_assign(code_assign2tc(dst_obj, res), false, cur_state->guard);
+  return true;
+}
+
 void goto_symext::intrinsic_memcpy_impl(
   reachability_treet &art,
   const code_function_call2t &func_call,
@@ -688,7 +777,7 @@ void goto_symext::intrinsic_memcpy_impl(
   // 3. Compute all DST addresses, memory check and compute operation result
 
   cur_state->rename(n_arg);
-  if (!n_arg || is_symbol2t(n_arg))
+  if (!n_arg)
   {
     bump_call(func_call, bump_name);
     return;
@@ -697,7 +786,15 @@ void goto_symext::intrinsic_memcpy_impl(
   simplify(n_arg);
   if (!is_constant_int2t(n_arg))
   {
-    bump_call(func_call, bump_name);
+    // A non-constant length used to go straight to the C byte loop, which then
+    // unwinds --unwind times on every call (docs/roadmap/
+    // symex-dead-work-cost-plan.md W6).
+    if (!memcpy_symbolic_length(dst_arg, src_arg, n_arg))
+    {
+      bump_call(func_call, bump_name);
+      return;
+    }
+    memcpy_finish(func_call, dst_arg, src_arg);
     return;
   }
 
@@ -890,27 +987,7 @@ void goto_symext::intrinsic_memcpy_impl(
         code_assign2tc(item.object, new_object), false, assignment_guard);
     }
   }
-  if (!options.get_bool_option("no-pointer-check"))
-  {
-    expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
-
-    expr2tc dst_same = same_object2tc(dst_arg, null_sym);
-    expr2tc dst_null_check = not2tc(same_object2tc(dst_arg, null_sym));
-    ex_state.cur_state->guard.guard_expr(dst_null_check);
-    claim(dst_null_check, " dereference failure: NULL pointer on DST");
-
-    expr2tc src_same = same_object2tc(src_arg, null_sym);
-    expr2tc src_null_check = not2tc(same_object2tc(src_arg, null_sym));
-    ex_state.cur_state->guard.guard_expr(src_null_check);
-    claim(src_null_check, " dereference failure: NULL pointer on SRC");
-  }
-
-  expr2tc ret_ref = func_call.ret;
-  if (!is_nil_expr(ret_ref))
-  {
-    dereference(ret_ref, dereferencet::READ);
-    symex_assign(code_assign2tc(ret_ref, dst_arg), false, cur_state->guard);
-  }
+  memcpy_finish(func_call, dst_arg, src_arg);
 }
 
 void goto_symext::intrinsic_memcpy(
@@ -939,7 +1016,8 @@ bool goto_symext::memcmp_resolve_operand(
   unsigned long number_of_bytes,
   expr2tc &object,
   uint64_t &offset,
-  uint64_t &avail_bytes)
+  uint64_t &avail_bytes,
+  bool rename_object)
 {
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), ptr);
@@ -950,7 +1028,11 @@ bool goto_symext::memcmp_resolve_operand(
     return false;
 
   dereference_callbackt::internal_item item = internal_deref_items.front();
-  cur_state->rename(item.object);
+  // A caller that assigns to the object needs it unrenamed: renaming yields
+  // its current *value*, which is not an lvalue. symex_assign renames the RHS
+  // itself, so reads through the unrenamed object still see the current value.
+  if (rename_object)
+    cur_state->rename(item.object);
   cur_state->rename(item.offset);
   if (!item.object || !item.offset)
     return false;
