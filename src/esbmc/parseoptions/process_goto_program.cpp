@@ -187,6 +187,28 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
+/// Whether the run needs the loop-invariant machinery.
+/// --synthesise-loop-invariants supplies the invariants that
+/// --loop-invariant-check discharges, so it implies that mode.
+bool esbmc_parseoptionst::wants_loop_invariants() const
+{
+  return cmdline.isset("loop-invariant-check") ||
+         cmdline.isset("synthesise-loop-invariants");
+}
+
+/// Synthesise the invariants when asked, then run the schema that discharges
+/// them.
+void esbmc_parseoptionst::apply_loop_invariants(
+  goto_functionst &goto_functions,
+  contextt &context)
+{
+  if (cmdline.isset("synthesise-loop-invariants"))
+    goto_synthesise_loop_invariants(goto_functions);
+
+  bool use_frame_rule = cmdline.isset("loop-frame-rule");
+  goto_loop_invariant(goto_functions, context, use_frame_rule);
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -442,28 +464,16 @@ bool esbmc_parseoptionst::process_goto_program(
     }
     else
     {
-      // --synthesise-loop-invariants supplies the invariants that
-      // --loop-invariant-check discharges, so it implies that mode.
-      const bool wants_loop_invariant =
-        cmdline.isset("loop-invariant-check") ||
-        cmdline.isset("synthesise-loop-invariants");
-
       // --k-induction and --loop-invariant-check are independent and may
       // both be specified.  remove_no_op only needs to run once.
-      if (is_k_induction || wants_loop_invariant)
+      if (is_k_induction || wants_loop_invariants())
         remove_no_op(goto_functions);
 
       if (is_k_induction)
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
-      if (wants_loop_invariant)
-      {
-        if (cmdline.isset("synthesise-loop-invariants"))
-          goto_synthesise_loop_invariants(goto_functions);
-
-        bool use_frame_rule = cmdline.isset("loop-frame-rule");
-        goto_loop_invariant(goto_functions, context, use_frame_rule);
-      }
+      if (wants_loop_invariants())
+        apply_loop_invariants(goto_functions, context);
     }
 
     // --termination: reduce non-termination to a reachability safety

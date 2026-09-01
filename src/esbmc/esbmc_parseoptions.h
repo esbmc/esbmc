@@ -56,6 +56,13 @@ protected:
   virtual bool
   process_goto_program(optionst &options, goto_functionst &goto_functions);
 
+  /// Whether the run needs the loop-invariant machinery.
+  bool wants_loop_invariants() const;
+
+  /// Synthesise the invariants when asked, then run the schema over them.
+  void
+  apply_loop_invariants(goto_functionst &goto_functions, contextt &context);
+
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 

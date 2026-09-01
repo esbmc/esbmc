@@ -205,35 +205,16 @@ struct affine_loopt
   std::vector<accumulatort> accumulators;
 };
 
-/// Match the loop against the affine counter/accumulator shape. Every rejection
-/// here costs only a missed invariant, so the tests are deliberately strict.
-bool recognise_affine_loop(
-  goto_functiont &goto_function,
-  const loopst &loop,
-  goto_programt::targett &head_out,
-  affine_loopt &out)
+/// Summarise the loop body into per-variable (target, addend) pairs, and check
+/// the counter advances by exactly one. Anything that is not a plain
+/// self-increment, or a second write to a variable already summarised, makes
+/// the per-iteration effect something this pass cannot express in closed form.
+static bool summarise_body(
+  goto_programt::targett head,
+  goto_programt::targett exit,
+  const expr2tc &counter,
+  std::map<std::string, std::pair<expr2tc, expr2tc>> &writes)
 {
-  goto_programt::targett head = loop.effective_loop_head();
-  const goto_programt::targett exit = loop.get_original_loop_exit();
-  if (!head->is_goto() || head == exit)
-    return false;
-
-  expr2tc cond;
-  if (!guard_condition(head, cond))
-    return false;
-  if (!split_bound(cond, out.counter, out.bound, out.inclusive))
-    return false;
-
-  const auto &modified = loop.get_modified_loop_vars();
-  if (!is_symbol2t(out.counter) || modified.find(out.counter) == modified.end())
-    return false;
-  if (mentions_modified_var(out.bound, modified))
-    return false;
-
-  // Summarise the body. Anything that is not a plain assignment, or a second
-  // write to a variable we already summarised, makes the per-iteration effect
-  // something this pass cannot express in closed form.
-  std::map<std::string, std::pair<expr2tc, expr2tc>> writes;
   for (goto_programt::targett it = std::next(head); it != exit; ++it)
   {
     if (breaks_straight_line(it))
@@ -256,22 +237,22 @@ bool recognise_affine_loop(
       return false;
   }
 
-  const auto counter_write = writes.find(out.counter->pretty());
-  if (
-    counter_write == writes.end() ||
-    !is_constant_one(counter_write->second.second))
-    return false;
+  const auto counter_write = writes.find(counter->pretty());
+  return counter_write != writes.end() &&
+         is_constant_one(counter_write->second.second);
+}
 
-  const goto_programt::targett begin = goto_function.body.instructions.begin();
-  if (!entry_value(head, begin, out.counter, modified, out.counter_entry))
-    return false;
-  if (!entry_admits_two_disjunct_bound(out.counter_entry, out.inclusive))
-    return false;
-
-  // Every remaining modified variable must be an accumulator whose
-  // per-iteration addend is loop-invariant. A variable we cannot classify means
-  // we have misread the loop, so reject rather than emit a summary alongside
-  // it.
+/// Classify every modified variable other than the counter as an accumulator
+/// whose per-iteration addend is loop-invariant, recording its entry value. A
+/// variable we cannot classify means we have misread the loop, so reject
+/// rather than emit a summary alongside it.
+static bool classify_accumulators(
+  goto_programt::targett head,
+  goto_programt::targett begin,
+  const loopst::loop_varst &modified,
+  const std::map<std::string, std::pair<expr2tc, expr2tc>> &writes,
+  affine_loopt &out)
+{
   for (const auto &var : modified)
   {
     if (var == out.counter)
@@ -302,6 +283,46 @@ bool recognise_affine_loop(
     [](const accumulatort &a, const accumulatort &b) {
       return a.var->pretty() < b.var->pretty();
     });
+  return true;
+}
+
+/// Match the loop against the affine counter/accumulator shape. Every rejection
+/// here costs only a missed invariant, so the tests are deliberately strict.
+bool recognise_affine_loop(
+  goto_functiont &goto_function,
+  const loopst &loop,
+  goto_programt::targett &head_out,
+  affine_loopt &out)
+{
+  goto_programt::targett head = loop.effective_loop_head();
+  const goto_programt::targett exit = loop.get_original_loop_exit();
+  if (!head->is_goto() || head == exit)
+    return false;
+
+  expr2tc cond;
+  if (!guard_condition(head, cond))
+    return false;
+  if (!split_bound(cond, out.counter, out.bound, out.inclusive))
+    return false;
+
+  const auto &modified = loop.get_modified_loop_vars();
+  if (!is_symbol2t(out.counter) || modified.find(out.counter) == modified.end())
+    return false;
+  if (mentions_modified_var(out.bound, modified))
+    return false;
+
+  std::map<std::string, std::pair<expr2tc, expr2tc>> writes;
+  if (!summarise_body(head, exit, out.counter, writes))
+    return false;
+
+  const goto_programt::targett begin = goto_function.body.instructions.begin();
+  if (!entry_value(head, begin, out.counter, modified, out.counter_entry))
+    return false;
+  if (!entry_admits_two_disjunct_bound(out.counter_entry, out.inclusive))
+    return false;
+
+  if (!classify_accumulators(head, begin, modified, writes, out))
+    return false;
 
   head_out = head;
   return true;
