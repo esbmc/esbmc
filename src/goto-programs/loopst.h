@@ -97,11 +97,12 @@ public:
     return pointer_array_write_unresolvable_;
   }
 
-  /// Record that the loop, or a function it calls, writes a scalar through a
-  /// dereference (`*p = ...`). The pointee is not a named symbol, so a
-  /// schema that havocs named symbols cannot cover it. k-induction keeps the
-  /// original loop in its base case and stays sound; the loop-invariant schema
-  /// replaces the loop outright, so it must decline instead (issue #7478).
+  /// Record that the loop, or a function it calls, writes through a
+  /// dereference (`*p = ...`, `p->f = ...`, `p->e[i] = ...`). The pointee is
+  /// not a named symbol, so a schema that havocs named symbols cannot cover it.
+  /// k-induction keeps the original loop in its base case and stays sound; the
+  /// loop-invariant schema replaces the loop outright, so it declines a loop
+  /// whose guard the havoc cannot reach (issue #7478).
   void set_writes_through_pointer()
   {
     writes_through_pointer_ = true;

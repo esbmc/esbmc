@@ -160,17 +160,27 @@ void goto_loopst::create_function_loop(
   it1->set_size(size + 1);
 }
 
-/// True when an assignment's write target is scalar storage reached through a
-/// dereference (`*p = ...`, `p->f = ...`): nothing named is written, so a
-/// havoc over named symbols cannot cover it. An array element reached through
-/// a pointer (`p[i] = ...`, `p->e[i] = ...`) is excluded -- that is already
-/// reported by loopst::set_modifies_pointer_array (#5224, #5230).
-static bool writes_scalar_through_pointer(const expr2tc &lhs)
+/// True when a write target is storage reached through a dereference
+/// (`*p = ...`, `p->f = ...`, `p->e[i] = ...`): nothing named is written, so a
+/// havoc over named symbols cannot cover it. `modifies_pointer_array` reports
+/// the array case too, but only goto_k_induction reads it, so the array shapes
+/// are included here rather than deferred to it (#5224, #5230).
+static bool writes_through_pointer(const expr2tc &lhs)
 {
-  const expr2tc *e = &lhs;
-  while (is_member2t(*e))
-    e = &to_member2t(*e).source_value;
-  return is_dereference2t(*e);
+  if (is_nil_expr(lhs))
+    return false;
+
+  for (const expr2tc *e = &lhs;;)
+  {
+    if (is_dereference2t(*e))
+      return true;
+    if (is_member2t(*e))
+      e = &to_member2t(*e).source_value;
+    else if (is_index2t(*e))
+      e = &to_index2t(*e).source_value;
+    else
+      return false;
+  }
 }
 
 void goto_loopst::collect_loop_symbols(
@@ -260,8 +270,7 @@ bool goto_loopst::compute_function_summary(
     if (instr.is_assign())
     {
       const expr2tc &target = to_code_assign2t(instr.code).target;
-      if (writes_scalar_through_pointer(target))
-        local.writes_through_pointer = true;
+      local.writes_through_pointer |= writes_through_pointer(target);
       collect_lhs_symbols(target, local);
     }
     else if (instr.is_function_call())
@@ -270,6 +279,7 @@ bool goto_loopst::compute_function_summary(
       if (is_dereference2t(call.function))
         continue;
 
+      local.writes_through_pointer |= writes_through_pointer(call.ret);
       collect_loop_symbols(call.ret, local.modified);
 
       const irep_idt &callee = to_symbol2t(call.function).thename;
@@ -314,7 +324,7 @@ void goto_loopst::get_modified_variables(
   if (instruction->is_assign())
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
-    if (writes_scalar_through_pointer(assign.target))
+    if (writes_through_pointer(assign.target))
       loop->set_writes_through_pointer();
     add_loop_var(*loop, assign.target, true);
   }
@@ -328,6 +338,8 @@ void goto_loopst::get_modified_variables(
       return;
 
     // First, add its return
+    if (writes_through_pointer(function_call.ret))
+      loop->set_writes_through_pointer();
     add_loop_var(*loop, function_call.ret, true);
 
     const irep_idt &identifier = to_symbol2t(function_call.function).thename;

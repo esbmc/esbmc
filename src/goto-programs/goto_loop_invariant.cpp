@@ -166,6 +166,37 @@ void goto_loop_invariant(
   goto_functions.update();
 }
 
+static void
+collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols);
+
+/// True when some symbol the loop's guard reads is one the havoc covers. When
+/// nothing the guard reads is havoc'd, the exit edge is decided by the
+/// concrete pre-loop state and cannot change, so the claims after the loop are
+/// never reached rather than checked (issue #7478).
+static bool guard_reads_havocd_var(
+  goto_programt::targett head,
+  const goto_functiont &fn,
+  const loopst &loop)
+{
+  std::set<irep_idt> havocd_names;
+  for (const auto &v : loop.get_modified_loop_vars())
+    if (is_symbol2t(v))
+      havocd_names.insert(to_symbol2t(v).get_symbol_name());
+
+  for (goto_programt::targett it = head; it != fn.body.instructions.end(); ++it)
+  {
+    std::set<irep_idt> read;
+    collect_symbols_local(it->code, read);
+    collect_symbols_local(it->guard, read);
+    for (const auto &name : read)
+      if (havocd_names.count(name))
+        return true;
+    if (it->is_goto())
+      break;
+  }
+  return false;
+}
+
 void goto_loop_invariantt::goto_loop_invariant()
 {
   for (auto &function_loop : function_loops)
@@ -189,21 +220,6 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   if (invariants.empty())
     return;
 
-  // The schema replaces the loop with a havoc of its modified symbols. A write
-  // through a dereference has no named symbol to havoc, so the loop would be
-  // symex'd from its concrete pre-loop state: the exit edge turns infeasible,
-  // the invariant is discharged against one concrete iteration and every claim
-  // after the loop is dropped without being solved (issue #7478). Leave the
-  // loop for the unwinder rather than report a proof we did not make.
-  if (loop.writes_through_pointer())
-  {
-    log_warning(
-      "loop invariant at {} not checked: the loop writes through a pointer, "
-      "which the havoc cannot cover",
-      loop.get_original_loop_head()->location.as_string());
-    return;
-  }
-
   log_status(
     "Processing {} loop invariant{}",
     invariants.size(),
@@ -225,6 +241,24 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
+
+  // A write through a dereference has no named symbol for the havoc to cover.
+  // When the guard reads nothing the havoc does reach, the loop is left at its
+  // concrete pre-loop state: the exit edge cannot change, the invariant is
+  // discharged against one concrete iteration and every claim after the loop is
+  // dropped without being solved (issue #7478). Leave the loop for the unwinder
+  // rather than report a proof we did not make. The base case above is checked
+  // against the concrete pre-loop state and needs no havoc, so it still stands.
+  if (
+    loop.writes_through_pointer() &&
+    !guard_reads_havocd_var(std::prev(after_head), goto_function, loop))
+  {
+    log_warning(
+      "loop invariant at {} not checked beyond its base case: the loop writes "
+      "through a pointer the havoc cannot cover",
+      loop.get_original_loop_head()->location.as_string());
+    return;
+  }
 
   // 2. Insert HAVOC and ASSUME at the loop head, ahead of the guard
   insert_havoc_and_assume_before_condition(
