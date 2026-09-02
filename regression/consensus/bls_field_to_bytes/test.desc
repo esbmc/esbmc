@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
 --incremental-bmc --function bls_field_to_bytes
 ^VERIFICATION SUCCESSFUL$
