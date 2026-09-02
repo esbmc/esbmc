@@ -52,9 +52,10 @@ def build_table(junit_path, previous=None, source=None):
     seen = 0
     for name, seconds, status in parse_junit(junit_path):
         seen += 1
-        # A skipped test measures the harness, not the test; keep any real
-        # duration already on record instead of overwriting it with ~0.
-        if status == "skip" and name in tests:
+        # A skipped test measures the harness, not the test: keep any real
+        # duration already on record, and don't record a first-time skip
+        # either, or its near-zero duration would read as a real measurement.
+        if status == "skip":
             continue
         tests[name] = {"seconds": seconds, "status": status, "measured": measured}
     return seen, {

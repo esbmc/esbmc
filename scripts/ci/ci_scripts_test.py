@@ -85,6 +85,13 @@ class CtestTimings(TempDirCase):
         _, table = timings.build_table(self.write("j.xml", JUNIT), previous)
         self.assertEqual(table["tests"]["regression/python/gamma"]["seconds"], 42.0)
 
+    def test_first_time_skip_is_not_recorded(self):
+        # An unmeasured test skipped on this host must stay unmeasured, or
+        # select_tests.py would floor its near-zero duration to MIN_COST
+        # instead of imputing the suite median.
+        _, table = timings.build_table(self.write("j.xml", JUNIT))
+        self.assertNotIn("regression/python/gamma", table["tests"])
+
     def test_empty_report_is_an_error(self):
         empty = self.write("e.xml", '<?xml version="1.0"?><testsuite tests="0"/>')
         out = os.path.join(self.tmp, "t.json")
