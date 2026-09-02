@@ -1,4 +1,4 @@
 KNOWNBUG
 main.goto
 --binary library.goto
-goto binary: string id [0-9]+ exceeds input size
+goto binary: string id [0-9]+ needs an unservable table
