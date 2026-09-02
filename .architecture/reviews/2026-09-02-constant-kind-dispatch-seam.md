@@ -1,8 +1,8 @@
 # Architecture review — esbmc — 2026-09-02
 
 **Scope**: The recent-churn hot spots by `git log` — `src/python-frontend/` (converter, python-list, function_call, string, numpy, dict) and, secondarily, `src/clang-c-frontend/clang_c_adjust_irep2.*` and `src/util/expr/`. Deepening pays off through *future* change (YAGNI), so the scan was weighted toward files edited in the last ~90 days.
-**Picked**: `constant-kind-dispatch-seam` — see the PR and `.architecture/backlog.md`.
-**Degradations**: none. `gh` authenticated; sub-agents available.
+**Picked**: `constant-kind-dispatch-seam` — see [PR #7484](https://github.com/esbmc/esbmc/pull/7484) and `.architecture/backlog.md`.
+**Degradations**: `gh` authenticated and sub-agents available. Two build-budget degradations: the solver-backed differential net `unit/solvers/simplification_equivalence.test.cpp` was not run locally (it needs a full `solvers` + solver-backend build; CI runs it), and `esbmc-coverage` Mode B was not available as a subagent in this environment.
 
 *Diagram legend (used in every card): solid edges are the **interface** a caller must learn; dashed edges are inside the **implementation**.*
 
