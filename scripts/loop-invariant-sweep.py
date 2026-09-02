@@ -94,7 +94,7 @@ def one(args, name):
     }
 
 
-def main():
+def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--suite", required=True)
     ap.add_argument("--flag", required=True)
@@ -110,16 +110,20 @@ def main():
     args.esbmc = os.path.abspath(args.esbmc)
     args.suite = os.path.abspath(args.suite)
     args.out = os.path.abspath(args.out)
+    return args
 
+
+def collect(args):
     names = sorted(n for n in os.listdir(args.suite) if os.path.isdir(os.path.join(args.suite, n)))
     rows = []
     with cf.ThreadPoolExecutor(max_workers=args.jobs) as ex:
         for r in ex.map(lambda n: one(args, n), names):
             if r:
                 rows.append(r)
+    return rows
 
-    json.dump(rows, open(args.out, "w"), indent=1)
 
+def summarise(rows):
     # A program the suite expects to fail that the flag reports proved is the
     # only outcome that is categorically wrong; everything else is precision.
     unsound = [r for r in rows if r["expected"] == "FAILED" and r["flagged"] == "SUCCESSFUL"]
@@ -128,7 +132,15 @@ def main():
         r for r in rows if r["baseline"] != "SUCCESSFUL" and r["flagged"] == "SUCCESSFUL"
         and r["expected"] == "SUCCESSFUL"
     ]
+    return unsound, alarms, gained
 
+
+def main():
+    args = parse_args()
+    rows = collect(args)
+    json.dump(rows, open(args.out, "w"), indent=1)
+
+    unsound, alarms, gained = summarise(rows)
     print(f"{len(rows)} tests  unsound={len(unsound)} "
           f"false-alarms={len(alarms)} gained={len(gained)}")
     for r in unsound:
