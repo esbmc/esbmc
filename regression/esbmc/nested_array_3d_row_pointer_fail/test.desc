@@ -1,4 +1,5 @@
 CORE
 main.c
 
+^\s*FAILED\s+\[main\.assertion\.2\]\s+line\s+14\s+the same read, asserted wrong$
 ^VERIFICATION FAILED$

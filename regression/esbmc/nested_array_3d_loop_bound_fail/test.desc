@@ -1,4 +1,5 @@
 CORE
 main.c
 
+^\s*FAILED\s+\[main\.assertion\.1\]\s+line\s+11\s+the same bound, asserted wrong$
 ^VERIFICATION FAILED$
