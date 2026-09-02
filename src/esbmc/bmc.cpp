@@ -207,9 +207,61 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   }
 }
 
+// The loop-invariant schema's own obligations -- does the invariant hold on
+// entry, does the loop body preserve it -- are statements about the
+// annotation, so a model falsifying one is the finding the mode exists to
+// report even though the inductive step is checked from the havoc'd state.
+// Only the program's own claims downstream of the havoc are
+// abstraction-derived.
+static bool is_loop_invariant_obligation(const locationt &location)
+{
+  const std::string property = location.property().as_string();
+  return property == "invariant-base-case" ||
+         property == "invariant-inductive-step";
+}
+
+// Attached to a claim downgraded from Failed to Unknown because the only trace
+// violating it runs through a --loop-invariant-check havoc (issue #7480).
+static const char *const weak_invariant_note =
+  "loop invariant too weak to prove this claim: the counterexample is against "
+  "the havoc abstraction, not a reachable state of the program";
+
+void bmct::record_satisfiable_claim(
+  const claim_slicer &claim,
+  const property_locationt &loc,
+  bool inductive_step)
+{
+  // Neither answer refutes the program. An inductive-step run starts from an
+  // arbitrary state, and a claim downstream of a loop-invariant havoc is
+  // checked against the invariant's over-approximation, so a model witnesses
+  // the annotation being too weak rather than a reachable state (#7480).
+  if (inductive_step)
+  {
+    goto_functionst::property_verdicts.record(
+      claim.claim_cstr,
+      property_verdictt::Unknown,
+      loc,
+      "inductive step could not prove this claim");
+    return;
+  }
+
+  if (
+    claim.claim_after_invariant_havoc &&
+    !is_loop_invariant_obligation(claim.claim_location))
+  {
+    weak_invariant_detected = true;
+    goto_functionst::property_verdicts.record(
+      claim.claim_cstr, property_verdictt::Unknown, loc, weak_invariant_note);
+    return;
+  }
+
+  goto_functionst::property_verdicts.record(
+    claim.claim_cstr, property_verdictt::Failed, loc);
+}
+
 void bmct::record_violated_properties(
   smt_convt &smt_conv,
-  const symex_target_equationt &eq) const
+  const symex_target_equationt &eq)
 {
   // A subprocess SMT-LIB backend answers sat/unsat without necessarily being
   // able to produce a model (that is what --result-only buys there). Which
@@ -219,8 +271,15 @@ void bmct::record_violated_properties(
   if (!smt_conv.has_model())
     return;
 
+  // Symex emits a linear trace, so once the loop-invariant schema's havoc has
+  // run every later claim on it is checked against the abstract state.
+  bool seen_invariant_havoc = false;
+
   for (const auto &step : eq.SSA_steps)
   {
+    if (step.is_assignment() && step.source.pc->loop_invariant_havoc)
+      seen_invariant_havoc = true;
+
     if (!step.is_assert() || step.ignore)
       continue;
 
@@ -231,10 +290,15 @@ void bmct::record_violated_properties(
 
     const locationt &location = step.source.pc->location;
     const std::string description = id2string(step.comment);
+    const bool weak_invariant =
+      seen_invariant_havoc && !is_loop_invariant_obligation(location);
+    if (weak_invariant)
+      weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
       description + " at " + location.as_string(),
-      property_verdictt::Failed,
-      property_location(location, description));
+      weak_invariant ? property_verdictt::Unknown : property_verdictt::Failed,
+      property_location(location, description),
+      weak_invariant ? weak_invariant_note : "");
   }
 }
 
@@ -435,6 +499,27 @@ void bmct::report_failure()
 void bmct::report_unknown()
 {
   log_fail("\nVERIFICATION UNKNOWN");
+}
+
+void bmct::report_violation()
+{
+  // When every violated claim sits downstream of a --loop-invariant-check
+  // havoc, no counterexample witnesses a state the program can reach. An
+  // over-approximation can prove, never refute: the invariant being too weak
+  // is "cannot prove", not "the program is wrong" (issue #7480).
+  if (
+    !weak_invariant_detected ||
+    goto_functionst::property_verdicts.has_violation())
+  {
+    report_failure();
+    return;
+  }
+
+  log_warning(
+    "every violated claim lies downstream of a loop invariant havoc, so its "
+    "counterexample is against the abstraction rather than the program; "
+    "strengthen the invariant to decide the claim");
+  report_unknown();
 }
 
 smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
@@ -1769,7 +1854,7 @@ void bmct::report_result(smt_resultt &res)
   case P_SATISFIABLE:
     if (!is && !fc)
     {
-      report_failure();
+      report_violation();
     }
     else if (fc)
     {
@@ -2998,11 +3083,7 @@ smt_resultt bmct::multi_property_check(
                        "invariant, requires clause, or upstream assume"
                      : "");
       else if (solver_result == P_SATISFIABLE)
-        goto_functionst::property_verdicts.record(
-          claim.claim_cstr,
-          is ? property_verdictt::Unknown : property_verdictt::Failed,
-          claim_ploc,
-          is ? "inductive step could not prove this claim" : "");
+        record_satisfiable_claim(claim, claim_ploc, is);
       else
       {
         // No answer at all. A coverage run suppresses the verdict that would
@@ -3590,8 +3671,10 @@ void bmct::report_property_verdicts(smt_resultt res) const
   // A violation was found but pinned on nothing: the solver answered sat
   // without a model to attribute it with (the subprocess SMT-LIB backends
   // under --result-only). Saying so beats a table that reads as contradicting
-  // the verdict below it.
-  if (res == P_SATISFIABLE && failed == 0)
+  // the verdict below it. A violation downgraded to unknown because it lies
+  // downstream of a loop-invariant havoc is attributed to its own row, so it
+  // is not this case (issue #7480).
+  if (res == P_SATISFIABLE && failed == 0 && !weak_invariant_detected)
     log_result(
       "   (a violation exists, but this solver produced no model, so which "
       "property it violates could not be determined)");

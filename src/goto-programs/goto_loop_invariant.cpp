@@ -675,6 +675,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->code = code_assign2tc(lhs, rhs);
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
+    t->loop_invariant_havoc = true;
   }
 
   // =========================================================

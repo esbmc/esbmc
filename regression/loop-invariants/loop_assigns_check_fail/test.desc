@@ -1,4 +1,5 @@
 CORE
 main.c
 --loop-invariant-check --loop-frame-rule
-^VERIFICATION FAILED$
+^WARNING: every violated claim lies downstream of a loop invariant havoc
+^VERIFICATION UNKNOWN$

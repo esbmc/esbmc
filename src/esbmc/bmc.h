@@ -92,9 +92,18 @@ protected:
   // parallel job threads.
   std::atomic<bool> vacuity_detected{false};
 
+  // Set when a violated claim was only violated downstream of a
+  // --loop-invariant-check havoc; consulted by report_result to map a verdict
+  // with no concrete violation from FAILED to UNKNOWN (issue #7480). Atomic
+  // because multi_property_check writes from parallel job threads.
+  std::atomic<bool> weak_invariant_detected{false};
+
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
+  /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
+  /// violated claim was abstraction-derived (issue #7480).
+  void report_violation();
   virtual void report_unknown();
   virtual void keep_alive_function() const;
 
@@ -215,9 +224,15 @@ private:
   /// falsifies, so the report names them even when the counterexample itself
   /// is suppressed. Call only where a SAT result witnesses a real violation:
   /// an inductive-step or forward-condition model does not.
+  /// Record the verdict a satisfiable answer earns for one claim.
+  void record_satisfiable_claim(
+    const claim_slicer &claim,
+    const property_locationt &loc,
+    bool inductive_step);
+
   void record_violated_properties(
     smt_convt &smt_conv,
-    const symex_target_equationt &eq) const;
+    const symex_target_equationt &eq);
 
   /// Source files whose assertions come from ESBMC's own operational models,
   /// so the report can sort them after the user's code. Empty for Python,
