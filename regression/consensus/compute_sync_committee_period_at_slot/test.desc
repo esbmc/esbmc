@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc --function compute_sync_committee_period_at_slot
+^VERIFICATION SUCCESSFUL$

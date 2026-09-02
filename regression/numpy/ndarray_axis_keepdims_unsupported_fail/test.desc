@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.sum\(\) does not support keepdims, where, out, initial or dtype arguments yet

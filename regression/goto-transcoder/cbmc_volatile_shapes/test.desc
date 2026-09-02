@@ -1,0 +1,4 @@
+CORE
+cbmc_volatile_shapes.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION SUCCESSFUL$
+^Generated [0-9]+ VCC\(s\), 4 remaining after simplification
