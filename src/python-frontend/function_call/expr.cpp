@@ -1127,7 +1127,7 @@ exprt function_call_expr::build_constant_from_arg() const
     // e.g. uint64(2**64 - 1): 2**64 alone overflows, retry against t's width.
     const std::optional<BigInt> folded = try_fold_constant_arith_json(arg);
     if (
-      !folded.has_value() ||
+      !folded.has_value() || !(t.is_signedbv() || t.is_unsignedbv()) ||
       !python_math::fits_in_width(*folded, bv_width(t), t.is_signedbv()))
       throw;
     return from_integer(*folded, t);
