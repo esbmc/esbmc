@@ -3674,8 +3674,11 @@ exprt python_list::handle_index_access(
     // sentinel returned by get_typet("tuple"), meaning "don't use the
     // annotation as-is; resolve the concrete struct type via the registry."
     if ((elem_type == typet() || elem_type.is_empty()) && array.is_symbol())
-      elem_type =
-        elem_types().last_element_type(array.identifier().as_string());
+    {
+      const std::string &list_name = array.identifier().as_string();
+      if (elem_types().find(list_name))
+        elem_type = elem_types().last_element_type(list_name);
+    }
 
     // Nested subscript chains like W[i][j] where the base is a Name with a
     // nested list annotation (e.g. list[list[T]]).  list_node is null in this
