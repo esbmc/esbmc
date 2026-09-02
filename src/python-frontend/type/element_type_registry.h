@@ -3,6 +3,7 @@
 #include <util/irep/type.h>
 
 #include <array>
+#include <cassert>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -163,11 +164,13 @@ private:
 
   slot_map &map_for(type_slot slot)
   {
+    assert(slot < type_slot::slot_count);
     return maps_[static_cast<size_t>(slot)];
   }
 
   const slot_map &map_for(type_slot slot) const
   {
+    assert(slot < type_slot::slot_count);
     return maps_[static_cast<size_t>(slot)];
   }
 
