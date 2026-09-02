@@ -3232,6 +3232,14 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     // return the whole array and then get the index, we can
     // do better and call get_array_element directly
     index2t index = to_index2t(res);
+
+    /* Same lowering convert_array_index() applies: a row of a flattened array
+       has no term, so convert_ast() below cannot be handed one. get() resolves
+       the ite this produces by asking the solver for its condition. */
+    expr2tc lowered = lower_flattened_row_select(index);
+    if (!is_nil_expr(lowered))
+      return get(lowered);
+
     expr2tc src_value = index.source_value;
 
     expr2tc newidx;
