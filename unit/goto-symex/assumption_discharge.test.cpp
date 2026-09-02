@@ -93,15 +93,21 @@ bool store_elided(const symex_target_equationt::SSA_stept &step)
 // the elision branch has to fire. Reading through an assertion, not the return
 // value, keeps the array live: a returned expression is itself sliced away, and
 // then the stores go with `ignore` rather than reaching the branch at all.
+// The stored values are `nondet * 3`, not bare nondets, on purpose: a
+// chain of (typecast) symbol stores now constant-propagates wholly, the
+// read folds to the stored symbol at rename time, the array is never
+// tracked, and every store dies as plain dead code before the elision
+// branch can fire. A multiplication over a nondet is refused by the
+// propagator, so these chains stay in the SSA and keep the exercise real.
 const char *dead_array_store = R"(
 int nondet_int(void);
 int main(void)
 {
   int a[4];
-  a[0] = nondet_int();
-  a[1] = nondet_int();
-  a[2] = nondet_int();
-  a[3] = nondet_int();
+  a[0] = nondet_int() * 3;
+  a[1] = nondet_int() * 3;
+  a[2] = nondet_int() * 3;
+  a[3] = nondet_int() * 3;
   __ESBMC_assert(a[1] != 424242, "read one index");
   return 0;
 }

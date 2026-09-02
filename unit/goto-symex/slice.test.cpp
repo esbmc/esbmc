@@ -104,10 +104,16 @@ slice_result slice_and_audit(symex_run::equation &run)
 
     std::set<std::string> reads;
     collect_ssa_reads(step.guard, reads);
-    if (step.is_assignment())
-      collect_ssa_reads(step.rhs, reads);
-    else
+    if (!step.is_assignment())
       collect_ssa_reads(step.cond, reads);
+    else if (store_elided(step))
+      // An elided store keeps its rhs textually for trace construction,
+      // but the encoded condition is the identity `lhs == src`: the dead
+      // update value and its inputs are not read by the formula, exactly
+      // as slice.cpp documents, so they are not closure obligations.
+      collect_ssa_reads(to_with2t(step.rhs).source_value, reads);
+    else
+      collect_ssa_reads(step.rhs, reads);
 
     // A name with no definition anywhere is a free symbol (nondet, argument,
     // uninitialised global) and always was; only a name whose definitions were
@@ -200,15 +206,20 @@ TEST_CASE("closure survives constant array indices", "[symex][slice]")
 {
   // scan_array_uses / index_reads: a store to one constant index may be elided
   // only if no retained read can observe it.
+  // The stored values are `nondet * 3` on purpose: bare symbol chains
+  // now constant-propagate wholly and the read folds away, so the array
+  // is never tracked and the stores die as plain dead code before the
+  // elision. A multiplication over a nondet is refused by the
+  // propagator, keeping the elision exercised.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
 {
   int arr[4];
-  arr[0] = nondet_int();
-  arr[1] = nondet_int();
-  arr[2] = nondet_int();
-  arr[3] = nondet_int();
+  arr[0] = nondet_int() * 3;
+  arr[1] = nondet_int() * 3;
+  arr[2] = nondet_int() * 3;
+  arr[3] = nondet_int() * 3;
   __ESBMC_assert(arr[1] != 424242, "read one index");
   return 0;
 }
