@@ -528,6 +528,15 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
     return BigInt(value.get<long long>());
   }
 
+  if (type == "UnaryOp" && node.contains("op") && node.contains("operand"))
+  {
+    const std::optional<BigInt> operand =
+      try_fold_constant_arith_json(node["operand"]);
+    if (operand.has_value() && node["op"]["_type"] == "USub")
+      return -(*operand);
+    return std::nullopt;
+  }
+
   if (
     type != "BinOp" || !node.contains("op") || !node.contains("left") ||
     !node.contains("right"))
