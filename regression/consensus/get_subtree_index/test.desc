@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---incremental-bmc --function get_subtree_index
+--unwind 513 --function get_subtree_index
 ^VERIFICATION FAILED$

@@ -2,6 +2,7 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <goto-programs/goto_functions.h>
+#include <util/base/threeval.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
@@ -143,6 +144,44 @@ public:
   };
 
   // Methods
+
+  /**
+   *  Rewrite an expression onto the canonical basis of its copy chains:
+   *  every L2 symbol with an entry in copy_definitions is replaced by
+   *  the value it was assigned. Used by path-guard subsumption to
+   *  compare branch conditions from different scopes structurally; the
+   *  result is for comparison only and is never fed back into the
+   *  symex state or the SSA equation.
+   *  @param expr Expression to rewrite; modified in place.
+   *  @return true if any substitution was made.
+   */
+  bool chase_copies(expr2tc &expr) const;
+
+  /**
+   *  Whether the accumulated path guard already decides a branch
+   *  condition: TV_TRUE when a conjunct matches it, TV_FALSE when one
+   *  matches its negation, TV_UNKNOWN otherwise. See symex_goto.cpp
+   *  for the matching discipline.
+   */
+  tvt::tv_enumt path_guard_decides(
+    const expr2tc &new_guard,
+    bool already_false,
+    bool already_true);
+
+  /**
+   *  Remember a guard generation's defining condition for
+   *  path_guard_decides, up to subsumption_map_capacity.
+   */
+  void record_guard_definition(const expr2tc &guard_expr, const expr2tc &rhs);
+
+  /**
+   *  Record a copy chain for chase_copies after an unconditional
+   *  assignment, when the rhs is a (possibly typecast) L2 symbol.
+   *  The rhs is canonicalized through existing chains first.
+   *  @param renamed_lhs L2 symbol generation just assigned.
+   *  @param rhs Renamed, simplified assignment rhs.
+   */
+  void record_copy_definition(const expr2tc &renamed_lhs, const expr2tc &rhs);
 
   /**
    *  Create a symex result for this run.
@@ -953,6 +992,13 @@ protected:
    *  @param expr Expression we're replacing the contents of.
    */
   void replace_dynamic_allocation(expr2tc &expr);
+
+  /// The named object \p ptr addresses, resolved through the value set, or nil.
+  expr2tc value_set_named_object(const expr2tc &ptr);
+  bool resolve_valid_object_by_value_set(expr2tc &expr, const expr2tc &obj_ref);
+  bool resolve_dynamic_size_by_value_set(expr2tc &expr);
+  void replace_valid_object(expr2tc &expr);
+  void replace_dynamic_size(expr2tc &expr);
   void default_replace_dynamic_allocation(expr2tc &expr);
 
   /**
@@ -1371,6 +1417,44 @@ protected:
    *  @see guard_identifier
    */
   irep_idt guard_identifier_s;
+  /**
+   *  Cap on guard_definitions and copy_definitions. Both grow linearly
+   *  with symex length (one entry per branching goto, one per bare
+   *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
+   *  copied whenever an execution state forks, so an interleaving-heavy
+   *  run would otherwise pay an unbounded per-fork cost. Past the cap,
+   *  recording stops: subsumption keeps matching against what was
+   *  recorded and never decides wrongly, it merely stops improving,
+   *  and the per-fork copy is bounded by the cap (~8 MB worst case).
+   *  Single-threaded runs never fork an execution state and only pay
+   *  the recording itself.
+   */
+  static constexpr size_t subsumption_map_capacity = 1 << 16;
+  /**
+   *  Defining condition of each L2 guard symbol generation, i.e. the
+   *  (renamed, simplified) rhs it was assigned in symex_goto. Guard
+   *  symbols are SSA: each generation is assigned exactly once, so a
+   *  single map for the whole symex object is sound. symex_goto uses
+   *  it to resolve path-guard conjuncts back to branch conditions —
+   *  level2 renaming cannot do that, as it never substitutes into
+   *  symbols that are already level2. Keyed by the L2-qualified symbol
+   *  name (an interned irep_idt with a cached hash) rather than the
+   *  expression, so a lookup never deep-compares expression trees.
+   */
+  std::unordered_map<irep_idt, expr2tc> guard_definitions;
+  /**
+   *  Copy chains between L2 symbol generations: lhs generation -> the
+   *  (possibly typecast) L2 symbol it was unconditionally assigned.
+   *  Values are canonicalized at insertion, so one substitution pass
+   *  reaches the root of a chain. Path-guard subsumption uses this to
+   *  rewrite branch conditions onto a common basis before structural
+   *  comparison — a value handed across a call boundary gets a fresh
+   *  symbol at every hop, and without the rewrite a callee's re-check
+   *  of a caller-established condition never matches. Deliberately NOT
+   *  fed into constant propagation: substituting copies globally slices
+   *  away the originals' assignments and degrades counterexamples.
+   */
+  std::unordered_map<irep_idt, expr2tc> copy_definitions;
   /** Loop numbers. */
   unsigned first_loop;
   /** Number of assertions executed. */

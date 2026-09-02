@@ -448,16 +448,29 @@ void python_exception_handler::get_raise_statement(
   {
     // Construct a constant struct to throw: raise { .message=&"Error message" }
     exprt arg;
+    bool arg_is_already_addressed = false;
     const auto &exc = element["exc"];
     if (
       exc.contains("args") && !exc["args"].empty() && !exc["args"][0].is_null())
     {
       const auto &json_arg = exc["args"][0];
       exprt tmp = converter_.get_expr(json_arg);
-      arg = string_constantt(
-        converter_.get_string_handler().process_format_spec(json_arg),
-        tmp.type(),
-        string_constantt::k_default);
+      if (tmp.type().is_array())
+      {
+        arg = string_constantt(
+          converter_.get_string_handler().process_format_spec(json_arg),
+          tmp.type(),
+          string_constantt::k_default);
+      }
+      else
+      {
+        // tmp is already the char* built for a message we can't know up
+        // front (e.g. an f-string with a variable in it). string_constantt
+        // needs a fixed-size array type, so just reuse tmp instead of
+        // rebuilding one with the wrong type.
+        arg = tmp;
+        arg_is_already_addressed = true;
+      }
     }
     else
     {
@@ -470,7 +483,8 @@ void python_exception_handler::get_raise_statement(
 
     raise.id("struct");
     raise.type() = type;
-    raise.copy_to_operands(build_address_of(arg));
+    raise.copy_to_operands(
+      arg_is_already_addressed ? arg : build_address_of(arg));
   }
   else
   {
