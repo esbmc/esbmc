@@ -187,45 +187,6 @@ apply_rounding_mode(goto_functionst &goto_functions, const cmdlinet &cmdline)
 //
 // \param options - various options used by the processing methods,
 // \param goto_functions - reference to the GOTO program to be processed.
-/// Whether the run needs the loop-invariant machinery.
-/// --synthesise-loop-invariants supplies the invariants that
-/// --loop-invariant-check discharges, so it implies that mode.
-bool esbmc_parseoptionst::wants_loop_invariants() const
-{
-  return cmdline.isset("loop-invariant-check") ||
-         cmdline.isset("synthesise-loop-invariants") ||
-         cmdline.isset("houdini-loop-invariants");
-}
-
-/// Synthesise the invariants when asked, then run the schema that discharges
-/// them.
-void esbmc_parseoptionst::apply_loop_invariants(
-  goto_functionst &goto_functions,
-  contextt &context,
-  const optionst &options)
-{
-  // Houdini re-derives the program per round from a pristine copy, so the
-  // schema must not have been applied here; do_houdini_strategy runs it.
-  // remove_no_op still had to run, which is why wants_loop_invariants() is
-  // true for this flag.
-  if (cmdline.isset("houdini-loop-invariants"))
-    return;
-
-  if (cmdline.isset("synthesise-loop-invariants"))
-    // Read from `options`, the same object goto_check consults
-    // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
-    // instead happens to agree today only because nothing calls
-    // set_option on these two, which is a property of the current code
-    // rather than an enforced one.
-    goto_synthesise_loop_invariants(
-      goto_functions,
-      options.get_bool_option("overflow-check") ||
-        options.get_bool_option("unsigned-overflow-check"));
-
-  bool use_frame_rule = cmdline.isset("loop-frame-rule");
-  goto_loop_invariant(goto_functions, context, use_frame_rule);
-}
-
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -872,4 +833,44 @@ bool esbmc_parseoptionst::process_goto_program(
   }
 
   return false;
+}
+
+/// Whether the run needs the loop-invariant machinery.
+/// --synthesise-loop-invariants supplies the invariants that
+/// --loop-invariant-check discharges, so it implies that mode.
+bool esbmc_parseoptionst::wants_loop_invariants() const
+{
+  return cmdline.isset("loop-invariant-check") ||
+         cmdline.isset("synthesise-loop-invariants") ||
+         cmdline.isset("houdini-loop-invariants");
+}
+
+/// Synthesise the invariants when asked, then run the schema that discharges
+/// them.
+void esbmc_parseoptionst::apply_loop_invariants(
+  goto_functionst &goto_functions,
+  contextt &context,
+  const optionst &options)
+{
+  // Houdini re-derives the program per round from a pristine copy, so the
+  // schema must not have been applied here; do_houdini_strategy runs it.
+  // remove_no_op still had to run, which is why wants_loop_invariants() is
+  // true for this flag.
+  if (cmdline.isset("houdini-loop-invariants"))
+    return;
+
+  if (cmdline.isset("synthesise-loop-invariants"))
+    // Read from `options`, the same object goto_check consults
+    // (goto_check.cpp:34,36). Deciding the same question from `cmdline`
+    // instead happens to agree today only because nothing calls
+    // set_option on these two, which is a property of the current code
+    // rather than an enforced one.
+    goto_synthesise_loop_invariants(
+      goto_functions,
+      overflow_checkst{
+        options.get_bool_option("overflow-check"),
+        options.get_bool_option("unsigned-overflow-check")});
+
+  bool use_frame_rule = cmdline.isset("loop-frame-rule");
+  goto_loop_invariant(goto_functions, context, use_frame_rule);
 }

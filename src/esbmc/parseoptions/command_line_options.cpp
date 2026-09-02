@@ -335,11 +335,6 @@ static std::string format_target()
   return oss.str();
 }
 
-// This method creates a set of options based on the CMD arguments passed to
-// ESBMC. Also, it sets some options that are used across various
-// ESBMC stages but which are not available via CMD.
-//
-// \param options - the options object created and updated by this method.
 /// Option defaults the loop-invariant modes imply.
 ///
 /// --synthesise-loop-invariants: the schema emits establishment, preservation
@@ -390,6 +385,11 @@ set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
     options.set_option("check-vacuity", true);
 }
 
+// This method creates a set of options based on the CMD arguments passed to
+// ESBMC. Also, it sets some options that are used across various
+// ESBMC stages but which are not available via CMD.
+//
+// \param options - the options object created and updated by this method.
 void esbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if (config.set(cmdline))

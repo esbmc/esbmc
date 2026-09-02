@@ -54,6 +54,16 @@ void goto_loop_invariant_combined(goto_functionst &goto_functions);
 class goto_loop_invariantt : public goto_loopst
 {
 public:
+  /// Maximum number of instructions to search backwards from the loop head
+  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
+  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
+  /// for up to ~4 extra declarations before the invariant.  Both
+  /// extract_loop_invariants and extract_and_remove_side_effects use this
+  /// same limit so their searches are consistent, and
+  /// goto_synthesise_loop_invariants scans the same window before deciding
+  /// a loop already carries a user-written invariant.
+  static constexpr size_t kMaxInvariantSearchBack = 10;
+
   goto_loop_invariantt(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
@@ -86,14 +96,6 @@ protected:
   /// came from; Houdini needs that to know which candidate to delete, and the
   /// vector loses the source instruction long before the ASSERT is built.
   std::vector<std::string> active_invariant_tags;
-  /// Maximum number of instructions to search backwards from the loop head
-  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
-  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
-  /// for up to ~4 extra declarations before the invariant.  Both
-  /// extract_loop_invariants and extract_and_remove_side_effects use this
-  /// same limit so their searches are consistent.
-  static constexpr size_t kMaxInvariantSearchBack = 10;
-
   void goto_loop_invariant();
 
   void convert_loop_with_invariant(loopst &loop);
