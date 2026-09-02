@@ -200,24 +200,12 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
-/// A (possibly typecast) symbol whose value can never change under it:
-/// a level2 SSA generation (assigned exactly once), or a nondet$ free
-/// variable (never assigned at all -- the frontend hands `nondet_u2()`
-/// to the store as `nondet$symex::nondet<N>` at level1_global, with no
-/// level2 generation ever minted). A union carrying such a value
-/// propagates as soundly as one carrying a constant; refusing it
-/// de-constants the WHOLE containing aggregate, and one nondet stored
-/// into any slot of a tagged-union stack then leaves every later
-/// member fold (loop bounds, branch guards) symbolic, unrolling
-/// data-independent loops to the unwind bound.
-///
-/// This differs deliberately from the bare-symbol nondet$ exclusion in
-/// constant_propagation: there a VARIABLE'S reads would be replaced by
-/// the placeholder wholesale, hollowing out the counterexample. Here
-/// the nondet symbol is a member VALUE inside a recorded aggregate --
-/// a member read folds to the free variable itself, which is what the
-/// trace shows for an unconstrained value regardless. Level0/level1
-/// program symbols stay refused: they are not single-assignment.
+/// A (possibly typecast) symbol whose value can never change under
+/// it: a level2 SSA generation (assigned once) or a nondet$ free
+/// variable (never assigned; no level2 generation is minted for it).
+/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the
+/// symbol here is a member value inside a recorded aggregate, so a
+/// member read folds to the free variable the trace shows anyway.
 static bool is_immutable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
@@ -239,11 +227,8 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
-/// A pure bitvector computation over immutable leaves is itself an
-/// immutable value: the cell-packing idiom `(s2)(x & 0xFFFF)` /
-/// `(s2)((x >> 16) & 0xFFFF)` stores pieces of one symbol, and
-/// refusing it de-constants the containing aggregate exactly like a
-/// bare symbol did.
+/// A pure bitvector computation over immutable leaves is itself
+/// immutable — the cell-packing idiom `(s2)((x >> 16) & 0xFFFF)`.
 static bool is_immutable_computation(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
@@ -275,13 +260,9 @@ static bool is_immutable_computation(const expr2tc &expr)
 }
 
 /// Whether a constant aggregate literal may propagate: every element
-/// must itself propagate. A union literal may additionally carry a
-/// (typecast) symbol as its initializing member: constant_union records
-/// init_field, so a later cross-member read of the propagated literal
-/// is still visible as one -- the simplifier declines it and the SMT
-/// union encoding interprets it -- and propagation never loses which
-/// member was written. Struct and array literals keep the plain
-/// recursion: no measured workload needs more there.
+/// must itself propagate. A union literal may also carry a (typecast)
+/// symbol as its initializing member — constant_union's init_field
+/// keeps a later cross-member read visible as one.
 /// Whether a with-chain update value keeps the chain propagatable: an
 /// immutable (computed) value or anything constant_propagation accepts.
 static bool
