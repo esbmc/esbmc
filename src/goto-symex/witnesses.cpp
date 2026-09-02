@@ -809,15 +809,25 @@ void _create_yaml_metadata_emitter(
 
   metadata << YAML::Key << "task" << YAML::BeginMap;
 
+  /* Every positional argument: a waypoint may name any of them, and
+     README-YAML.md requires a waypoint's file_name to be in this list. */
+  std::vector<std::string> input_files = config.args;
+  if (input_files.empty())
+    input_files.push_back(verifiedfile);
+
   metadata << YAML::Key << "input_files" << YAML::BeginSeq;
-  metadata << YAML::DoubleQuoted << verifiedfile;
+  for (const std::string &input_file : input_files)
+    metadata << YAML::DoubleQuoted << input_file;
   metadata << YAML::EndSeq;
 
-  std::string file_hash;
-  generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
   metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
-  metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
-           << YAML::DoubleQuoted << file_hash;
+  for (const std::string &input_file : input_files)
+  {
+    std::string file_hash;
+    generate_sha256_hash_for_file(input_file.c_str(), file_hash);
+    metadata << YAML::Key << YAML::DoubleQuoted << input_file << YAML::Value
+             << YAML::DoubleQuoted << file_hash;
+  }
   metadata << YAML::EndMap;
 
   std::string spec;

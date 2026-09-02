@@ -234,8 +234,8 @@ void show_goto_trace_gui(
 
 /*
    Return true if
-   - the location's file_name matches the user input or one of the
-     user-supplied include files
+   - the location's file_name matches one of the user's input files or one of
+     the user-supplied include files
    - the location is explicitly labeled as user_provided
    - the location is empty
    - the location is the esbmc_intrinsics.h exception
@@ -248,8 +248,12 @@ bool input_file_check(const locationt &l)
   const irep_idt &f_name = l.get_file();
   if (f_name.empty())
     return true;
-  if (f_name == config.options.get_option("input-file"))
-    return true;
+  /* config.args, not options["input-file"]: the latter retains only the last
+     positional argument, so under multiple input files every step from an
+     earlier one would look foreign. */
+  for (const std::string &arg : config.args)
+    if (f_name == arg)
+      return true;
   for (const auto &inc : config.ansi_c.include_files)
   {
     if (f_name == inc)
