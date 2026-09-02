@@ -74,7 +74,11 @@ int main(void)
   vm.frame.pc = 0;
   vm.frame.stack[0].r = nondet_u2(); /* dead: overwritten next */
   vm.frame.stack[0].r = 1;
-  vm.frame.sp = 1;
+  /* An intermediate local: its level2 generation, not a nondet$
+   * symbol, is what lands in the slot — the other acceptance path. */
+  u2 held = nondet_u2();
+  vm.frame.stack[1].r = held;
+  vm.frame.sp = 2;
   __ESBMC_assert(dispatch(&vm) == 0, "caught");
   __ESBMC_assert(vm.frame.pc == 7, "at the handler");
   return 0;

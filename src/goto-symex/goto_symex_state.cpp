@@ -225,6 +225,12 @@ static bool is_immutable_value(const expr2tc &expr)
     b = &to_typecast2t(*b).from;
   if (!is_symbol2t(*b))
     return false;
+  // Scalars only: an aggregate-typed symbol must keep going through
+  // constant_propagation, whose array_may_propagate refuses the
+  // infinite-size modelling arrays and oversized nests.
+  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
+        is_pointer_type((*b)->type)))
+    return false;
   const symbol2t &sym = to_symbol2t(*b);
   if (
     sym.rlevel == symbol_renaming_level::level2 ||

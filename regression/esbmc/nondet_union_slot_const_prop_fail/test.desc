@@ -1,4 +1,5 @@
 CORE
 main.c
---unwind 2
+--unwind 3
+^State 1 file .*main\.c line 25 column 3 function main thread 0$
 ^VERIFICATION FAILED$
