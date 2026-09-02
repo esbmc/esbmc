@@ -568,6 +568,11 @@ public:
    */
   BigInt uniform_scalar_elem_size(const std::string &list_id) const;
 
+  /** Same, for a list reached as an expression: a non-symbol operand names no
+   *  list to look up, so it has no single width and yields 0.
+   */
+  BigInt uniform_scalar_elem_size(const exprt &list) const;
+
   /**
    * @brief Unpack a list variable into multiple targets, supporting starred
    * expressions.

@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---incremental-bmc --function ceillog2
+--unwind 513 --function ceillog2
 ^VERIFICATION FAILED$

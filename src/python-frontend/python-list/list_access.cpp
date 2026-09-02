@@ -2829,10 +2829,19 @@ exprt python_list::handle_range_slice(
     std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
       converter_.get_type_handler().get_list_type())),
     config.ansi_c.address_width));
+  // The source list's element width, when every element shares one. Without it
+  // the per-element copy length is the symbolic o->size and each copy unwinds
+  // memcpy's byte loop to --unwind, which is what made slicing the most
+  // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
+  BigInt slice_elem_size = uniform_scalar_elem_size(array);
+
   exprt push_call = build_call_expr(
     *push_func,
     bool_type(),
-    {build_symbol(sliced_list), build_symbol(at_result), slice_list_type_id});
+    {build_symbol(sliced_list),
+     build_symbol(at_result),
+     slice_list_type_id,
+     from_integer(slice_elem_size, size_type())});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
