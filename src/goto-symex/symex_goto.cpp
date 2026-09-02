@@ -48,6 +48,17 @@ static bool is_stable_value(const expr2tc &expr)
   }
 }
 
+/// Flattened node count of @p expr, giving up once past @p limit.
+static size_t count_nodes_up_to(const expr2tc &expr, size_t limit)
+{
+  size_t n = 1;
+  expr->foreach_operand([&n, limit](const expr2tc &e) {
+    if (n <= limit)
+      n += count_nodes_up_to(e, limit);
+  });
+  return n;
+}
+
 bool goto_symext::chase_copies(expr2tc &expr) const
 {
   if (is_nil_expr(expr))
@@ -83,19 +94,24 @@ void goto_symext::record_copy_definition(
     lhs_sym.rlevel != symbol_renaming_level::level2_global)
     return;
 
-  // Only a bare copy, possibly through typecasts. Anything else (an
-  // ite from a guarded assignment, arithmetic, a dereference chain) is
-  // not a stable renaming of one value and gets no entry. Bare
-  // constants are already inlined by constant propagation and need no
-  // chase.
+  // A stable value only: a (possibly typecast) symbol, or a pure
+  // bitvector computation over such leaves. Anything else (an ite
+  // from a guarded assignment, a dereference chain) is not a stable
+  // renaming of one value and gets no entry. Bare constants are
+  // already inlined by constant propagation and need no chase.
   if (!is_stable_value(rhs) || is_constant_expr(rhs))
     return;
   if (copy_definitions.size() >= subsumption_map_capacity)
     return;
 
-  // Canonicalize so chains resolve in one substitution pass.
+  // Canonicalize so chains resolve in one substitution pass; drop
+  // oversized canonical forms (see max_copy_definition_nodes).
   expr2tc value = rhs;
   chase_copies(value);
+  if (
+    count_nodes_up_to(value, max_copy_definition_nodes) >
+    max_copy_definition_nodes)
+    return;
   copy_definitions[irep_idt(to_symbol2t(renamed_lhs).get_symbol_name())] =
     value;
 }

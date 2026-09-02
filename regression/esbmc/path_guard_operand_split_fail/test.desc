@@ -1,4 +1,5 @@
 CORE
 main.c
---unwind 30 --no-unwinding-assertions
+--unwind 136 --no-unwinding-assertions
+^.*legal encodings must stay reachable.*$
 ^VERIFICATION FAILED$
