@@ -917,8 +917,8 @@ public:
 
   /** Name every element of a row being written whole as a store of the
    *  corresponding read out of it, at @p offset in the flattened array.
-   *  Requires the row's flattened size to be a compile-time constant, which
-   *  both call sites establish; false when a nested row's is not. */
+   *  False when a length it would have to enumerate is not a compile-time
+   *  constant, leaving the caller to fall back on the whole-array encoding. */
   bool expand_row_stores(
     const expr2tc &row,
     const expr2tc &offset,

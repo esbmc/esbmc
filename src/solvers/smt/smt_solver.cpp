@@ -2896,13 +2896,9 @@ static expr2tc lower_flattened_row_select(const index2t &index)
 /* Name every element of @p row, a row being written whole, as a store of the
  * corresponding read out of it. Correct whatever the row denotes -- the read
  * is of the row expression itself -- which is what makes it the general case
- * behind decompose_stores()' in-place fast path. False when a nested row's
- * length is not a compile-time constant, which leaves nothing to enumerate.
- *
- * @p row's own length is a caller's precondition, not something to re-test:
- * both call sites reach here only after requiring the flattened form of this
- * very type to have a constant size, and a flattened size is the product of
- * the dimensions. */
+ * behind decompose_stores()' in-place fast path. False when any length it has
+ * to enumerate is not a compile-time constant, which leaves the caller to fall
+ * back on the whole-array encoding. */
 bool smt_solver_baset::expand_row_stores(
   const expr2tc &row,
   const expr2tc &offset,
@@ -2921,6 +2917,12 @@ bool smt_solver_baset::expand_row_stores(
       return false;
     stride = to_constant_int2t(sub.array_size).value;
   }
+
+  /* Not implied by the caller's check on the flattened size: mul2t folds
+     `n * 0` to `0`, so a zero-length inner dimension makes a row's flattened
+     size constant while this dimension stays symbolic. */
+  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+    return false;
 
   BigInt n = to_constant_int2t(rowtype.array_size).value;
   for (BigInt k = 0; k < n; k = k + 1)
@@ -3277,6 +3279,14 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
     // return the whole array and then get the index, we can
     // do better and call get_array_element directly
     index2t index = to_index2t(res);
+
+    /* Same lowering convert_array_index() applies: a row of a flattened array
+       has no term, so convert_ast() below cannot be handed one. get() resolves
+       the ite this produces by asking the solver for its condition. */
+    expr2tc lowered = lower_flattened_row_select(index);
+    if (!is_nil_expr(lowered))
+      return get(lowered);
+
     expr2tc src_value = index.source_value;
 
     expr2tc newidx;
