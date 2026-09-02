@@ -17,6 +17,15 @@ esac
 
 [ -f "$file" ] || exit 0
 
+# Mirror CI's code-style exclusions (pull_request.yml / install-format-hook.sh):
+# these are vendored trees CI never format-checks, so leave their style alone.
+case "$file" in
+  */src/ansi-c/cpp/* | */src/clang-c-frontend/headers/* | \
+    */src/c2goto/library/libm/musl/*)
+    exit 0
+    ;;
+esac
+
 # Prefer the clang-format 11 / git-clang-format pair pinned by
 # scripts/install-format-hook.sh, since that's the exact version CI's
 # code-style check uses, and git-clang-format lets us format only the lines
