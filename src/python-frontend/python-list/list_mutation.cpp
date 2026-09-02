@@ -483,7 +483,10 @@ void python_list::emit_list_copy(
   exprt push_call = build_call_expr(
     *push_obj_sym,
     bool_type(),
-    {build_symbol(dst), build_symbol(tmp_obj), list_type_id_arg});
+    {build_symbol(dst),
+     build_symbol(tmp_obj),
+     list_type_id_arg,
+     from_integer(BigInt(0), size_type())});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -923,6 +926,13 @@ BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
   return width;
 }
 
+BigInt python_list::uniform_scalar_elem_size(const exprt &list) const
+{
+  if (!list.is_symbol())
+    return 0;
+  return uniform_scalar_elem_size(list.identifier().as_string());
+}
+
 exprt python_list::build_extend_list_call(
   const symbolt &list,
   const nlohmann::json &op,
@@ -1136,8 +1146,7 @@ exprt python_list::build_extend_list_call(
   // element to be the same scalar width: extend applies one length to all of
   // them, so a mixed-width list must keep the model's symbolic elem->size
   // fallback (0).
-  BigInt elem_size_bytes =
-    actual_list.is_symbol() ? uniform_scalar_elem_size(other_list_name) : 0;
+  BigInt elem_size_bytes = uniform_scalar_elem_size(actual_list);
 
   code_function_callt extend_func_call;
   extend_func_call.function() = build_symbol(*extend_func_sym);
