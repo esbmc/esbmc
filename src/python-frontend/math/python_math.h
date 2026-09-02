@@ -80,6 +80,8 @@ public:
 
   static bool fits_in_width(const BigInt &value, unsigned width, bool is_signed);
 
+  static const BigInt kMaxConstantFoldExponent;
+
   /**
    * @brief Classify whether a call should be handled by math dispatch.
    *

@@ -24,8 +24,6 @@
 
 namespace
 {
-const BigInt kMaxConstantFoldExponent = 1024;
-
 // Reconcile `value` to exactly `target_type`'s width. `c_implicit_typecast_
 // arithmetic` (the same arithmetic promotion clang_cpp_adjust's adjust_expr_rel
 // applies) buckets operands into coarse C ranks with a minimum promotion of
@@ -168,6 +166,8 @@ BigInt python_math::pow_bigint_non_negative(BigInt base, BigInt exp)
   }
   return result;
 }
+
+const BigInt python_math::kMaxConstantFoldExponent = 1024;
 
 bool python_math::fits_in_width(const BigInt &value, unsigned width, bool is_signed)
 {

@@ -548,7 +548,7 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
     return *lhs - *rhs;
   if (op == "Mult")
     return *lhs * *rhs;
-  if (op == "Pow" && *rhs >= 0)
+  if (op == "Pow" && *rhs >= 0 && *rhs <= python_math::kMaxConstantFoldExponent)
     return python_math::pow_bigint_non_negative(*lhs, *rhs);
 
   return std::nullopt;
