@@ -249,10 +249,6 @@ static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 
 namespace
 {
-// Per-kind constant descriptors: the one place that names, for each numeric
-// constant kind, its operand-type predicate, its is-constant predicate, and
-// its stored-value accessor. dispatch_binary_fold and the three binary
-// constant-fold ladders (arith / logic / relation) share this single mapping.
 struct int_kind
 {
   using value_type = BigInt;
