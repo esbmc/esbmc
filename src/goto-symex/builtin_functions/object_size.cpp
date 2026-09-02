@@ -134,38 +134,52 @@ void goto_symext::intrinsic_builtin_object_size(
     // Note: type_byte_size returns the allocated object size, not just the sum
     // of fields. For structs/unions this includes alignment and padding, which
     // matches GCC's __builtin_object_size semantics.
-    BigInt total_size = type_byte_size(addressed_type);
-
-    if (consider_offset)
+    //
+    // A VLA or otherwise dynamically sized array has no compile-time size, so
+    // type_byte_size() throws rather than returning one. That is not an error
+    // here: GCC's __builtin_object_size answers "unknown" for exactly these
+    // objects, which is the fallback this function already computes when it
+    // cannot identify the object at all. Letting the exception escape instead
+    // aborts the run.
+    try
     {
-      // Type 1 or 3: calculate remaining bytes from offset
-      expr2tc offset_expr = pointer_offset2tc(get_int64_type(), ptr);
-      cur_state->rename(offset_expr);
-      do_simplify(offset_expr);
+      BigInt total_size = type_byte_size(addressed_type);
 
-      if (is_constant_int2t(offset_expr))
+      if (consider_offset)
       {
-        BigInt offset = to_constant_int2t(offset_expr).value;
-        BigInt remaining =
-          (total_size > offset) ? (total_size - offset) : BigInt(0);
-        obj_size = constant_int2tc(size_type2(), remaining);
+        // Type 1 or 3: calculate remaining bytes from offset
+        expr2tc offset_expr = pointer_offset2tc(get_int64_type(), ptr);
+        cur_state->rename(offset_expr);
+        do_simplify(offset_expr);
+
+        if (is_constant_int2t(offset_expr))
+        {
+          BigInt offset = to_constant_int2t(offset_expr).value;
+          BigInt remaining =
+            (total_size > offset) ? (total_size - offset) : BigInt(0);
+          obj_size = constant_int2tc(size_type2(), remaining);
+        }
+        else
+        {
+          // Offset is symbolic - can't determine remaining size statically
+          const expr2tc total_size_expr =
+            constant_int2tc(get_int64_type(), total_size);
+          obj_size = if2tc(
+            size_type2(),
+            greaterthan2tc(total_size_expr, offset_expr),
+            sub2tc(size_type2(), total_size_expr, offset_expr),
+            gen_zero(size_type2()));
+        }
       }
       else
       {
-        // Offset is symbolic - can't determine remaining size statically
-        const expr2tc total_size_expr =
-          constant_int2tc(get_int64_type(), total_size);
-        obj_size = if2tc(
-          size_type2(),
-          greaterthan2tc(total_size_expr, offset_expr),
-          sub2tc(size_type2(), total_size_expr, offset_expr),
-          gen_zero(size_type2()));
+        // Type 0 or 2: return full object size of the addressed object
+        obj_size = constant_int2tc(size_type2(), total_size);
       }
     }
-    else
+    catch (const array_type2t::array_size_excp &)
     {
-      // Type 0 or 2: return full object size of the addressed object
-      obj_size = constant_int2tc(size_type2(), total_size);
+      obj_size = create_fallback_size(use_zero_for_unknown);
     }
   }
 
