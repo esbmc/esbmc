@@ -347,10 +347,13 @@ TEST_CASE(
 
   // Every entry is a sink, so `filtered` comes out empty and the
   // `!filtered.empty()` guard is the only thing between `p` and an empty target
-  // set. The loop dereferences `p` once per unwound iteration, so all four must
-  // carry their checks. Deleting the guard costs exactly one of each kind --
-  // a dereference nobody verifies, which is the missed-bug direction, and the
-  // same asymmetry the function-pointer filter above is checked for.
+  // set. The loop dereferences `p` once per unwound iteration (unwind=4), but
+  // the inductive step's assert-to-assume conversion (#6443) converts every
+  // claim but the last unwinding's, so exactly one dereference check of each
+  // kind survives as an assertion rather than four. Deleting the guard still
+  // costs exactly one of each kind -- a dereference nobody verifies, which is
+  // the missed-bug direction, and the same asymmetry the function-pointer
+  // filter above is checked for.
   REQUIRE(asserts_commented(eq, "dereference failure: invalid pointer") == 1);
   REQUIRE(
     asserts_commented(eq, "dereference failure: Incorrect alignment") == 1);

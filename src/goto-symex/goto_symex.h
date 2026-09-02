@@ -1340,6 +1340,16 @@ protected:
    */
   bool is_assume_false(const expr2tc &assumption);
 
+  /**
+   *  Whether the inductive-step's assert-to-assume conversion (#6443) applies
+   *  to this claim: only inside the loop first_loop names, only while that
+   *  attribution is unambiguous, and only before the last unwinding, which
+   *  supplies the induction hypothesis instead of being converted.
+   *  @param new_expr The claim expression, renamed but not necessarily
+   *         simplified (--no-simplify makes do_simplify a no-op).
+   */
+  bool should_convert_inductive_claim(const expr2tc &new_expr) const;
+
   // Members
 
   /** Options we're working with */
