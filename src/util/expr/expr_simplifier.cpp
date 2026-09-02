@@ -1457,16 +1457,9 @@ expr2tc with2t::do_simplify() const
 }
 
 /// Project a member read out of a constant union literal, or return
-/// nothing when it cannot fold. The value always sits at position 0
-/// with init_field naming the member it initializes. A cross-member
-/// read between INTEGER members of the same width is an exact bit
-/// reinterpretation — two's-complement integers of one width share
-/// their representation, so { .r=v }.s is (s-type)v. Without that fold
-/// the tagged-slot idiom never resolves: the dereference layer
-/// normalizes union accesses to the first member, so a value written
-/// via .r and read via .r still arrives here as a .s read of an
-/// .r-initialized literal. Anything wider, or any non-integer member,
-/// stays unfolded.
+/// nothing. A cross-member read between integer members of one width
+/// is an exact bit reinterpretation: { .r=v }.s is (s-type)v. Wider or
+/// non-integer members stay unfolded.
 static expr2tc fold_union_member_read(
   const constant_union2t &uni,
   const irep_idt &member,
