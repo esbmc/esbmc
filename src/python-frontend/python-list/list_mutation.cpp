@@ -1183,9 +1183,9 @@ exprt python_list::build_pop_list_call(
   // drop it to keep the recorded sequence aligned with the runtime list.
   if (elem_type == typet())
   {
-    if (const auto *recorded = elem_types().find(list_id))
+    if (elem_types().find(list_id))
     {
-      elem_type = recorded->back().second;
+      elem_type = elem_types().last_element_type(list_id);
       elem_types().pop_last(list_id);
       elem_types().memoize_pop_type(site, elem_type);
     }
@@ -1324,10 +1324,14 @@ exprt python_list::build_shallow_copy_call(
   size_t float_type_id = 0;
   if (src.is_symbol())
   {
-    const auto *recorded = elem_types().find(src.identifier().as_string());
-    if (recorded)
+    const std::string &src_id = src.identifier().as_string();
+    if (elem_types().find(src_id))
     {
-      const typet &elem_type = converter_.ns.follow(recorded->back().second);
+      // Copy (not `const typet &`): last_element_type() returns by value, and
+      // ns.follow() may return a reference to that same temporary argument,
+      // which would otherwise dangle past this statement.
+      const typet elem_type =
+        converter_.ns.follow(elem_types().last_element_type(src_id));
       if (
         elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
         elem_type.is_floatbv() || elem_type.is_bool())
