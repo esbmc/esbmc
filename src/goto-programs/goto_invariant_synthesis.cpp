@@ -132,14 +132,17 @@ bool is_constant_one(const expr2tc &expr)
 }
 
 /// True when a LOOP_INVARIANT already sits in the window goto_loop_invariant's
-/// extractor searches. Both would be folded into one conjunction, so adding a
-/// guess next to a user-written invariant risks failing the user's own proof.
+/// extractor searches -- the extractor's own constant, so the two agree by
+/// construction. Both invariants would be folded into one conjunction, so
+/// adding a guess next to a user-written one risks failing the user's proof.
 bool has_user_invariant(
   const goto_programt::targett &head,
   const goto_programt::targett &begin)
 {
   goto_programt::targett it = head;
-  for (size_t steps = 0; it != begin && steps < kMaxEntryScanBack; ++steps)
+  for (size_t steps = 0;
+       it != begin && steps < goto_loop_invariantt::kMaxInvariantSearchBack;
+       ++steps)
   {
     --it;
     if (it->is_loop_invariant())
@@ -368,7 +371,7 @@ bool match_counter_and_bound(
 bool regime_admits_counter(
   const affine_loopt &out,
   bool body_asserts,
-  bool overflow_checks_enabled)
+  const overflow_checkst &overflow)
 {
   // Symbolic addend: two disjuncts only, so an unsigned counter entering at 0
   // or 1. See the header.
@@ -391,13 +394,19 @@ bool regime_admits_counter(
   if (body_asserts && !is_unsigned_integer(out.counter))
     return false;
 
-  // goto_check instruments the guards this pass emits. The closed form is built
-  // at each accumulator's type, not the counter's, so an unsigned counter with
-  // a signed accumulator would still emit signed arithmetic and draw claims on
-  // operations the user never wrote.
-  if (!overflow_checks_enabled)
+  // goto_check instruments the guards this pass emits, and
+  // --unsigned-overflow-check widens what it instruments to unsigned
+  // arithmetic as well, leaving no integer type the closed form could be
+  // emitted at without inventing claims. Decline outright.
+  if (overflow.unsigned_arith)
+    return false;
+
+  if (!overflow.signed_arith)
     return true;
 
+  // The closed form is built at each accumulator's type, not the counter's, so
+  // an unsigned counter with a signed accumulator would still emit signed
+  // arithmetic and draw claims on operations the user never wrote.
   if (!is_unsigned_integer(out.counter))
     return false;
   for (const auto &acc : out.accumulators)
@@ -411,7 +420,7 @@ bool regime_admits_counter(
 bool recognise_affine_loop(
   goto_functiont &goto_function,
   const loopst &loop,
-  bool overflow_checks_enabled,
+  const overflow_checkst &overflow,
   goto_programt::targett &head_out,
   affine_loopt &out)
 {
@@ -436,7 +445,7 @@ bool recognise_affine_loop(
   if (!classify_accumulators(head, begin, modified, writes, out))
     return false;
 
-  if (!regime_admits_counter(out, body_asserts, overflow_checks_enabled))
+  if (!regime_admits_counter(out, body_asserts, overflow))
     return false;
 
   head_out = head;
@@ -555,7 +564,7 @@ void emit_invariant(
 
 void goto_synthesise_loop_invariants(
   goto_functionst &goto_functions,
-  bool overflow_checks_enabled)
+  const overflow_checkst &overflow)
 {
   size_t synthesised = 0;
 
@@ -572,8 +581,7 @@ void goto_synthesise_loop_invariants(
 
       goto_programt::targett head;
       affine_loopt shape;
-      if (!recognise_affine_loop(
-            it->second, loop, overflow_checks_enabled, head, shape))
+      if (!recognise_affine_loop(it->second, loop, overflow, head, shape))
         continue;
 
       // goto_loop_invariant's extractor walks backwards from the *original*

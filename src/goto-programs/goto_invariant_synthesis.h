@@ -3,6 +3,20 @@
 
 #include <goto-programs/goto_functions.h>
 
+/// What goto_check will instrument on the guards this pass emits. It checks
+/// every instruction guard, including the synthesised ones, so a closed form
+/// emitted at a type it watches draws overflow claims on arithmetic the user
+/// never wrote.
+struct overflow_checkst
+{
+  /// --overflow-check: signed arithmetic is instrumented.
+  bool signed_arith = false;
+  /// --unsigned-overflow-check: unsigned arithmetic is instrumented too
+  /// (goto_check.cpp, `enable_unsigned_overflow_check`). Under it no integer
+  /// type is safe to emit the closed form at, so synthesis declines outright.
+  bool unsigned_arith = false;
+};
+
 /// Synthesise loop invariants for affine counter/accumulator loops and attach
 /// them as LOOP_INVARIANT instructions, exactly as if the user had written
 /// __ESBMC_loop_invariant(). The subsequent goto_loop_invariant pass discharges
@@ -58,15 +72,10 @@
 /// satisfies the guard, so the body's `i + 1` wraps and the conjunct is false
 /// after a legitimate iteration. Signed loops therefore carry a weaker bound
 /// and are declined where that weakness is observable — a body that asserts, or
-/// a run with overflow checking on.
-///
-/// @param overflow_checks_enabled  when true, decline signed loops. goto_check
-///        instruments every instruction guard, including the ones this pass
-///        emits, so the synthesised `(i - i0) * e` draws overflow claims on
-///        arithmetic the user never wrote. Unsigned wrap is well defined and
-///        unaffected; only the signed form invents claims.
+/// a run with signed overflow checking on. --unsigned-overflow-check
+/// declines every loop, signed or not; see overflow_checkst.
 void goto_synthesise_loop_invariants(
   goto_functionst &goto_functions,
-  bool overflow_checks_enabled);
+  const overflow_checkst &overflow);
 
 #endif /* GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_ */

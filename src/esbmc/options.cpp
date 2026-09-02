@@ -569,7 +569,8 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Synthesise invariants for affine counter/accumulator loops and discharge "
      "them with the loop-invariant havoc schema; implies "
-     "--loop-invariant-check and --multi-property"},
+     "--loop-invariant-check, and --multi-property unless a k-induction phase "
+     "is selected"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "

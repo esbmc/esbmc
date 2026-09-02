@@ -48,6 +48,16 @@ void goto_loop_invariant_combined(goto_functionst &goto_functions);
 class goto_loop_invariantt : public goto_loopst
 {
 public:
+  /// Maximum number of instructions to search backwards from the loop head
+  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
+  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
+  /// for up to ~4 extra declarations before the invariant.  Both
+  /// extract_loop_invariants and extract_and_remove_side_effects use this
+  /// same limit so their searches are consistent, and
+  /// goto_synthesise_loop_invariants scans the same window before deciding
+  /// a loop already carries a user-written invariant.
+  static constexpr size_t kMaxInvariantSearchBack = 10;
+
   goto_loop_invariantt(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
@@ -74,14 +84,6 @@ protected:
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
   /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
   std::vector<expr2tc> active_loop_assigns;
-  /// Maximum number of instructions to search backwards from the loop head
-  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
-  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
-  /// for up to ~4 extra declarations before the invariant.  Both
-  /// extract_loop_invariants and extract_and_remove_side_effects use this
-  /// same limit so their searches are consistent.
-  static constexpr size_t kMaxInvariantSearchBack = 10;
-
   void goto_loop_invariant();
 
   void convert_loop_with_invariant(loopst &loop);
