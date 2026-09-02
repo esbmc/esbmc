@@ -125,6 +125,31 @@ static bool is_relational(const expr2tc &expr)
          is_greaterthanequal2t(expr);
 }
 
+/// The short-circuit operators, whose operands goto_convert's lowering rejects
+/// unless they are boolean.
+static bool is_short_circuit(const expr2tc &expr)
+{
+  return is_and2t(expr) || is_or2t(expr) || is_not2t(expr);
+}
+
+/// Both spellings of a call: a bare `f(x);` statement is a sideeffect2t of kind
+/// function_call rather than a code_function_call2t.
+static bool is_call_site(const expr2tc &expr)
+{
+  return is_code_function_call2t(expr) || is_sideeffect2t(expr);
+}
+
+/// The unary operators promote_unary_bool_operand claims: the complement of
+/// is_complex_unary within the family. The chain spelled this exclusion as the
+/// `else` of is_complex_unary, which is a strict subset of the same family;
+/// stating it as a predicate holds in both the rewriting and the declining case
+/// for the same reason, rather than relying on the first arm having mutated the
+/// node out of the second's reach.
+static bool is_promotable_unary(const expr2tc &expr)
+{
+  return (is_neg2t(expr) || is_bitnot2t(expr)) && !is_complex_type(expr->type);
+}
+
 /// The source location of `expr` when it is a statement that can hold a call
 /// in a sub-expression, empty otherwise. sideeffect2t carries none of its own,
 /// so a call in one takes the enclosing statement's -- which is what
@@ -192,8 +217,7 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
     adjust_index(expr);
   else if (is_member2t(expr))
     adjust_member(expr);
-  else if (
-    sole_adjuster && (is_code_function_call2t(expr) || is_sideeffect2t(expr)))
+  else if (sole_adjuster && is_call_site(expr))
   {
     // Before declare_implicit_callee: the polymorphic name is repointed at the
     // concrete instance here, and it is that symbol the callee check must see.
@@ -206,99 +230,78 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (sole_adjuster)
     adjust_sole_arms(expr);
 
-  if (sole_adjuster && is_address_of2t(expr))
-    adjust_address_of(expr);
-
   enclosing_location = saved_location;
 }
 
-/// The arms that only run when this pass is the sole adjuster, gathered behind
-/// one test so adjust_expr does not repeat it per arm.
-void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
+void clang_c_adjust_irep2::adjust_comma_type(expr2tc &expr)
 {
+  const code_comma2t &c = to_code_comma2t(expr);
+  if (expr->type != c.side_2->type)
+    expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
+}
+
+/// Name and member from one token, so the string the ordering test matches on
+/// and the member it names cannot drift apart.
+#define ARM(member) #member, &clang_c_adjust_irep2::member
+
+/// The arms that run when this pass is the sole adjuster, in application order.
+///
+/// The order is load-bearing wherever a comment below says so; everywhere else
+/// the guards are disjoint by expr_id and the row order is free. Each guard is
+/// re-evaluated against the current node, so an arm that rewrites a node into
+/// another kind hands it to that kind's arm below -- which is how
+/// adjust_index's `p[i]` becomes a dereference the dereference arm then sees.
+const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   // First: the sugar has to be in place before adjust_call_callee decides
-  // whether this call is direct, since that is what it reads.
-  adjust_function_designators(expr);
-
-  if (is_and2t(expr) || is_or2t(expr) || is_not2t(expr))
-    adjust_boolean_operands(expr);
-
-  if (is_code_function_call2t(expr) || is_sideeffect2t(expr))
-  {
-    adjust_call_callee(expr);
-    adjust_call_arguments(expr);
-  }
-
-  if (is_if2t(expr))
-    adjust_if_expr(expr);
-
-  if (is_binary_arith(expr))
-  {
-    adjust_complex_arith(expr);
-    adjust_vector_float_arith(expr);
-  }
-
+  // whether this call is direct, since that is what it reads. It is offered
+  // every node and guards itself on an address_of2t.
+  {ARM(adjust_function_designators), nullptr},
+  {ARM(adjust_boolean_operands), is_short_circuit},
+  {ARM(adjust_call_callee), is_call_site},
+  {ARM(adjust_call_arguments), is_call_site},
+  {ARM(adjust_if_expr), is_if2t},
+  {ARM(adjust_complex_arith), is_binary_arith},
+  {ARM(adjust_vector_float_arith), is_binary_arith},
   /* Before the hoist: hoist_for_init rewrites a code_for2t into a block, and a
    * block is not a statement-with-condition, so the loop's guard would never
    * reach the conversion. */
-  if (is_statement_with_condition(expr))
-    adjust_statement_condition(expr);
+  {ARM(adjust_statement_condition), is_statement_with_condition},
+  {ARM(hoist_for_init), is_code_for2t},
+  {ARM(adjust_expression_statement), is_code_expression2t},
+  {ARM(adjust_comma_type), is_code_comma2t},
+  {ARM(adjust_struct), is_constant_struct2t},
+  {ARM(adjust_array_subtype), is_constant_array2t},
+  {ARM(adjust_decl_init), is_code_decl2t},
+  {ARM(adjust_dereference), is_dereference2t},
+  {ARM(adjust_complex_unary), is_complex_unary},
+  {ARM(promote_unary_bool_operand), is_promotable_unary},
+  {ARM(adjust_relational), is_relational},
+  {ARM(adjust_special_functions), is_sideeffect2t},
+  {ARM(adjust_binary_arith_operands), is_arith_or_bitwise},
+  {ARM(adjust_shift_operands), is_shift},
+  {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
+  {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
+  // Ran after the chain returned; as the last row it runs at the same point,
+  // and under !sole_adjuster the table is never entered either way.
+  {ARM(adjust_address_of), is_address_of2t},
+};
 
-  if (is_code_for2t(expr))
-    hoist_for_init(expr);
+#undef ARM
 
-  if (is_code_expression2t(expr))
-    adjust_expression_statement(expr);
-
-  adjust_sole_arms_tail(expr);
+std::vector<clang_c_adjust_irep2::arm_info> clang_c_adjust_irep2::arm_order()
+{
+  std::vector<arm_info> order;
+  order.reserve(std::size(arms));
+  for (const arm &a : arms)
+    order.push_back({a.name, a.when});
+  return order;
 }
 
-/// The tail of adjust_sole_arms. Split only to keep either half under
-/// the complexity gate; the two run back to back and the arms below are
-/// order-independent of the ones above.
-void clang_c_adjust_irep2::adjust_sole_arms_tail(expr2tc &expr)
+void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
-  // A comma expression takes its right operand's type (C11 6.5.17p2). Clang
-  // hands it the *decayed* type when the right operand is an array, so leaving
-  // it makes `(c, a[i])[0]` index a pointer rather than the row -- which loses
-  // the named array-bounds check for the generic dereference one. Same rewrite
-  // as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
-  if (is_code_comma2t(expr))
-  {
-    const code_comma2t &c = to_code_comma2t(expr);
-    if (expr->type != c.side_2->type)
-      expr = code_comma2tc(c.side_2->type, c.side_1, c.side_2);
-  }
-  if (is_constant_struct2t(expr))
-    adjust_struct(expr);
-  if (is_constant_array2t(expr))
-    adjust_array_subtype(expr);
-  if (is_code_decl2t(expr))
-    adjust_decl_init(expr);
-  if (is_dereference2t(expr))
-    adjust_dereference(expr);
-
-  if (is_complex_unary(expr))
-    adjust_complex_unary(expr);
-  else if (is_neg2t(expr) || is_bitnot2t(expr))
-    promote_unary_bool_operand(expr);
-
-  if (is_relational(expr))
-    adjust_relational(expr);
-
-  if (is_sideeffect2t(expr))
-    adjust_special_functions(expr);
-
-  if (is_arith_or_bitwise(expr))
-    adjust_binary_arith_operands(expr);
-  else if (is_shift(expr))
-    adjust_shift_operands(expr);
-
-  if (is_sideeffect_assign2t(expr))
-  {
-    adjust_plain_assignment(expr);
-    adjust_compound_assignment(expr);
-  }
+  for (const arm &a : arms)
+    if (!a.when || a.when(expr))
+      (this->*a.run)(expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:
