@@ -4454,16 +4454,8 @@ static void copy_homogeneous_elem_types(
   const std::string &src,
   const std::string &dest)
 {
-  const size_t n = registry.size(src);
-  if (n == 0)
+  if (registry.uniform_element_type(src).is_nil())
     return;
-
-  const typet first = registry.element_type(src, 0);
-  if (first.is_nil())
-    return;
-  for (size_t i = 1; i < n; ++i)
-    if (registry.element_type(src, i) != first)
-      return;
 
   registry.assign_from(src, dest);
 }
