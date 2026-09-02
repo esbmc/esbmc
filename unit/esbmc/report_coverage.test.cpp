@@ -32,8 +32,11 @@ void reset_totals()
   goto_coveraget::total_assert_ins = 0;
   goto_coveraget::total_branch = 0;
   goto_coveraget::total_func_branch = 0;
+  goto_coveraget::total_kpath = 0;
+  goto_coveraget::total_kpath_spanning = 0;
   goto_coveraget::total_cond.clear();
   goto_coveraget::all_claims.clear();
+  goto_coveraget::k_path_spanning_redundant.clear();
 }
 
 optionst flags(std::initializer_list<const char *> set)
@@ -201,4 +204,102 @@ TEST_CASE("a program with no conditions covers none", "[coverage]")
   CHECK_THAT(
     coverage_report(flags({"condition-coverage"}), {}),
     Catch::Matchers::Contains("Condition Coverage: 0%"));
+}
+
+TEST_CASE("branch coverage counts the goals reached", "[coverage]")
+{
+  const claimt taken{"branch taken", "t.c:4"};
+  const claimt missed{"branch not taken", "t.c:4"};
+  reset_totals();
+  goto_coveraget::all_claims = {taken, missed};
+  goto_coveraget::total_branch = 4;
+
+  const std::string logged =
+    coverage_report(flags({"branch-coverage"}), {signature(taken)});
+
+  CHECK_THAT(logged, Catch::Matchers::Contains("Branches : 4"));
+  CHECK_THAT(logged, Catch::Matchers::Contains("Reached : 1"));
+  CHECK_THAT(logged, Catch::Matchers::Contains("Branch Coverage: 25%"));
+}
+
+TEST_CASE("branch coverage can list what was reached", "[coverage]")
+{
+  const claimt taken{"branch taken", "t.c:4"};
+  reset_totals();
+  goto_coveraget::all_claims = {taken};
+  goto_coveraget::total_branch = 1;
+
+  CHECK_THAT(
+    coverage_report(flags({"branch-coverage-claims"}), {signature(taken)}),
+    Catch::Matchers::Contains("branch taken"));
+}
+
+TEST_CASE("a program with no branches has no percentage", "[coverage]")
+{
+  reset_totals();
+  goto_coveraget::total_func_branch = 0;
+
+  CHECK_THAT(
+    coverage_report(flags({"branch-function-coverage"}), {}),
+    Catch::Matchers::Contains("Branch Coverage: N/A (no branches)"));
+}
+
+TEST_CASE("function branch coverage counts entry points too", "[coverage]")
+{
+  const claimt entry{"function main entered", "t.c:1"};
+  reset_totals();
+  goto_coveraget::all_claims = {entry};
+  goto_coveraget::total_func_branch = 2;
+
+  const std::string logged =
+    coverage_report(flags({"branch-function-coverage"}), {signature(entry)});
+
+  CHECK_THAT(
+    logged, Catch::Matchers::Contains("Function Entry Points & Branches : 2"));
+  CHECK_THAT(logged, Catch::Matchers::Contains("Branch Coverage: 50%"));
+}
+
+TEST_CASE("k-path coverage measures against the spanning set", "[coverage]")
+{
+  const claimt maximal{"k-path witness", "t.c:7"};
+  reset_totals();
+  goto_coveraget::total_kpath = 5;
+  goto_coveraget::total_kpath_spanning = 2;
+
+  const std::string logged =
+    coverage_report(flags({"k-path-coverage-enabled"}), {signature(maximal)});
+
+  CHECK_THAT(logged, Catch::Matchers::Contains("k-Path Witnesses : 5"));
+  CHECK_THAT(logged, Catch::Matchers::Contains("Spanning Set : 2"));
+  CHECK_THAT(logged, Catch::Matchers::Contains("Reached : 1"));
+  CHECK_THAT(logged, Catch::Matchers::Contains("k-Path Coverage: 50%"));
+}
+
+TEST_CASE("a subsumed k-path goal does not inflate coverage", "[coverage]")
+{
+  // Numerator and denominator must both restrict to maximal goals, or a
+  // reached-but-subsumed goal counts against a maximal-only total.
+  const claimt maximal{"k-path witness", "t.c:7"};
+  const claimt subsumed{"k-path witness", "t.c:8"};
+  reset_totals();
+  goto_coveraget::total_kpath = 5;
+  goto_coveraget::total_kpath_spanning = 2;
+  goto_coveraget::k_path_spanning_redundant = {subsumed};
+
+  CHECK_THAT(
+    coverage_report(
+      flags({"k-path-coverage-enabled"}),
+      {signature(maximal), signature(subsumed)}),
+    Catch::Matchers::Contains("Reached : 1"));
+}
+
+TEST_CASE("no k-path goals means no percentage", "[coverage]")
+{
+  reset_totals();
+  goto_coveraget::total_kpath = 3;
+  goto_coveraget::total_kpath_spanning = 0;
+
+  CHECK_THAT(
+    coverage_report(flags({"k-path-coverage-enabled"}), {}),
+    Catch::Matchers::Contains("k-Path Coverage: N/A (no k-path goals)"));
 }
