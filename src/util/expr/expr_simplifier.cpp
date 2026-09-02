@@ -3351,17 +3351,35 @@ expr2tc bitcast2t::do_simplify() const
   return expr2tc();
 }
 
-/* &x is the address of a real object and is never NULL. The one shape that
- * looks like an address-of but need not be non-null is a &*p round-trip, which
- * reduces to p -- and expr2t::simplify deliberately leaves address_of's operand
- * alone, so that shape reaches the callers intact. */
 static bool is_null_pointer(const expr2tc &expr);
 
+/* &x is the address of a real object and is never NULL. The shapes that look
+ * like an address-of but need not be are the dereference-rooted ones: &*p is
+ * p, and &p->m / &(*p)[i] are p plus a constant offset -- the offsetof idiom
+ * &((struct S *)0)->m is exactly that, and pointer_offset2t::do_simplify in
+ * this file folds it to the member offset, 0 for the first member. Indexing a
+ * pointer is *(p + i), a dereference in all but name. expr2t::simplify
+ * deliberately leaves address_of's operand alone, so all of these reach the
+ * callers intact; walk the member/index chain and answer only for a root that
+ * is a declared object. */
 static bool address_of_is_provably_non_null(const expr2tc &e)
 {
   if (!is_address_of2t(e))
     return false;
-  return !is_dereference2t(to_address_of2t(e).ptr_obj);
+
+  expr2tc obj = to_address_of2t(e).ptr_obj;
+  while (is_member2t(obj) || is_index2t(obj))
+    obj = is_member2t(obj) ? to_member2t(obj).source_value
+                           : to_index2t(obj).source_value;
+
+  return is_symbol2t(obj) || is_constant_string2t(obj);
+}
+
+/* NULL reaches the simplifier both as the symbol and as a constant zero cast
+ * to a pointer; a null-guard rule has to accept either. */
+static bool is_null_pointer_value(const expr2tc &expr)
+{
+  return is_null_pointer(expr) || is_null_pointer_constant(expr);
 }
 
 /// Typecast of a constant bool to a number type; nullopt when no arm matches.
@@ -3430,10 +3448,7 @@ static std::optional<expr2tc> fold_constant_bv_source(
   }
 
   if (is_bool_type(type))
-  {
-    const constant_int2t &theint = to_constant_int2t(simp);
     return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
-  }
 
   if (is_floatbv_type(type))
   {
@@ -4484,10 +4499,10 @@ expr2tc notequal2t::do_simplify() const
       !is_nil_expr(b))
     return b;
 
-  // &x != NULL is true, the mirror of the == NULL rule equality2t already has.
-  if (is_null_pointer(side_1) && address_of_is_provably_non_null(side_2))
+  // &x != NULL is true, the mirror of the == NULL rule same_object2t has.
+  if (is_null_pointer_value(side_1) && address_of_is_provably_non_null(side_2))
     return gen_true_expr();
-  if (is_null_pointer(side_2) && address_of_is_provably_non_null(side_1))
+  if (is_null_pointer_value(side_2) && address_of_is_provably_non_null(side_1))
     return gen_true_expr();
 
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
@@ -5233,8 +5248,8 @@ expr2tc same_object2t::do_simplify() const
     op2 = to_typecast2t(op2).from;
 
   // Handle NULL pointer comparisons first
-  bool op1_is_null = is_null_pointer(op1);
-  bool op2_is_null = is_null_pointer(op2);
+  bool op1_is_null = is_null_pointer_value(op1);
+  bool op2_is_null = is_null_pointer_value(op2);
 
   if (op1_is_null && op2_is_null)
     return gen_true_expr(); // Both NULL
@@ -5242,12 +5257,6 @@ expr2tc same_object2t::do_simplify() const
   // Exactly one side is NULL: can the other side equal NULL? &x is the
   // address of a real object, never NULL, so they're definitely different
   // objects. Symbols (pointer variables) might hold NULL — leave to SMT.
-  //
-  // Special case: address_of(dereference(p)) is semantically equivalent to
-  // p (a &*p round-trip), and p may be NULL. expr2t::simplify deliberately
-  // doesn't simplify operands of address_of, so this shape can reach us
-  // unchanged. Fold to false only when the address_of target isn't a
-  // dereference of a pointer that could itself be NULL.
   if (op1_is_null && address_of_is_provably_non_null(op2))
     return gen_false_expr();
   if (op2_is_null && address_of_is_provably_non_null(op1))
