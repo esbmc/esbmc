@@ -134,6 +134,15 @@ TEST_CASE("copying between instances", "[python-frontend][types]")
     REQUIRE(registry.element_type("dst") == string_type());
   }
 
+  SECTION("append_from leaves the destination alone for an unknown source")
+  {
+    registry.record("dst", "old", string_type());
+    registry.append_from("missing", "dst");
+
+    REQUIRE(registry.size("dst") == 1);
+    REQUIRE(registry.element_type("dst") == string_type());
+  }
+
   SECTION("append_from concatenates")
   {
     registry.record("dst", "old", string_type());
@@ -335,6 +344,23 @@ TEST_CASE("derived type queries", "[python-frontend][types]")
     registry.record("bad", "", string_type());
     REQUIRE_THROWS_AS(
       registry.homogeneous_element_type("bad", "sorted"), std::runtime_error);
+  }
+}
+
+TEST_CASE("pop-site type memo", "[python-frontend][types]")
+{
+  ensure_config_initialized();
+  element_type_registry registry;
+
+  SECTION("an unmemoized site reads as absent")
+  {
+    REQUIRE(registry.memoized_pop_type("site") == typet());
+  }
+
+  SECTION("memoize_pop_type is replayed by a later lookup")
+  {
+    registry.memoize_pop_type("site", int_type());
+    REQUIRE(registry.memoized_pop_type("site") == int_type());
   }
 }
 
