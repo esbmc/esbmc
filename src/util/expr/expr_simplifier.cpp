@@ -4497,12 +4497,9 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
   return c.is_zero();
 }
 
-// A value that is provably non-negative by type structure alone: an
-// unsigned bitvector, or an unsigned bitvector zero-extended into a
-// STRICTLY wider signed type (the C promotion `(int)a_u16` shape —
-// the sign bit can never be set). Comparisons of such a value against
-// zero are decidable, but the plain unsigned-vs-zero rule misses them
-// because the promoted comparison happens in the signed domain.
+// Provably non-negative by type structure alone: an unsigned
+// bitvector, possibly zero-extended into a STRICTLY wider signed type
+// (the C promotion `(int)a_u16` shape — the sign bit is never set).
 static bool is_provably_nonneg(const expr2tc &e)
 {
   if (is_unsignedbv_type(e))
