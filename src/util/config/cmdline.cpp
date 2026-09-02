@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <set>
 #include <sstream>
 
 #include <stdexcept>
@@ -237,6 +238,13 @@ bool cmdlinet::parse(
   const char **argv,
   const struct group_opt_templ *opts)
 {
+  static std::set<const struct group_opt_templ *> parsed;
+  if (!parsed.insert(opts).second)
+  {
+    log_error("option table parsed more than once");
+    return true;
+  }
+
   clear();
   unsigned int i = 0;
   for (; opts[i].groupname != "end"; i++)
