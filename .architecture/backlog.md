@@ -4,13 +4,13 @@ Persistent memory for the `pm-deepen` routine. Each `## <slug>` is a candidate; 
 
 ## constant-kind-dispatch-seam
 
-- **Status**: proposed
+- **Status**: in-flight
 - **Score**: 22/25 (leverage 4, locality 4, blast radius 1, heat 5)
-- **Files**: ~2 estimated
+- **Files**: ~2 estimated (2 actual)
 - **Modules**: `src/util/expr/expr_simplifier.cpp`, `unit/util/simplify2t.test.cpp`
-- **Summary**: Collapse the four duplicated constant-kind ladders (`simplify_arith_2ops`, `simplify_logic_2ops`, `simplify_constant_relation`, `simplify_arith_1op`) into one `dispatch_binary_fold` seam driven by a per-kind trait, keeping each caller's extras caller-side.
+- **Summary**: Collapse the three duplicated two-operand constant-kind ladders (`simplify_arith_2ops`, `simplify_logic_2ops`, `simplify_constant_relation`) into one `dispatch_binary_fold` seam driven by per-kind descriptor structs, keeping each caller's extras caller-side. `simplify_arith_1op` (distinct one-operand contract) scoped out.
 - **First seen**: 2026-09-02
-- **PR**: —
+- **PR**: #7484
 
 ## string-method-dispatch-single-seam
 
@@ -74,11 +74,11 @@ Persistent memory for the `pm-deepen` routine. Each `## <slug>` is a candidate; 
 
 ## Run log
 
-### Run 2026-09-02 — in progress
+### Run 2026-09-02 — complete
 
-- **Outcome**: (updated at completion)
-- **Stopped at**: —
-- **Branch**: `sym/esbmc/routine/refactor-audit/01M1FK9R1B` (adopted — non-default, 0 commits ahead of origin/master, no upstream, unpublished on origin)
-- **Committed**: report + backlog
-- **Evidence**: first run — no prior `.architecture/`, `CONTEXT.md`, or `docs/adr/`
-- **Next**: implement `constant-kind-dispatch-seam` test-first and open a PR
+- **Outcome**: complete
+- **Stopped at**: step 6 — PR opened
+- **Branch**: `sym/esbmc/routine/refactor-audit/01M1FK9R1B` (adopted — non-default, 0 commits ahead of origin/master, no upstream, unpublished on origin; kept the caller's name, slug recorded here)
+- **Committed**: report + backlog + implementation (`dcc9f3d243`)
+- **Evidence**: PR #7484; `simplify2ttest` 139 cases / 258 assertions green, fixedbv pins mutation-checked, clang-format clean, code-review confirmed behaviour-preserving
+- **Next**: `string-method-dispatch-single-seam` is the runner-up candidate (tied 22/25) for the next firing
