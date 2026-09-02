@@ -26,6 +26,17 @@ if(ENABLE_Z3)
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 endif()
 
+if(ENABLE_BITWUZLA)
+  # Links `solverbitw` (the static lib carrying bitwuzla_conv.cpp) so the test
+  # can construct the backend directly: mk_*_sort is not reachable through
+  # smt_convt, and the sort cache it pins is a property of the backend, not of
+  # any query it answers. `solvers` supplies create_solver for the model half.
+  new_unit_test(bitwuzla_sort_cache_test "bitwuzla_sort_cache.test.cpp"
+                "solvers;util_esbmc;filesystem;bigint")
+  target_include_directories(bitwuzla_sort_cache_test
+    PRIVATE ${Bitwuzla_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/bitwuzla)
+endif()
+
 if(ENABLE_SMTLIB)
   # Verdict scanner shared by the one-shot subprocess backends (bitwuzllob,
   # neurosym); lives in the smtlib library. util_esbmc supplies the logging

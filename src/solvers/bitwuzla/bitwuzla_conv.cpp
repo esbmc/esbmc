@@ -11,6 +11,40 @@ smt_astt bitw_smt_ast::with_sort(smt_solver_baset *ctx, smt_sortt s) const
   return ctx->new_solver_ast<bitw_smt_ast>(a, s);
 }
 
+namespace
+{
+/** Owns the term reference bitwuzla_get_value() hands back. The C API refcounts
+ *  every term it exports, so a model query that never releases its result pins
+ *  that term in the term manager for the lifetime of the solver.
+ *
+ *  Balanced because every export is exactly +1: releasing once undoes the
+ *  query's increment and no more. Where the query hands back the argument
+ *  itself (issue #7063) that still leaves ESBMC's own reference, taken when the
+ *  term was built, intact -- this holds only while nothing else in this file
+ *  releases a term ESBMC still stores. */
+class value_reft
+{
+public:
+  explicit value_reft(BitwuzlaTerm t) : t(t)
+  {
+  }
+  ~value_reft()
+  {
+    bitwuzla_term_release(t);
+  }
+  value_reft(const value_reft &) = delete;
+  value_reft &operator=(const value_reft &) = delete;
+
+  operator BitwuzlaTerm() const
+  {
+    return t;
+  }
+
+private:
+  BitwuzlaTerm t;
+};
+} // namespace
+
 void bitwuzla_error_handler(const char *msg)
 {
   log_error("Bitwuzla error encountered\n{}", msg);
@@ -720,7 +754,7 @@ smt_astt bitwuzla_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 tvt bitwuzla_convt::get_bool(smt_astt a)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  BitwuzlaTerm value = bitwuzla_get_value(bitw, ast->a);
+  value_reft value(bitwuzla_get_value(bitw, ast->a));
 
   if (bitwuzla_term_is_true(value))
     return tvt(true);
@@ -737,10 +771,8 @@ tvt bitwuzla_convt::get_bool(smt_astt a)
 BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
-  const char *result =
-    bitwuzla_term_value_get_str(bitwuzla_get_value(bitw, ast->a));
-  BigInt val = binary2integer(result, is_signed);
-  return val;
+  value_reft value(bitwuzla_get_value(bitw, ast->a));
+  return binary2integer(bitwuzla_term_value_get_str(value), is_signed);
 }
 
 expr2tc bitwuzla_convt::get_array_elem(
@@ -757,11 +789,11 @@ expr2tc bitwuzla_convt::get_array_elem(
     idx = to_solver_smt_ast<bitw_smt_ast>(
       mk_smt_bv(BigInt(index), mk_bv_sort(array_bound)));
 
+  value_reft array_value(bitwuzla_get_value(bitw, za->a));
+  value_reft index_value(bitwuzla_get_value(bitw, idx->a));
+
   BitwuzlaTerm e = bitwuzla_mk_term2(
-    bitw_term_manager,
-    BITWUZLA_KIND_ARRAY_SELECT,
-    bitwuzla_get_value(bitw, za->a),
-    bitwuzla_get_value(bitw, idx->a));
+    bitw_term_manager, BITWUZLA_KIND_ARRAY_SELECT, array_value, index_value);
 
   return get_by_ast(subtype, new_ast(e, convert_sort(subtype)));
 }
@@ -904,6 +936,11 @@ void bitwuzla_convt::print_model()
     {
       BitwuzlaTerm value =
         bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a);
+      /* value walks down the lambda chain below; this owns the reference the
+       * query handed back, which the walk leaves behind on its first step. The
+       * walk stays valid past that release because bitwuzla_term_get_children
+       * exports every child with its own increment and never drops it. */
+      value_reft root(value);
       size_t size;
       BitwuzlaTerm *children = bitwuzla_term_get_children(value, &size);
       assert(size == 2);
@@ -940,74 +977,103 @@ void bitwuzla_convt::print_model()
     }
     else
     {
+      value_reft value(
+        bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a));
       fprintf(
         messaget::state.out,
         ") %s %s)\n",
         bitwuzla_sort_to_string(sort),
-        bitwuzla_term_to_string(
-          bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a)));
+        bitwuzla_term_to_string(value));
     }
   }
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_BOOL, bitwuzla_mk_bool_sort(bitw_term_manager), 1);
+  return cached_sort({SMT_SORT_BOOL, 0, 0}, [this] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_BOOL, bitwuzla_mk_bool_sort(bitw_term_manager), 1);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_bv_sort(std::size_t width)
 {
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_BV, bitwuzla_mk_bv_sort(bitw_term_manager, width), width);
+  return cached_sort({SMT_SORT_BV, width, 0}, [this, width] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_BV, bitwuzla_mk_bv_sort(bitw_term_manager, width), width);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_fbv_sort(std::size_t width)
 {
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_FIXEDBV, bitwuzla_mk_bv_sort(bitw_term_manager, width), width);
+  return cached_sort({SMT_SORT_FIXEDBV, width, 0}, [this, width] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_FIXEDBV, bitwuzla_mk_bv_sort(bitw_term_manager, width), width);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_array_sort(smt_sortt domain, smt_sortt range)
 {
-  auto domain_sort = to_solver_smt_sort<BitwuzlaSort>(domain);
-  auto range_sort = to_solver_smt_sort<BitwuzlaSort>(range);
+  /* Keyed on the operand sorts' addresses: no smt_sort is ever freed (nothing
+   * under src/solvers/ deletes one, and pop_ctx frees only smt_asts), so an
+   * address can never be recycled into a different sort. Identity rather than
+   * width because a Bool domain and a 1-bit bit-vector domain are distinct
+   * Bitwuzla sorts that share a width. */
+  sort_keyt key{
+    SMT_SORT_ARRAY,
+    reinterpret_cast<uintptr_t>(domain),
+    reinterpret_cast<uintptr_t>(range)};
 
-  auto t =
-    bitwuzla_mk_array_sort(bitw_term_manager, domain_sort->s, range_sort->s);
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_ARRAY, t, domain_sort->get_data_width(), range);
+  return cached_sort(key, [this, domain, range] {
+    auto domain_sort = to_solver_smt_sort<BitwuzlaSort>(domain);
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_ARRAY,
+      bitwuzla_mk_array_sort(
+        bitw_term_manager,
+        domain_sort->s,
+        to_solver_smt_sort<BitwuzlaSort>(range)->s),
+      domain_sort->get_data_width(),
+      range);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_bvfp_sort(std::size_t ew, std::size_t sw)
 {
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_BVFP,
-    bitwuzla_mk_bv_sort(bitw_term_manager, ew + sw + 1),
-    ew + sw + 1,
-    sw + 1);
+  return cached_sort({SMT_SORT_BVFP, ew, sw}, [this, ew, sw] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_BVFP,
+      bitwuzla_mk_bv_sort(bitw_term_manager, ew + sw + 1),
+      ew + sw + 1,
+      sw + 1);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw_term_manager, 3), 3);
+  return cached_sort({SMT_SORT_BVFP_RM, 0, 0}, [this] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw_term_manager, 3), 3);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   // sw excludes the hidden bit, which Bitwuzla's significand width includes.
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_FPBV,
-    bitwuzla_mk_fp_sort(bitw_term_manager, ew, sw + 1),
-    ew + sw + 1,
-    sw + 1);
+  return cached_sort({SMT_SORT_FPBV, ew, sw}, [this, ew, sw] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_FPBV,
+      bitwuzla_mk_fp_sort(bitw_term_manager, ew, sw + 1),
+      ew + sw + 1,
+      sw + 1);
+  });
 }
 
 smt_sortt bitwuzla_convt::mk_fpbv_rm_sort()
 {
-  return new solver_smt_sort<BitwuzlaSort>(
-    SMT_SORT_FPBV_RM, bitwuzla_mk_rm_sort(bitw_term_manager), 3);
+  return cached_sort({SMT_SORT_FPBV_RM, 0, 0}, [this] {
+    return new solver_smt_sort<BitwuzlaSort>(
+      SMT_SORT_FPBV_RM, bitwuzla_mk_rm_sort(bitw_term_manager), 3);
+  });
 }
 
 smt_astt bitwuzla_convt::mk_smt_fpbv(const ieee_floatt &thereal)
@@ -1376,8 +1442,8 @@ ieee_floatt bitwuzla_convt::get_fpbv(smt_astt a)
   const char *sign;
   const char *exponent;
   const char *significand;
-  bitwuzla_term_value_get_fp_ieee(
-    bitwuzla_get_value(bitw, ast->a), &sign, &exponent, &significand, 2);
+  value_reft value(bitwuzla_get_value(bitw, ast->a));
+  bitwuzla_term_value_get_fp_ieee(value, &sign, &exponent, &significand, 2);
 
   const unsigned ew = a->sort->get_exponent_width();
   const unsigned sw = a->sort->get_significand_width() - 1;
