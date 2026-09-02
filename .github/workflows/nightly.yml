@@ -198,10 +198,24 @@ jobs:
           name: nightly-issue
           path: nightly-issue.txt
 
+      # steps.suite's exit code only drives the diagnostics above (see "Run
+      # the full suite"); nothing before this step actually fails the job, so
+      # a stable regression would otherwise produce an issue and a successful
+      # bisect while this workflow stays green. This is the real gate.
+      - name: Fail the job if the nightly needs attention
+        if: ${{ steps.report.outputs.action != 'none' }}
+        run: |
+          echo "::error::Nightly verdict: ${{ steps.report.outputs.action }} -- see the issue filed above."
+          exit 1
+
   bisect:
     name: Bisect the regression
     needs: suite
-    if: ${{ needs.suite.outputs.action == 'bisect' && needs.suite.outputs.test != '' }}
+    # !cancelled(): the step above deliberately fails "suite" on a red night,
+    # which would otherwise make GitHub Actions skip this job by default --
+    # it is needed precisely when "suite" fails. Not always(), which would
+    # also run this after "suite" is cancelled or times out.
+    if: ${{ !cancelled() && needs.suite.outputs.action == 'bisect' && needs.suite.outputs.test != '' }}
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
     # Every bisect step is a full rebuild, so this is hours rather than the
     # minutes #6735 estimates from test runtime alone. ccache absorbs most of
