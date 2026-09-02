@@ -14,36 +14,43 @@
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
 
-inline code_function_callt invoke_intrinsic(
+/// An ESBMC intrinsic invoked from an *expression* position, as a
+/// `sideeffect2t` of allockind::function_call carrying the call's result type.
+///
+/// It has to be an expression node, not a `code_function_call2t`: the latter is
+/// void-typed, and an enclosing arithmetic constructor asserts on an operand
+/// whose type is not its own -- CBMC serialises `object_size` under `+`, so the
+/// abort landed while the binary was still being read, long before
+/// lift_call_expressions() gets a chance to hoist the call out (#7410).
+inline expr2tc invoke_intrinsic(
   const std::string &name,
   const typet &type,
   const std::vector<exprt> &args)
 {
   assert(has_prefix(name, "c:@F@__ESBMC"));
-  code_function_callt call;
   code_typet code_type;
   code_type.return_type() = type;
   code_type.type() = type;
   for (const exprt &arg : args)
     code_type.arguments().push_back(arg.type());
 
-  symbolt symbol;
-  symbol.mode = "C";
-  symbol.set_type(code_type);
-  symbol.name = name;
-  symbol.id = name;
-  symbol.is_extern = false;
-  symbol.file_local = false;
+  exprt fn("symbol", code_type);
+  fn.identifier(name);
+  fn.name(name);
 
-  exprt tmp("symbol", symbol.get_type());
-  tmp.identifier(symbol.id);
-  tmp.name(symbol.name);
+  expr2tc callee;
+  migrate_expr(fn, callee);
 
-  call.function() = tmp;
+  std::vector<expr2tc> arguments;
+  arguments.reserve(args.size());
   for (const exprt &arg : args)
-    call.arguments().push_back(arg);
+  {
+    expr2tc migrated;
+    migrate_expr(arg, migrated);
+    arguments.push_back(migrated);
+  }
 
-  return call;
+  return side_effect_function_call2tc(migrate_type(type), callee, arguments);
 }
 
 // File for old irep -> new irep conversions.
@@ -947,6 +954,58 @@ static void coerce_ternary_branch(expr2tc &branch, const type2tc &type)
   }
 
   branch = typecast2tc(type, branch);
+}
+
+static expr2tc coerce_to_type(const expr2tc &e, const type2tc &type)
+{
+  return e->type == type ? e : expr2tc(typecast2tc(type, e));
+}
+
+/// __CPROVER_{r,w,rw}_ok(p, n): the n bytes from p lie inside one live object.
+/// Migrating these to `true` made every assertion over them pass vacuously --
+/// CBMC refutes __CPROVER_r_ok(malloc(8), 16) and ESBMC proved it. ESBMC draws
+/// no read/write distinction (it models no read-only storage), so all three get
+/// the same encoding.
+static expr2tc migrate_pointer_ok(const exprt &expr)
+{
+  assert(expr.operands().size() == 2);
+
+  expr2tc ptr, size;
+  migrate_expr(expr.op0(), ptr);
+  migrate_expr(expr.op1(), size);
+
+  // The extent comes from the same intrinsic __CPROVER_OBJECT_SIZE uses, so it
+  // covers heap, stack and static objects; lift_call_expressions hoists the
+  // call out of this predicate once the binary is loaded.
+  const typet size_t_type = expr.op1().type();
+  constant_exprt kind(size_t_type);
+  kind.set_value(
+    integer2binary(0, atoi(size_t_type.width().as_string().c_str())));
+  expr2tc extent = invoke_intrinsic(
+    "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind});
+
+  // pointer_offset2t requires a signed, address-width result type -- the same
+  // rule the __CPROVER_POINTER_OFFSET case follows. Taking the type from the
+  // size operand instead put a void-typed pointer_offset into the formula
+  // whenever CBMC's own lowering (__CPROVER_object_whole) left that operand
+  // untyped, and the simplifier then built a typecast to void that aborted the
+  // solver.
+  const type2tc offs_type = get_int_type(config.ansi_c.address_width);
+  expr2tc offset = pointer_offset2tc(offs_type, ptr);
+  expr2tc last = add2tc(offs_type, offset, coerce_to_type(size, offs_type));
+
+  // not(invalid_pointer) rather than valid_object: the latter is
+  // __ESBMC_alloc[obj], which symex only maintains for dynamic objects, so a
+  // stack or static object reads as invalid. invalid_pointer is restricted to
+  // dynamic objects and the INVALID object by construction
+  // (dynamic_allocation.cpp), which is the polarity wanted here.
+  // NULL is neither dynamic nor the INVALID object, so invalid_pointer does not
+  // exclude it; CBMC reports it as not readable, so say so explicitly.
+  expr2tc not_null = notequal2tc(ptr, gen_zero(ptr->type));
+
+  return and2tc(
+    and2tc(not_null, not2tc(invalid_pointer2tc(ptr))),
+    lessthanequal2tc(last, coerce_to_type(extent, offs_type)));
 }
 
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
@@ -2783,10 +2842,22 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     type = migrate_type(expr.type());
 
-    const std::string function = "c:@F@__ESBMC_get_object_size";
-    const std::vector<exprt> args = {expr.op0()};
+    // __CPROVER_OBJECT_SIZE counts *bytes*, which is what
+    // __ESBMC_builtin_object_size's type-0 mode reports for heap, stack and
+    // static objects alike; __ESBMC_get_object_size returns the addressed
+    // array's element count, so it agreed only for char.
+    const std::string function = "c:@F@__ESBMC_builtin_object_size";
+    constant_exprt kind(expr.type());
+    kind.set_value(
+      integer2binary(0, atoi(expr.type().width().as_string().c_str())));
+    const std::vector<exprt> args = {expr.op0(), kind};
 
-    migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
+    // The result is a *call*: object_size resolves its object by dereference,
+    // which is symex machinery, so there is nothing to evaluate in place. CBMC
+    // serialises it inside an expression, so it is spelled as an
+    // expression-context call and lift_call_expressions() hoists it out to
+    // statement level once the binary is loaded.
+    new_expr_ref = invoke_intrinsic(function, expr.type(), args);
     return;
   }
 
@@ -2856,9 +2927,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "r_ok" || expr.id() == "w_ok" || expr.id() == "rw_ok")
   {
-    // FUTURE: call __ESBMC_r_ok / __ESBMC_w_ok / __ESBMC_rw_ok
-    true_exprt t;
-    migrate_expr(t, new_expr_ref);
+    new_expr_ref = migrate_pointer_ok(expr);
     return;
   }
 

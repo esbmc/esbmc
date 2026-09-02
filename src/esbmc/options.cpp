@@ -1028,7 +1028,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable value-set analysis for pointers and add assumes to the "
      "program"},
-    {"segfault-handler", NULL, "Print stacktrace on segmentation fault"}}},
+    {"segfault-handler",
+     NULL,
+     "Print a backtrace and memory map on a fatal signal"}}},
   {"DEBUG options",
    {
      {"double-assign-check",

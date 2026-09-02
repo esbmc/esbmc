@@ -653,6 +653,23 @@ public:
    */
   static size_t get_list_type_map_size(const std::string &list_id);
 
+  /**
+   * @brief The element byte width every recorded element of @p list_id shares,
+   *        or 0 when there is no single answer.
+   *
+   * The list models apply one copy length to every element, so a width is only
+   * usable when all of them agree. Non-scalar elements (nested lists, dicts)
+   * and mixed widths both yield 0, which keeps the model on its symbolic
+   * o->size path. Distinct from build_shallow_copy_call, which reads only the
+   * last type-map entry.
+   */
+  BigInt uniform_scalar_elem_size(const std::string &list_id) const;
+
+  /** Same, for a list reached as an expression: a non-symbol operand names no
+   *  list to look up, so it has no single width and yields 0.
+   */
+  BigInt uniform_scalar_elem_size(const exprt &list) const;
+
   /** Compute the type_flag and float_type_id for a list, using the same
    *  encoding as __ESBMC_list_sort and __ESBMC_list_lt:
    *    0 = all-integer, 1 = all-float, 2 = string, 3 = mixed int+float.

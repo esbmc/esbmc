@@ -471,7 +471,14 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
       // foreach_operand (both fold over K::fields), so no operand is skipped.
       const size_t n = node->get_num_sub_exprs();
       for (size_t i = n; i-- > 0;)
-        stack.emplace_back(*node->get_sub_expr(i), false);
+      {
+        // Optional operand slots are nil for some kinds (sideeffect2t's
+        // operand and size); pushing one hashes a null container below.
+        const expr2tc *sub = node->get_sub_expr(i);
+        if (sub == nullptr || is_nil_expr(*sub))
+          continue;
+        stack.emplace_back(*sub, false);
+      }
       continue;
     }
 

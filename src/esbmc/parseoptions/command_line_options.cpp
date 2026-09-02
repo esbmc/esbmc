@@ -31,6 +31,7 @@ extern "C"
 #include <clang-c-frontend/clang_c_language.h>
 #include <util/config/config.h>
 #include <util/base/filesystem.h>
+#include <util/base/signal_catcher.h>
 #include <csignal>
 #include <cstdlib>
 #include <limits>
@@ -95,20 +96,6 @@ extern "C"
 #define BT_BUF_SIZE 256
 
 #ifndef _WIN32
-// Writes a preformatted constant, retrying short writes. write(2) is
-// async-signal-safe; the logging API is not — it formats and allocates.
-static void write_stderr(const char *msg, size_t len)
-{
-  while (len > 0)
-  {
-    ssize_t n = write(STDERR_FILENO, msg, len);
-    if (n <= 0)
-      break;
-    msg += n;
-    len -= static_cast<size_t>(n);
-  }
-}
-
 // Runs on SIGALRM, on whatever the main thread was doing — quite possibly
 // inside malloc holding the arena lock, which is why every call here is from
 // POSIX's async-signal-safe set (#6201). has_violation() is an atomic load.
@@ -117,13 +104,13 @@ void timeout_handler(int)
   static const char timed_out[] = "ERROR: Timed out\n";
   static const char failed[] = "VERIFICATION FAILED\n";
 
-  write_stderr(timed_out, sizeof(timed_out) - 1);
+  signal_safe_write(STDERR_FILENO, timed_out, sizeof(timed_out) - 1);
   // Under --multi-property the run keeps exploring interleavings after a
   // violation, to reach the properties only later schedules touch. A timeout
   // landing in that tail must not discard a counterexample already found and
   // printed: the verdict is settled once a property is violated.
   if (goto_functionst::property_verdicts.has_violation())
-    write_stderr(failed, sizeof(failed) - 1);
+    signal_safe_write(STDERR_FILENO, failed, sizeof(failed) - 1);
   // Kill any external solver process groups first: they are in their own
   // groups, so they outlive this _exit() otherwise (e.g. an mpirun job).
   file_operations::kill_registered_pgroups_from_signal();
@@ -182,6 +169,22 @@ static void segfault_handler(int sig)
     close(fd);
   }
   ::raise(sig);
+}
+
+/* Displaces the concise reporter installed before doit(): asking for the
+ * backtrace is explicit intent, so this one does not defer to a handler
+ * somebody else set. */
+static void install_verbose_crash_handler(const cmdlinet &cmdline)
+{
+  if (!cmdline.isset("segfault-handler"))
+    return;
+
+  for (int sig : {SIGSEGV, SIGBUS, SIGABRT})
+    install_altstack_handler(sig, segfault_handler, false);
+}
+#else
+static void install_verbose_crash_handler(const cmdlinet &)
+{
 }
 #endif
 
@@ -721,13 +724,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
-#ifndef _WIN32
-  if (cmdline.isset("segfault-handler"))
-  {
-    signal(SIGSEGV, segfault_handler);
-    signal(SIGABRT, segfault_handler);
-  }
-#endif
+  install_verbose_crash_handler(cmdline);
 
   // parallel solving activates "--multi-property"
   if (cmdline.isset("parallel-solving"))

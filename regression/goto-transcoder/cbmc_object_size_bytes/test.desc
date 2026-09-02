@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 cbmc_object_size_bytes.goto
 --binary
 ^VERIFICATION SUCCESSFUL$
