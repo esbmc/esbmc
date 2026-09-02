@@ -43,3 +43,6 @@ regression/**/test
 
 # Generated doxygen API reference (see .config/Doxyfile)
 docs/html/
+
+# Created by some Claude skills
+.architecture/
