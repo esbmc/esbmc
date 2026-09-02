@@ -267,6 +267,30 @@ class SelectorCli(TempDirCase):
         rc = sel.main(["--timings", timings_path, "--output", os.path.join(self.tmp, "o.txt")])
         self.assertEqual(rc, 1)
 
+    def test_a_test_with_no_measurement_is_still_in_the_universe(self):
+        # Without --tests the universe defaults to the timing table's own
+        # keys, so an unmeasured test (newly added, or a first-time skip)
+        # would never even be considered for the weekly sample -- not merely
+        # under-costed. --always-run forces it in deterministically, which
+        # requires impute_costs to have given it a real cost in the first
+        # place (select() only takes an --always-run name when it has one).
+        known = ["regression/suite0/a", "regression/suite0/b"]
+        table = {
+            "schema": 1,
+            "tests": {n: {"seconds": 1.0, "status": "run"} for n in known},
+        }
+        timings_path = self.write("t.json", json.dumps(table))
+        unmeasured = "regression/suite0/brand_new"
+        tests_path = self.write("tests.txt", "\n".join(known + [unmeasured]))
+        always_run_path = self.write("always.txt", unmeasured)
+        out = os.path.join(self.tmp, "selected.txt")
+        rc = sel.main([
+            "--timings", timings_path, "--tests", tests_path, "--always-run", always_run_path,
+            "--week", "2026-W36", "--budget-seconds", "10", "--jobs", "1", "--output", out
+        ])
+        self.assertEqual(rc, 0)
+        self.assertIn(unmeasured, sel.read_lines(out))
+
 
 class IndexResolution(unittest.TestCase):
 

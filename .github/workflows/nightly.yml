@@ -91,8 +91,15 @@ jobs:
             echo "$out already exists; leaving this week's selection frozen."
             exit 0
           fi
+          # Without --tests the universe defaults to ci/test-timings.json's own
+          # keys, so a test with no measurement yet -- newly added, or a
+          # first-time skip on this runner -- would never even be considered
+          # for imputation; it would just be absent from the sample.
+          all_tests="$RUNNER_TEMP/all-tests.txt"
+          (cd build && ctest --show-only=json-v1) | jq -r '.tests[].name' > "$all_tests"
           python3 scripts/ci/select_tests.py \
             --timings ci/test-timings.json \
+            --tests "$all_tests" \
             --week "$week" \
             --budget-seconds "$FAST_LANE_BUDGET_SECONDS" \
             --jobs "$FAST_LANE_JOBS" \
