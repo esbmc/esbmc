@@ -140,12 +140,16 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/issue.md" >> "$GITHUB_STEP_SUMMARY" || true
 
+      # steps.suite.outputs.exit-code is ctest's raw exit code, which is
+      # non-zero even when every failure is quarantined; gate on the verdict
+      # instead, or a quarantine-only night never advances the baseline and
+      # the next real bisect's commit range grows unbounded until it does.
       - name: Record a new green baseline
-        if: ${{ steps.suite.outputs.exit-code == '0' }}
+        if: ${{ steps.report.outputs.action == 'none' }}
         run: |
           {
-            echo "# Commit of the last nightly whose full suite was green. Written by"
-            echo "# .github/workflows/nightly.yml; the bisect range starts here."
+            echo "# Commit of the last nightly with no non-quarantined failures."
+            echo "# Written by .github/workflows/nightly.yml; the bisect range starts here."
             echo "${{ github.sha }}"
           } > ci/last-green-nightly.txt
 
