@@ -1814,18 +1814,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   return a;
 }
 
-/// Encode a remainder. When the formula also divides the SAME operands
-/// — remainder checks, spec renderings of the C99 6.5.5 identity,
-/// strength-reduced div/mod pairs — the remainder lowers
-/// compositionally as a - (a / b) * b, its SMT-LIB defining identity
-/// (exact for every valuation: rem and div are co-defined for b == 0
-/// and wrap consistently on MIN / -1). The shared division term turns
-/// a rem-vs-div equivalence from a pointwise circuit comparison,
-/// infeasible to bit-blast already at 32 bits, into a structural one.
-/// A remainder with no matching division keeps the solver's rem
-/// primitive: its native rewrites are 3-5x faster on rem-heavy proofs
-/// (math.gcd-style loops), where the lowering would introduce division
-/// circuits the program never asked for.
+/// Encode a remainder: compositional as a - (a / b) * b when the
+/// formula also divides the same operands, the rem primitive otherwise.
 smt_astt
 smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
 {

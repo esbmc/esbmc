@@ -1,4 +1,5 @@
 CORE
 main.c
 
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line \d+\s+off-by-one identity$
 ^VERIFICATION FAILED$
