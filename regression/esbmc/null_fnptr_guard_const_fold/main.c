@@ -46,5 +46,15 @@ int main(void)
     for (unsigned short i = 0; i < vm.sp; i++)
       m++;
   __ESBMC_assert(m == 2, "the nonnull guard folded too");
+
+  /* Constant-offset forms: an object base plus or minus a constant is
+   * still a real object's address in the (object, offset) model, even
+   * past the object's end. */
+  unsigned short *q = vm.cells + 8;
+  int k = 0;
+  if (q != 0 && q - 3 != 0 && 0 != q + 60)
+    for (unsigned short i = 0; i < vm.sp; i++)
+      k++;
+  __ESBMC_assert(k == 2, "the offset guards folded too");
   return 0;
 }

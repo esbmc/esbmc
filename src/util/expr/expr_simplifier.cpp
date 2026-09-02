@@ -4368,28 +4368,17 @@ static expr2tc cancel_common_unary_operand(
   return expr2tc();
 }
 
-// Pointer-comparison constant folding. A comparison against the null
-// pointer is decidable whenever the other side is either also null or
-// provably a real object's address: in the memory model no object lives
-// at address zero, so `&sym == NULL` is false, as is
-// `(T*)((char*)&sym + k) == NULL` for ANY constant offset k — a
-// pointer value is an (object, offset) pair here, NULL is the null
-// object, and the comparison is decided by the object base alone, so
-// even an offset that walks past the object cannot alias null.
-// Without this fold every `p == NULL` guard over a concrete pointer
-// stays symbolic, every assignment downstream of it becomes guarded,
-// constant propagation dies with it, and data-independent loops behind
-// such guards unroll into formulas that scale with the object size.
-static bool is_null_pointer_value(const expr2tc &e)
+// Null-pointer comparison folding: a pointer value is an (object,
+// offset) pair and no object lives at address zero, so `&sym ± k`
+// never aliases NULL for any constant k.
+static bool is_null_pointer(const expr2tc &e)
 {
   const expr2tc *p = &e;
   while (is_typecast2t(*p))
     p = &to_typecast2t(*p).from;
-  if (is_symbol2t(*p) && to_symbol2t(*p).thename == "NULL")
+  if (is_symbol2t(*p) && to_symbol2t(*p).get_symbol_name() == "NULL")
     return true;
-  if (is_constant_int2t(*p) && to_constant_int2t(*p).value.is_zero())
-    return true;
-  return false;
+  return is_null_pointer_constant(*p);
 }
 
 static bool is_provably_nonnull_pointer(const expr2tc &e)
@@ -4397,8 +4386,10 @@ static bool is_provably_nonnull_pointer(const expr2tc &e)
   const expr2tc *p = &e;
   while (is_typecast2t(*p))
     p = &to_typecast2t(*p).from;
+  // address_of(dereference(q)) is just q and may be NULL;
+  // same_object2t::do_simplify refuses the shape for the same reason.
   if (is_address_of2t(*p))
-    return true;
+    return !is_dereference2t(to_address_of2t(*p).ptr_obj);
   // &sym + k / k + &sym / &sym - k: object base plus a constant offset
   if (is_add2t(*p))
   {
@@ -4424,8 +4415,8 @@ simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
 {
   if (!is_pointer_type(s1) && !is_pointer_type(s2))
     return expr2tc();
-  bool n1 = is_null_pointer_value(s1);
-  bool n2 = is_null_pointer_value(s2);
+  bool n1 = is_null_pointer(s1);
+  bool n2 = is_null_pointer(s2);
   if (n1 && n2)
     return eq ? gen_true_expr() : gen_false_expr();
   if (
@@ -5297,15 +5288,6 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 
   // We can't determine if they are the same object
   return expr2tc();
-}
-
-static bool is_null_pointer(const expr2tc &expr)
-{
-  // Check for explicit NULL symbol
-  if (is_symbol2t(expr) && to_symbol2t(expr).get_symbol_name() == "NULL")
-    return true;
-
-  return false;
 }
 
 expr2tc same_object2t::do_simplify() const
