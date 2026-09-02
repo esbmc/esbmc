@@ -523,6 +523,11 @@ void create_graphml(xmlnodet &graphml)
   source_code_node.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", source_code_node);
 
+  /* README-GraphML.md defines no per-edge origin-file key: programfile is
+     graph-level, so a conforming validator ignores this and still resolves
+     startline against programfile. Emitted anyway because it is the only place
+     a consumer can learn which file a step came from, and the edges it appears
+     on were unmatchable either way. */
   xmlnodet origin_file_node;
   origin_file_node.add("<xmlattr>.id", "originfile");
   origin_file_node.put(
