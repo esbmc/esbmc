@@ -731,7 +731,8 @@ this document** — each is a prioritised target for the cited harness.
 | **R47** | **Medium (no verdict, default configuration)** — found by a guard-*shape* census rather than a bound one, §15 M9 (R47); **FIXED**, same entry | **Every descending pointer walk hangs; every ascending twin folds.** The guard is `add(&a[4], k) != &a[0]`: the add's base keeps its own subscript, so it never meets the bare bound beside it. A decrement also never reaches the `base + offset` shape an increment has. Four other mechanisms were measured and refuted first, including a real missing `sub2t` arm in `constant_propagation` that changes no verdict | 18-shape guard census; `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp` | `regression/esbmc/descending_pointer_walk{,_fail}` | **Fixed**, in two steps: `p - c -> p + (-c)` for a signed constant gives a decrementing walk the shape an incrementing one has, and giving `flatten_addressof_under_add` the single-subscript fallback the top level already had rebases the `&a[4]` inside `&a[4] + k`. 18/18 of the census folds |
 | **R48** | **Medium–High (no verdict, default configuration)** — found by a bound-*storage* census extending R42–R47, §15 M9 (R48); **FIXED**, same entry | **A nested member write into a struct with no propagated value drops the whole struct.** `struct S{struct I in;}; struct S x; x.in.n = 4;` then `for (i = 0; i < x.in.n; i++)` never terminates under default flags, while the flat `x.n = 4` spelling of the same program proves `SUCCESSFUL` in 0.4 s. `constant_propagation`'s struct arm walks the `with` chain and then requires its base not to be a `member2t`, and a nested member write spells that base as exactly that — `x#1.in`, the old value of the field being updated — so the inner update is refused, the outer one becomes non-constant, and the bound stays symbolic. The equation is right: a bare `assert(x.in.n == 4)` on the same program proves. Only `symex_goto`'s syntactic exit decision (R30) cannot see the value. | the 20-shape storage census and its 6 controls, §15 M9 (R48); `goto_symex_state.cpp:322`; `regression/esbmc/nested_member_loop_bound{,_fail}` | **H-C2** | Fixed by removing the clause. The base is already renamed, so the propagated value is as self-contained as the flat `with(x#1, n, 4)` the same arm already keeps, and the array arm added by the same commit (#2845) never carried the restriction. Eight nested shapes hang on the base build and decide on the patched one. |
 | **R49** | **Medium–High (no verdict, default configuration)** — found by probing the sibling arms of R48's fix, §15 M9 (R49, R50); **FIXED**, same entry | **A union `with` chain touching two fields is refused, so a bound stored in the last-written field never folds.** `union U{int a; short b;}; u.b=1; u.a=4;` then `for (i = 0; i < u.a; i++)` never terminates. The arm requires every update in the chain to name the same field, reasoning that union members alias — which is true and already enforced by `member2t::do_simplify`, which refuses to step past a `with` whose source is a union. The gate was denying itself a value the simplifier handles correctly. | seven before/after probes, §15 M9 (R49, R50); `goto_symex_state.cpp:351-393`; `regression/esbmc/union_mixed_field_{bound,bound_fail,aliased_fail}` | **H-C2** | Fixed by dropping the same-field requirement. Every read aliased by a *later* sibling write still refuses to fold, at all three widths probed (`int` over `int`, `short` over `int`, a `char[4]` byte over `int`), so the relaxation buys termination and not a wrong answer. The residual is a struct-typed update into a union, which the arm still declines because it gates on `is_constant_expr` where the struct arm gates on `constant_propagation`. |
-| **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED at two dimensions**, §15 M9 (R50); deeper nesting is the open residual | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. The second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program, and so does a `memcpy` between two rows. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,row_alias,row_phi_merge,row_via_pointer,row_memcpy,plane_memcpy,vla_row}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. The gate relaxes to **two** dimensions only: past that, a nested row's leaves are a two-level index chain that `decompose_select_chain` flattens straight past the enclosing `with`, and the same programs abort. **Two residuals stay open** — the 3-D bound, and `expand_row_stores`' element enumeration, which is quadratic and not bounded by R42's cap. |
+| **R50** | **Medium (no verdict, default configuration; a wrong answer and a solver abort behind a correct guard)** — found beside R49, §15 M9 (R49, R50); **FIXED at two dimensions**, §15 M9 (R50); deeper nesting is the open residual | **A bound stored in a multi-dimensional array never folds, because propagating the array would break the encoder.** `int a[2][2]; a[1][1]=4;` looped to `a[1][1]` hangs. `array_may_propagate` declined any multi-dimensional array that is not wholly constant. Ablating that clause makes the bound fold **and** breaks the encoder two ways: a read of the updated row at a nondet index aborts with `bitwuzla: error: ... expected array term at index 0`, and a row carrying **two** stores silently loses the older one, because `decompose_store_chain` walks only the newest update's spine. The gate's own comment named both modes; R50's row recorded only the aborts, because only the aborts had been measured. The second failure is a wrong answer, not a crash: `a[1][0]=5; a[1][1]=4;` read back through a row pointer returns `FAILED` on a correct program, and so does a `memcpy` between two rows. | the three-configuration mutation matrix, §15 M9 (R50); `array_may_propagate` at `goto_symex_state.cpp:148`; `decompose_store_chain` at `smt_solver.cpp:2724`; `regression/esbmc/nested_array_{loop_bound,row_alias,row_phi_merge,row_via_pointer,row_memcpy,plane_memcpy,vla_row}{,_fail}` | **H-C2** | Fixed in the encoder first, exactly as this row's earlier recommendation required, and only then in the gate. `lower_flattened_row_select` gives a read out of a row an encoding by pushing it inside the `with` (select-over-store); `decompose_stores` normalises a whole chain — including every store a row carries — into flat element stores. The gate relaxes to **two** dimensions only: past that, a nested row's leaves are a two-level index chain that `decompose_select_chain` flattens straight past the enclosing `with`, and the same programs abort. **Two residuals stay open** — the 3-D bound, and `expand_row_stores`' element enumeration, which is quadratic and not bounded by R42's cap. A third consequence, **R52**, surfaced while gating the 3-D fix: the propagated chain this row creates is a DAG, and three walks over it were unmemoised. |
+| **R52** | **Medium (no verdict, `--no-simplify`)** — found while gating R51's fix, §15 M9 (R52); **FIXED**, same entry | **A propagated multi-dimensional array is walked as a tree, and it is a DAG.** Each store references the chain twice — once as the `with` source, once inside the `index` of the row it updates — so a walk that does not memoise visits paths exponential in the store count. `int a[8][8]` with 32 element writes under `--no-simplify` does not terminate: 131 s and 18.4 GB and still climbing, against 0.27 s and 84 MB once memoised. The default configuration is unaffected, because the simplifier folds the chain before any of these walks see it. R50's fix is what creates the shape, so this row is its consequence and not a pre-existing defect; R51 only widens which programs reach it. | a store-count ladder against three binaries, §15 M9 (R52); `get_original_name` at `renaming.cpp:347`, `pre_register_addresses` at `symex_target_equation.cpp:30`, `get_value_set_rec` at `value_set.cpp:603`; `regression/esbmc/nested_array_no_simplify_scale{,_fail}` | **H-C2** | Fixed by memoising all three walks. `get_original_name` caches **shared nodes only** — caching every node holds the original alive, which forces `irep_container::detach()` to clone even an unshared one and breaks the in-place rewrite `goto_symex_statet::assignment` relies on. A depth cap is **not** the fix: 2-D at 64 stores and 3-D at 256 stores both exhaust memory, so the wall is the store count, not the nesting. **One residual stays open**: `migrate_expr_back` expands the same DAG into an `irept` tree with no memoisation, so `--ssa-trace` and `--show-vcc` still blow up on this row's own reproducer. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -7819,6 +7820,84 @@ every test still green. The row tests carry 5–7 live VCCs precisely because th
 read at a **nondet** index, and that is the only reason the wrong-answer column
 above is observable at all. This is R49's lesson recurring one entry later: check
 the VCC count before believing a test gates the solver.
+
+---
+
+### M9 (R52) — 2026-09-02, the propagated chain is a DAG, and three walks read it as a tree
+
+R50 taught symex to propagate a bound stored in a 2-D array. The expression it
+now builds is a `with` chain, and each store references the chain **twice** —
+once as the store's source, once inside the `index` naming the row it updates.
+That is a DAG. Three separate walks traverse it without memoisation, so each
+visits a number of paths exponential in the store count, and the non-const
+`Foreach_operand` calls `irep_container::detach()` on every node it reaches,
+materialising each shared subtree into a private copy.
+
+**The wall is the store count, not the nesting.** Measured on the pre-fix
+binary under `--no-simplify`, with an 8 GB cap:
+
+| shape | fast | slow | exhausts memory |
+|---|---|---|---|
+| 2-D `a[16][16]` | 16 stores, 0.45 s | 20 stores, 7.5 s | 24 stores |
+| 3-D `a[4][4][4]` | 8 stores, 0.03 s | 12 stores, 2.6 s | 16 stores |
+| 4-D `a[2][2][2][2]` | 8 stores, 0.39 s | — | 12 stores |
+
+Roughly ×2 per store at two dimensions. Depth raises the branching factor, so
+the knee arrives earlier; it does not create the problem. A depth cap — the
+obvious first fix — therefore does **not** work: 2-D at 64 stores and 3-D at
+256 stores both exhaust memory.
+
+**Attribution, by three binaries built from one tree.** The merge base is fast
+at every store count, because the gate declines the shape and the expression
+never forms. This branch reproduces the knee exactly at 2-D. R51 leaves the 2-D
+numbers unchanged and brings ≥3-D to the same wall. So **R50's fix owns the
+defect**, and R51 only widens which programs meet it.
+
+**Three walks, not one**, all over the same DAG:
+
+| site | cost | fix |
+|---|---|---|
+| `renaming::renaming_levelt::get_original_name`, `renaming.cpp:347` | 12 GB → 84 MB | memoise, **shared nodes only** |
+| `pre_register_addresses`, `symex_target_equation.cpp:30` | time only (const walk) | visited set |
+| `value_sett::get_value_set_rec`, `value_set.cpp:603` | time and memory | memoise on (expr, suffix, original_type, under_deref) |
+
+**Caching every node is wrong, and the unit suite says so.** Holding the
+original container alive to stop its address being recycled is what makes the
+key safe — but that extra reference forces `detach()` to clone even an
+*unshared* node, which destroys the in-place rewrite
+`goto_symex_statet::assignment` (`goto_symex_state.cpp:432`) relies on when it
+renames `l1_rhs` before handing it to `value_set.assign`.
+The symptom is the overapproximation unit test *the post-havoc value-set filter
+drops the sink, not the candidate* going 0 → 3 on `mentions_invalid_object`.
+Gating on `refcount > 1` avoids it and costs nothing: an unshared node is
+visited once anyway, so caching it could never pay.
+
+**Default configuration is not affected**, and that is why nothing caught this:
+the simplifier folds the chain before any of the three walks sees it, so the
+blowup needs `--no-simplify`. The regression tree has 143 tests using that
+flag and **none** of them combines it with an array of two or more dimensions.
+
+**The regression test pins time, because it cannot pin memory.**
+`--memlimit` is the natural discriminator — 84 MB against 18.4 GB — but
+`regression/testing_tool.py:526` lists it in `UNSUPPORTED_OPTIONS` and strips
+it. With all three sites fixed the separation is wide enough not to need it:
+`a[8][8]` with 32 stores runs 0.27 s post-fix and does not terminate pre-fix
+(131 s and 18.4 GB, against the harness's 120 s cap), so
+`nested_array_no_simplify_scale{,_fail}` change verdict on the fix. With only
+*two* of the three sites fixed the same program took 52 s at 25 stores, which
+is why the third site had to be closed before a test could be written at all.
+
+**A fourth walk survives, in the debug printers.** `migrate_expr_back`
+(`src/util/irep/migrate.cpp:3152`) expands the DAG into an `irept` **tree** with
+no memoisation, and `SSA_stept::output` reaches it from `--ssa-trace`
+(`symex_target_equation.cpp:98`) and `--show-vcc` (`bmc.cpp:2234`). Measured on
+the **fixed** binary, same shape: 14 stores 1.56 s / 412 MB, 20 stores 11.1 s /
+3.4 GB under `--show-vcc`, and the 32-store test killed at 222 s / **59.5 GB**
+under `--ssa-trace`. So this row's own reproducer cannot be inspected with the
+standard tools. The counterexample printer is unaffected — `build_goto_trace`
+prints solver-materialised values, not the chain — so the `_fail` test still
+completes in 0.33 s. Left open: the fix belongs in `migrate_expr_back` or a
+printer-level memo, not in the three walks this entry closes.
 
 ---
 
