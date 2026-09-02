@@ -179,7 +179,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh issue create \
-            --title "Nightly full suite failed on $(git rev-parse --short HEAD)" \
+            --title "Nightly full suite failed on $(git rev-parse --short "${{ github.sha }}")" \
             --label CI \
             --body-file "$RUNNER_TEMP/issue.md" > nightly-issue.txt
           cat nightly-issue.txt
