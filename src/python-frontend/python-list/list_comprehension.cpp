@@ -532,7 +532,10 @@ void python_list::handle_list_var_unpacking(
     exprt push_call = build_call_expr(
       *push_obj_func,
       bool_type(),
-      {build_symbol(star_list), build_symbol(tmp_at), star_list_type_id});
+      {build_symbol(star_list),
+       build_symbol(tmp_at),
+       star_list_type_id,
+       from_integer(BigInt(0), size_type())});
     push_call.location() = loc;
     loop_body.copy_to_operands(
       converter_.convert_expression_to_code(push_call));

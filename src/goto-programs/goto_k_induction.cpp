@@ -5,8 +5,7 @@
 #include <goto-programs/remove_no_op.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_guard.h>
-#include <pointer-analysis/value_set.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/andersen.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
@@ -436,7 +435,7 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
 /// behaviour). We abstain whenever the points-to set is empty, unknown,
 /// invalid, or contains a heap (dynamic) object — none of which has a
 /// nameable symbol to havoc.
-bool resolve_pointer_array_writes(loopst &loop, value_set_analysist &vsa)
+bool resolve_pointer_array_writes(loopst &loop, value_setst &vsa)
 {
   // A write reaching the loop through a callee (pointer is a callee
   // parameter, not in scope here) or with no extractable pointer cannot be
@@ -546,28 +545,18 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 }
 } // namespace
 
-bool goto_k_induction(goto_functionst &goto_functions, const namespacet &ns)
+bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
 {
-  // Build the value-set fixpoint once, up front, on the pristine program —
-  // value_set_analysist asserts on k-induction-transformed CFGs, so it must
-  // run before any transform_loop mutation, not lazily from inside the loop
-  // (an earlier plain loop would already have been transformed). Built only
-  // when a pointer-array write is present, to avoid paying the cost.
-  std::shared_ptr<value_set_analysist> vsa;
+  // Build the points-to fixpoint once, up front, on the pristine program, not
+  // lazily from inside the loop (an earlier plain loop would already have been
+  // transformed). Built only when a pointer-array write is present, to avoid
+  // paying the cost.
+  std::shared_ptr<value_setst> vsa;
   if (has_direct_pointer_array_write(goto_functions))
   {
-    vsa = std::make_shared<value_set_analysist>(ns);
-    try
-    {
-      (*vsa)(goto_functions);
-    }
-    catch (...)
-    {
-      // VSA is best-effort: any failure (incomplete implementation, symbolic
-      // type, ...) just means we cannot resolve pointees and fall back to
-      // disabling the inductive step.
-      vsa = nullptr;
-    }
+    auto points_to = std::make_shared<andersent>();
+    vsa = points_to;
+    (*points_to)(goto_functions);
   }
 
   // A reachable __VERIFIER_nondet_memory call havocs a caller object the
