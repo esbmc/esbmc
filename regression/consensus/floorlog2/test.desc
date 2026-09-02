@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
---incremental-bmc --function floorlog2
+--unwind 513 --function floorlog2
 ^VERIFICATION FAILED$

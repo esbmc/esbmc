@@ -448,6 +448,7 @@ exprt function_call_expr::handle_int_to_bytes() const
     // to big-endian would mis-fold a little-endian intent into a wrong byte
     // array. Reject the non-constant form with a clean error instead, matching
     // the constant-length guard above.
+    std::string folded_byteorder;
     if (
       byteorder_arg->contains("value") &&
       (*byteorder_arg)["value"].is_boolean())
@@ -455,6 +456,9 @@ exprt function_call_expr::handle_int_to_bytes() const
     else if (
       byteorder_arg->contains("value") && (*byteorder_arg)["value"].is_string())
       big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
+    else if (string_handler::extract_constant_string(
+               *byteorder_arg, converter_, folded_byteorder))
+      big_endian = folded_byteorder == "big";
     else
       throw std::runtime_error(
         "int.to_bytes() currently expects a constant byteorder");

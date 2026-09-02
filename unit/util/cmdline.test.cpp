@@ -17,8 +17,6 @@
 
 // Reaching config-file location resolution is what matters here: parse()
 // expands the default config path before it can consult the home variable.
-// Built afresh per call: parse() hands each value_semantic to boost, which
-// takes ownership, so one table cannot serve two parses.
 static std::vector<group_opt_templ> make_test_options()
 {
   return {
@@ -28,6 +26,21 @@ static std::vector<group_opt_templ> make_test_options()
        "source file names"}}},
     {"end", {{"", NULL, "end of options"}}},
     {"Hidden Options", {{"", NULL, ""}}}};
+}
+
+enum test_caset
+{
+  home_unset,
+  home_empty,
+  home_set,
+  repeat_parse
+};
+
+template <test_caset>
+static const std::vector<group_opt_templ> &test_options()
+{
+  static const std::vector<group_opt_templ> opts = make_test_options();
+  return opts;
 }
 
 namespace
@@ -82,9 +95,8 @@ TEST_CASE(
     // Constructing std::optional<std::string> from getenv's null return is UB
     // and aborted or crashed the process before any work was done (#6238).
     scoped_home no_home(nullptr);
-    const std::vector<group_opt_templ> opts = make_test_options();
     cmdlinet cmdline;
-    REQUIRE_FALSE(cmdline.parse(2, argv, opts.data()));
+    REQUIRE_FALSE(cmdline.parse(2, argv, test_options<home_unset>().data()));
     REQUIRE(cmdline.args.size() == 1);
     REQUIRE(cmdline.args[0] == "main.c");
   }
@@ -95,9 +107,8 @@ TEST_CASE(
   SECTION("home variable set but empty")
   {
     scoped_home empty_home("");
-    const std::vector<group_opt_templ> opts = make_test_options();
     cmdlinet cmdline;
-    REQUIRE_FALSE(cmdline.parse(2, argv, opts.data()));
+    REQUIRE_FALSE(cmdline.parse(2, argv, test_options<home_empty>().data()));
     REQUIRE(cmdline.args[0] == "main.c");
   }
 #endif
@@ -105,9 +116,20 @@ TEST_CASE(
   SECTION("home variable set")
   {
     scoped_home a_home("/tmp");
-    const std::vector<group_opt_templ> opts = make_test_options();
     cmdlinet cmdline;
-    REQUIRE_FALSE(cmdline.parse(2, argv, opts.data()));
+    REQUIRE_FALSE(cmdline.parse(2, argv, test_options<home_set>().data()));
     REQUIRE(cmdline.args[0] == "main.c");
   }
+}
+
+TEST_CASE("an option table is parsed at most once", "[cmdline]")
+{
+  const char *argv[] = {"esbmc", "main.c"};
+
+  cmdlinet first;
+  REQUIRE_FALSE(first.parse(2, argv, test_options<repeat_parse>().data()));
+  REQUIRE(first.args[0] == "main.c");
+
+  cmdlinet second;
+  CHECK(second.parse(2, argv, test_options<repeat_parse>().data()));
 }

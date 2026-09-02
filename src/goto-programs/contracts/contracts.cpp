@@ -2665,7 +2665,13 @@ expr2tc code_contractst::replace_is_fresh_temps(
           lessthanequal2tc(off, have),
           lessthanequal2tc(n, sub2tc(size_type2(), have, off)));
 
-        return and2tc(valid_obj, or2tc(not2tc(is_dynamic), fits));
+        // The !is_dynamic escape was here because DYNAMIC_SIZE says nothing
+        // about automatic storage, so demanding the extent would have rejected
+        // every stack caller (#6542). symex now resolves DYNAMIC_SIZE and
+        // VALID_OBJECT against the object the value set names (#7464), so the
+        // extent is meaningful there too, and the escape would only make the
+        // check vacuous for exactly the callers it was meant to admit.
+        return and2tc(valid_obj, fits);
       }
     }
   }
