@@ -812,14 +812,10 @@ public:
   smt_astt convert_bitcast(const expr2tc &expr);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
-  /** Record every division's operand pair in @p expr, recursively. The
-   *  modulus conversion consults these: a remainder whose operands are
-   *  also divided somewhere in the formula lowers compositionally as
-   *  a - (a / b) * b, sharing the division term, which turns a
-   *  rem-vs-div equivalence from a pointwise circuit comparison into a
-   *  structural one. A remainder with no matching division keeps the
-   *  solver's rem primitive and its native rewrites -- lowering those
-   *  too costs 3-5x on rem-heavy proofs (math.gcd-style loops). */
+  /** Record every division's operand pair in @p expr, recursively.
+   *  convert_modulus lowers a remainder compositionally only when its
+   *  operands appear here; unconditional lowering costs 3-5x on
+   *  rem-heavy proofs. */
   void note_division_operands(const expr2tc &expr);
   /** Encode a remainder: compositional via the matching division when
    *  one exists in the formula, the solver's rem primitive otherwise. */
