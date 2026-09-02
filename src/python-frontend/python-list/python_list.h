@@ -739,7 +739,8 @@ private:
   exprt remove_function_calls_recursive(exprt &e, const nlohmann::json &node);
 
   /// The converter-owned registry recording per-instance element types.
-  element_type_registry &elem_types() const;
+  element_type_registry &elem_types();
+  const element_type_registry &elem_types() const;
 
   /**
    * @brief Append every element of src onto dst at runtime.

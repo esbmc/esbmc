@@ -2,9 +2,15 @@
 
 using namespace python_expr;
 
-element_type_registry &python_list::elem_types() const
+element_type_registry &python_list::elem_types()
 {
   return converter_.get_element_type_registry();
+}
+
+const element_type_registry &python_list::elem_types() const
+{
+  const python_converter &const_converter = converter_;
+  return const_converter.get_element_type_registry();
 }
 
 symbolt &python_list::create_list()
