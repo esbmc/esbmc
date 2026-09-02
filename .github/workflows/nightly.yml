@@ -104,8 +104,17 @@ jobs:
       # re-running a handful of tests costs seconds, rebuilding costs half an
       # hour. Newly flaky tests are appended to the quarantine list, which the
       # report below then excludes from its verdict.
+      # Bounds the worst case (a hung test) against the job's remaining
+      # budget. Not a per-test --timeout: regression tests carry their own
+      # ctest TIMEOUT property (up to ESBMC_REGRESS_TIMEOUT*2, unlike the PR
+      # leg this job doesn't reconfigure down), and nightly_bisect.py's own
+      # --timeout is a subprocess kill with no exception handling, so passing
+      # one shorter than that property would crash this step and, since nothing
+      # after it runs with `if: always()`, skip the report/baseline/commit too.
       - name: Separate real failures from flaky ones
         if: ${{ steps.suite.outputs.exit-code != '0' }}
+        timeout-minutes: 60
+        continue-on-error: true
         run: |
           mapfile -t failing < <(python3 scripts/ci/nightly_report.py \
             --junit "$RUNNER_TEMP/junit.xml" \
