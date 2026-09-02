@@ -557,6 +557,17 @@ class NightlyOutputs(TempDirCase):
             ])
         self.assertEqual(buf.getvalue().split(), ["regression/esbmc/broken"])
 
+    def test_print_failures_prints_nothing_over_the_mass_failure_cutoff(self):
+        # De-flaking every failure three times over is exactly the expensive
+        # work a mass failure should skip, not run before escalating.
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            nightly.main([
+                "--junit", self.write("j.xml", FAILING_JUNIT), "--commit", "abc",
+                "--max-failures", "1", "--print-failures"
+            ])
+        self.assertEqual(buf.getvalue(), "")
+
     def test_github_output_names_one_test_to_bisect(self):
         out = os.path.join(self.tmp, "gh.txt")
         nightly.main([

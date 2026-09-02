@@ -181,7 +181,11 @@ def main(argv=None):
             handle.write(format_issue(report))
 
     if args.print_failures:
-        print("\n".join(f["test"] for f in failures))
+        # A wall of failures is the case de-flaking is expensive for and least
+        # useful on -- print nothing so the caller skips it, same as the
+        # "escalate" verdict below would once it runs.
+        if len(failures) <= args.max_failures:
+            print("\n".join(f["test"] for f in failures))
         return 0
 
     if args.github_output:

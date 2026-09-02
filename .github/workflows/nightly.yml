@@ -30,6 +30,11 @@ env:
   FAST_LANE_BUDGET_SECONDS: 900
   FAST_LANE_JOBS: 2
   DEFLAKE_ATTEMPTS: 3
+  # Keep in sync with nightly_report.py's DEFAULT_MAX_FAILURES: above this many
+  # failures the cause is almost never one commit, and de-flaking each of them
+  # three times over would waste the job's remaining budget on a run that's
+  # going to escalate to a human regardless.
+  MASS_FAILURE_THRESHOLD: 25
 
 jobs:
   suite:
@@ -106,9 +111,10 @@ jobs:
             --junit "$RUNNER_TEMP/junit.xml" \
             --commit "${{ github.sha }}" \
             --quarantine ci/quarantine.txt \
+            --max-failures "$MASS_FAILURE_THRESHOLD" \
             --print-failures)
           if [ "${#failing[@]}" -eq 0 ]; then
-            echo "every failure is already quarantined; nothing to de-flake"
+            echo "nothing to de-flake: no non-quarantined failures, or over the $MASS_FAILURE_THRESHOLD-test mass-failure cutoff"
             exit 0
           fi
           args=()
@@ -128,6 +134,7 @@ jobs:
             --commit "${{ github.sha }}" \
             --last-green "${{ steps.baseline.outputs.sha }}" \
             --quarantine ci/quarantine.txt \
+            --max-failures "$MASS_FAILURE_THRESHOLD" \
             --json "$RUNNER_TEMP/nightly.json" \
             --issue-body "$RUNNER_TEMP/issue.md" \
             --github-output "$GITHUB_OUTPUT"
