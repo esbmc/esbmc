@@ -30,6 +30,7 @@ struct group_opt_templ
 class cmdlinet
 {
 public:
+  /// \p opts must have static storage duration and is parsed at most once.
   bool parse(int argc, const char **argv, const struct group_opt_templ *opts);
   const char *getval(const char *option) const;
   const std::list<std::string> &get_values(const char *option) const;
