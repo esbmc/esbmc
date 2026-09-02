@@ -607,6 +607,59 @@ void value_sett::get_value_set_rec(
   const type2tc &original_type,
   bool under_deref) const
 {
+  const bool outermost = rec_cache == nullptr;
+  std::optional<rec_cachet> own;
+  if (outermost)
+  {
+    own.emplace();
+    rec_cache = &*own;
+  }
+
+  /* Declared after `own`, so the pointer is cleared before the map it names
+   * is destroyed. */
+  struct scopet
+  {
+    const value_sett &v;
+    bool outermost;
+    ~scopet()
+    {
+      if (outermost)
+        v.rec_cache = nullptr;
+    }
+  } scope{*this, outermost};
+
+  /* Strong references taken before the walk: they keep the keyed nodes alive
+   * for the cache's lifetime, so no address can be freed and recycled into a
+   * false hit, and they raise the refcount enough that detach() cannot rewrite
+   * a keyed node in place. Callers pass references *into* other nodes here
+   * (`new_expr->type`, `obj->type`), so binding them locally is what makes the
+   * key and the retained container provably name the same node. */
+  const expr2tc keyed_expr = expr;
+  const type2tc keyed_type = original_type;
+  rec_cache_keyt key{keyed_expr.get(), suffix, keyed_type.get(), under_deref};
+
+  auto cached = rec_cache->find(key);
+  if (cached != rec_cache->end())
+  {
+    make_union(dest, std::get<2>(cached->second));
+    return;
+  }
+
+  object_mapt produced;
+  get_value_set_rec_impl(expr, produced, suffix, original_type, under_deref);
+  make_union(dest, produced);
+  rec_cache->emplace(
+    std::move(key),
+    std::make_tuple(keyed_expr, keyed_type, std::move(produced)));
+}
+
+void value_sett::get_value_set_rec_impl(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type,
+  bool under_deref) const
+{
   if (is_unknown2t(expr) || is_invalid2t(expr))
   {
     // Unknown / invalid exprs mean we just point at something unknown (and

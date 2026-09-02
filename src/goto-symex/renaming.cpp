@@ -1,4 +1,6 @@
 #include <goto-symex/renaming.h>
+#include <unordered_map>
+#include <utility>
 #include <langapi/language_util.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
@@ -246,16 +248,22 @@ void renaming::level2t::coveredinbees(
   entry.node_id = node_id;
 }
 
-void renaming::renaming_levelt::get_original_name(
-  expr2tc &expr,
-  symbol2t::renaming_level lev)
+namespace
 {
-  if (is_nil_expr(expr))
-    return;
+/** Rewritten form of every node already visited, keyed by its address. The
+ *  original container is kept alongside so a freed node's address cannot be
+ *  recycled into a false hit.
+ *
+ *  A propagated `with` chain over a nested array is a DAG -- each store
+ *  references the chain both as the store's source and inside the `index` of
+ *  the row it updates -- so an unmemoised walk visits a number of paths
+ *  exponential in the store count, and Foreach_operand's detach() gives every
+ *  one of them a private copy. */
+using original_name_cachet =
+  std::unordered_map<const expr2t *, std::pair<expr2tc, expr2tc>>;
 
-  expr->Foreach_operand(
-    [&lev](expr2tc &e) { renaming_levelt::get_original_name(e, lev); });
-
+void rename_symbol_to_level(expr2tc &expr, symbol2t::renaming_level lev)
+{
   if (!is_symbol2t(expr))
     return;
 
@@ -299,6 +307,55 @@ void renaming::renaming_levelt::get_original_name(
     log_error("get_original_nameing to invalid level {}", fmt::underlying(lev));
     abort();
   }
+}
+
+void get_original_name_rec(
+  expr2tc &expr,
+  symbol2t::renaming_level lev,
+  original_name_cachet &cache)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  /* Caching an *unshared* node would be a soundness regression, not just a
+   * cost: the cache holds the original alive, and that reference makes
+   * detach() clone on write, so the node is rebound to a copy instead of
+   * rewritten in place. Callers depend on the in-place rewrite -- pinned by
+   * unit/goto-symex/overapproximation.test.cpp:319, which goes 0 -> 3 on
+   * mentions_invalid_object when the gate is dropped, because an `unknown`
+   * surviving into the restored set clears known_exhaustive in
+   * dereferencet::dereference and re-opens an invalid_object free variable.
+   * An unshared node is reached once anyway, so the gate costs nothing. */
+  const expr2t *key = std::as_const(expr).get();
+  const bool shared = key->refcount.load(std::memory_order_acquire) > 1;
+
+  if (shared)
+  {
+    auto cached = cache.find(key);
+    if (cached != cache.end())
+    {
+      expr = cached->second.second;
+      return;
+    }
+  }
+
+  expr2tc original = shared ? expr : expr2tc();
+
+  expr->Foreach_operand(
+    [&lev, &cache](expr2tc &e) { get_original_name_rec(e, lev, cache); });
+  rename_symbol_to_level(expr, lev);
+
+  if (shared)
+    cache.emplace(key, std::make_pair(std::move(original), expr));
+}
+} // namespace
+
+void renaming::renaming_levelt::get_original_name(
+  expr2tc &expr,
+  symbol2t::renaming_level lev)
+{
+  original_name_cachet cache;
+  get_original_name_rec(expr, lev, cache);
 }
 
 void renaming::level1t::print(std::ostream &out) const

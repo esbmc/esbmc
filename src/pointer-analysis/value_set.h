@@ -1,6 +1,8 @@
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
+#include <tuple>
+#include <map>
 #include <pointer-analysis/value_sets.h>
 #include <optional>
 #include <set>
@@ -59,6 +61,8 @@ public:
   {
   }
 
+  /* rec_cache is deliberately not copied: it points into the stack frame of an
+   * in-progress query, and a copy can only be taken between queries. */
   value_sett(const value_sett &ref)
     : location_number(ref.location_number),
       values(ref.values),
@@ -628,6 +632,29 @@ public:
     const std::string &suffix,
     const type2tc &original_type,
     bool under_deref = true) const;
+
+private:
+  /** What one get_value_set_rec query contributed, keyed by its arguments.
+   *  Shared subexpressions make a value query a DAG walk, so without this the
+   *  walk costs paths exponential in the number of stores a propagated array
+   *  carries. The key's expr and type are held alongside the result so a freed
+   *  node's address cannot be recycled into a false hit. */
+  using rec_cache_keyt =
+    std::tuple<const expr2t *, std::string, const type2t *, bool>;
+  using rec_cachet =
+    std::map<rec_cache_keyt, std::tuple<expr2tc, type2tc, object_mapt>>;
+
+  /** Owned by the outermost get_value_set_rec call, and null outside one, so
+   *  nothing is carried across queries that `values` may have changed
+   *  between. */
+  mutable rec_cachet *rec_cache = nullptr;
+
+  void get_value_set_rec_impl(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type,
+    bool under_deref) const;
 
 protected:
   /** The byte offset a constant operand of pointer arithmetic contributes,
