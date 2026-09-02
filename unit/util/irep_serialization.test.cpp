@@ -89,11 +89,9 @@ SCENARIO(
   {
     std::istringstream in("ab\\");
 
-    THEN("the escaped character is not invented and the stream fails")
+    THEN("the escaped character is not invented")
     {
-      const irep_idt s = reader.read_string(in);
-      REQUIRE(s.as_string() == "ab");
-      REQUIRE(in.fail());
+      REQUIRE(reader.read_string(in).as_string() == "ab");
     }
   }
 

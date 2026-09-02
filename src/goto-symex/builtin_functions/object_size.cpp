@@ -119,7 +119,7 @@ void goto_symext::intrinsic_builtin_object_size(
     // Note: type_byte_size returns the allocated object size, not just the sum
     // of fields. For structs/unions this includes alignment and padding, which
     // matches GCC's __builtin_object_size semantics.
-    BigInt total_size = type_byte_size(addressed_type);
+    BigInt total_size = type_byte_size(addressed_type, &ns);
 
     if (consider_offset)
     {
