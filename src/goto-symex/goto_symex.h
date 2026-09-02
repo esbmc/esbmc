@@ -1406,6 +1406,16 @@ protected:
    */
   bool is_assume_false(const expr2tc &assumption);
 
+  /**
+   *  Whether the inductive-step's assert-to-assume conversion (#6443) applies
+   *  to this claim: only inside the loop first_loop names, only while that
+   *  attribution is unambiguous, and only before the last unwinding, which
+   *  supplies the induction hypothesis instead of being converted.
+   *  @param new_expr The claim expression, renamed but not necessarily
+   *         simplified (--no-simplify makes do_simplify a no-op).
+   */
+  bool should_convert_inductive_claim(const expr2tc &new_expr) const;
+
   // Members
 
   /** Options we're working with */
@@ -1457,6 +1467,14 @@ protected:
   std::unordered_map<irep_idt, expr2tc> copy_definitions;
   /** Loop numbers. */
   unsigned first_loop;
+  /** Set when the loop named by `first_loop` exits, because the next loop to
+   *  take that name is a different one. Latched: never cleared, and copied
+   *  with the symex object, so one exit disables the assert-to-assume
+   *  conversion for the remainder of that execution. Conservative on purpose;
+   *  declining to convert costs the induction hypothesis and nothing else.
+   *  Loops nested concurrently are excluded by `loop_iterations.size()` in
+   *  claim() instead. See esbmc/esbmc#6443. */
+  bool multiple_loops_seen;
   /** Number of assertions executed. */
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */

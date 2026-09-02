@@ -64,6 +64,29 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
   return false;
 }
 
+bool goto_symext::should_convert_inductive_claim(const expr2tc &new_expr) const
+{
+  if (!(inductive_step && first_loop))
+    return false;
+
+  // A claim simplified to false would become assume(false), killing the
+  // path; is_false is syntactic, so fold through branch_decision_guard
+  // first (same idiom as symex_goto's new_guard_false, #6778) rather than
+  // relying on new_expr's own do_simplify, which --no-simplify disables.
+  if (is_false(branch_decision_guard(new_expr)))
+    return false;
+
+  // first_loop names the assertion's own loop only while no other is in play.
+  if (multiple_loops_seen || cur_state->loop_iterations.size() > 1)
+    return false;
+
+  // Assertions added by the bidirectional search are not converted.
+  if (cur_state->source.pc->inductive_assertion)
+    return false;
+
+  return cur_state->loop_iterations[first_loop] < max_unwind - 1;
+}
+
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
   // Can happen when evaluating certain special intrinsics. Gulp.
@@ -121,25 +144,20 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // claim fully resolved by incremental solving
 
+  // Convert asserts into assumes on all but the last unwinding of the inductive
+  // step, which is what supplies the induction hypothesis. This must run before
+  // the claim is recorded, or the claim stays a live proof obligation and the
+  // step degenerates into BMC from an arbitrary state (esbmc/esbmc#6443).
+  if (should_convert_inductive_claim(new_expr))
+  {
+    assume(claim_expr);
+    return;
+  }
+
   symex_witness_assert(new_expr, msg);
 
   // add assertion to the target equation
   assertion(new_expr, msg);
-
-  // Convert asserts in assumes, if it's not the last loop iteration
-  // This is a common technique in k-induction to strengthen the induction hypothesis.
-  // also, don't convert assertions added by the bidirectional search
-  if (
-    inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
-  {
-    // Fetch the current loop iteration count
-    BigInt unwind = cur_state->loop_iterations[first_loop];
-    if (unwind < max_unwind - 1)
-    {
-      assume(claim_expr);
-      return;
-    }
-  }
 }
 
 void goto_symext::record_property_verdict(

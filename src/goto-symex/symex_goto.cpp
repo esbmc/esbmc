@@ -277,7 +277,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
       // Reset loop counter
       if (instruction.loop_number == first_loop)
+      {
+        // The loop naming `first_loop` has exited; whatever loop is named
+        // next is a different one. See goto_symext::multiple_loops_seen.
         first_loop = 0;
+        multiple_loops_seen = true;
+      }
     }
 
     // next instruction
@@ -339,7 +344,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
       // Reset loop counter
       if (instruction.loop_number == first_loop)
+      {
+        // The loop naming `first_loop` has exited; whatever loop is named
+        // next is a different one. See goto_symext::multiple_loops_seen.
         first_loop = 0;
+        multiple_loops_seen = true;
+      }
 
       return;
     }
