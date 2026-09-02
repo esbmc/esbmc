@@ -315,19 +315,37 @@ static waypoint witness_waypoint(
 
 /* README-YAML.md requires a waypoint's file_name to be one of the task's input
    files, so a step inside a header or an operational model is reported at its
-   innermost call site that is one. */
-static const locationt &witness_input_location(const goto_trace_stept &step)
+   innermost call site that is one. Null when no frame qualifies. */
+static const locationt *witness_input_location(const goto_trace_stept &step)
 {
   if (input_file_check(step.pc->location))
-    return step.pc->location;
+    return &step.pc->location;
 
   for (const auto &frame : step.stack_trace)
     if (
       frame.src != nullptr && frame.src->is_set &&
       input_file_check(frame.src->pc->location))
-      return frame.src->pc->location;
+      return &frame.src->pc->location;
 
-  return step.pc->location;
+  return nullptr;
+}
+
+/* A violation witness whose target waypoint is missing guides a validator
+   nowhere, so an unhoistable target is attributed to the verified file rather
+   than dropped: a file_name the validator was never given makes the witness
+   ill-formed, while a line it cannot match only costs confirmation. */
+static waypoint witness_target_waypoint(
+  const goto_trace_stept &step,
+  const std::string &verified_file,
+  optionst &options)
+{
+  const locationt *loc = witness_input_location(step);
+  waypoint wp =
+    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  wp.type = waypoint::target;
+  if (loc == nullptr)
+    wp.file = verified_file;
+  return wp;
 }
 
 void show_state_header(
@@ -479,10 +497,8 @@ void violation_yaml_goto_trace(
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
-        waypoint wp = witness_waypoint(
-          witness_input_location(step), yml.verified_file, options);
-        wp.type = waypoint::target;
-        yml.segments.push_back(wp);
+        yml.segments.push_back(
+          witness_target_waypoint(step, yml.verified_file, options));
 
         /* having printed a property violation, don't print more steps. */
 
