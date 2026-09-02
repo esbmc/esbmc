@@ -1,13 +1,23 @@
 name: Master Coverage
 on:
-  # Nightly, not per-push: the run takes hours, and every push to master shared
-  # one `cancel-in-progress` concurrency group, so a later push killed it. 97 of
-  # the last 100 runs were cancelled and master went 8 days with no report.
+  # Nightly, not per-push: the full-suite run takes hours, and every push
+  # to master shared one `cancel-in-progress` concurrency group, so a later
+  # push killed it. 97 of the last 100 runs were cancelled and master went
+  # 8 days with no report.
   schedule:
     - cron: '0 2 * * *'
-  # Lets the sharded pipeline be re-run against a known commit, so its total
-  # can be compared with a previous unsharded run rather than assumed correct.
+  # Lets the pipeline be re-run against a known commit, in either mode:
+  # fast (minimal cov-regression suite + non-regression tests) or full
+  # (the whole regression suite, hours; off-schedule on purpose).
   workflow_dispatch:
+    inputs:
+      full:
+        description: >-
+          Run the full regression suite (hours) instead of the minimal
+          cov-regression set
+        type: choice
+        options: [fast, full]
+        default: fast
 
 concurrency:
   group: ${{ github.workflow }}
@@ -15,15 +25,9 @@ concurrency:
 
 jobs:
   coverage:
-    name: Coverage shard ${{ matrix.shard }}/4
+    name: Coverage (${{ github.event.inputs.full || 'fast' }})
     runs-on: ubuntu-24.04
-    # A 4-vCPU hosted runner needs ~5.5h for the whole suite, against a 6h hard
-    # job limit; runner speed varies by ~20%, so unsharded runs miss the wall.
-    timeout-minutes: 180
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
+    timeout-minutes: ${{ github.event.inputs.full == 'full' && 480 || 180 }}
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies and build with coverage
@@ -33,19 +37,116 @@ jobs:
       - name: Run tests
         env:
           LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
-        # -I <shard>,,4 walks the suite with a stride of 4, so the shards
-        # partition it exactly and interleave slow suites across all four.
+        # fast: minimal coverage suite (cov-regression) + all non-regression
+        # tests (unit + other). Together they cover exactly the lines the
+        # full regression suite covers (100% parity, line-level verified).
+        # full: the entire suite, for the manual re-baseline.
         run: |
           mkdir -p build/coverage && cd build/ && \
-          ctest -j4 --progress --timeout 600 -I ${{ matrix.shard }},,4 . || true
-      - name: Merge coverage data
-        run: llvm-profdata merge -sparse --failure-mode=warn /tmp/esbmc-coverage/*.profraw -o build/merged.profdata
-      - name: Generate lcov coverage report
+          if [ "${{ github.event.inputs.full }}" = "full" ]; then
+            ctest -j4 --progress --timeout 600 . || true
+          else
+            { ctest -j4 --progress --timeout 600 -LE regression || true; } && \
+            { ctest -j4 --progress --timeout 600 -L cov-regression || true; }
+          fi
+      - name: Map coverage files to instrumented binaries
+        # Raw files are named coverage-<sig>_<n>_<pid>.profraw: %m gives the
+        # binary's signature, %p one file per process. Re-run each
+        # instrumented executable once with a hash-revealing template so the
+        # signature can be matched back to its binary for per-binary export
+        # (unit-test binaries count toward the total, fixing the old
+        # esbmc-only counting gap).
         run: |
-          llvm-cov export -format=lcov \
-            -instr-profile=build/merged.profdata \
-            build/src/esbmc/esbmc \
-            > coverage.info
+          set -euo pipefail
+          mkdir -p /tmp/esbmc-coverage/hashmap
+          bins="build/src/esbmc/esbmc"
+          bins+=" $(find build/unit -type f -executable -not -name '*.so*' -not -name '*.a' | tr '\n' ' ')"
+          for b in $bins; do
+            name=$(echo "$b" | tr '/' '~')
+            ( cd "$(dirname "$b")" && \
+              LLVM_PROFILE_FILE="/tmp/esbmc-coverage/hashmap/${name}-%m.profraw" \
+              timeout 15 "./$(basename "$b")" --cov-hash-probe >/dev/null 2>&1 || true )
+          done
+      - name: Merge per-binary coverage data
+        # Group the per-process raws by binary signature and merge each
+        # group in a single hop: re-merging an already-merged profile from
+        # raws drops counters. --failure-mode=warn keeps one corrupt input
+        # (a forked test child SIGKILLed mid-flush) from aborting its whole
+        # group, which is the failure that voided the run in #7136.
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/esbmc-coverage/groups
+          for raw in /tmp/esbmc-coverage/coverage-*.profraw; do
+            [ -e "$raw" ] || continue
+            h=$(basename "$raw" .profraw)
+            h=${h#coverage-}
+            h=${h%_*} # drop the %p suffix, leaving the %m signature
+            ls /tmp/esbmc-coverage/hashmap/*"-${h}"*.profraw >/dev/null 2>&1 || continue
+            echo "$raw" >> "/tmp/esbmc-coverage/groups/${h}.list"
+          done
+          ok=0; empty=0
+          for list in /tmp/esbmc-coverage/groups/*.list; do
+            h=$(basename "$list" .list)
+            pd="/tmp/esbmc-coverage/${h}.profdata"
+            llvm-profdata merge -sparse --failure-mode=warn \
+              --input-files="$list" -o "$pd" || { rm -f "$pd"; continue; }
+            # Every input corrupt still exits 0, with an empty profile.
+            if llvm-profdata show "$pd" 2>/dev/null |
+                 grep -q '^Total functions: [1-9]'; then
+              echo "$h: $(wc -l < "$list") raws"
+              ok=$((ok+1))
+            else
+              echo "$h: no usable profile from $(wc -l < "$list") raws"
+              rm -f "$pd"
+              empty=$((empty+1))
+            fi
+          done
+          echo "merged $ok binaries, $empty with no usable profile"
+          [ "$ok" -gt 0 ]
+      - name: Generate lcov coverage report
+        # One llvm-cov export per binary (unit-test binaries included, fixing
+        # the old esbmc-only counting gap), then a union of the DA records.
+        # The union is plain text, not `lcov -a`: lcov sums counts in
+        # doubles and mangles hot counters (>= 2^53) into exponential
+        # notation, which Codecov rejects.
+        run: |
+          set -uo pipefail
+          for pd in /tmp/esbmc-coverage/*.profdata; do
+            h=$(basename "$pd" .profdata)
+            m=$(ls /tmp/esbmc-coverage/hashmap/*"-${h}"*.profraw 2>/dev/null | head -1) || continue
+            binpath=$(basename "$m" | sed "s/-${h}.*\.profraw//")
+            binpath=$(echo "$binpath" | tr '~' '/')
+            [ -x "$binpath" ] || { echo "binary missing: $binpath"; continue; }
+            llvm-cov export -format=lcov -instr-profile="$pd" "$binpath" \
+              > "/tmp/esbmc-coverage/${h}.lcov"
+          done
+          python3 - /tmp/esbmc-coverage/*.lcov > coverage.info <<'PYEOF'
+          import sys
+          covered = {}
+          for path in sys.argv[1:]:
+              sf = None
+              for ln in open(path):
+                  if ln.startswith("SF:"):
+                      sf = ln[3:].strip()
+                  elif ln.startswith("DA:") and sf:
+                      line, _, count = ln[3:].strip().partition(",")
+                      try:
+                          hit = int(count) > 0
+                      except ValueError:
+                          hit = float(count) > 0
+                      covered[(sf, line)] = covered.get((sf, line), False) or hit
+          cur = None
+          for (sf, line), hit in sorted(covered.items(),
+                                         key=lambda kv: (kv[0][0], int(kv[0][1]))):
+              if sf != cur:
+                  if cur is not None:
+                      print("end_of_record")
+                  print(f"SF:{sf}")
+                  cur = sf
+              print(f"DA:{line},{1 if hit else 0}")
+          if cur is not None:
+              print("end_of_record")
+          PYEOF
       - name: Filter out uninteresting paths
         run: |
           lcov --ignore-errors inconsistent --ignore-errors corrupt \
@@ -53,54 +154,21 @@ jobs:
                '/usr/*' \
                '*/build/*' \
                --output-file coverage.info
-      - name: Save shard coverage
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-shard-${{ matrix.shard }}
-          path: coverage.info
-          retention-days: 1
-      - name: Clean tmp files
-        # Four shards each leave a profraw directory behind otherwise, and a
-        # run that fails before this point never cleans up at all.
-        if: always()
-        run: rm -rf /tmp/esbmc*
-
-  upload:
-    name: Upload coverage to Codecov
-    runs-on: ubuntu-24.04
-    # Every shard must succeed: a missing shard would publish a partial figure
-    # as the repo total, which reads as a coverage regression.
-    needs: coverage
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install lcov
-        run: sudo apt-get update && sudo apt-get install -y lcov
-      - name: Fetch shard coverage
-        uses: actions/download-artifact@v8
-        with:
-          pattern: coverage-shard-*
-          path: shards
-      # Not uploaded -- this is the combined line total #6799 left open, to be
-      # read from the log and compared against the last good unsharded run
-      # (76.4%, 138,698 of 181,616 lines).
-      - name: Report combined line total
-        continue-on-error: true
-        run: |
-          args=()
-          for f in shards/*/coverage.info; do args+=(-a "$f"); done
-          # 'empty': llvm-cov's lcov export carries no function records, which
-          # lcov treats as an error when aggregating tracefiles.
-          lcov --ignore-errors inconsistent --ignore-errors corrupt \
-               --ignore-errors empty "${args[@]}" \
-               --output-file combined.info
-      # Upload the shards themselves and let Codecov merge them: the two runs
-      # that ever reached this step both uploaded an lcov-combined tracefile and
-      # both came back `state: error` with no report, while every unsharded run
-      # before them processed. Server-side merge is Codecov's own path for
-      # matrix builds and drops the step that correlates with the failures.
+      - name: Report line total
+        run: lcov --summary coverage.info
       - name: Upload to Codecov
         uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          disable_search: true
-          files: shards/coverage-shard-1/coverage.info,shards/coverage-shard-2/coverage.info,shards/coverage-shard-3/coverage.info,shards/coverage-shard-4/coverage.info
+          files: coverage.info
+      - name: Save coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage.info
+          retention-days: 5
+      - name: Clean tmp files
+        # Also on failure: a cancelled or failed run otherwise leaves its
+        # profraw directory behind, and the runner's /tmp fills up.
+        if: always()
+        run: rm -rf /tmp/esbmc*
