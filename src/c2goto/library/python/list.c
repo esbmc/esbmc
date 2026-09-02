@@ -272,12 +272,16 @@ static bool __ESBMC_list_push_shallow_sz(
   return __ESBMC_list_push_object(l, o, float_type_id, 0);
 }
 
+// elem_size is threaded straight to the size-aware core above: the slice
+// lowering knows the source list's element width, and passing it keeps the
+// per-element copy off memcpy's byte loop. 0 keeps the previous behaviour.
 bool __ESBMC_list_push_shallow(
   PyListObject *l,
   PyObject *o,
-  size_t list_type_id)
+  size_t list_type_id,
+  size_t elem_size)
 {
-  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, 0, 0);
+  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, elem_size, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
