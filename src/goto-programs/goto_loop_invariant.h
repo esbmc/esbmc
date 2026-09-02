@@ -170,13 +170,15 @@ private:
   void insert_invariant_verification_branch(loopst &loop);
 
   /**
-   * Copy the loop body instructions (from the instruction immediately after
-   * @p loop_head up to, but not including, @p loop_exit) into @p out.
-   * Intra-loop jump targets are remapped to the copied instructions; targets
-   * outside the loop are left unchanged.
+   * Copy the loop body instructions (from @p body_begin up to, but not
+   * including, @p loop_exit) into @p out. Intra-loop jump targets are remapped
+   * to the copied instructions; targets outside the loop are left unchanged.
+   * @p body_begin is the instruction after the loop head when the head is the
+   * loop's guard, which ASSUME(entry_cond) models instead, and the head itself
+   * otherwise -- a do-while head is a body instruction (issue #7494).
    */
   void copy_loop_body(
-    goto_programt::targett loop_head,
+    goto_programt::targett body_begin,
     goto_programt::targett loop_exit,
     goto_programt &out) const;
 };
