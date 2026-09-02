@@ -45,6 +45,7 @@ jobs:
       action: ${{ steps.report.outputs.action }}
       test: ${{ steps.report.outputs.test }}
       last-green: ${{ steps.baseline.outputs.sha }}
+      issue-reused: ${{ steps.issue.outputs.reused }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -200,15 +201,36 @@ jobs:
       # Filed before the bisect runs, so a red master is visible immediately
       # rather than after several hours of rebuilds. The bisect job comments its
       # answer onto this same issue when it finishes.
+      #
+      # Keyed on the failing test (or "mass failure" for escalate, which has
+      # none) rather than the commit, since the auto-commit above advances
+      # github.sha every night regardless of whether the regression itself
+      # changed -- a commit-keyed title could never match a prior night's
+      # issue. On a match we skip re-filing and (via issue-reused, below)
+      # skip re-bisecting an unchanged range; if that earlier bisect never
+      # finished, a human can force a fresh one with workflow_dispatch.
       - name: Open an issue for the red nightly
         if: ${{ steps.report.outputs.action != 'none' }}
+        id: issue
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh issue create \
-            --title "Nightly full suite failed on $(git rev-parse --short "${{ github.sha }}")" \
-            --label CI \
-            --body-file "$RUNNER_TEMP/issue.md" > nightly-issue.txt
+          test="${{ steps.report.outputs.test }}"
+          key="nightly: ${test:-mass failure}"
+          existing=$(gh issue list --state open --label CI \
+            --search "in:title \"$key\"" --json url --jq '.[0].url // empty')
+          if [ -n "$existing" ]; then
+            printf 'Still red on `%s` -- same regression already tracked here.\n' \
+              "$(git rev-parse --short "${{ github.sha }}")" | gh issue comment "$existing" --body-file -
+            echo "$existing" > nightly-issue.txt
+            echo "reused=true" >> "$GITHUB_OUTPUT"
+          else
+            gh issue create \
+              --title "$key ($(git rev-parse --short "${{ github.sha }}"))" \
+              --label CI \
+              --body-file "$RUNNER_TEMP/issue.md" > nightly-issue.txt
+            echo "reused=false" >> "$GITHUB_OUTPUT"
+          fi
           cat nightly-issue.txt
 
       - name: Pass the issue URL to the bisect job
@@ -234,8 +256,10 @@ jobs:
     # !cancelled(): the step above deliberately fails "suite" on a red night,
     # which would otherwise make GitHub Actions skip this job by default --
     # it is needed precisely when "suite" fails. Not always(), which would
-    # also run this after "suite" is cancelled or times out.
-    if: ${{ !cancelled() && needs.suite.outputs.action == 'bisect' && needs.suite.outputs.test != '' }}
+    # also run this after "suite" is cancelled or times out. issue-reused:
+    # an open issue for this same test already exists, so the commit range
+    # would just re-derive an answer already filed -- skip re-bisecting it.
+    if: ${{ !cancelled() && needs.suite.outputs.action == 'bisect' && needs.suite.outputs.test != '' && needs.suite.outputs.issue-reused != 'true' }}
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
     # Every bisect step is a full rebuild, so this is hours rather than the
     # minutes #6735 estimates from test runtime alone. ccache absorbs most of
