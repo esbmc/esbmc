@@ -160,27 +160,16 @@ void goto_loopst::create_function_loop(
   it1->set_size(size + 1);
 }
 
-/// True when a write target is storage reached through a dereference
-/// (`*p = ...`, `p->f = ...`, `p->e[i] = ...`): nothing named is written, so a
-/// havoc over named symbols cannot cover it. `modifies_pointer_array` reports
-/// the array case too, but only goto_k_induction reads it, so the array shapes
-/// are included here rather than deferred to it (#5224, #5230).
+/// True when a write target is storage reached through a pointer (`*p = ...`,
+/// `p->f = ...`, `p->e[i] = ...`, `((S *)v)->f = ...`): nothing named is
+/// written, so a havoc over named symbols cannot cover it. Writing the pointer
+/// variable itself (`p = ...`) names a symbol the havoc does cover.
+/// `modifies_pointer_array` reports the array shapes too, but only
+/// goto_k_induction reads that flag, so they are recognised here rather than
+/// deferred to it (#5224, #5230).
 static bool writes_through_pointer(const expr2tc &lhs)
 {
-  if (is_nil_expr(lhs))
-    return false;
-
-  for (const expr2tc *e = &lhs;;)
-  {
-    if (is_dereference2t(*e))
-      return true;
-    if (is_member2t(*e))
-      e = &to_member2t(*e).source_value;
-    else if (is_index2t(*e))
-      e = &to_index2t(*e).source_value;
-    else
-      return false;
-  }
+  return !is_nil_expr(lhs) && !is_symbol2t(lhs) && indexes_through_pointer(lhs);
 }
 
 void goto_loopst::collect_loop_symbols(
