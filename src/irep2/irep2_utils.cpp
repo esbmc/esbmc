@@ -129,7 +129,7 @@ expr2tc gen_zero(const type2tc &type, bool array_as_array_of)
     auto union_type = to_union_type(type);
 
     if (union_type.members.empty())
-      return constant_union2tc(type, irep_idt(), std::vector<expr2tc>());
+      return constant_union2tc(type, irep_idt{}, std::vector<expr2tc>{});
 
     std::vector<expr2tc> members = {
       gen_zero(union_type.members.front(), array_as_array_of)};

@@ -132,7 +132,7 @@ TEST_CASE("gen_zero recurses over aggregates (H-A10)", "[core][irep2]")
       "empty_u");
     REQUIRE(
       gen_zero(un) ==
-      constant_union2tc(un, irep_idt(), std::vector<expr2tc>{}));
+      constant_union2tc(un, irep_idt{}, std::vector<expr2tc>{}));
   }
 
   SECTION("nested struct-of-array recurses correctly")
