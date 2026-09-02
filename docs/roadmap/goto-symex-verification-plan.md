@@ -7900,6 +7900,14 @@ The bound pair kills the gate half, the twelve read tests kill the encoder
 half, and each read test carries live VCCs -- 3, or 5 for the memcpy pair --
 so none of them folds at symex time.
 
+Every `_fail` half pins the property id, line and message of the assertion it
+means, not just the verdict. Each of these programs raises array-bounds claims
+on the assertion's own line, and `nested_array_3d_row_pointer_fail` raises a
+dereference-alignment claim ahead of it, so `^VERIFICATION FAILED$` alone would
+be satisfied by a claim the row is not about. The pins agree under Bitwuzla and
+Z3, and mutating one of them to a property id the run does not produce fails
+the test.
+
 **The last pair was added by the coverage gate, and it is the only one that
 reaches its line.** `is_flattened_row`'s `ite` arm is a two-operand `||`, and
 every `ite` the other eleven tests build comes from `push_row_read`'s own
