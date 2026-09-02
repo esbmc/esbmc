@@ -886,12 +886,16 @@ reported `sizeof(*p)` instead:
 - `0` through a `void *` — `__CPROVER_OBJECT_SIZE(&scalar_static)` FAILED where CBMC proves it;
 - `1` through the `signed char *` CPROVER's write-set checks cast to — so a stack `int` came
   back as one byte and `Check that i is valid` FAILED on every
-  `goto-instrument --apply-loop-contracts` binary, again where CBMC proves it.
+  `goto-instrument --apply-loop-contracts` binary, again where CBMC proves it;
+- `sizeof(struct S)` through a `struct S *` walking a `struct S[4]`, where the subtype resolved
+  through the symbol table rather than the object — 8 against GCC's 32.
 
-Both are fixed by preferring the dereferenced object's type. **The array-only tests hid it**:
-`cbmc_object_size{,_bytes,_static}` all address arrays, where the old code already preferred
-the object. `cbmc_object_size_scalar` and `cbmc_loop_invariant` cover the two shapes it missed;
-reverting the fix fails seven tests.
+All three are fixed by preferring the dereferenced object's type. **The array-only tests hid
+it**: `cbmc_object_size{,_bytes,_static}` all address arrays, where the old code already
+preferred the object. `cbmc_object_size_scalar`, `cbmc_loop_invariant` and
+`builtin_object_size17{,_fail}` cover the three shapes it missed; restoring the pre-fix helper
+fails `builtin_object_size17{,_fail}`, `cbmc_loop_invariant` and `cbmc_contract_global_assigns`
+across `regression/{esbmc,extensions,goto-transcoder}`.
 
 Also measured while probing contracts, and *not* defects:
 
@@ -1057,26 +1061,6 @@ What is genuinely open is narrower than this section implied: **separation** bet
 `is_fresh`'d pointers (CBMC's memory-map argument is dropped by the bridge), `is_fresh` in an
 `ensures` clause, and the `__CPROVER_contracts_*` object/write-set helpers beyond the
 `assigns` checks measured above.
-
-**Status 2026-08-30: every contract shape probed now matches CBMC**, and each is pinned in
-`regression/goto-transcoder/`. The `is_fresh` bridges closed the unserialised-library gap in
-both directions (assume side and check side); the rest needed no bridge at all, only the
-`object_size` extent fix that the write-set checks depend on.
-
-| shape | pinned as |
-|---|---|
-| `requires(is_fresh)` / `ensures(is_fresh)`, enforce and replace | `cbmc_contract_is_fresh*`, `cbmc_ensures_fresh_*` |
-| `ensures` scalar, enforce and `--replace-call-with-contract` | `cbmc_contract_{ensures,replace}*` |
-| `assigns` — plain lvalue, `object_whole`, `object_upto`, a global | `cbmc_contract_{frees,object_upto,global_assigns}*`, `cbmc_expr_*` |
-| `frees` | `cbmc_contract_frees` |
-| `__CPROVER_old` in an `ensures` | `cbmc_contract_old{,_fail}` |
-| `--apply-loop-contracts` loop invariants | `cbmc_loop_invariant{,_fail}` |
-| a contract calling a contracted callee (nested) | `cbmc_contract_nested{,_fail}` |
-
-What remains open is narrow and named above: separation between two `is_fresh`'d pointers is
-unmodelled (CBMC's memory-map argument is dropped, and it is not currently a divergence), and
-the `__CPROVER_contracts_*` helpers beyond the `assigns`/`frees` checks measured here have not
-been exercised.
 
 **Status 2026-08-30: every contract shape probed now matches CBMC**, and each is pinned in
 `regression/goto-transcoder/`. The `is_fresh` bridges closed the unserialised-library gap in
