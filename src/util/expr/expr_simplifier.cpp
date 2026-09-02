@@ -247,6 +247,8 @@ static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
   return try_simplification(typecast2tc(type, expr));
 }
 
+namespace
+{
 // Per-kind constant descriptors: the one place that names, for each numeric
 // constant kind, its operand-type predicate, its is-constant predicate, and
 // its stored-value accessor. dispatch_binary_fold and the three binary
@@ -365,6 +367,7 @@ dispatch_binary_fold(const expr2tc &s1, const expr2tc &s2)
     return fold_kind<TFunctor, Wrap, bool_kind>(s1, s2);
   return std::nullopt;
 }
+} // namespace
 
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_2ops(
