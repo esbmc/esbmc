@@ -37,5 +37,14 @@ int main(void)
   for (unsigned short i = 0; i < (refused3 ? 3 : 30000); i++)
     k++;
   __ESBMC_assert(k == 3, "constant-left >: the refusal folded");
+
+  unsigned short ref4 = nondet_u2();
+  int refused4 = 0;
+  if (!(ref4 < count))
+    refused4 = 1;
+  int j = 0;
+  for (unsigned short i = 0; i < (refused4 ? 3 : 30000); i++)
+    j++;
+  __ESBMC_assert(j == 3, "constant-right <: the refusal folded");
   return 0;
 }

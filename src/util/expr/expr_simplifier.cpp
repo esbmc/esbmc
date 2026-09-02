@@ -4527,8 +4527,8 @@ expr2tc lessthan2t::do_simplify() const
   // (wider-signed)(unsigned) < 0 is always false: zero-extension can
   // never produce a negative value.
   if (
-    is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero() &&
-    is_provably_nonneg(side_1))
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_false_expr();
 
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
@@ -4584,10 +4584,10 @@ expr2tc greaterthan2t::do_simplify() const
     return gen_false_expr();
 
   // 0 > (wider-signed)(unsigned) is always false: the mirror of the
-  // `< 0` fold below, for the constant-on-the-left spelling.
+  // `< 0` fold above, for the constant-on-the-left spelling.
   if (
-    is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero() &&
-    is_provably_nonneg(side_2))
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
     return gen_false_expr();
 
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
@@ -4639,8 +4639,8 @@ expr2tc lessthanequal2t::do_simplify() const
   // 0 <= (wider-signed)(unsigned) is always true: the mirror of the
   // `>= 0` fold below, for the constant-on-the-left spelling.
   if (
-    is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero() &&
-    is_provably_nonneg(side_2))
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
     return gen_true_expr();
 
   // Self-comparison: x <= x is always true (except for floats with NaN)
@@ -4700,8 +4700,8 @@ expr2tc greaterthanequal2t::do_simplify() const
   // (wider-signed)(unsigned) >= 0 is always true: zero-extension can
   // never produce a negative value.
   if (
-    is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero() &&
-    is_provably_nonneg(side_1))
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_true_expr();
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
