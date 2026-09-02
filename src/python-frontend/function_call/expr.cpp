@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
@@ -517,7 +518,15 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
   if (
     type == "Constant" && node.contains("value") &&
     node["value"].is_number_integer())
-    return BigInt(node["value"].get<long long>());
+  {
+    const nlohmann::json &value = node["value"];
+    if (
+      value.is_number_unsigned() &&
+      value.get<unsigned long long>() >
+        static_cast<unsigned long long>(std::numeric_limits<long long>::max()))
+      return std::nullopt;
+    return BigInt(value.get<long long>());
+  }
 
   if (
     type != "BinOp" || !node.contains("op") || !node.contains("left") ||
