@@ -657,6 +657,51 @@ add_test(NAME sometimes_passes COMMAND sh -c
         self.assertEqual(bisect.main(["deflake", "--build-dir", self.build]), 1)
 
 
+class BisectPredicateGuard(TempDirCase):
+    """Exercises bisect_predicate.sh's ctest guard with a fake ctest on PATH,
+    rather than a real ESBMC build."""
+
+    SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bisect_predicate.sh")
+
+    def _run(self, ctest_script):
+        bin_dir = os.path.join(self.tmp, "bin")
+        os.makedirs(bin_dir)
+        fake_ctest = os.path.join(bin_dir, "ctest")
+        with open(fake_ctest, "w", encoding="utf-8") as handle:
+            handle.write(ctest_script)
+        os.chmod(fake_ctest, 0o755)
+
+        repo = os.path.join(self.tmp, "repo")
+        os.makedirs(os.path.join(repo, "scripts"))
+        os.makedirs(os.path.join(repo, "build"))
+        with open(os.path.join(repo, "scripts", "build.sh"), "w", encoding="utf-8") as handle:
+            handle.write("#!/bin/sh\nexit 0\n")
+        os.chmod(os.path.join(repo, "scripts", "build.sh"), 0o755)
+
+        env = dict(os.environ,
+                  BISECT_TEST="regression/esbmc/foo",
+                  PATH=f"{bin_dir}:{os.environ['PATH']}")
+        return subprocess.run([self.SCRIPT],
+                              cwd=repo,
+                              env=env,
+                              capture_output=True,
+                              text=True,
+                              check=False)
+
+    def test_no_matching_tests_is_skipped_not_good(self):
+        # A commit predating the test: ctest matches nothing and exits 0.
+        done = self._run('#!/bin/sh\necho "No tests were found!!!" >&2\nexit 0\n')
+        self.assertEqual(done.returncode, 125)
+
+    def test_a_real_pass_exits_zero(self):
+        done = self._run('#!/bin/sh\necho "1/1 Test #1: foo  Passed"\nexit 0\n')
+        self.assertEqual(done.returncode, 0)
+
+    def test_a_real_failure_is_nonzero_and_not_skipped(self):
+        done = self._run('#!/bin/sh\necho "1/1 Test #1: foo  Failed"\nexit 8\n')
+        self.assertEqual(done.returncode, 8)
+
+
 class BisectComment(unittest.TestCase):
 
     def test_a_culprit_comment_names_the_commit_and_disclaims_a_fix(self):

@@ -17,4 +17,14 @@ set -e
 pattern=$(python3 -c 'import os, re; print("^" + re.escape(os.environ["BISECT_TEST"]) + "$")')
 
 cd build
-ctest -R "$pattern" --output-on-failure
+output=$(ctest -R "$pattern" --output-on-failure 2>&1) && rc=0 || rc=$?
+printf '%s\n' "$output"
+
+# ctest exits 0 when its filter matches nothing, and says so on stderr, not
+# stdout: a commit predating the test would otherwise read as "good" and
+# bisect would blame whichever commit added the test.
+case "$output" in
+  *"No tests were found"*) echo "$BISECT_TEST does not exist at this commit" >&2; exit 125 ;;
+esac
+
+exit "$rc"
