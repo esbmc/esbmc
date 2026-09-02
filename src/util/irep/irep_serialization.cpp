@@ -153,7 +153,18 @@ irep_idt irep_serializationt::read_string(std::istream &in)
     if (i >= read_buffer.size())
       read_buffer.resize(read_buffer.size() * 2, 0);
     if (c == '\\') // escaped chars
-      read_buffer[i] = static_cast<char>(in.get());
+    {
+      const int escaped = in.get();
+      if (escaped == EOF)
+      {
+        // Same reasoning as read_long: a stream that ends mid-escape has no
+        // character to store, and narrowing EOF would hand the caller a 0xff
+        // the file never contained.
+        in.setstate(std::ios::failbit);
+        break;
+      }
+      read_buffer[i] = static_cast<char>(escaped);
+    }
     else
       read_buffer[i] = static_cast<char>(c);
     i++;
