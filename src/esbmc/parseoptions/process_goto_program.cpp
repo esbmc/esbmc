@@ -59,7 +59,7 @@
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/andersen.h>
 #include <util/symtab/symbol.h>
 #include <util/base/time_stopping.h>
 #include <goto-programs/goto_cfg.h>
@@ -366,46 +366,16 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (cmdline.isset("gcse"))
     {
-      std::shared_ptr<value_set_analysist> vsa =
-        std::make_shared<value_set_analysist>(ns);
-      try
-      {
-        log_status("Computing Value-Set Analysis (VSA)");
-        (*vsa)(goto_functions);
-      }
-      catch (vsa_not_implemented_exception &)
-      {
-        log_warning(
-          "Unable to compute VSA due to incomplete implementation. Some GOTO "
-          "optimizations will be disabled");
-        vsa = nullptr;
-      }
-      catch (type2t::symbolic_type_excp &)
-      {
-        log_warning(
-          "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
-          "optimizations will be disabled");
-        vsa = nullptr;
-      }
-      catch (const std::string &e)
-      {
-        log_warning(
-          "[GOTO] Unable to compute VSA due to: {}. Some GOTO "
-          "optimizations will be disabled",
-          e);
-        vsa = nullptr;
-      }
+      auto andersen = std::make_shared<andersent>();
+      log_status("Computing points-to analysis (Andersen)");
+      (*andersen)(goto_functions);
+      std::shared_ptr<value_setst> points_to = andersen;
 
       if (cmdline.isset("no-library"))
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
 
-      if (!vsa)
-        log_warning("Could not apply GCSE optimization due to VSA limitation!");
-      else
-      {
-        goto_cse cse(context, vsa);
-        cse.run(goto_functions);
-      }
+      goto_cse cse(context, points_to);
+      cse.run(goto_functions);
     }
 
     // Under --termination, goto_termination does its own havoc, so
