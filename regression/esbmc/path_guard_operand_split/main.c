@@ -17,6 +17,20 @@ static int handler(unsigned char mn)
   return acc;
 }
 
+/* The additive form of the split: both sides derive a table offset
+ * from the same byte with + and -, so the add/sub arms of the stable-
+ * value walk carry the match. */
+static int offset_handler(unsigned char mn)
+{
+  unsigned char off = (unsigned char)((mn >> 4) + (mn & 0x0F) - 1);
+  if (off > 4)
+    return -1;
+  int acc = 0;
+  for (unsigned char i = 0; i < (unsigned char)(off * 8u + 1); i++)
+    acc++;
+  return acc;
+}
+
 int main(void)
 {
   unsigned char mn = nondet_u1();
@@ -24,5 +38,10 @@ int main(void)
   if (m_ >= 1 && m_ <= 2 && n_ >= 1 && n_ <= 2)
     return 0;
   __ESBMC_assert(handler(mn) == -1, "illegal encodings refuse");
+
+  unsigned char off_ = (unsigned char)((mn >> 4) + (mn & 0x0F) - 1);
+  if (off_ <= 4)
+    return 0;
+  __ESBMC_assert(offset_handler(mn) == -1, "out-of-range offsets refuse");
   return 0;
 }
