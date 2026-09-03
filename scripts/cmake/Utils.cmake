@@ -111,15 +111,31 @@ endfunction()
 # ${CMAKE_BINARY_DIR}/${ID}. A failed download is fatal (and the partial file is
 # removed so the next configure retries) — file(DOWNLOAD) does not fail on its
 # own, which previously left 0-byte archives that "extracted" to empty dirs.
+# Retried because one transient TLS/HTTP failure fetching a release asset fails
+# the whole configure before any source is compiled.
+set(ESBMC_DOWNLOAD_ATTEMPTS 3 CACHE STRING
+    "Attempts per dependency download before configuration fails")
+
 function(_download_and_extract ID URL ARCHIVE)
   if(NOT EXISTS ${ARCHIVE})
-    message(STATUS "Downloading ${ID} from ${URL}")
-    file(DOWNLOAD ${URL} ${ARCHIVE} SHOW_PROGRESS TLS_VERIFY ON STATUS _dl_status)
-    list(GET _dl_status 0 _dl_code)
-    if(NOT _dl_code EQUAL 0)
+    foreach(attempt RANGE 1 ${ESBMC_DOWNLOAD_ATTEMPTS})
+      message(STATUS "Downloading ${ID} from ${URL} "
+                     "(attempt ${attempt}/${ESBMC_DOWNLOAD_ATTEMPTS})")
+      file(DOWNLOAD ${URL} ${ARCHIVE} SHOW_PROGRESS TLS_VERIFY ON STATUS _dl_status)
+      list(GET _dl_status 0 _dl_code)
+      if(_dl_code EQUAL 0)
+        break()
+      endif()
       list(GET _dl_status 1 _dl_msg)
       file(REMOVE ${ARCHIVE})
-      message(FATAL_ERROR "Failed to download ${ID} from ${URL}: ${_dl_msg}")
+      message(STATUS "Download of ${ID} failed: ${_dl_msg}")
+      if(attempt LESS ${ESBMC_DOWNLOAD_ATTEMPTS})
+        execute_process(COMMAND ${CMAKE_COMMAND} -E sleep 5)
+      endif()
+    endforeach()
+    if(NOT _dl_code EQUAL 0)
+      message(FATAL_ERROR "Failed to download ${ID} from ${URL} after "
+                          "${ESBMC_DOWNLOAD_ATTEMPTS} attempts: ${_dl_msg}")
     endif()
   endif()
 
