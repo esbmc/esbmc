@@ -179,9 +179,10 @@ public:
   std::unordered_map<std::string, BitwuzlaTerm> uf_decls;
 
 private:
-  /** Identifies a sort by kind plus the two widths that parameterise it: the
+  /** Identifies a sort by kind plus the two values that parameterise it: the
    *  bit-width for bit-vectors, (exponent, significand) for floating-point, and
-   *  (domain width, range sort) for arrays. */
+   *  the domain and range sorts' addresses for arrays -- identity rather than
+   *  width, for the reason mk_array_sort gives. */
   typedef std::tuple<smt_sort_kind, uint64_t, uint64_t> sort_keyt;
 
   /** Sorts are immutable and outlive every context, so one instance per

@@ -165,8 +165,9 @@ SCENARIO("Bitwuzla model values survive being read back", "[solvers][bitwuzla]")
   const type2tc u32 = get_uint32_type();
   const type2tc arr_type = array_type2tc(u32, from_integer(4, u32), false);
 
-  // One constrained scalar per query, plus a bool and an array element, so
-  // every model-reading path in the backend runs at least once.
+  // One constrained scalar per query, plus a bool, a float and an array
+  // element, so every backend entry point that takes a value_reft runs at
+  // least once: get_bv, get_bool, get_fpbv, get_array_elem and print_model.
   std::vector<expr2tc> scalars;
   for (unsigned i = 0; i < 8; i++)
   {
@@ -181,6 +182,14 @@ SCENARIO("Bitwuzla model values survive being read back", "[solvers][bitwuzla]")
   const expr2tc arr = symbol2tc(arr_type, "a");
   const expr2tc elem = index2tc(u32, arr, from_integer(2, u32));
   solver->assert_expr(equality2tc(elem, from_integer(0xbeef, u32)));
+
+  // create_new_bitwuzla_solver hands the convt out as the fp_convt, so a
+  // floatbv symbol routes smt_convt::get() into bitwuzla_convt::get_fpbv.
+  ieee_floatt half(ieee_float_spect::double_precision());
+  half.from_double(0.5);
+  const expr2tc fsym =
+    symbol2tc(ieee_float_spect::double_precision().get_type(), "f");
+  solver->assert_expr(equality2tc(fsym, constant_floatbv2tc(half)));
 
   REQUIRE(solver->dec_solve() == smt_resultt::P_SATISFIABLE);
 
@@ -204,6 +213,16 @@ SCENARIO("Bitwuzla model values survive being read back", "[solvers][bitwuzla]")
       expr2tc v = solver->get(elem);
       REQUIRE(is_constant_int2t(v));
       REQUIRE(to_constant_int2t(v).value == BigInt(0xbeef));
+    }
+    THEN("the float reads back its asserted value")
+    {
+      expr2tc v = solver->get(fsym);
+      REQUIRE(is_constant_floatbv2t(v));
+      REQUIRE(to_constant_floatbv2t(v).value.to_double() == 0.5);
+    }
+    THEN("printing the model releases every value it reads")
+    {
+      solver->print_model();
     }
     THEN("repeating every query returns the same values")
     {

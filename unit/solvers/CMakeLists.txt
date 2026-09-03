@@ -31,10 +31,15 @@ if(ENABLE_BITWUZLA)
   # can construct the backend directly: mk_*_sort is not reachable through
   # smt_convt, and the sort cache it pins is a property of the backend, not of
   # any query it answers. `solvers` supplies create_solver for the model half.
+  # Only the backend's own source dir is named here. Bitwuzla's include dirs
+  # arrive as a usage requirement of PkgConfig::Bitwuzla, which solverbitw
+  # links with the plain signature; naming that imported target here instead
+  # is a configure error, as pkg_check_modules created it in the solver's
+  # directory scope rather than GLOBAL.
   new_unit_test(bitwuzla_sort_cache_test "bitwuzla_sort_cache.test.cpp"
                 "solvers;util_esbmc;filesystem;bigint")
   target_include_directories(bitwuzla_sort_cache_test
-    PRIVATE ${Bitwuzla_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/bitwuzla)
+    PRIVATE ${CMAKE_SOURCE_DIR}/src/solvers/bitwuzla)
 endif()
 
 if(ENABLE_SMTLIB)
