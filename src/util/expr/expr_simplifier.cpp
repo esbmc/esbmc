@@ -1619,6 +1619,15 @@ expr2tc pointer_capability2t::do_simplify() const
   return expr2tc();
 }
 
+/// Whether pointer arithmetic over @p ptr_op can be scaled here: a
+/// symbol-typed (named struct/union) subtype needs the namespace to
+/// size it, so without one the offset is left to the SMT layer.
+static bool ptr_subtype_size_known(const expr2tc &ptr_op)
+{
+  return !is_symbol_type(to_pointer_type(ptr_op->type).subtype) ||
+         migrate_namespace_lookup != nullptr;
+}
+
 expr2tc pointer_offset2t::do_simplify() const
 {
   // XXX - this could be better. But the current implementation catches most
@@ -1749,10 +1758,12 @@ expr2tc pointer_offset2t::do_simplify() const
       to_constant_int2t(non_ptr_op).value.is_zero())
       return pointer_offset2tc(type, ptr_op);
 
-    // Can't do any kind of simplification if the ptr op has a symbolic type.
-    // Let the SMT layer handle this. In the future, can we pass around a
-    // namespace?
-    if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+    // Bailing on every symbol type here (the same #2803-era
+    // restriction the NULL arm above shed in #6779) left
+    // pointer_offset(&arr_of_structs[0] + k) unfolded, so every field
+    // read through such a pointer became a symbolic-offset byte
+    // extract over the whole aggregate.
+    if (!ptr_subtype_size_known(ptr_op))
       return expr2tc();
 
     // Turn the pointer one into pointer_offset.
@@ -1800,7 +1811,8 @@ expr2tc pointer_offset2t::do_simplify() const
         to_constant_int2t(offset_op).value.is_zero())
         return pointer_offset2tc(type, ptr_op);
 
-      if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+      // See the add arm above.
+      if (!ptr_subtype_size_known(ptr_op))
         return expr2tc();
 
       expr2tc ptr_offset = pointer_offset2tc(type, ptr_op);
