@@ -899,9 +899,8 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = conditional_back_edge
-                 ? expr2tc(or2tc(exit_cond, invariants[i]))
-                 : invariants[i];
+    t->guard = conditional_back_edge ? expr2tc(or2tc(exit_cond, invariants[i]))
+                                     : invariants[i];
     t->location = loop_exit->location;
     t->location.comment(
       invariant_claim_comment("loop invariant inductive step", i));

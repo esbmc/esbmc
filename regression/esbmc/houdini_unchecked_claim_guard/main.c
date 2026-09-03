@@ -1,11 +1,15 @@
-/* A side-effecting loop guard. The frontend hoists `cnt--` above the point the
- * schema havocs at, so the exit edge tests a pre-havoc temporary, is
- * infeasible, and the assertion after the loop is never reached -- an
- * unreached claim is silently not a failing one. Reduced from
+/* A side-effecting loop guard, reduced from
  * regression/k-induction/github_1092_6_false, where this reported VERIFICATION
- * SUCCESSFUL. Houdini must notice it lost a claim and decline to call it a
- * proof. The underlying schema defect is issue #7478: it reproduces on master
- * with a hand-written invariant and no Houdini code involved. */
+ * SUCCESSFUL. The schema used to hoist `cnt--` above the havoc point, so the
+ * exit edge tested a pre-havoc temporary, was infeasible, and the assertion
+ * after the loop was never reached -- an unreached claim is silently not a
+ * failing one. This test pinned Houdini's unchecked-claim guard noticing that
+ * and declining to call it a proof.
+ *
+ * PR #7482 fixed the underlying schema defect (issue #7478), so the claim
+ * survives and the real bug is reported directly. The guard is consequently no
+ * longer exercised here; whether it still has a reachable case of its own is
+ * worth deciding separately rather than assuming from this file. */
 #include <assert.h>
 
 int main()
