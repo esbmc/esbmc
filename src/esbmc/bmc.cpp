@@ -511,7 +511,7 @@ void bmct::report_unknown()
   log_fail("\nVERIFICATION UNKNOWN");
 }
 
-void bmct::report_violation(smt_resultt &res)
+void bmct::report_violation()
 {
   // When every violated claim sits downstream of a --loop-invariant-check
   // havoc, no counterexample witnesses a state the program can reach. An
@@ -530,12 +530,7 @@ void bmct::report_violation(smt_resultt &res)
     "counterexample is against the abstraction rather than the program; "
     "strengthen the invariant to decide the claim");
   report_unknown();
-
-  // smt_resultt has no unknown value, and the run's result doubles as the
-  // process exit code. Every other path that prints UNKNOWN -- vacuity here,
-  // the k-induction strategy elsewhere -- leaves it at P_UNSATISFIABLE and
-  // exits 0, because an unknown verdict does not witness a bug (issue #7480).
-  res = P_UNSATISFIABLE;
+  verdict_is_unknown = true;
 }
 
 smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
@@ -1870,7 +1865,7 @@ void bmct::report_result(smt_resultt &res)
   case P_SATISFIABLE:
     if (!is && !fc)
     {
-      report_violation(res);
+      report_violation();
     }
     else if (fc)
     {
@@ -1967,7 +1962,12 @@ smt_resultt bmct::start_bmc()
     symex->report_reduction_stats();
   }
 
-  return res;
+  // The run's result doubles as the process exit code, and smt_resultt has no
+  // unknown value. Every other path that prints UNKNOWN -- vacuity here, the
+  // k-induction strategy elsewhere -- exits 0, because an unknown verdict does
+  // not witness a bug. Map it here rather than rewrite the solver's own answer
+  // where the verdict is decided (issue #7480).
+  return verdict_is_unknown ? P_UNSATISFIABLE : res;
 }
 
 size_t bmct::barren_interleaving_budget() const

@@ -102,9 +102,13 @@ protected:
   virtual void report_success();
   virtual void report_failure();
   /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
-  /// violated claim was abstraction-derived, in which case \p res is lowered
-  /// so the run does not exit as a failure (issue #7480).
-  void report_violation(smt_resultt &res);
+  /// violated claim was abstraction-derived (issue #7480).
+  void report_violation();
+
+  /// Set when the run printed UNKNOWN over a satisfiable result, so start_bmc
+  /// can return the exit code the verdict earns without misreporting what the
+  /// solver answered.
+  bool verdict_is_unknown = false;
   virtual void report_unknown();
   virtual void keep_alive_function() const;
 
@@ -231,8 +235,11 @@ private:
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself
-  /// is suppressed. Call only where a SAT result witnesses a real violation:
-  /// an inductive-step or forward-condition model does not.
+  /// is suppressed. Failed, or Unknown for a claim the model reaches only past
+  /// a loop-invariant havoc, whose witness is the abstraction rather than a
+  /// reachable state (issue #7480). Call only where a SAT result can witness a
+  /// real violation at all: an inductive-step or forward-condition model
+  /// cannot.
   void record_violated_properties(
     smt_convt &smt_conv,
     const symex_target_equationt &eq);

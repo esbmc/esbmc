@@ -363,6 +363,7 @@ bool simple_slice::run(symex_target_equationt::SSA_stepst &steps)
 bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
 {
   sliced = 0;
+  claim_after_invariant_havoc = false;
   fine_timet algorithm_start = current_time();
   size_t counter = 1;
   bool seen_invariant_havoc = false;
