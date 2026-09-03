@@ -579,6 +579,42 @@ void goto_loop_invariantt::insert_assert_before_loop(
   goto_function.body.insert_swap(loop_head, dest);
 }
 
+/// Storage a loop writes through a pointer has no named symbol, so havoc the
+/// pointed-to object through the pointer itself and let symex resolve it
+/// against its own value set. Without this the pointee keeps its pre-loop value
+/// across the abstract iteration and a claim about it after the loop is decided
+/// on state the loop overwrote (issue #7478).
+///
+/// A pointee is havoc'd as one nondet value, which for a large aggregate costs
+/// more to encode than the loop it replaces: the 1024-element `poly` of
+/// quantified_array_invariant goes from under a second to nine minutes, against
+/// eight seconds at 256 elements. Cover what is cheap and leave the rest to
+/// issue #7502 rather than trade a proof for a timeout.
+void goto_loop_invariantt::havoc_pointees(
+  const loopst &loop,
+  const locationt &loc,
+  goto_programt &dest) const
+{
+  const namespacet ns(context);
+
+  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
+  {
+    if (!is_pointer_type(ptr->type))
+      continue;
+
+    const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
+    if (
+      is_empty_type(pointee) || is_code_type(pointee) ||
+      pointee->get_width() > kMaxHavocPointeeBits)
+      continue;
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
+    t->location = loc;
+    t->location.comment("loop invariant havoc");
+  }
+}
+
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett loop_head,
   const loopst &loop,
@@ -647,26 +683,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->loop_invariant_havoc = true;
   }
 
-  // Storage the loop writes through a pointer has no named symbol, so havoc
-  // the pointed-to object through the pointer itself and let symex resolve it
-  // against its own value set. Without this the pointee keeps its pre-loop
-  // value across the abstract iteration, and a claim about it after the loop
-  // is decided on state the loop actually overwrote (issue #7478).
-  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
-  {
-    if (!is_pointer_type(ptr->type))
-      continue;
-
-    const namespacet ns(context);
-    const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
-    if (is_empty_type(pointee) || is_code_type(pointee))
-      continue;
-
-    goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
-    t->location = loop_head->location;
-    t->location.comment("loop invariant havoc");
-  }
+  havoc_pointees(loop, loop_head->location, dest);
 
   // =========================================================
   // Frame Rule Step 3: Enforce Frame Conditions (if enabled)
