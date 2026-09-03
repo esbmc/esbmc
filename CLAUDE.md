@@ -1,11 +1,8 @@
 # AGENTS.md
 
-This file provides guidance to coding agents working with this repository. The
-same workflow rules also live in `CLAUDE.md` (which Claude Code loads
-automatically); update both files together when changing build, test, style, or
-post-implementation rules.
-
-Please remove all mannered prose.
+This file provides guidance to coding agents working with this repository.
+The `AGENTS.md` file is a symlink that points to `CLAUDE.md` so that all
+agentic harnesses follow the same rules.
 
 ## Project Overview
 
@@ -141,6 +138,13 @@ bullet below.
   reports what the branch adds against its merge base, the same check the
   Complexity workflow runs on the PR (needs `pip install lizard==1.23.0`). It is
   advisory while the thresholds are being calibrated.
+
+## General Style Guidelines
+
+The following applies to the tone and style when writing comments, code, documentation
+pull requests and more.
+
+- Please remove all mannered prose.
 
 ## Branching
 
