@@ -207,17 +207,27 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   }
 }
 
-// The loop-invariant schema's own obligations -- does the invariant hold on
-// entry, does the loop body preserve it -- are statements about the
-// annotation, so a model falsifying one is the finding the mode exists to
-// report even though the inductive step is checked from the havoc'd state.
-// Only the program's own claims downstream of the havoc are
-// abstraction-derived.
+// Obligations the schema discharges from the havoc'd state on purpose: does
+// the body preserve the invariant, does it respect the assigns clause. Both
+// are statements about the annotation rather than about a reachable state, so
+// a model falsifying one is the finding the mode exists to report.
+//
+// The base case is not among them. It is checked from the state the loop is
+// entered in, which for an outermost loop is concrete -- and the generic test
+// already leaves it alone there, since no havoc precedes it. An inner loop's
+// base case sits inside the outer body, downstream of the outer havoc, where
+// the entry state is arbitrary: `s == i` holds at every real entry of the
+// inner loop below and is still refuted there.
+//
+//   while (i < 3) { __ESBMC_loop_invariant(j >= 0 && s == i); ... s++; i++; }
+//
+// Exempting it by property name would pin that false alarm as a verdict, so it
+// is left to the generic rule (issue #7480).
 static bool is_loop_invariant_obligation(const locationt &location)
 {
   const std::string property = location.property().as_string();
-  return property == "invariant-base-case" ||
-         property == "invariant-inductive-step";
+  return property == "invariant-inductive-step" ||
+         property == "assigns compliance";
 }
 
 // Attached to a claim downgraded from Failed to Unknown because the only trace

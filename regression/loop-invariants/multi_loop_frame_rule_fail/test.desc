@@ -1,5 +1,4 @@
 CORE
 main.c
 --loop-invariant-check --loop-frame-rule --k-induction
-^WARNING: every violated claim lies downstream of a loop invariant havoc
-^VERIFICATION UNKNOWN$
+^VERIFICATION FAILED$

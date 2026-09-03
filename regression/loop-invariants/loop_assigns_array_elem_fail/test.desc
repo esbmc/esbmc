@@ -1,6 +1,5 @@
 CORE
 main.c
 --loop-invariant-check --loop-frame-rule
-^WARNING: every violated claim lies downstream of a loop invariant havoc
-^VERIFICATION UNKNOWN$
+^VERIFICATION FAILED$
 ^.*global\[5\] not in assigns clause.*$
