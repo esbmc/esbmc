@@ -174,8 +174,12 @@ jobs:
         if: always()
         run: rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-*
 
+      # continue-on-error: a lost push race here (e.g. a concurrent run) must
+      # not skip every step below -- issue filing and the bisect job's own
+      # artifact download both depend on them still running.
       - name: Commit the nightly state
         uses: stefanzweifel/git-auto-commit-action@v7
+        continue-on-error: true
         with:
           commit_message: '[ci] nightly: timings, selection and baseline'
           file_pattern: |
@@ -202,23 +206,35 @@ jobs:
       # rather than after several hours of rebuilds. The bisect job comments its
       # answer onto this same issue when it finishes.
       #
-      # Keyed on the failing test (or "mass failure" for escalate, which has
-      # none) rather than the commit, since the auto-commit above advances
-      # github.sha every night regardless of whether the regression itself
-      # changed -- a commit-keyed title could never match a prior night's
-      # issue. On a match we skip re-filing and (via issue-reused, below)
-      # skip re-bisecting an unchanged range; if that earlier bisect never
-      # finished, a human can force a fresh one with workflow_dispatch.
+      # Keyed on the failing test for a bisectable night, or a fixed
+      # "escalate" key for every escalate sub-case (mass failure, no
+      # baseline, unreachable baseline, no commit range -- steps.report never
+      # sets outputs.test for any of those) rather than the commit, since the
+      # auto-commit above advances github.sha every night regardless of
+      # whether the regression itself changed -- a commit-keyed title could
+      # never match a prior night's issue. `gh issue list --search` is a
+      # ranked full-text match, not an exact one, so the candidates are
+      # re-filtered by jq for a title that is exactly $key or $key followed
+      # by the "(<sha>)" suffix this step appends below -- a mismatched
+      # top-ranked hit must not suppress filing the real issue. On a match we
+      # skip re-filing and (via issue-reused, below) skip re-bisecting an
+      # unchanged range; if that earlier bisect never finished, a human can
+      # force a fresh one with workflow_dispatch.
       - name: Open an issue for the red nightly
         if: ${{ steps.report.outputs.action != 'none' }}
         id: issue
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          test="${{ steps.report.outputs.test }}"
-          key="nightly: ${test:-mass failure}"
+          if [ "${{ steps.report.outputs.action }}" = "bisect" ]; then
+            key="nightly: ${{ steps.report.outputs.test }}"
+          else
+            key="nightly: escalate"
+          fi
           existing=$(gh issue list --state open --label CI \
-            --search "in:title \"$key\"" --json url --jq '.[0].url // empty')
+            --search "in:title \"$key\"" --json title,url |
+            jq -r --arg key "$key" \
+              '[.[] | select(.title == $key or (.title | startswith($key + " (")))] | .[0].url // empty')
           if [ -n "$existing" ]; then
             printf 'Still red on `%s` -- same regression already tracked here.\n' \
               "$(git rev-parse --short "${{ github.sha }}")" | gh issue comment "$existing" --body-file -
