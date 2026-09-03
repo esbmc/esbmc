@@ -1,0 +1,7 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^WARNING: loop invariant at .* not checked beyond its base case
+^\s+PASSED\s+\[main\.assertion\.2\]\s+line\s+12\s+loop invariant base case$
+^\s+PASSED\s+\[main\.assertion\.4\]\s+line\s+16\s+assertion cnt == 0$
+^VERIFICATION SUCCESSFUL$
