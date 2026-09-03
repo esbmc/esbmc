@@ -104,7 +104,7 @@ void python_converter::update_symbol(const exprt &expr) const
 static std::pair<std::string, std::string>
 from_import_binding(const nlohmann::json &ast, const std::string &bound)
 {
-  std::pair<std::string, std::string> binding;
+  std::pair<std::string, std::string> binding, wildcard;
 
   for (const auto &stmt : ast["body"])
   {
@@ -117,6 +117,13 @@ from_import_binding(const nlohmann::json &ast, const std::string &bound)
     for (const auto &alias : stmt["names"])
     {
       const std::string name = alias.value("name", "");
+      // `from m import *` binds every name m defines, this one included, but
+      // an explicit import of the name still wins over it (#7399).
+      if (name == "*")
+      {
+        wildcard = {stmt["full_path"].get<std::string>(), bound};
+        continue;
+      }
       const bool aliased =
         alias.contains("asname") && !alias["asname"].is_null();
       if ((aliased ? alias["asname"].get<std::string>() : name) == bound)
@@ -124,7 +131,7 @@ from_import_binding(const nlohmann::json &ast, const std::string &bound)
     }
   }
 
-  return binding;
+  return binding.first.empty() ? wildcard : binding;
 }
 
 /// Class name a `bases` entry denotes. A qualified base (`module.Class`)
@@ -168,7 +175,7 @@ symbolt *python_converter::find_function_in_imported_base_classes(
   if (!module_ast)
     return nullptr;
 
-  const nlohmann::json class_node =
+  nlohmann::json class_node =
     json_utils::find_class((*module_ast)["body"], class_name);
 
   for (const auto &base_class_node : class_node["bases"])
