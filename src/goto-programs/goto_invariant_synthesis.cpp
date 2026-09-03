@@ -250,6 +250,57 @@ struct affine_loopt
   std::vector<accumulatort> accumulators;
 };
 
+/// MSVC spells `assert(e)` as `(!!(e)) || (_wassert(...), 0)`, so on that
+/// target a loop body that asserts holds a branch around the ASSERT rather than
+/// the single one the glibc and Darwin spellings fold to in do_assert_fail().
+/// The region such a branch spans writes nothing, so the per-iteration effect
+/// is still exactly the assignments outside it and stepping over it is sound.
+///
+/// `first` indexes the branch that opens the region. On success `join` is the
+/// index control rejoins at -- the caller resumes there -- and `saw_assert` is
+/// set if the region asserts.
+bool assertion_only_region(
+  const std::vector<goto_programt::targett> &body,
+  const std::map<const goto_programt::instructiont *, size_t> &index,
+  size_t first,
+  size_t &join,
+  bool &saw_assert)
+{
+  join = first + 1;
+  for (size_t i = first; i < join; ++i)
+  {
+    const goto_programt::targett it = body[i];
+
+    if (it->is_goto())
+    {
+      for (const auto &target : it->targets)
+      {
+        const auto found = index.find(&*target);
+        // A target outside the body leaves the loop (a `break`, whose iteration
+        // count this pass cannot express); one at or behind `first` is a back
+        // edge, so a nested loop rather than an assertion diamond.
+        if (found == index.end() || found->second <= first)
+          return false;
+        join = std::max(join, found->second);
+      }
+      continue;
+    }
+
+    if (it->is_assert())
+    {
+      saw_assert = true;
+      continue;
+    }
+
+    // Anything that can write a variable or call out of the region would make
+    // the per-iteration effect conditional, which is what the region has to
+    // rule out to be skippable.
+    if (!it->is_skip() && !it->is_location())
+      return false;
+  }
+  return true;
+}
+
 /// Summarise the loop body into per-variable (target, addend) pairs, and check
 /// the counter advances by exactly one. Anything that is not a plain
 /// self-increment, or a second write to a variable already summarised, makes
@@ -262,8 +313,28 @@ static bool summarise_body(
   bool &body_asserts)
 {
   body_asserts = false;
+
+  std::vector<goto_programt::targett> body;
+  std::map<const goto_programt::instructiont *, size_t> index;
   for (goto_programt::targett it = std::next(head); it != exit; ++it)
   {
+    index.emplace(&*it, body.size());
+    body.push_back(it);
+  }
+
+  for (size_t i = 0; i < body.size(); ++i)
+  {
+    const goto_programt::targett it = body[i];
+
+    if (it->is_goto())
+    {
+      size_t join;
+      if (!assertion_only_region(body, index, i, join, body_asserts))
+        return false;
+      i = join - 1;
+      continue;
+    }
+
     if (breaks_straight_line(it))
       return false;
     if (it->is_assert())
