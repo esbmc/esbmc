@@ -322,9 +322,15 @@ void goto_loopst::get_modified_variables(
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
-    // Don't do function pointers
+    // A call through a function pointer hides the callee's writes from the
+    // summary, so a pointer write inside it would leave the loop looking
+    // havoc-covered when it is not (issue #7478).
     if (is_dereference2t(function_call.function))
+    {
+      loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
       return;
+    }
 
     // First, add its return
     if (writes_through_pointer(function_call.ret))
@@ -349,7 +355,13 @@ void goto_loopst::get_modified_variables(
     for (const auto &v : summary.unmodified)
       loop->add_unmodified_var_to_loop(v);
     if (summary.writes_through_pointer)
+    {
+      // The write is through a callee parameter, which is not in scope at the
+      // caller's loop head, so no pointer here names the storage to havoc.
+      // Same reason Phase 1 disables the inductive step for it (#5230, #7478).
       loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
+    }
     if (summary.modifies_pointer_array)
     {
       loop->set_modifies_pointer_array();
@@ -386,6 +398,14 @@ void goto_loopst::add_loop_var(
   // pointer at loop entry — unsound if the loop never reassigns it.
   if (is_modified && is_dereference2t(expr))
   {
+    // The pointee has no named symbol, so record the pointer for the value-set
+    // resolution to turn into one; an unextractable pointer leaves the write
+    // uncoverable and the loop-invariant schema declines (#5230, #7478).
+    expr2tc ptr = extract_queried_pointer(expr);
+    if (is_nil_expr(ptr))
+      loop.set_pointer_array_write_unresolvable();
+    else
+      loop.add_pointer_array_write_ptr(ptr);
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
