@@ -33,6 +33,11 @@ import tempfile
 import zlib
 from concurrent.futures import ProcessPoolExecutor
 
+# The sibling import below has to follow the sys.path setup.
+# pylint: disable=wrong-import-position
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from select_tests import DEFAULT_PACKING_EFFICIENCY  # noqa: E402  (sibling module, not a package)
+
 # Paths that are not ESBMC's own code and would distort the cover.
 DEFAULT_EXCLUDES = ("/usr/", "/build/")
 
@@ -232,7 +237,7 @@ def select(args):
         print(f"note: {len(missing)} covered tests have no timing; assuming 1s", file=sys.stderr)
         costs.update({n: 1.0 for n in missing})
 
-    budget = args.budget_seconds * max(args.jobs, 1)
+    budget = args.budget_seconds * max(args.jobs, 1) * args.packing_efficiency
     chosen, trail = greedy_cover(bitsets, costs, budget, args.target)
     if not chosen:
         print("error: no test fits the budget", file=sys.stderr)
@@ -282,6 +287,10 @@ def main(argv=None):
     solve.add_argument("--output", default="ci/core-set.txt")
     solve.add_argument("--budget-seconds", type=float, default=180.0, help="wall-clock to fill")
     solve.add_argument("--jobs", type=int, default=2, help="ctest -j the budget assumes")
+    solve.add_argument("--packing-efficiency",
+                       type=float,
+                       default=DEFAULT_PACKING_EFFICIENCY,
+                       help="fraction of jobs x budget a real run actually packs")
     solve.add_argument("--target",
                        type=float,
                        default=0.95,

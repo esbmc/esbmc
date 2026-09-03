@@ -332,6 +332,30 @@ class CoverageIo(TempDirCase):
         self.assertEqual(ccs.unmangle("regression@esbmc-cpp@cpp@foo"),
                          "regression/esbmc-cpp/cpp/foo")
 
+    def test_select_applies_the_default_packing_efficiency_to_the_budget(self):
+        # A run never packs perfectly, so the effective budget must be
+        # discounted the same way select_tests.py discounts its own budget --
+        # otherwise the core set overruns the fast-lane wall-clock it is
+        # charged against.
+        cov = os.path.join(self.tmp, "cov")
+        os.makedirs(cov, exist_ok=True)
+        with gzip.open(os.path.join(cov, ccs.BITSETS), "wt", encoding="utf-8") as fh:
+            fh.write(json.dumps({"test": "regression/a/x", "bits": self._blob(0b1)}) + "\n")
+        table = {"tests": {"regression/a/x": {"seconds": 10.0}}}
+        timings_path = self.write("t.json", json.dumps(table))
+        rc = ccs.main([
+            "select", "--coverage", cov, "--timings", timings_path, "--output",
+            os.path.join(self.tmp, "core.txt"), "--budget-seconds", "11.5", "--jobs", "1"
+        ])
+        # 11.5s x 1 job x the default 0.85 packing efficiency = 9.775s, less
+        # than the one test's 10.0s cost -- it must not fit.
+        self.assertEqual(rc, 1)
+
+    @staticmethod
+    def _blob(bits):
+        raw = bits.to_bytes((bits.bit_length() + 7) // 8, "big")
+        return base64.b64encode(zlib.compress(raw)).decode("ascii")
+
     def test_select_reports_an_error_with_no_coverage(self):
         os.makedirs(os.path.join(self.tmp, "cov"), exist_ok=True)
         with gzip.open(os.path.join(self.tmp, "cov", ccs.BITSETS), "wt", encoding="utf-8"):
