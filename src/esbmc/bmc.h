@@ -102,8 +102,9 @@ protected:
   virtual void report_success();
   virtual void report_failure();
   /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
-  /// violated claim was abstraction-derived (issue #7480).
-  void report_violation();
+  /// violated claim was abstraction-derived, in which case \p res is lowered
+  /// so the run does not exit as a failure (issue #7480).
+  void report_violation(smt_resultt &res);
   virtual void report_unknown();
   virtual void keep_alive_function() const;
 
@@ -220,16 +221,18 @@ private:
   /// some phase happened to reach a verdict on (discussion #7023).
   void seed_property_verdicts(const symex_target_equationt &eq) const;
 
-  /// Record Failed for every assertion in \p eq that \p smt_conv's model
-  /// falsifies, so the report names them even when the counterexample itself
-  /// is suppressed. Call only where a SAT result witnesses a real violation:
-  /// an inductive-step or forward-condition model does not.
-  /// Record the verdict a satisfiable answer earns for one claim.
+  /// Record the verdict a satisfiable answer earns for one claim: Failed, or
+  /// Unknown when the model witnesses only the invariant abstraction rather
+  /// than a reachable state (issue #7480).
   void record_satisfiable_claim(
     const claim_slicer &claim,
     const property_locationt &loc,
     bool inductive_step);
 
+  /// Record a verdict for every assertion in \p eq that \p smt_conv's model
+  /// falsifies, so the report names them even when the counterexample itself
+  /// is suppressed. Call only where a SAT result witnesses a real violation:
+  /// an inductive-step or forward-condition model does not.
   void record_violated_properties(
     smt_convt &smt_conv,
     const symex_target_equationt &eq);
