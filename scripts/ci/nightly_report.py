@@ -56,7 +56,12 @@ def failing_cases(junit_path, tail_lines=OUTPUT_TAIL_LINES):
 
 
 def commit_range(repo, last_green, head):
-    """List ``(sha, author, subject)`` for the commits a regression could be in."""
+    """List ``(sha, author, subject)`` for the commits a regression could be in.
+
+    Returns ``None``, not ``[]``, when the range itself couldn't be computed
+    (e.g. ``last_green`` was force-pushed away or pruned) -- callers must not
+    confuse that with a genuinely empty range.
+    """
     if not last_green:
         return []
     out = subprocess.run(
@@ -66,9 +71,7 @@ def commit_range(repo, last_green, head):
         capture_output=True,
         text=True)
     if out.returncode:
-        # A force-push or a pruned baseline leaves an unreachable sha; say so
-        # rather than reporting an empty range as "nothing changed".
-        return []
+        return None
     return [tuple(line.split("\x1f", 2)) for line in out.stdout.splitlines() if line]
 
 
@@ -84,6 +87,10 @@ def verdict(failures, last_green, commits, max_failures=DEFAULT_MAX_FAILURES):
                             "threshold), which points at the environment rather than a commit")
     if not last_green:
         return "escalate", "no green nightly on record, so there is no baseline to bisect against"
+    if commits is None:
+        return "escalate", (f"the last green baseline `{last_green[:10]}` is unreachable from "
+                            "this commit (force-pushed away or pruned), so no commit range "
+                            "could be computed")
     if not commits:
         return "escalate", (f"no commits between {last_green[:10]} and this run -- the same "
                             "tree changed verdict, so the failure is not deterministic")
@@ -184,7 +191,7 @@ def main(argv=None):
         # A wall of failures is the case de-flaking is expensive for and least
         # useful on -- print nothing so the caller skips it, same as the
         # "escalate" verdict below would once it runs.
-        if len(failures) <= args.max_failures:
+        if failures and len(failures) <= args.max_failures:
             print("\n".join(f["test"] for f in failures))
         return 0
 

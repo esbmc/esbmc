@@ -767,6 +767,11 @@ class NightlyVerdict(unittest.TestCase):
         self.assertEqual(action, "escalate")
         self.assertIn("not deterministic", reason)
 
+    def test_an_unreachable_baseline_is_distinguished_from_an_empty_range(self):
+        action, reason = nightly.verdict(["t"], "abc", None)
+        self.assertEqual(action, "escalate")
+        self.assertIn("unreachable", reason)
+
 
 class NightlyCommitRange(TempRepo):
 
@@ -778,9 +783,9 @@ class NightlyCommitRange(TempRepo):
         self.assertEqual([subject for _, _, subject in commits], ["three", "two"])
         self.assertEqual({author for _, author, _ in commits}, {"Tester"})
 
-    def test_an_unreachable_baseline_reports_no_range_rather_than_crashing(self):
+    def test_an_unreachable_baseline_reports_none_rather_than_crashing(self):
         head = self.commit("one")
-        self.assertEqual(nightly.commit_range(self.repo, "0" * 40, head), [])
+        self.assertIsNone(nightly.commit_range(self.repo, "0" * 40, head))
 
 
 class Deflake(unittest.TestCase):
