@@ -112,6 +112,19 @@ struct resultt
   uint64_t k;
 };
 
+#ifndef _WIN32
+/** Tell the parent this child reached no answer. max_k_step is the sentinel the
+ *  parent initialises solution[] with and tests for a crashed child, so
+ *  reporting it keeps a failed run from being read as a completed one. */
+static void report_no_answer(int pipe_fd, resultt &r, uint64_t max_k_step)
+{
+  r.k = max_k_step;
+  auto const len = write(pipe_fd, &r, sizeof(r));
+  assert(len == sizeof(r) && "short write");
+  (void)len; // ndebug
+}
+#endif
+
 // This is the parallel version of k-induction algorithm.
 // This is an old implementation and should be revisited sometime in the
 // future.
@@ -456,13 +469,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
       catch (...)
       {
-        /* break falls through to the "no answer" report below, which the parent
-         * reads as a completed run; max_k_step is the sentinel it initialises
-         * solution[] with and tests for a crashed child. */
-        r.k = max_k_step;
-        auto const len = write(forward_pipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; // ndebug
+        /* break would fall through to the "no answer" report below, which the
+         * parent reads as a completed run. */
+        report_no_answer(forward_pipe[1], r, max_k_step);
         return false;
       }
 
@@ -573,13 +582,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
       catch (...)
       {
-        /* break falls through to the "no answer" report below, which the parent
-         * reads as a completed run; max_k_step is the sentinel it initialises
-         * solution[] with and tests for a crashed child. */
-        r.k = max_k_step;
-        auto const len = write(forward_pipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; // ndebug
+        /* break would fall through to the "no answer" report below, which the
+         * parent reads as a completed run. */
+        report_no_answer(forward_pipe[1], r, max_k_step);
         return false;
       }
 
@@ -649,13 +654,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
       catch (...)
       {
-        /* break falls through to the "no answer" report below, which the parent
-         * reads as a completed run; max_k_step is the sentinel it initialises
-         * solution[] with and tests for a crashed child. */
-        r.k = max_k_step;
-        auto const len = write(forward_pipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; // ndebug
+        /* break would fall through to the "no answer" report below, which the
+         * parent reads as a completed run. */
+        report_no_answer(forward_pipe[1], r, max_k_step);
         return false;
       }
 
