@@ -81,9 +81,22 @@ def _merge(profraws, llvm_profdata, out):
                    capture_output=True)
 
 
+_WORKER_INDEX = None
+
+
+def _init_worker(index):
+    """Pool initializer: stash the line index once per worker process.
+
+    ``index`` (~180k entries) would otherwise be pickled into every job tuple
+    and shipped once per test instead of once per worker.
+    """
+    global _WORKER_INDEX  # pylint: disable=global-statement
+    _WORKER_INDEX = index
+
+
 def _collect_one(job):  # pylint: disable=too-many-locals
     """Worker: merge one test's profiles and return its covered lines as a bitset."""
-    name, directory, binary, llvm_cov, llvm_profdata, excludes, index = job
+    name, directory, binary, llvm_cov, llvm_profdata, excludes = job
     profraws = [
         os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".profraw")
     ]
@@ -100,7 +113,7 @@ def _collect_one(job):  # pylint: disable=too-many-locals
             return name, None
     bits = 0
     for key in covered:
-        position = index.get(key)
+        position = _WORKER_INDEX.get(key)
         if position is not None:
             bits |= 1 << position
     if not bits:
@@ -138,11 +151,12 @@ def collect(args):  # pylint: disable=too-many-locals
     with gzip.open(os.path.join(args.output, LINE_INDEX), "wt", encoding="utf-8") as handle:
         handle.write("".join(f"{key}\n" for key in index))
 
-    jobs = [(name, d, args.binary, args.llvm_cov, args.llvm_profdata, excludes, index)
+    jobs = [(name, d, args.binary, args.llvm_cov, args.llvm_profdata, excludes)
             for name, d in tests]
     done = 0
     with gzip.open(os.path.join(args.output, BITSETS), "wt", encoding="utf-8") as handle:
-        with ProcessPoolExecutor(max_workers=args.jobs) as pool:
+        with ProcessPoolExecutor(max_workers=args.jobs, initializer=_init_worker,
+                                 initargs=(index, )) as pool:
             for name, bits in pool.map(_collect_one, jobs, chunksize=4):
                 done += 1
                 if bits:
