@@ -1,5 +1,5 @@
 CORE
 main.c
---unwind 16 --no-unwinding-assertions
+--unwind 16
 ^.*wrong leaf value must be refuted.*$
 ^VERIFICATION FAILED$

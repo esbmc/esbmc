@@ -13,6 +13,7 @@ new_unit_test(irep2crcconsistencytest "crc_consistency.test.cpp" "util_esbmc")
 new_unit_test(irep2withtypetest "with_type.test.cpp" "util_esbmc")
 new_unit_test(irep2serialisationtest "serialisation.test.cpp" "util_esbmc")
 new_unit_test(irep2guardalgebratest "guard_algebra.test.cpp" "util_esbmc")
+new_unit_test(irep2pointeroffsetarithtest "pointer_offset_arith.test.cpp" "util_esbmc")
 
 # What the simplifier hook is handed (issue #7260). Only meaningful where the
 # build compiled verify_rewrite() into something other than a no-op.

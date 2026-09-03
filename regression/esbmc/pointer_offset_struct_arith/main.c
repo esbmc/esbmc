@@ -1,8 +1,9 @@
-/* Pointer arithmetic over a static array of named structs: the walk's
- * offsets must fold, or every field read becomes a symbolic-offset
- * byte extract over the whole aggregate and the solver diverges. The
- * - spelling is normalized to + by the frontend, so both walks here
- * reach the add arm; the sub arm has no C-reachable spelling. */
+/* Distilled from symbolically executing a JavaCard VM's test fixture:
+ * a CAP-file parse tree emitted as a static array of structs whose
+ * child pointers point back into the same array, walked by pointer
+ * arithmetic. Each step's offset must fold, or every field read
+ * becomes a symbolic-offset byte extract over the whole aggregate and
+ * the solver diverges. */
 #include <string.h>
 typedef struct node
 {
@@ -27,15 +28,13 @@ static const node *child(const node *n, const char *nm)
       return &n->kids[i];
   return 0;
 }
-unsigned short nondet_u2(void);
 int main(void)
 {
   const node *a = child(t, "alpha");
   const node *d = child(a, "delta");
   const node *g = d - 1; /* negative-constant step, also the add arm */
-  unsigned short x = nondet_u2();
   __ESBMC_assert(
-    d != 0 && d->val == 4 && g->val == 3 && x == x,
+    d != 0 && d->val == 4 && g->val == 3,
     "struct-array pointer arithmetic folds");
   return 0;
 }
