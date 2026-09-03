@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 8 --no-unwinding-assertions --function integer_squareroot
+--loop-invariant-check --function integer_squareroot
 ^VERIFICATION SUCCESSFUL$
