@@ -13,16 +13,14 @@ int main()
   OFStream out;
   FStream both;
 
-  assert(!in.is_open());
-  assert(!out.is_open());
-  assert(!both.is_open());
-
+  /* The conversions pin alias identity -- a distinct class would not convert --
+   * and is_open() then asserts through the alias-typed object. */
   std::ifstream *p = &in;
   std::ofstream *q = &out;
   std::fstream *r = &both;
-  assert(p == &in);
-  assert(q == &out);
-  assert(r == &both);
+  assert(!p->is_open());
+  assert(!q->is_open());
+  assert(!r->is_open());
 
   IOStream *io = 0;
   std::iostream *s = io;
