@@ -130,24 +130,34 @@ def _draw(bucket, budget, costs, rng, taken):
     return picked, spent
 
 
-def select(universe, costs, always_run, budget, week):
-    # pylint: disable=too-many-locals,too-many-branches
-    """Choose the week's subset. Returns ``(sorted names, stats)``."""
+def _seed_always_run(always_run, costs):
+    """Force the core set in unconditionally. Returns ``(taken, spent)``."""
     taken = set()
     spent = 0.0
     for name in sorted(always_run):
         if name in costs:
             taken.add(name)
             spent += costs[name]
+    return taken, spent
 
+
+def _strata_of(universe, taken):
+    """Group not-yet-taken universe members by stratum."""
     strata = {}
     for name in universe:
         if name not in taken:
             strata.setdefault(stratum_of(name), []).append(name)
+    return strata
 
-    # Every non-empty stratum contributes at least one test even if its
-    # proportional share would round to zero, which is what keeps a small suite
-    # from going untested for weeks at a time.
+
+def _seed_one_per_stratum(strata, taken, costs, week):
+    """Draw one test per stratum unconditionally.
+
+    Every non-empty stratum contributes at least one test even if its
+    proportional share would round to zero, which is what keeps a small suite
+    from going untested for weeks at a time. Returns the cost spent.
+    """
+    spent = 0.0
     for stratum in sorted(strata):
         rng = random.Random(seed_for(week, stratum))
         pool = [n for n in strata[stratum] if n not in taken]
@@ -155,46 +165,67 @@ def select(universe, costs, always_run, budget, week):
             name = rng.choice(sorted(pool))
             taken.add(name)
             spent += costs[name]
+    return spent
 
+
+def _redistribute_round(pending, costs, remaining, total, taken, week, round_no):
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    """Spend one round's share of the remaining budget across pending strata.
+
+    Returns ``(added, spent)``.
+    """
+    added = False
+    spent = 0.0
+    for stratum in sorted(pending):
+        names = pending[stratum]
+        share = remaining * sum(costs[n] for n in names) / total
+        buckets = _terciles(names, costs)
+        bucket_total = sum(costs[n] for n in names)
+        # A fresh RNG per (week, stratum, round) keeps the draw reproducible
+        # while letting later rounds reach tests the first pass skipped.
+        rng = random.Random(seed_for(week, f"{stratum}#{round_no}"))
+        for bucket in buckets:
+            weight = sum(costs[n] for n in bucket)
+            picked, cost = _draw(bucket, share * weight / bucket_total, costs, rng, taken)
+            if picked:
+                added = True
+                taken.update(picked)
+                spent += cost
+    return added, spent
+
+
+def _redistribute(strata, taken, costs, budget, spent, week):
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    """Spend whatever budget remains across strata, proportional to cost share."""
     for round_no in range(REDISTRIBUTION_ROUNDS):
         remaining = budget - spent
         if remaining <= 0:
             break
-        pending = {
-            s: [n for n in names if n not in taken]
-            for s, names in strata.items()
-        }
+        pending = {s: [n for n in names if n not in taken] for s, names in strata.items()}
         pending = {s: names for s, names in pending.items() if names}
         total = sum(costs[n] for names in pending.values() for n in names)
         if not total:
             break
 
-        added = False
-        for stratum in sorted(pending):
-            names = pending[stratum]
-            share = remaining * sum(costs[n] for n in names) / total
-            buckets = _terciles(names, costs)
-            bucket_total = sum(costs[n] for n in names)
-            # A fresh RNG per (week, stratum, round) keeps the draw reproducible
-            # while letting later rounds reach tests the first pass skipped.
-            rng = random.Random(seed_for(week, f"{stratum}#{round_no}"))
-            for bucket in buckets:
-                weight = sum(costs[n] for n in bucket)
-                picked, cost = _draw(bucket, share * weight / bucket_total, costs, rng, taken)
-                if picked:
-                    added = True
-                    taken.update(picked)
-                    spent += cost
+        added, round_spent = _redistribute_round(pending, costs, remaining, total, taken, week,
+                                                 round_no)
+        spent += round_spent
         if not added:
             break
+    return spent
 
-    # Report over the whole universe, not just the sampled part, so a suite
-    # entirely absorbed by the core set still shows up in the table.
+
+def _selection_stats(universe, taken, always_run, costs, week, spent, budget):
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    """Build the stats dict, reporting over the whole universe.
+
+    Reports over the whole universe, not just the sampled part, so a suite
+    entirely absorbed by the core set still shows up in the table.
+    """
     everything = {}
     for name in universe:
         everything.setdefault(stratum_of(name), []).append(name)
-
-    stats = {
+    return {
         "week": week,
         "selected": len(taken),
         "universe": len(universe),
@@ -209,6 +240,15 @@ def select(universe, costs, always_run, budget, week):
             for s, names in sorted(everything.items())
         },
     }
+
+
+def select(universe, costs, always_run, budget, week):
+    """Choose the week's subset. Returns ``(sorted names, stats)``."""
+    taken, spent = _seed_always_run(always_run, costs)
+    strata = _strata_of(universe, taken)
+    spent += _seed_one_per_stratum(strata, taken, costs, week)
+    spent = _redistribute(strata, taken, costs, budget, spent, week)
+    stats = _selection_stats(universe, taken, always_run, costs, week, spent, budget)
     return sorted(taken), stats
 
 
