@@ -73,6 +73,9 @@ jobs:
 
       - name: Save the line sets
         # Keeps `select` re-runnable at a different budget without re-measuring.
+        # if: always() so a failing `select` doesn't discard `collect`'s
+        # multi-hour output along with it.
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: per-test-coverage
