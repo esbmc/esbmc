@@ -187,6 +187,138 @@ SCENARIO(
   }
 }
 
+SCENARIO(
+  "the IREP2 adjuster decodes both call shapes and rewrites the callee",
+  "[core][clang-c-frontend][irep2-adjust]")
+{
+  // A no-argument function, and the implicit `&f` designator sugar the frontend
+  // installs on a direct call. adjust_call_callee strips it back to a direct f.
+  const type2tc ftype = code_type2tc(
+    std::vector<type2tc>{}, get_empty_type(), std::vector<irep_idt>{}, false);
+  const expr2tc f = symbol2tc(ftype, "f");
+  const expr2tc sugar = address_of2tc(ftype, f, /*is_implicit=*/true);
+
+  GIVEN("a code_function_call2t whose callee is the implicit &f sugar")
+  {
+    contextt ctx;
+    clang_c_adjust_irep2 pass(ctx, true);
+    expr2tc call =
+      code_function_call2tc(expr2tc(), sugar, std::vector<expr2tc>{});
+
+    WHEN("the pass adjusts it")
+    {
+      // Driven through adjust_expr, the pass's own interface. as_call reads the
+      // callee from the code_function_call2t's .function slot and writes it
+      // back there; the implicit &f collapses to a direct f.
+      pass.adjust_expr(call);
+
+      THEN("the callee is decoded from .function and the sugar stripped")
+      {
+        REQUIRE(to_code_function_call2t(call).function == f);
+      }
+    }
+  }
+
+  GIVEN("a sideeffect2t of kind function_call with the same &f sugar")
+  {
+    contextt ctx;
+    clang_c_adjust_irep2 pass(ctx, true);
+    expr2tc call = sideeffect2tc(
+      get_empty_type(),
+      sugar,
+      expr2tc(),
+      std::vector<expr2tc>{},
+      type2tc(),
+      sideeffect_allockind::function_call);
+
+    WHEN("the pass adjusts it")
+    {
+      // The other spelling: the callee lives in .operand, not .function, and
+      // as_call must read and write the same node through that slot.
+      pass.adjust_expr(call);
+
+      THEN("the callee is decoded from .operand and the sugar stripped")
+      {
+        REQUIRE(to_sideeffect2t(call).operand == f);
+      }
+    }
+  }
+
+  GIVEN("a sideeffect2t of a non-call kind through a function pointer")
+  {
+    contextt ctx;
+    clang_c_adjust_irep2 pass(ctx, true);
+    const expr2tc fp = symbol2tc(pointer_type2tc(ftype), "fp");
+    expr2tc se = sideeffect2tc(
+      get_int_type(32),
+      fp,
+      expr2tc(),
+      std::vector<expr2tc>{},
+      type2tc(),
+      sideeffect_allockind::nondet);
+
+    WHEN("the pass adjusts it")
+    {
+      // as_call's kind gate rejects any sideeffect2t that is not a call, so
+      // adjust_call_callee leaves the pointer-typed operand undereferenced.
+      pass.adjust_expr(se);
+
+      THEN("the callee slot is untouched")
+      {
+        REQUIRE(to_sideeffect2t(se).operand == fp);
+      }
+    }
+  }
+
+  // The other write-back branch: a pointer-typed callee is dereferenced in
+  // place, through the same *call->callee slot, for both shapes.
+  const expr2tc fp = symbol2tc(pointer_type2tc(ftype), "fp");
+
+  GIVEN("a code_function_call2t through a function pointer")
+  {
+    contextt ctx;
+    clang_c_adjust_irep2 pass(ctx, true);
+    expr2tc call = code_function_call2tc(expr2tc(), fp, std::vector<expr2tc>{});
+
+    WHEN("the pass adjusts it")
+    {
+      pass.adjust_expr(call);
+
+      THEN("the .function slot is dereferenced")
+      {
+        const expr2tc &callee = to_code_function_call2t(call).function;
+        REQUIRE(is_dereference2t(callee));
+        REQUIRE(to_dereference2t(callee).value == fp);
+      }
+    }
+  }
+
+  GIVEN("a sideeffect2t of kind function_call through a function pointer")
+  {
+    contextt ctx;
+    clang_c_adjust_irep2 pass(ctx, true);
+    expr2tc call = sideeffect2tc(
+      get_empty_type(),
+      fp,
+      expr2tc(),
+      std::vector<expr2tc>{},
+      type2tc(),
+      sideeffect_allockind::function_call);
+
+    WHEN("the pass adjusts it")
+    {
+      pass.adjust_expr(call);
+
+      THEN("the .operand slot is dereferenced")
+      {
+        const expr2tc &callee = to_sideeffect2t(call).operand;
+        REQUIRE(is_dereference2t(callee));
+        REQUIRE(to_dereference2t(callee).value == fp);
+      }
+    }
+  }
+}
+
 int main(int argc, char *argv[])
 {
   // c_typecastt ranks operands against config.ansi_c, which is zero-initialised
