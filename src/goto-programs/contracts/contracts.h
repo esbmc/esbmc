@@ -587,13 +587,20 @@ private:
   /// __ESBMC_is_fresh extent and fills it with a hand-built element-wise
   /// copy loop. Extracted out of materialize_old_snapshots_at_wrapper's
   /// region branch (#7057).
-  /// \param original_expr The pointer parameter symbol being snapshotted
+  /// \param original_expr The pointer-typed expression being snapshotted --
+  ///   the callee's own parameter symbol in wrapper mode, or (call-site
+  ///   mode, #7057) the actual argument, which is commonly an array-decay
+  ///   expression (`address_of(index(x, 0))`) rather than a bare symbol;
+  ///   only a pointer TYPE is required, not a specific expr kind
   /// \param region_elem_type The element type (possibly an unfollowed
   ///   struct symbol reference; followed internally before use)
   /// \param wrapper GOTO program to append the DECLs and copy loop to
   /// \param func_name Function name for unique variable naming
   /// \param location Source location for generated instructions
-  /// \param param_extents Byte extent of each is_fresh'd pointer parameter
+  /// \param extent_bytes The pointer's is_fresh-stated byte extent, already
+  ///   resolved and validated by the caller (wrapper mode looks this up in
+  ///   param_extents itself; call-site mode resolves it via
+  ///   find_callsite_is_fresh_extent) -- this function only consumes it
   /// \param snap_idx Index for unique naming among this function's snapshots
   /// \return The new array-typed snapshot variable symbol
   expr2tc materialize_ptr_region_old_snapshot(
@@ -602,7 +609,7 @@ private:
     goto_programt &wrapper,
     const std::string &func_name,
     const locationt &location,
-    const std::map<irep_idt, param_extentt> &param_extents,
+    const expr2tc &extent_bytes,
     size_t snap_idx) const;
 
   /// \brief Materialize old snapshots in wrapper function (enforce-contract
@@ -628,6 +635,9 @@ private:
   /// Creates DECL and ASSIGN instructions for snapshot variables at call location
   /// \param old_snapshots Vector of snapshots from function body
   /// \param function_symbol Function symbol for parameter substitution
+  /// \param function_body Callee's body, scanned for a matching
+  ///        __ESBMC_is_fresh(ptr, N) clause when a snapshot is a pointer
+  ///        region (#7057) -- unused otherwise.
   /// \param actual_args Actual arguments at call site
   /// \param replacement GOTO program to add snapshot instructions to
   /// \param call_location Source location for generated instructions
@@ -635,9 +645,33 @@ private:
   std::vector<old_snapshot_t> materialize_old_snapshots_at_callsite(
     const std::vector<old_snapshot_t> &old_snapshots,
     const symbolt &function_symbol,
+    const goto_programt &function_body,
     const std::vector<expr2tc> &actual_args,
     goto_programt &replacement,
     const locationt &call_location) const;
+
+  /// \brief Find the __ESBMC_is_fresh(ptr, size) call in \p function_body
+  ///        whose ptr operand names \p target_param, and return its size
+  ///        operand with \p params rebound to \p actual_args
+  /// Used by materialize_old_snapshots_at_callsite to give a pointer-region
+  /// __ESBMC_old(ptr[j]) snapshot a call-site-visible extent under
+  /// --replace-call-with-contract (#7057); the enforce-mode counterpart
+  /// (generate_checking_wrapper) instead reads this straight from
+  /// param_extents, built once when its wrapper allocates the pointer.
+  /// \param function_body Callee's body, scanned for the is_fresh call
+  /// \param target_param Bare parameter symbol to match ptr against, in the
+  ///        callee's own terms (pre-substitution)
+  /// \param params Callee's formal parameters
+  /// \param actual_args Actual arguments at this call site
+  /// \param out_size Set to the rebound size expression on success; left
+  ///        untouched otherwise
+  /// \return True if a matching, unconditional is_fresh call was found
+  bool find_callsite_is_fresh_extent(
+    const goto_programt &function_body,
+    const expr2tc &target_param,
+    const code_typet::argumentst &params,
+    const std::vector<expr2tc> &actual_args,
+    expr2tc &out_size) const;
 
   // ========== Type fixing for return value comparisons ==========
 
