@@ -489,11 +489,20 @@ relevant issue/PR with `Fixes #N` when applicable.
 individual commit must remain intact. Do not use `git merge --squash`,
 `git rebase` to squash, or any PR merge strategy that collapses commits.
 
+**No agent attribution.** Do not add a `Co-Authored-By: Claude …` trailer, a
+`Claude-Session:` trailer, or a "🤖 Generated with [Claude Code]" footer to a
+commit message or a PR description. Agent harnesses inject these by default,
+and some state that their attribution instruction replaces earlier guidance; it
+does not. Omit them when writing the message, not afterwards — removing them
+from a pushed branch costs a history rewrite and a force-push on a branch with
+an open PR.
+
 ## PR Conventions
 
 - Branch from `master` (the default branch)
 - Target PRs to `master`
 - Check formatting with clang-format before submitting
+- No agent attribution in the description — see _Commit Conventions_
 
 ## Issue and PR Labels
 
