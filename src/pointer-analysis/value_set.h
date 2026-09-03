@@ -626,7 +626,12 @@ public:
     object_mapt &op1_set,
     object_mapt &dest) const;
 
-  void get_value_set_rec(
+  /** The entry point for the recursive value-set walk: memoises, then calls
+   *  get_value_set_rec. Call this rather than the recursion itself -- a
+   *  propagated multi-dimensional array reaches here as a DAG, and walking it
+   *  unmemoised costs paths exponential in the number of stores it carries.
+   *  The recursion is private so that cannot be bypassed. */
+  void get_value_set_rec_cached(
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
@@ -634,22 +639,24 @@ public:
     bool under_deref = true) const;
 
 private:
-  /** What one get_value_set_rec query contributed, keyed by its arguments.
-   *  Shared subexpressions make a value query a DAG walk, so without this the
-   *  walk costs paths exponential in the number of stores a propagated array
-   *  carries. The key's expr and type are held alongside the result so a freed
-   *  node's address cannot be recycled into a false hit. */
+  /** What one get_value_set_rec_cached query contributed, keyed by its
+   * arguments. Shared subexpressions make a value query a DAG walk, so without
+   * this the walk costs paths exponential in the number of stores a propagated
+   * array carries. The key's expr and type are held alongside the result so a
+   * freed node's address cannot be recycled into a false hit. */
   using rec_cache_keyt =
     std::tuple<const expr2t *, std::string, const type2t *, bool>;
   using rec_cachet =
     std::map<rec_cache_keyt, std::tuple<expr2tc, type2tc, object_mapt>>;
 
-  /** Owned by the outermost get_value_set_rec call, and null outside one, so
-   *  nothing is carried across queries that `values` may have changed
+  /** Owned by the outermost get_value_set_rec_cached call, and null outside
+   * one, so nothing is carried across queries that `values` may have changed
    *  between. */
   mutable rec_cachet *rec_cache = nullptr;
 
-  void get_value_set_rec_impl(
+  /** One step of the walk. Its own recursive calls go through
+   *  get_value_set_rec_cached, which is what makes the memo effective. */
+  void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
@@ -684,8 +691,8 @@ protected:
     const type2tc &original_type,
     object_mapt &dest) const;
 
-  /** The constant cases of get_value_set_rec: what a value reaches this code as
-   *  once constant propagation has substituted it. */
+  /** The constant cases of get_value_set_rec: what a value reaches this code
+   *  as once constant propagation has substituted it. */
   void get_constant_value_set(
     const expr2tc &expr,
     object_mapt &dest,
@@ -740,7 +747,7 @@ protected:
    *  @param values_rhs The value set of the right hand side of the assignment,
    *         i.e. all the things the rhs points at.
    *  @param suffix Accumulated suffix of the lhs up to this point. See docs for
-   *         @ref entryt and @get_value_set_rec.
+   *         @ref entryt and @get_value_set_rec_cached.
    *  @param add_to_sets See @ref assign. */
   void assign_rec(
     const expr2tc &lhs,
