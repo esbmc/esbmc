@@ -52,6 +52,7 @@ public:
   std::string return_from_function;
   std::string thread_id;
   std::string create_thread;
+  std::string origin_file;
   BigInt start_line = c_nonset;
   BigInt end_line = c_nonset;
   BigInt start_offset = c_nonset;
@@ -272,7 +273,7 @@ bool is_valid_witness_expr(
   const irep_container<expr2t> &exp);
 
 BigInt get_line_number(
-  std::string &verified_file,
+  const std::string &verified_file,
   BigInt relative_line_number,
   optionst &options);
 
