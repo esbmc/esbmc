@@ -112,6 +112,37 @@ class Strata(unittest.TestCase):
         self.assertEqual(sel.iso_week(date(2026, 1, 1)), "2026-W01")
 
 
+class MeasuredCosts(unittest.TestCase):
+
+    def test_skip_only_entries_are_excluded(self):
+        # First seen skipped, never actually run: its near-zero duration must
+        # not be trusted as a real cost.
+        table = {
+            "regression/a/x": {
+                "seconds": 5.0,
+                "status": "run"
+            },
+            "regression/a/skipped": {
+                "seconds": 0.001,
+                "status": "skip"
+            },
+        }
+        self.assertEqual(sel.measured_costs(table), {"regression/a/x": 5.0})
+
+    def test_run_and_fail_entries_are_kept(self):
+        table = {
+            "regression/a/x": {
+                "seconds": 5.0,
+                "status": "run"
+            },
+            "regression/a/y": {
+                "seconds": 1.0,
+                "status": "fail"
+            },
+        }
+        self.assertEqual(sel.measured_costs(table), {"regression/a/x": 5.0, "regression/a/y": 1.0})
+
+
 class Costs(unittest.TestCase):
 
     def test_unknown_test_takes_its_own_suites_median(self):
@@ -225,6 +256,25 @@ class Selection(unittest.TestCase):
         self.assertEqual(sum(v["selected"] for v in stats["strata"].values()), stats["selected"])
 
 
+class FormatSummary(unittest.TestCase):
+
+    def test_wall_clock_applies_the_packing_efficiency_discount(self):
+        # cpu_seconds alone understates wall-clock: real runs pack
+        # imperfectly, which is exactly what packing_efficiency discounts for.
+        stats = {
+            "week": "2026-W36",
+            "selected": 1,
+            "universe": 1,
+            "always_run": 0,
+            "cpu_seconds": 600.0,
+            "budget_cpu_seconds": 600.0,
+            "strata": {},
+        }
+        summary = sel.format_summary(stats, jobs=2, packing_efficiency=0.5)
+        # 600 CPU-seconds / 2 jobs / 0.5 packing efficiency = 600s = 10.0 min.
+        self.assertIn("projected 10.0 min wall-clock", summary)
+
+
 class SelectorCli(TempDirCase):
 
     def test_end_to_end(self):
@@ -245,7 +295,34 @@ class SelectorCli(TempDirCase):
         self.assertTrue(selected)
         self.assertTrue(set(selected) <= set(names))
         with open(summary, encoding="utf-8") as fh:
-            self.assertIn("Fast-lane selection", fh.read())
+            summary_text = fh.read()
+        self.assertIn("Fast-lane selection", summary_text)
+        # ci/test-timings.json refreshes nightly, so pointing users at
+        # re-running select_tests.py --week later in the same week would not
+        # reliably reproduce this selection; point at the frozen file instead.
+        self.assertIn("run_selected_tests.py --tests ci/selected-tests-2026-W36.txt", summary_text)
+        self.assertNotIn("select_tests.py --week", summary_text)
+        with open(out, encoding="utf-8") as fh:
+            self.assertIn("run_selected_tests.py --tests <this file>", fh.read())
+
+    def test_skip_only_test_stays_selectable_via_the_core_set(self):
+        # Never having a real run must not drop a test from the universe --
+        # only from the measured-cost map, which impute_costs then fills in.
+        names = universe(1, 5)
+        table = {
+            "schema": 1,
+            "tests": {n: {"seconds": 10.0, "status": "run"} for n in names},
+        }
+        table["tests"][names[0]] = {"seconds": 0.001, "status": "skip"}
+        timings_path = self.write("t.json", json.dumps(table))
+        always_run = self.write("core.txt", names[0] + "\n")
+        out = os.path.join(self.tmp, "selected.txt")
+        rc = sel.main([
+            "--timings", timings_path, "--week", "2026-W36", "--budget-seconds", "1", "--jobs",
+            "1", "--always-run", always_run, "--output", out
+        ])
+        self.assertEqual(rc, 0)
+        self.assertIn(names[0], sel.read_lines(out))
 
     def test_comments_and_blanks_are_ignored(self):
         path = self.write("l.txt", "# header\n\nregression/a/x\n  regression/a/y  # trailing\n")
