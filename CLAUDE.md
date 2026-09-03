@@ -5,6 +5,8 @@ same workflow rules also live in `CLAUDE.md` (which Claude Code loads
 automatically); update both files together when changing build, test, style, or
 post-implementation rules.
 
+Please remove all mannered prose.
+
 ## Project Overview
 
 ESBMC (Efficient SMT-based Context-Bounded Model Checker) is a software model
