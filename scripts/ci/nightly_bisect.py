@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Find the commit that broke the nightly, without touching the test (#6735, tier 3 step 5).
 
 Two subcommands, in the order the issue puts them:
