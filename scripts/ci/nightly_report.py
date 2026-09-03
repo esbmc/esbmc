@@ -106,7 +106,10 @@ def format_issue(report):
     ]
     if report["last_green"]:
         lines.append(f"- last green nightly: `{report['last_green'][:10]}`")
-        lines.append(f"- **{len(report['commits'])}** commit(s) in the range")
+        if report["commits"] is None:
+            lines.append("- commit range unavailable (baseline unreachable -- see verdict below)")
+        else:
+            lines.append(f"- **{len(report['commits'])}** commit(s) in the range")
     else:
         lines.append("- no green nightly on record")
     lines += ["", f"**Verdict: {report['action']}** — {report['reason']}", ""]

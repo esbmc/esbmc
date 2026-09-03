@@ -773,6 +773,22 @@ class NightlyVerdict(unittest.TestCase):
         self.assertIn("unreachable", reason)
 
 
+class NightlyIssueBody(unittest.TestCase):
+
+    def test_an_unreachable_baseline_does_not_crash_the_issue_body(self):
+        report = {
+            "commit": "abc1234567",
+            "last_green": "def4567890",
+            "failures": [{"test": "t", "seconds": 1.0, "output": ""}],
+            "quarantined": [],
+            "commits": None,
+            "action": "escalate",
+            "reason": "baseline unreachable",
+        }
+        body = nightly.format_issue(report)
+        self.assertIn("commit range unavailable", body)
+
+
 class NightlyCommitRange(TempRepo):
 
     def test_lists_commits_since_the_baseline_with_authors(self):
