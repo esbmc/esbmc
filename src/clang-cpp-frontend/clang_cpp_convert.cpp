@@ -255,6 +255,18 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    /* clang's USR for a member of a closure declared in a function template
+     * names the specialisation but not the closure, so sibling lambdas in one
+     * instantiation share an id and the last body converted wins (#7499). The
+     * closure's own id is already unique per lambda and per instantiation
+     * (#6976), so qualify with it. */
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd))
+      if (md->getParent()->isLambda())
+      {
+        std::string closure_name, closure_id;
+        get_decl_name(*md->getParent(), closure_name, closure_id);
+        id += "@" + closure_id;
+      }
     return;
   }
 
