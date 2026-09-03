@@ -1,6 +1,7 @@
 #ifndef _ESBMC_PROP_SMT_SMT_SOLVER_H_
 #define _ESBMC_PROP_SMT_SMT_SOLVER_H_
 
+#include <optional>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
@@ -304,6 +305,11 @@ public:
    *  @return Explicit assigned value of expr in the solver. May be nil, in
    *          which case the solver did not assign a value to it for some
    *          reason. */
+  /** get()'s index_id case: read one element out of the solver's array
+   *  model rather than materialising the whole array. Nullopt where the
+   *  case falls through to get()'s generic tail. */
+  std::optional<expr2tc> get_index_value(const expr2tc &expr, expr2tc &res);
+
   virtual expr2tc get(const expr2tc &expr);
 
   /** Solver name fetcher. Returns a string naming the solver being used, and
@@ -917,8 +923,8 @@ public:
 
   /** Name every element of a row being written whole as a store of the
    *  corresponding read out of it, at @p offset in the flattened array.
-   *  False when a length it would have to enumerate is not a compile-time
-   *  constant, leaving the caller to fall back on the whole-array encoding. */
+   *  Requires the row's flattened size to be a compile-time constant, which
+   *  both call sites establish; false when a nested row's is not. */
   bool expand_row_stores(
     const expr2tc &row,
     const expr2tc &offset,

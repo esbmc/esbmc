@@ -3260,6 +3260,71 @@ void smt_solver_baset::pre_solve()
   array_api->add_array_constraints_for_solving();
 }
 
+/* get()'s index_id case: read one element out of the solver's array model
+ * rather than materialising the whole array. Nullopt where the case falls
+ * through to get()'s generic tail, having possibly rewritten @p res. */
+std::optional<expr2tc>
+smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
+{
+  // If we try to get an index from the solver, it will first
+  // return the whole array and then get the index, we can
+  // do better and call get_array_element directly
+  index2t index = to_index2t(res);
+
+  /* Same lowering convert_array_index() applies: a row of a flattened array
+     has no term, so convert_ast() below cannot be handed one. get() resolves
+     the ite this produces by asking the solver for its condition. */
+  expr2tc lowered = lower_flattened_row_select(index);
+  if (!is_nil_expr(lowered))
+    return get(lowered);
+
+  expr2tc src_value = index.source_value;
+
+  expr2tc newidx;
+  // Same NDEBUG-off safety guard as in convert_array_index() above.
+  const bool src_is_infinite_array =
+    is_array_type(index.source_value->type) &&
+    to_array_type(index.source_value->type).size_is_infinite;
+  if (is_index2t(index.source_value) && !src_is_infinite_array)
+  {
+    newidx = decompose_select_chain(expr, src_value);
+  }
+  else
+  {
+    newidx = fix_array_idx(index.index, index.source_value->type);
+  }
+
+  // if the source value is a constant, there's no need to
+  // call the array api
+  if (is_constant_number(src_value))
+    return src_value;
+
+  // Convert the idx, it must be an integer
+  expr2tc idx = get(newidx);
+  if (is_constant_int2t(idx))
+  {
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(src_value);
+
+    // Retrieve the element
+    if (is_tuple_array_ast_type(src_value->type))
+      res = tuple_api->tuple_get_array_elem(
+        array, to_constant_int2t(idx).value.to_uint64(), res->type);
+    else
+      res = array_api->get_array_elem(
+        array,
+        to_constant_int2t(idx).value.to_uint64(),
+        get_flattened_array_subtype(res->type));
+
+    // If we got a nil result, return original expression
+    if (is_nil_expr(res))
+      return expr;
+  }
+
+  // TODO: Give up, then what?
+  return std::nullopt;
+}
+
 expr2tc smt_solver_baset::get(const expr2tc &expr)
 {
   if (is_constant_number(expr))
@@ -3274,65 +3339,9 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   switch (res->expr_id)
   {
   case expr2t::index_id:
-  {
-    // If we try to get an index from the solver, it will first
-    // return the whole array and then get the index, we can
-    // do better and call get_array_element directly
-    index2t index = to_index2t(res);
-
-    /* Same lowering convert_array_index() applies: a row of a flattened array
-       has no term, so convert_ast() below cannot be handed one. get() resolves
-       the ite this produces by asking the solver for its condition. */
-    expr2tc lowered = lower_flattened_row_select(index);
-    if (!is_nil_expr(lowered))
-      return get(lowered);
-
-    expr2tc src_value = index.source_value;
-
-    expr2tc newidx;
-    // Same NDEBUG-off safety guard as in convert_array_index() above.
-    const bool src_is_infinite_array =
-      is_array_type(index.source_value->type) &&
-      to_array_type(index.source_value->type).size_is_infinite;
-    if (is_index2t(index.source_value) && !src_is_infinite_array)
-    {
-      newidx = decompose_select_chain(expr, src_value);
-    }
-    else
-    {
-      newidx = fix_array_idx(index.index, index.source_value->type);
-    }
-
-    // if the source value is a constant, there's no need to
-    // call the array api
-    if (is_constant_number(src_value))
-      return src_value;
-
-    // Convert the idx, it must be an integer
-    expr2tc idx = get(newidx);
-    if (is_constant_int2t(idx))
-    {
-      // Convert the array so we can call the array api
-      smt_astt array = convert_ast(src_value);
-
-      // Retrieve the element
-      if (is_tuple_array_ast_type(src_value->type))
-        res = tuple_api->tuple_get_array_elem(
-          array, to_constant_int2t(idx).value.to_uint64(), res->type);
-      else
-        res = array_api->get_array_elem(
-          array,
-          to_constant_int2t(idx).value.to_uint64(),
-          get_flattened_array_subtype(res->type));
-
-      // If we got a nil result, return original expression
-      if (is_nil_expr(res))
-        return expr;
-    }
-
-    // TODO: Give up, then what?
+    if (auto v = get_index_value(expr, res))
+      return *v;
     break;
-  }
 
   case expr2t::with_id:
   {
