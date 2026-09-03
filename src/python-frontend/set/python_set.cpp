@@ -85,7 +85,7 @@ exprt python_set::get()
     converter_.add_instruction(set_push_func_call);
 
     // Track type information
-    list_helper.add_type_info(
+    converter_.get_element_type_registry().record(
       set_id, elem.identifier().as_string(), elem.type());
   }
 
@@ -133,7 +133,8 @@ exprt python_set::get_from_iterable(
       exprt set_push_func_call =
         list_helper.build_push_list_call(set_symbol, element, elem_expr);
       converter_.add_instruction(set_push_func_call);
-      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+      converter_.get_element_type_registry().record(
+        set_id, std::string(), elem_expr.type());
     }
 
     return build_symbol(set_symbol);
@@ -302,7 +303,8 @@ exprt python_set::get_from_iterable(
       if (iterable.is_symbol())
       {
         const std::string &list_id = iterable.identifier().as_string();
-        elem_type = python_list::get_list_element_type(list_id);
+        elem_type =
+          converter_.get_element_type_registry().element_type(list_id);
       }
       if (elem_type == typet())
         elem_type = any_type();
@@ -345,7 +347,8 @@ exprt python_set::get_from_iterable(
           const std::string elem_id = elem_expr.is_symbol()
                                         ? elem_expr.identifier().as_string()
                                         : std::string();
-          list_helper.add_type_info(set_id, elem_id, elem_expr.type());
+          converter_.get_element_type_registry().record(
+            set_id, elem_id, elem_expr.type());
         }
       }
     }
@@ -355,7 +358,8 @@ exprt python_set::get_from_iterable(
       exprt array_index =
         build_index(iterable, build_symbol(idx_sym), char_type());
       elem_expr = array_index;
-      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+      converter_.get_element_type_registry().record(
+        set_id, std::string(), elem_expr.type());
     }
     else
     {
@@ -365,7 +369,8 @@ exprt python_set::get_from_iterable(
         build_add(iterable, build_symbol(idx_sym), iterable.type());
       // ptr_add is a synthetic char* value, so build the dereference in IREP2.
       elem_expr = build_dereference(ptr_add, char_type());
-      list_helper.add_type_info(set_id, std::string(), elem_expr.type());
+      converter_.get_element_type_registry().record(
+        set_id, std::string(), elem_expr.type());
 
       // Break if we hit the null terminator (V.3: built in IREP2).
       expr2tc elem2;
