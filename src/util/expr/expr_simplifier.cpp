@@ -4602,10 +4602,35 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
   return c.is_zero();
 }
 
+// Provably non-negative by type structure alone: an unsigned
+// bitvector, possibly zero-extended into a STRICTLY wider signed type
+// (the C promotion `(int)a_u16` shape — the sign bit is never set).
+static bool is_provably_nonneg(const expr2tc &e)
+{
+  if (is_unsignedbv_type(e))
+    return true;
+  if (is_typecast2t(e))
+  {
+    const typecast2t &tc = to_typecast2t(e);
+    if (
+      is_signedbv_type(tc.type) && is_unsignedbv_type(tc.from) &&
+      tc.type->get_width() > tc.from->type->get_width())
+      return true;
+  }
+  return false;
+}
+
 expr2tc lessthan2t::do_simplify() const
 {
   // Self-comparison: x < x is always false (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
+  // (wider-signed)(unsigned) < 0 is always false: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_false_expr();
 
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
@@ -4660,6 +4685,13 @@ expr2tc greaterthan2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
+  // 0 > (wider-signed)(unsigned) is always false: the mirror of the
+  // `< 0` fold above, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
+    return gen_false_expr();
+
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
   // Require the constant to share the variable side's type.
   if (
@@ -4706,6 +4738,13 @@ struct Lessthanequaltor
 
 expr2tc lessthanequal2t::do_simplify() const
 {
+  // 0 <= (wider-signed)(unsigned) is always true: the mirror of the
+  // `>= 0` fold below, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
+    return gen_true_expr();
+
   // Self-comparison: x <= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
@@ -4758,6 +4797,13 @@ expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // (wider-signed)(unsigned) >= 0 is always true: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_true_expr();
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
