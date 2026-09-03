@@ -19,6 +19,7 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 env:
   # The budget the fast lane is being sized for, and the parallelism the PR
@@ -91,12 +92,17 @@ jobs:
         if: always()
         run: rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-*
 
-      - name: Commit the timing table and selection
-        uses: stefanzweifel/git-auto-commit-action@v7
+      - name: Open a PR with the refreshed timings
+        # master requires PR review, so a direct push here is rejected --
+        # open a PR instead, same as the sv-comp-* workflows.
+        uses: peter-evans/create-pull-request@v8
         with:
-          commit_message: '[ci] refresh per-test timings'
-          file_pattern: |
+          commit-message: '[ci] refresh per-test timings'
+          title: '[ci] refresh per-test timings'
+          body: 'Automated nightly refresh of ci/test-timings.json and this week''s frozen fast-lane selection.'
+          branch: auto/test-timings-refresh
+          add-paths: |
             ci/test-timings.json
             ci/selected-tests-*.txt
-          commit_user_name: 'github-actions'
-          commit_user_email: 'github-actions@github.com'
+          delete-branch: true
+          labels: automation
