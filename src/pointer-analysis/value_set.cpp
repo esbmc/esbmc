@@ -1,4 +1,5 @@
 #include <cassert>
+#include <unordered_set>
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set.h>
 #include <util/arith/arith_tools.h>
@@ -1351,6 +1352,58 @@ static bool is_related_struct(
          is_subclass_of(lhs_type, rhs_type, ns);
 }
 
+/* Whether `type` can transitively hold a pointer. Conservative on symbol types,
+ * whose definition is not resolved here: reporting "may hold a pointer" only
+ * costs the walk that would have happened anyway. */
+static bool
+type_has_pointer(const type2tc &type, std::unordered_set<const type2t *> &seen)
+{
+  if (is_nil_type(type))
+    return false;
+
+  /* A tag left unresolved has no members to inspect here. */
+  if (is_symbol_type(type) || is_cpp_name_type(type))
+    return true;
+
+  if (is_pointer_type(type))
+    return true;
+
+  /* An address round-trips through any integer at least as wide as a pointer
+   * (C11 7.20.1.4), and value_sett records the provenance on such a member --
+   * so a struct of them is not pointer-free for this purpose. */
+  if (is_unsignedbv_type(type) || is_signedbv_type(type))
+    return type->get_width() >= config.ansi_c.pointer_width();
+
+  if (is_array_type(type))
+    return type_has_pointer(to_array_type(type).subtype, seen);
+
+  if (is_vector_type(type))
+    return type_has_pointer(to_vector_type(type).subtype, seen);
+
+  if (!is_struct_type(type) && !is_union_type(type))
+    return false;
+
+  /* A struct reaches itself only through a pointer, which returns above; the
+   * visited set guards against a malformed type graph rather than valid C. */
+  if (!seen.insert(type.get()).second)
+    return false;
+
+  const std::vector<type2tc> &members = is_struct_type(type)
+                                          ? to_struct_type(type).members
+                                          : to_union_type(type).members;
+  for (const type2tc &member : members)
+    if (type_has_pointer(member, seen))
+      return true;
+
+  return false;
+}
+
+static bool type_has_pointer(const type2tc &type)
+{
+  std::unordered_set<const type2t *> seen;
+  return type_has_pointer(type, seen);
+}
+
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
@@ -1385,6 +1438,13 @@ void value_sett::assign(
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
+    /* Nothing in a pointer-free aggregate can point anywhere, so the walk
+     * below would only create empty entries -- O(members) per assignment,
+     * which made wide structs quadratic in symex (#7521). An absent entry
+     * reads back as an empty one (get_symbol_value_set). */
+    if (!type_has_pointer(lhs_type))
+      return;
+
     /* Types do not agree (different kind, or same kind but structurally
      * incompatible). The latter happens when a single translation unit ends
      * up with two declarations of the same struct tag that differ in members
