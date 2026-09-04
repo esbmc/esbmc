@@ -22,6 +22,31 @@ namespace
  *  itself (issue #7063) that still leaves ESBMC's own reference, taken when the
  *  term was built, intact -- this holds only while nothing else in this file
  *  releases a term ESBMC still stores. */
+/** Owns one sort reference. bitwuzla.h states that any API function returning
+ *  a BitwuzlaSort returns a copy the receiver may release, so a getter's result
+ *  is +1 exactly like a term query's. */
+class sort_reft
+{
+public:
+  explicit sort_reft(BitwuzlaSort s) : s(s)
+  {
+  }
+  ~sort_reft()
+  {
+    bitwuzla_sort_release(s);
+  }
+  sort_reft(const sort_reft &) = delete;
+  sort_reft &operator=(const sort_reft &) = delete;
+
+  operator BitwuzlaSort() const
+  {
+    return s;
+  }
+
+private:
+  BitwuzlaSort s;
+};
+
 class value_reft
 {
 public:
@@ -926,8 +951,8 @@ void bitwuzla_convt::print_model()
   for (const auto &entry : symtable)
   {
     smt_astt term = entry.ast;
-    BitwuzlaSort sort =
-      bitwuzla_term_get_sort(to_solver_smt_ast<bitw_smt_ast>(term)->a);
+    sort_reft sort(
+      bitwuzla_term_get_sort(to_solver_smt_ast<bitw_smt_ast>(term)->a));
     fprintf(
       messaget::state.out,
       "(define-fun %s (",
@@ -947,11 +972,12 @@ void bitwuzla_convt::print_model()
       while (bitwuzla_term_get_kind(children[1]) == BITWUZLA_KIND_LAMBDA)
       {
         assert(bitwuzla_term_is_var(children[0]));
+        sort_reft child_sort(bitwuzla_term_get_sort(children[0]));
         fprintf(
           messaget::state.out,
           "(%s %s) ",
           bitwuzla_term_to_string(children[0]),
-          bitwuzla_sort_to_string(bitwuzla_term_get_sort(children[0])));
+          bitwuzla_sort_to_string(child_sort));
         value = children[1];
         children = bitwuzla_term_get_children(value, &size);
       }
@@ -963,15 +989,14 @@ void bitwuzla_convt::print_model()
       //       functions is called more than once in one printf call.
       //       Alternatively, we could also first get and copy the strings, use
       //       a single printf call, and then free the copied strings.
+      sort_reft last_sort(bitwuzla_term_get_sort(children[0]));
       fprintf(
         messaget::state.out,
         "(%s %s))",
         bitwuzla_term_to_string(children[0]),
-        bitwuzla_sort_to_string(bitwuzla_term_get_sort(children[0])));
-      fprintf(
-        messaget::state.out,
-        " %s",
-        bitwuzla_sort_to_string(bitwuzla_sort_fun_get_codomain(sort)));
+        bitwuzla_sort_to_string(last_sort));
+      sort_reft codomain(bitwuzla_sort_fun_get_codomain(sort));
+      fprintf(messaget::state.out, " %s", bitwuzla_sort_to_string(codomain));
       fprintf(
         messaget::state.out, " %s)\n", bitwuzla_term_to_string(children[1]));
     }
@@ -1471,8 +1496,9 @@ smt_astt bitwuzla_convt::mk_quantifier(
     original_terms.push_back(orig);
     std::string name =
       "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
-    bound_vars.push_back(bitwuzla_mk_var(
-      bitw_term_manager, bitwuzla_term_get_sort(orig), name.c_str()));
+    sort_reft orig_sort(bitwuzla_term_get_sort(orig));
+    bound_vars.push_back(
+      bitwuzla_mk_var(bitw_term_manager, orig_sort, name.c_str()));
   }
 
   // Substitute SSA terms with bound vars in the body.
