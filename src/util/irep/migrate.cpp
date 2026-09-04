@@ -217,7 +217,7 @@ static type2tc migrate_type0(const typet &type)
     std::vector<irep_idt> names;
     std::vector<irep_idt> pretty_names;
     const struct_typet &strct = to_struct_type(type);
-    const struct_union_typet::componentst comps = strct.components();
+    const struct_union_typet::componentst &comps = strct.components();
 
     for (const auto &comp : comps)
     {
@@ -243,7 +243,7 @@ static type2tc migrate_type0(const typet &type)
     std::vector<irep_idt> names;
     std::vector<irep_idt> pretty_names;
     const struct_union_typet &strct = to_union_type(type);
-    const struct_union_typet::componentst comps = strct.components();
+    const struct_union_typet::componentst &comps = strct.components();
 
     for (const auto &comp : comps)
     {
