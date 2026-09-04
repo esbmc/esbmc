@@ -1,4 +1,5 @@
 #include <cassert>
+#include <optional>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
@@ -1271,6 +1272,166 @@ split_suffix_components(const std::string &suffix)
   return components;
 }
 
+/* A value-set target is a usable reachability root only if it denotes a
+ * concrete object: drop unknown/invalid descriptors and null/string/code
+ * objects. Returns the root object symbol, or nil to skip. */
+expr2tc usable_root(const expr2tc &descriptor)
+{
+  if (is_unknown2t(descriptor) || is_invalid2t(descriptor))
+    return expr2tc();
+  assert(is_object_descriptor2t(descriptor));
+  expr2tc obj = to_object_descriptor2t(descriptor).get_root_object();
+  if (
+    is_null_object2t(obj) || is_constant_string2t(obj) || is_code_type(obj) ||
+    !is_symbol2t(obj))
+    return expr2tc();
+  return obj;
+}
+
+/* An edge of the points-to graph: the target object's name and the condition
+ * under which the source currently holds its address. */
+using edge_listt = std::vector<std::pair<std::string, expr2tc>>;
+
+/* Add the content-based out-edges of one object: the pointers actually
+ * stored in it, read slot by slot. Needed because get_entries_rec() derives
+ * an object's out-edges from its *type*, and a heap object ESBMC could not
+ * type -- every allocation whose result is not immediately cast, e.g. one
+ * returned by a `void *`-valued wrapper -- is a flat byte array with no
+ * pointer sub-component to derive them from. */
+/* The pointer-slot view of a constant-size array object. */
+struct buffer_layoutt
+{
+  type2tc subtype;
+  BigInt elem_bytes;
+  BigInt total_bytes;
+};
+
+/* The slot view of `obj`, or nullopt when it does not have one.
+ *
+ * Only constant-size objects can be soundly, fully expanded; a symbolic size
+ * hits the array-index reachability TODO further down and is left as a (sound)
+ * residual false positive. Only scalar elements are read: a byte (stitched) or
+ * a pointer-width number/pointer (indexed directly). Restricting to these keeps
+ * type_byte_size() off incomplete/unsized types and keeps the direct-index path
+ * off aggregates (bitcast would be ill-formed); arrays of structs/arrays are
+ * left unexpanded -- another sound residual. */
+std::optional<buffer_layoutt>
+buffer_layout(const expr2tc &obj, const BigInt &ptr_bytes, uint64_t max_slots)
+{
+  if (!is_array_type(obj->type))
+    return {};
+  const array_type2t &arr_t = to_array_type(obj->type);
+  if (is_nil_expr(arr_t.array_size) || !is_constant_int2t(arr_t.array_size))
+    return {};
+  if (!is_number_type(arr_t.subtype) && !is_pointer_type(arr_t.subtype))
+    return {};
+
+  const BigInt elem_bytes = type_byte_size(arr_t.subtype);
+  const BigInt total_bytes =
+    to_constant_int2t(arr_t.array_size).value * elem_bytes;
+  if (
+    ptr_bytes == 0 || elem_bytes == 0 ||
+    total_bytes / ptr_bytes > BigInt(max_slots))
+    return {};
+
+  /* Each pointer occupies a whole number of elements, or each element is a
+   * single byte we stitch together; other element sizes are skipped (a sound
+   * residual). */
+  if (elem_bytes != 1 && elem_bytes != ptr_bytes)
+    return {};
+
+  return buffer_layoutt{arr_t.subtype, elem_bytes, total_bytes};
+}
+
+/* The pointer `buf_val` holds at byte offset `off`. The SMT backend rejects
+ * byte_extract on an array, so read element-by-element via index() and
+ * combine. */
+expr2tc read_pointer_slot(
+  const expr2tc &buf_val,
+  const buffer_layoutt &lay,
+  const BigInt &ptr_bytes,
+  bool is_big_endian,
+  const BigInt &off)
+{
+  const type2tc void_ptr_type = pointer_type2tc(get_empty_type());
+  if (lay.elem_bytes == ptr_bytes)
+  {
+    expr2tc el = index2tc(
+      lay.subtype, buf_val, gen_ulong((off / lay.elem_bytes).to_uint64()));
+    return is_pointer_type(el) ? typecast2tc(void_ptr_type, el)
+                               : bitcast2tc(void_ptr_type, el);
+  }
+
+  /* elem_bytes == 1: stitch `pb` consecutive bytes into a pointer. */
+  const uint64_t pb = ptr_bytes.to_uint64();
+  std::vector<expr2tc> bytes;
+  bytes.reserve(pb);
+  for (uint64_t b = 0; b < pb; b++)
+    bytes.push_back(typecast2tc(
+      get_uint8_type(),
+      index2tc(
+        lay.subtype, buf_val, gen_ulong((off + BigInt(b)).to_uint64()))));
+
+  expr2tc accuml = is_big_endian ? bytes.front() : bytes.back();
+  if (is_big_endian)
+    for (uint64_t b = 1; b < pb; b++)
+      accuml = concat2tc(
+        get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
+  else
+    for (int b = (int)pb - 2; b >= 0; b--)
+      accuml = concat2tc(
+        get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
+  return bitcast2tc(void_ptr_type, accuml);
+}
+
+void add_content_edges(
+  goto_symex_statet &state,
+  const expr2tc &obj,
+  const BigInt &ptr_bytes,
+  bool is_big_endian,
+  uint64_t max_slots,
+  const std::function<void(const expr2tc &)> &discover,
+  std::map<std::string, edge_listt> &out_edges)
+{
+  const std::optional<buffer_layoutt> lay =
+    buffer_layout(obj, ptr_bytes, max_slots);
+  if (!lay)
+    return;
+
+  /* The buffer's current content: L2-rename the object symbol. */
+  expr2tc buf_val = obj;
+  state.rename(buf_val);
+
+  /* Candidate objects the buffer's elements may point at. */
+  value_sett::object_mapt contents;
+  state.value_set.get_value_set_rec(obj, contents, "[]", obj->type);
+
+  const std::string src = to_symbol2t(obj).get_symbol_name();
+  for (auto c_it = contents.begin(); c_it != contents.end(); ++c_it)
+  {
+    expr2tc cobj = usable_root(state.value_set.to_expr(c_it));
+    if (is_nil_expr(cobj))
+      continue;
+
+    /* Reach `cobj` iff some pointer-aligned slot of the buffer currently
+     * holds its address: OR over slots of same_object(slot, &cobj). */
+    expr2tc cadr = address_of2tc(cobj->type, cobj);
+    expr2tc slot_reach;
+    for (BigInt off(0); off + ptr_bytes <= lay->total_bytes; off += ptr_bytes)
+    {
+      expr2tc so = same_object2tc(
+        read_pointer_slot(buf_val, *lay, ptr_bytes, is_big_endian, off), cadr);
+      slot_reach = slot_reach ? or2tc(slot_reach, so) : so;
+    }
+    if (slot_reach)
+    {
+      out_edges[src].emplace_back(
+        to_symbol2t(cobj).get_symbol_name(), slot_reach);
+      discover(cobj);
+    }
+  }
+}
+
 } // namespace
 
 void goto_symext::add_memory_leak_checks()
@@ -1331,13 +1492,13 @@ void goto_symext::add_memory_leak_checks()
      * reachable object (and the condition under which it is reachable) into
      * globals_point_to alongside the global roots above.
      *
-     * Heap buffers need a content-based chase rather than the type-based
-     * get_entries_rec() used for globals: the SV-COMP entry harness stores an
-     * array of `char *` arguments into a single `malloc((argc+1)*8)` block,
-     * which ESBMC types as a flat byte array. get_entries_rec() sees no pointer
-     * sub-component there and would stop, leaking the argument strings. Instead,
-     * for each constant-size object we read a pointer at every pointer-aligned
-     * offset and OR same_object() over them: this reads the actual stored bytes
+     * Heap buffers need a content-based chase in addition to the type-based
+     * get_entries_rec(): the SV-COMP entry harness stores an array of `char *`
+     * arguments into a single `malloc((argc+1)*8)` block, which ESBMC types as
+     * a flat byte array. get_entries_rec() sees no pointer sub-component there
+     * and would stop, leaking the argument strings. Instead, for each
+     * constant-size object we read a pointer at every pointer-aligned offset
+     * and OR same_object() over them: this reads the actual stored bytes
      * (sound -- a pointer the buffer no longer holds does not match) and, being
      * fully expanded for a constant size, is negatable in the leak claim's
      * `not(reachable)` context (the array-index reachability TODO below only
@@ -1345,29 +1506,62 @@ void goto_symext::add_memory_leak_checks()
     const bool is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
     const BigInt ptr_bytes(config.ansi_c.pointer_width() / 8);
-    const type2tc void_ptr_type = pointer_type2tc(get_empty_type());
-
-    /* A value-set target is a usable reachability root only if it denotes a
-     * concrete object: drop unknown/invalid descriptors and null/string/code
-     * objects. Returns the root object symbol, or nil to skip. */
-    auto usable_root = [](const expr2tc &descriptor) -> expr2tc {
-      if (is_unknown2t(descriptor) || is_invalid2t(descriptor))
-        return expr2tc();
-      assert(is_object_descriptor2t(descriptor));
-      expr2tc obj = to_object_descriptor2t(descriptor).get_root_object();
-      if (
-        is_null_object2t(obj) || is_constant_string2t(obj) ||
-        is_code_type(obj) || !is_symbol2t(obj))
-        return expr2tc();
-      return obj;
-    };
-
-    /* Worklist of (heap-object symbol, condition under which it is reachable).
-     * `local_reached` bounds work on cyclic heaps and caps total objects. */
-    std::vector<std::pair<expr2tc, expr2tc>> reach_work;
-    std::unordered_set<std::string> local_reached;
-    const size_t max_reached = 4096;
     const uint64_t max_slots = 1024;
+
+    /* The points-to graph solved by the two phases below. An edge S -> T
+     * carries only the *local* condition "some pointer sub-component of S
+     * currently holds T's address"; how S itself was reached is phase 2's
+     * business. Ordered so that the shape of the conditions built below does
+     * not depend on the standard library's hashing. */
+    std::map<std::string, edge_listt> out_edges;
+    std::map<std::string, expr2tc> node_adr;
+
+    /* The graph's roots, which carry the nil (unconditionally reachable)
+     * condition. Only the globals as `get_globals` returned them qualify:
+     * `globals` doubles as the frontier below, and an entry appended to it
+     * later denotes an object reached *through* a root. Initialised in place so
+     * that no later edit can quietly turn a heap object into a root, which
+     * would mask a real leak. */
+    const std::unordered_set<std::string> roots = [&globals] {
+      std::unordered_set<std::string> r;
+      for (const value_sett::entryt &e : globals)
+        r.insert(e.identifier);
+      return r;
+    }();
+
+    /* Objects whose contents are still to be read slot by slot, and those
+     * already expanded (which also keeps this terminating on a cyclic heap). */
+    std::vector<expr2tc> obj_work;
+    std::unordered_set<std::string> expanded;
+    size_t content_budget = 4096;
+
+    /* Locals of the active frames are roots too (see below), but synthetic
+     * ones, so they are kept apart from the globals taken above. */
+    std::unordered_set<std::string> local_roots;
+
+    /* Record `obj` as a graph node and expand it: by type here, and by content
+     * via the worklist. */
+    auto discover = [&](const expr2tc &obj) {
+      const std::string name = to_symbol2t(obj).get_symbol_name();
+      node_adr.emplace(name, address_of2tc(obj->type, obj));
+      if (!expanded.insert(name).second)
+        return;
+
+      const size_t entries_before = globals.size();
+      va.get_entries_rec(name, "", migrate_type_back(obj->type), globals);
+
+      /* Read the contents only of an object whose type named no pointer
+       * sub-component: where it did, the entries just appended already yield
+       * every edge a slot read would, and duplicating them only grows the
+       * formula. Slot reads are also the part worth budgeting -- each costs a
+       * disjunct per slot -- whereas the type-based walk above is left uncapped
+       * as it was before the two shared a graph. */
+      if (globals.size() == entries_before && content_budget > 0)
+      {
+        content_budget--;
+        obj_work.push_back(obj);
+      }
+    };
 
     for (const auto &local_frame : cur_state->call_stack)
     {
@@ -1407,7 +1601,8 @@ void goto_symext::add_memory_leak_checks()
          * `p = NULL`). To keep the leak check sound we must test the pointer's
          * *current* value, so L2-rename a copy of lptr to its SSA value here.
          * level1 was already applied via the owning frame above; level2 is
-         * frame-independent, so renaming through the current state is correct. */
+         * frame-independent, so renaming through the current state is correct.
+         */
         expr2tc lptr_val = lptr;
         cur_state->level2.rename(lptr_val);
 
@@ -1418,117 +1613,21 @@ void goto_symext::add_memory_leak_checks()
             continue;
 
           /* The local is unconditionally live; it points at root_object
-           * exactly when same_object holds. */
+           * exactly when same_object holds. Model the local itself as an
+           * unconditionally reachable graph root so that phase 2 merges this
+           * route with every other one into the object. */
           expr2tc adr = address_of2tc(root_object->type, root_object);
-          reach_work.emplace_back(root_object, same_object2tc(lptr_val, adr));
+          /* The space keeps this synthetic key out of the symbol-name space
+           * `out_edges` otherwise holds: a collision with a real object would
+           * make that object an unconditional root, masking a leak. */
+          const std::string lroot =
+            "local root " + to_symbol2t(lptr).get_symbol_name();
+          local_roots.insert(lroot);
+          out_edges[lroot].emplace_back(
+            to_symbol2t(root_object).get_symbol_name(),
+            same_object2tc(lptr_val, adr));
+          discover(root_object);
         }
-      }
-    }
-
-    while (!reach_work.empty() && local_reached.size() < max_reached)
-    {
-      expr2tc obj = reach_work.back().first;
-      expr2tc cond = reach_work.back().second;
-      reach_work.pop_back();
-
-      /* Record the object as reachable under `cond`. */
-      expr2tc adr = address_of2tc(obj->type, obj);
-      expr2tc &pts = globals_point_to[adr];
-      pts = pts ? or2tc(pts, cond) : cond;
-
-      /* Expand each object's contents once. */
-      if (!local_reached.insert(to_symbol2t(obj).get_symbol_name()).second)
-        continue;
-
-      /* Only constant-size objects can be soundly, fully expanded; a symbolic
-       * size hits the array-index reachability TODO further down and is left
-       * as a (sound) residual false positive. */
-      if (!is_array_type(obj->type))
-        continue;
-      const array_type2t &arr_t = to_array_type(obj->type);
-      if (is_nil_expr(arr_t.array_size) || !is_constant_int2t(arr_t.array_size))
-        continue;
-
-      /* Only scalar elements are read below: a byte (stitched) or a
-       * pointer-width number/pointer (indexed directly). Restricting to these
-       * keeps type_byte_size() off incomplete/unsized types and keeps the
-       * direct-index path off aggregates (bitcast would be ill-formed). Arrays
-       * of structs/arrays are left unexpanded -- a sound residual. */
-      if (!is_number_type(arr_t.subtype) && !is_pointer_type(arr_t.subtype))
-        continue;
-
-      const BigInt elem_bytes = type_byte_size(arr_t.subtype);
-      const BigInt total_bytes =
-        to_constant_int2t(arr_t.array_size).value * elem_bytes;
-      if (
-        ptr_bytes == 0 || elem_bytes == 0 ||
-        total_bytes / ptr_bytes > BigInt(max_slots))
-        continue;
-
-      /* Each pointer occupies a whole number of elements, or each element is a
-       * single byte we stitch together; other element sizes are skipped (a
-       * sound residual). The SMT backend rejects byte_extract on an array, so
-       * read element-by-element via index() and combine. */
-      const uint64_t pb = ptr_bytes.to_uint64();
-      if (elem_bytes != 1 && elem_bytes != ptr_bytes)
-        continue;
-
-      /* The buffer's current content: L2-rename the object symbol. */
-      expr2tc buf_val = obj;
-      cur_state->rename(buf_val);
-
-      /* Read the pointer stored at byte offset `off`. */
-      auto read_slot = [&](const BigInt &off) -> expr2tc {
-        if (elem_bytes == ptr_bytes)
-        {
-          expr2tc el = index2tc(
-            arr_t.subtype, buf_val, gen_ulong((off / elem_bytes).to_uint64()));
-          return is_pointer_type(el) ? typecast2tc(void_ptr_type, el)
-                                     : bitcast2tc(void_ptr_type, el);
-        }
-        /* elem_bytes == 1: stitch `pb` consecutive bytes into a pointer. */
-        std::vector<expr2tc> bytes;
-        bytes.reserve(pb);
-        for (uint64_t b = 0; b < pb; b++)
-          bytes.push_back(typecast2tc(
-            get_uint8_type(),
-            index2tc(
-              arr_t.subtype,
-              buf_val,
-              gen_ulong((off + BigInt(b)).to_uint64()))));
-        expr2tc accuml = is_big_endian ? bytes.front() : bytes.back();
-        if (is_big_endian)
-          for (uint64_t b = 1; b < pb; b++)
-            accuml = concat2tc(
-              get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
-        else
-          for (int b = (int)pb - 2; b >= 0; b--)
-            accuml = concat2tc(
-              get_uint_type(accuml->type->get_width() + 8), accuml, bytes[b]);
-        return bitcast2tc(void_ptr_type, accuml);
-      };
-
-      /* Candidate objects the buffer's elements may point at. */
-      value_sett::object_mapt contents;
-      cur_state->value_set.get_value_set_rec(obj, contents, "[]", obj->type);
-
-      for (auto c_it = contents.begin(); c_it != contents.end(); ++c_it)
-      {
-        expr2tc cobj = usable_root(cur_state->value_set.to_expr(c_it));
-        if (is_nil_expr(cobj))
-          continue;
-
-        /* Reach `cobj` iff some pointer-aligned slot of the buffer currently
-         * holds its address: OR over slots of same_object(slot, &cobj). */
-        expr2tc cadr = address_of2tc(cobj->type, cobj);
-        expr2tc slot_reach;
-        for (BigInt off(0); off + ptr_bytes <= total_bytes; off += ptr_bytes)
-        {
-          expr2tc so = same_object2tc(read_slot(off), cadr);
-          slot_reach = slot_reach ? or2tc(slot_reach, so) : so;
-        }
-        if (slot_reach)
-          reach_work.emplace_back(cobj, and2tc(cond, slot_reach));
       }
     }
 
@@ -1547,21 +1646,30 @@ void goto_symext::add_memory_leak_checks()
      * forgotten memory (#6594). Merging the incoming paths of one frontier
      * level, as the previous fix for #2335 did, only covers routes of equal
      * length. */
-    using edge_listt = std::vector<std::pair<std::string, expr2tc>>;
-    /* Ordered so that the shape of the conditions built below does not depend
-     * on the standard library's hashing. */
-    std::map<std::string, edge_listt> out_edges;
-    std::map<std::string, expr2tc> node_adr;
-
-    std::unordered_set<std::string> roots;
-    for (const value_sett::entryt &e : globals)
-      roots.insert(e.identifier);
-
     /* Visiting each entry only once also keeps phase 1 terminating on circular
      * data structures. */
     std::unordered_set<std::string> visited;
-    while (!globals.empty())
+    while (!globals.empty() || !obj_work.empty())
     {
+      /* Objects discovered so far still need their contents expanded; a byte
+       * buffer never yields a value-set entry, so this worklist is the only
+       * thing that carries the walk past one. */
+      while (!obj_work.empty())
+      {
+        const expr2tc obj = std::move(obj_work.back());
+        obj_work.pop_back();
+        add_content_edges(
+          *cur_state,
+          obj,
+          ptr_bytes,
+          is_big_endian,
+          max_slots,
+          discover,
+          out_edges);
+      }
+      if (globals.empty())
+        break;
+
       const value_sett::entryt e = std::move(globals.front());
       globals.pop_front();
       if (!visited.emplace(e.identifier + e.suffix).second)
@@ -1774,12 +1882,7 @@ void goto_symext::add_memory_leak_checks()
         assert(is_symbol2t(root_object));
         const std::string dst = to_symbol2t(root_object).get_symbol_name();
         out_edges[e.identifier].emplace_back(dst, same_as_e);
-        node_adr.emplace(dst, adr);
-
-        /* Check the contents of a valid root object of this target for more
-         * pointers reaching out further */
-        va.get_entries_rec(
-          dst, "", migrate_type_back(root_object->type), globals);
+        discover(root_object);
       }
     }
 
@@ -1797,6 +1900,8 @@ void goto_symext::add_memory_leak_checks()
      * simple-path ones already imply. */
     std::map<std::string, expr2tc> reach, delta;
     for (const std::string &r : roots)
+      reach.emplace(r, expr2tc());
+    for (const std::string &r : local_roots)
       reach.emplace(r, expr2tc());
     delta = reach;
 

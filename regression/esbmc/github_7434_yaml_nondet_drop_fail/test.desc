@@ -1,0 +1,8 @@
+CORE
+main.c
+--witness-output-yaml -
+^VERIFICATION FAILED$
+type: "function_return"
+file_name: "[^"]*main\.c"
+line: 9$
+(?s)\A(?!.*\n *line: 29$)

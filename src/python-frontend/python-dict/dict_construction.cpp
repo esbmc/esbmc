@@ -140,8 +140,8 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     if (!iterable_expr.is_symbol())
       throw std::runtime_error(
         "DictComp tuple target requires a named list of tuples");
-    tuple_elem_type =
-      converter_.name_space().follow(python_list::get_list_element_type(
+    tuple_elem_type = converter_.name_space().follow(
+      converter_.get_element_type_registry().element_type(
         iterable_expr.identifier().as_string(), 0));
     if (!converter_.get_tuple_handler().is_tuple_type(tuple_elem_type))
       throw std::runtime_error(
@@ -160,8 +160,8 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   // whose alignment ESBMC cannot prove when a later dict lookup reads the key
   // as a 64-bit word in __ESBMC_values_equal (dereference-alignment failure).
   // Mirror the subscript read used by the desugared for-loop: take the element
-  // type from the static list_type_map and only fall back to any_type() when it
-  // cannot be determined, so no currently-working case regresses.
+  // type from the element-type registry and only fall back to any_type() when
+  // it cannot be determined, so no currently-working case regresses.
   typet loop_var_type = any_type();
   bool mixed_numeric = false;
   if (is_tuple_target)
@@ -187,11 +187,13 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
     // Restricting specialisation to all-numeric lists keeps the read sound and
     // leaves every other case on the previous any_type() path (no regression).
     const std::string list_id = iterable_expr.identifier().as_string();
-    typet num = python_list::numeric_element_type(list_id);
+    typet num =
+      converter_.get_element_type_registry().numeric_element_type(list_id);
     if (num != typet())
     {
       loop_var_type = num;
-      mixed_numeric = python_list::has_mixed_numeric_types(list_id);
+      mixed_numeric =
+        converter_.get_element_type_registry().has_mixed_numeric(list_id);
     }
   }
 
@@ -610,7 +612,7 @@ exprt python_dict_handler::create_dict_from_literal(
     // Track the key's element type so that handle_index_access can resolve
     // the concrete struct type for tuple keys instead of relying solely on
     // the "tuple" annotation (which produces empty_typet as a sentinel).
-    list_handler.add_type_info(
+    converter_.get_element_type_registry().record(
       keys_list.id.as_string(), key_elem_id, key_expr.type());
 
     exprt value_expr = converter_.get_expr(values[i]);
@@ -637,40 +639,34 @@ exprt python_dict_handler::create_dict_from_literal(
       exprt push_value = list_handler.build_push_list_call(
         values_list, element, value_expr, all_values_float);
       converter_.add_instruction(push_value);
-      // Record the value's type under a dedicated key so
-      // has_mixed_numeric_types() can detect a heterogeneous int/float dict at
-      // the subscript read site (where a single static value type otherwise
-      // misreads the other type's bits). It must NOT be recorded under the
-      // values-list's own id: that would flip the .values()/.items() list read
-      // onto the generic mixed-list path, which reads dict value storage
-      // incorrectly (github_3719_4).
-      list_handler.add_type_info(
-        dict_value_types_key(values_list.id.as_string()),
+      // Record the value's type in its own slot so has_mixed_numeric() can
+      // detect a heterogeneous int/float dict at the subscript read site
+      // (where a single static value type otherwise misreads the other
+      // type's bits). It must NOT go in the values-list's elements slot: that
+      // would flip the .values()/.items() list read onto the generic
+      // mixed-list path, which reads dict value storage incorrectly
+      // (github_3719_4).
+      converter_.get_element_type_registry().record(
+        values_list.id.as_string(),
         std::string(),
-        value_expr.type());
+        value_expr.type(),
+        type_slot::dict_value_types);
 
       // A list value: record its uniform element type so a later d[k] list
       // read can type the inner elements (e.g. a list-of-tuples value, which
       // otherwise dereferences to void and aborts the dereference layer).
       if (value_expr.type() == list_type && value_expr.is_symbol())
       {
-        auto it =
-          python_list::list_type_map.find(value_expr.identifier().as_string());
-        if (it != python_list::list_type_map.end() && !it->second.empty())
-        {
-          const typet &first = it->second.front().second;
-          const bool uniform = std::all_of(
-            it->second.begin(),
-            it->second.end(),
-            [&first](const std::pair<std::string, typet> &e) {
-              return e.second == first;
-            });
-          if (uniform)
-            list_handler.add_type_info(
-              dict_value_list_elems_key(values_list.id.as_string()),
-              std::string(),
-              first);
-        }
+        element_type_registry &registry =
+          converter_.get_element_type_registry();
+        const typet uniform =
+          registry.uniform_element_type(value_expr.identifier().as_string());
+        if (uniform != typet())
+          registry.record(
+            values_list.id.as_string(),
+            std::string(),
+            uniform,
+            type_slot::dict_value_list_elems);
       }
     }
   }
@@ -687,7 +683,7 @@ exprt python_dict_handler::create_dict_from_literal(
   converter_.add_instruction(values_assign);
 
   // Record the dict symbol → internal list symbol mapping so that
-  // converter_stmt can propagate list_type_map entries when it sees
+  // converter_stmt can propagate recorded element types when it sees
   // ESBMC_keys_N = dict_sym.keys (a member expression, not a symbol copy).
   if (target_symbol.is_symbol())
   {
