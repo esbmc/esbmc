@@ -1,0 +1,4 @@
+CORE
+main.c
+--error-label ERROR --unwind 1
+^VERIFICATION FAILED$

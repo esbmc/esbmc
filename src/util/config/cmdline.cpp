@@ -233,6 +233,24 @@ std::optional<std::string> cmdlinet::get_config_file_location() const
   return std::nullopt;
 }
 
+/// Warn when a value-taking option consumed a token that names another option:
+/// `--witness-output --show-loops` silently makes "--show-loops" the witness
+/// path, and the swallowed option never runs (#7525).
+static void warn_option_like_values(
+  const boost::program_options::parsed_options &parsed,
+  const boost::program_options::options_description &desc)
+{
+  for (const auto &opt : parsed.options)
+    for (const std::string &value : opt.value)
+      if (
+        value.rfind("--", 0) == 0 && desc.find_nothrow(value.substr(2), false))
+        log_warning(
+          "'--{}' takes a value, so '{}' was read as that value rather than as "
+          "an option",
+          opt.string_key,
+          value);
+}
+
 bool cmdlinet::parse(
   int argc,
   const char **argv,
@@ -292,12 +310,13 @@ bool cmdlinet::parse(
   try
   {
     // Load commandline parameters (highest priority)
-    boost::program_options::store(
+    boost::program_options::parsed_options command_line =
       boost::program_options::command_line_parser(argc, argv)
         .options(all_cmdline_options)
         .positional(p)
-        .run(),
-      vm);
+        .run();
+    warn_option_like_values(command_line, all_cmdline_options);
+    boost::program_options::store(command_line, vm);
 
     // Config file: Check if config file should be loaded, and get location.
     std::optional<std::string> config_path = this->get_config_file_location();
@@ -328,12 +347,13 @@ bool cmdlinet::parse(
     }
 
     // Load env (lowest priority)
-    boost::program_options::store(
+    boost::program_options::parsed_options env_options =
       boost::program_options::command_line_parser(
         simple_shell_unescape(getenv("ESBMC_OPTS"), "ESBMC_OPTS"))
         .options(all_cmdline_options)
-        .run(),
-      vm);
+        .run();
+    warn_option_like_values(env_options, all_cmdline_options);
+    boost::program_options::store(env_options, vm);
   }
   // Boost throws program_options errors as boost::wrapexcept<...>, whose
   // typeinfo does not match this translation unit's std::exception across the
