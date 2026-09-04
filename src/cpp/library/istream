@@ -357,6 +357,11 @@ template <class charT>
 struct char_traits;
 template <class CharT, class Traits = char_traits<CharT>>
 using basic_istream = istream;
+/* [istream.syn] declares basic_iostream here too; the model defines the class
+ * itself in <iostream>, which every use that needs it complete includes. */
+class iostream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_iostream = iostream;
 #endif
 
 } // namespace std
