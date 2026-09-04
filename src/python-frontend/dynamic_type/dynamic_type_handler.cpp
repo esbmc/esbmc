@@ -484,9 +484,7 @@ exprt dynamic_type_handler::handle_comparison(
   if (lhs_tagged && rhs_tagged)
   {
     if (ordered)
-      throw std::runtime_error(
-        "ordering two dynamically-typed variables directly is not yet "
-        "supported");
+      return build_ordered_obj(op, lhs, rhs);
 
     const symbolt *eq_obj_func =
       converter_.symbol_table().find_symbol("c:@F@__python_scalar_eq_obj");
@@ -496,7 +494,8 @@ exprt dynamic_type_handler::handle_comparison(
       int_type(),
       {build_address_of(lhs),
        build_address_of(rhs),
-       type_handler_.tagged_scalar_type_id(long_long_int_type())});
+       type_handler_.tagged_scalar_type_id(long_long_int_type()),
+       type_handler_.tagged_scalar_type_id(bool_type())});
     exprt equal = build_equal(call, from_integer(1, int_type()));
     return op == "NotEq" ? build_not(equal) : equal;
   }
@@ -534,6 +533,33 @@ exprt dynamic_type_handler::build_ordered_literal(
   if (op == "Gt")
     return build_greater_than(cmp, zero);
   assert(op == "GtE" && "unexpected operator routed to build_ordered_literal");
+  return build_greater_equal(cmp, zero);
+}
+
+exprt dynamic_type_handler::build_ordered_obj(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const symbolt *cmp_obj_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_cmp_obj");
+  assert(cmp_obj_func && "__python_scalar_cmp_obj not found in symbol table");
+  exprt cmp = build_call_expr(
+    *cmp_obj_func,
+    int_type(),
+    {build_address_of(lhs),
+     build_address_of(rhs),
+     type_handler_.tagged_scalar_type_id(long_long_int_type()),
+     type_handler_.tagged_scalar_type_id(bool_type())});
+
+  exprt zero = from_integer(BigInt(0), int_type());
+  if (op == "Lt")
+    return build_less_than(cmp, zero);
+  if (op == "LtE")
+    return build_less_equal(cmp, zero);
+  if (op == "Gt")
+    return build_greater_than(cmp, zero);
+  assert(op == "GtE" && "unexpected operator routed to build_ordered_obj");
   return build_greater_equal(cmp, zero);
 }
 

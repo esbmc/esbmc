@@ -14,7 +14,6 @@
 class python_converter;
 class type_handler;
 
-
 class dynamic_type_handler
 {
 public:
@@ -180,6 +179,8 @@ private:
     const std::string &op,
     const exprt &tagged,
     const exprt &literal);
+  exprt
+  build_ordered_obj(const std::string &op, const exprt &lhs, const exprt &rhs);
   exprt build_add_literal(
     const exprt &tagged,
     const exprt &literal,
@@ -222,4 +223,3 @@ private:
   // point is surviving the join.
   std::unordered_map<std::string, std::string> aliases_;
 };
-
