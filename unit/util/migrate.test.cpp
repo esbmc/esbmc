@@ -28,6 +28,7 @@
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
 #include <util/arith/arith_tools.h>
+#include <utility>
 
 namespace
 {
@@ -715,4 +716,48 @@ TEST_CASE(
 
   REQUIRE(via_helper == via_legacy); // faithful drop-in
   require_expr_roundtrip(via_helper);
+}
+
+// migrate_type_back memoises aggregate types on node identity (#7571). These
+// pin the two properties that make that sound; both would have held trivially
+// before the cache existed, so they are guards against a future regression in
+// it rather than tests of new behaviour.
+
+TEST_CASE("migrate_type_back is stable across repeated calls", "[migrate]")
+{
+  const type2tc s = make_struct_type();
+
+  const typet first = migrate_type_back(s);
+  const typet second = migrate_type_back(s);
+  REQUIRE(full_eq(first, second));
+
+  migrate_type_back_cache_clear();
+  REQUIRE(full_eq(migrate_type_back(s), first));
+
+  // Distinct nodes that compare equal must still back-migrate equally: the
+  // cache keys on address, so an equal-but-separate node takes the slow path.
+  const type2tc other = make_struct_type();
+  REQUIRE(other == s);
+  REQUIRE(full_eq(migrate_type_back(other), first));
+}
+
+TEST_CASE("a cached type2t detaches rather than mutating", "[migrate]")
+{
+  type2tc s = make_struct_type();
+  const typet before = migrate_type_back(s); // s is now referenced by the cache
+
+  // Read the node address through the const accessor: the non-const get() is
+  // itself the detaching overload, so reading with it would perform the very
+  // clone the test is trying to observe.
+  const type2t *original = std::as_const(s).get();
+
+  // Copy-on-write: the cache's reference makes the refcount > 1, so this
+  // mutable access must clone. If it wrote through instead, the cached legacy
+  // form would silently describe a type nobody holds any more.
+  to_struct_type(s).name = "renamed";
+  REQUIRE(std::as_const(s).get() != original);
+
+  REQUIRE(full_eq(migrate_type_back(s), migrate_type_back(s)));
+  REQUIRE(!full_eq(migrate_type_back(s), before));
+  REQUIRE(full_eq(before, migrate_type_back(make_struct_type())));
 }

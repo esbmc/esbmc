@@ -13,6 +13,7 @@
 #include <util/base/prefix.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
+#include <unordered_map>
 
 /// An ESBMC intrinsic invoked from an *expression* position, as a
 /// `sideeffect2t` of allockind::function_call carrying the call's result type.
@@ -2950,7 +2951,48 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   throw std::string("migrate expr failed: ") + id2string(expr.id());
 }
 
+/// Legacy forms of migrated aggregate types, keyed on node identity.
+///
+/// Identity keying is sound because the entry pins the `type2tc`, so the node
+/// cannot be freed and its address reused, and `irep_container` is
+/// copy-on-write: a node the cache references detaches on write rather than
+/// mutating in place. migrate_type_back() reads no globals, so the legacy form
+/// is a pure function of the node. The pinned `type2tc` is what keeps the key
+/// valid; the `typet` is the memoised result.
+using back_cachet =
+  std::unordered_map<const type2t *, std::pair<type2tc, typet>>;
+
+static thread_local back_cachet back_cache;
+static constexpr size_t back_cache_capacity = 4096;
+
+void migrate_type_back_cache_clear()
+{
+  back_cache.clear();
+}
+
+static typet migrate_type_back0(const type2tc &ref);
+
 typet migrate_type_back(const type2tc &ref)
+{
+  if (
+    !ref ||
+    (ref->type_id != type2t::struct_id && ref->type_id != type2t::union_id))
+    return migrate_type_back0(ref);
+
+  auto it = back_cache.find(ref.get());
+  if (it != back_cache.end())
+    return it->second.second;
+
+  typet result = migrate_type_back0(ref);
+  // goto_convert clears per function, but symex calls this too and has no such
+  // boundary. Evicting only loses sharing, never correctness (#53).
+  if (back_cache.size() >= back_cache_capacity)
+    back_cache.clear();
+  back_cache.emplace(ref.get(), std::make_pair(ref, result));
+  return result;
+}
+
+static typet migrate_type_back0(const type2tc &ref)
 {
   switch (ref->type_id)
   {
