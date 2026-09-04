@@ -227,21 +227,67 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
+/// A pure bitvector computation over immutable leaves is itself
+/// immutable — the cell-packing idiom `(s2)((x >> 16) & 0xFFFF)`.
+static bool is_immutable_computation(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+  if (is_immutable_value(*b))
+    return true;
+  // Constant leaves stay scalar: an aggregate literal must route
+  // through constant_propagation so array_may_propagate keeps its say.
+  if (is_constant_expr(*b))
+    return !is_constant_struct2t(*b) && !is_constant_union2t(*b) &&
+           !is_constant_array2t(*b) && !is_constant_array_of2t(*b) &&
+           !is_constant_vector2t(*b);
+  if (!is_bv_type((*b)->type))
+    return false;
+  switch ((*b)->expr_id)
+  {
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::shl_id:
+  case expr2t::lshr_id:
+  case expr2t::ashr_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  {
+    bool ok = true;
+    (*b)->foreach_operand([&ok](const expr2tc &e) {
+      if (ok && !is_immutable_computation(e))
+        ok = false;
+    });
+    return ok;
+  }
+  default:
+    return false;
+  }
+}
+
 /// Whether a constant aggregate literal may propagate: every element
 /// must itself propagate. A union literal may also carry a (typecast)
 /// symbol as its initializing member — constant_union's init_field
 /// keeps a later cross-member read visible as one.
+/// Whether a with-chain update value keeps the chain propagatable: an
+/// immutable (computed) value or anything constant_propagation accepts.
+static bool
+update_may_propagate(const goto_symex_statet &state, const expr2tc &uv)
+{
+  return is_immutable_computation(uv) || state.constant_propagation(uv);
+}
+
 static bool aggregate_literal_may_propagate(
   const goto_symex_statet &state,
   const expr2tc &expr)
 {
-  const bool is_union_literal = is_constant_union2t(expr);
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
     if (
-      noconst && !(is_union_literal && is_immutable_value(e)) &&
-      !state.constant_propagation(e))
+      noconst && !is_immutable_computation(e) && !state.constant_propagation(e))
       noconst = false;
   });
   return noconst;
@@ -358,7 +404,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
           (is_struct_type(uv->type) || is_array_type(uv->type) ||
            is_union_type(uv->type)) &&
           type_has_constant_size(uv->type) && struct_is_fixed_size;
-        if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
+        if (
+          !(scalar_update || aggregate_update) ||
+          !update_may_propagate(*this, uv))
         {
           all_constant_updates = false;
           break;
@@ -383,7 +431,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
-        if (!constant_propagation(w.update_value))
+        if (!update_may_propagate(*this, w.update_value))
         {
           all_constant_updates = false;
           break;
@@ -416,7 +464,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
         if (
           !is_constant_expr(w.update_value) &&
-          !is_immutable_value(w.update_value))
+          !is_immutable_computation(w.update_value))
         {
           all_constant_updates = false;
           break;
