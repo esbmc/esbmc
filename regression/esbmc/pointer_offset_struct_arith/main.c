@@ -32,7 +32,8 @@ int main(void)
 {
   const node *a = child(t, "alpha");
   const node *d = child(a, "delta");
-  const node *g = d - 1; /* negative-constant step, also the add arm */
+  const node *g = d - 1; /* sub2t spelling: exercises the unchanged
+                            sub-arm bail alongside the fixed add arm */
   __ESBMC_assert(
     d != 0 && d->val == 4 && g->val == 3,
     "struct-array pointer arithmetic folds");
