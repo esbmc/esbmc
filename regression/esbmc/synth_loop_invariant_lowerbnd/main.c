@@ -7,7 +7,7 @@
  * bound and the test burns the full 1200s ctest cap rather than reporting
  * anything. 11 iterations suffice for n <= 10. The test still fails in that
  * case, on the missing "Synthesised loop invariants" line, which names the
- * defect instead of timing out. Windows currently takes that path. */
+ * defect instead of timing out. */
 #include <stdint.h>
 #include <assert.h>
 int main(void) {

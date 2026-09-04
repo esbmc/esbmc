@@ -1,0 +1,6 @@
+CORE
+main.c
+--synthesise-loop-invariants --unwind 12
+^Synthesised loop invariants for 1 loop$
+FAILED.*assertion sn < \(uint64_t\)n \* a$
+^VERIFICATION FAILED$
