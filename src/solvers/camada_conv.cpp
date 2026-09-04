@@ -408,7 +408,12 @@ camada::SMTSolverRef create_esbmc_oneshot_solver(
 
 camada::SMTSolverRef create_esbmc_cvc5_solver(const optionst &options)
 {
+#if CAMADA_HAVE_CVC5
   return camada::createCVC5Solver(pick_solver_config(options));
+#else
+  (void)options;
+  unsupported("CVC5 support in Camada");
+#endif
 }
 
 camada::SMTSolverRef create_esbmc_bitwuzla_solver(const optionst &options)
@@ -770,7 +775,6 @@ expr2tc smt_solver_baset::get_array_elem(
 {
   auto idx = make_index_expr(array->Sort->getIndexSort(), index);
   auto elem = solver->getArrayElement(array, idx);
-  auto elem_sort = convert_sort(subtype);
   return get_by_ast(subtype, elem);
 }
 
@@ -960,7 +964,6 @@ smt_astt smt_solver_baset::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt smt_solver_baset::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
-  auto sort = mk_fpbv_rm_sort();
   return solver->mkRM(to_camada_rm(rm), fp_encoding());
 }
 
@@ -1010,7 +1013,6 @@ smt_astt smt_solver_baset::mk_smt_fpbv_abs(smt_astt op)
 
 smt_astt smt_solver_baset::mk_from_fp_to_bv(smt_astt op)
 {
-  auto to = mk_bvfp_sort(sort_fp_ew(op->Sort), sort_fp_sw(op->Sort));
   return solver->mkIEEEFPToBV(op);
 }
 
@@ -1281,16 +1283,6 @@ smt_astt smt_solver_baset::mk_quantifier(
     is_forall ? solver->mkForall(vars, rhs) : solver->mkExists(vars, rhs);
   return q;
 }
-
-std::unique_ptr<camada::SMTSolver> solver;
-/* Set when the SMT-LIB backend drives an external one-shot program. */
-const bool oneshot = false;
-/* Camada's SMT-LIB backend streams the script to its sink as it is built
- * rather than buffering it, so dump_smt() has nothing to hand back. */
-const bool streams_script = false;
-std::string oneshot_prog;
-std::string formula_path;
-bool solved = false;
 
 /* --fp2bv asks for floating-point encoded as bit-vectors, which is exactly
  * camada's FPEncoding::BV; let it bit-blast rather than swapping in ESBMC's
