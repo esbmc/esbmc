@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import ast
 import base64
+import math
 
 __all__ = [
     "add_type_annotation",
     "annotate_constant_node",
     "encode_bytes",
     "tag_bignum_constants",
+    "tag_nonfinite_floats",
 ]
+
+# json.dump writes a non-finite float as the bare token Infinity/-Infinity/NaN,
+# which is not valid JSON, so the C++ reader rejects the file the parser just
+# wrote. Move the value to a string tag and null the number (#7545).
+_NONFINITE_FLOAT_KEYS = ("value", "real_value", "imag_value")
 
 # Python ints are arbitrary precision; the JSON wire format used by the C++
 # frontend stores them as numbers, which nlohmann::json silently truncates to
@@ -44,6 +51,35 @@ def _tag_bignum_constants(node: object, in_usub_operand: bool = False) -> None:
     elif isinstance(node, list):
         for v in node:
             _tag_bignum_constants(v)
+
+
+def _spell_nonfinite(v: float) -> str:
+    if math.isnan(v):
+        return "nan"
+    return "inf" if v > 0 else "-inf"
+
+
+def _tag_nonfinite_floats(node: object) -> None:
+    if isinstance(node, dict):
+        # Gated on Constant like _tag_bignum_constants: only a literal carries a
+        # raw float under these keys, and a future producer reusing the names
+        # should not be rewritten silently.
+        keys = _NONFINITE_FLOAT_KEYS if node.get("_type") == "Constant" else ()
+        for key in keys:
+            v = node.get(key)
+            if isinstance(v, float) and not math.isfinite(v):
+                node[key] = None
+                node[f"{key}_nonfinite"] = _spell_nonfinite(v)
+        for v in node.values():
+            _tag_nonfinite_floats(v)
+    elif isinstance(node, list):
+        for v in node:
+            _tag_nonfinite_floats(v)
+
+
+def tag_nonfinite_floats(node: object) -> None:
+    """Public façade for non-finite float tagging in AST-JSON dictionaries."""
+    _tag_nonfinite_floats(node)
 
 
 def encode_bytes(value: bytes) -> str:

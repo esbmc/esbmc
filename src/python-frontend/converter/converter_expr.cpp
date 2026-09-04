@@ -254,6 +254,20 @@ exprt python_converter::make_char_array_expr(
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
+/// The double @p node carries for @p key. A non-finite literal has no JSON
+/// number form, so the parser nulls it and records the spelling under
+/// "<key>_nonfinite" (#7545).
+static double nonfinite_aware_double(
+  const nlohmann::json &node,
+  const std::string &key,
+  double fallback)
+{
+  const auto tag = node.find(key + "_nonfinite");
+  if (tag == node.end())
+    return node.value(key, fallback);
+  return nonfinite_float_from_spelling(tag->get<std::string>())->to_double();
+}
+
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   const auto &annotated_node =
@@ -266,8 +280,8 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     annotated_node.contains("esbmc_type_annotation") &&
     annotated_node["esbmc_type_annotation"] == "complex")
   {
-    double real = annotated_node.value("real_value", 0.0);
-    double imag = annotated_node.value("imag_value", 0.0);
+    double real = nonfinite_aware_double(annotated_node, "real_value", 0.0);
+    double imag = nonfinite_aware_double(annotated_node, "imag_value", 0.0);
 
     // UnaryOp(USub, Constant(complex)) must preserve the sign.
     if (
@@ -310,6 +324,13 @@ exprt python_converter::get_literal(const nlohmann::json &element)
       "fixed-width bitvector; arbitrary-precision int support is tracked in "
       "issue #4642.");
   }
+
+  // A non-finite float literal reaches here with a nulled value and a tag
+  // naming the spelling (#7545).
+  if (element.contains("value_nonfinite"))
+    return nonfinite_float_from_spelling(
+             element["value_nonfinite"].get<std::string>())
+      ->to_expr();
 
   // Handle None literals (null values)
   if (value.is_null())
