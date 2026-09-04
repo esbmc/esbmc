@@ -1404,7 +1404,7 @@ void add_content_edges(
 
   /* Candidate objects the buffer's elements may point at. */
   value_sett::object_mapt contents;
-  state.value_set.get_value_set_rec(obj, contents, "[]", obj->type);
+  state.value_set.get_value_set_rec_cached(obj, contents, "[]", obj->type);
 
   const std::string src = to_symbol2t(obj).get_symbol_name();
   for (auto c_it = contents.begin(); c_it != contents.end(); ++c_it)
@@ -1593,7 +1593,7 @@ void goto_symext::add_memory_leak_checks()
         local_frame.level1.get_ident_name(lptr);
 
         value_sett::object_mapt lpoints_to;
-        cur_state->value_set.get_value_set_rec(
+        cur_state->value_set.get_value_set_rec_cached(
           lptr, lpoints_to, "", lptr->type);
 
         /* The value set is flow-insensitive: lptr's entry still lists every
@@ -1801,7 +1801,7 @@ void goto_symext::add_memory_leak_checks()
       value_sett::object_mapt points_to;
       /* Collect its value-set into 'points_to'. Since that's a map, this
        * will only add targets that are not already in there. */
-      cur_state->value_set.get_value_set_rec(
+      cur_state->value_set.get_value_set_rec_cached(
         sym_expr2, points_to, e.suffix, sym_expr2->type);
 
       /* Now add the new found symbols to 'globals_point_to' and also record

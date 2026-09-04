@@ -10,15 +10,60 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
 
-/// A (possibly typecast) SSA symbol: it never changes meaning after
-/// its assignment, so a copy chain built from one is a stable renaming
-/// of the same value.
+/// A (possibly typecast) SSA symbol, or a pure bit operation over such
+/// leaves: neither changes meaning after its operands' assignments, so
+/// a copy chain built from one is a stable renaming of the same value.
+/// The computation form covers the operand-split idiom
+/// `m = (mn >> 4) & 0x0F` a caller and a callee both derive from one
+/// byte — without it their range checks never match and the callee's
+/// already-decided branches fork anyway. Computation nodes are
+/// restricted to bitvector types; symbol and constant leaves and the
+/// peeled typecasts stay accepted as in the bare-copy base. The
+/// restriction quarantines pointer-typed arithmetic in the chains —
+/// the leading suspect in the wrong FAILED verdicts the unrestricted
+/// form produced on the DebugOpt CI legs (cuda 003/024, python
+/// github_2937).
 static bool is_stable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
   while (is_typecast2t(*b))
     b = &to_typecast2t(*b).from;
-  return is_symbol2t(*b);
+  if (is_symbol2t(*b) || is_constant_expr(*b))
+    return true;
+  if (!is_bv_type((*b)->type))
+    return false;
+  switch ((*b)->expr_id)
+  {
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::shl_id:
+  case expr2t::lshr_id:
+  case expr2t::ashr_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  {
+    bool ok = true;
+    (*b)->foreach_operand([&ok](const expr2tc &e) {
+      if (ok && !is_stable_value(e))
+        ok = false;
+    });
+    return ok;
+  }
+  default:
+    return false;
+  }
+}
+
+/// Flattened node count of @p expr, giving up once past @p limit.
+static size_t count_nodes_up_to(const expr2tc &expr, size_t limit)
+{
+  size_t n = 1;
+  expr->foreach_operand([&n, limit](const expr2tc &e) {
+    if (n <= limit)
+      n += count_nodes_up_to(e, limit);
+  });
+  return n;
 }
 
 bool goto_symext::chase_copies(expr2tc &expr) const
@@ -56,19 +101,24 @@ void goto_symext::record_copy_definition(
     lhs_sym.rlevel != symbol_renaming_level::level2_global)
     return;
 
-  // Only a bare copy, possibly through typecasts. Anything else (an
-  // ite from a guarded assignment, arithmetic, a dereference chain) is
-  // not a stable renaming of one value and gets no entry. Bare
-  // constants are already inlined by constant propagation and need no
-  // chase.
+  // A stable value only: a (possibly typecast) symbol, or a pure
+  // bitvector computation over such leaves. Anything else (an ite
+  // from a guarded assignment, a dereference chain) is not a stable
+  // renaming of one value and gets no entry. Bare constants are
+  // already inlined by constant propagation and need no chase.
   if (!is_stable_value(rhs) || is_constant_expr(rhs))
     return;
   if (copy_definitions.size() >= subsumption_map_capacity)
     return;
 
-  // Canonicalize so chains resolve in one substitution pass.
+  // Canonicalize so chains resolve in one substitution pass; drop
+  // oversized canonical forms (see max_copy_definition_nodes).
   expr2tc value = rhs;
   chase_copies(value);
+  if (
+    count_nodes_up_to(value, max_copy_definition_nodes) >
+    max_copy_definition_nodes)
+    return;
   copy_definitions[irep_idt(to_symbol2t(renamed_lhs).get_symbol_name())] =
     value;
 }
@@ -173,6 +223,16 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     path_guard_decides(new_guard, new_guard_false, new_guard_true);
   new_guard_true |= path_decides == tvt::TV_TRUE;
   new_guard_false |= path_decides == tvt::TV_FALSE;
+
+  // Self-check mode: each subsumption decision claims its own
+  // soundness — a wrong TV_TRUE/TV_FALSE becomes a failed claim with a
+  // trace, even where the final verdict would not flip.
+  if (
+    path_decides != tvt::TV_UNKNOWN &&
+    options.get_bool_option("check-guard-subsumption"))
+    claim(
+      path_decides == tvt::TV_TRUE ? new_guard : not2tc(new_guard),
+      "path-guard subsumption decision holds");
 
   // new_guard_false: the branch is provably not taken (guard simplifies to
   // false, or the current path is already dead). new_guard_true: the guard

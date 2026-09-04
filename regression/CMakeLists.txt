@@ -105,6 +105,15 @@ if(ESBMC_SIZEOF_LONG EQUAL 8)
     list(APPEND ESBMC_TEST_CAPABILITIES lp64_host)
 endif()
 
+# The per-test budget is long enough for a test that takes minutes to solve.
+# ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
+# short leg allows has no way to ask for more; without this it is reported as
+# a hard timeout on every PR. The PR workflow sets 120 (build-unix.yml), the
+# default is 1200.
+if(ESBMC_REGRESS_TIMEOUT GREATER_EQUAL 600)
+    list(APPEND ESBMC_TEST_CAPABILITIES long_timeout)
+endif()
+
 string(REPLACE ";" "," ESBMC_TEST_CAPABILITIES_ARG "${ESBMC_TEST_CAPABILITIES}")
 message(STATUS "Regression capabilities: ${ESBMC_TEST_CAPABILITIES_ARG}")
 
