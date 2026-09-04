@@ -632,8 +632,8 @@ private:
     const std::map<irep_idt, param_extentt> &param_extents) const;
 
   /// \brief Materialize old snapshots at call site (replace-call mode)
-  /// Creates DECL and ASSIGN instructions for snapshot variables at call location
-  /// \param old_snapshots Vector of snapshots from function body
+  /// Creates DECL and ASSIGN instructions for snapshot variables at call
+  /// location \param old_snapshots Vector of snapshots from function body
   /// \param function_symbol Function symbol for parameter substitution
   /// \param function_body Callee's body, scanned for a matching
   ///        __ESBMC_is_fresh(ptr, N) clause when a snapshot is a pointer
@@ -641,7 +641,8 @@ private:
   /// \param actual_args Actual arguments at call site
   /// \param replacement GOTO program to add snapshot instructions to
   /// \param call_location Source location for generated instructions
-  /// \return Vector of call-site snapshots (with parameter substitution applied)
+  /// \return Vector of call-site snapshots (with parameter substitution
+  /// applied)
   std::vector<old_snapshot_t> materialize_old_snapshots_at_callsite(
     const std::vector<old_snapshot_t> &old_snapshots,
     const symbolt &function_symbol,

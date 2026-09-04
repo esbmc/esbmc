@@ -4266,12 +4266,10 @@ code_contractst::materialize_old_snapshots_at_callsite(
       // below is keyed on raw_ptr_param (the callee's OWN, pre-substitution
       // parameter name, always a symbol) rather than original_expr itself.
       expr2tc extent_size;
-      bool found = params && find_callsite_is_fresh_extent(
-                               function_body,
-                               raw_ptr_param,
-                               *params,
-                               actual_args,
-                               extent_size);
+      bool found =
+        params &&
+        find_callsite_is_fresh_extent(
+          function_body, raw_ptr_param, *params, actual_args, extent_size);
       if (!found)
       {
         log_error(
@@ -4308,8 +4306,7 @@ code_contractst::materialize_old_snapshots_at_callsite(
       decl_inst->code =
         code_decl2tc(original_expr->type, to_symbol2t(snapshot_var).thename);
       decl_inst->location = call_location;
-      decl_inst->location.comment(
-        "__ESBMC_old call-site snapshot declaration");
+      decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
 
       // Generate snapshot assignment: snapshot_var = original_expr
       goto_programt::targett assign_inst = replacement.add_instruction(ASSIGN);
