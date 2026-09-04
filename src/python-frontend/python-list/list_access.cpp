@@ -288,7 +288,7 @@ exprt python_list::build_bool_mask_index(
   while_stmt.location() = location;
   converter_.add_instruction(while_stmt);
 
-  add_type_info_entry(result_list_id, "", elem_type);
+  elem_types().record(result_list_id, "", elem_type);
 
   return build_symbol(result_list);
 }
@@ -2274,7 +2274,7 @@ void python_list::copy_dict_view_elem_types(
   const exprt &array,
   const std::string &sliced_id)
 {
-  if (!list_type_map[sliced_id].empty() || array.id() != exprt::member)
+  if (elem_types().size(sliced_id) != 0 || array.id() != exprt::member)
     return;
 
   const exprt &dict_sym = array.op0();
@@ -2286,16 +2286,16 @@ void python_list::copy_dict_view_elem_types(
   const std::string &src = python_dict_handler::get_internal_list_id(
     dict_sym.identifier().as_string(), component == "keys");
   if (!src.empty())
-    copy_type_info(src, sliced_id);
+    elem_types().assign_from(src, sliced_id);
 
-  // Tuple values are recorded under $dict_value_types$ rather than the
-  // values-list id, so the copy above is a no-op for them.
-  if (component == "values" && list_type_map[sliced_id].empty())
+  // Tuple values live in the dict_value_types slot rather than the
+  // values-list's elements slot, so the copy above is a no-op for them.
+  if (component == "values" && elem_types().size(sliced_id) == 0)
   {
     const typet tuple_t =
       converter_.get_dict_handler()->recorded_tuple_value_type(dict_sym);
     if (!tuple_t.is_nil() && !tuple_t.is_empty())
-      add_type_info_entry(sliced_id, std::string(), tuple_t);
+      elem_types().record(sliced_id, std::string(), tuple_t);
   }
 }
 
@@ -2829,10 +2829,19 @@ exprt python_list::handle_range_slice(
     std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
       converter_.get_type_handler().get_list_type())),
     config.ansi_c.address_width));
+  // The source list's element width, when every element shares one. Without it
+  // the per-element copy length is the symbolic o->size and each copy unwinds
+  // memcpy's byte loop to --unwind, which is what made slicing the most
+  // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
+  BigInt slice_elem_size = uniform_scalar_elem_size(array);
+
   exprt push_call = build_call_expr(
     *push_func,
     bool_type(),
-    {build_symbol(sliced_list), build_symbol(at_result), slice_list_type_id});
+    {build_symbol(sliced_list),
+     build_symbol(at_result),
+     slice_list_type_id,
+     from_integer(slice_elem_size, size_type())});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -2925,24 +2934,24 @@ exprt python_list::handle_range_slice(
           element = build_symbol(tmp);
         }
 
-        list_type_map[sliced_list.id.as_string()].push_back(
-          std::make_pair(element.identifier().as_string(), element.type()));
+        elem_types().record(
+          sliced_list.id.as_string(),
+          element.identifier().as_string(),
+          element.type());
       }
     }
   }
 
   // This handles cases where one or both bounds are null or negative (e.g.
   // numbers[:-1]), or where the source is a function parameter rather than a
-  // locally constructed list, so list_type_map has no entries for it.
+  // locally constructed list, so the registry has no entries for it.
   const std::string &sliced_id = sliced_list.id.as_string();
 
   copy_dict_view_elem_types(array, sliced_id);
 
-  if (list_type_map[sliced_id].empty())
+  if (elem_types().size(sliced_id) == 0)
   {
-    if (
-      list_type_map[sliced_id].empty() && list_value_.contains("value") &&
-      list_value_["value"].contains("id"))
+    if (list_value_.contains("value") && list_value_["value"].contains("id"))
     {
       const std::string &param_name =
         list_value_["value"]["id"].get<std::string>();
@@ -2959,10 +2968,7 @@ exprt python_list::handle_range_slice(
           param_node, converter_.get_type_handler());
 
         if (elem_type != typet())
-        {
-          list_type_map[sliced_id].push_back(
-            std::make_pair(std::string(), elem_type));
-        }
+          elem_types().record(sliced_id, std::string(), elem_type);
       }
     }
   }
@@ -3205,7 +3211,8 @@ void python_list::handle_slice_assignment(
   {
     // RHS is a list variable (includes self-assignment l[...] = l): size from
     // its declared element type.
-    const typet et = get_list_element_type(value_node["id"].get<std::string>());
+    const typet et =
+      elem_types().element_type(value_node["id"].get<std::string>());
     if (!et.is_nil())
       elem_size_bytes = scalar_width(et);
   }
@@ -3250,7 +3257,7 @@ typet python_list::bare_list_param_elem_type(
     (ann_id != "list" && ann_id != "List"))
     return annotated;
 
-  const typet inferred = get_list_element_type(param_id, 0);
+  const typet inferred = elem_types().element_type(param_id, 0);
   return inferred.is_empty() ? annotated : inferred;
 }
 
@@ -3264,74 +3271,67 @@ std::optional<exprt> python_list::resolve_nested_list_element(
   if (array.type() == converter_.get_type_handler().get_list_type())
   {
     const auto &key = array.identifier().as_string();
-    auto type_map_it = list_type_map.find(key);
-    if (type_map_it != list_type_map.end())
+    if (const auto *recorded = elem_types().find(key))
     {
-      if (!type_map_it->second.empty())
+      // Homogeneous lists (e.g. list comprehensions) record a single
+      // element-type entry; ESBMC models lists as homogeneous, so reuse
+      // that entry for any in-structure index.  Without this, a constant
+      // outer index >= 1 into a comprehension-built nested list skips the
+      // nested-element handling below, the inner element type (float) is
+      // lost, and the value reaches the SMT FP encoder as a non-FP sort
+      // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
+      // lists record one entry per element, so for an in-bounds index
+      // eff_index == index and behaviour is unchanged.  The runtime value
+      // is still read at pos_expr below, so only the static type is taken
+      // from the homogeneous entry.
+      const size_t eff_index =
+        index < recorded->size() ? index : recorded->size() - 1;
+      const std::string &elem_id = recorded->at(eff_index).first;
+      elem_type = recorded->at(eff_index).second;
+
+      if (elem_type == converter_.get_type_handler().get_list_type())
       {
-        // Homogeneous lists (e.g. list comprehensions) record a single
-        // element-type entry; ESBMC models lists as homogeneous, so reuse
-        // that entry for any in-structure index.  Without this, a constant
-        // outer index >= 1 into a comprehension-built nested list skips the
-        // nested-element handling below, the inner element type (float) is
-        // lost, and the value reaches the SMT FP encoder as a non-FP sort
-        // (get_exponent_width abort / Z3 "rm and fp sorts", #5129).  Literal
-        // lists record one entry per element, so for an in-bounds index
-        // eff_index == index and behaviour is unchanged.  The runtime value
-        // is still read at pos_expr below, so only the static type is taken
-        // from the homogeneous entry.
-        const size_t eff_index = index < type_map_it->second.size()
-                                   ? index
-                                   : type_map_it->second.size() - 1;
-        const std::string &elem_id = type_map_it->second.at(eff_index).first;
-        elem_type = type_map_it->second.at(eff_index).second;
-
-        if (elem_type == converter_.get_type_handler().get_list_type())
+        // Nested-list element.  The recorded elem_id names the inner-list
+        // symbol, but assign_from copies that id verbatim across a
+        // function-return boundary (Q = build()), where it is a *callee*
+        // frame local — returning build_symbol(elem_id) would reference a
+        // symbol that is never assigned in the caller's symex frame, so its
+        // value is nondet (float_buf OOB / wrong value, #5103/#5102).
+        //
+        // Instead, read the inner list pointer at runtime from `array`
+        // (valid in every scope: list_at returns the stored pointer, so
+        // aliasing/mutation semantics are preserved), bind it to a fresh
+        // caller-scope symbol, and copy the inner element-type map onto
+        // that symbol so deeper subscripts (Q[i][j]) still resolve
+        // int/float.  For parameter-annotation-only entries (elem_id
+        // empty) fall through to the dynamic __ESBMC_list_at path below.
+        if (!elem_id.empty())
         {
-          // Nested-list element.  The recorded elem_id names the inner-list
-          // symbol, but copy_type_info copies that id verbatim across a
-          // function-return boundary (Q = build()), where it is a *callee*
-          // frame local — returning build_symbol(elem_id) would reference a
-          // symbol that is never assigned in the caller's symex frame, so its
-          // value is nondet (float_buf OOB / wrong value, #5103/#5102).
-          //
-          // Instead, read the inner list pointer at runtime from `array`
-          // (valid in every scope: list_at returns the stored pointer, so
-          // aliasing/mutation semantics are preserved), bind it to a fresh
-          // caller-scope symbol, and copy the inner element-type map onto
-          // that symbol so deeper subscripts (Q[i][j]) still resolve
-          // int/float.  For parameter-annotation-only entries (elem_id
-          // empty) fall through to the dynamic __ESBMC_list_at path below.
-          if (!elem_id.empty())
-          {
-            exprt list_at_call =
-              build_list_at_call(array, pos_expr, list_value_);
-            exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
+          exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
+          exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
 
-            // As a store target the subscript must stay an lvalue into the
-            // slot: binding it to the temporary below sends `xs[0] = xs[1]`
-            // into a dead local and leaves xs untouched, so len(xs[0]) keeps
-            // answering the overwritten element's length (#7360). Reads
-            // nested inside a target still take the temp path.
-            if (converter_.is_store_target(list_value_))
-              return inner_ptr;
+          // As a store target the subscript must stay an lvalue into the
+          // slot: binding it to the temporary below sends `xs[0] = xs[1]`
+          // into a dead local and leaves xs untouched, so len(xs[0]) keeps
+          // answering the overwritten element's length (#7360). Reads
+          // nested inside a target still take the temp path.
+          if (converter_.is_store_target(list_value_))
+            return inner_ptr;
 
-            const locationt loc =
-              converter_.get_location_from_decl(list_value_);
+          const locationt loc = converter_.get_location_from_decl(list_value_);
 
-            symbolt &inner_sym = converter_.create_tmp_symbol(
-              list_value_, "$nested_list$", elem_type, exprt());
-            code_declt inner_decl(build_symbol(inner_sym));
-            inner_decl.location() = loc;
-            converter_.add_instruction(inner_decl);
+          symbolt &inner_sym = converter_.create_tmp_symbol(
+            list_value_, "$nested_list$", elem_type, exprt());
+          code_declt inner_decl(build_symbol(inner_sym));
+          inner_decl.location() = loc;
+          converter_.add_instruction(inner_decl);
 
-            code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
-            inner_assign.location() = loc;
-            converter_.add_instruction(inner_assign);
+          code_assignt inner_assign(build_symbol(inner_sym), inner_ptr);
+          inner_assign.location() = loc;
+          converter_.add_instruction(inner_assign);
 
-            copy_type_info(elem_id, inner_sym.id.as_string());
-            return build_symbol(inner_sym);
-          }
+          elem_types().assign_from(elem_id, inner_sym.id.as_string());
+          return build_symbol(inner_sym);
         }
       }
     }
@@ -3459,7 +3459,8 @@ exprt python_list::handle_index_access(
     {
       const std::string &list_name = array.identifier().as_string();
 
-      if (list_type_map[list_name].empty())
+      const auto *recorded = elem_types().find(list_name);
+      if (!recorded)
       {
         /* Fall back to annotation for function parameters */
         if (
@@ -3486,37 +3487,16 @@ exprt python_list::handle_index_access(
             ? 0
             : index;
 
-        try
+        if (type_index < recorded->size())
+          elem_type = (*recorded)[type_index].second;
+        else
         {
-          elem_type = list_type_map[list_name].at(type_index).second;
-        }
-        catch (const std::out_of_range &)
-        {
-          // Do not emit a frontend conversion error for constant OOB indices.
+          // Do not emit a frontend conversion error for a constant OOB index.
           // The runtime list access model can raise IndexError, which is
-          // observable by Python try/except code.
+          // observable by Python try/except code. Use the known element type
+          // for homogeneous dynamic lists.
+          elem_type = elem_types().last_element_type(list_name);
 
-          // Use the known element type for homogeneous dynamic lists.
-          if (!list_type_map[list_name].empty())
-          {
-            elem_type = list_type_map[list_name].back().second;
-          }
-          else if (
-            list_value_.contains("value") &&
-            list_value_["value"].contains("id") &&
-            list_value_["value"]["id"].is_string())
-          {
-            // Try annotation fallback for dynamic lists or function parameters
-            const nlohmann::json list_value_node = json_utils::get_var_value(
-              list_value_["value"]["id"],
-              converter_.current_function_name(),
-              converter_.ast());
-
-            elem_type = get_elem_type_from_annotation(
-              list_value_node, converter_.get_type_handler());
-          }
-
-          // Only throw if annotation also fails
           if (elem_type == typet())
           {
             const locationt l = converter_.get_location_from_decl(list_value_);
@@ -3571,8 +3551,8 @@ exprt python_list::handle_index_access(
         if (elem_type != typet() && array.is_symbol())
         {
           const std::string &list_name = array.identifier().as_string();
-          if (list_type_map[list_name].empty())
-            list_type_map[list_name].push_back(std::make_pair("", elem_type));
+          if (elem_types().size(list_name) == 0)
+            elem_types().record(list_name, "", elem_type);
         }
       }
 
@@ -3692,13 +3672,12 @@ exprt python_list::handle_index_access(
     // For variable indices, prefer compile-time list element type information
     // when available.  Also fire when elem_type is empty_typet(): that is the
     // sentinel returned by get_typet("tuple"), meaning "don't use the
-    // annotation as-is; resolve the concrete struct type via list_type_map."
+    // annotation as-is; resolve the concrete struct type via the registry."
     if ((elem_type == typet() || elem_type.is_empty()) && array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
-      auto type_map_it = list_type_map.find(list_name);
-      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
-        elem_type = type_map_it->second.back().second;
+      if (elem_types().find(list_name))
+        elem_type = elem_types().last_element_type(list_name);
     }
 
     // Nested subscript chains like W[i][j] where the base is a Name with a
@@ -3882,8 +3861,7 @@ exprt python_list::handle_index_access(
     if (array.is_symbol())
     {
       const std::string &list_name = array.identifier().as_string();
-      auto it = list_type_map.find(list_name);
-      if (it != list_type_map.end() && !it->second.empty())
+      if (const auto *recorded = elem_types().find(list_name))
       {
         bool has_const_index = false;
         bool negative_index = false;
@@ -3920,7 +3898,7 @@ exprt python_list::handle_index_access(
         {
           // If sizes diverge, the symbol was likely reassigned/mutated.
           is_stable_list_literal =
-            it->second.size() == list_node["value"]["elts"].size();
+            recorded->size() == list_node["value"]["elts"].size();
         }
 
         // A list that escaped into a function/method call may have been grown
@@ -3931,7 +3909,7 @@ exprt python_list::handle_index_access(
           has_const_index && !is_slice_derived_var && is_stable_list_literal &&
           !converter_.is_list_call_escaped(list_name))
         {
-          const size_t known_size = it->second.size();
+          const size_t known_size = recorded->size();
           const bool oob = negative_index ? (index_abs > known_size)
                                           : (index_abs >= known_size);
           if (oob)
@@ -3963,7 +3941,7 @@ exprt python_list::handle_index_access(
        slice_node["operand"]["_type"] == "Constant");
     const bool mixed_numeric =
       !constant_index && array.is_symbol() &&
-      has_mixed_numeric_types(array.identifier().as_string());
+      elem_types().has_mixed_numeric(array.identifier().as_string());
     if (mixed_numeric)
       elem_type = double_type();
 

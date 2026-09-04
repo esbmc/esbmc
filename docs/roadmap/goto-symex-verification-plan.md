@@ -729,6 +729,7 @@ this document** — each is a prioritised target for the cited harness.
 | **R46** | **Medium (no verdict, default configuration)** — R45's named residual, closed the next hour, §15 M9 (R46); **FIXED**, same entry | **A loop bounded by `offsetof` never exits.** `offsetof` lowers to `(char *)(struct S *)NULL + k`, and `pointer_offset2t`'s NULL arm folded to zero only when the pointee was *not* a symbol type — which is every struct and union, so the only shape `offsetof` produces was the only shape the fold refused. The guard arrived with the arm in #2803 with no rationale recorded, and NULL is object 0 at offset 0 whatever it points to | `pointer_offset2t::do_simplify`, `src/util/expr/expr_simplifier.cpp`; 8-shape `offsetof` census | `regression/esbmc/offsetof_loop_bound{,_nested,_fail}` | **Fixed**: drop the pointee restriction. Removing a live guard is not a C-Dead obligation — the census names the five shapes that change and the suite sweep shows nothing else does |
 | **R44** | **Medium–High (no verdict, default configuration)** — found by R43's own open census row, §15 M9 (R44); **FIXED**, same entry | **A flat walk across a 2-D array never terminates.** `address_of2t::do_simplify` rebases only the innermost subscript, so `&a[1][2]` becomes `&(a[1])[0] + 2` while a pointer started at `&a[0][0]` carries `&(a[0])[0] + k`; the two bases differ and the guard is never decided. Two addresses in the same row already met, which is what made the shape read as a rank problem. R43's `<` row (c08) was also unmeasured: the ordered relations never had the normalisation at all | `normalize_addressof_index` and `simplify_relations`, `src/util/expr/expr_simplifier.cpp`; R43's own c06 census row | `regression/esbmc/nested_index_bound{,_lt,_fail}`, `nested_member_index_bound{,_fail}` | **Fixed**: rebase both operands on a chain with every subscript zeroed, counting the offset in the pointer's own pointee type so member steps join the same rewrite; reach it through pointer arithmetic so both sides move together; and give the ordered relations the normalisation `equality2t`/`notequal2t` already had. Residual: a walk whose two ends reach *different* members does not share a base |
 | **R47** | **Medium (no verdict, default configuration)** — found by a guard-*shape* census rather than a bound one, §15 M9 (R47); **FIXED**, same entry | **Every descending pointer walk hangs; every ascending twin folds.** The guard is `add(&a[4], k) != &a[0]`: the add's base keeps its own subscript, so it never meets the bare bound beside it. A decrement also never reaches the `base + offset` shape an increment has. Four other mechanisms were measured and refuted first, including a real missing `sub2t` arm in `constant_propagation` that changes no verdict | 18-shape guard census; `sub2t::do_simplify`, `src/util/expr/expr_simplifier.cpp` | `regression/esbmc/descending_pointer_walk{,_fail}` | **Fixed**, in two steps: `p - c -> p + (-c)` for a signed constant gives a decrementing walk the shape an incrementing one has, and giving `flatten_addressof_under_add` the single-subscript fallback the top level already had rebases the `&a[4]` inside `&a[4] + k`. 18/18 of the census folds |
+| **R48** | **Medium–High (no verdict, default configuration)** — found by a bound-*storage* census extending R42–R47, §15 M9 (R48); **FIXED**, same entry | **A nested member write into a struct with no propagated value drops the whole struct.** `struct S{struct I in;}; struct S x; x.in.n = 4;` then `for (i = 0; i < x.in.n; i++)` never terminates under default flags, while the flat `x.n = 4` spelling of the same program proves `SUCCESSFUL` in 0.4 s. `constant_propagation`'s struct arm walks the `with` chain and then requires its base not to be a `member2t`, and a nested member write spells that base as exactly that — `x#1.in`, the old value of the field being updated — so the inner update is refused, the outer one becomes non-constant, and the bound stays symbolic. The equation is right: a bare `assert(x.in.n == 4)` on the same program proves. Only `symex_goto`'s syntactic exit decision (R30) cannot see the value. | the 20-shape storage census and its 6 controls, §15 M9 (R48); `goto_symex_state.cpp:322`; `regression/esbmc/nested_member_loop_bound{,_fail}` | **H-C2** | Fixed by removing the clause. The base is already renamed, so the propagated value is as self-contained as the flat `with(x#1, n, 4)` the same arm already keeps, and the array arm added by the same commit (#2845) never carried the restriction. Eight nested shapes hang on the base build and decide on the patched one. |
 | **R41** | **Medium (spurious counterexample, `--ir-ieee`)** — found by re-measuring §15 M9 (side finding 2), whose enclosure diagnosis it refutes; **FIXED**, §15 M9 (R41) | a float symbol's real value is unconstrained between max_normal and the infinity sentinel, so `|x| > max_normal` and `x == INFINITY` disagree about the same value and `IEEE_MUL`'s invalid-operation arm gives `0*f` a NaN predicate | `smt_solver.cpp` `convert_terminal`, `ir_ieee_conv.cpp` `is_inf_real` | `regression/floats/ir_ieee_symbol_magnitude` | Assert `|x| <= max_normal \| |x| == sentinel` alongside the existing subnormal-gap axiom. |
 | **R42** | **Medium–High (no verdict, default configuration)** — found by a trip-count shape census extending R30, §15 M9 (R42); **FIXED**, same entry | **A loop bounded by a constant element of a multi-dimensional array never terminates.** Constant propagation excluded every multi-dimensional array since 2017, so `t[0][0]` stays symbolic, `is_false(new_guard)` never fires and the loop unwinds forever. 1-D folds; 2-D and 3-D do not, whether initialised, `const`, `static`, assigned, or reached through a flat or row pointer | `goto_symex_statet::constant_propagation`, `goto_symex_state.cpp`; census of 20 trip-count shapes, 8 of 15 array shapes hung | R30's census method | Bound the exclusion by element count rather than dropping it: the gate had an unrecorded reason and removing it outright costs 11x on a 64x64 array. |
 | **R37** | **Low (spurious counterexample and missed bug, but unreachable below an 8 EiB allocation)** — found by code review of R36's fix, §15 M9 (R36); **FIXED**, §15 M9 (R37) | **An offset at or above `2^63` reads negative in the pointer comparator.** `char *p = malloc(n); char *q = p + n; assert(q >= p);` — defined by C11 6.5.8p5 — reports `FAILED` with `n = 0x8000000000000000`. The signed reading R36 installs is a *convention*: `pointer_struct`'s offset member is `ptraddr_type2()`, full unsigned width, and `memory_alloc.cpp` caps allocations just under `2^64`, so the huge object is representable and reachable. Both error directions exist — a guarded branch on such a pointer is pruned instead. This is the residual R36 knowingly accepts, the two readings being mutually exclusive | `src/solvers/smt/smt_memspace.cpp` `convert_ptr_cmp`; `pointer_struct` in `smt_solver.cpp`; the allocation cap in `memory_alloc.cpp` | `regression/esbmc/ptr_rel_huge_object` (CORE), `regression/esbmc/alloc_ptrdiff_max`, `alloc_above_ptrdiff_max`, `alloc_ptrdiff_max_fail` | **Fixed for `malloc`**, §15 M9 (R37): the cap is `PTRDIFF_MAX`, which puts every *defined* offset of a `malloc`ed object below `2^63` and so makes the signed reading exact there. `alloca` and `realloc` are **not** capped and still reproduce the row's witness verbatim — registered as **R38**. Note the standard argument runs the other way from what this row first claimed — see the entry |
@@ -7455,6 +7456,134 @@ With R40 closed, every path that can size an object — `malloc`, `alloca`,
 `realloc` and a VLA declaration — is bounded at `PTRDIFF_MAX`, and the R34–R38
 family has no remaining spelling except R38's `--force-*-success` residual, which
 is open by decision rather than by omission.
+---
+
+
+### M9 (R48) — 2026-09-01, the write that had nowhere constant to land
+
+R43, R44 and R47 asked how a loop bound is *spelled*; R42, R45 and R46 asked how
+its trip count is *computed*. This census asks where the bound's value is
+*stored*: twenty programs, one loop each, `for (i = 0; i < B; i++)` over a bound
+of 4, with `B` reached through a `const` local, a file-scope `static const`, a
+global, an enum constant, a plain member, a bitfield member, a `char` member, a
+union member, an array element, a 2-D array element, a member of an array
+element, a member through a pointer, a dereference, a function return,
+`sizeof(a)/sizeof(a[0])`, a copy of a struct, a copy of a scalar, and a
+`memcpy`-shaped element copy. No flags, 15 s cap.
+
+**Nineteen decide. The one that does not is a member of a member.**
+`struct S { struct I in; }; struct S x; x.in.n = 4;` then looping to `x.in.n`
+never terminates, while the same program with one less level of nesting
+(`x.n = 4`, `i < x.n`) proves `SUCCESSFUL` in 0.4 s.
+
+**Four controls separate nesting from initialisation**, because the flat row
+that works is also the row that was written with an initialiser:
+
+| Control | Shape | Base |
+|---|---|---|
+| c1 | flat member, assigned into an uninitialised struct | `SUCCESSFUL` |
+| c2 | nested member, written by an initialiser `{{4}}` | `SUCCESSFUL` |
+| c3 | nested, the whole inner struct assigned | `SUCCESSFUL` |
+| c4 | nested, zero-initialised first, then the member assigned | `SUCCESSFUL` |
+| c6 | nested, uninitialised, read by a bare `assert(x.in.n == 4)` | `SUCCESSFUL` |
+| c5 | nested, uninitialised, read as a **loop bound** | **hangs** |
+
+So it is neither the nesting nor the assignment on its own: it is a nested
+member write into a struct that has **no propagated value yet**, read back
+somewhere that needs the value at symex time rather than at solve time. c6 is
+the row that says the equation is right — the solver proves the member is 4.
+Only the exit decision, which `symex_goto` takes syntactically on the folded
+guard (R30), cannot see it.
+
+**Where the value is dropped.** The VCC dump names the shape exactly:
+
+```
+{-2} x#2 == (x#1 WITH [in := x#1.in WITH [n := 4]])
+{-3} m#1  == x#2.in.n
+```
+
+`m` is a symbol rather than `4`, so `i < m` never folds and the loop unwinds
+forever. `constant_propagation`'s struct arm walks the `with` chain checking
+every update is itself propagatable, and then requires the chain's base to not
+be a `member2t` (`goto_symex_state.cpp:322`). A nested member write spells its
+base as exactly that — `x#1.in`, the old value of the field being updated —
+so the inner `with` is refused, which makes the outer update non-constant,
+which drops the whole struct. Nothing about the expression is unsafe to keep:
+`x#1` is already renamed, so the value is self-contained in the same way
+`with(x#1, n, 4)` — which the flat case propagates, and which c1 relies on —
+already is.
+
+The condition is not an old guard that predates the chain walk. #2845 *relaxed*
+`is_symbol2t(current)` to `!is_member2t(current)` when it introduced the walk;
+the member exclusion is the one shape the relaxation kept out, and it is the
+shape a nested write always produces. The array arm added by the same commit
+carries no such restriction, which is why `a[1] = 4` under an uninitialised
+array folds and `x.in.n = 4` does not.
+
+**The fix is the removal of that clause**, and the extended census is the
+control for it — eight nested-member shapes, every one of which hangs on the
+base build and decides on the patched one:
+
+| # | shape | base | patched |
+|---|---|---|---|
+| d01 | three levels, `x.b.a.n` | **hangs** | `SUCCESSFUL` |
+| d02 | member of an array element, `a[1].in.n` | **hangs** | `SUCCESSFUL` |
+| d03 | nested member through a pointer, `p->in.n` | **hangs** | `SUCCESSFUL` |
+| d04 | nested bound plus two sibling members asserted | **hangs** | `SUCCESSFUL` |
+| d05 | the member written twice, 4 then 6 | **hangs** | `SUCCESSFUL` |
+| d06 | an array inside the inner struct, `x.in.a[1]` | **hangs** | `SUCCESSFUL` |
+| d07 | anti-vacuity twin: the same loop asserted as 5 | **hangs** | `FAILED` |
+| d08 | an unrelated nondet symbol in scope | **hangs** | `SUCCESSFUL` |
+
+d04 and d05 are the rows that matter beyond termination, and both ship. d04
+asserts the two members the loop does not read, so a fold that over-wrote the
+struct rather than one field would fail it; d05 asserts the *second* write, so a
+fold that took the first `with` in the chain would fail it — that is the
+ordering property the composition pair does not reach, since it writes three
+*different* members. d07 is the twin that shows the folded trip count is the
+right one and not merely a number.
+
+**Measured.**
+
+| Artefact | Invocation | Verdict | Mutation it kills |
+|---|---|---|---|
+| `regression/esbmc/nested_member_loop_bound` | default | `CORE`, `SUCCESSFUL`, pinned on `Generated 2 VCC(s), 0 remaining after simplification` — the bound folds, so both claims discharge without the solver | the clause restored: the base build does not terminate on this file |
+| `regression/esbmc/nested_member_loop_bound_fail` | default | `CORE`, `FAILED`, naming its own assertion text | a fold that invented a trip count rather than reading one |
+| `regression/esbmc/nested_member_loop_bound_overwrite` | default | `CORE`, `SUCCESSFUL` on `s == 6` — the member is written 4 then 6, so the fold takes the chain's *last* update | a fold that read the first `with` in the chain |
+| `regression/esbmc/nested_member_loop_bound_overwrite_fail` | default | `CORE`, `FAILED` on `s == 4`, the same program asserted against the first write | the pair passing vacuously in both directions |
+| the 20-shape storage census + 6 controls | per-file, 15 s cap | 19/20 on the base build, 20/20 patched | — |
+| the 8-shape nested census | per-file, 20 s cap | 0/8 on the base build, 8/8 patched | — |
+| `-L esbmc/` | `ctest -j6`, 120 s cap | **2019/2019, 0 failures**, 413 s | — |
+| unit tests | `ctest -LE regression -j6` | 771/771 | — |
+| `-L esbmc-cpp/cpp` | `ctest -j6`, 120 s cap | 955/957; both residues controlled below | — |
+
+**The two C++ residues are the harness cap, not the patch.** `ch13_10` passes
+when re-run outside an 8-way load, so it is the familiar slow-test flake.
+`ch9_7` is the interesting one: it takes **118.4 s** on the patched build and
+**118.5 s** on a control binary of the same tree without the patch, against
+`testing_tool.py`'s own 120 s ceiling — which `ctest --timeout` cannot raise, so
+the test sits half a second from failing on this machine whatever is committed.
+Its own `test.desc` asks for `--timeout 900`, which is the clearest statement
+that 120 s was never its budget.
+
+**A union in the nested path is the other residual, and the census does not
+reach it.** All twenty storage shapes carry a struct or an array between the
+symbol and the bound, never a union, so 20/20 is a claim about that census and
+not about nesting in general: `union U { struct P a; int b; }` read as
+`x.u.a.p` still hangs under default flags, and decides under `--unwind 8`. The
+union arm gates its updates on `is_constant_expr` where the struct arm gates on
+`constant_propagation`, so a struct-typed update into a union declines and takes
+the enclosing struct down with it — the same asymmetry this entry just closed
+between the struct and array arms, one level further in. Left open here rather
+than fixed blind.
+
+The probe the fix does *not* move is worth naming. The same nesting with a
+**nondet** member — `x.in.n = nondet_int()` under `assume(0 <= x.in.n <= 4)` —
+hangs on both builds, because there is no constant to propagate in the first
+place. That is R28's stated residual: a genuinely symbolic bound is
+`--smt-symex-guard`'s question, not constant propagation's, and this entry does
+not narrow it.
+
 ---
 
 ## Appendix A — Methodological basis

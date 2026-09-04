@@ -1177,7 +1177,7 @@ void python_converter::refine_any_param_to_list(
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
     param_sym->set_type(param_arg.type());
   if (elem_type != typet())
-    python_list::add_type_info_entry(param_id, "", elem_type);
+    element_type_registry_.record(param_id, "", elem_type);
 }
 
 /// Whether an unannotated parameter should be refined to the list model.
@@ -1223,7 +1223,7 @@ void python_converter::seed_list_param_element_type(
       return;
     const typet elem_type = type_handler_.get_list_type(element).subtype();
     if (!elem_type.is_empty())
-      python_list::add_type_info_entry(arg_id, "", elem_type);
+      element_type_registry_.record(arg_id, "", elem_type);
     return;
   }
 
@@ -1236,7 +1236,7 @@ void python_converter::seed_list_param_element_type(
   typet elem_type;
   if (infer_list_elem_type_from_call_sites(
         id.get_function(), param_index, elem_type))
-    python_list::add_type_info_entry(arg_id, "", elem_type);
+    element_type_registry_.record(arg_id, "", elem_type);
 }
 
 bool python_converter::infer_list_elem_type_from_call_sites(

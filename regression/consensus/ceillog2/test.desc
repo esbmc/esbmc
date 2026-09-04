@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 42 --function ceillog2 --no-standard-checks
+^VERIFICATION FAILED$

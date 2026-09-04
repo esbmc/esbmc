@@ -314,6 +314,16 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
   // pre_register_addresses for scope).
   pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
 
+  // Show the solver every division's operand pair up front: the
+  // modulus conversion lowers a remainder compositionally only when
+  // the same operands are divided somewhere in the formula.
+  for (const auto &SSA_step : SSA_steps)
+  {
+    smt_conv.note_division_operands(SSA_step.guard);
+    smt_conv.note_division_operands(SSA_step.rhs);
+    smt_conv.note_division_operands(SSA_step.cond);
+  }
+
   equation_conversion_statet state;
   state.assumpt_expr = gen_true_expr();
 

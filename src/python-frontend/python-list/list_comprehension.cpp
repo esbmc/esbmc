@@ -64,8 +64,7 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   else if (iterable_expr.type() == list_type && iterable_expr.is_symbol())
   {
     const std::string &list_id = iterable_expr.identifier().as_string();
-    auto type_map_it = list_type_map.find(list_id);
-    if (type_map_it == list_type_map.end() || type_map_it->second.empty())
+    if (elem_types().size(list_id) == 0)
       return build_symbol(result_list);
   }
 
@@ -84,12 +83,9 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     if (iterable_expr.is_symbol())
     {
       const std::string &list_id = iterable_expr.identifier().as_string();
-      auto type_map_it = list_type_map.find(list_id);
-      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
-      {
-        // Use the actual element type from type_map
-        loop_var_type = type_map_it->second[0].second;
-      }
+      const typet recorded = elem_types().element_type(list_id);
+      if (recorded != typet())
+        loop_var_type = recorded;
     }
   }
   else if (iterable_expr.type().is_array())
@@ -206,12 +202,9 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
     if (iterable_expr.is_symbol())
     {
       const std::string &list_id = iterable_expr.identifier().as_string();
-      auto type_map_it = list_type_map.find(list_id);
-      if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
-      {
-        // Get the element type from the first entry
-        actual_elem_type = type_map_it->second[0].second;
-      }
+      const typet recorded = elem_types().element_type(list_id);
+      if (recorded != typet())
+        actual_elem_type = recorded;
     }
 
     // Use list_at and extract_pyobject_value for consistent handling
@@ -255,8 +248,8 @@ exprt python_list::handle_comprehension(const nlohmann::json &element)
   converter_.current_block = saved_block;
 
   // Update type map
-  list_type_map[result_list_id].push_back(
-    std::make_pair(element_expr.identifier().as_string(), element_expr.type()));
+  elem_types().record(
+    result_list_id, element_expr.identifier().as_string(), element_expr.type());
 
   // If we had filter conditions, wrap append in if statement
   if (generator.contains("ifs") && !generator["ifs"].empty())
@@ -333,15 +326,10 @@ void python_list::handle_list_var_unpacking(
   const size_t after_star =
     (star_idx >= 0) ? targets.size() - static_cast<size_t>(star_idx) - 1 : 0;
 
-  // Get element type from list_type_map or from the variable's annotation
+  // Element type from the registry, else from the variable's annotation
   typet elem_type;
   if (list_expr.is_symbol())
-  {
-    const std::string &list_id = list_expr.identifier().as_string();
-    auto it = list_type_map.find(list_id);
-    if (it != list_type_map.end() && !it->second.empty())
-      elem_type = it->second[0].second;
-  }
+    elem_type = elem_types().element_type(list_expr.identifier().as_string());
   if (elem_type == typet() && ast_node["value"].contains("id"))
   {
     const std::string &var_name = ast_node["value"]["id"].get<std::string>();
@@ -532,7 +520,10 @@ void python_list::handle_list_var_unpacking(
     exprt push_call = build_call_expr(
       *push_obj_func,
       bool_type(),
-      {build_symbol(star_list), build_symbol(tmp_at), star_list_type_id});
+      {build_symbol(star_list),
+       build_symbol(tmp_at),
+       star_list_type_id,
+       from_integer(BigInt(0), size_type())});
     push_call.location() = loc;
     loop_body.copy_to_operands(
       converter_.convert_expression_to_code(push_call));
@@ -549,7 +540,7 @@ void python_list::handle_list_var_unpacking(
     target_block.copy_to_operands(while_loop);
 
     // Record element type for the starred list
-    python_list::add_type_info_entry(star_list.id.as_string(), "", elem_type);
+    elem_types().record(star_list.id.as_string(), "", elem_type);
 
     // Assign the new list to the starred variable and register its type info
     assign_to_target(star_value, build_symbol(star_list));
@@ -559,7 +550,7 @@ void python_list::handle_list_var_unpacking(
       const std::string var_name = star_value["id"].get<std::string>();
       symbol_id var_sid = converter_.create_symbol_id();
       var_sid.set_object(var_name);
-      python_list::add_type_info_entry(var_sid.to_string(), "", elem_type);
+      elem_types().record(var_sid.to_string(), "", elem_type);
     }
 
     // Assign targets after the star using size_var
