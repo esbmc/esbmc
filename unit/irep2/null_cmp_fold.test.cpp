@@ -58,6 +58,22 @@ TEST_CASE("(T *)(&obj + k) == NULL folds to false", "[irep2][simplify]")
   REQUIRE(!to_constant_bool2t(s).value);
 }
 
+TEST_CASE("truncating cast chain must not fold", "[irep2][simplify]")
+{
+  // (int *)(uint8_t)(uintptr_t)&obj: the 8-bit link can be zero even
+  // though &obj is not, so the peel must stop at the integer cast.
+  expr2tc obj = symbol2tc(get_int32_type(), irep_idt("obj"));
+  expr2tc chain = typecast2tc(
+    int_ptr(),
+    typecast2tc(
+      get_uint8_type(),
+      typecast2tc(get_uint64_type(), address_of2tc(int_ptr(), obj))));
+  expr2tc eq = equality2tc(chain, null_ptr());
+  expr2tc s = eq->simplify();
+  if (!is_nil_expr(s))
+    REQUIRE(!is_constant_bool2t(s));
+}
+
 TEST_CASE("&(*p)[i] + k == NULL must not fold", "[irep2][simplify]")
 {
   // The peel must bottom out at the chain root: an index over a

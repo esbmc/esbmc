@@ -4385,10 +4385,14 @@ simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
     return eq ? gen_true_expr() : gen_false_expr();
   if (n1 == n2)
     return expr2tc();
+  // Only pointer-typed links preserve nullness: a cast through an
+  // integer type may truncate, and integer arithmetic can wrap to
+  // zero, so the peel stops at the first non-pointer node.
   const expr2tc *p = n1 ? &s2 : &s1;
-  while (true)
+  while (is_pointer_type((*p)->type))
   {
-    if (is_typecast2t(*p))
+    if (
+      is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from->type))
       p = &to_typecast2t(*p).from;
     else if (is_add2t(*p) && is_constant_int2t(to_add2t(*p).side_2))
       p = &to_add2t(*p).side_1;
