@@ -5109,6 +5109,14 @@ bool code_contractst::find_callsite_is_fresh_extent(
           requires_clause, to_symbol2t(call->ret).thename))
       continue;
 
+    // Only formal parameters are substituted: they are the only names in
+    // size that vary per call and need closing over the caller's actuals.
+    // Anything else the size expression names (a global, a named constant)
+    // is deliberately left as-is -- it is not scoped to the callee, so it
+    // resolves identically at the call site without rewriting, the same way
+    // it already resolves inside the callee's own is_fresh clause. See
+    // github_4219_old_in_forall_array_param_replace_mode_global_extent for
+    // this in practice.
     expr2tc size = call->operands[1];
     for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
     {

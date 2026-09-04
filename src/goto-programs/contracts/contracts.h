@@ -675,7 +675,11 @@ private:
   /// \param params Callee's formal parameters
   /// \param actual_args Actual arguments at this call site
   /// \param out_size Set to the rebound size expression on success; left
-  ///        untouched otherwise
+  ///        untouched otherwise. Only names matching a formal in \p params
+  ///        are rebound; anything else the size expression names (a global,
+  ///        a named constant) is deliberately left alone, since it is not
+  ///        scoped to the callee and already resolves identically at the
+  ///        call site.
   /// \return True if exactly one matching, unconditional is_fresh call was
   ///         found. Aborts, rather than returning, if more than one such
   ///         call names \p target_param with genuinely different extents --
