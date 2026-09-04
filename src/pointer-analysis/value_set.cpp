@@ -1,5 +1,7 @@
 #include <cassert>
 #include <unordered_set>
+#include <set>
+#include <goto-programs/goto_functions.h>
 #include <langapi/language_util.h>
 #include <pointer-analysis/value_set.h>
 #include <util/arith/arith_tools.h>
@@ -1355,6 +1357,129 @@ static bool is_related_struct(
          is_subclass_of(lhs_type, rhs_type, ns);
 }
 
+/* EXPERIMENT (#7521 / --32): an integer member can only carry provenance if the
+ * program converts a pointer to an integer somewhere. Default conservative. */
+bool value_sett::program_converts_pointer_to_int = true;
+
+static bool expr_converts_pointer_to_int(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return false;
+
+  if (is_typecast2t(e) || is_bitcast2t(e))
+  {
+    const expr2tc &from =
+      is_typecast2t(e) ? to_typecast2t(e).from : to_bitcast2t(e).from;
+    if (
+      (is_unsignedbv_type(e->type) || is_signedbv_type(e->type)) &&
+      !is_nil_expr(from) && is_pointer_type(from->type))
+      return true;
+  }
+
+  bool found = false;
+  e->foreach_operand([&found](const expr2tc &next) {
+    found |= expr_converts_pointer_to_int(next);
+  });
+  return found;
+}
+
+/* Functions named anywhere other than as a direct call target, i.e. whose
+ * address is taken. Over-approximates the targets of every indirect call --
+ * `__ESBMC_atexit_handler` dispatches through a function pointer and is
+ * reachable in every program, so giving up on any indirect call would
+ * disable this everywhere. */
+static void collect_address_taken(const expr2tc &e, std::set<irep_idt> &out)
+{
+  if (is_nil_expr(e))
+    return;
+
+  if (is_code_function_call2t(e))
+  {
+    const code_function_call2t &call = to_code_function_call2t(e);
+    if (!is_nil_expr(call.function) && !is_symbol2t(call.function))
+      collect_address_taken(call.function, out);
+    collect_address_taken(call.ret, out);
+    for (const expr2tc &arg : call.operands)
+      collect_address_taken(arg, out);
+    return;
+  }
+
+  if (is_symbol2t(e) && is_code_type(e->type))
+    out.insert(to_symbol2t(e).thename);
+
+  e->foreach_operand(
+    [&out](const expr2tc &n) { collect_address_taken(n, out); });
+}
+
+/* Direct callees of @p e. Returns false if a call target is not a plain
+ * symbol, i.e. the call is indirect. */
+static bool collect_callees(const expr2tc &e, std::set<irep_idt> &out)
+{
+  if (is_nil_expr(e))
+    return true;
+
+  bool complete = true;
+  if (is_code_function_call2t(e))
+  {
+    const expr2tc &f = to_code_function_call2t(e).function;
+    if (!is_nil_expr(f) && is_symbol2t(f))
+      out.insert(to_symbol2t(f).thename);
+    else
+      complete = false;
+  }
+  e->foreach_operand([&out, &complete](const expr2tc &n) {
+    complete &= collect_callees(n, out);
+  });
+  return complete;
+}
+
+void value_sett::scan_program_for_pointer_to_int(
+  const goto_functionst &goto_functions)
+{
+  /* Only functions reachable from the entry point matter: including a header
+   * links its whole operational model, and a dead OM function (posix_memalign
+   * from <stdlib.h>) would otherwise disable this for every program. */
+  std::set<irep_idt> address_taken;
+  for (const auto &fn : goto_functions.function_map)
+    if (fn.second.body_available)
+      for (const auto &ins : fn.second.body.instructions)
+        collect_address_taken(ins.code, address_taken);
+
+  std::set<irep_idt> worklist, seen;
+  for (const auto &fn : goto_functions.function_map)
+    if (fn.first.as_string().find("__ESBMC_main") != std::string::npos)
+      worklist.insert(fn.first);
+  if (worklist.empty())
+    for (const auto &fn : goto_functions.function_map)
+      if (fn.first.as_string().find("@F@main") != std::string::npos)
+        worklist.insert(fn.first);
+
+  program_converts_pointer_to_int = false;
+  while (!worklist.empty())
+  {
+    const irep_idt cur = *worklist.begin();
+    worklist.erase(worklist.begin());
+    if (!seen.insert(cur).second)
+      continue;
+    auto it = goto_functions.function_map.find(cur);
+    if (it == goto_functions.function_map.end() || !it->second.body_available)
+      continue;
+    for (const auto &ins : it->second.body.instructions)
+    {
+      if (
+        expr_converts_pointer_to_int(ins.code) ||
+        expr_converts_pointer_to_int(ins.guard))
+      {
+        program_converts_pointer_to_int = true;
+        return;
+      }
+      /* An indirect call can land on any address-taken function. */
+      if (!collect_callees(ins.code, worklist))
+        worklist.insert(address_taken.begin(), address_taken.end());
+    }
+  }
+}
+
 /* Whether `type` can transitively hold a pointer. Conservative on symbol types,
  * whose definition is not resolved here: reporting "may hold a pointer" only
  * costs the walk that would have happened anyway. */
@@ -1375,7 +1500,8 @@ type_has_pointer(const type2tc &type, std::unordered_set<const type2t *> &seen)
    * (C11 7.20.1.4), and value_sett records the provenance on such a member --
    * so a struct of them is not pointer-free for this purpose. */
   if (is_unsignedbv_type(type) || is_signedbv_type(type))
-    return type->get_width() >= config.ansi_c.pointer_width();
+    return value_sett::program_converts_pointer_to_int &&
+           type->get_width() >= config.ansi_c.pointer_width();
 
   if (is_array_type(type))
     return type_has_pointer(to_array_type(type).subtype, seen);

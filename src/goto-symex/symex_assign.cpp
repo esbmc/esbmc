@@ -3,6 +3,7 @@
 #include <goto-symex/dynamic_allocation.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
+#include <pointer-analysis/value_set.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -57,6 +58,7 @@ goto_symext::goto_symext(
     inductive_step(options.get_bool_option("inductive-step")),
     validate_witness(options.get_bool_option("validate-violation-witness"))
 {
+  value_sett::scan_program_for_pointer_to_int(_goto_functions);
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
 

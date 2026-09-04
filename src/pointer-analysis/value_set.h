@@ -556,6 +556,9 @@ public:
    *         pointer set for lhs. Otherwise, overwrite it. Used for the static
    *         analysis. */
   void assign(const expr2tc &lhs, const expr2tc &rhs, bool add_to_sets = false);
+  static bool program_converts_pointer_to_int;
+  static void
+  scan_program_for_pointer_to_int(const class goto_functionst &goto_functions);
   /** assign()'s struct/union arm, split out to keep assign() one dispatch. */
   void assign_struct_union(
     const expr2tc &lhs,
