@@ -1,5 +1,8 @@
+#include <optional>
 #include <limits>
+#include <optional>
 #include <type_traits>
+#include <vector>
 
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -245,6 +248,124 @@ static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
   return try_simplification(typecast2tc(type, expr));
 }
 
+namespace
+{
+struct int_kind
+{
+  using value_type = BigInt;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_bv_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_int2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_int2t(c).value;
+  }
+};
+struct fixedbv_kind
+{
+  using value_type = fixedbvt;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_fixedbv_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_fixedbv2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_fixedbv2t(c).value;
+  }
+};
+struct floatbv_kind
+{
+  using value_type = ieee_floatt;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_floatbv_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_floatbv2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_floatbv2t(c).value;
+  }
+};
+struct bool_kind
+{
+  using value_type = bool;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_bool_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_bool2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_bool2t(c).value;
+  }
+};
+
+// The value-vs-reference knob. Arith/logic functors are instantiated
+// TFunctor<V>; relation functors TFunctor<V&>. Both are handed the same
+// runtime accessor (returning V&), so only the template argument differs.
+template <class V>
+using by_value = V;
+template <class V>
+using by_ref = V &;
+
+template <
+  template <class>
+  class TFunctor,
+  template <class>
+  class Wrap,
+  class Kind>
+static expr2tc fold_kind(const expr2tc &a, const expr2tc &b)
+{
+  using V = typename Kind::value_type;
+  return TFunctor<Wrap<V>>::simplify(a, b, &Kind::is_const, &Kind::value);
+}
+
+// Fold two constant operands of a runtime-selected numeric kind through
+// TFunctor. Returns nullopt when no arm matched either operand; an optional
+// holding nil when an arm matched but the functor declined; the folded
+// constant otherwise. That three-way result lets a caller (relations)
+// reproduce the original if/else-if fall-through exactly. `Floats` is a
+// compile-time knob: arith passes false so the floatbv arm -- and thus
+// TFunctor<ieee_floatt>, which does not compile for e.g. Modtor (ieee_floatt
+// has no operator%=) -- is never instantiated.
+template <
+  template <class>
+  class TFunctor,
+  template <class> class Wrap = by_value,
+  bool Floats = true>
+static std::optional<expr2tc>
+dispatch_binary_fold(const expr2tc &s1, const expr2tc &s2)
+{
+  if (int_kind::is_type(s1) || int_kind::is_type(s2))
+    return fold_kind<TFunctor, Wrap, int_kind>(s1, s2);
+  if (fixedbv_kind::is_type(s1) || fixedbv_kind::is_type(s2))
+    return fold_kind<TFunctor, Wrap, fixedbv_kind>(s1, s2);
+  if constexpr (Floats)
+  {
+    if (floatbv_kind::is_type(s1) || floatbv_kind::is_type(s2))
+      return fold_kind<TFunctor, Wrap, floatbv_kind>(s1, s2);
+  }
+  if (bool_kind::is_type(s1) || bool_kind::is_type(s2))
+    return fold_kind<TFunctor, Wrap, bool_kind>(s1, s2);
+  return std::nullopt;
+}
+} // namespace
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_2ops(
   const type2tc &type,
@@ -271,59 +392,26 @@ static expr2tc simplify_arith_2ops(
   expr2tc simpl_res;
   if (is_vector_type(type))
   {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
+    // Vector operands are constant_vector2t, not scalar bv, so the seam's
+    // type predicates cannot route them: call the functor directly with the
+    // bv accessor and let its distribute_vector_operation fire.
+    simpl_res = fold_kind<TFunctor, by_value, int_kind>(
+      simplified_side_1, simplified_side_2);
   }
-  else if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
+  else
   {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
+    // Floats=false: no floatbv arm here (see the assert above), so
+    // TFunctor<ieee_floatt> is never instantiated for arith.
+    simpl_res = dispatch_binary_fold<TFunctor, by_value, false>(
+                  simplified_side_1, simplified_side_2)
+                  .value_or(expr2tc());
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-
-    // Fix rounding when an overflow occurs
+    // Fix rounding when a bv overflow occurs. Only the bv arm yields a
+    // constant_int2t result, so this reproduces the original per-arm fixup.
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
-  else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (is_bool_type(simplified_side_1) || is_bool_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
-
-    simpl_res = TFunctor<bool>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else
-    return expr2tc();
 
   return typecast_check_return(type, simpl_res);
 }
@@ -731,34 +819,85 @@ static bool coerce_to_common_type(expr2tc &a, expr2tc &b)
   return true;
 }
 
-/// &base[i] - &base[j] = i - j, or nil when the operands are not two constant
-/// subscripts of one array. C23 6.5.6p9 defines pointer subtraction as the
-/// difference of the subscripts, so this is the standard's own answer rather
-/// than an optimisation; a differing base is undefined there and is left
-/// unfolded (#6779). Without this the difference stays a comparison operand
-/// symex cannot decide, and a loop bounded by it never exits.
-static expr2tc
-fold_index_difference(const expr2tc &a, const expr2tc &b, const type2tc &type)
+/// Decompose an address into the object it is rooted at and its constant byte
+/// offset within it, walking constant subscripts and members and looking
+/// through the pointer casts a byte-distance idiom spells. False when any step
+/// is not a compile-time constant, which leaves the difference unfolded.
+static bool
+address_root_and_offset(const expr2tc &e, expr2tc &root, BigInt &offset)
 {
-  if (!is_address_of2t(a) || !is_address_of2t(b))
+  expr2tc addr = e;
+  while (is_typecast2t(addr))
+    addr = to_typecast2t(addr).from;
+  if (!is_address_of2t(addr))
+    return false;
+
+  offset = 0;
+  expr2tc obj = to_address_of2t(addr).ptr_obj;
+  while (is_index2t(obj) || is_member2t(obj))
+  {
+    if (is_index2t(obj))
+    {
+      const index2t &idx = to_index2t(obj);
+      if (!is_constant_int2t(idx.index))
+        return false;
+      offset += to_constant_int2t(idx.index).value *
+                type_byte_size(idx.type, migrate_namespace_lookup);
+      obj = idx.source_value;
+      continue;
+    }
+    const member2t &mem = to_member2t(obj);
+    offset += member_offset(
+      mem.source_value->type, mem.member, migrate_namespace_lookup);
+    obj = mem.source_value;
+  }
+
+  root = obj;
+  return true;
+}
+
+/// &base.x - &base.y and &base[i] - &base[j] fold to the distance between the
+/// two sub-objects, in units of the operands' own pointee type. C23 6.5.6p9
+/// defines pointer subtraction as that difference, so this is the standard's
+/// own answer rather than an optimisation; a differing root is undefined there
+/// and is left unfolded (#6779). Without it the difference stays a comparison
+/// operand symex cannot decide, and a loop bounded by it never exits.
+static expr2tc
+fold_address_difference(const expr2tc &a, const expr2tc &b, const type2tc &type)
+{
+  if (a->type != b->type || !is_pointer_type(a->type))
     return expr2tc();
 
-  const expr2tc &obj_a = to_address_of2t(a).ptr_obj;
-  const expr2tc &obj_b = to_address_of2t(b).ptr_obj;
-  if (!is_index2t(obj_a) || !is_index2t(obj_b))
-    return expr2tc();
+  const type2tc &pointee = to_pointer_type(a->type).subtype;
+  if (is_empty_type(pointee))
+    return expr2tc(); // void *, whose difference has no unit to divide by
 
-  const index2t &idx_a = to_index2t(obj_a);
-  const index2t &idx_b = to_index2t(obj_b);
-  if (
-    idx_a.source_value != idx_b.source_value ||
-    !is_constant_int2t(idx_a.index) || !is_constant_int2t(idx_b.index))
-    return expr2tc();
+  // Only dyn_sized_array_excp is caught for the whole simplification; an
+  // unmeasurable type here means this fold has no answer, not that the rest of
+  // the expression is unsimplifiable.
+  try
+  {
+    expr2tc root_a, root_b;
+    BigInt off_a, off_b;
+    if (
+      !address_root_and_offset(a, root_a, off_a) ||
+      !address_root_and_offset(b, root_b, off_b) || root_a != root_b)
+      return expr2tc();
 
-  return constant_int2tc(
-    type,
-    to_constant_int2t(idx_a.index).value -
-      to_constant_int2t(idx_b.index).value);
+    // (char *)&a[4] - (char *)&a[0] is 16, not 4: the cast decides the unit,
+    // so the byte distance is scaled by the operands' own pointee type rather
+    // than by whatever the sub-objects happen to be.
+    const BigInt unit = type_byte_size(pointee, migrate_namespace_lookup);
+    const BigInt distance = off_a - off_b;
+    if (unit == 0 || distance % unit != 0)
+      return expr2tc();
+
+    return constant_int2tc(type, distance / unit);
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return expr2tc();
+  }
 }
 
 /// (w + x) - (y + z) with one shared addend cancels the common term; nil when
@@ -814,6 +953,43 @@ fold_common_addend(const expr2tc &a, const expr2tc &b, const type2tc &type)
   return expr2tc();
 }
 
+/// `p - c` -> `p + (-c)` for a signed constant c.
+///
+/// A decrementing walk otherwise never reaches the `base + offset` form an
+/// incrementing one has, and every shared-base cancellation that decides a
+/// pointer comparison matches add2t, so the guard of a `p--` loop stays
+/// undecidable and the loop never exits (#6779). An unsigned c is left alone:
+/// negating it is a wrap this rewrite has no reason to commit to.
+static expr2tc fold_pointer_minus_const(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (
+    !is_pointer_type(type) || !is_constant_int2t(side_2) ||
+    !is_signedbv_type(side_2->type))
+    return expr2tc();
+
+  return add2tc(
+    type,
+    side_1,
+    constant_int2tc(side_2->type, -to_constant_int2t(side_2).value));
+}
+
+/// The two folds a subtraction over addresses has: the distance between two of
+/// them, and a decrement re-spelled as an increment.
+static expr2tc fold_pointer_sub(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (expr2tc diff = fold_address_difference(side_1, side_2, type);
+      !is_nil_expr(diff))
+    return diff;
+
+  return fold_pointer_minus_const(type, side_1, side_2);
+}
+
 expr2tc sub2t::do_simplify() const
 {
   // x - 0 = x. Mirrors Subtor::simplify but short-circuits before
@@ -833,7 +1009,7 @@ expr2tc sub2t::do_simplify() const
   if (side_1 == side_2)
     return gen_zero(type);
 
-  if (expr2tc folded = fold_index_difference(side_1, side_2, type);
+  if (expr2tc folded = fold_pointer_sub(type, side_1, side_2);
       !is_nil_expr(folded))
     return folded;
 
@@ -1367,50 +1543,59 @@ expr2tc with2t::do_simplify() const
   return expr2tc();
 }
 
+/// Project a member read out of a constant union literal, or return
+/// nothing. A cross-member read between integer members of one width
+/// is an exact bit reinterpretation: { .r=v }.s is (s-type)v. Wider or
+/// non-integer members stay unfolded.
+static expr2tc fold_union_member_read(
+  const constant_union2t &uni,
+  const irep_idt &member,
+  const type2tc &type)
+{
+  if (uni.datatype_members.empty())
+    return expr2tc();
+
+  const expr2tc &val = uni.datatype_members[0];
+  if (uni.init_field != member)
+  {
+    if (
+      is_bv_type(type) && is_bv_type(val->type) &&
+      type->get_width() == val->type->get_width())
+    {
+      expr2tc cast = typecast2tc(type, val);
+      return try_simplification(cast);
+    }
+    return expr2tc();
+  }
+
+  /* If the selected type isn't compatible, whatever field is in the
+   * constant union isn't the field being selected; don't simplify. */
+  if (
+    !is_pointer_type(type) &&
+    !base_type_eq(type, val->type, *migrate_namespace_lookup))
+    return expr2tc();
+
+  return val;
+}
+
 expr2tc member2t::do_simplify() const
 {
-  if (is_constant_struct2t(source_value) || is_constant_union2t(source_value))
+  if (is_constant_union2t(source_value))
+    return fold_union_member_read(
+      to_constant_union2t(source_value), member, type);
+
+  if (is_constant_struct2t(source_value))
   {
     unsigned no =
       struct_union_get_component_number(source_value->type, member).value();
 
-    // Project the selected member value out of the constant aggregate.
-    expr2tc s;
-    if (is_constant_struct2t(source_value))
-    {
-      s = to_constant_struct2t(source_value).datatype_members[no];
-      // Be defensive: if member extraction type doesn't match, skip
-      // simplification instead of aborting in the simplifier.
-      if (
-        !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, *migrate_namespace_lookup))
-        return expr2tc();
-    }
-    else
-    {
-      // constant_union stores the value at position 0 with init_field indicating
-      // which member was initialized.
-      const constant_union2t &uni = to_constant_union2t(source_value);
-
-      // Only the active union member can be simplified away.
-      if (uni.init_field != member)
-        return expr2tc();
-
-      // The value is always stored at position 0
-      if (uni.datatype_members.empty())
-        return expr2tc();
-
-      s = uni.datatype_members[0];
-
-      /* If the type we just selected isn't compatible, it means that whatever
-       * field is in the constant union /isn't/ the field we're selecting from
-       * it. So don't simplify it, because we can't. */
-
-      if (
-        !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, *migrate_namespace_lookup))
-        return expr2tc();
-    }
+    expr2tc s = to_constant_struct2t(source_value).datatype_members[no];
+    // Be defensive: if member extraction type doesn't match, skip
+    // simplification instead of aborting in the simplifier.
+    if (
+      !is_pointer_type(type) &&
+      !base_type_eq(type, s->type, *migrate_namespace_lookup))
+      return expr2tc();
 
     return s;
   }
@@ -1535,16 +1720,16 @@ expr2tc pointer_offset2t::do_simplify() const
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
-  {
-    if (is_pointer_type(ptr_obj->type))
-    {
-      const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
-      // Allow NULL simplification for pointer types to primitives
-      if (!is_symbol_type(ptr_type.subtype))
-        return gen_zero(type);
-    }
-  }
+  // NULL is object 0 at offset 0 whatever it is a pointer to, so the pointee
+  // does not gate this. It used to: #2803 restricted the fold to non-symbol
+  // subtypes with no reason recorded, and offsetof lowers to
+  // `(char *)(struct S *)NULL + k`, so a struct pointee — the only shape
+  // offsetof ever produces — never folded and a loop bounded by an offsetof
+  // never exited (#6779).
+  if (
+    is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL" &&
+    is_pointer_type(ptr_obj->type))
+    return gen_zero(type);
 
   if (is_address_of2t(ptr_obj))
   {
@@ -2000,62 +2185,10 @@ static expr2tc simplify_logic_2ops(
     !is_constant_expr(simplified_side_2))
     return expr2tc();
 
-  expr2tc simpl_res;
-
-  if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_floatbv_type(simplified_side_1) || is_floatbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-    std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
-
-    simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (is_bool_type(simplified_side_1) || is_bool_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
-
-    simpl_res = TFunctor<bool>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else
-    return expr2tc();
-
-  return typecast_check_return(type, simpl_res);
+  return typecast_check_return(
+    type,
+    dispatch_binary_fold<TFunctor>(simplified_side_1, simplified_side_2)
+      .value_or(expr2tc()));
 }
 
 template <class constant_type>
@@ -3261,6 +3394,205 @@ expr2tc bitcast2t::do_simplify() const
   return expr2tc();
 }
 
+static bool is_null_pointer(const expr2tc &expr);
+
+/* &x is the address of a real object and is never NULL. The shapes that look
+ * like an address-of but need not be are the dereference-rooted ones: &*p is
+ * p, and &p->m / &(*p)[i] are p plus a constant offset -- the offsetof idiom
+ * &((struct S *)0)->m is exactly that, and pointer_offset2t::do_simplify in
+ * this file folds it to the member offset, 0 for the first member. Indexing a
+ * pointer is *(p + i), a dereference in all but name. expr2t::simplify
+ * deliberately leaves address_of's operand alone, so all of these reach the
+ * callers intact; walk the member/index chain and answer only for a root that
+ * is a declared object. */
+static bool address_of_is_provably_non_null(const expr2tc &e)
+{
+  if (!is_address_of2t(e))
+    return false;
+
+  expr2tc obj = to_address_of2t(e).ptr_obj;
+  while (is_member2t(obj) || is_index2t(obj))
+    obj = is_member2t(obj) ? to_member2t(obj).source_value
+                           : to_index2t(obj).source_value;
+
+  return is_symbol2t(obj) || is_constant_string2t(obj);
+}
+
+/* NULL reaches the simplifier both as the symbol and as a constant zero cast
+ * to a pointer; a null-guard rule has to accept either. */
+static bool is_null_pointer_value(const expr2tc &expr)
+{
+  return is_null_pointer(expr) || is_null_pointer_constant(expr);
+}
+
+/// Typecast of a constant bool to a number type; nullopt when no arm matches.
+static std::optional<expr2tc> fold_constant_bool_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // bool to int
+  if (is_bv_type(type))
+    return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
+
+  if (is_fixedbv_type(type))
+  {
+    fixedbvt fbv;
+    fbv.spec = fixedbv_spect(to_fixedbv_type(type));
+    fbv.from_integer(to_constant_bool2t(simp).value);
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_floatbv_type(type))
+  {
+    if (!is_constant_int2t(rounding_mode))
+      return expr2tc();
+
+    ieee_floatt fpbv;
+
+    BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+    // Bool -> float: convert the bool's integer value (0 or 1) into
+    // a float of the destination type.
+    fpbv.spec = ieee_float_spect(to_floatbv_type(type));
+    fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
+
+    return constant_floatbv2tc(fpbv);
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant integer to a number type; nullopt when no arm
+/// matches.
+static std::optional<expr2tc> fold_constant_bv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // int to int/float/double
+  const constant_int2t &theint = to_constant_int2t(simp);
+
+  if (is_bv_type(type))
+  {
+    // Typecasting an integer constant to a (possibly smaller) integer
+    // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
+    // destination width via the same binary round-trip the legacy
+    // from_integer + to_integer pair performed.
+    return from_integer(theint.value, type);
+  }
+
+  if (is_fixedbv_type(type))
+  {
+    fixedbvt fbv;
+    fbv.spec = fixedbv_spect(to_fixedbv_type(type));
+    fbv.from_integer(theint.value);
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_bool_type(type))
+    return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
+
+  if (is_floatbv_type(type))
+  {
+    if (!is_constant_int2t(rounding_mode))
+      return expr2tc();
+
+    ieee_floatt fpbv;
+
+    BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+    fpbv.spec = ieee_float_spect(to_floatbv_type(type));
+    fpbv.from_integer(to_constant_int2t(simp).value);
+
+    return constant_floatbv2tc(fpbv);
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant fixed-point value to a number type; nullopt when no
+/// arm matches.
+static std::optional<expr2tc> fold_constant_fixedbv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  (void)rounding_mode;
+  // float/double to int/float/double
+  fixedbvt fbv(to_constant_fixedbv2t(simp).value);
+
+  if (is_bv_type(type))
+    return constant_int2tc(type, fbv.to_integer());
+
+  if (is_fixedbv_type(type))
+  {
+    fbv.round(fixedbv_spect(to_fixedbv_type(type)));
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_bool_type(type))
+  {
+    const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
+    return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant float to a number type; nullopt when no arm matches.
+static std::optional<expr2tc> fold_constant_floatbv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // float/double to int/float/double
+  if (!is_constant_int2t(rounding_mode))
+    return expr2tc();
+
+  ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
+
+  BigInt rm_value = to_constant_int2t(rounding_mode).value;
+  fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+  if (is_bv_type(type))
+    return constant_int2tc(type, fpbv.to_integer());
+
+  if (is_floatbv_type(type))
+  {
+    fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
+    return constant_floatbv2tc(fpbv);
+  }
+
+  if (is_bool_type(type))
+    return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
+  return std::nullopt;
+}
+
+/// Constant-operand typecasts, dispatched on the source type.
+///
+/// nullopt when no arm matches, so the caller falls through to the
+/// non-constant cases exactly as the inline chain did; a nil expr2tc means an
+/// arm matched and declined (a non-constant rounding mode), which is
+/// do_simplify's own "no simplification" answer.
+static std::optional<expr2tc> fold_constant_typecast(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  if (!is_number_type(type))
+    return std::nullopt;
+
+  if (is_bool_type(simp))
+    return fold_constant_bool_source(type, simp, rounding_mode);
+  if (is_bv_type(simp))
+    return fold_constant_bv_source(type, simp, rounding_mode);
+  if (is_fixedbv_type(simp))
+    return fold_constant_fixedbv_source(type, simp, rounding_mode);
+  if (is_floatbv_type(simp))
+    return fold_constant_floatbv_source(type, simp, rounding_mode);
+  return std::nullopt;
+}
+
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
@@ -3274,128 +3606,18 @@ expr2tc typecast2t::do_simplify() const
   // so `from` is already simplified.
   const expr2tc &simp = from;
 
+  // Casting the address of a declared object to bool is true. Without this a
+  // `p ? a : b` guard on such an address stays symbolic, so the value it
+  // selects is not propagated as a constant and any loop bounded by it unwinds
+  // to --unwind rather than its real trip count
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4).
+  if (is_bool_type(type) && address_of_is_provably_non_null(simp))
+    return gen_true_expr();
+
   if (is_constant_expr(simp))
   {
-    // Casts from constant operands can be done here.
-    if (is_bool_type(simp) && is_number_type(type))
-    {
-      // bool to int
-      if (is_bv_type(type))
-        return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
-
-      if (is_fixedbv_type(type))
-      {
-        fixedbvt fbv;
-        fbv.spec = fixedbv_spect(to_fixedbv_type(type));
-        fbv.from_integer(to_constant_bool2t(simp).value);
-        return constant_fixedbv2tc(fbv);
-      }
-
-      if (is_floatbv_type(type))
-      {
-        if (!is_constant_int2t(rounding_mode))
-          return expr2tc();
-
-        ieee_floatt fpbv;
-
-        BigInt rm_value = to_constant_int2t(rounding_mode).value;
-        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-        // Bool -> float: convert the bool's integer value (0 or 1) into
-        // a float of the destination type.
-        fpbv.spec = ieee_float_spect(to_floatbv_type(type));
-        fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
-
-        return constant_floatbv2tc(fpbv);
-      }
-    }
-    else if (is_bv_type(simp) && is_number_type(type))
-    {
-      // int to int/float/double
-      const constant_int2t &theint = to_constant_int2t(simp);
-
-      if (is_bv_type(type))
-      {
-        // Typecasting an integer constant to a (possibly smaller) integer
-        // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
-        // destination width via the same binary round-trip the legacy
-        // from_integer + to_integer pair performed.
-        return from_integer(theint.value, type);
-      }
-
-      if (is_fixedbv_type(type))
-      {
-        fixedbvt fbv;
-        fbv.spec = fixedbv_spect(to_fixedbv_type(type));
-        fbv.from_integer(theint.value);
-        return constant_fixedbv2tc(fbv);
-      }
-
-      if (is_bool_type(type))
-      {
-        const constant_int2t &theint = to_constant_int2t(simp);
-        return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
-      }
-
-      if (is_floatbv_type(type))
-      {
-        if (!is_constant_int2t(rounding_mode))
-          return expr2tc();
-
-        ieee_floatt fpbv;
-
-        BigInt rm_value = to_constant_int2t(rounding_mode).value;
-        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-        fpbv.spec = ieee_float_spect(to_floatbv_type(type));
-        fpbv.from_integer(to_constant_int2t(simp).value);
-
-        return constant_floatbv2tc(fpbv);
-      }
-    }
-    else if (is_fixedbv_type(simp) && is_number_type(type))
-    {
-      // float/double to int/float/double
-      fixedbvt fbv(to_constant_fixedbv2t(simp).value);
-
-      if (is_bv_type(type))
-        return constant_int2tc(type, fbv.to_integer());
-
-      if (is_fixedbv_type(type))
-      {
-        fbv.round(fixedbv_spect(to_fixedbv_type(type)));
-        return constant_fixedbv2tc(fbv);
-      }
-
-      if (is_bool_type(type))
-      {
-        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
-        return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
-      }
-    }
-    else if (is_floatbv_type(simp) && is_number_type(type))
-    {
-      // float/double to int/float/double
-      if (!is_constant_int2t(rounding_mode))
-        return expr2tc();
-
-      ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
-
-      BigInt rm_value = to_constant_int2t(rounding_mode).value;
-      fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-      if (is_bv_type(type))
-        return constant_int2tc(type, fpbv.to_integer());
-
-      if (is_floatbv_type(type))
-      {
-        fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
-        return constant_floatbv2tc(fpbv);
-      }
-
-      if (is_bool_type(type))
-        return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
-    }
+    if (auto folded = fold_constant_typecast(type, simp, rounding_mode))
+      return *folded;
   }
   else if (is_bool_type(type))
   {
@@ -3489,6 +3711,52 @@ expr2tc nearbyint2t::do_simplify() const
   return expr2tc();
 }
 
+/// Linearise the constant-indexed rows enclosing @p idx: for `&a[c1]..[cn][e]`
+/// return the same chain with every enclosing index zeroed, and set @p offset
+/// to `c1*s1 + .. + cn*sn` counted in elements of the innermost type. Nil when
+/// there is no enclosing index, when one is not constant, or when a dimension
+/// has no constant size — the caller then keeps the single-level form.
+///
+/// This is what lets a pointer walking `a` as flat memory meet a bound spelled
+/// `&a[1][2]`: both sides reduce to an offset off `&a[0][0]` (#6778).
+static expr2tc linearise_enclosing_indices(const index2t &idx, BigInt &offset)
+{
+  // The cursor stays a pointer into the chain `idx` owns: the non-const
+  // to_index2t overload goes through get(), whose detach() clones every shared
+  // node it walks past.
+  std::vector<type2tc> row_types;
+  BigInt linear = 0;
+  BigInt stride = 1;
+
+  const expr2tc *base = &idx.source_value;
+  while (is_index2t(*base))
+  {
+    const index2t &row = to_index2t(*base);
+    if (!is_constant_int2t(row.index) || !is_array_type(row.type))
+      return expr2tc();
+
+    const expr2tc &dim = to_array_type(row.type).array_size;
+    if (is_nil_expr(dim) || !is_constant_int2t(dim))
+      return expr2tc();
+
+    stride *= to_constant_int2t(dim).value;
+    linear += to_constant_int2t(row.index).value * stride;
+    row_types.push_back(row.type);
+    base = &row.source_value;
+  }
+
+  if (row_types.empty())
+    return expr2tc();
+
+  expr2tc zero = constant_int2tc(index_type2(), BigInt(0));
+  expr2tc rebuilt = *base;
+  for (auto row = row_types.rbegin(); row != row_types.rend(); ++row)
+    rebuilt = index2tc(*row, rebuilt, zero);
+
+  offset = linear;
+  return rebuilt;
+}
+
 expr2tc address_of2t::do_simplify() const
 {
   // NB: address_of never has its operands simplified below its feet for
@@ -3515,18 +3783,26 @@ expr2tc address_of2t::do_simplify() const
     const index2t &idx = to_index2t(ptr_obj);
     const pointer_type2t &ptr_type = to_pointer_type(type);
 
-    // Don't simplify &a[0]
-    if (
-      is_constant_int2t(idx.index) &&
-      to_constant_int2t(idx.index).value.is_zero())
+    BigInt extra = 0;
+    expr2tc zeroed = linearise_enclosing_indices(idx, extra);
+    const bool outer_is_zero = is_constant_int2t(idx.index) &&
+                               to_constant_int2t(idx.index).value.is_zero();
+
+    // Don't simplify &a[0]: with no enclosing row to linearise there is no
+    // offset to spell. This is also the fixpoint condition -- the rewrite below
+    // emits an all-zero index chain, which re-enters here and must stop.
+    if (outer_is_zero && extra.is_zero())
       return expr2tc();
 
-    expr2tc new_index = try_simplification(idx.index);
     expr2tc zero = constant_int2tc(index_type2(), BigInt(0));
-    expr2tc new_idx = index2tc(idx.type, idx.source_value, zero);
-    expr2tc sub_addr_of = address_of2tc(ptr_type.subtype, new_idx);
+    expr2tc src = is_nil_expr(zeroed) ? idx.source_value : zeroed;
+    expr2tc base =
+      address_of2tc(ptr_type.subtype, index2tc(idx.type, src, zero));
+    if (!extra.is_zero())
+      base = add2tc(type, base, from_integer(extra, index_type2()));
 
-    return add2tc(type, sub_addr_of, new_index);
+    return outer_is_zero ? base
+                         : add2tc(type, base, try_simplification(idx.index));
   }
 
   return expr2tc();
@@ -3543,57 +3819,15 @@ static expr2tc simplify_constant_relation(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
+  // Scalar arms (bv/fixedbv/floatbv/bool) fold by reference through the shared
+  // seam. An optional carrying a value -- even a nil one -- means a scalar arm
+  // matched, so the pointer arm below stays an `else` of that match: a matched
+  // arm that declined must not fall through to it.
+  if (auto folded = dispatch_binary_fold<TFunctor, by_ref>(side_1, side_2))
+    return typecast_check_return(type, *folded);
+
   expr2tc simpl_res;
-
-  if (is_bv_type(side_1) || is_bv_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res =
-      TFunctor<BigInt &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res =
-      TFunctor<fixedbvt &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-    std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
-
-    simpl_res =
-      TFunctor<ieee_floatt &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_bool_type(side_1) || is_bool_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
-
-    simpl_res =
-      TFunctor<bool &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_pointer_type(side_1) || is_pointer_type(side_2))
+  if (is_pointer_type(side_1) || is_pointer_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       [&](const expr2tc &t) -> bool {
@@ -3618,6 +3852,212 @@ static expr2tc simplify_constant_relation(
   return typecast_check_return(type, simpl_res);
 }
 
+/// Sum a chain's subscripts, each scaled into @p pointee-sized units; nil when
+/// a step is not a whole number of them or cannot be measured at all.
+///
+/// Members contribute nothing: the rebuilt base keeps the member path as it
+/// is, so their offset is already in there. Counting it here too only shows up
+/// once the struct has padding before the member
+/// (`struct { char c; int v[3]; } s[2]`).
+static expr2tc subscript_offset_in_units(
+  const std::vector<const expr2tc *> &chain,
+  const type2tc &pointee,
+  const type2tc &offset_t)
+{
+  try
+  {
+    const BigInt unit = type_byte_size(pointee, migrate_namespace_lookup);
+    if (unit == 0)
+      return expr2tc();
+
+    expr2tc offset = constant_int2tc(offset_t, BigInt(0));
+    for (const expr2tc *step : chain)
+    {
+      if (is_member2t(*step))
+        continue;
+
+      const index2t &idx = to_index2t(*step);
+      const BigInt size = type_byte_size(idx.type, migrate_namespace_lookup);
+      if (size % unit != 0)
+        return expr2tc();
+
+      expr2tc sub = idx.index;
+      if (sub->type != offset_t)
+        sub = typecast2tc(offset_t, sub);
+      const BigInt scale = size / unit;
+      if (scale != 1)
+        sub = mul2tc(offset_t, sub, constant_int2tc(offset_t, scale));
+      offset = add2tc(offset_t, offset, sub);
+    }
+    return offset;
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return expr2tc();
+  }
+}
+
+/// Flatten `&a[i][j]` to `&a[0][0] + (i * N + j)`, and `&s[i].v[j]` likewise,
+/// with the offset counted in the pointer's own pointee type.
+///
+/// address_of2t::do_simplify rewrites only the innermost subscript, so two
+/// addresses that differ in an outer one keep different bases and the
+/// cancellation below cannot reach them: a flat walk from `&a[0][0]` to
+/// `&a[1][2]` never exits. Zeroing every subscript gives them a base to share;
+/// members are kept as they are and contribute their own constant offset, so
+/// an array of structs walked as flat memory is the same rewrite rather than a
+/// second one. Only the comparison's operands are rewritten, so no dereference
+/// is built from the flattened form (#6778).
+///
+/// A subscript contributes `subscript * (sizeof(element) / unit)`, which keeps
+/// a symbolic subscript symbolic.
+static expr2tc flatten_nested_index_address(const address_of2t &ao)
+{
+  const type2tc &pointee = to_pointer_type(ao.type).subtype;
+  if (is_empty_type(pointee))
+    return expr2tc();
+
+  std::vector<const expr2tc *> chain;
+  const expr2tc *root = &ao.ptr_obj;
+  while (is_index2t(*root) || is_member2t(*root))
+  {
+    chain.push_back(root);
+    root = is_index2t(*root) ? &to_index2t(*root).source_value
+                             : &to_member2t(*root).source_value;
+  }
+
+  // A single subscript is address_of2t::do_simplify's own case; leave it there
+  // so this only ever widens what already folded.
+  if (chain.size() < 2)
+    return expr2tc();
+
+  const type2tc &offset_t = index_type2();
+  expr2tc offset = subscript_offset_in_units(chain, pointee, offset_t);
+  if (is_nil_expr(offset))
+    return expr2tc();
+
+  expr2tc base = *root;
+  for (size_t i = chain.size(); i-- > 0;)
+  {
+    const expr2tc &step = *chain[i];
+    base = is_index2t(step)
+             ? index2tc(step->type, base, constant_int2tc(offset_t, BigInt(0)))
+             : member2tc(step->type, base, to_member2t(step).member);
+  }
+
+  expr2tc flat =
+    add2tc(ao.type, address_of2tc(pointee, base), try_simplification(offset));
+  expr2tc simplified = flat->simplify();
+  return is_nil_expr(simplified) ? flat : simplified;
+}
+
+/// Reach the address_of under pointer arithmetic: an induction variable
+/// started at `&a[1][0]` arrives here as `&a[1][0] + k` and has to be put on
+/// the same base as the bound it is compared against. Nil when nothing nested
+/// was found, so the single-subscript path below stays as it was.
+static expr2tc flatten_addressof_under_add(const expr2tc &e)
+{
+  if (is_address_of2t(e))
+  {
+    const address_of2t &ao = to_address_of2t(e);
+    if (expr2tc flat = flatten_nested_index_address(ao); !is_nil_expr(flat))
+      return flat;
+
+    // A single subscript is address_of2t::do_simplify's case, and the
+    // top-level operand already gets it; an address under pointer arithmetic
+    // did not, so `&a[4] + k` kept a base its bare `&a[0]` bound could never
+    // meet and a 1-D descending walk never exited (#6779).
+    return is_index2t(ao.ptr_obj) ? ao.do_simplify() : expr2tc();
+  }
+
+  if (!is_add2t(e))
+    return expr2tc();
+
+  const add2t &a = to_add2t(e);
+  expr2tc f1 = flatten_addressof_under_add(a.side_1);
+  expr2tc f2 = flatten_addressof_under_add(a.side_2);
+  if (is_nil_expr(f1) && is_nil_expr(f2))
+    return expr2tc();
+
+  expr2tc rebuilt = add2tc(
+    e->type, is_nil_expr(f1) ? a.side_1 : f1, is_nil_expr(f2) ? a.side_2 : f2);
+  expr2tc simplified = rebuilt->simplify();
+  return is_nil_expr(simplified) ? rebuilt : simplified;
+}
+
+static expr2tc normalize_addressof_index(const expr2tc &e)
+{
+  if (expr2tc flat = flatten_addressof_under_add(e); !is_nil_expr(flat))
+    return flat;
+
+  if (!is_address_of2t(e) || !is_index2t(to_address_of2t(e).ptr_obj))
+    return e;
+
+  expr2tc folded = to_address_of2t(e).do_simplify();
+  return is_nil_expr(folded) ? e : folded;
+}
+
+/// Put both operands of a pointer comparison into `&base[0] + c` form, and
+/// return the rebuilt comparison when either changed. @p rebuild re-emits the
+/// node so the common-addend cancellation in the caller can decide it.
+template <typename Rebuild>
+static expr2tc normalize_addressof_operands(
+  const expr2tc &a,
+  const expr2tc &b,
+  Rebuild rebuild)
+{
+  expr2tc na = normalize_addressof_index(a);
+  expr2tc nb = normalize_addressof_index(b);
+  if (na == a && nb == b)
+    return expr2tc();
+
+  expr2tc rebuilt = rebuild(na, nb);
+  expr2tc simplified = rebuilt->simplify();
+  return is_nil_expr(simplified) ? rebuilt : simplified;
+}
+
+/// `(&x + c1) ~ (&x + c2)` reduces to `c1 ~ c2`: when the bases match,
+/// comparing addresses is comparing offsets. Split out of simplify_relations
+/// to keep its decision count off the complexity gate.
+template <typename constructor>
+static expr2tc cancel_shared_pointer_base(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if (
+    !is_add2t(side_1) || !is_add2t(side_2) || !is_pointer_type(side_1) ||
+    !is_pointer_type(side_2))
+    return expr2tc();
+
+  const add2t &lhs = to_add2t(side_1);
+  const add2t &rhs = to_add2t(side_2);
+
+  // Coerce both offsets to a common type so the rebuilt node is well-formed
+  // even when they carry different concrete bv widths — `arr + (int)c` vs
+  // `arr + (long)c` from a p++ chain.
+  auto cancel = [&type](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
+    expr2tc a = a_in, b = b_in;
+    if (!coerce_to_common_type(a, b))
+      return expr2tc();
+    return typecast_check_return(type, make_irep<constructor>(a, b));
+  };
+
+  // {base to match, its counterpart} then {the two surviving offsets}.
+  const expr2tc *const combinations[][4] = {
+    {&lhs.side_1, &rhs.side_1, &lhs.side_2, &rhs.side_2},
+    {&lhs.side_2, &rhs.side_2, &lhs.side_1, &rhs.side_1},
+    {&lhs.side_1, &rhs.side_2, &lhs.side_2, &rhs.side_1},
+    {&lhs.side_2, &rhs.side_1, &lhs.side_1, &rhs.side_2}};
+
+  for (const auto &c : combinations)
+    if (*c[0] == *c[1] && is_constant(*c[2]) && is_constant(*c[3]))
+      if (expr2tc r = cancel(*c[2], *c[3]); !is_nil_expr(r))
+        return r;
+
+  return expr2tc();
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_relations(
   const type2tc &type,
@@ -3634,61 +4074,23 @@ static expr2tc simplify_relations(
 
   if (!is_constant(simplified_side_1) || !is_constant(simplified_side_2))
   {
-    // Pointer comparison with a shared base: (&x + 1 == &x + 2) => (1 == 2).
-    // address = pointer + offset; when the bases match, comparing addresses
-    // reduces to comparing offsets.
-    if (
-      is_add2t(simplified_side_1) && is_add2t(simplified_side_2) &&
-      is_pointer_type(simplified_side_1) && is_pointer_type(simplified_side_2))
-    {
-      const add2t &lhs = to_add2t(simplified_side_1);
-      const add2t &rhs = to_add2t(simplified_side_2);
+    // Put both sides on a common base first; the cancellation below can only
+    // see a shared base once `&a[c]` has become `&a[0] + c`. Equality and
+    // inequality do this for themselves before they get here, so this is what
+    // gives the ordered relations the same reach — a walk bounded by
+    // `p < &a[4]` folds where before only `p != &a[4]` did (#6778).
+    auto rebuild = [&type](const expr2tc &a, const expr2tc &b) {
+      return typecast_check_return(type, make_irep<constructor>(a, b));
+    };
+    if (expr2tc r = normalize_addressof_operands(
+          simplified_side_1, simplified_side_2, rebuild);
+        !is_nil_expr(r))
+      return r;
 
-      // Shared-base pointer cancellation reduces to a relation between the
-      // two surviving offsets. Coerce both to a common type so the rebuilt
-      // node is well-formed even when the offsets carry different concrete
-      // bv widths — `arr + (int)c` vs `arr + (long)c` from a p++ chain.
-      auto cancel = [&](const expr2tc &a_in, const expr2tc &b_in) -> expr2tc {
-        expr2tc a = a_in, b = b_in;
-        if (!coerce_to_common_type(a, b))
-          return expr2tc();
-        expr2tc rel = make_irep<constructor>(a, b);
-        return typecast_check_return(type, rel);
-      };
-
-      if (
-        lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_2))
-      {
-        expr2tc r = cancel(lhs.side_2, rhs.side_2);
-        if (!is_nil_expr(r))
-          return r;
-      }
-      if (
-        lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_1))
-      {
-        expr2tc r = cancel(lhs.side_1, rhs.side_1);
-        if (!is_nil_expr(r))
-          return r;
-      }
-      if (
-        lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
-        is_constant(rhs.side_1))
-      {
-        expr2tc r = cancel(lhs.side_2, rhs.side_1);
-        if (!is_nil_expr(r))
-          return r;
-      }
-      if (
-        lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
-        is_constant(rhs.side_2))
-      {
-        expr2tc r = cancel(lhs.side_1, rhs.side_2);
-        if (!is_nil_expr(r))
-          return r;
-      }
-    }
+    if (expr2tc r = cancel_shared_pointer_base<constructor>(
+          type, simplified_side_1, simplified_side_2);
+        !is_nil_expr(r))
+      return r;
 
     return expr2tc();
   }
@@ -3886,34 +4288,6 @@ fold_const_across_addsub(const expr2tc &side_1, const expr2tc &side_2)
 /// exits (#6778). The rewrite is applied here rather than in expr2t::simplify
 /// because folding every address_of loses the concrete offset the value-set
 /// analysis needs (regression/incremental-smt/incremental-24).
-static expr2tc normalize_addressof_index(const expr2tc &e)
-{
-  if (!is_address_of2t(e) || !is_index2t(to_address_of2t(e).ptr_obj))
-    return e;
-
-  expr2tc folded = to_address_of2t(e).do_simplify();
-  return is_nil_expr(folded) ? e : folded;
-}
-
-/// Put both operands of a pointer comparison into `&base[0] + c` form, and
-/// return the rebuilt comparison when either changed. @p rebuild re-emits the
-/// node so the common-addend cancellation in the caller can decide it.
-template <typename Rebuild>
-static expr2tc normalize_addressof_operands(
-  const expr2tc &a,
-  const expr2tc &b,
-  Rebuild rebuild)
-{
-  expr2tc na = normalize_addressof_index(a);
-  expr2tc nb = normalize_addressof_index(b);
-  if (na == a && nb == b)
-    return expr2tc();
-
-  expr2tc rebuilt = rebuild(na, nb);
-  expr2tc simplified = rebuilt->simplify();
-  return is_nil_expr(simplified) ? rebuilt : simplified;
-}
-
 /// Re-emit a comparison over @p a_in and @p b_in after coercing them to a
 /// common type; nil when they have none. Pointer-arith chains reach the
 /// cancellations below with mixed-width integer offsets (`(int)c` against
@@ -4126,6 +4500,12 @@ expr2tc notequal2t::do_simplify() const
       !is_nil_expr(b))
     return b;
 
+  // &x != NULL is true, the mirror of the == NULL rule same_object2t has.
+  if (is_null_pointer_value(side_1) && address_of_is_provably_non_null(side_2))
+    return gen_true_expr();
+  if (is_null_pointer_value(side_2) && address_of_is_provably_non_null(side_1))
+    return gen_true_expr();
+
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
   // preserves equality also preserves inequality.
@@ -4214,10 +4594,35 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
   return c.is_zero();
 }
 
+// Provably non-negative by type structure alone: an unsigned
+// bitvector, possibly zero-extended into a STRICTLY wider signed type
+// (the C promotion `(int)a_u16` shape — the sign bit is never set).
+static bool is_provably_nonneg(const expr2tc &e)
+{
+  if (is_unsignedbv_type(e))
+    return true;
+  if (is_typecast2t(e))
+  {
+    const typecast2t &tc = to_typecast2t(e);
+    if (
+      is_signedbv_type(tc.type) && is_unsignedbv_type(tc.from) &&
+      tc.type->get_width() > tc.from->type->get_width())
+      return true;
+  }
+  return false;
+}
+
 expr2tc lessthan2t::do_simplify() const
 {
   // Self-comparison: x < x is always false (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
+  // (wider-signed)(unsigned) < 0 is always false: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_false_expr();
 
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
@@ -4272,6 +4677,13 @@ expr2tc greaterthan2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
+  // 0 > (wider-signed)(unsigned) is always false: the mirror of the
+  // `< 0` fold above, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
+    return gen_false_expr();
+
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
   // Require the constant to share the variable side's type.
   if (
@@ -4318,6 +4730,13 @@ struct Lessthanequaltor
 
 expr2tc lessthanequal2t::do_simplify() const
 {
+  // 0 <= (wider-signed)(unsigned) is always true: the mirror of the
+  // `>= 0` fold below, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
+    return gen_true_expr();
+
   // Self-comparison: x <= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
@@ -4370,6 +4789,13 @@ expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // (wider-signed)(unsigned) >= 0 is always true: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_true_expr();
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
@@ -4869,8 +5295,8 @@ expr2tc same_object2t::do_simplify() const
     op2 = to_typecast2t(op2).from;
 
   // Handle NULL pointer comparisons first
-  bool op1_is_null = is_null_pointer(op1);
-  bool op2_is_null = is_null_pointer(op2);
+  bool op1_is_null = is_null_pointer_value(op1);
+  bool op2_is_null = is_null_pointer_value(op2);
 
   if (op1_is_null && op2_is_null)
     return gen_true_expr(); // Both NULL
@@ -4878,21 +5304,6 @@ expr2tc same_object2t::do_simplify() const
   // Exactly one side is NULL: can the other side equal NULL? &x is the
   // address of a real object, never NULL, so they're definitely different
   // objects. Symbols (pointer variables) might hold NULL — leave to SMT.
-  //
-  // Special case: address_of(dereference(p)) is semantically equivalent to
-  // p (a &*p round-trip), and p may be NULL. expr2t::simplify deliberately
-  // doesn't simplify operands of address_of, so this shape can reach us
-  // unchanged. Fold to false only when the address_of target isn't a
-  // dereference of a pointer that could itself be NULL.
-  auto address_of_is_provably_non_null = [](const expr2tc &e) -> bool {
-    if (!is_address_of2t(e))
-      return false;
-    const expr2tc &target = to_address_of2t(e).ptr_obj;
-    // &*p reduces to p, which may be NULL — refuse the fold.
-    if (is_dereference2t(target))
-      return false;
-    return true;
-  };
   if (op1_is_null && address_of_is_provably_non_null(op2))
     return gen_false_expr();
   if (op2_is_null && address_of_is_provably_non_null(op1))

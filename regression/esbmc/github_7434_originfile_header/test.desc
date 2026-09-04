@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-graphml -
+^VERIFICATION FAILED$
+key="originfile">[^<]*helper\.h
+<key id="originfile" attr\.name="originFileName" attr\.type="string" for="edge"/>

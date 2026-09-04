@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_overflow_unary_minus.goto
+--binary
+^VERIFICATION SUCCESSFUL$

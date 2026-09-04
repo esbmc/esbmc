@@ -8,6 +8,7 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
+#include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/set/python_set.h>
@@ -187,6 +188,16 @@ public:
   type_handler &get_type_handler()
   {
     return type_handler_;
+  }
+
+  element_type_registry &get_element_type_registry()
+  {
+    return element_type_registry_;
+  }
+
+  const element_type_registry &get_element_type_registry() const
+  {
+    return element_type_registry_;
   }
 
   /// Record that a list symbol escaped into a function/method call and may have
@@ -849,6 +860,14 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
+  /// @p method_name under @p base_class, as the module that defines the base
+  /// spells it, or null when the base is not imported.
+  symbolt *find_method_in_imported_base(
+    const nlohmann::json &base_class_node,
+    const std::string &base_class,
+    const std::string &method_name,
+    bool is_ctor) const;
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
@@ -1034,6 +1053,35 @@ private:
     const nlohmann::json &ast_node,
     const typet &current_type);
 
+  /**
+   * @brief Preserves the concrete result type of a np.<reducer>(a, axis=...)
+   * RHS instead of trusting the static annotator's guess.
+   *
+   * numpy.py necessarily declares sum/prod/mean/min/max/argmin/argmax's
+   * return type as `Any`, since their real shape is data-dependent (a scalar
+   * when flattened, an array along an axis); the static annotator resolves
+   * that ambiguity either to `Any` (void*) or, for some of these, to a plain
+   * scalar type guessed from the argument literal -- both wrong once axis=
+   * makes the real result a concrete array, and both would box/truncate the
+   * array numpy_call_expr's axis-aware fast paths actually produce, which
+   * can't be indexed afterwards. Unlike resolve_any_subscript_array_type,
+   * this does NOT gate on current_type being any_type() first: a wrong
+   * scalar guess needs overriding too. It is instead scoped narrowly by
+   * shape: a `Call` RHS whose callee is an attribute access on a name
+   * resolving to the imported numpy module, naming one of the functions
+   * above, and carrying a literal `axis=` keyword -- a shape that, on
+   * success, only ever produces a 1-D array result, so trusting a probe of
+   * the real call over the static guess is always correct here.
+   *
+   * @param ast_node The assignment AST node.
+   * @param current_type The current LHS type.
+   * @return The probed call result type, or the unmodified `current_type`
+   *   when the RHS does not match that shape.
+   */
+  typet resolve_numpy_reducer_call_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
   std::string resolve_name_symbol_id(const std::string &name) const;
 
   std::string root_name_from_subscript(const nlohmann::json &node) const;
@@ -1048,6 +1096,17 @@ private:
   bool is_numpy_view_copy_call_node(const nlohmann::json &node) const;
 
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
+  // itself returns a numpy array is never an is_numpy_array_constructor_expr
+  // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type
+  // already reflects the array-return fix by the time update_numpy_array_
+  // binding runs, so trust it instead of duplicating that resolution here.
+  // Split out of update_numpy_array_binding to keep its own decision count
+  // from growing further.
+  bool is_array_returning_call_expr(
+    const nlohmann::json &rhs_node,
+    const exprt &lhs) const;
 
   bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
 
@@ -1164,6 +1223,15 @@ private:
   bool return_value_uses_call_argument(
     const nlohmann::json &return_value,
     const nlohmann::json &call_node) const;
+
+  // return <call>(<param>, ...), e.g. `def transposed(a): return
+  // np.transpose(a)`: true when every Name the call expression references is
+  // either one of `params` or an imported module alias. Split out of
+  // return_value_uses_call_argument to keep that function's own decision
+  // count down.
+  bool return_call_only_references_params_or_modules(
+    const nlohmann::json &return_value,
+    const nlohmann::json &params) const;
 
   void reject_unsafe_numpy_view_target(const nlohmann::json &target);
   void reject_unsafe_numpy_view_write_to(const std::string &root_id);
@@ -1720,6 +1788,7 @@ private:
   const std::vector<nlohmann::json> *extra_asts_;
   const global_scope &global_scope_;
   type_handler type_handler_;
+  element_type_registry element_type_registry_;
   string_builder *string_builder_;
   symbol_generator sym_generator_;
 
@@ -1838,7 +1907,7 @@ private:
 
   /// List symbols passed as an argument to a function/method call, keyed by
   /// symbol id. Such a list may have been mutated (e.g. appended to) by the
-  /// callee, which the caller's static length tracking (list_type_map / the AST
+  /// callee, which the caller's static length tracking (the registry / the AST
   /// literal) does not observe. The convert-time constant-index bounds check in
   /// python-list/list_access.cpp is therefore suppressed for these lists, so
   /// the access falls back to the sound runtime __ESBMC_list_at path (GitHub

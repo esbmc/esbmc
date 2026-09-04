@@ -2,6 +2,17 @@
 
 using namespace python_expr;
 
+element_type_registry &python_list::elem_types()
+{
+  return converter_.get_element_type_registry();
+}
+
+const element_type_registry &python_list::elem_types() const
+{
+  const python_converter &const_converter = converter_;
+  return const_converter.get_element_type_registry();
+}
+
 symbolt &python_list::create_list()
 {
   locationt location = converter_.get_location_from_decl(list_value_);
@@ -109,7 +120,7 @@ exprt python_list::build_symbolic_fill_list(
   while_stmt.location() = location;
   converter_.add_instruction(while_stmt);
 
-  add_type_info_entry(result_id, "", elem_type);
+  elem_types().record(result_id, "", elem_type);
 
   return build_symbol(result);
 }
@@ -121,7 +132,10 @@ exprt python_list::get()
   const std::string &list_id = list_symbol.id.as_string();
   locationt location = converter_.get_location_from_decl(list_value_);
 
-  auto materialize_list_elem = [&](const exprt &elem) -> exprt {
+  auto materialize_list_elem = [&](const exprt &raw_elem) -> exprt {
+    // Must precede the is_symbol() return: a bare function symbol (#6640).
+    const exprt elem = decay_function_to_pointer(raw_elem);
+
     if (elem.is_symbol())
       return elem;
 
@@ -185,8 +199,8 @@ exprt python_list::get()
     exprt list_push_func_call =
       build_push_list_call(list_symbol, list_value_, map_elem);
     converter_.add_instruction(list_push_func_call);
-    list_type_map[list_id].push_back(
-      std::make_pair(map_elem.identifier().as_string(), map_elem.type()));
+    elem_types().record(
+      list_id, map_elem.identifier().as_string(), map_elem.type());
   }
 
   return build_symbol(list_symbol);
@@ -203,8 +217,7 @@ exprt python_list::build_list_from_exprs(const std::vector<exprt> &elems)
     // the element type-id from its type, and copies it into the list storage.
     exprt push_call = build_push_list_call(list_symbol, list_value_, elem);
     converter_.add_instruction(push_call);
-    list_type_map[list_id].push_back(
-      std::make_pair(std::string(), elem.type()));
+    elem_types().record(list_id, std::string(), elem.type());
   }
 
   return build_symbol(list_symbol);
@@ -260,9 +273,8 @@ exprt python_list::create_vla(
   converter_.add_instruction(while_cod);
 
   // Record one type-map entry per source element for index-based type lookups.
-  auto &result_types = list_type_map[result.id.as_string()];
   for (const auto &list_elem : list_elems)
-    result_types.push_back(std::make_pair(std::string(), list_elem.type()));
+    elem_types().record(result.id.as_string(), std::string(), list_elem.type());
 
   return build_symbol(result);
 }

@@ -11,6 +11,143 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
 
+/// A (possibly typecast) SSA symbol: it never changes meaning after
+/// its assignment, so a copy chain built from one is a stable renaming
+/// of the same value.
+static bool is_stable_value(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+  return is_symbol2t(*b);
+}
+
+bool goto_symext::chase_copies(expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (is_symbol2t(expr))
+  {
+    auto it =
+      copy_definitions.find(irep_idt(to_symbol2t(expr).get_symbol_name()));
+    if (it == copy_definitions.end())
+      return false;
+    expr = it->second;
+    return true;
+  }
+
+  bool changed = false;
+  expr->Foreach_operand([this, &changed](expr2tc &e) {
+    if (chase_copies(e))
+      changed = true;
+  });
+  return changed;
+}
+
+void goto_symext::record_copy_definition(
+  const expr2tc &renamed_lhs,
+  const expr2tc &rhs)
+{
+  if (!is_symbol2t(renamed_lhs))
+    return;
+  const symbol2t &lhs_sym = to_symbol2t(renamed_lhs);
+  if (
+    lhs_sym.rlevel != symbol_renaming_level::level2 &&
+    lhs_sym.rlevel != symbol_renaming_level::level2_global)
+    return;
+
+  // Only a bare copy, possibly through typecasts. Anything else (an
+  // ite from a guarded assignment, arithmetic, a dereference chain) is
+  // not a stable renaming of one value and gets no entry. Bare
+  // constants are already inlined by constant propagation and need no
+  // chase.
+  if (!is_stable_value(rhs) || is_constant_expr(rhs))
+    return;
+  if (copy_definitions.size() >= subsumption_map_capacity)
+    return;
+
+  // Canonicalize so chains resolve in one substitution pass.
+  expr2tc value = rhs;
+  chase_copies(value);
+  copy_definitions[irep_idt(to_symbol2t(renamed_lhs).get_symbol_name())] =
+    value;
+}
+
+/// Remember a guard generation's defining condition, up to the
+/// documented capacity.
+void goto_symext::record_guard_definition(
+  const expr2tc &guard_expr,
+  const expr2tc &new_rhs)
+{
+  if (guard_definitions.size() < subsumption_map_capacity)
+    guard_definitions[irep_idt(to_symbol2t(guard_expr).get_symbol_name())] =
+      new_rhs;
+}
+
+/// Whether the accumulated path guard already decides @p new_guard:
+/// TV_TRUE when a conjunct matches it, TV_FALSE when one matches its
+/// negation, TV_UNKNOWN otherwise. Conjuncts are usually guard SYMBOLS
+/// (possibly negated); level2 renaming never substitutes into an
+/// already-L2 symbol, so their defining conditions are looked up in
+/// guard_definitions instead. Both sides are rewritten onto the
+/// canonical copy-chain basis — conditions from different scopes name
+/// the same value through different symbol generations — and compared
+/// structurally; comparison negations are canonicalized by the
+/// simplifier. The rewritten forms are for matching only and never
+/// reach the SSA equation.
+tvt::tv_enumt goto_symext::path_guard_decides(
+  const expr2tc &new_guard,
+  bool already_false,
+  bool already_true)
+{
+  if (already_false || already_true)
+    return tvt::TV_UNKNOWN;
+
+  expr2tc cmp_guard = new_guard;
+  if (chase_copies(cmp_guard))
+    do_simplify(cmp_guard);
+  expr2tc neg_guard = not2tc(cmp_guard);
+  do_simplify(neg_guard);
+
+  for (const expr2tc &raw : cur_state->guard.guard_list)
+  {
+    bool negated = false;
+    expr2tc conjunct = raw;
+    if (is_not2t(conjunct))
+    {
+      negated = true;
+      conjunct = to_not2t(conjunct).value;
+    }
+    auto def = is_symbol2t(conjunct)
+                 ? guard_definitions.find(
+                     irep_idt(to_symbol2t(conjunct).get_symbol_name()))
+                 : guard_definitions.end();
+    if (def != guard_definitions.end())
+    {
+      conjunct = def->second;
+      if (negated)
+      {
+        conjunct = not2tc(conjunct);
+        do_simplify(conjunct);
+      }
+    }
+    else
+    {
+      conjunct = raw;
+      cur_state->rename(conjunct);
+      do_simplify(conjunct);
+    }
+    if (chase_copies(conjunct))
+      do_simplify(conjunct);
+    if (conjunct == cmp_guard)
+      return tvt::TV_TRUE;
+    if (conjunct == neg_guard)
+      return tvt::TV_FALSE;
+  }
+  return tvt::TV_UNKNOWN;
+}
+
 void goto_symext::symex_goto(const expr2tc &old_guard)
 {
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
@@ -27,6 +164,16 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   bool new_guard_false = (is_false(decided) || cur_state->guard.is_false());
   bool new_guard_true = is_true(decided);
+
+  // Path-guard subsumption: a branch condition the accumulated path
+  // guard already decides is not forked again. Without this, a
+  // callee's own `x < 0` check downstream of a caller's
+  // `if (x >= 0) return` leaves symex exploring the contradictory
+  // region — allocators, GC, memmove models — for nothing.
+  const tvt::tv_enumt path_decides =
+    path_guard_decides(new_guard, new_guard_false, new_guard_true);
+  new_guard_true |= path_decides == tvt::TV_TRUE;
+  new_guard_false |= path_decides == tvt::TV_FALSE;
 
   // new_guard_false: the branch is provably not taken (guard simplifies to
   // false, or the current path is already dead). new_guard_true: the guard
@@ -261,6 +408,11 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       do_simplify(new_rhs);
 
       cur_state->assignment(guard_expr, new_rhs);
+
+      // assignment() renamed guard_expr to its fresh L2 generation;
+      // remember what that generation stands for so later gotos can
+      // resolve path-guard conjuncts back to branch conditions.
+      record_guard_definition(guard_expr, new_rhs);
 
       target->assignment(
         gen_true_expr(),

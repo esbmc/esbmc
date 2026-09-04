@@ -8,6 +8,7 @@
 #include <sstream>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
+#include <util/base/prefix.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
@@ -174,6 +175,78 @@ static bool array_may_propagate(const expr2tc &e)
   return elems && *elems <= multidim_propagation_bound;
 }
 
+/// The operand a wrapper node's propagatability is decided by, or null when
+/// @p e is not one. sizeof2t folds to its own `value`, which already holds
+/// clang's computed byte size, so it propagates exactly when that does -- and
+/// declines for a VLA, whose value is a symbolic expression.
+static const expr2tc *propagation_passthrough(const expr2tc &e)
+{
+  if (is_typecast2t(e))
+    return &to_typecast2t(e).from;
+  if (is_sizeof2t(e))
+    return &to_sizeof2t(e).value;
+  return nullptr;
+}
+
+/// Arithmetic whose result is known once its operands are. Only add used to be
+/// treated that way, so `n = sizeof(a) / sizeof(a[0])` was not propagated and a
+/// loop bounded by n never exited under --no-simplify, where do_simplify no
+/// longer folds the division to a literal first (#6778). The stored value
+/// stays unfolded, so the flag still decides the encoding; it is
+/// branch_decision_guard that folds it to decide the exit.
+static bool is_const_foldable_arith(const expr2tc &e)
+{
+  return is_add2t(e) || is_sub2t(e) || is_mul2t(e) || is_div2t(e) ||
+         is_modulus2t(e);
+}
+
+/// A (possibly typecast) symbol whose value can never change under
+/// it: a level2 SSA generation (assigned once) or a nondet$ free
+/// variable (never assigned; no level2 generation is minted for it).
+/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the
+/// symbol here is a member value inside a recorded aggregate, so a
+/// member read folds to the free variable the trace shows anyway.
+static bool is_immutable_value(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+  if (!is_symbol2t(*b))
+    return false;
+  // Scalars only: an aggregate-typed symbol must keep going through
+  // constant_propagation, whose array_may_propagate refuses the
+  // infinite-size modelling arrays and oversized nests.
+  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
+        is_pointer_type((*b)->type)))
+    return false;
+  const symbol2t &sym = to_symbol2t(*b);
+  if (
+    sym.rlevel == symbol_renaming_level::level2 ||
+    sym.rlevel == symbol_renaming_level::level2_global)
+    return true;
+  return has_prefix(sym.thename.as_string(), "nondet$");
+}
+
+/// Whether a constant aggregate literal may propagate: every element
+/// must itself propagate. A union literal may also carry a (typecast)
+/// symbol as its initializing member — constant_union's init_field
+/// keeps a later cross-member read visible as one.
+static bool aggregate_literal_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &expr)
+{
+  const bool is_union_literal = is_constant_union2t(expr);
+  bool noconst = true;
+
+  expr->foreach_operand([&](const expr2tc &e) {
+    if (
+      noconst && !(is_union_literal && is_immutable_value(e)) &&
+      !state.constant_propagation(e))
+      noconst = false;
+  });
+  return noconst;
+}
+
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   if (no_propagation)
@@ -209,10 +282,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_address_of2t(expr))
     return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
 
-  if (is_typecast2t(expr))
-    return constant_propagation(to_typecast2t(expr).from);
+  if (const expr2tc *inner = propagation_passthrough(expr))
+    return constant_propagation(*inner);
 
-  if (is_add2t(expr))
+  if (is_const_foldable_arith(expr))
   {
     bool noconst = true;
 
@@ -293,8 +366,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
         current = w.source_value;
       }
 
-      // If we reached a symbol and all updates were constants, propagate
-      if (all_constant_updates && !is_member2t(current))
+      // The chain's base may itself be a member of an unpropagated symbol —
+      // that is how a nested member write `x.in.n = 4` spells itself — and the
+      // value stays self-contained because the base is already renamed.
+      if (all_constant_updates)
         return true;
     }
 
@@ -339,7 +414,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       {
         const with2t &w = to_with2t(current);
 
-        if (!is_constant_expr(w.update_value))
+        if (
+          !is_constant_expr(w.update_value) &&
+          !is_immutable_value(w.update_value))
         {
           all_constant_updates = false;
           break;
@@ -376,15 +453,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
     is_constant_array2t(expr))
-  {
-    bool noconst = true;
-
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
-        noconst = false;
-    });
-    return noconst;
-  }
+    return aggregate_literal_may_propagate(*this, expr);
 
   if (is_constant_expr(expr))
     return true;

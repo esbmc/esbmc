@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_object_upto_fail.goto
+--binary --function fill2
+^VERIFICATION FAILED$

@@ -191,7 +191,7 @@ exprt python_dict_handler::handle_dict_subscript(
     list_assign.location() = location;
     converter_.add_instruction(list_assign);
 
-    // Extract element type and populate list_type_map for correct iteration
+    // Extract element type and record it for correct iteration
     if (dict_expr.is_symbol())
     {
       const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
@@ -240,9 +240,8 @@ exprt python_dict_handler::handle_dict_subscript(
                   value_type["slice"]["id"].get<std::string>();
                 typet elem_type = type_handler_.get_typet(elem_type_str);
 
-                const std::string &list_id = list_result.id.as_string();
-                python_list::list_type_map[list_id].push_back(
-                  std::make_pair("", elem_type));
+                converter_.get_element_type_registry().record(
+                  list_result.id.as_string(), "", elem_type);
               }
             }
           }
@@ -252,29 +251,17 @@ exprt python_dict_handler::handle_dict_subscript(
 
     // Fallback: element type recorded at construction (literal dict whose
     // values are lists with a uniform element type).
-    if (
-      python_list::get_list_type_map_size(list_result.id.as_string()) == 0 &&
-      dict_expr.is_symbol())
+    element_type_registry &registry = converter_.get_element_type_registry();
+    if (registry.size(list_result.id.as_string()) == 0 && dict_expr.is_symbol())
     {
       const std::string &vals_id =
         get_internal_list_id(dict_expr.identifier().as_string(), false);
       if (!vals_id.empty())
       {
-        auto it =
-          python_list::list_type_map.find(dict_value_list_elems_key(vals_id));
-        if (it != python_list::list_type_map.end() && !it->second.empty())
-        {
-          const typet &first = it->second.front().second;
-          const bool uniform = std::all_of(
-            it->second.begin(),
-            it->second.end(),
-            [&first](const std::pair<std::string, typet> &e) {
-              return e.second == first;
-            });
-          if (uniform)
-            python_list::list_type_map[list_result.id.as_string()].push_back(
-              std::make_pair(std::string(), first));
-        }
+        const typet uniform = registry.uniform_element_type(
+          vals_id, type_slot::dict_value_list_elems);
+        if (uniform != typet())
+          registry.record(list_result.id.as_string(), std::string(), uniform);
       }
     }
 
@@ -302,7 +289,8 @@ exprt python_dict_handler::handle_dict_subscript(
       dict_id.empty() ? std::string() : get_internal_list_id(dict_id, false);
     if (
       !vals_id.empty() &&
-      python_list::has_mixed_numeric_types(dict_value_types_key(vals_id)))
+      converter_.get_element_type_registry().has_mixed_numeric(
+        vals_id, type_slot::dict_value_types))
     {
       const size_t float_type_id =
         std::hash<std::string>{}(type_handler_.type_to_string(
@@ -446,8 +434,8 @@ void python_dict_handler::handle_dict_subscript_assign(
     const std::string vals_id =
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
-      list_handler.add_type_info(
-        dict_value_types_key(vals_id), std::string(), value.type());
+      converter_.get_element_type_registry().record(
+        vals_id, std::string(), value.type(), type_slot::dict_value_types);
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(
