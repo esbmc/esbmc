@@ -515,18 +515,13 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
 
   const std::string &type = node["_type"];
 
+  if (type == "Constant" && node.contains("_bigint"))
+    return BigInt(node["_bigint"].get<std::string>().c_str());
+
   if (
     type == "Constant" && node.contains("value") &&
     node["value"].is_number_integer())
-  {
-    const nlohmann::json &value = node["value"];
-    if (
-      value.is_number_unsigned() &&
-      value.get<unsigned long long>() >
-        static_cast<unsigned long long>(std::numeric_limits<long long>::max()))
-      return std::nullopt;
-    return BigInt(value.get<long long>());
-  }
+    return BigInt(node["value"].get<long long>());
 
   if (type == "UnaryOp" && node.contains("op") && node.contains("operand"))
   {
@@ -545,8 +540,7 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
   const std::optional<BigInt> lhs = try_fold_constant_arith_json(node["left"]);
   if (!lhs.has_value())
     return std::nullopt;
-  const std::optional<BigInt> rhs =
-    try_fold_constant_arith_json(node["right"]);
+  const std::optional<BigInt> rhs = try_fold_constant_arith_json(node["right"]);
   if (!rhs.has_value())
     return std::nullopt;
 
