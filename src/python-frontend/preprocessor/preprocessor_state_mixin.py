@@ -14,7 +14,6 @@ class PreprocessorStateMixin:
         self.range_loop_counter = 0
         self.iterable_loop_counter = 0
         self.enumerate_loop_counter = 0
-        self.nondet_expand_counter = 0
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.functionVarargs = set()
@@ -75,6 +74,9 @@ class PreprocessorStateMixin:
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
         self.called_names = set()
+        # nondet_list/nondet_dict the module defines itself, so the
+        # rewrite to a typed builder must leave those calls alone.
+        self.shadowed_nondet_collections = set()
         self.list_literal_values = {}
         # Names bound to a dict literal, mapped to that literal; invalidated on
         # any mutation, scoped like list_literal_values.

@@ -5,6 +5,7 @@ import copy
 
 class ModuleRewriteMixin:
     called_names: set
+    shadowed_nondet_collections: set
     variable_annotations: dict
     module_dunder_all: list | None
     exported_range_aliases: set
@@ -423,6 +424,8 @@ class ModuleRewriteMixin:
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
 
+        self._scan_shadowed_nondet_collections(node)
+
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
@@ -464,6 +467,32 @@ class ModuleRewriteMixin:
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 local_binds, local_names = self._collect_scope_dict_binds(n.body)
                 self._record_scope_calls(n.body, local_binds, local_names, module_binds)
+
+
+    def _scan_shadowed_nondet_collections(self, node):
+        """Record `nondet_list`/`nondet_dict` names this module defines itself.
+
+        The rewrite to a typed builder matches on the callee name, so without
+        this a user's own `def nondet_list(...)` would be replaced by ESBMC's
+        model and its body never verified. A name that is only *imported* stays
+        interceptable: SV-COMP harnesses import `_sv_verifier.nondet_list`
+        expecting ESBMC's model, not the stub's body.
+        """
+        intrinsics = ("nondet_list", "nondet_dict")
+        for n in ast.walk(node):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if n.name in intrinsics:
+                    self.shadowed_nondet_collections.add(n.name)
+                for arg in getattr(getattr(n, "args", None), "args", []):
+                    if arg.arg in intrinsics:
+                        self.shadowed_nondet_collections.add(arg.arg)
+            elif isinstance(n, ast.Assign):
+                for target in n.targets:
+                    if isinstance(target, ast.Name) and target.id in intrinsics:
+                        self.shadowed_nondet_collections.add(target.id)
+            elif isinstance(n, ast.AnnAssign):
+                if isinstance(n.target, ast.Name) and n.target.id in intrinsics:
+                    self.shadowed_nondet_collections.add(n.target.id)
 
     @staticmethod
     def _walk_scope(stmts):

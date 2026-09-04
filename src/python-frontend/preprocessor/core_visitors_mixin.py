@@ -225,15 +225,6 @@ class CoreVisitorsMixin:
             return
         self._known_literal_values.pop(target_name, None)
 
-    def _maybe_expand_nondet_assign(self, node):
-        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
-            return None
-        if not (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)):
-            return None
-        if node.value.func.id not in ("nondet_list", "nondet_dict"):
-            return None
-        return self._expand_nondet_call(node.targets[0], node.value, node)
-
     @staticmethod
     def _build_stop_iteration_raise(source_node):
         raise_node = ast.Raise(
@@ -475,6 +466,26 @@ class CoreVisitorsMixin:
                     self._copy_location_info(node, ann_assign)
                     ast.fix_missing_locations(ann_assign)
                     self.variable_annotations[target.id] = annotation
+                    return ann_assign
+
+            # A rewritten nondet builder carries its element types in its name,
+            # and an unannotated assignment leaves the converter no return type
+            # to infer from. Emit the annotation explicitly, as the inline
+            # expansion this rewrite replaced used to (esbmc/esbmc#7575).
+            if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
+                annotation = self._nondet_builder_annotation(node.value.func.id)
+                if annotation is not None:
+                    ann_assign = ast.AnnAssign(
+                        target=ast.Name(id=target.id, ctx=ast.Store()),
+                        annotation=annotation,
+                        value=node.value,
+                        simple=1,
+                    )
+                    self._copy_location_info(node, ann_assign)
+                    ast.fix_missing_locations(ann_assign)
+                    self.variable_annotations[target.id] = annotation
+                    self.known_variable_types[target.id] = \
+                        self._infer_type_from_call(node.value)
                     return ann_assign
 
         if (isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name)
@@ -1347,10 +1358,6 @@ class CoreVisitorsMixin:
         if neutralized_target is not None:
             self._known_literal_values.pop(neutralized_target, None)
 
-        expanded = self._maybe_expand_nondet_assign(node)
-        if expanded is not None:
-            return expanded
-
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
@@ -1481,6 +1488,10 @@ class CoreVisitorsMixin:
 
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         self._invalidate_list_literals_for_call(node)
+        rewritten_nondet = self._rewrite_nondet_collection_call(node)
+        if rewritten_nondet is not None:
+            self.generic_visit(rewritten_nondet)
+            return rewritten_nondet
         rewritten_dunder = self._maybe_rewrite_operator_dunder_call(node)
         if rewritten_dunder is not None:
             return rewritten_dunder
