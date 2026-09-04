@@ -1,5 +1,12 @@
 #include <solvers/smt/smt_solver.h>
 
+/// Largest value @p type can represent.
+static BigInt type_max_value(const type2tc &type)
+{
+  const unsigned int width = type->get_width();
+  return BigInt::power2(is_signedbv_type(type) ? width - 1 : width) - 1;
+}
+
 smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
@@ -44,7 +51,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 
       if (is_signed)
       {
-        BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+        BigInt max_val = type_max_value(side1->type);
         BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
 
         expr2tc max_int = constant_int2tc(side1->type, max_val);
@@ -118,7 +125,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
         auto const width = side1->type->get_width();
 
         // Define minimum and maximum values for signed integers
-        BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+        BigInt max_val = type_max_value(side1->type);
         BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
 
         expr2tc max_int = constant_int2tc(side1->type, max_val);
@@ -314,8 +321,17 @@ smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)
 
   // Define unsigned bounds for the destination width
   expr2tc lower_bound = constant_int2tc(ocast.operand->type, 0);
-  expr2tc upper_bound =
-    constant_int2tc(ocast.operand->type, BigInt::power2(dst_width) - 1);
+
+  /* 2^bits - 1 has to be representable in the operand's type. At equal widths
+   * a signed operand cannot hold it, and constant_int2tc wraps it to -1, which
+   * leaves `operand < 0 || operand > -1` -- a tautology. A bound the type
+   * cannot reach is never exceeded, so clamp it to the type's own max (#7324). */
+  const BigInt type_max = type_max_value(ocast.operand->type);
+  BigInt bound = BigInt::power2(dst_width) - 1;
+  if (bound > type_max)
+    bound = type_max;
+
+  expr2tc upper_bound = constant_int2tc(ocast.operand->type, bound);
 
   // Check if the operand is within bounds
   expr2tc overflow_check = or2tc(
