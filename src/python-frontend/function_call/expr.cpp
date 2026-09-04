@@ -5937,6 +5937,12 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
+    // Tagged arguments aren't supported yet; refuse before goto-symex.
+    if (type_handler_.is_tagged_scalar_type(arg.type()))
+      throw std::runtime_error(
+        "passing a dynamically-typed variable to a function is not yet "
+        "supported");
+
     // A list passed to a callee may be mutated there (e.g. appended to), which
     // the caller's static length tracking does not observe. Mark the symbol so
     // later constant-index accesses fall back to the runtime bounds check
