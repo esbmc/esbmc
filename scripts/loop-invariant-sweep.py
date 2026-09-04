@@ -52,7 +52,7 @@ def verdict(out):
     """First verdict line in the output, matching how the SV-COMP wrapper reads it."""
     best, at = "NONE", len(out) + 1
     for v in VERDICTS:
-        m = re.search(r"^VERIFICATION %s$" % v, out, re.M)
+        m = re.search(rf"^VERIFICATION {v}$", out, re.M)
         if m and m.start() < at:
             best, at = v, m.start()
     return best
@@ -68,7 +68,10 @@ def expected(desc_lines):
 
 def run(esbmc, cwd, args, timeout):
     try:
-        p = subprocess.run([esbmc] + args, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+        # check=False: a non-zero exit is the normal outcome for a failing
+        # verdict, and the verdict is read from the output either way.
+        p = subprocess.run([esbmc] + args, cwd=cwd, capture_output=True, text=True,
+                           timeout=timeout, check=False)
         return verdict(p.stdout + p.stderr)
     except subprocess.TimeoutExpired:
         return "TIMEOUT"
@@ -79,7 +82,8 @@ def one(args, name):
     desc = os.path.join(d, "test.desc")
     if not os.path.isfile(desc):
         return None
-    lines = open(desc).read().splitlines()
+    with open(desc, encoding="utf-8") as f:
+        lines = f.read().splitlines()
     if len(lines) < 3:
         return None
     src, flags = lines[1].strip(), shlex.split(lines[2])
@@ -138,7 +142,8 @@ def summarise(rows):
 def main():
     args = parse_args()
     rows = collect(args)
-    json.dump(rows, open(args.out, "w"), indent=1)
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(rows, f, indent=1)
 
     unsound, alarms, gained = summarise(rows)
     print(f"{len(rows)} tests  unsound={len(unsound)} "
