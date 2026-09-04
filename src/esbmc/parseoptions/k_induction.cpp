@@ -450,6 +450,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Struct to keep the result
     struct resultt r = {process_type, 0};
 
+    /* The parent reads back its own max_k_step as "this child gave no answer"
+     * (see the crash check beside solution[FORWARD_CONDITION]). The loop below
+     * raises max_k_step when the parent asks for a larger k, so snapshot the
+     * value the parent still holds -- reporting the raised one is read as a
+     * bug at that k. */
+    const uint64_t no_answer_k = max_k_step;
+
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
@@ -471,7 +478,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       {
         /* break would fall through to the "no answer" report below, which the
          * parent reads as a completed run. */
-        report_no_answer(forward_pipe[1], r, max_k_step);
+        report_no_answer(forward_pipe[1], r, no_answer_k);
         return false;
       }
 
