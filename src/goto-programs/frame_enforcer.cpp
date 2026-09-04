@@ -240,6 +240,42 @@ static void emit_array_store_frame(
     dest, loc, equality2tc(var, updated), mode, id2string(arr_name));
 }
 
+// Compare the scalar leaves, not whole rows: a row of a multi-dimensional
+// array is an array-typed rvalue, which no solver reads correctly (#7057).
+static void emit_leaf_equalities(
+  goto_programt &dest,
+  const locationt &loc,
+  frame_modet mode,
+  const expr2tc &var_elem,
+  const expr2tc &snap_elem,
+  const expr2tc &exemption,
+  const std::string &label)
+{
+  if (is_array_type(var_elem->type))
+  {
+    const array_type2t &at = to_array_type(var_elem->type);
+    const BigInt &n = to_constant_int2t(at.array_size).value;
+    for (BigInt j = 0; j < n; j += 1)
+    {
+      expr2tc jc = constant_int2tc(at.array_size->type, j);
+      emit_leaf_equalities(
+        dest,
+        loc,
+        mode,
+        index2tc(at.subtype, var_elem, jc),
+        index2tc(at.subtype, snap_elem, jc),
+        exemption,
+        label + "[" + integer2string(j) + "]");
+    }
+    return;
+  }
+
+  expr2tc guard = equality2tc(var_elem, snap_elem);
+  if (!is_nil_expr(exemption))
+    guard = or2tc(guard, exemption);
+  emit_frame_instruction(dest, loc, guard, mode, label);
+}
+
 // Hold every element the clause did not name unchanged, rather than the array
 // as a whole -- which the named write itself falsifies (#7056). A global array
 // has a constant extent, so this needs neither a witness index nor a
@@ -276,21 +312,39 @@ static bool emit_array_elem_frame(
     return true;
   }
 
+  // Descending to the leaves multiplies the assertion count, so the budget is
+  // measured over the leaves, and a nested dimension of unknown extent has
+  // none to count.
+  BigInt leaves = n;
+  for (type2tc sub = atype.subtype; is_array_type(sub);
+       sub = to_array_type(sub).subtype)
+  {
+    const array_type2t &s = to_array_type(sub);
+    if (!is_constant_int2t(s.array_size))
+      return false;
+    leaves = leaves * to_constant_int2t(s.array_size).value;
+  }
+  if (leaves > BigInt(max_elementwise_frame_extent))
+    return false;
+
   for (BigInt k = 0; k < n; k += 1)
   {
     expr2tc kc = constant_int2tc(atype.array_size->type, k);
-    expr2tc elem_guard = equality2tc(
-      index2tc(atype.subtype, var, kc), index2tc(atype.subtype, snap, kc));
+    expr2tc exemption;
 
     for (const expr2tc &assigned : ait->second)
-      elem_guard = or2tc(
-        elem_guard, equality2tc(typecast2tc(assigned->type, kc), assigned));
+    {
+      expr2tc named = equality2tc(typecast2tc(assigned->type, kc), assigned);
+      exemption = is_nil_expr(exemption) ? named : or2tc(exemption, named);
+    }
 
-    emit_frame_instruction(
+    emit_leaf_equalities(
       dest,
       loc,
-      elem_guard,
       mode,
+      index2tc(atype.subtype, var, kc),
+      index2tc(atype.subtype, snap, kc),
+      exemption,
       id2string(arr_name) + "[" + integer2string(k) + "]");
   }
   return true;

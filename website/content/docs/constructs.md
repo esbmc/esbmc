@@ -320,21 +320,30 @@ int main() {
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *p);
 ```
 
-`__ESBMC_get_object_size(p)` yields the size in bytes of the whole object `p`
-points into, regardless of `p`'s offset. GCC's `__builtin_object_size(p, type)`
+`__ESBMC_get_object_size(p)` yields the number of *elements* in the array object
+`p` points into, regardless of `p`'s offset. GCC's `__builtin_object_size(p, type)`
 is rewritten to `__ESBMC_builtin_object_size` and answered from the same model
 rather than from a compile-time approximation, so it stays exact for heap
-objects:
+objects. It counts **bytes**, and it measures the object addressed rather than
+`sizeof(*p)`: a scalar reached through a `void *` or a `char *` reports the
+scalar's own size, not `0` or `1`. The two therefore agree only where the
+element is one byte wide:
 
 ```c
 #include <assert.h>
 #include <stdlib.h>
 int main() {
     char a[10];
+    int n[4];
     char *d = malloc(8);
     assert(__ESBMC_get_object_size(a) == 10);
     assert(__builtin_object_size(a, 0) == 10);
+    assert(__ESBMC_get_object_size(n) == 4);    /* elements */
+    assert(__builtin_object_size(n, 0) == 16);  /* bytes */
     assert(__ESBMC_get_object_size(d) == 8);
+
+    void *v = &n[0];
+    assert(__builtin_object_size(v, 0) == 16);  /* the object, not sizeof(void) */
     return 0;
 }
 ```
@@ -419,7 +428,7 @@ against havoc'd values ([#2457](https://github.com/esbmc/esbmc/issues/2457)):
 | `__CPROVER_POINTER_OBJECT(p)` | Object component of `p` |
 | `__CPROVER_POINTER_OFFSET(p)` | Byte offset component of `p` |
 | `__CPROVER_same_object(p, q)` | `p` and `q` address the same object |
-| `__CPROVER_OBJECT_SIZE(p)` | Size of the object (`0` for `NULL`) |
+| `__CPROVER_OBJECT_SIZE(p)` | Size in bytes of the object addressed, whatever `p`'s own type (`0` for `NULL`) |
 | `__CPROVER_DYNAMIC_OBJECT(p)` | `p` points into heap-allocated memory |
 | `__CPROVER_LIVE_OBJECT(p)` | The object is still allocated |
 | `__CPROVER_WRITEABLE_OBJECT(p)` | Coincides with `__CPROVER_LIVE_OBJECT` |

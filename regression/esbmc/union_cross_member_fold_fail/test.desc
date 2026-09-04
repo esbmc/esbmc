@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2
+^\s+FAILED\s+\[main\.assertion\.2\]\s+line \d+\s+any other value must be refuted$
+^VERIFICATION FAILED$

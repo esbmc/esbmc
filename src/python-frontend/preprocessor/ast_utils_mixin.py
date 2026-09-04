@@ -5,6 +5,13 @@ import copy
 class AstUtilsMixin:
 
     @staticmethod
+    def subscripts_name(node, name):
+        """True when ``node`` contains a subscript of the bare name ``name``."""
+        return any(
+            isinstance(n, ast.Subscript) and isinstance(n.value, ast.Name) and n.value.id == name
+            for n in ast.walk(node))
+
+    @staticmethod
     def _sanitize_identifier_fragment(fragment):
         return "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in fragment)
 

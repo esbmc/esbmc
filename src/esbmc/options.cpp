@@ -184,7 +184,17 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enable SV-COMP mode: suppress GCC-acceptable frontend diagnostics "
      "(int/pointer conversions), treat __builtin_unreachable as a no-op, emit "
      "physical line numbers for witnesses, and avoid malloc/free in the "
-     "fopen/fclose models. Set automatically by the SV-COMP wrapper."}}},
+     "fopen/fclose models. Set automatically by the SV-COMP wrapper."},
+    /* Read by clang_c_language.cpp, which is built unconditionally, so these
+     * must not sit in a frontend-gated group (#7345). */
+    {"clang-c-irep2-adjust",
+     NULL,
+     "Run the IREP2-native C adjuster alongside the legacy adjust pass "
+     "(Phase 6 migration; experimental, default off)"},
+    {"clang-c-irep2-adjust-only",
+     NULL,
+     "Use the IREP2-native C adjuster instead of the legacy adjust pass "
+     "(Phase 6 hop-off; experimental, default off)"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
@@ -207,14 +217,6 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-list-compare-depth",
       boost::program_options::value<int>()->default_value(4)->value_name("nr"),
       "Set maximum nesting depth for Python list comparison (default is 4)"},
-     {"clang-c-irep2-adjust",
-      NULL,
-      "Run the IREP2-native C adjuster alongside the legacy adjust pass "
-      "(Phase 6 migration; experimental, default off)"},
-     {"clang-c-irep2-adjust-only",
-      NULL,
-      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
-      "(Phase 6 hop-off; experimental, default off)"},
      {"python-irep2-adjust",
       NULL,
       "Run the IREP2-native Python adjuster alongside the legacy adjust pass "
@@ -1001,7 +1003,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable value-set analysis for pointers and add assumes to the "
      "program"},
-    {"segfault-handler", NULL, "Print stacktrace on segmentation fault"}}},
+    {"segfault-handler",
+     NULL,
+     "Print a backtrace and memory map on a fatal signal"}}},
   {"DEBUG options",
    {
      {"double-assign-check",

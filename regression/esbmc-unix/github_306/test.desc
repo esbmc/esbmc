@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 20 --unlimited-k-steps --32 --k-induction --max-inductive-step 3 --no-pointer-check --no-bounds-check --interval-analysis
+REQUIRES arch32
 ^VERIFICATION FAILED$

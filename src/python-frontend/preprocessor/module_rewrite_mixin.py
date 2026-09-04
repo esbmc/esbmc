@@ -56,38 +56,40 @@ class ModuleRewriteMixin:
 
         def _walk_module_only(root):
             for child in ast.iter_child_nodes(root):
-                if isinstance(child,
-                              (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                if isinstance(child, ast.Lambda):
                     continue
                 yield child
-                yield from _walk_module_only(child)
+                if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    yield from _walk_module_only(child)
 
+        flow_nodes = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith)
         for stmt in module_node.body:
-            flow_nodes = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With,
-                          ast.AsyncWith)
-            if not isinstance(stmt, flow_nodes):
-                continue
-            for inner in _walk_module_only(stmt):
-                if isinstance(inner, ast.Assign):
-                    for t in inner.targets:
-                        rebound |= target_names(t)
-                elif isinstance(inner, (ast.AnnAssign, ast.AugAssign)):
-                    if isinstance(inner.target, ast.Name):
-                        rebound.add(inner.target.id)
-                elif isinstance(inner, ast.NamedExpr) and isinstance(inner.target, ast.Name):
-                    rebound.add(inner.target.id)
-                elif isinstance(inner, (ast.For, ast.AsyncFor)):
-                    rebound |= target_names(inner.target)
-                elif isinstance(inner, (ast.With, ast.AsyncWith)):
-                    for item in inner.items:
-                        if item.optional_vars:
-                            rebound |= target_names(item.optional_vars)
+            if isinstance(stmt, flow_nodes):
+                for inner in _walk_module_only(stmt):
+                    rebound |= ModuleRewriteMixin._bound_names_of(inner)
 
         for inner in ast.walk(module_node):
             if isinstance(inner, ast.Global):
                 rebound.update(inner.names)
 
         return rebound
+
+    @staticmethod
+    def _bound_names_of(node):
+        """Names a single statement/expression node binds in its own scope."""
+        target_names = ModuleRewriteMixin._target_names
+        if isinstance(node, ast.Assign):
+            return set().union(*(target_names(t) for t in node.targets))
+        if isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            return {node.target.id} if isinstance(node.target, ast.Name) else set()
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            return target_names(node.target)
+        if isinstance(node, (ast.With, ast.AsyncWith)):
+            return set().union(*(target_names(i.optional_vars) for i in node.items
+                                 if i.optional_vars))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return {node.name}
+        return set()
 
     @staticmethod
     def _scope_locally_binds(scope_node, names):  # pylint: disable=too-many-branches
@@ -302,25 +304,56 @@ class ModuleRewriteMixin:
         ]
 
     @staticmethod
-    def collect_range_wrappers(module_node):  # pylint: disable=too-many-boolean-expressions
-        """Collect trivial def f(p): return range(...) wrappers at module scope."""
+    def _simple_single_return_defs(module_node):
+        """Yield ``(stmt, params, expr)`` for each undecorated, never-rebound
+        module-level ``def f(p, ...): return <expr>`` with plain parameters."""
         rebound = ModuleRewriteMixin._rebound_module_names(module_node)
-        wrappers = {}
         for stmt in module_node.body:
             if not (isinstance(stmt, ast.FunctionDef) and stmt.name not in rebound
-                    and len(stmt.body) == 1 and isinstance(stmt.body[0], ast.Return)):
+                    and not stmt.decorator_list and len(stmt.body) == 1
+                    and isinstance(stmt.body[0], ast.Return) and stmt.body[0].value is not None):
                 continue
-            call = stmt.body[0].value
+            args = stmt.args
+            if (args.vararg or args.kwarg or args.kwonlyargs or args.posonlyargs or args.defaults
+                    or args.kw_defaults):
+                continue
+            yield stmt, [a.arg for a in args.args], stmt.body[0].value
+
+    @staticmethod
+    def _collect_single_return_funcs(module_node):
+        """One-parameter single-return defs as name -> (param, expr), so a
+        ``key=f`` folds like a lambda."""
+        return {
+            stmt.name: (params[0], expr)
+            for stmt, params, expr in ModuleRewriteMixin._simple_single_return_defs(module_node)
+            if len(params) == 1
+        }
+
+    def _collect_param_subscripting_funcs(self, module_node):
+        """Names that may index the first argument they are called with.
+
+        Covers defs whose body subscripts their first parameter, plus every
+        imported name, whose body this scan cannot see. Keyed on name alone, so
+        a nested or rebound def of the same name counts too: over-refusing
+        costs a clear error, under-refusing costs a verdict.
+        """
+        names = set()
+        for stmt in ast.walk(module_node):
+            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                names.update(alias.asname or alias.name for alias in stmt.names)
+            elif (isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.args.args
+                  and self.subscripts_name(stmt, stmt.args.args[0].arg)):
+                names.add(stmt.name)
+        return names
+
+    @staticmethod
+    def collect_range_wrappers(module_node):
+        """Collect trivial def f(p): return range(...) wrappers at module scope."""
+        wrappers = {}
+        for stmt, params, call in ModuleRewriteMixin._simple_single_return_defs(module_node):
             if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
                     and call.func.id == "range" and not call.keywords):
                 continue
-            args = stmt.args
-            has_non_simple_args = (args.vararg is not None or args.kwarg is not None
-                                   or args.kwonlyargs or args.posonlyargs or args.defaults
-                                   or args.kw_defaults)
-            if has_non_simple_args:
-                continue
-            params = [a.arg for a in args.args]
             param_set = set(params)
             if not all((isinstance(a, ast.Name) and a.id in param_set) or (isinstance(
                     a, ast.Constant) and isinstance(a.value, int) and not isinstance(a.value, bool))
@@ -384,6 +417,8 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        self.expand_unittest_main(node)
+
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
@@ -406,6 +441,8 @@ class ModuleRewriteMixin:
         self.module_dunder_all = self._capture_dunder_all(node)
         self._scan_sequence_iterators(node)
         self._scan_module_vararg_defs(node)
+        self._single_return_funcs = self._collect_single_return_funcs(node)
+        self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
 
     def _scan_dict_literal_bindings_and_calls(self, node):

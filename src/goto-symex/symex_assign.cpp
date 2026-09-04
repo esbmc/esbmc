@@ -193,6 +193,11 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   remaining_claims = sym.remaining_claims;
   simplified_claims = sym.simplified_claims;
   guard_identifier_s = sym.guard_identifier_s;
+  // Both maps bind L2 generation numbers; a forked/replayed execution
+  // state re-allocates generations from its snapshot's counters, so it
+  // must start from the snapshot's bindings, not empty or stale ones.
+  guard_definitions = sym.guard_definitions;
+  copy_definitions = sym.copy_definitions;
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
   memory_leak_check = sym.memory_leak_check;
@@ -373,6 +378,10 @@ void goto_symext::symex_assign(
   const guard2tc &guard)
 {
   const code_assign2t &code = to_code_assign2t(code_assign);
+
+  // A variable-length array's size reaches symex only here; bound it before the
+  // object it sizes can put an offset above PTRDIFF_MAX in the comparator. R40.
+  bound_dynamic_object_size(code);
 
   // Sanity check: if the target has zero size, then we've ended up assigning
   // to/from either a C++ POD class with no fields or an empty C struct or
@@ -732,6 +741,10 @@ void goto_symext::symex_assign_symbol(
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
   cur_state->assignment(renamed_lhs, rhs);
+
+  // A guarded assignment wrapped rhs in an ite above, so only genuine
+  // unconditional copies reach the copy-chain map.
+  record_copy_definition(renamed_lhs, rhs);
 
   // Special case when the lhs is an array access, we need to get the
   // right symbol for the index

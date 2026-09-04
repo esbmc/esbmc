@@ -216,3 +216,36 @@ typet infer_elem_type_from_call_return(
 }
 
 } // namespace python_list_detail
+
+typet python_list::infer_literal_element_type(
+  const nlohmann::json &list_literal)
+{
+  nlohmann::json first_elem = json_utils::get_list_element(list_literal, 0);
+  if (first_elem.is_null() || first_elem.empty())
+    return typet();
+
+  const type_handler &th = converter_.get_type_handler();
+
+  // A heterogeneous int/float literal is promoted to a homogeneous double list
+  // at construction (python_list::get, promote_ints), so every element is a
+  // double in __ESBMC_float_buf. Read it as a double regardless of which
+  // element the index selects; the first element's int type misreads the bits.
+  if (
+    list_literal["_type"] == "List" && list_literal.contains("elts") &&
+    list_literal["elts"].is_array())
+  {
+    bool has_int = false, has_float = false;
+    for (const auto &e : list_literal["elts"])
+    {
+      const typet t = th.get_typet(e);
+      if (t.is_floatbv())
+        has_float = true;
+      else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
+        has_int = true;
+    }
+    if (has_int && has_float)
+      return double_type();
+  }
+
+  return th.get_typet(first_elem);
+}

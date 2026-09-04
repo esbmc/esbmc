@@ -291,7 +291,9 @@ inline bool simplify(expr2tc &expr)
   expr2tc tmp = expr->simplify();
   if (!is_nil_expr(tmp))
   {
-    simplification_check::verify_rewrite(expr, tmp);
+    // No verify_rewrite() here: simplify() now checks each rewrite where it is
+    // made, so a whole-expression claim would restate what is already proved,
+    // in the widest and most decline-prone query of the run (esbmc/esbmc#7260).
     expr = tmp;
     return true;
   }
@@ -414,6 +416,8 @@ distribute_vector_operation(Func func, const expr2tc &op1, const expr2tc &op2)
       // store nil into the member slot — keep new_op so the lane
       // expression survives unsimplified for the SMT layer.
       auto folded = new_op->do_simplify();
+      if (!is_nil_expr(folded))
+        simplification_check::verify_rewrite(new_op, folded);
       datatype_member = is_nil_expr(folded) ? new_op : folded;
     }
     return constant_vector2tc(v->type, std::move(members));
@@ -459,5 +463,18 @@ void get_symbols(
  *  Idempotent: returns @p ops unchanged when already padded. */
 std::vector<expr2tc>
 pad_struct_operands(const struct_type2t &st, std::vector<expr2tc> ops);
+
+/** Base name of the variable a forall2t/exists2t binds, or an empty id when
+ *  @p binder holds no symbol at all. Strips typecasts, then the address_of
+ *  the solver expects around a binder that names a variable directly.
+ *
+ *  A binder of any other shape yields the name of whatever symbol it does
+ *  hold: `void *q = &i; __ESBMC_forall(q, ...)` binds `i` but reads as `q`.
+ *  Callers that must not confuse the two want the strict form below. */
+irep_idt quantifier_bound_name(const expr2tc &binder);
+
+/** As quantifier_bound_name, but empty unless @p binder is (a typecast of)
+ *  address_of(symbol), i.e. unless it names the bound variable directly. */
+irep_idt quantifier_direct_bound_name(const expr2tc &binder);
 
 #endif /* UTIL_IREP2_UTILS_H_ */

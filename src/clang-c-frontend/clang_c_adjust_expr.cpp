@@ -16,7 +16,6 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
-#include <util/expr/type2name.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -1330,69 +1329,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
   if (f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
-    if (exprt poly = is_gcc_polymorphic_builtin(identifier, expr.arguments());
+    if (exprt poly = declare_gcc_polymorphic_builtin(
+          to_symbol_expr(f_op), expr.arguments(), expr.location(), context);
         poly.is_not_nil())
     {
-      irep_idt identifier_with_type = poly.identifier();
-      auto &arguments = to_code_type(poly.type()).arguments();
-
-      // For all atomic/sync polymorphic built-ins (which are the ones handled
-      // by typecheck_gcc_polymorphic_builtin), looking at the first parameter
-      // suffices to distinguish different implementations.
-      if (arguments.front().type().is_pointer())
-      {
-        identifier_with_type =
-          id2string(identifier) + "_" +
-          type2name(to_pointer_type(arguments.front().type()).subtype());
-      }
-      else
-      {
-        identifier_with_type =
-          id2string(identifier) + "_" + type2name(arguments.front().type());
-      }
-
-      poly.identifier(identifier_with_type);
-      poly.name(f_op.name());
-      poly.location() = expr.location();
-
-      symbolt *function_symbol_with_type =
-        context.find_symbol(identifier_with_type);
-      if (!function_symbol_with_type)
-      {
-        for (std::size_t i = 0; i < arguments.size(); ++i)
-        {
-          const std::string base_name = "p_" + std::to_string(i);
-
-          // TODO: Just like the function parameter symbols in
-          // clang_c_convertert::get_function_param, adding this symbol to the
-          // context is only necessary for the migrate code.
-          symbolt param_symbol;
-          param_symbol.id = id2string(identifier_with_type) + "::" + base_name;
-          param_symbol.name = base_name;
-          param_symbol.location = f_op.location();
-          param_symbol.set_type(arguments[i].type());
-          param_symbol.lvalue = true;
-          param_symbol.is_parameter = true;
-          param_symbol.file_local = true;
-
-          arguments[i].cmt_identifier(param_symbol.id);
-          arguments[i].cmt_base_name(param_symbol.name);
-
-          context.add(param_symbol);
-        }
-
-        symbolt new_symbol;
-        new_symbol.id = identifier_with_type;
-        new_symbol.name = f_op.name();
-        new_symbol.location = expr.location();
-        new_symbol.set_type(poly.type());
-        code_blockt implementation =
-          instantiate_gcc_polymorphic_builtin(identifier, to_symbol_expr(poly));
-        new_symbol.set_value(implementation);
-
-        context.add(new_symbol);
-      }
-
       f_op = std::move(poly);
     }
     else

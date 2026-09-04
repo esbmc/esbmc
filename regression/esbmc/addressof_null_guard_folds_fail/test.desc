@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 20
+^VERIFICATION FAILED$
+^ *FAILED .*assertion total\(&a, via_ternary\(&a\)\) == 77$
+^Generated [0-9]{1,2} VCC\(s\)

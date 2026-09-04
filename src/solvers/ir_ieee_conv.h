@@ -48,6 +48,14 @@ public:
     smt_astt sym_ast,
     const symbol2t &sym);
 
+  /** Assert that a float symbol's real value is representable: every finite
+   *  value has magnitude at most max_normal, and the only magnitude above it
+   *  is the infinity sentinel that arithmetic saturates to on overflow.
+   *  Called from smt_solver_baset::convert_terminal for symbol_id. */
+  void assert_representable_magnitude(
+    smt_astt sym_ast,
+    const floatbv_type2t &fbv_type);
+
   /** Look up the tracked interval for t; fall back to the point interval {t,
    * t}.
    *  Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp. */

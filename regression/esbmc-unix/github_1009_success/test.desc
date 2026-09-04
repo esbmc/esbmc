@@ -1,4 +1,5 @@
 THOROUGH
 main.c
 --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --unlimited-k-steps --64 --no-pointer-check --no-bounds-check --overflow-check --no-assertions --k-induction --max-inductive-step 3
+REQUIRES signed_wchar_host
 ^VERIFICATION SUCCESSFUL$

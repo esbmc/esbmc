@@ -2,6 +2,7 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <goto-programs/goto_functions.h>
+#include <util/base/threeval.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
@@ -79,7 +80,8 @@ public:
     expr2tc obj;
     /** Guard when allocation occured. */
     guard2tc alloc_guard;
-    /** Record if the object is automatically desallocated (allocated with alloca). */
+    /** Record if the object is automatically desallocated (allocated with
+     * alloca). */
     bool auto_deallocd;
     /** The object name */
     std::string name;
@@ -142,6 +144,44 @@ public:
   };
 
   // Methods
+
+  /**
+   *  Rewrite an expression onto the canonical basis of its copy chains:
+   *  every L2 symbol with an entry in copy_definitions is replaced by
+   *  the value it was assigned. Used by path-guard subsumption to
+   *  compare branch conditions from different scopes structurally; the
+   *  result is for comparison only and is never fed back into the
+   *  symex state or the SSA equation.
+   *  @param expr Expression to rewrite; modified in place.
+   *  @return true if any substitution was made.
+   */
+  bool chase_copies(expr2tc &expr) const;
+
+  /**
+   *  Whether the accumulated path guard already decides a branch
+   *  condition: TV_TRUE when a conjunct matches it, TV_FALSE when one
+   *  matches its negation, TV_UNKNOWN otherwise. See symex_goto.cpp
+   *  for the matching discipline.
+   */
+  tvt::tv_enumt path_guard_decides(
+    const expr2tc &new_guard,
+    bool already_false,
+    bool already_true);
+
+  /**
+   *  Remember a guard generation's defining condition for
+   *  path_guard_decides, up to subsumption_map_capacity.
+   */
+  void record_guard_definition(const expr2tc &guard_expr, const expr2tc &rhs);
+
+  /**
+   *  Record a copy chain for chase_copies after an unconditional
+   *  assignment, when the rhs is a (possibly typecast) L2 symbol.
+   *  The rhs is canonicalized through existing chains first.
+   *  @param renamed_lhs L2 symbol generation just assigned.
+   *  @param rhs Renamed, simplified assignment rhs.
+   */
+  void record_copy_definition(const expr2tc &renamed_lhs, const expr2tc &rhs);
 
   /**
    *  Create a symex result for this run.
@@ -598,11 +638,11 @@ protected:
   void intrinsic_kill_monitor(reachability_treet &art);
   /**
    * @brief Intrinsic call for C memset function call
-   * 
+   *
    * This will either invoke our operational model (at string.c)
    * or try to compute the resulting value directly
-   * 
-   * @param art 
+   *
+   * @param art
    * @param func_call memset function call
    */
   void intrinsic_memset(
@@ -646,6 +686,25 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
+  /** Models a memcpy/memmove whose length is not a constant, the case
+   *  intrinsic_memcpy_impl otherwise defers to the C byte loop (which then
+   *  unwinds --unwind times per call). Mirrors intrinsic_memcmp's symbolic-n
+   *  path: bound the copy by the objects' own widths, guard each byte position
+   *  with i < n, and claim n <= that bound so an over-long copy is still
+   *  reported. Returns false when the operands cannot be resolved, leaving the
+   *  caller to bump. */
+  bool memcpy_symbolic_length(
+    const expr2tc &dst_arg,
+    const expr2tc &src_arg,
+    const expr2tc &n_arg);
+
+  /** The NULL checks and return-value assignment shared by both of
+   *  intrinsic_memcpy_impl's paths. */
+  void memcpy_finish(
+    const code_function_call2t &func_call,
+    const expr2tc &dst_arg,
+    const expr2tc &src_arg);
+
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
@@ -655,7 +714,8 @@ protected:
     unsigned long number_of_bytes,
     expr2tc &object,
     uint64_t &offset,
-    uint64_t &avail_bytes);
+    uint64_t &avail_bytes,
+    bool rename_object = true);
 
   /** Models __ESBMC_memmove. Identical optimisation to memcpy (the new value
    *  is built from the current src/dst bytes before assigning, so overlapping
@@ -672,7 +732,8 @@ protected:
     const code_function_call2t &func_call,
     const std::string &bump_name);
 
-  // Function to call a symname function, in case where were not able to optimize it
+  // Function to call a symname function, in case where were not able to
+  // optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
 
@@ -684,7 +745,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  /** Implements GCC's __builtin_object_size intrinsic for object size determination
+  /** Implements GCC's __builtin_object_size intrinsic for object size
+   * determination
    *
    * @param func_call Function call with 2 operands: pointer and type parameter
    * @param art Reachability tree (unused)
@@ -705,7 +767,8 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
-  /* Handles dereferencing between threads and is used only in data race checks. **/
+  /* Handles dereferencing between threads and is used only in data race checks.
+   * **/
   void replace_races_check(expr2tc &expr);
 
   void simplify_python_builtins(expr2tc &expr);
@@ -756,7 +819,18 @@ protected:
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &over_cap);
+
+  /**
+   *  Bound at PTRDIFF_MAX the object size an assignment records, reporting a
+   *  constant request that exceeds it rather than assuming it away. Only an
+   *  assignment to a dynamic_size2t records one -- a VLA declaration is the
+   *  only way a stack object's size reaches symex, and renaming has exposed
+   *  its constness by then. R40.
+   *  @param code The assignment, unrenamed.
+   */
+  void bound_dynamic_object_size(const code_assign2t &code);
 
   /**
    *  Create result pointer from newly allocated array.
@@ -918,6 +992,13 @@ protected:
    *  @param expr Expression we're replacing the contents of.
    */
   void replace_dynamic_allocation(expr2tc &expr);
+
+  /// The named object \p ptr addresses, resolved through the value set, or nil.
+  expr2tc value_set_named_object(const expr2tc &ptr);
+  bool resolve_valid_object_by_value_set(expr2tc &expr, const expr2tc &obj_ref);
+  bool resolve_dynamic_size_by_value_set(expr2tc &expr);
+  void replace_valid_object(expr2tc &expr);
+  void replace_dynamic_size(expr2tc &expr);
   void default_replace_dynamic_allocation(expr2tc &expr);
 
   /**
@@ -929,13 +1010,13 @@ protected:
 
   /**
    * Handle side effects in the symbolic execution.
-   * 
+   *
    * @param lhs The left-hand side expression (target of the assignment).
    * @param effect The side effect expression to be handled, typically one of
    *        the `sideeffect2t` kinds like `malloc`, `realloc`, etc.
-   * 
-   * This function does not return any value; it modifies the symbolic execution state
-   * based on the side effect encountered.
+   *
+   * This function does not return any value; it modifies the symbolic execution
+   * state based on the side effect encountered.
    */
   void handle_sideeffect(
     const expr2tc &lhs,
@@ -944,11 +1025,11 @@ protected:
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
-   * 
+   *
    * @param lhs The left-hand side expression (target of the assignment).
-   * @param if_effect The conditional expression (`if2t`) to be handled, containing
-   *        the condition, true branch, and false branch.
-   * 
+   * @param if_effect The conditional expression (`if2t`) to be handled,
+   * containing the condition, true branch, and false branch.
+   *
    * This function returns true if there is a sideeffect.
    */
   bool handle_conditional(
@@ -1336,6 +1417,44 @@ protected:
    *  @see guard_identifier
    */
   irep_idt guard_identifier_s;
+  /**
+   *  Cap on guard_definitions and copy_definitions. Both grow linearly
+   *  with symex length (one entry per branching goto, one per bare
+   *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
+   *  copied whenever an execution state forks, so an interleaving-heavy
+   *  run would otherwise pay an unbounded per-fork cost. Past the cap,
+   *  recording stops: subsumption keeps matching against what was
+   *  recorded and never decides wrongly, it merely stops improving,
+   *  and the per-fork copy is bounded by the cap (~8 MB worst case).
+   *  Single-threaded runs never fork an execution state and only pay
+   *  the recording itself.
+   */
+  static constexpr size_t subsumption_map_capacity = 1 << 16;
+  /**
+   *  Defining condition of each L2 guard symbol generation, i.e. the
+   *  (renamed, simplified) rhs it was assigned in symex_goto. Guard
+   *  symbols are SSA: each generation is assigned exactly once, so a
+   *  single map for the whole symex object is sound. symex_goto uses
+   *  it to resolve path-guard conjuncts back to branch conditions —
+   *  level2 renaming cannot do that, as it never substitutes into
+   *  symbols that are already level2. Keyed by the L2-qualified symbol
+   *  name (an interned irep_idt with a cached hash) rather than the
+   *  expression, so a lookup never deep-compares expression trees.
+   */
+  std::unordered_map<irep_idt, expr2tc> guard_definitions;
+  /**
+   *  Copy chains between L2 symbol generations: lhs generation -> the
+   *  (possibly typecast) L2 symbol it was unconditionally assigned.
+   *  Values are canonicalized at insertion, so one substitution pass
+   *  reaches the root of a chain. Path-guard subsumption uses this to
+   *  rewrite branch conditions onto a common basis before structural
+   *  comparison — a value handed across a call boundary gets a fresh
+   *  symbol at every hop, and without the rewrite a callee's re-check
+   *  of a caller-established condition never matches. Deliberately NOT
+   *  fed into constant propagation: substituting copies globally slices
+   *  away the originals' assignments and degrades counterexamples.
+   */
+  std::unordered_map<irep_idt, expr2tc> copy_definitions;
   /** Loop numbers. */
   unsigned first_loop;
   /** Number of assertions executed. */
@@ -1461,16 +1580,17 @@ protected:
   /** Flag as to whether we're doing a k-induction inductive step.
    *  Corresponds to the option --inductive-step */
   bool inductive_step;
-  /** Cached from --validate-violation-witness; checked on every branch/intrinsic. */
+  /** Cached from --validate-violation-witness; checked on every
+   * branch/intrinsic. */
   bool validate_witness;
 
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
-  /** Analyze the shared varables in a function call, this is because an argumemt
-   *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/
+  /** Analyze the shared varables in a function call, this is because an
+   * argumemt may be renamed to constant bool in symex_function_call_code(),
+   * while we need to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
   friend void build_goto_symex_classes();
 };
@@ -1511,7 +1631,8 @@ protected:
 namespace goto_symex_utils
 {
 /**
- * Computes the equivalent object value when considering a memcpy operation on it.
+ * Computes the equivalent object value when considering a memcpy operation on
+ * it.
  *
  * @param src The source expression from which bytes are copied.
  * @param dst The destination expression to which bytes are copied.
@@ -1519,7 +1640,8 @@ namespace goto_symex_utils
  * @param src_offset The offset in src from which the bytes start.
  * @param dst_offset The offset in dst at which the bytes are written.
  *
- * @returns A new expr2tc representing the result of the memcpy operation, or an empty expr2tc if unable construct the object
+ * @returns A new expr2tc representing the result of the memcpy operation, or an
+ * empty expr2tc if unable construct the object
  *
  * Usage Examples:
  * @code
@@ -1529,7 +1651,8 @@ namespace goto_symex_utils
  * size_t src_offset = 1;
  * size_t dst_offset = 2;
  *
- * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset, dst_offset);
+ * expr2tc result = gen_byte_memcpy(src, dst, num_of_bytes, src_offset,
+ * dst_offset);
  * // result should be constant_int2tc(bitvec_type(32)), BigInt(0x12de345678));
  * @endcode
  */

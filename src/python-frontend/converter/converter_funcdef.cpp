@@ -296,6 +296,7 @@ code_blockt python_converter::create_capture_cells(
     bind.then_case() = code_assignt(cell, nondet);
     bind.else_case() = code_assignt(cell, source_expr);
     bind.location() = location;
+    bind.location().property("skipped");
     bindings.copy_to_operands(bind);
 
     code_assignt mark(is_bound, gen_boolean(true));
@@ -304,6 +305,19 @@ code_blockt python_converter::create_capture_cells(
   }
 
   return bindings;
+}
+
+// A conversion call such as str("abc") yields its argument, so the argument's
+// length sizes the target. A method call does not, so it falls through to size
+// 0 -- the variable-length char[0] a non-literal argument already gives. Sizing
+// by the argument made "x".replace("a", "z") a scalar char (#7376). Only a Call
+// carries an array "args", so "func" is present here.
+static bool sizes_target_by_first_argument(const nlohmann::json &value)
+{
+  return value.contains("args") && value["args"].is_array() &&
+         value["args"].size() > 0 && value["args"][0].contains("value") &&
+         value["args"][0]["value"].is_string() &&
+         value["func"].value("_type", "") != "Attribute";
 }
 
 size_t python_converter::get_type_size(const nlohmann::json &ast_node)
@@ -340,12 +354,7 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
     else if (ast_node["value"]["value"].is_string())
       type_size = ast_node["value"]["value"].get<std::string>().size();
   }
-  else if (
-    ast_node["value"].contains("args") &&
-    ast_node["value"]["args"].is_array() &&
-    ast_node["value"]["args"].size() > 0 &&
-    ast_node["value"]["args"][0].contains("value") &&
-    ast_node["value"]["args"][0]["value"].is_string())
+  else if (sizes_target_by_first_argument(ast_node["value"]))
   {
     type_size = ast_node["value"]["args"][0]["value"].get<std::string>().size();
   }
@@ -1168,7 +1177,7 @@ void python_converter::refine_any_param_to_list(
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
     param_sym->set_type(param_arg.type());
   if (elem_type != typet())
-    python_list::add_type_info_entry(param_id, "", elem_type);
+    element_type_registry_.record(param_id, "", elem_type);
 }
 
 /// Whether an unannotated parameter should be refined to the list model.
@@ -1214,7 +1223,7 @@ void python_converter::seed_list_param_element_type(
       return;
     const typet elem_type = type_handler_.get_list_type(element).subtype();
     if (!elem_type.is_empty())
-      python_list::add_type_info_entry(arg_id, "", elem_type);
+      element_type_registry_.record(arg_id, "", elem_type);
     return;
   }
 
@@ -1227,7 +1236,7 @@ void python_converter::seed_list_param_element_type(
   typet elem_type;
   if (infer_list_elem_type_from_call_sites(
         id.get_function(), param_index, elem_type))
-    python_list::add_type_info_entry(arg_id, "", elem_type);
+    element_type_registry_.record(arg_id, "", elem_type);
 }
 
 bool python_converter::infer_list_elem_type_from_call_sites(

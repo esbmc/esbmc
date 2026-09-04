@@ -1,4 +1,5 @@
 CORE
 main.c
 --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --unlimited-k-steps --no-vla-size-check --32 --no-por --context-bound 5 --no-pointer-check --no-bounds-check --data-races-check --no-assertions --incremental-bmc
+REQUIRES arch32
 ^VERIFICATION FAILED$

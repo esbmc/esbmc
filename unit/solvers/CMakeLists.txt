@@ -30,3 +30,9 @@ endif()
 new_unit_test(simplification_equivalence_test
               "simplification_equivalence.test.cpp"
               "solvers;util_esbmc;filesystem;bigint")
+
+# The node tuple flattener's update(), driven directly: the field-preservation
+# contract it broke is unreachable from C input, so no regression test states
+# it. `solvers` rather than a named backend -- whichever is built in answers.
+new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")

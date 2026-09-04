@@ -10,6 +10,7 @@ new_unit_test(irep2_type_roundtrip_test "irep2_type_roundtrip_test.cpp" "pythonf
 new_unit_test(python_adjust_test "python_adjust_test.cpp" "pythonfrontend;clangcfrontend_stuff;util_esbmc;bigint")
 new_unit_test(function_call_cache_test "function_call_cache_test.cpp" "pythonfrontend")
 new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "pythonfrontend")
+new_unit_test(element_type_registry_test "element_type_registry_test.cpp" "pythonfrontend;util_esbmc;bigint")
 if(NOT WIN32)
 new_unit_test(function_call_expr_error_test "function_call_expr_error_test.cpp" "pythonfrontend;util_esbmc;bigint")
 endif()

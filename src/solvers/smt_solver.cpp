@@ -463,7 +463,14 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
       // foreach_operand (both fold over K::fields), so no operand is skipped.
       const size_t n = node->get_num_sub_exprs();
       for (size_t i = n; i-- > 0;)
-        stack.emplace_back(*node->get_sub_expr(i), false);
+      {
+        // Optional operand slots are nil for some kinds (sideeffect2t's
+        // operand and size); pushing one hashes a null container below.
+        const expr2tc *sub = node->get_sub_expr(i);
+        if (sub == nullptr || is_nil_expr(*sub))
+          continue;
+        stack.emplace_back(*sub, false);
+      }
       continue;
     }
 
@@ -957,24 +964,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::modulus_id:
-  {
-    auto m = to_modulus2t(expr);
-
-    if (int_encoding)
-    {
-      a = mk_mod(args[0], args[1]);
-    }
-    else if (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
-    {
-      a = mk_bvumod(args[0], args[1]);
-    }
-    else
-    {
-      assert(is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
-      a = solver->mkBVSRem(args[0], args[1]);
-    }
+    a = convert_modulus(to_modulus2t(expr), args[0], args[1]);
     break;
-  }
   case expr2t::index_id:
   {
     a = convert_array_index(expr);
@@ -1891,6 +1882,40 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   return a;
 }
 
+/// Encode a remainder: compositional as a - (a / b) * b when the
+/// formula also divides the same operands, the rem primitive otherwise.
+smt_astt
+smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return mk_mod(a, b);
+  if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
+    return solver->mkBVSRem(a, b);
+
+  assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
+  const bool both_unsigned =
+    is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2);
+  if (divided_operand_pairs.count({m.side_1, m.side_2}))
+  {
+    smt_astt quot = both_unsigned ? solver->mkBVUDiv(a, b) : mk_bvsdiv(a, b);
+    return solver->mkBVSub(a, solver->mkBVMul(quot, b));
+  }
+  return both_unsigned ? mk_bvumod(a, b) : solver->mkBVSRem(a, b);
+}
+
+void smt_solver_baset::note_division_operands(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (is_div2t(expr))
+  {
+    const div2t &d = to_div2t(expr);
+    divided_operand_pairs.emplace(d.side_1, d.side_2);
+  }
+  expr->foreach_operand(
+    [this](const expr2tc &e) { note_division_operands(e); });
+}
+
 void smt_solver_baset::assert_expr(const expr2tc &e)
 {
   assert_ast(convert_ast(e));
@@ -2217,8 +2242,16 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       // back to its magnitude-only threshold, which is the correct (not
       // merely conservative) check here.
       const floatbv_type2t &fbv_type = to_floatbv_type(sym.type);
-      assert_ast(solver->mkEqual(
-        sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+      assert_ast(
+        mk_eq(sym_ast, mk_subnormal_flush(sym_ast, fbv_type, expr2tc())));
+
+      // The other half of representability: a magnitude strictly between
+      // max_normal and the infinity sentinel is a value no operation can
+      // produce, and the two readings of "infinite" disagree there --
+      // encode_ieee_mul's invalid-operation term tests |x| > max_normal
+      // while a math.h isinf() that compares against INFINITY tests
+      // |x| == sentinel. Left unconstrained, 0*f was reported non-zero.
+      ir_ieee_api->assert_representable_magnitude(sym_ast, fbv_type);
     }
 
     return sym_ast;

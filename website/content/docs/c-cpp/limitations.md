@@ -28,6 +28,16 @@ should not, or vice versa.
   correctly, and `push_back` converges under `--incremental-bmc`, but the
   element copy-constructor loop that `insert`'s shift runs unwinds indefinitely.
   Use a bounded `--unwind N` run for that case.
+- **`list` and `deque` have no allocator-taking constructors.** Both take the
+  `Allocator` template parameter and expose `get_allocator()`, but a constructor
+  that is *passed* an allocator is not modelled, so `std::list<int, A> c(a)` is
+  a parse error — the same gap `basic_string` has, though not `vector`, whose
+  constructors do take a trailing allocator
+  ([#7493](https://github.com/esbmc/esbmc/issues/7493)).
+- **Comparing two `std::list` iterators with `<` is rejected**, as it is against
+  libc++: a list iterator is not random-access, so the ordering has to come from
+  a user-declared `operator<`. What changed is that such a user-declared
+  operator is now *found* by argument-dependent lookup.
 - Some STL container regression tests remain marked `KNOWNBUG`
   ([#4400](https://github.com/esbmc/esbmc/issues/4400)); the `regression/esbmc-cpp`
   suites are the authoritative record of which specific cases fail.
@@ -44,9 +54,14 @@ should not, or vice versa.
 
 ## Inheritance and polymorphism
 
-Virtual dispatch through a non-first base under multiple inheritance relies on
-Clang's `ASTRecordLayout` in a way that is known to be brittle
-([#3894](https://github.com/esbmc/esbmc/issues/3894)). Some
+Base-subobject displacements — the override thunk adapting a `Base*` receiver,
+both arms of `dynamic_cast`, and derived-to-base conversions under a virtual
+base — are now taken from ESBMC's own class layout rather than Clang's
+`ASTRecordLayout`, which disagreed with it under the Itanium primary-base rule
+([#3894](https://github.com/esbmc/esbmc/issues/3894)). A hierarchy containing a
+virtual base keeps a flattened layout that cannot express every shape; the
+remaining ones are pinned as `KNOWNBUG` under
+`regression/esbmc-cpp/inheritance/`. Some
 inheritance/polymorphism regressions remain marked `KNOWNBUG`
 ([#4399](https://github.com/esbmc/esbmc/issues/4399)), as do some of the
 `gcc-template-tests` ([#4398](https://github.com/esbmc/esbmc/issues/4398)).
@@ -73,6 +88,14 @@ call shape works.
   library ([#965](https://github.com/esbmc/esbmc/issues/965)). They are written
   for verification tractability, so their performance characteristics and
   internal representations do not match a production standard library.
+- `std::filesystem::directory_iterator` yields a bounded, nondeterministic
+  number of synthesised entries — nothing reads a real filesystem, so symbolic
+  execution terminates. The cap is an *assumption* rather than an assertion, so
+  a defect needing more entries than it allows is excluded silently, where the
+  container models assert instead and report `capacity exceeded`.
+- `std::ilogb`, `std::logb` and `std::nexttoward` resolve as overloads but have
+  no model in ESBMC's libc, so they return a nondeterministic value rather than
+  the C99 result.
 
 ## Time and clocks
 

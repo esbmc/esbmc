@@ -1,4 +1,5 @@
 CORE
 main.c
 --32 --interval-analysis
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

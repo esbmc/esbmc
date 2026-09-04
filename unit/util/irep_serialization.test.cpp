@@ -77,3 +77,43 @@ SCENARIO(
     }
   }
 }
+
+SCENARIO(
+  "a truncated string is reported, not silently completed",
+  "[core][utils][irep_serialization]")
+{
+  irep_serializationt::ireps_containert container;
+  irep_serializationt reader(container);
+
+  GIVEN("a stream that ends where an escape sequence began")
+  {
+    std::istringstream in("ab\\");
+
+    THEN("the escaped character is not invented")
+    {
+      REQUIRE(reader.read_string(in).as_string() == "ab");
+    }
+  }
+
+  GIVEN("a stream that ends without the string's terminator")
+  {
+    std::istringstream in("ab");
+
+    THEN("what was read is returned")
+    {
+      REQUIRE(reader.read_string(in).as_string() == "ab");
+    }
+  }
+
+  GIVEN("a complete escaped string")
+  {
+    std::ostringstream out;
+    write_string(out, std::string("a\\b"));
+    std::istringstream in(out.str());
+
+    THEN("the escape reads back as the character it protected")
+    {
+      REQUIRE(reader.read_string(in).as_string() == "a\\b");
+    }
+  }
+}

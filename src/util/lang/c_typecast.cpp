@@ -301,45 +301,52 @@ type2tc c_typecastt::follow_with_qualifiers(const type2tc &src_type)
   return dest_type;
 }
 
+c_typecastt::c_typet c_typecastt::rank_integer(unsigned width, bool is_signed)
+{
+  if (width <= config.ansi_c.char_width)
+    return is_signed ? CHAR : UCHAR;
+  if (width <= config.ansi_c.int_width)
+    return is_signed ? INT : UINT;
+  if (width <= config.ansi_c.long_int_width)
+    return is_signed ? LONG : ULONG;
+  if (width <= config.ansi_c.long_long_int_width)
+    return is_signed ? LONGLONG : ULONGLONG;
+  // Exactly 128, not <=: a _BitInt(65..127) is a signedbv of its own width,
+  // and ranking it INT128 makes implicit_typecast_arithmetic widen it to 128
+  // bits, moving the overflow boundary --overflow-check tests. The #extint
+  // marker cannot gate this instead: migrate_type rebuilds signedbv from width
+  // alone (migrate.cpp), so the expr2tc overload cannot see it and the two
+  // copies would diverge.
+  if (width == config.ansi_c.int_128_width)
+    return is_signed ? INT128 : UINT128;
+  return OTHER;
+}
+
+c_typecastt::c_typet c_typecastt::rank_floating(unsigned width)
+{
+  if (width <= config.ansi_c.single_width)
+    return SINGLE;
+  if (width <= config.ansi_c.double_width)
+    return DOUBLE;
+  if (width <= config.ansi_c.long_double_width)
+    return LONGDOUBLE;
+  return OTHER;
+}
+
 c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 {
   unsigned width = atoi(type.width().c_str());
 
   if (type.id() == "signedbv")
-  {
-    if (width <= config.ansi_c.char_width)
-      return CHAR;
-    else if (width <= config.ansi_c.int_width)
-      return INT;
-    else if (width <= config.ansi_c.long_int_width)
-      return LONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return LONGLONG;
-  }
+    return rank_integer(width, true);
   else if (type.id() == "unsignedbv")
-  {
-    if (width <= config.ansi_c.char_width)
-      return UCHAR;
-    else if (width <= config.ansi_c.int_width)
-      return UINT;
-    else if (width <= config.ansi_c.long_int_width)
-      return ULONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return ULONGLONG;
-  }
+    return rank_integer(width, false);
   else if (type.is_bool())
     return BOOL;
   else if (type.id() == "fixedbv")
     return FIXED;
   else if (type.id() == "floatbv")
-  {
-    if (width <= config.ansi_c.single_width)
-      return SINGLE;
-    else if (width <= config.ansi_c.double_width)
-      return DOUBLE;
-    else if (width <= config.ansi_c.long_double_width)
-      return LONGDOUBLE;
-  }
+    return rank_floating(width);
   else if (type.id() == "pointer")
   {
     if (type.subtype().id() == "empty")
@@ -364,35 +371,9 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
 c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
 {
   if (is_signedbv_type(type))
-  {
-    unsigned width = to_signedbv_type(type).width;
-
-    if (width <= config.ansi_c.char_width)
-      return CHAR;
-    else if (width <= config.ansi_c.int_width)
-      return INT;
-    else if (width <= config.ansi_c.long_int_width)
-      return LONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return LONGLONG;
-    if (width <= config.ansi_c.int_128_width)
-      return INT128;
-  }
+    return rank_integer(to_signedbv_type(type).width, true);
   else if (is_unsignedbv_type(type))
-  {
-    unsigned width = to_unsignedbv_type(type).width;
-
-    if (width <= config.ansi_c.char_width)
-      return UCHAR;
-    else if (width <= config.ansi_c.int_width)
-      return UINT;
-    else if (width <= config.ansi_c.long_int_width)
-      return ULONG;
-    else if (width <= config.ansi_c.long_long_int_width)
-      return ULONGLONG;
-    if (width <= config.ansi_c.int_128_width)
-      return UINT128;
-  }
+    return rank_integer(to_unsignedbv_type(type).width, false);
   else if (is_bool_type(type))
     return BOOL;
   else if (is_fixedbv_type(type))
@@ -405,13 +386,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     // promoted both operands to a type its switch has no case for and
     // silently converted neither -- making the whole helper a no-op on any
     // expr2tc pair with a floating-point operand.
-    unsigned width = to_floatbv_type(type).get_width();
-    if (width <= config.ansi_c.single_width)
-      return SINGLE;
-    else if (width <= config.ansi_c.double_width)
-      return DOUBLE;
-    else if (width <= config.ansi_c.long_double_width)
-      return LONGDOUBLE;
+    return rank_floating(to_floatbv_type(type).get_width());
   }
   else if (is_pointer_type(type))
   {
@@ -758,7 +733,8 @@ void c_typecastt::implicit_typecast_followed(
 
     if (src_type.is_struct() || src_type.is_union())
     {
-      // We got a case to convert derived class object to base base class pointer, e.g.:
+      // We got a case to convert derived class object to base base class
+      // pointer, e.g.:
       //  Convert from `derived_obj` to `(Base*)&derived_obj`
       // (probably) as part of function call argument adjustment flow
       // when calling a base method from a derived object
@@ -887,10 +863,9 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr1, exprt &expr2)
   {
     exprt &other_side = c_type1 == FIXED ? expr2 : expr1;
     const c_typet other = c_type1 == FIXED ? c_type2 : c_type1;
-    /* INT128/UINT128 are appended after OTHER in c_typet, so integer-ness
-     * cannot be tested by rank alone. */
-    const bool other_is_int =
-      other < FIXED || other == INT128 || other == UINT128;
+    /* Every integer kind, INT128/UINT128 included, now ranks below FIXED
+     * (C17 6.3.1.8), so integer-ness is a rank test. */
+    const bool other_is_int = other < FIXED;
     if (other_is_int)
     {
       implicit_typecast_arithmetic(other_side, std::max(other, INT));
@@ -958,7 +933,8 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
     if (dest.id() == "if")
     {
       // Special case: if expression
-      // To typecast the if expression, we need to apply the operations: true and false
+      // To typecast the if expression, we need to apply the operations: true
+      // and false
       dest.type() = type;
 
       do_typecast(dest.op1(), type);

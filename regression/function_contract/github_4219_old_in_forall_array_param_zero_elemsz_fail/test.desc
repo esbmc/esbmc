@@ -1,0 +1,4 @@
+CORE
+main.c
+--function bump --enforce-contract bump --unwind 4
+has a zero-size element type, so no element count can be derived

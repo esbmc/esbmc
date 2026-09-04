@@ -463,15 +463,15 @@ int esbmc_parseoptionst::doit()
   // simplification the frontend and the GOTO passes perform. Inert unless
   // the build enabled ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK.
   install_simplification_equivalence_check(namespacet(context), options);
+  // Reports and uninstalls on the way out, whichever of doit()'s exits is
+  // taken. Uninstalling here rather than at the end of GOTO construction left
+  // symex -- where the rewrites that decide a verdict actually happen --
+  // unchecked, and the count describing only the frontend (esbmc/esbmc#7260).
+  const simplification_check_scopet simplification_check_scope;
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
     return 6;
-
-  simplification_check_stats::report();
-  // The checker captured a namespace over `context`, a member of this object;
-  // dropping it here keeps it from outliving what it points at.
-  simplification_check::clear();
 
   // Output claims about this program
   // (Fedor: should be moved to the output method perhaps)

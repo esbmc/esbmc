@@ -1,0 +1,5 @@
+CORE
+main.c
+--fixedbv --no-slice --32 -Wno-error=implicit-function-declaration
+REQUIRES arch32
+^VERIFICATION SUCCESSFUL$

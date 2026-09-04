@@ -42,6 +42,20 @@ void ir_ieee_convt::assert_symbol_range(
   }
 }
 
+void ir_ieee_convt::assert_representable_magnitude(
+  smt_astt sym_ast,
+  const floatbv_type2t &fbv_type)
+{
+  smt_astt zero = ctx->get_zero_real();
+  smt_astt abs_sym = ctx->solver->mkIte(
+    ctx->mk_lt(sym_ast, zero), ctx->mk_sub(zero, sym_ast), sym_ast);
+  // The double sentinel represents infinity for every float width, matching
+  // the constant_floatbv encoding in smt_solver.cpp.
+  ctx->assert_ast(ctx->mk_or(
+    ctx->mk_le(abs_sym, get_max_normal_real(fbv_type)),
+    ctx->mk_eq(abs_sym, ctx->get_double_inf_sentinel())));
+}
+
 ir_ieee_convt::ra_interval_t ir_ieee_convt::get_interval(smt_astt t) const
 {
   auto it = ir_ra_interval_map.find(t.get());

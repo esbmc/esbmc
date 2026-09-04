@@ -9,6 +9,7 @@ on:
       - 'tools/ld-verify/**'
       - 'regression/ld/**'
       - 'unit/ld-frontend/**'
+      - 'src/esbmc/options.cpp'
       - '.github/workflows/plcplus-linux-binary.yml'
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - 'tools/ld-verify/**'
       - 'regression/ld/**'
       - 'unit/ld-frontend/**'
+      - 'src/esbmc/options.cpp'
       - '.github/workflows/plcplus-linux-binary.yml'
 
 jobs:
@@ -63,6 +65,24 @@ jobs:
         run: |
           cmake --build build -j$(nproc) --target \
             esbmc ld-verify ld_parser_test ld_property_test ld_ir_gen_test
+
+      # This is CI's only ENABLE_PYTHON_FRONTEND=Off build, so it is the only
+      # place an option registered in a frontend-gated group but read by
+      # unconditionally-built code shows up as missing (#7345). Asserting the
+      # Python options are absent keeps the check honest: without it, a build
+      # that silently enabled the Python frontend would pass for the wrong
+      # reason.
+      - name: Assert C-frontend options survive a Python-off build
+        run: |
+          help=$(./build/src/esbmc/esbmc --help)
+          for opt in --clang-c-irep2-adjust --clang-c-irep2-adjust-only; do
+            grep -q -- "$opt" <<<"$help" || {
+              echo "::error::$opt missing from a Python-off build"; exit 1; }
+          done
+          grep -q -- --python-irep2-adjust <<<"$help" && {
+            echo "::error::Python options present; this build is not Python-off"
+            exit 1; }
+          echo "C-frontend options present; Python options absent, as expected."
 
       # Catch2 registers unit tests by test-case name, so there is no label to
       # select the LD ones by; run their binaries directly.

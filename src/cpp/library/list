@@ -3,6 +3,8 @@
 
 #include <stdlib.h>
 
+#include <memory> /* std::allocator, for the Allocator parameter */
+
 #include "cstddef" /* ptrdiff_t */
 #include "definitions.h"
 #include "iterator_tags.h"
@@ -50,7 +52,94 @@ struct __om_list_pool<node_t, false>
   }
 };
 
-template <class T>
+/* The iterator is a namespace-scope template, not a member of list<T>, so
+ * that argument-dependent lookup on an iterator reaches T's namespace --
+ * [basic.lookup.argdep] associates a nested class's *enclosing class*, not
+ * that class's template arguments. libc++ spells it __list_iterator<T, ...>
+ * for the same reason. ESBMC's own goto_programt declares
+ * operator<(const_targett, const_targett) and keys a std::map on it; with a
+ * nested iterator that operator is never found. */
+template <class T, class Allocator = std::allocator<T> >
+class list;
+
+template <class T, class Allocator = std::allocator<T> >
+class __om_list_iterator
+{
+public:
+  /* [iterator.traits] reads these five from the iterator itself. Without
+   * them iterator_traits<list<T>::iterator> does not resolve, so a generic
+   * algorithm over a list iterator fails -- boost::adaptors::reversed over
+   * an SSA step list is what surfaced it. The category is bidirectional:
+   * the operators below advance and retreat one step, with no random
+   * access. */
+  typedef ::std::bidirectional_iterator_tag iterator_category;
+  typedef T value_type;
+  typedef ::std::ptrdiff_t difference_type;
+  typedef T *pointer;
+  typedef T &reference;
+
+  list<T, Allocator> *owner;
+  unsigned int idx;
+
+  __om_list_iterator() : owner(NULL), idx(LIST_MAX_SIZE)
+  {
+  }
+  __om_list_iterator(list<T, Allocator> *o, unsigned int i) : owner(o), idx(i)
+  {
+  }
+  __om_list_iterator(const __om_list_iterator &x) : owner(x.owner), idx(x.idx)
+  {
+  }
+  __om_list_iterator &operator=(const __om_list_iterator &x)
+  {
+    owner = x.owner;
+    idx = x.idx;
+    return *this;
+  }
+
+  reference operator*() const
+  {
+    return owner->_storage.buf[idx].data;
+  }
+  pointer operator->() const
+  {
+    return &owner->_storage.buf[idx].data;
+  }
+
+  __om_list_iterator &operator++()
+  {
+    idx = owner->_next_idx(idx);
+    return *this;
+  }
+  __om_list_iterator operator++(int)
+  {
+    __om_list_iterator tmp(*this);
+    idx = owner->_next_idx(idx);
+    return tmp;
+  }
+  __om_list_iterator &operator--()
+  {
+    idx = owner->_prev_idx(idx);
+    return *this;
+  }
+  __om_list_iterator operator--(int)
+  {
+    __om_list_iterator tmp(*this);
+    idx = owner->_prev_idx(idx);
+    return tmp;
+  }
+
+  bool operator==(const __om_list_iterator &x) const
+  {
+    return idx == x.idx && owner == x.owner;
+  }
+  bool operator!=(const __om_list_iterator &x) const
+  {
+    return !(*this == x);
+  }
+};
+
+template <class T, class Allocator>
 class list
 {
 public:
@@ -59,6 +148,9 @@ public:
   typedef unsigned int size_type;
   typedef int difference_type;
   typedef T value_type;
+  /* The allocator is carried for name lookup and type identity only: this
+   * model never obtains storage through it. See the note in <memory>. */
+  typedef Allocator allocator_type;
   typedef T *pointer;
   typedef const T *const_pointer;
 
@@ -174,92 +266,18 @@ public:
     return _storage.buf[idx].prev_idx;
   }
 
-  class iterator
-  {
-  public:
-    /* [iterator.traits] reads these five from the iterator itself. Without
-     * them iterator_traits<list<T>::iterator> does not resolve, so a generic
-     * algorithm over a list iterator fails -- boost::adaptors::reversed over
-     * an SSA step list is what surfaced it. The category is bidirectional:
-     * the operators below advance and retreat one step, with no random
-     * access. */
-    typedef ::std::bidirectional_iterator_tag iterator_category;
-    typedef T value_type;
-    typedef ::std::ptrdiff_t difference_type;
-    typedef T *pointer;
-    typedef T &reference;
-
-    list<T> *owner;
-    size_type idx;
-
-    iterator() : owner(NULL), idx(SENTINEL)
-    {
-    }
-    iterator(list<T> *o, size_type i) : owner(o), idx(i)
-    {
-    }
-    iterator(const iterator &x) : owner(x.owner), idx(x.idx)
-    {
-    }
-    iterator &operator=(const iterator &x)
-    {
-      owner = x.owner;
-      idx = x.idx;
-      return *this;
-    }
-
-    reference operator*() const
-    {
-      return owner->_storage.buf[idx].data;
-    }
-    pointer operator->() const
-    {
-      return &owner->_storage.buf[idx].data;
-    }
-
-    iterator &operator++()
-    {
-      idx = owner->_next_idx(idx);
-      return *this;
-    }
-    iterator operator++(int)
-    {
-      iterator tmp(*this);
-      idx = owner->_next_idx(idx);
-      return tmp;
-    }
-    iterator &operator--()
-    {
-      idx = owner->_prev_idx(idx);
-      return *this;
-    }
-    iterator operator--(int)
-    {
-      iterator tmp(*this);
-      idx = owner->_prev_idx(idx);
-      return tmp;
-    }
-
-    bool operator==(const iterator &x) const
-    {
-      return idx == x.idx && owner == x.owner;
-    }
-    bool operator!=(const iterator &x) const
-    {
-      return !(*this == x);
-    }
-  };
+  typedef __om_list_iterator<T, Allocator> iterator;
 
   class reverse_iterator
   {
   public:
-    list<T> *owner;
+    list *owner;
     size_type idx;
 
     reverse_iterator() : owner(NULL), idx(SENTINEL)
     {
     }
-    reverse_iterator(list<T> *o, size_type i) : owner(o), idx(i)
+    reverse_iterator(list *o, size_type i) : owner(o), idx(i)
     {
     }
     reverse_iterator(const reverse_iterator &x) : owner(x.owner), idx(x.idx)
@@ -385,7 +403,7 @@ public:
   // terminates naturally at x._next_free, instead of speculatively
   // unrolling to --unwind with a fresh LIST_MAX_SIZE-way case split per
   // step on the symbolic next_idx.
-  list(const list<T> &x)
+  list(const list &x)
   {
     __om_allocate();
     _sentinel_prev = x._sentinel_prev;
@@ -396,7 +414,7 @@ public:
       _storage.buf[i] = x._storage.buf[i];
   }
 
-  list<T> &operator=(const list<T> &x)
+  list &operator=(const list &x)
   {
     if (this != &x)
     {
@@ -418,6 +436,11 @@ public:
   typedef iterator const_iterator;
   typedef reverse_iterator const_reverse_iterator;
 
+  allocator_type get_allocator() const
+  {
+    return allocator_type();
+  }
+
   iterator begin()
   {
     return iterator(this, _sentinel_next);
@@ -435,14 +458,14 @@ public:
   const_iterator begin() const
   {
     const_iterator it;
-    it.owner = const_cast<list<T> *>(this);
+    it.owner = const_cast<list *>(this);
     it.idx = _sentinel_next;
     return it;
   }
   const_iterator end() const
   {
     const_iterator it;
-    it.owner = const_cast<list<T> *>(this);
+    it.owner = const_cast<list *>(this);
     it.idx = SENTINEL;
     return it;
   }
@@ -472,14 +495,14 @@ public:
   const_reverse_iterator rbegin() const
   {
     const_reverse_iterator it;
-    it.owner = const_cast<list<T> *>(this);
+    it.owner = const_cast<list *>(this);
     it.idx = _sentinel_prev;
     return it;
   }
   const_reverse_iterator rend() const
   {
     const_reverse_iterator it;
-    it.owner = const_cast<list<T> *>(this);
+    it.owner = const_cast<list *>(this);
     it.idx = SENTINEL;
     return it;
   }
@@ -629,9 +652,9 @@ public:
     return last;
   }
 
-  void swap(list<value_type> &x)
+  void swap(list &x)
   {
-    list<value_type> tmp(*this);
+    list tmp(*this);
     *this = x;
     x = tmp;
   }
@@ -644,7 +667,7 @@ public:
   // Splice all of x's elements before position. After the call, x is
   // empty. Implemented as copy-and-erase rather than node transfer
   // because pool slots are owned per-instance.
-  void splice(iterator position, list<value_type> &x)
+  void splice(iterator position, list &x)
   {
     iterator it = x.begin();
     while (it != x.end())
@@ -657,7 +680,7 @@ public:
     }
   }
 
-  void splice(iterator position, list<value_type> &x, iterator i)
+  void splice(iterator position, list &x, iterator i)
   {
     insert(position, *i);
     x.erase(i);
@@ -668,11 +691,7 @@ public:
   // before insert/erase so the loop never reads through an erased node.
   // 'last' is taken by value, so even when x and *this overlap, its idx
   // is stable across the erases (we never erase the node at last).
-  void splice(
-    iterator position,
-    list<value_type> &x,
-    iterator first,
-    iterator last)
+  void splice(iterator position, list &x, iterator first, iterator last)
   {
     iterator it = first;
     while (it != last)
@@ -767,7 +786,7 @@ public:
     }
   }
 
-  void merge(list<value_type> &x)
+  void merge(list &x)
   {
     iterator i = begin();
     iterator j = x.begin();
@@ -788,7 +807,7 @@ public:
     }
   }
 
-  void merge(list<value_type> &x, pred_double *pred)
+  void merge(list &x, pred_double *pred)
   {
     iterator i = begin();
     iterator j = x.begin();
@@ -893,7 +912,11 @@ public:
   }
 };
 
-void advance(list<unsigned int>::iterator &it, int n)
+/* <iterator>'s generic advance uses `i = i + n` before C++11, which a
+ * bidirectional list iterator cannot do; these overloads are that fallback.
+ * Templated on Allocator so a list with a custom allocator keeps it. */
+template <class T, class Allocator>
+void advance(__om_list_iterator<T, Allocator> &it, int n)
 {
   if (n > 0)
     for (int i = 0; i < n; i++)
@@ -903,28 +926,23 @@ void advance(list<unsigned int>::iterator &it, int n)
       --it;
 }
 
-void advance(list<int>::iterator &it, int n)
-{
-  if (n > 0)
-    for (int i = 0; i < n; i++)
-      ++it;
-  else
-    for (int i = 0; i < -n; i++)
-      --it;
-}
-
-bool operator==(const list<int> &x, const list<int> &y)
+/* [container.requirements]: the comparisons are templates over the element
+ * type, not the two hardcoded instantiations this used to carry -- a
+ * list<char> could not be compared at all. The static step bound is what stops
+ * ESBMC unrolling speculatively to --unwind instead of to LIST_MAX_SIZE. */
+template <class T, class Allocator>
+bool operator==(const list<T, Allocator> &x, const list<T, Allocator> &y)
 {
   if (x._size != y._size)
     return false;
-  list<int>::size_type ix = x._sentinel_next;
-  list<int>::size_type iy = y._sentinel_next;
-  // Static step bound so ESBMC stops unrolling at LIST_MAX_SIZE
-  // (== SENTINEL) instead of speculatively unrolling to --unwind.
-  for (list<int>::size_type step = 0; step < list<int>::SENTINEL; step++)
+  typename list<T, Allocator>::size_type ix = x._sentinel_next;
+  typename list<T, Allocator>::size_type iy = y._sentinel_next;
+  for (typename list<T, Allocator>::size_type step = 0;
+       step < list<T, Allocator>::SENTINEL;
+       step++)
   {
-    if (ix == list<int>::SENTINEL)
-      return iy == list<int>::SENTINEL;
+    if (ix == list<T, Allocator>::SENTINEL)
+      return iy == list<T, Allocator>::SENTINEL;
     if (x._storage.buf[ix].data != y._storage.buf[iy].data)
       return false;
     ix = x._storage.buf[ix].next_idx;
@@ -933,32 +951,54 @@ bool operator==(const list<int> &x, const list<int> &y)
   return true;
 }
 
-bool operator!=(const list<int> &x, const list<int> &y)
+template <class T, class Allocator>
+bool operator!=(const list<T, Allocator> &x, const list<T, Allocator> &y)
 {
   return !(x == y);
 }
 
-bool operator==(const list<double> &x, const list<double> &y)
+/* The ordering is the lexicographical comparison of the two ranges, so the
+ * first differing element decides it and the lengths matter only when one
+ * range is a prefix of the other. */
+template <class T, class Allocator>
+bool operator<(const list<T, Allocator> &x, const list<T, Allocator> &y)
 {
-  if (x._size != y._size)
-    return false;
-  list<double>::size_type ix = x._sentinel_next;
-  list<double>::size_type iy = y._sentinel_next;
-  for (list<double>::size_type step = 0; step < list<double>::SENTINEL; step++)
+  typename list<T, Allocator>::size_type ix = x._sentinel_next;
+  typename list<T, Allocator>::size_type iy = y._sentinel_next;
+  for (typename list<T, Allocator>::size_type step = 0;
+       step < list<T, Allocator>::SENTINEL;
+       step++)
   {
-    if (ix == list<double>::SENTINEL)
-      return iy == list<double>::SENTINEL;
-    if (x._storage.buf[ix].data != y._storage.buf[iy].data)
+    if (ix == list<T, Allocator>::SENTINEL)
+      return iy != list<T, Allocator>::SENTINEL;
+    if (iy == list<T, Allocator>::SENTINEL)
+      return false;
+    if (x._storage.buf[ix].data < y._storage.buf[iy].data)
+      return true;
+    if (y._storage.buf[iy].data < x._storage.buf[ix].data)
       return false;
     ix = x._storage.buf[ix].next_idx;
     iy = y._storage.buf[iy].next_idx;
   }
-  return true;
+  return false;
 }
 
-bool operator!=(const list<double> &x, const list<double> &y)
+template <class T, class Allocator>
+bool operator>(const list<T, Allocator> &x, const list<T, Allocator> &y)
 {
-  return !(x == y);
+  return y < x;
+}
+
+template <class T, class Allocator>
+bool operator<=(const list<T, Allocator> &x, const list<T, Allocator> &y)
+{
+  return !(y < x);
+}
+
+template <class T, class Allocator>
+bool operator>=(const list<T, Allocator> &x, const list<T, Allocator> &y)
+{
+  return !(x < y);
 }
 
 } // namespace std

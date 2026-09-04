@@ -962,7 +962,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  if (op == "Eq" || op == "NotEq")
+  if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
     return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
   if (op == "Add" || op == "Sub" || op == "Div")
     return dynamic_type_handler_.handle_arithmetic(
@@ -1670,6 +1670,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     guard.cond() = is_zero;
     guard.then_case() = throw_code;
     guard.location() = div_loc;
+    guard.location().property("skipped");
     add_instruction(guard);
   }
 

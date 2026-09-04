@@ -294,6 +294,15 @@ esbmc main.c --witness-output main.graphml
     
 We recommend reading [Exchange Format for Violation Witnesses and Correctness Witnesses](https://github.com/sosy-lab/sv-witnesses) to obtain further information about violation and correctness witnesses in graphml format.
 
+A GraphML trace step that comes from a header or from one of ESBMC's operational
+models is emitted with an `originfile` naming the file it came from, and keeps
+that file's own line numbers instead of having them resolved against the
+verified file. `originfile` is not a key the exchange format defines, so a
+conforming validator ignores it; the edges it appears on were unmatchable to a
+validator before, either way. YAML witnesses have no equivalent, so there a
+waypoint is hoisted to its innermost call site inside an input file and one that
+cannot name an input file is dropped, as `README-YAML.md` requires.
+
 ## Unwinding Assertions
 
 In ESBMC, all loops are "unwound", i.e., replaced by several guarded copies of the loop body; the same happens for backward "gotos" and recursive functions. Soundness requires that ESBMC insert a so-called `unwinding assertion` at the end of the loop. As an example, consider the simple C code fragment illustrated below:
@@ -355,6 +364,19 @@ file file.c line 5 function main
 unwinding assertion loop
 ```
 
+`--no-unwinding-assertions` removes that assertion, so paths past the bound are
+assumed away rather than reported. A proof obtained that way holds only up to
+the bound, and a run whose loops were cut short says so above the verdict:
+
+```
+** 0 of 1 properties failed, 1 passed
+WARNING: the unwinding bound cut a loop short while unwinding checks were
+disabled, so paths past the bound were assumed away rather than verified; this
+result holds only up to that bound
+
+VERIFICATION SUCCESSFUL
+```
+
 ## Verification Strategies
 
 ESBMC offers several incremental strategies that control how loops are unwound
@@ -370,6 +392,17 @@ algorithm works, see
 
 `--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
 increment granularity.
+
+## Reusing common subexpressions
+
+`--gcse` precomputes a subexpression shared between assignments into an
+intermediate variable, so symbolic execution builds it once rather than at every
+use. Whether a rewrite is safe depends on what the program's pointers can
+address, which comes from an inclusion-based (Andersen) whole-program points-to
+analysis over the GOTO program. The analysis is deliberately imprecise —
+symbolic execution supplies the real precision — and abstains on any expression
+whose targets it cannot determine, in which case the rewrite is not made. The
+flag is off by default.
 
 ## Selecting the floating-point rounding mode
 
@@ -736,6 +769,25 @@ leaves the checks ESBMC *generates* inside model code (those are controlled by
 `--no-standard-checks`), renumbers `--claim` indices, and is unsupported for
 Python.
 
+## When ESBMC itself crashes
+
+A SIGSEGV or SIGBUS inside ESBMC is an internal error, not a verification
+result, and is reported as one rather than leaving the exit status as its only
+trace:
+
+```
+ESBMC caught SIGSEGV: this is an internal error, not a verification result.
+Re-run with --segfault-handler for a backtrace.
+Please report it at https://github.com/esbmc/esbmc/issues
+```
+
+The report needs no flag and runs on an alternate signal stack, so a crash from
+stack exhaustion is reported too. A handler installed by someone else is left
+alone, so an AddressSanitizer build keeps its own richer report.
+`--segfault-handler` *replaces* this reporter with one that prints a backtrace
+and the process memory map, and covers `SIGABRT` as well — asking for the
+backtrace is explicit intent, so that one does not defer to a foreign handler.
+
 ## Supported SMT backends {#smt-backends}
 
 ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
@@ -781,6 +833,15 @@ the encoding, for a solver that accepts only one fragment. A logic without the
 array or floating-point sorts (`QF_BV`, say) also makes ESBMC flatten both
 away before serializing, and is incompatible with `--ir`. The SMT-LIB backend
 is never picked implicitly.
+
+Floating-point arithmetic is encoded with the SMT floating-point theory
+(`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
+CVC4/CVC5 — and lowered to bit-vectors elsewhere. `--fp2bv` forces the
+bit-vector lowering on any backend, which is the encoding to reach for when a
+property depends on the sign of a NaN: the theory cannot represent it
+([#7021](https://github.com/esbmc/esbmc/issues/7021)). `fmod`, `remainder` and
+`remquo` are always lowered through a bit-vector round-trip, since the theory's
+`fp.rem` is far slower to solve.
 
 An alternative default solver can be set with `--default-solver SOLVER` (the
 name without the `--`), which suits a shell alias or the `ESBMC_OPTS`

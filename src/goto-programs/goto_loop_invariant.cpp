@@ -166,6 +166,37 @@ void goto_loop_invariant(
   goto_functions.update();
 }
 
+static void
+collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols);
+
+/// True when some symbol the loop's guard reads is one the havoc covers. When
+/// nothing the guard reads is havoc'd, the exit edge is decided by the
+/// concrete pre-loop state and cannot change, so the claims after the loop are
+/// never reached rather than checked (issue #7478).
+static bool guard_reads_havocd_var(
+  goto_programt::targett head,
+  const goto_functiont &fn,
+  const loopst &loop)
+{
+  std::set<irep_idt> havocd_names;
+  for (const auto &v : loop.get_modified_loop_vars())
+    if (is_symbol2t(v))
+      havocd_names.insert(to_symbol2t(v).get_symbol_name());
+
+  for (goto_programt::targett it = head; it != fn.body.instructions.end(); ++it)
+  {
+    std::set<irep_idt> read;
+    collect_symbols_local(it->code, read);
+    collect_symbols_local(it->guard, read);
+    for (const auto &name : read)
+      if (havocd_names.count(name))
+        return true;
+    if (it->is_goto())
+      break;
+  }
+  return false;
+}
+
 void goto_loop_invariantt::goto_loop_invariant()
 {
   for (auto &function_loop : function_loops)
@@ -202,12 +233,36 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   goto_programt side_effects;
   extract_and_remove_side_effects(loop_head, loop, invariants, side_effects);
 
+  // insert_assert_before_loop swaps the base case into the loop-head slot and
+  // moves the head's own instruction to a fresh node behind it, so the
+  // `loop_head` iterator no longer denotes the loop head afterwards. Anchor the
+  // instruction that follows it, which no insertion before the head can move.
+  goto_programt::targett after_head = std::next(loop_head);
+
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
 
-  // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
+  // A write through a dereference has no named symbol for the havoc to cover.
+  // When the guard reads nothing the havoc does reach, the loop is left at its
+  // concrete pre-loop state: the exit edge cannot change, the invariant is
+  // discharged against one concrete iteration and every claim after the loop is
+  // dropped without being solved (issue #7478). Leave the loop for the unwinder
+  // rather than report a proof we did not make. The base case above is checked
+  // against the concrete pre-loop state and needs no havoc, so it still stands.
+  if (
+    loop.writes_through_pointer() &&
+    !guard_reads_havocd_var(std::prev(after_head), goto_function, loop))
+  {
+    log_warning(
+      "loop invariant at {} not checked beyond its base case: the loop writes "
+      "through a pointer the havoc cannot cover",
+      loop.get_original_loop_head()->location.as_string());
+    return;
+  }
+
+  // 2. Insert HAVOC and ASSUME at the loop head, ahead of the guard
   insert_havoc_and_assume_before_condition(
-    loop_head, loop, invariants, loop_assigns, side_effects);
+    std::prev(after_head), loop, invariants, loop_assigns, side_effects);
 
   // 3. Insert inductive step verification and loop termination
   insert_inductive_step_and_termination(loop, invariants, side_effects);
@@ -556,23 +611,20 @@ void goto_loop_invariantt::insert_assert_before_loop(
 }
 
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
-  goto_programt::targett &loop_head,
+  goto_programt::targett loop_head,
   const loopst &loop,
   const std::vector<expr2tc> &invariants,
   const std::vector<expr2tc> &loop_assigns,
   goto_programt &side_effects)
 {
-  // Find the loop condition (IF instruction) - this should be right at loop_head
-  goto_programt::targett condition_it = loop_head;
-  while (condition_it != goto_function.body.instructions.end() &&
-         !condition_it->is_goto())
-    ++condition_it;
-
-  if (condition_it == goto_function.body.instructions.end())
-    return; // No loop condition found
-
-  // Insert BEFORE the loop condition (after the base case assert)
-  goto_programt::targett insert_point = condition_it;
+  // The havoc models an arbitrary iteration, so it belongs at the loop head,
+  // where the base case and the inductive step already anchor the invariant --
+  // not at the guard's IF. A guard with a side effect (`while (cnt--)`), a call
+  // (`while (f(&x))`) or a short circuit is lowered to instructions that sit
+  // between the two; havoc'ing after them leaves the IF testing a pre-havoc
+  // temporary, which makes the loop-exit edge infeasible and silently drops
+  // every claim after the loop (issue #7478).
+  goto_programt::targett insert_point = loop_head;
 
   goto_programt dest;
 
@@ -623,6 +675,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->code = code_assign2tc(lhs, rhs);
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
+    t->loop_invariant_havoc = true;
   }
 
   // =========================================================
@@ -741,22 +794,42 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
       active_loop_assigns, dest, loop_exit->location, frame_modet::ASSERT);
   }
 
+  // A `do`-`while` back edge carries the loop's own exit test, so unlike the
+  // unconditional back edge of a `while` or `for` loop it cannot be cut with
+  // ASSUME(false): the fall-through is the exit path, and killing it drops
+  // every claim after the loop (issue #7478). Assume the negated condition
+  // instead and drop the back edge outright, and guard the inductive step by
+  // that condition so it is required only of an iteration that would actually
+  // follow -- the same correction the combined pass made for do-while in
+  // PR #3777.
+  const bool conditional_back_edge =
+    loop_exit->is_goto() && !is_true(loop_exit->guard);
+  const expr2tc exit_cond =
+    conditional_back_edge ? not2tc(loop_exit->guard) : gen_false_expr();
+
   // 3. ASSERT for inductive step.
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = invariant;
+    t->guard =
+      conditional_back_edge ? expr2tc(or2tc(exit_cond, invariant)) : invariant;
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
     t->location.property("invariant-inductive-step");
   }
 
-  // 4. Insert ASSUME(FALSE) to terminate the loop
+  // 4. Cut the back edge: the havoc already covers every iteration.
   goto_programt::targett t = dest.add_instruction(ASSUME);
-  t->guard = gen_false_expr();
+  t->guard = exit_cond;
   t->location = loop_exit->location;
   t->location.comment("loop termination");
+
+  // ASSUME(false) leaves an unconditional back edge statically unreachable, but
+  // a conditional one still has a satisfiable guard and symex would unwind it
+  // forever. Remove it; the ASSUME above already constrains the exit path.
+  if (conditional_back_edge)
+    loop_exit->make_skip();
 
   // Insert at the insert point
   goto_function.body.insert_swap(insert_point, dest);
