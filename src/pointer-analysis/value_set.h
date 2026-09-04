@@ -78,7 +78,8 @@ public:
     return *this;
   }
 
-  //*********************************** Types ************************************
+  //*********************************** Types
+  //************************************
 
   /** A type for a set of expressions */
   typedef std::set<expr2tc> expr_sett;
@@ -555,6 +556,12 @@ public:
    *         pointer set for lhs. Otherwise, overwrite it. Used for the static
    *         analysis. */
   void assign(const expr2tc &lhs, const expr2tc &rhs, bool add_to_sets = false);
+  /** assign()'s struct/union arm, split out to keep assign() one dispatch. */
+  void assign_struct_union(
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    const type2tc &lhs_type,
+    bool add_to_sets);
 
   /** Interpret a function call during static analysis. Looks up the given
    *  function, and simulates the assignment of all the arguments to the
@@ -739,7 +746,8 @@ protected:
   static void obj_numbering_deref(unsigned int num);
 
 public:
-  //********************************** Members ***********************************
+  //********************************** Members
+  //***********************************
   /** Location number of the instruction this value set is attached to;
    *  used to identify allocation sites for dynamic objects. */
   unsigned location_number;

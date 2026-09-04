@@ -742,7 +742,8 @@ void value_sett::get_value_set_rec(
     return;
   }
 
-  // Handle constant arrays being indexed (e.g., function pointer dispatch tables)
+  // Handle constant arrays being indexed (e.g., function pointer dispatch
+  // tables)
   if (is_constant_array_of2t(expr) || is_constant_array2t(expr))
   {
     if (!suffix.empty() && suffix[0] == '[')
@@ -854,7 +855,8 @@ void value_sett::get_value_set_rec(
 
     if (is_array_type(with.source_value->type))
     {
-      // For arrays: if suffix indicates array access, we might hit the updated element
+      // For arrays: if suffix indicates array access, we might hit the updated
+      // element
       if (suffix.empty() || suffix.find("[]") == 0)
         should_include_update = true;
     }
@@ -972,7 +974,8 @@ void value_sett::get_value_set_rec(
       assert(sym.level1_num == 0);
     /* These assertions do not hold during value_sett::assign():
      * - level2 (non-global): the RHS can be an L2 symbol (e.g. pthread_create)
-     * - level2_global: global variables renamed during symbolic execution appear
+     * - level2_global: global variables renamed during symbolic execution
+    appear
      *   as L2_global symbols; their value set is looked up via the base name.
     // assert(sym.rlevel != symbol2t::renaming_level::level2);
     // assert(sym.rlevel != symbol2t::renaming_level::level2_global);
@@ -1404,6 +1407,89 @@ static bool type_has_pointer(const type2tc &type)
   return type_has_pointer(type, seen);
 }
 
+void value_sett::assign_struct_union(
+  const expr2tc &lhs,
+  const expr2tc &rhs,
+  const type2tc &lhs_type,
+  bool add_to_sets)
+{
+  /* Nothing in a pointer-free aggregate can point anywhere, so the walk
+   * below would only create empty entries -- O(members) per assignment,
+   * which made wide structs quadratic in symex (#7521). An absent entry
+   * reads back as an empty one (get_symbol_value_set). */
+  if (!type_has_pointer(lhs_type))
+    return;
+
+  /* Types do not agree (different kind, or same kind but structurally
+   * incompatible). The latter happens when a single translation unit ends
+   * up with two declarations of the same struct tag that differ in members
+   * - e.g. glibc's `struct tm` (with `__tm_gmtoff`/`__tm_zone`) versus
+   * ESBMC's operational `time.h` (`tm_gmtoff`/`tm_zone`) - or for
+   * dereferences like:
+   *
+   *   struct S { int x; } a;
+   *   int b;
+   *   a = *(struct S *)&b;
+   *
+   * which build_reference_to() reports as a dereference_failure. For
+   * value-set tracking we simply drop the assignment.
+   */
+  if (lhs_type->type_id != rhs->type->type_id)
+    return;
+  const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
+  if (
+    rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
+    !is_related_struct(lhs_type, rhs->type, ns))
+    return;
+
+  // Assign the values of all members of the rhs thing to the lhs. It's
+  // sort-of-valid for the right hand side to be a superclass of the subclass,
+  // in which case there are some fields not common between them, so we
+  // iterate over the superclasses members.
+  const std::vector<type2tc> &members = struct_union_members(rhs->type);
+  const std::vector<irep_idt> &member_names =
+    struct_union_member_names(rhs->type);
+
+  for (size_t i = 0; i < members.size(); i++)
+  {
+    const type2tc &subtype = members[i];
+    const irep_idt &name = member_names[i];
+
+    // ignore methods
+    if (is_code_type(subtype))
+      continue;
+
+    // The rhs may carry a member that the lhs type does not have — e.g. a
+    // class-specific vtable-pointer component present in only one of two
+    // structurally-related struct declarations (a subclass/superclass pair,
+    // or the same tag declared across translation units). There is no
+    // storage on the lhs to assign into, so skip it rather than building an
+    // ill-formed member access (which trips a member2t component-lookup
+    // assertion and, in release builds, yields a malformed expression).
+    if (!struct_union_get_component_number(lhs_type, name).has_value())
+      continue;
+
+    expr2tc lhs_member = member2tc(subtype, lhs, name);
+
+    expr2tc rhs_member;
+    if (is_unknown2t(rhs))
+    {
+      rhs_member = unknown2tc(subtype);
+    }
+    else if (is_invalid2t(rhs))
+    {
+      rhs_member = invalid2tc(subtype);
+    }
+    else
+    {
+      expr2tc rhs_member = make_member(rhs, name);
+
+      // XXX -- shouldn't this be one level of indentation up?
+      assign(lhs_member, rhs_member, add_to_sets);
+    }
+  }
+}
+
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
@@ -1438,81 +1524,7 @@ void value_sett::assign(
 
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    /* Nothing in a pointer-free aggregate can point anywhere, so the walk
-     * below would only create empty entries -- O(members) per assignment,
-     * which made wide structs quadratic in symex (#7521). An absent entry
-     * reads back as an empty one (get_symbol_value_set). */
-    if (!type_has_pointer(lhs_type))
-      return;
-
-    /* Types do not agree (different kind, or same kind but structurally
-     * incompatible). The latter happens when a single translation unit ends
-     * up with two declarations of the same struct tag that differ in members
-     * - e.g. glibc's `struct tm` (with `__tm_gmtoff`/`__tm_zone`) versus
-     * ESBMC's operational `time.h` (`tm_gmtoff`/`tm_zone`) - or for
-     * dereferences like:
-     *
-     *   struct S { int x; } a;
-     *   int b;
-     *   a = *(struct S *)&b;
-     *
-     * which build_reference_to() reports as a dereference_failure. For
-     * value-set tracking we simply drop the assignment.
-     */
-    if (lhs_type->type_id != rhs->type->type_id)
-      return;
-    const bool rhs_concrete = !is_unknown2t(rhs) && !is_invalid2t(rhs);
-    if (
-      rhs_concrete && !base_type_eq(rhs->type, lhs_type, ns) &&
-      !is_related_struct(lhs_type, rhs->type, ns))
-      return;
-
-    // Assign the values of all members of the rhs thing to the lhs. It's
-    // sort-of-valid for the right hand side to be a superclass of the subclass,
-    // in which case there are some fields not common between them, so we
-    // iterate over the superclasses members.
-    const std::vector<type2tc> &members = struct_union_members(rhs->type);
-    const std::vector<irep_idt> &member_names =
-      struct_union_member_names(rhs->type);
-
-    for (size_t i = 0; i < members.size(); i++)
-    {
-      const type2tc &subtype = members[i];
-      const irep_idt &name = member_names[i];
-
-      // ignore methods
-      if (is_code_type(subtype))
-        continue;
-
-      // The rhs may carry a member that the lhs type does not have — e.g. a
-      // class-specific vtable-pointer component present in only one of two
-      // structurally-related struct declarations (a subclass/superclass pair,
-      // or the same tag declared across translation units). There is no
-      // storage on the lhs to assign into, so skip it rather than building an
-      // ill-formed member access (which trips a member2t component-lookup
-      // assertion and, in release builds, yields a malformed expression).
-      if (!struct_union_get_component_number(lhs_type, name).has_value())
-        continue;
-
-      expr2tc lhs_member = member2tc(subtype, lhs, name);
-
-      expr2tc rhs_member;
-      if (is_unknown2t(rhs))
-      {
-        rhs_member = unknown2tc(subtype);
-      }
-      else if (is_invalid2t(rhs))
-      {
-        rhs_member = invalid2tc(subtype);
-      }
-      else
-      {
-        expr2tc rhs_member = make_member(rhs, name);
-
-        // XXX -- shouldn't this be one level of indentation up?
-        assign(lhs_member, rhs_member, add_to_sets);
-      }
-    }
+    assign_struct_union(lhs, rhs, lhs_type, add_to_sets);
     return;
   }
 
