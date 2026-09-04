@@ -120,6 +120,21 @@ TEST_CASE("gen_zero recurses over aggregates (H-A10)", "[core][irep2]")
       gen_zero(un) == constant_union2tc(un, "a", std::vector<expr2tc>{z32}));
   }
 
+  SECTION("union with no members zeroes to the empty union constant")
+  {
+    // A member-less union occupies no storage, so there is nothing to zero.
+    // The assert guarding members.front() is compiled out under NDEBUG, where
+    // this used to dereference address 0 instead.
+    type2tc un = union_type2tc(
+      std::vector<type2tc>{},
+      std::vector<irep_idt>{},
+      std::vector<irep_idt>{},
+      "empty_u");
+    REQUIRE(
+      gen_zero(un) ==
+      constant_union2tc(un, irep_idt{}, std::vector<expr2tc>{}));
+  }
+
   SECTION("nested struct-of-array recurses correctly")
   {
     type2tc inner = array_type2tc(u8, size_of(2), false);

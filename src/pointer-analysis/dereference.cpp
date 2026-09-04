@@ -1165,7 +1165,6 @@ void dereferencet::build_reference_rec(
   // no-op, so return any value of the target type (issue #723).
   if (type_byte_size_bits(type) == 0)
   {
-    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
     value = (is_union_type(type) && to_union_type(type).members.empty())
               ? make_failed_symbol(type)
               : gen_zero(type);
