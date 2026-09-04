@@ -51,6 +51,10 @@ jobs:
           done < runs.txt
           echo "collected $(find reports -name '*.json' | wc -l) reports"
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
       - name: Aggregate
         run: |
           python3 scripts/ci/shadow_report.py aggregate \
