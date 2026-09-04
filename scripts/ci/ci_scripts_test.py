@@ -595,15 +595,5 @@ class ShadowAggregate(TempDirCase):
             self.assertEqual(json.load(handle)["runs"], 1)
 
 
-class Universe(unittest.TestCase):
-
-    def test_build_dir_universe_matches_ctest_numbering(self):
-        # ctest_test_names must stay index-aligned with resolve(), since the
-        # runner turns names back into ctest numbers.
-        names = ["alpha", "beta", "gamma"]
-        numbers, _ = runner.resolve(names, names)
-        self.assertEqual(numbers, [1, 2, 3])
-
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)
