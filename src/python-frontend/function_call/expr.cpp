@@ -901,9 +901,13 @@ exprt function_call_expr::build_constant_from_arg() const
       // Try to parse as regular float
       {
         const std::string raw_val = arg["value"].get<std::string>();
+        // strtod does not know PEP 515, so drop the separators first (#7558).
+        std::string digits;
+        const bool separators_ok =
+          type_utils::strip_pep515_underscores(raw_val, digits);
         char *end = nullptr;
-        double dval = std::strtod(raw_val.c_str(), &end);
-        if (!end || end != raw_val.c_str() + raw_val.size())
+        double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+        if (!separators_ok || !end || end != digits.c_str() + digits.size())
         {
           std::string m =
             "could not convert string to float : '" + raw_val + "'";
