@@ -255,6 +255,18 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    /* A lambda's operator(), __invoke and conversion-operator USRs name the
+     * enclosing specialisation but not the closure, so siblings in one
+     * instantiation share an id and the last body converted wins (#7499); the
+     * closure's own id is already unique (#6976). Constructors take the case
+     * above and need none -- their USR spells the class "(lambda at f:l:c)". */
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd);
+        md && md->getParent()->isLambda())
+    {
+      std::string closure_name, closure_id;
+      get_decl_name(*md->getParent(), closure_name, closure_id);
+      id += "@" + closure_id;
+    }
     return;
   }
 
