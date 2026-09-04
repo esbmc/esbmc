@@ -131,6 +131,9 @@ private:
    */
   exprt build_constant_from_arg() const;
 
+  std::optional<BigInt>
+  try_fold_constant_arith_json(const nlohmann::json &node) const;
+
   /*
    * Folds bytes.fromhex("..") over a constant hex string into a byte array.
    */
@@ -150,7 +153,7 @@ private:
    * Resolves the list symbol for a list method call.
    * Handles both a plain name (e.g. mylist.append()) and a subscript of
    * a nested list (e.g. nested[0].append()) by looking up the inner list
-   * symbol via list_type_map.  Returns nullptr when not found.
+   * symbol via the element-type registry.  Returns nullptr when not found.
    * On return, `display_name` holds a human-readable identifier suitable
    * for error messages (e.g. "mylist" or "nested[0]").
    */

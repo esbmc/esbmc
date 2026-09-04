@@ -1,4 +1,6 @@
+#include <optional>
 #include <limits>
+#include <optional>
 #include <type_traits>
 #include <vector>
 
@@ -246,6 +248,124 @@ static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
   return try_simplification(typecast2tc(type, expr));
 }
 
+namespace
+{
+struct int_kind
+{
+  using value_type = BigInt;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_bv_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_int2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_int2t(c).value;
+  }
+};
+struct fixedbv_kind
+{
+  using value_type = fixedbvt;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_fixedbv_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_fixedbv2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_fixedbv2t(c).value;
+  }
+};
+struct floatbv_kind
+{
+  using value_type = ieee_floatt;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_floatbv_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_floatbv2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_floatbv2t(c).value;
+  }
+};
+struct bool_kind
+{
+  using value_type = bool;
+  static bool is_type(const expr2tc &e)
+  {
+    return is_bool_type(e);
+  }
+  static bool is_const(const expr2tc &e)
+  {
+    return is_constant_bool2t(e);
+  }
+  static value_type &value(expr2tc &c)
+  {
+    return to_constant_bool2t(c).value;
+  }
+};
+
+// The value-vs-reference knob. Arith/logic functors are instantiated
+// TFunctor<V>; relation functors TFunctor<V&>. Both are handed the same
+// runtime accessor (returning V&), so only the template argument differs.
+template <class V>
+using by_value = V;
+template <class V>
+using by_ref = V &;
+
+template <
+  template <class>
+  class TFunctor,
+  template <class>
+  class Wrap,
+  class Kind>
+static expr2tc fold_kind(const expr2tc &a, const expr2tc &b)
+{
+  using V = typename Kind::value_type;
+  return TFunctor<Wrap<V>>::simplify(a, b, &Kind::is_const, &Kind::value);
+}
+
+// Fold two constant operands of a runtime-selected numeric kind through
+// TFunctor. Returns nullopt when no arm matched either operand; an optional
+// holding nil when an arm matched but the functor declined; the folded
+// constant otherwise. That three-way result lets a caller (relations)
+// reproduce the original if/else-if fall-through exactly. `Floats` is a
+// compile-time knob: arith passes false so the floatbv arm -- and thus
+// TFunctor<ieee_floatt>, which does not compile for e.g. Modtor (ieee_floatt
+// has no operator%=) -- is never instantiated.
+template <
+  template <class>
+  class TFunctor,
+  template <class> class Wrap = by_value,
+  bool Floats = true>
+static std::optional<expr2tc>
+dispatch_binary_fold(const expr2tc &s1, const expr2tc &s2)
+{
+  if (int_kind::is_type(s1) || int_kind::is_type(s2))
+    return fold_kind<TFunctor, Wrap, int_kind>(s1, s2);
+  if (fixedbv_kind::is_type(s1) || fixedbv_kind::is_type(s2))
+    return fold_kind<TFunctor, Wrap, fixedbv_kind>(s1, s2);
+  if constexpr (Floats)
+  {
+    if (floatbv_kind::is_type(s1) || floatbv_kind::is_type(s2))
+      return fold_kind<TFunctor, Wrap, floatbv_kind>(s1, s2);
+  }
+  if (bool_kind::is_type(s1) || bool_kind::is_type(s2))
+    return fold_kind<TFunctor, Wrap, bool_kind>(s1, s2);
+  return std::nullopt;
+}
+} // namespace
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_arith_2ops(
   const type2tc &type,
@@ -272,59 +392,26 @@ static expr2tc simplify_arith_2ops(
   expr2tc simpl_res;
   if (is_vector_type(type))
   {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
+    // Vector operands are constant_vector2t, not scalar bv, so the seam's
+    // type predicates cannot route them: call the functor directly with the
+    // bv accessor and let its distribute_vector_operation fire.
+    simpl_res = fold_kind<TFunctor, by_value, int_kind>(
+      simplified_side_1, simplified_side_2);
   }
-  else if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
+  else
   {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
+    // Floats=false: no floatbv arm here (see the assert above), so
+    // TFunctor<ieee_floatt> is never instantiated for arith.
+    simpl_res = dispatch_binary_fold<TFunctor, by_value, false>(
+                  simplified_side_1, simplified_side_2)
+                  .value_or(expr2tc());
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-
-    // Fix rounding when an overflow occurs
+    // Fix rounding when a bv overflow occurs. Only the bv arm yields a
+    // constant_int2t result, so this reproduces the original per-arm fixup.
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
-  else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (is_bool_type(simplified_side_1) || is_bool_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
-
-    simpl_res = TFunctor<bool>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else
-    return expr2tc();
 
   return typecast_check_return(type, simpl_res);
 }
@@ -1456,50 +1543,59 @@ expr2tc with2t::do_simplify() const
   return expr2tc();
 }
 
+/// Project a member read out of a constant union literal, or return
+/// nothing. A cross-member read between integer members of one width
+/// is an exact bit reinterpretation: { .r=v }.s is (s-type)v. Wider or
+/// non-integer members stay unfolded.
+static expr2tc fold_union_member_read(
+  const constant_union2t &uni,
+  const irep_idt &member,
+  const type2tc &type)
+{
+  if (uni.datatype_members.empty())
+    return expr2tc();
+
+  const expr2tc &val = uni.datatype_members[0];
+  if (uni.init_field != member)
+  {
+    if (
+      is_bv_type(type) && is_bv_type(val->type) &&
+      type->get_width() == val->type->get_width())
+    {
+      expr2tc cast = typecast2tc(type, val);
+      return try_simplification(cast);
+    }
+    return expr2tc();
+  }
+
+  /* If the selected type isn't compatible, whatever field is in the
+   * constant union isn't the field being selected; don't simplify. */
+  if (
+    !is_pointer_type(type) &&
+    !base_type_eq(type, val->type, *migrate_namespace_lookup))
+    return expr2tc();
+
+  return val;
+}
+
 expr2tc member2t::do_simplify() const
 {
-  if (is_constant_struct2t(source_value) || is_constant_union2t(source_value))
+  if (is_constant_union2t(source_value))
+    return fold_union_member_read(
+      to_constant_union2t(source_value), member, type);
+
+  if (is_constant_struct2t(source_value))
   {
     unsigned no =
       struct_union_get_component_number(source_value->type, member).value();
 
-    // Project the selected member value out of the constant aggregate.
-    expr2tc s;
-    if (is_constant_struct2t(source_value))
-    {
-      s = to_constant_struct2t(source_value).datatype_members[no];
-      // Be defensive: if member extraction type doesn't match, skip
-      // simplification instead of aborting in the simplifier.
-      if (
-        !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, *migrate_namespace_lookup))
-        return expr2tc();
-    }
-    else
-    {
-      // constant_union stores the value at position 0 with init_field indicating
-      // which member was initialized.
-      const constant_union2t &uni = to_constant_union2t(source_value);
-
-      // Only the active union member can be simplified away.
-      if (uni.init_field != member)
-        return expr2tc();
-
-      // The value is always stored at position 0
-      if (uni.datatype_members.empty())
-        return expr2tc();
-
-      s = uni.datatype_members[0];
-
-      /* If the type we just selected isn't compatible, it means that whatever
-       * field is in the constant union /isn't/ the field we're selecting from
-       * it. So don't simplify it, because we can't. */
-
-      if (
-        !is_pointer_type(type) &&
-        !base_type_eq(type, s->type, *migrate_namespace_lookup))
-        return expr2tc();
-    }
+    expr2tc s = to_constant_struct2t(source_value).datatype_members[no];
+    // Be defensive: if member extraction type doesn't match, skip
+    // simplification instead of aborting in the simplifier.
+    if (
+      !is_pointer_type(type) &&
+      !base_type_eq(type, s->type, *migrate_namespace_lookup))
+      return expr2tc();
 
     return s;
   }
@@ -2089,62 +2185,10 @@ static expr2tc simplify_logic_2ops(
     !is_constant_expr(simplified_side_2))
     return expr2tc();
 
-  expr2tc simpl_res;
-
-  if (is_bv_type(simplified_side_1) || is_bv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res = TFunctor<BigInt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_fixedbv_type(simplified_side_1) || is_fixedbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res = TFunctor<fixedbvt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (
-    is_floatbv_type(simplified_side_1) || is_floatbv_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-    std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
-
-    simpl_res = TFunctor<ieee_floatt>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else if (is_bool_type(simplified_side_1) || is_bool_type(simplified_side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
-
-    simpl_res = TFunctor<bool>::simplify(
-      simplified_side_1, simplified_side_2, is_constant, get_value);
-  }
-  else
-    return expr2tc();
-
-  return typecast_check_return(type, simpl_res);
+  return typecast_check_return(
+    type,
+    dispatch_binary_fold<TFunctor>(simplified_side_1, simplified_side_2)
+      .value_or(expr2tc()));
 }
 
 template <class constant_type>
@@ -3350,6 +3394,205 @@ expr2tc bitcast2t::do_simplify() const
   return expr2tc();
 }
 
+static bool is_null_pointer(const expr2tc &expr);
+
+/* &x is the address of a real object and is never NULL. The shapes that look
+ * like an address-of but need not be are the dereference-rooted ones: &*p is
+ * p, and &p->m / &(*p)[i] are p plus a constant offset -- the offsetof idiom
+ * &((struct S *)0)->m is exactly that, and pointer_offset2t::do_simplify in
+ * this file folds it to the member offset, 0 for the first member. Indexing a
+ * pointer is *(p + i), a dereference in all but name. expr2t::simplify
+ * deliberately leaves address_of's operand alone, so all of these reach the
+ * callers intact; walk the member/index chain and answer only for a root that
+ * is a declared object. */
+static bool address_of_is_provably_non_null(const expr2tc &e)
+{
+  if (!is_address_of2t(e))
+    return false;
+
+  expr2tc obj = to_address_of2t(e).ptr_obj;
+  while (is_member2t(obj) || is_index2t(obj))
+    obj = is_member2t(obj) ? to_member2t(obj).source_value
+                           : to_index2t(obj).source_value;
+
+  return is_symbol2t(obj) || is_constant_string2t(obj);
+}
+
+/* NULL reaches the simplifier both as the symbol and as a constant zero cast
+ * to a pointer; a null-guard rule has to accept either. */
+static bool is_null_pointer_value(const expr2tc &expr)
+{
+  return is_null_pointer(expr) || is_null_pointer_constant(expr);
+}
+
+/// Typecast of a constant bool to a number type; nullopt when no arm matches.
+static std::optional<expr2tc> fold_constant_bool_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // bool to int
+  if (is_bv_type(type))
+    return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
+
+  if (is_fixedbv_type(type))
+  {
+    fixedbvt fbv;
+    fbv.spec = fixedbv_spect(to_fixedbv_type(type));
+    fbv.from_integer(to_constant_bool2t(simp).value);
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_floatbv_type(type))
+  {
+    if (!is_constant_int2t(rounding_mode))
+      return expr2tc();
+
+    ieee_floatt fpbv;
+
+    BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+    // Bool -> float: convert the bool's integer value (0 or 1) into
+    // a float of the destination type.
+    fpbv.spec = ieee_float_spect(to_floatbv_type(type));
+    fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
+
+    return constant_floatbv2tc(fpbv);
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant integer to a number type; nullopt when no arm
+/// matches.
+static std::optional<expr2tc> fold_constant_bv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // int to int/float/double
+  const constant_int2t &theint = to_constant_int2t(simp);
+
+  if (is_bv_type(type))
+  {
+    // Typecasting an integer constant to a (possibly smaller) integer
+    // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
+    // destination width via the same binary round-trip the legacy
+    // from_integer + to_integer pair performed.
+    return from_integer(theint.value, type);
+  }
+
+  if (is_fixedbv_type(type))
+  {
+    fixedbvt fbv;
+    fbv.spec = fixedbv_spect(to_fixedbv_type(type));
+    fbv.from_integer(theint.value);
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_bool_type(type))
+    return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
+
+  if (is_floatbv_type(type))
+  {
+    if (!is_constant_int2t(rounding_mode))
+      return expr2tc();
+
+    ieee_floatt fpbv;
+
+    BigInt rm_value = to_constant_int2t(rounding_mode).value;
+    fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+    fpbv.spec = ieee_float_spect(to_floatbv_type(type));
+    fpbv.from_integer(to_constant_int2t(simp).value);
+
+    return constant_floatbv2tc(fpbv);
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant fixed-point value to a number type; nullopt when no
+/// arm matches.
+static std::optional<expr2tc> fold_constant_fixedbv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  (void)rounding_mode;
+  // float/double to int/float/double
+  fixedbvt fbv(to_constant_fixedbv2t(simp).value);
+
+  if (is_bv_type(type))
+    return constant_int2tc(type, fbv.to_integer());
+
+  if (is_fixedbv_type(type))
+  {
+    fbv.round(fixedbv_spect(to_fixedbv_type(type)));
+    return constant_fixedbv2tc(fbv);
+  }
+
+  if (is_bool_type(type))
+  {
+    const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
+    return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
+  }
+  return std::nullopt;
+}
+
+/// Typecast of a constant float to a number type; nullopt when no arm matches.
+static std::optional<expr2tc> fold_constant_floatbv_source(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  // float/double to int/float/double
+  if (!is_constant_int2t(rounding_mode))
+    return expr2tc();
+
+  ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
+
+  BigInt rm_value = to_constant_int2t(rounding_mode).value;
+  fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
+
+  if (is_bv_type(type))
+    return constant_int2tc(type, fpbv.to_integer());
+
+  if (is_floatbv_type(type))
+  {
+    fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
+    return constant_floatbv2tc(fpbv);
+  }
+
+  if (is_bool_type(type))
+    return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
+  return std::nullopt;
+}
+
+/// Constant-operand typecasts, dispatched on the source type.
+///
+/// nullopt when no arm matches, so the caller falls through to the
+/// non-constant cases exactly as the inline chain did; a nil expr2tc means an
+/// arm matched and declined (a non-constant rounding mode), which is
+/// do_simplify's own "no simplification" answer.
+static std::optional<expr2tc> fold_constant_typecast(
+  const type2tc &type,
+  const expr2tc &simp,
+  const expr2tc &rounding_mode)
+{
+  if (!is_number_type(type))
+    return std::nullopt;
+
+  if (is_bool_type(simp))
+    return fold_constant_bool_source(type, simp, rounding_mode);
+  if (is_bv_type(simp))
+    return fold_constant_bv_source(type, simp, rounding_mode);
+  if (is_fixedbv_type(simp))
+    return fold_constant_fixedbv_source(type, simp, rounding_mode);
+  if (is_floatbv_type(simp))
+    return fold_constant_floatbv_source(type, simp, rounding_mode);
+  return std::nullopt;
+}
+
 expr2tc typecast2t::do_simplify() const
 {
   // Follow approach of old irep, i.e., copy it
@@ -3363,128 +3606,18 @@ expr2tc typecast2t::do_simplify() const
   // so `from` is already simplified.
   const expr2tc &simp = from;
 
+  // Casting the address of a declared object to bool is true. Without this a
+  // `p ? a : b` guard on such an address stays symbolic, so the value it
+  // selects is not propagated as a constant and any loop bounded by it unwinds
+  // to --unwind rather than its real trip count
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4).
+  if (is_bool_type(type) && address_of_is_provably_non_null(simp))
+    return gen_true_expr();
+
   if (is_constant_expr(simp))
   {
-    // Casts from constant operands can be done here.
-    if (is_bool_type(simp) && is_number_type(type))
-    {
-      // bool to int
-      if (is_bv_type(type))
-        return constant_int2tc(type, BigInt(to_constant_bool2t(simp).value));
-
-      if (is_fixedbv_type(type))
-      {
-        fixedbvt fbv;
-        fbv.spec = fixedbv_spect(to_fixedbv_type(type));
-        fbv.from_integer(to_constant_bool2t(simp).value);
-        return constant_fixedbv2tc(fbv);
-      }
-
-      if (is_floatbv_type(type))
-      {
-        if (!is_constant_int2t(rounding_mode))
-          return expr2tc();
-
-        ieee_floatt fpbv;
-
-        BigInt rm_value = to_constant_int2t(rounding_mode).value;
-        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-        // Bool -> float: convert the bool's integer value (0 or 1) into
-        // a float of the destination type.
-        fpbv.spec = ieee_float_spect(to_floatbv_type(type));
-        fpbv.from_integer(BigInt(to_constant_bool2t(simp).value));
-
-        return constant_floatbv2tc(fpbv);
-      }
-    }
-    else if (is_bv_type(simp) && is_number_type(type))
-    {
-      // int to int/float/double
-      const constant_int2t &theint = to_constant_int2t(simp);
-
-      if (is_bv_type(type))
-      {
-        // Typecasting an integer constant to a (possibly smaller) integer
-        // type: from_integer(BigInt, type2tc) truncates/sign-extends to the
-        // destination width via the same binary round-trip the legacy
-        // from_integer + to_integer pair performed.
-        return from_integer(theint.value, type);
-      }
-
-      if (is_fixedbv_type(type))
-      {
-        fixedbvt fbv;
-        fbv.spec = fixedbv_spect(to_fixedbv_type(type));
-        fbv.from_integer(theint.value);
-        return constant_fixedbv2tc(fbv);
-      }
-
-      if (is_bool_type(type))
-      {
-        const constant_int2t &theint = to_constant_int2t(simp);
-        return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
-      }
-
-      if (is_floatbv_type(type))
-      {
-        if (!is_constant_int2t(rounding_mode))
-          return expr2tc();
-
-        ieee_floatt fpbv;
-
-        BigInt rm_value = to_constant_int2t(rounding_mode).value;
-        fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-        fpbv.spec = ieee_float_spect(to_floatbv_type(type));
-        fpbv.from_integer(to_constant_int2t(simp).value);
-
-        return constant_floatbv2tc(fpbv);
-      }
-    }
-    else if (is_fixedbv_type(simp) && is_number_type(type))
-    {
-      // float/double to int/float/double
-      fixedbvt fbv(to_constant_fixedbv2t(simp).value);
-
-      if (is_bv_type(type))
-        return constant_int2tc(type, fbv.to_integer());
-
-      if (is_fixedbv_type(type))
-      {
-        fbv.round(fixedbv_spect(to_fixedbv_type(type)));
-        return constant_fixedbv2tc(fbv);
-      }
-
-      if (is_bool_type(type))
-      {
-        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
-        return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
-      }
-    }
-    else if (is_floatbv_type(simp) && is_number_type(type))
-    {
-      // float/double to int/float/double
-      if (!is_constant_int2t(rounding_mode))
-        return expr2tc();
-
-      ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
-
-      BigInt rm_value = to_constant_int2t(rounding_mode).value;
-      fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
-
-      if (is_bv_type(type))
-        return constant_int2tc(type, fpbv.to_integer());
-
-      if (is_floatbv_type(type))
-      {
-        fpbv.change_spec(ieee_float_spect(to_floatbv_type(type)));
-        return constant_floatbv2tc(fpbv);
-      }
-
-      if (is_bool_type(type))
-        return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
-    }
+    if (auto folded = fold_constant_typecast(type, simp, rounding_mode))
+      return *folded;
   }
   else if (is_bool_type(type))
   {
@@ -3686,57 +3819,15 @@ static expr2tc simplify_constant_relation(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
+  // Scalar arms (bv/fixedbv/floatbv/bool) fold by reference through the shared
+  // seam. An optional carrying a value -- even a nil one -- means a scalar arm
+  // matched, so the pointer arm below stays an `else` of that match: a matched
+  // arm that declined must not fall through to it.
+  if (auto folded = dispatch_binary_fold<TFunctor, by_ref>(side_1, side_2))
+    return typecast_check_return(type, *folded);
+
   expr2tc simpl_res;
-
-  if (is_bv_type(side_1) || is_bv_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_int2t;
-
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
-      return to_constant_int2t(c).value;
-    };
-
-    simpl_res =
-      TFunctor<BigInt &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_fixedbv_type(side_1) || is_fixedbv_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
-
-    std::function<fixedbvt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
-
-    simpl_res =
-      TFunctor<fixedbvt &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
-
-    std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt & {
-      return to_constant_floatbv2t(c).value;
-    };
-
-    simpl_res =
-      TFunctor<ieee_floatt &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_bool_type(side_1) || is_bool_type(side_2))
-  {
-    std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &)) & is_constant_bool2t;
-
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
-      return to_constant_bool2t(c).value;
-    };
-
-    simpl_res =
-      TFunctor<bool &>::simplify(side_1, side_2, is_constant, get_value);
-  }
-  else if (is_pointer_type(side_1) || is_pointer_type(side_2))
+  if (is_pointer_type(side_1) || is_pointer_type(side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
       [&](const expr2tc &t) -> bool {
@@ -4409,6 +4500,12 @@ expr2tc notequal2t::do_simplify() const
       !is_nil_expr(b))
     return b;
 
+  // &x != NULL is true, the mirror of the == NULL rule same_object2t has.
+  if (is_null_pointer_value(side_1) && address_of_is_provably_non_null(side_2))
+    return gen_true_expr();
+  if (is_null_pointer_value(side_2) && address_of_is_provably_non_null(side_1))
+    return gen_true_expr();
+
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
   // preserves equality also preserves inequality.
@@ -4497,10 +4594,35 @@ static bool is_type_min(const BigInt &c, const type2tc &t)
   return c.is_zero();
 }
 
+// Provably non-negative by type structure alone: an unsigned
+// bitvector, possibly zero-extended into a STRICTLY wider signed type
+// (the C promotion `(int)a_u16` shape — the sign bit is never set).
+static bool is_provably_nonneg(const expr2tc &e)
+{
+  if (is_unsignedbv_type(e))
+    return true;
+  if (is_typecast2t(e))
+  {
+    const typecast2t &tc = to_typecast2t(e);
+    if (
+      is_signedbv_type(tc.type) && is_unsignedbv_type(tc.from) &&
+      tc.type->get_width() > tc.from->type->get_width())
+      return true;
+  }
+  return false;
+}
+
 expr2tc lessthan2t::do_simplify() const
 {
   // Self-comparison: x < x is always false (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
+  // (wider-signed)(unsigned) < 0 is always false: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_false_expr();
 
   // Type-extreme bounds. x < TYPE_MIN is always false; nothing in the type's
@@ -4555,6 +4677,13 @@ expr2tc greaterthan2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
+  // 0 > (wider-signed)(unsigned) is always false: the mirror of the
+  // `< 0` fold above, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
+    return gen_false_expr();
+
   // x > TYPE_MAX is always false; nothing exceeds the max representable.
   // Require the constant to share the variable side's type.
   if (
@@ -4601,6 +4730,13 @@ struct Lessthanequaltor
 
 expr2tc lessthanequal2t::do_simplify() const
 {
+  // 0 <= (wider-signed)(unsigned) is always true: the mirror of the
+  // `>= 0` fold below, for the constant-on-the-left spelling.
+  if (
+    is_constant_int2t(side_1) && side_1->type == side_2->type &&
+    to_constant_int2t(side_1).value.is_zero() && is_provably_nonneg(side_2))
+    return gen_true_expr();
+
   // Self-comparison: x <= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
@@ -4653,6 +4789,13 @@ expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // (wider-signed)(unsigned) >= 0 is always true: zero-extension can
+  // never produce a negative value.
+  if (
+    is_constant_int2t(side_2) && side_2->type == side_1->type &&
+    to_constant_int2t(side_2).value.is_zero() && is_provably_nonneg(side_1))
     return gen_true_expr();
 
   // x >= TYPE_MIN is always true; the min representable bounds the type.
@@ -5152,8 +5295,8 @@ expr2tc same_object2t::do_simplify() const
     op2 = to_typecast2t(op2).from;
 
   // Handle NULL pointer comparisons first
-  bool op1_is_null = is_null_pointer(op1);
-  bool op2_is_null = is_null_pointer(op2);
+  bool op1_is_null = is_null_pointer_value(op1);
+  bool op2_is_null = is_null_pointer_value(op2);
 
   if (op1_is_null && op2_is_null)
     return gen_true_expr(); // Both NULL
@@ -5161,21 +5304,6 @@ expr2tc same_object2t::do_simplify() const
   // Exactly one side is NULL: can the other side equal NULL? &x is the
   // address of a real object, never NULL, so they're definitely different
   // objects. Symbols (pointer variables) might hold NULL — leave to SMT.
-  //
-  // Special case: address_of(dereference(p)) is semantically equivalent to
-  // p (a &*p round-trip), and p may be NULL. expr2t::simplify deliberately
-  // doesn't simplify operands of address_of, so this shape can reach us
-  // unchanged. Fold to false only when the address_of target isn't a
-  // dereference of a pointer that could itself be NULL.
-  auto address_of_is_provably_non_null = [](const expr2tc &e) -> bool {
-    if (!is_address_of2t(e))
-      return false;
-    const expr2tc &target = to_address_of2t(e).ptr_obj;
-    // &*p reduces to p, which may be NULL — refuse the fold.
-    if (is_dereference2t(target))
-      return false;
-    return true;
-  };
   if (op1_is_null && address_of_is_provably_non_null(op2))
     return gen_false_expr();
   if (op2_is_null && address_of_is_provably_non_null(op1))

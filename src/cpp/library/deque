@@ -1,6 +1,8 @@
 #ifndef __STL_DEQUE
 #define __STL_DEQUE
 
+#include <memory> /* std::allocator, for the Allocator parameter */
+
 #include "iterator"
 #include "stdexcept"
 #if __cplusplus >= 201103L
@@ -11,7 +13,7 @@
 
 namespace std
 {
-template <class T>
+template <class T, class Allocator = std::allocator<T> >
 class deque
 {
 public:
@@ -439,6 +441,9 @@ public:
   typedef int size_type;
   typedef int difference_type;
   typedef T value_type;
+  /* The allocator is carried for name lookup and type identity only: this
+   * model never obtains storage through it. See the note in <memory>. */
+  typedef Allocator allocator_type;
   typedef T *pointer;
   typedef const T *const_pointer;
 
@@ -501,7 +506,7 @@ public:
     verify_capacity();
   }
 
-  deque(const deque<T> &x) : _size(0), _capacity(1)
+  deque(const deque &x) : _size(0), _capacity(1)
   {
     _size = 0;
     buf[0] = T();
@@ -510,7 +515,7 @@ public:
     verify_capacity();
   }
 
-  deque<T> &operator=(const deque<T> &x)
+  deque &operator=(const deque &x)
   {
     _size = 0;
     buf[0] = T();
@@ -556,6 +561,11 @@ public:
     while ((t11 + i) < t21)
       push_back(t11[i++]);
     verify_capacity();
+  }
+
+  allocator_type get_allocator() const
+  {
+    return allocator_type();
   }
 
   // iterators:
@@ -853,9 +863,9 @@ public:
     return it;
   }
 
-  void swap(deque<T> &v1)
+  void swap(deque &v1)
   {
-    deque<T> aux;
+    deque aux;
     aux = v1;
     v1 = *this;
     *this = aux;
@@ -870,7 +880,7 @@ public:
   }
 
   // comparators:
-  bool operator==(const deque<T> &rhv) const
+  bool operator==(const deque &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
@@ -880,7 +890,7 @@ public:
     return true;
   }
 
-  bool operator!=(const deque<T> &rhv) const
+  bool operator!=(const deque &rhv) const
   {
     return (!(*this == rhv));
   }
@@ -889,7 +899,7 @@ public:
    * of the two ranges, so the first differing element decides it and the
    * lengths matter only when one range is a prefix of the other. Comparing
    * sizes instead made {2} <= {1, 3}. */
-  bool operator<(const deque<T> &rhv) const
+  bool operator<(const deque &rhv) const
   {
     size_type n = this->size() < rhv.size() ? this->size() : rhv.size();
     for (size_type i = 0; i < n; i++)
@@ -902,17 +912,17 @@ public:
     return this->size() < rhv.size();
   }
 
-  bool operator>(const deque<T> &rhv) const
+  bool operator>(const deque &rhv) const
   {
     return rhv < *this;
   }
 
-  bool operator>=(const deque<T> &rhv) const
+  bool operator>=(const deque &rhv) const
   {
     return !(*this < rhv);
   }
 
-  bool operator<=(const deque<T> &rhv) const
+  bool operator<=(const deque &rhv) const
   {
     return !(rhv < *this);
   }
