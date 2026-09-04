@@ -106,7 +106,7 @@ jobs:
           --tests "$selection" \
           -j2 --output-junit "$RUNNER_TEMP/fast-lane.xml" || true
         echo "FAST_LANE_SECONDS=$(( $(date +%s) - start ))" >> "$GITHUB_ENV"
-        rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-*
+        rm -rf /tmp/esbmc-headers-* /tmp/esbmc-test-* /tmp/esbmc-python-astgen-*
 
     - name: Run tests
       if: ${{ inputs.testing == true }}
