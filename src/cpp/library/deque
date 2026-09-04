@@ -493,14 +493,8 @@ public:
     verify_capacity();
   }
 
-  explicit deque(size_type n) : _size(0), _capacity(1)
-  {
-    for (int i = 0; i < n; i++)
-      push_back(T());
-    _capacity = n;
-  }
-
-  explicit deque(size_type n, const allocator_type &) : _size(0), _capacity(1)
+  explicit deque(size_type n, const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
     for (int i = 0; i < n; i++)
       push_back(T());

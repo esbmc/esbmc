@@ -1,4 +1,5 @@
 CORE
 main.cpp
 --std=c++11 --incremental-bmc
+FAILED.*assertion n_value\[0\] == 8$
 ^VERIFICATION FAILED$
