@@ -763,8 +763,10 @@ TEST_CASE("migrate_type_back recurses through nested aggregates", "[migrate]")
 TEST_CASE("migrate_type_back survives cache eviction", "[migrate]")
 {
   const type2tc probe = make_nested_struct_type();
+  type2tc pinned = make_struct_type();
   migrate_type_back_cache_clear();
   const std::string expected = migrate_type_back(probe).pretty();
+  migrate_type_back(pinned);
 
   // Overflow the cache to exercise the eviction path. Every node stays pinned
   // while cached, so no address can be recycled and each insert is a new key.
@@ -777,6 +779,14 @@ TEST_CASE("migrate_type_back survives cache eviction", "[migrate]")
       struct_type2tc(members, names, names, "s" + std::to_string(i)));
     migrate_type_back(nodes.back());
   }
+
+  // Eviction dropped the cache's reference, so `pinned` is uniquely owned
+  // again and this mutable access does not clone. Were the cache still
+  // holding it, copy-on-write would detach and the address would change --
+  // which is what makes this discriminate eviction from an unbounded cache.
+  const type2t *node = std::as_const(pinned).get();
+  to_struct_type(pinned).name = "evicted";
+  REQUIRE(std::as_const(pinned).get() == node);
 
   REQUIRE(migrate_type_back(probe).pretty() == expected);
 }
