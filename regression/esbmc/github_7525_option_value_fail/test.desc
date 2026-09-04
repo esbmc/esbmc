@@ -1,4 +1,5 @@
 CORE
 main.c
---error-label ERROR --unwind 1
+--smtlib-solver-prog --no-assertions --unwind 1
+^WARNING: .--smtlib-solver-prog. takes a value, so .--no-assertions. was read as that value
 ^VERIFICATION FAILED$

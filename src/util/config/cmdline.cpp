@@ -242,13 +242,32 @@ static void warn_option_like_values(
 {
   for (const auto &opt : parsed.options)
     for (const std::string &value : opt.value)
-      if (
-        value.rfind("--", 0) == 0 && desc.find_nothrow(value.substr(2), false))
+    {
+      if (value.rfind("--", 0) != 0)
+        continue;
+
+      /* Approximate, because the parser runs with boost's default style, which
+       * includes allow_guessing: `--show-loo` reaches --show-loops, so an exact
+       * lookup would let the abbreviated spelling through unwarned. */
+      bool names_an_option;
+      try
+      {
+        names_an_option = desc.find_nothrow(value.substr(2), true) != nullptr;
+      }
+      catch (const boost::program_options::ambiguous_option &)
+      {
+        /* A prefix several options share. find_nothrow throws rather than
+         * returning them, and a value that ambiguous is still option-like. */
+        names_an_option = true;
+      }
+
+      if (names_an_option)
         log_warning(
           "'--{}' takes a value, so '{}' was read as that value rather than as "
           "an option",
           opt.string_key,
           value);
+    }
 }
 
 bool cmdlinet::parse(
