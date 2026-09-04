@@ -90,6 +90,15 @@ type2tc make_struct_type()
   std::vector<irep_idt> names{"x", "y"};
   return struct_type2tc(members, names, names, "s");
 }
+
+type2tc make_nested_struct_type()
+{
+  const type2tc arr = array_type2tc(
+    get_int_type(32), constant_int2tc(get_uint_type(32), BigInt(4)), false);
+  std::vector<type2tc> members{arr, make_struct_type(), get_uint_type(64)};
+  std::vector<irep_idt> names{"a", "inner", "z"};
+  return struct_type2tc(members, names, names, "outer");
+}
 } // namespace
 
 TEST_CASE("migrate type round-trips for scalar kinds", "[migrate]")
@@ -718,33 +727,64 @@ TEST_CASE(
   require_expr_roundtrip(via_helper);
 }
 
-// migrate_type_back memoises aggregate types on node identity (#7571). These
-// pin the two properties that make that sound; both would have held trivially
-// before the cache existed, so they are guards against a future regression in
-// it rather than tests of new behaviour.
+// migrate_type_back memoises aggregate types on node identity (#7571).
+//
+// full_eq short-circuits on shared irept data (irep.cpp:209), so comparing two
+// cache hits asserts nothing -- these compare pretty() text, which always walks
+// the structure.
 
 TEST_CASE("migrate_type_back is stable across repeated calls", "[migrate]")
 {
   const type2tc s = make_struct_type();
-
-  const typet first = migrate_type_back(s);
-  const typet second = migrate_type_back(s);
-  REQUIRE(full_eq(first, second));
+  const std::string first = migrate_type_back(s).pretty();
 
   migrate_type_back_cache_clear();
-  REQUIRE(full_eq(migrate_type_back(s), first));
+  REQUIRE(migrate_type_back(s).pretty() == first);
 
   // Distinct nodes that compare equal must still back-migrate equally: the
   // cache keys on address, so an equal-but-separate node takes the slow path.
   const type2tc other = make_struct_type();
   REQUIRE(other == s);
-  REQUIRE(full_eq(migrate_type_back(other), first));
+  REQUIRE(migrate_type_back(other).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back recurses through nested aggregates", "[migrate]")
+{
+  // An array member routes the reverse migration through migrate_expr_back on
+  // the array size; a struct member exercises the recursive aggregate arm.
+  const type2tc s = make_nested_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+  REQUIRE(migrate_type_back(make_nested_struct_type()).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back survives cache eviction", "[migrate]")
+{
+  const type2tc probe = make_nested_struct_type();
+  migrate_type_back_cache_clear();
+  const std::string expected = migrate_type_back(probe).pretty();
+
+  // Overflow the cache to exercise the eviction path. Every node stays pinned
+  // while cached, so no address can be recycled and each insert is a new key.
+  std::vector<type2tc> nodes;
+  for (unsigned int i = 0; i < 5000; i++)
+  {
+    std::vector<type2tc> members{get_int_type(32), get_bool_type()};
+    std::vector<irep_idt> names{"x", "y"};
+    nodes.push_back(
+      struct_type2tc(members, names, names, "s" + std::to_string(i)));
+    migrate_type_back(nodes.back());
+  }
+
+  REQUIRE(migrate_type_back(probe).pretty() == expected);
 }
 
 TEST_CASE("a cached type2t detaches rather than mutating", "[migrate]")
 {
   type2tc s = make_struct_type();
-  const typet before = migrate_type_back(s); // s is now referenced by the cache
+  const std::string before = migrate_type_back(s).pretty();
 
   // Read the node address through the const accessor: the non-const get() is
   // itself the detaching overload, so reading with it would perform the very
@@ -757,7 +797,6 @@ TEST_CASE("a cached type2t detaches rather than mutating", "[migrate]")
   to_struct_type(s).name = "renamed";
   REQUIRE(std::as_const(s).get() != original);
 
-  REQUIRE(full_eq(migrate_type_back(s), migrate_type_back(s)));
-  REQUIRE(!full_eq(migrate_type_back(s), before));
-  REQUIRE(full_eq(before, migrate_type_back(make_struct_type())));
+  REQUIRE(migrate_type_back(s).pretty() != before);
+  REQUIRE(migrate_type_back(make_struct_type()).pretty() == before);
 }

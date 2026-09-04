@@ -2957,8 +2957,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 /// cannot be freed and its address reused, and `irep_container` is
 /// copy-on-write: a node the cache references detaches on write rather than
 /// mutating in place. migrate_type_back() reads no globals, so the legacy form
-/// is a pure function of the node. The pinned `type2tc` is what keeps the key
-/// valid; the `typet` is the memoised result.
+/// is a pure function of the node -- unlike the forward direction, which reads
+/// `config` and `migrate_namespace_lookup`, so this key scheme must not be
+/// copied to it. The pinned `type2tc` keeps the key valid; the `typet` is the
+/// memoised result.
 using back_cachet =
   std::unordered_map<const type2t *, std::pair<type2tc, typet>>;
 
@@ -2970,29 +2972,29 @@ void migrate_type_back_cache_clear()
   back_cache.clear();
 }
 
-static typet migrate_type_back0(const type2tc &ref);
+static typet migrate_type_back_uncached(const type2tc &ref);
 
 typet migrate_type_back(const type2tc &ref)
 {
-  if (
-    !ref ||
-    (ref->type_id != type2t::struct_id && ref->type_id != type2t::union_id))
-    return migrate_type_back0(ref);
+  if (ref->type_id != type2t::struct_id && ref->type_id != type2t::union_id)
+    return migrate_type_back_uncached(ref);
 
   auto it = back_cache.find(ref.get());
   if (it != back_cache.end())
     return it->second.second;
 
-  typet result = migrate_type_back0(ref);
+  typet result = migrate_type_back_uncached(ref);
   // goto_convert clears per function, but symex calls this too and has no such
-  // boundary. Evicting only loses sharing, never correctness (#53).
+  // boundary, so bound the cache rather than let it grow for the life of the
+  // process as the pool removed in daa066ad91a4 did. Evicting only loses
+  // sharing, never correctness.
   if (back_cache.size() >= back_cache_capacity)
     back_cache.clear();
   back_cache.emplace(ref.get(), std::make_pair(ref, result));
   return result;
 }
 
-static typet migrate_type_back0(const type2tc &ref)
+static typet migrate_type_back_uncached(const type2tc &ref)
 {
   switch (ref->type_id)
   {
