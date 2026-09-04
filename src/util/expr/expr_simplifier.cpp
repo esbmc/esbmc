@@ -4368,60 +4368,38 @@ static expr2tc cancel_common_unary_operand(
   return expr2tc();
 }
 
-// Null-pointer comparison folding: a pointer value is an (object,
-// offset) pair and no object lives at address zero, so `&sym ± k`
-// never aliases NULL for any constant k.
-static bool is_null_pointer(const expr2tc &e)
-{
-  const expr2tc *p = &e;
-  while (is_typecast2t(*p))
-    p = &to_typecast2t(*p).from;
-  if (is_symbol2t(*p) && to_symbol2t(*p).get_symbol_name() == "NULL")
-    return true;
-  return is_null_pointer_constant(*p);
-}
-
-static bool is_provably_nonnull_pointer(const expr2tc &e)
-{
-  const expr2tc *p = &e;
-  while (is_typecast2t(*p))
-    p = &to_typecast2t(*p).from;
-  // address_of(dereference(q)) is just q and may be NULL;
-  // same_object2t::do_simplify refuses the shape for the same reason.
-  if (is_address_of2t(*p))
-    return !is_dereference2t(to_address_of2t(*p).ptr_obj);
-  // &sym + k / k + &sym / &sym - k: object base plus a constant offset
-  if (is_add2t(*p))
-  {
-    const add2t &a = to_add2t(*p);
-    if (is_constant_int2t(a.side_2))
-      return is_provably_nonnull_pointer(a.side_1);
-    if (is_constant_int2t(a.side_1))
-      return is_provably_nonnull_pointer(a.side_2);
-  }
-  if (is_sub2t(*p))
-  {
-    const sub2t &s = to_sub2t(*p);
-    if (is_constant_int2t(s.side_2))
-      return is_provably_nonnull_pointer(s.side_1);
-  }
-  return false;
-}
-
-// Returns true/false constant when the pointer comparison is decidable,
-// nil otherwise. `eq` selects the polarity.
+// Returns a Boolean constant when a pointer comparison against NULL is
+// decidable, nil otherwise. `eq` selects the polarity. A pointer value
+// is an (object, offset) pair and no object lives at address zero, so
+// the non-null side peels casts and constant ± offsets down to its
+// root before the address_of root check: `(T *)(&sym + k) == NULL`
+// folds exactly like `&sym == NULL`.
 static expr2tc
 simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
 {
   if (!is_pointer_type(s1) && !is_pointer_type(s2))
     return expr2tc();
-  bool n1 = is_null_pointer(s1);
-  bool n2 = is_null_pointer(s2);
+  bool n1 = is_null_pointer_value(s1);
+  bool n2 = is_null_pointer_value(s2);
   if (n1 && n2)
     return eq ? gen_true_expr() : gen_false_expr();
-  if (
-    (n1 && is_provably_nonnull_pointer(s2)) ||
-    (n2 && is_provably_nonnull_pointer(s1)))
+  if (n1 == n2)
+    return expr2tc();
+  const expr2tc *p = n1 ? &s2 : &s1;
+  while (true)
+  {
+    if (is_typecast2t(*p))
+      p = &to_typecast2t(*p).from;
+    else if (is_add2t(*p) && is_constant_int2t(to_add2t(*p).side_2))
+      p = &to_add2t(*p).side_1;
+    else if (is_add2t(*p) && is_constant_int2t(to_add2t(*p).side_1))
+      p = &to_add2t(*p).side_2;
+    else if (is_sub2t(*p) && is_constant_int2t(to_sub2t(*p).side_2))
+      p = &to_sub2t(*p).side_1;
+    else
+      break;
+  }
+  if (address_of_is_provably_non_null(*p))
     return eq ? gen_false_expr() : gen_true_expr();
   return expr2tc();
 }
@@ -4564,12 +4542,6 @@ expr2tc notequal2t::do_simplify() const
   if (expr2tc b = widened_bool_compared_to_zero(side_1, side_2);
       !is_nil_expr(b))
     return b;
-
-  // &x != NULL is true, the mirror of the == NULL rule same_object2t has.
-  if (is_null_pointer_value(side_1) && address_of_is_provably_non_null(side_2))
-    return gen_true_expr();
-  if (is_null_pointer_value(side_2) && address_of_is_provably_non_null(side_1))
-    return gen_true_expr();
 
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
@@ -5288,6 +5260,15 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 
   // We can't determine if they are the same object
   return expr2tc();
+}
+
+static bool is_null_pointer(const expr2tc &expr)
+{
+  // Check for explicit NULL symbol
+  if (is_symbol2t(expr) && to_symbol2t(expr).get_symbol_name() == "NULL")
+    return true;
+
+  return false;
 }
 
 expr2tc same_object2t::do_simplify() const

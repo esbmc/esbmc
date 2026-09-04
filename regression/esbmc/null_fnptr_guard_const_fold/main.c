@@ -1,6 +1,7 @@
-/* Bytecode-VM dispatch, one level deeper than the naive shape: the
- * null check and the handler call live in a callee, and the handler
- * mutates a shared machine struct. Without the fold the impossible
+/* Distilled from verifying a JavaCard VM's interpreter loop: handler
+ * dispatch through a static function-pointer table, one level deeper
+ * than the naive shape — the null check and the handler call live in a
+ * callee, and the handler mutates a shared machine struct. Without the fold the impossible
  * null path survives to the callee's return merge, the whole struct
  * becomes a phi of updated-vs-original, and every later member read
  * -- including the loop bound -- stops folding. */

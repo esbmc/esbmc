@@ -44,3 +44,36 @@ TEST_CASE("&*p == NULL must not fold", "[irep2][simplify]")
   if (!is_nil_expr(s))
     REQUIRE(!is_constant_bool2t(s));
 }
+
+TEST_CASE("(T *)(&obj + k) == NULL folds to false", "[irep2][simplify]")
+{
+  expr2tc obj = symbol2tc(get_int32_type(), irep_idt("obj"));
+  expr2tc arith = add2tc(
+    int_ptr(),
+    address_of2tc(int_ptr(), obj),
+    constant_int2tc(get_int32_type(), BigInt(2)));
+  expr2tc eq = equality2tc(typecast2tc(int_ptr(), arith), null_ptr());
+  expr2tc s = eq->simplify();
+  REQUIRE(is_constant_bool2t(s));
+  REQUIRE(!to_constant_bool2t(s).value);
+}
+
+TEST_CASE("&(*p)[i] + k == NULL must not fold", "[irep2][simplify]")
+{
+  // The peel must bottom out at the chain root: an index over a
+  // dereference roots at p, which may be NULL.
+  type2tc arr = array_type2tc(get_int32_type(), expr2tc(), true);
+  expr2tc p = symbol2tc(pointer_type2tc(arr), irep_idt("p"));
+  expr2tc elem = index2tc(
+    get_int32_type(),
+    dereference2tc(arr, p),
+    constant_int2tc(get_int32_type(), BigInt(1)));
+  expr2tc arith = add2tc(
+    int_ptr(),
+    address_of2tc(int_ptr(), elem),
+    constant_int2tc(get_int32_type(), BigInt(2)));
+  expr2tc eq = equality2tc(arith, null_ptr());
+  expr2tc s = eq->simplify();
+  if (!is_nil_expr(s))
+    REQUIRE(!is_constant_bool2t(s));
+}
