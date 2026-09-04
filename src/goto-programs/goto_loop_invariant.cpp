@@ -603,9 +603,22 @@ void goto_loop_invariantt::havoc_pointees(
       continue;
 
     const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
-    if (
-      is_empty_type(pointee) || is_code_type(pointee) ||
-      pointee->get_width() > kMaxHavocPointeeBits)
+    if (is_empty_type(pointee) || is_code_type(pointee))
+      continue;
+
+    // get_width() throws on a VLA or an infinite array, and on a type the
+    // namespace could not resolve. A pointee with no static width has no
+    // nondet value to build either, so it is out of reach here.
+    unsigned width;
+    try
+    {
+      width = pointee->get_width();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      continue;
+    }
+    if (width > kMaxHavocPointeeBits)
       continue;
 
     goto_programt::targett t = dest.add_instruction(ASSIGN);
@@ -660,6 +673,11 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
   }
 
+  // Before Step 2: a pointer the loop reassigns is havoc'd there, and writing
+  // through it afterwards would reach an arbitrary object rather than the
+  // storage this loop writes.
+  havoc_pointees(loop, loop_head->location, dest);
+
   // =========================================================
   // Step 2: Standard Havoc — assign nondet to all modified variables
   // =========================================================
@@ -682,8 +700,6 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location.comment("loop invariant havoc");
     t->loop_invariant_havoc = true;
   }
-
-  havoc_pointees(loop, loop_head->location, dest);
 
   // =========================================================
   // Frame Rule Step 3: Enforce Frame Conditions (if enabled)

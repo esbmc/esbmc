@@ -1,6 +1,5 @@
 CORE
 main.c
 --loop-invariant-check --multi-property
-^WARNING: loop invariant at .* not checked beyond its base case
-^\s+FAILED\s+\[main\.assertion\.2\]\s+line\s+19\s+assertion 0$
+^\s+FAILED\s+\[main\.assertion\.4\]\s+line\s+19\s+assertion cnt == 4$
 ^VERIFICATION FAILED$

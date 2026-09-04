@@ -16,6 +16,6 @@ int main()
   {
     dec(&cnt);
   }
-  assert(cnt == 4);
+  assert(cnt == 0);
   return 0;
 }

@@ -305,6 +305,21 @@ bool goto_loopst::compute_function_summary(
   return complete;
 }
 
+/// A callee writing through its own parameter names storage the caller cannot:
+/// the parameter is out of scope at the call. The call's own pointer arguments
+/// are what it was handed, so record those and let the havoc reach the pointee
+/// through them. Recording an argument the callee never writes only widens the
+/// abstraction, which stays sound (issue #7478).
+static void
+record_callee_pointer_writes(loopst &loop, const code_function_call2t &call)
+{
+  loop.set_writes_through_pointer();
+
+  for (const expr2tc &arg : call.operands)
+    if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+      loop.add_pointer_array_write_ptr(arg);
+}
+
 void goto_loopst::get_modified_variables(
   goto_programt::instructionst::iterator instruction,
   function_loopst::iterator loop,
@@ -355,13 +370,7 @@ void goto_loopst::get_modified_variables(
     for (const auto &v : summary.unmodified)
       loop->add_unmodified_var_to_loop(v);
     if (summary.writes_through_pointer)
-    {
-      // The write is through a callee parameter, which is not in scope at the
-      // caller's loop head, so no pointer here names the storage to havoc.
-      // Same reason Phase 1 disables the inductive step for it (#5230, #7478).
-      loop->set_writes_through_pointer();
-      loop->set_pointer_array_write_unresolvable();
-    }
+      record_callee_pointer_writes(*loop, function_call);
     if (summary.modifies_pointer_array)
     {
       loop->set_modifies_pointer_array();
