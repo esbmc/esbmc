@@ -325,7 +325,8 @@ smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)
   /* 2^bits - 1 has to be representable in the operand's type. At equal widths
    * a signed operand cannot hold it, and constant_int2tc wraps it to -1, which
    * leaves `operand < 0 || operand > -1` -- a tautology. A bound the type
-   * cannot reach is never exceeded, so clamp it to the type's own max (#7324). */
+   * cannot reach is never exceeded, so clamp it to the type's own max (#7324).
+   */
   const BigInt type_max = type_max_value(ocast.operand->type);
   BigInt bound = BigInt::power2(dst_width) - 1;
   if (bound > type_max)
