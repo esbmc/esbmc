@@ -57,11 +57,12 @@ public:
   /// Maximum number of instructions to search backwards from the loop head
   /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
   /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
-  /// for up to ~4 extra declarations before the invariant.  Both
-  /// extract_loop_invariants and extract_and_remove_side_effects use this
-  /// same limit so their searches are consistent, and
-  /// goto_synthesise_loop_invariants scans the same window before deciding
-  /// a loop already carries a user-written invariant.
+  /// for up to ~4 extra declarations before the invariant.  This is the only
+  /// definition: goto_loop_invariant.cpp's free functions name it qualified,
+  /// so extract_invariants_near, extract_loop_assigns and
+  /// extract_and_remove_side_effects search the same window, and so does
+  /// goto_synthesise_loop_invariants when deciding whether a loop already
+  /// carries a user-written invariant.
   static constexpr size_t kMaxInvariantSearchBack = 10;
 
   goto_loop_invariantt(

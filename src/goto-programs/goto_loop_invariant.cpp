@@ -45,10 +45,6 @@
 // Shared helper: extract the loop invariant near a loop head
 // ---------------------------------------------------------------------------
 
-/// Maximum number of instructions to search backwards from the loop head
-/// when locating the LOOP_INVARIANT instruction.
-static constexpr size_t kMaxInvariantSearchBack = 10;
-
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 const char *const kHoudiniCandidatePrefix = "houdini-candidate:";
 
@@ -120,7 +116,7 @@ static void cluster_same_loop_invariants(
   size_t &dist,
   Collect collect)
 {
-  while (it != begin && dist < kMaxInvariantSearchBack)
+  while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
     ++dist;
@@ -187,7 +183,7 @@ static std::vector<expr2tc> extract_invariants_near(
   // program (regression/esbmc/synth_loop_invariant_adjacent).
   bool crossed_real_instruction = false;
 
-  while (it != begin && dist < kMaxInvariantSearchBack)
+  while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
     ++dist;
@@ -383,7 +379,7 @@ goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
   size_t search_distance = 0;
 
   while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < kMaxInvariantSearchBack)
+         search_distance < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --search_it;
     ++search_distance;
@@ -532,7 +528,7 @@ static void extract_and_remove_side_effects_impl(
   goto_programt::targett loop_inv_it = loop_head;
   size_t back_dist = 0;
   while (loop_inv_it != goto_function.body.instructions.begin() &&
-         back_dist < kMaxInvariantSearchBack)
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --loop_inv_it;
     ++back_dist;
