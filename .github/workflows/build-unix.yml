@@ -89,19 +89,26 @@ jobs:
         # comparison below is only meaningful if the fast-lane subset and the
         # full run share one universe, and this build's test set can differ
         # from the one that produced ci/test-timings.json. Note this is *not*
-        # the nightly's actual selection minus python-intensive:
-        # --exclude-prefix filters the universe before the stratified
-        # budget/redistribution runs, so the remaining strata get a larger
-        # share here than they would in the nightly's own frozen list.
+        # the nightly's actual selection minus python-intensive: the prefix is
+        # dropped from the universe before the stratified budget/redistribution
+        # runs, so the remaining strata get a larger share here than they would
+        # in the nightly's own frozen list.
+        universe="$RUNNER_TEMP/universe-$week.txt"
+        python3 -c "
+        import sys
+        sys.path.insert(0, 'scripts/ci')
+        from run_selected_tests import ctest_test_names
+        names = [n for n in ctest_test_names('build') if not n.startswith('regression/python-intensive/')]
+        open('$universe', 'w').write('\n'.join(names) + '\n')
+        "
         selection="$RUNNER_TEMP/selected-tests-$week.txt"
         python3 scripts/ci/select_tests.py \
           --timings ci/test-timings.json \
-          --build-dir build \
+          --tests "$universe" \
           --week "$week" \
           --budget-seconds 900 \
           --jobs 2 \
           --always-run ci/core-set.txt \
-          --exclude-prefix regression/python-intensive/ \
           --output "$selection"
         echo "FAST_LANE_SELECTION=$selection" >> "$GITHUB_ENV"
         start=$(date +%s)

@@ -13,6 +13,7 @@ stale the way a checked-in index list would.
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -20,10 +21,20 @@ import sys
 # The sibling import below has to follow the sys.path setup.
 # pylint: disable=wrong-import-position
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from select_tests import ctest_test_names, read_lines  # noqa: E402
+from select_tests import read_lines  # noqa: E402  (sibling module, not a package)
 
 # MAX_ARG_STRLEN is 128 kB; stop short of it with room for the rest of argv.
 MAX_ARG_BYTES = 120_000
+
+
+def ctest_test_names(build_dir):
+    """List the build's tests in ctest numbering order (test #N is entry N-1)."""
+    out = subprocess.run(["ctest", "--show-only=json-v1"],
+                         cwd=build_dir,
+                         check=True,
+                         capture_output=True,
+                         text=True).stdout
+    return [t["name"] for t in json.loads(out)["tests"]]
 
 
 def resolve(selected, names):
