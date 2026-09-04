@@ -44,7 +44,7 @@ jobs:
           since=$(date -u -d "$DAYS days ago" +%Y-%m-%d)
           # One artifact per PR run; a run that predates the artifact's
           # retention, or never produced one, is simply absent.
-          gh run list --workflow PR --created ">=$since" --limit 200 \
+          gh run list --workflow PR --created ">=$since" --limit 1000 \
             --json databaseId --jq '.[].databaseId' > runs.txt
           while read -r id; do
             gh run download "$id" --name shadow-report --dir "reports/$id" 2>/dev/null || true
