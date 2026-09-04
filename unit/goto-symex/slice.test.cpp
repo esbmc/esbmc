@@ -108,10 +108,11 @@ slice_result slice_and_audit(symex_run::equation &run)
       collect_ssa_reads(step.cond, reads);
     else if (store_elided(step))
       // An elided store keeps its rhs textually for trace construction,
-      // but the encoded condition is the identity `lhs == src`: the dead
-      // update value and its inputs are not read by the formula, exactly
-      // as slice.cpp documents, so they are not closure obligations.
-      collect_ssa_reads(to_with2t(step.rhs).source_value, reads);
+      // but only the encoded condition reaches the formula. Collect
+      // from that condition rather than reconstructing the expected
+      // identity `lhs == src`, so a wrongly-encoded elided store still
+      // surfaces as a closure violation instead of being assumed away.
+      collect_ssa_reads(step.cond, reads);
     else
       collect_ssa_reads(step.rhs, reads);
 

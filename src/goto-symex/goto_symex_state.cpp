@@ -234,8 +234,16 @@ static bool is_immutable_computation(const expr2tc &expr)
   const expr2tc *b = &expr;
   while (is_typecast2t(*b))
     b = &to_typecast2t(*b).from;
-  if (is_immutable_value(*b) || is_constant_expr(*b))
+  if (is_immutable_value(*b))
     return true;
+  // Constant leaves stay scalar: an aggregate literal must route
+  // through constant_propagation so array_may_propagate keeps its say.
+  if (is_constant_expr(*b))
+    return !is_constant_struct2t(*b) && !is_constant_union2t(*b) &&
+           !is_constant_array2t(*b) && !is_constant_array_of2t(*b) &&
+           !is_constant_vector2t(*b);
+  if (!is_bv_type((*b)->type))
+    return false;
   switch ((*b)->expr_id)
   {
   case expr2t::bitand_id:
