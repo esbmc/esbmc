@@ -2913,7 +2913,7 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
   expr2tc arr_size2 = to_array_type(type_rec).array_size;
 
   /* Every nil array_size is built alongside size_is_infinite, and an infinite
-   * outer level returned above, so no level reached here carries one (#7481). */
+   * outer level returned above, so none reached here carries one (#7481). */
   assert(!is_nil_expr(arr_size1) && !is_nil_expr(arr_size2));
 
   if (arr_size1->type != arr_size2->type)
