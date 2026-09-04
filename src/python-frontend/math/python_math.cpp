@@ -169,7 +169,10 @@ BigInt python_math::pow_bigint_non_negative(BigInt base, BigInt exp)
 
 const BigInt python_math::kMaxConstantFoldExponent = 1024;
 
-bool python_math::fits_in_width(const BigInt &value, unsigned width, bool is_signed)
+bool python_math::fits_in_width(
+  const BigInt &value,
+  unsigned width,
+  bool is_signed)
 {
   const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
   const BigInt max_val =

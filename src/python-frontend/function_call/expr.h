@@ -131,8 +131,8 @@ private:
    */
   exprt build_constant_from_arg() const;
 
-  std::optional<BigInt> try_fold_constant_arith_json(
-    const nlohmann::json &node) const;
+  std::optional<BigInt>
+  try_fold_constant_arith_json(const nlohmann::json &node) const;
 
   /*
    * Folds bytes.fromhex("..") over a constant hex string into a byte array.
