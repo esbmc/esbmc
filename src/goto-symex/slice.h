@@ -69,6 +69,10 @@ public:
   /// report.
   std::string claim_comment;
   locationt claim_location;
+  /// Whether a --loop-invariant-check havoc step precedes the kept claim on
+  /// this trace, so the claim is checked against the invariant's
+  /// over-approximation rather than the program (issue #7480).
+  bool claim_after_invariant_havoc = false;
   bool show_slice_info;
   bool is_goto_cov;
   namespacet ns;

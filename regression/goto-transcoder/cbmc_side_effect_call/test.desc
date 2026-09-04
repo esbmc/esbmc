@@ -1,0 +1,4 @@
+CORE
+cbmc_side_effect_call.goto
+--binary
+^VERIFICATION SUCCESSFUL$
