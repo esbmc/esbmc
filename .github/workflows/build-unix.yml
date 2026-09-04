@@ -86,9 +86,13 @@ jobs:
         # tests set TIMEOUT themselves).
         cmake -DESBMC_REGRESS_TIMEOUT=120 build
         # Derived here rather than read from the nightly's committed list: the
-        # comparison below is only meaningful if both runs draw from the same
-        # universe, and the PR leg excludes python-intensive. Same week seed,
-        # so this is the nightly's draw minus that suite.
+        # comparison below is only meaningful if the fast-lane subset and the
+        # full run share one universe, and this build's test set can differ
+        # from the one that produced ci/test-timings.json. Note this is *not*
+        # the nightly's actual selection minus python-intensive:
+        # --exclude-prefix filters the universe before the stratified
+        # budget/redistribution runs, so the remaining strata get a larger
+        # share here than they would in the nightly's own frozen list.
         selection="$RUNNER_TEMP/selected-tests-$week.txt"
         python3 scripts/ci/select_tests.py \
           --timings ci/test-timings.json \
