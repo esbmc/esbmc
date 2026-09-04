@@ -11,13 +11,17 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
 
-/// A (possibly typecast) SSA symbol, or a pure bitvector computation
-/// over such leaves: neither changes meaning after its operands'
-/// assignments, so a copy chain built from one is a stable renaming of
-/// the same value. The computation form covers the operand-split idiom
+/// A (possibly typecast) SSA symbol, or a pure bit operation over such
+/// leaves: neither changes meaning after its operands' assignments, so
+/// a copy chain built from one is a stable renaming of the same value.
+/// The computation form covers the operand-split idiom
 /// `m = (mn >> 4) & 0x0F` a caller and a callee both derive from one
 /// byte — without it their range checks never match and the callee's
-/// already-decided branches fork anyway.
+/// already-decided branches fork anyway. Restricted to bitvector-typed
+/// nodes at every level: pointer-typed arithmetic recorded into the
+/// chains is the leading suspect in the wrong FAILED verdicts the
+/// unrestricted form produced on the DebugOpt CI legs (cuda 003/024,
+/// python github_2937).
 static bool is_stable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
@@ -25,6 +29,8 @@ static bool is_stable_value(const expr2tc &expr)
     b = &to_typecast2t(*b).from;
   if (is_symbol2t(*b) || is_constant_expr(*b))
     return true;
+  if (!is_bv_type((*b)->type))
+    return false;
   switch ((*b)->expr_id)
   {
   case expr2t::bitand_id:
@@ -216,6 +222,14 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     path_guard_decides(new_guard, new_guard_false, new_guard_true);
   new_guard_true |= path_decides == tvt::TV_TRUE;
   new_guard_false |= path_decides == tvt::TV_FALSE;
+
+  // Debug oracle: each subsumption decision claims its own soundness —
+  // a wrong TV_TRUE/TV_FALSE becomes a failed claim with a trace, even
+  // where the final verdict would not flip.
+  if (path_decides != tvt::TV_UNKNOWN && getenv("ESBMC_CHECK_SUBSUMPTION"))
+    claim(
+      path_decides == tvt::TV_TRUE ? new_guard : not2tc(new_guard),
+      "path-guard subsumption decision holds");
 
   // new_guard_false: the branch is provably not taken (guard simplifies to
   // false, or the current path is already dead). new_guard_true: the guard
