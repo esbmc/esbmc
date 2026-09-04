@@ -63,6 +63,11 @@ void smt_convt::assert_expr(const expr2tc &e)
   solver_impl->assert_expr(e);
 }
 
+void smt_convt::note_division_operands(const expr2tc &expr)
+{
+  solver_impl->note_division_operands(expr);
+}
+
 void smt_convt::convert_ast(const expr2tc &expr)
 {
   // Discard the handle: callers only need the expression encoded into the

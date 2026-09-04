@@ -29,7 +29,7 @@ A `test.desc` file may also contain `CHECK_FILE` lines for non-JSON output files
 - `<op>`. Either `contains` (the regex must match somewhere in the file) or `absent` (the regex must not match).
 - `<regex>`. A Python regex matched with `re.MULTILINE`; the rest of the line, so it may contain spaces.
 
-When any `CHECK_JSON` or `CHECK_FILE` directive is present the runner executes ESBMC in a fresh temporary directory so parallel tests cannot clobber each other's output files. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE` passes.
+The runner executes every test in a fresh temporary directory, so parallel tests cannot clobber each other's output files and a relative output path in the flags line (`--witness-output`, `--cex-output`, `--output`) never lands in the source tree. Paths in `CHECK_JSON`/`CHECK_FILE`/`SEED_FILE` resolve there. The directory is removed when the test ends; a run hard-killed by ctest's `TIMEOUT` leaks one, named `esbmc-regress-*` under `TMPDIR`. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE` passes.
 
 For example, `regression/smtlib/github_6059/test.desc` asserts the `--output` dump holds the real formula and not the status string that used to overwrite it:
 
