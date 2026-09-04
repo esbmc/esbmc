@@ -3,4 +3,4 @@ main.c
 
 ^VERIFICATION FAILED$
 ^\[Counterexample\]$
-^  v = 4 
+^  v = 4 \(
