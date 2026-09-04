@@ -641,8 +641,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     args.reserve(expr->get_num_sub_exprs());
-    expr->foreach_operand(
-      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
+    expr->foreach_operand([this, &args](const expr2tc &e) {
+      args.push_back(is_nil_expr(e) ? nullptr : convert_ast(e));
+    });
   }
   }
 
