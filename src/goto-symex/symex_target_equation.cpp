@@ -1,3 +1,4 @@
+#include <unordered_set>
 #include <cassert>
 #include <functional>
 #include <goto-symex/goto_symex.h>
@@ -39,8 +40,14 @@ void pre_register_addresses(
   // use happens to appear in the source.  Dynamic/automatic objects keep
   // their original lazy registration to avoid exposing later-allocated
   // memory to earlier casts.
+  // Shared subexpressions make an SSA step a DAG, not a tree -- a propagated
+  // `with` chain over a nested array references itself once per store -- so an
+  // unmemoised walk costs a number of paths exponential in the store count.
+  std::unordered_set<const expr2t *> seen;
   std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
     if (!e)
+      return;
+    if (!seen.insert(e.get()).second)
       return;
     if (is_address_of2t(e))
     {
@@ -313,6 +320,16 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
   // them regardless of source-level declaration order (see
   // pre_register_addresses for scope).
   pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
+
+  // Show the solver every division's operand pair up front: the
+  // modulus conversion lowers a remainder compositionally only when
+  // the same operands are divided somewhere in the formula.
+  for (const auto &SSA_step : SSA_steps)
+  {
+    smt_conv.note_division_operands(SSA_step.guard);
+    smt_conv.note_division_operands(SSA_step.rhs);
+    smt_conv.note_division_operands(SSA_step.cond);
+  }
 
   equation_conversion_statet state;
   state.assumpt_expr = gen_true_expr();

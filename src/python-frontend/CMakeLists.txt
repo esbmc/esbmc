@@ -42,7 +42,6 @@ add_library(pythonfrontend STATIC
             exception/python_exception_handler.cpp
             lambda/python_lambda.cpp
             python-list/list_type_inference.cpp
-            python-list/list_type_map.cpp
             python-list/list_construction.cpp
             python-list/list_mutation.cpp
             python-list/list_access.cpp
@@ -60,6 +59,7 @@ add_library(pythonfrontend STATIC
             python_annotation/annotation_parser.cpp
             python_annotation/annotation_utils.cpp
             symbol_id.cpp
+            type/element_type_registry.cpp
             type/type_handler.cpp
             math/cmath_lowering_policy.cpp
             math/complex_handler.cpp

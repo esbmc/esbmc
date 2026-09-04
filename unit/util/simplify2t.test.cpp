@@ -11,6 +11,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
 #include <util/lang/c_types.h>
+#include <util/arith/fixedbv.h>
 #include <util/config/config.h>
 
 namespace
@@ -1877,6 +1878,71 @@ TEST_CASE("A symbolic boolean comparison is left alone", "[relation][bool]")
   // simplify() returns nil when it changes nothing.
   const expr2tc result = expr->simplify();
   REQUIRE((is_nil_expr(result) || !is_constant_bool2t(result)));
+}
+
+// --- Fixedbv constant-fold pins -------------------------------------------
+// The other cases here reach only the bv and bool arms of the constant-kind
+// dispatch ladders; these pin the fixedbv arm, in both the arithmetic
+// (simplify_arith_2ops) and the by-reference relation (simplify_constant_
+// relation) callers.
+static type2tc q32_32()
+{
+  return fixedbv_type2tc(64, 32); // 64-bit fixedbv, 32 integer bits
+}
+static expr2tc fixedbv_const(const type2tc &t, long v)
+{
+  fixedbvt f(fixedbv_spect(to_fixedbv_type(t)));
+  f.from_integer(BigInt(v));
+  return constant_fixedbv2tc(f);
+}
+
+TEST_CASE("Fixedbv constant fold: 3 + 5 = 8", "[arithmetic][add][fixedbv]")
+{
+  const type2tc fbv = q32_32();
+  const expr2tc expr =
+    add2tc(fbv, fixedbv_const(fbv, 3), fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_fixedbv2t(result));
+  REQUIRE(to_constant_fixedbv2t(result).value.to_integer() == 8);
+}
+
+TEST_CASE(
+  "Fixedbv constant relation: 3 < 5 = true",
+  "[relation][lessthan][fixedbv]")
+{
+  const type2tc fbv = q32_32();
+  const expr2tc expr =
+    lessthan2tc(fixedbv_const(fbv, 3), fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(to_constant_bool2t(result).value);
+}
+
+TEST_CASE(
+  "Fixedbv constant relation: 3 == 5 = false",
+  "[relation][equality][fixedbv]")
+{
+  // Distinct operands so the x==x identity shortcut does not pre-empt the
+  // fixedbv relation arm -- this must reach the constant-fold dispatch.
+  const type2tc fbv = q32_32();
+  const expr2tc expr =
+    equality2tc(fixedbv_const(fbv, 3), fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE(is_constant_bool2t(result));
+  REQUIRE(!to_constant_bool2t(result).value);
+}
+
+TEST_CASE(
+  "Fixedbv symbolic relation is left alone",
+  "[relation][lessthan][fixedbv]")
+{
+  // A symbolic fixedbv operand: the fixedbv relation arm fires but the functor
+  // declines to fold, so the relation is left unchanged.
+  const type2tc fbv = q32_32();
+  const expr2tc s = symbol2tc(fbv, "s");
+  const expr2tc expr = lessthan2tc(s, fixedbv_const(fbv, 5));
+  const expr2tc result = expr->simplify();
+  REQUIRE((is_nil_expr(result) || is_lessthan2t(result)));
 }
 
 #if 0
