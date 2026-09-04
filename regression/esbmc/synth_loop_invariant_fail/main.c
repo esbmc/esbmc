@@ -1,5 +1,7 @@
 /* The synthesised invariant is established and preserved, but the property is
- * genuinely false (off by one). Synthesis must not mask the violation. */
+ * genuinely false (off by one). Synthesis must not mask the violation: the
+ * claim is downstream of the invariant havoc, so #7491 reports it unknown
+ * rather than failed, but it must still be reported and not pass. */
 #include <stdint.h>
 #include <assert.h>
 
