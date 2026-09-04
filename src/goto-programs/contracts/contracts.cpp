@@ -4206,6 +4206,7 @@ code_contractst::materialize_old_snapshots_at_callsite(
   const std::vector<code_contractst::old_snapshot_t> &old_snapshots,
   const symbolt &function_symbol,
   const goto_programt &function_body,
+  const expr2tc &requires_clause,
   const std::vector<expr2tc> &actual_args,
   goto_programt &replacement,
   const locationt &call_location) const
@@ -4266,10 +4267,13 @@ code_contractst::materialize_old_snapshots_at_callsite(
       // below is keyed on raw_ptr_param (the callee's OWN, pre-substitution
       // parameter name, always a symbol) rather than original_expr itself.
       expr2tc extent_size;
-      bool found =
-        params &&
-        find_callsite_is_fresh_extent(
-          function_body, raw_ptr_param, *params, actual_args, extent_size);
+      bool found = params && find_callsite_is_fresh_extent(
+                               function_body,
+                               raw_ptr_param,
+                               requires_clause,
+                               *params,
+                               actual_args,
+                               extent_size);
       if (!found)
       {
         log_error(
@@ -5051,19 +5055,34 @@ as_is_fresh_call(goto_programt::const_targett it)
 
 /// Find the __ESBMC_is_fresh(ptr, size) call in \p function_body whose ptr
 /// operand (after stripping the frontend's void* typecast) is the bare
-/// parameter symbol \p target_param, and return its size operand with the
-/// callee's formal \p params rebound to \p actual_args -- the identical
-/// rebinding lower_is_fresh_in_requires applies a few lines later in
-/// generate_replacement_at_call, needed here too to build a call-site-
-/// visible extent for a __ESBMC_old(ptr[j]) region snapshot under
-/// --replace-call-with-contract (#7057). Returns false, \p out_size
-/// untouched, if no such is_fresh call is found (e.g. the extent is stated
-/// conditionally, or on an indirect lvalue rather than a bare parameter --
-/// both already unsupported by the enforce-mode counterpart,
-/// materialize_ptr_region_old_snapshot, for the same reason).
+/// parameter symbol \p target_param AND which \p requires_clause asserts
+/// unconditionally (the same test lower_is_fresh_in_requires applies via
+/// asserted_unconditionally, a few lines later in generate_replacement_at_
+/// call, for the identical reason: a guarded is_fresh states nothing on the
+/// branch that does not take it, so treating it as a hard extent there would
+/// be wrong regardless of who reads it). \p requires_clause is the same
+/// already-parameter-substituted requires_clause generate_replacement_at_
+/// call already has in hand at the call site (substitution never touches
+/// an is_fresh temp, only formals, so this is safe to reuse without a
+/// fresh un-substituted copy). On a match, returns its size operand with
+/// the callee's formal \p params rebound to \p actual_args -- the
+/// identical rebinding lower_is_fresh_in_requires applies -- needed here to
+/// build a call-site-visible extent for a __ESBMC_old(ptr[j]) region
+/// snapshot under --replace-call-with-contract (#7057).
+///
+/// Returns false, \p out_size untouched, if no qualifying is_fresh call is
+/// found (e.g. the only one present is conditional, or the pointer is an
+/// indirect lvalue rather than a bare parameter -- both already unsupported
+/// by the enforce-mode counterpart, materialize_ptr_region_old_snapshot,
+/// for the same reason). Hard-errors if MORE than one qualifying is_fresh
+/// call names the same pointer: silently picking one would materialise
+/// whichever extent happened to be scanned first, which is exactly the
+/// wrong-extent defect this function exists to rule out, not just move
+/// elsewhere.
 bool code_contractst::find_callsite_is_fresh_extent(
   const goto_programt &function_body,
   const expr2tc &target_param,
+  const expr2tc &requires_clause,
   const code_typet::argumentst &params,
   const std::vector<expr2tc> &actual_args,
   expr2tc &out_size) const
@@ -5072,6 +5091,7 @@ bool code_contractst::find_callsite_is_fresh_extent(
     return false;
   const irep_idt &target_name = to_symbol2t(target_param).thename;
 
+  std::vector<expr2tc> matches;
   forall_goto_program_instructions (it, function_body)
   {
     const code_function_call2t *call = as_is_fresh_call(it);
@@ -5085,6 +5105,10 @@ bool code_contractst::find_callsite_is_fresh_extent(
     if (!is_symbol2t(ptr) || to_symbol2t(ptr).thename != target_name)
       continue;
 
+    if (!asserted_unconditionally(
+          requires_clause, to_symbol2t(call->ret).thename))
+      continue;
+
     expr2tc size = call->operands[1];
     for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
     {
@@ -5092,10 +5116,31 @@ bool code_contractst::find_callsite_is_fresh_extent(
         symbol2tc(migrate_type(params[i].type()), params[i].get_identifier());
       size = replace_symbol_in_expr(size, param_expr, actual_args[i]);
     }
-    out_size = size;
-    return true;
+    // A repeated, identically-resolved is_fresh(r, N) clause (redundant but
+    // not conflicting) should not trip the ambiguity check below -- only
+    // genuinely differing extents make the choice of which one to use
+    // undefined.
+    if (std::find(matches.begin(), matches.end(), size) == matches.end())
+      matches.push_back(size);
   }
-  return false;
+
+  if (matches.empty())
+    return false;
+
+  if (matches.size() > 1)
+  {
+    log_error(
+      "__ESBMC_old({}[...]) region snapshot's extent is ambiguous: {} "
+      "unconditional __ESBMC_is_fresh({}, N) clauses name this pointer "
+      "with different extents; state it once (#7057)",
+      id2string(target_name),
+      matches.size(),
+      id2string(target_name));
+    abort();
+  }
+
+  out_size = matches.front();
+  return true;
 }
 
 /// The position of the parameter \p ptr names, or params.size() if it names
@@ -5502,6 +5547,7 @@ void code_contractst::generate_replacement_at_call(
       body_snapshots,
       function_symbol,
       function_body,
+      requires_clause,
       actual_args,
       replacement,
       call_location);

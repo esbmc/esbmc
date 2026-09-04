@@ -300,6 +300,13 @@ Prefix commits with a category tag in brackets, e.g., `[python]`, `[build]`, `[s
 - Branch from `master` (the default branch)
 - Target PRs to `master`
 - Check formatting with clang-format before submitting
+- A PR description, issue, or review comment states only what a reader can
+  verify from the repository — a test, a command, a file and line. It does
+  not rely on private tooling, unnamed inputs, or local runs nobody else can
+  reproduce. If a claim matters enough to make, it belongs in the repository
+  as a test or as steps someone can follow; if it cannot be put there, leave
+  it out rather than present it as verification. (This applies even when the
+  claim is true — the point is reproducibility, not honesty.)
 
 ## Issue and PR Labels
 

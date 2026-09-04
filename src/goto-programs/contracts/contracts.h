@@ -638,6 +638,11 @@ private:
   /// \param function_body Callee's body, scanned for a matching
   ///        __ESBMC_is_fresh(ptr, N) clause when a snapshot is a pointer
   ///        region (#7057) -- unused otherwise.
+  /// \param requires_clause The already-parameter-substituted requires
+  ///        clause generate_replacement_at_call already has in hand,
+  ///        forwarded to find_callsite_is_fresh_extent to test whether a
+  ///        candidate is_fresh call is asserted unconditionally -- unused
+  ///        otherwise.
   /// \param actual_args Actual arguments at call site
   /// \param replacement GOTO program to add snapshot instructions to
   /// \param call_location Source location for generated instructions
@@ -647,12 +652,14 @@ private:
     const std::vector<old_snapshot_t> &old_snapshots,
     const symbolt &function_symbol,
     const goto_programt &function_body,
+    const expr2tc &requires_clause,
     const std::vector<expr2tc> &actual_args,
     goto_programt &replacement,
     const locationt &call_location) const;
 
   /// \brief Find the __ESBMC_is_fresh(ptr, size) call in \p function_body
-  ///        whose ptr operand names \p target_param, and return its size
+  ///        whose ptr operand names \p target_param and which \p
+  ///        requires_clause asserts unconditionally, and return its size
   ///        operand with \p params rebound to \p actual_args
   /// Used by materialize_old_snapshots_at_callsite to give a pointer-region
   /// __ESBMC_old(ptr[j]) snapshot a call-site-visible extent under
@@ -662,14 +669,22 @@ private:
   /// \param function_body Callee's body, scanned for the is_fresh call
   /// \param target_param Bare parameter symbol to match ptr against, in the
   ///        callee's own terms (pre-substitution)
+  /// \param requires_clause Already-substituted requires clause, tested via
+  ///        asserted_unconditionally so a guarded is_fresh (stating nothing
+  ///        on the branch that skips it) is not treated as a hard extent
   /// \param params Callee's formal parameters
   /// \param actual_args Actual arguments at this call site
   /// \param out_size Set to the rebound size expression on success; left
   ///        untouched otherwise
-  /// \return True if a matching, unconditional is_fresh call was found
+  /// \return True if exactly one matching, unconditional is_fresh call was
+  ///         found. Aborts, rather than returning, if more than one such
+  ///         call names \p target_param with genuinely different extents --
+  ///         see the definition for why silently picking one is exactly the
+  ///         defect this function exists to rule out.
   bool find_callsite_is_fresh_extent(
     const goto_programt &function_body,
     const expr2tc &target_param,
+    const expr2tc &requires_clause,
     const code_typet::argumentst &params,
     const std::vector<expr2tc> &actual_args,
     expr2tc &out_size) const;
