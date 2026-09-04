@@ -17,11 +17,13 @@
 /// The computation form covers the operand-split idiom
 /// `m = (mn >> 4) & 0x0F` a caller and a callee both derive from one
 /// byte — without it their range checks never match and the callee's
-/// already-decided branches fork anyway. Restricted to bitvector-typed
-/// nodes at every level: pointer-typed arithmetic recorded into the
-/// chains is the leading suspect in the wrong FAILED verdicts the
-/// unrestricted form produced on the DebugOpt CI legs (cuda 003/024,
-/// python github_2937).
+/// already-decided branches fork anyway. Computation nodes are
+/// restricted to bitvector types; symbol and constant leaves and the
+/// peeled typecasts stay accepted as in the bare-copy base. The
+/// restriction quarantines pointer-typed arithmetic in the chains —
+/// the leading suspect in the wrong FAILED verdicts the unrestricted
+/// form produced on the DebugOpt CI legs (cuda 003/024, python
+/// github_2937).
 static bool is_stable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
@@ -223,10 +225,12 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   new_guard_true |= path_decides == tvt::TV_TRUE;
   new_guard_false |= path_decides == tvt::TV_FALSE;
 
-  // Debug oracle: each subsumption decision claims its own soundness —
-  // a wrong TV_TRUE/TV_FALSE becomes a failed claim with a trace, even
-  // where the final verdict would not flip.
-  if (path_decides != tvt::TV_UNKNOWN && getenv("ESBMC_CHECK_SUBSUMPTION"))
+  // Self-check mode: each subsumption decision claims its own
+  // soundness — a wrong TV_TRUE/TV_FALSE becomes a failed claim with a
+  // trace, even where the final verdict would not flip.
+  if (
+    path_decides != tvt::TV_UNKNOWN &&
+    options.get_bool_option("check-guard-subsumption"))
     claim(
       path_decides == tvt::TV_TRUE ? new_guard : not2tc(new_guard),
       "path-guard subsumption decision holds");
