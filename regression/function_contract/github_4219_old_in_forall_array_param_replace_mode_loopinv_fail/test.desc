@@ -2,3 +2,4 @@ CORE
 main.c
 --replace-call-with-contract bump --unwind 8
 ^VERIFICATION FAILED$
+must fail -- the ensures guarantees arr\[0\] == 3, not 999
