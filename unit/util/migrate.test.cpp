@@ -28,6 +28,7 @@
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
 #include <util/arith/arith_tools.h>
+#include <chrono>
 
 namespace
 {
@@ -715,4 +716,42 @@ TEST_CASE(
 
   REQUIRE(via_helper == via_legacy); // faithful drop-in
   require_expr_roundtrip(via_helper);
+}
+
+// migrate_expr_back memoises on node identity so a shared subtree is expanded
+// once (R52 in docs/roadmap/goto-symex-verification-plan.md). A propagated
+// `with` chain over a nested array references its predecessor twice -- as the
+// store's source, and inside the `index` naming the row it updates -- so the
+// legacy form is reached along a number of paths exponential in the store
+// count. 30 stores is 2^30 paths without the memo and 30 nodes with it.
+
+TEST_CASE("migrate_expr_back expands a shared subtree once", "[migrate]")
+{
+  use_test_ns();
+
+  const type2tc row = array_type2tc(get_int_type(32), gen_ulong(4), false);
+  const type2tc grid = array_type2tc(row, gen_ulong(4), false);
+
+  expr2tc chain = symbol2tc(grid, "grid");
+  for (unsigned k = 0; k < 30; ++k)
+  {
+    // Both operands name `chain`, which is what makes the result a DAG.
+    expr2tc old_row = index2tc(row, chain, gen_ulong(k % 4));
+    expr2tc updated = with2tc(
+      row, old_row, gen_ulong((k + 1) % 4), gen_long(get_int_type(32), k));
+    chain = with2tc(grid, chain, gen_ulong(k % 4), updated);
+  }
+
+  // The bound is a stand-in for termination: the unmemoised walk visits 2^30
+  // paths and does not return, so any threshold separates the two.
+  const auto started = std::chrono::steady_clock::now();
+  const exprt legacy = migrate_expr_back(chain);
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  REQUIRE(
+    std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() < 5);
+
+  REQUIRE(legacy.id() == "with");
+  const exprt &inner = legacy.op2().op0();
+  REQUIRE(inner.id() == "index");
+  REQUIRE(inner.op0().id() == "with");
 }

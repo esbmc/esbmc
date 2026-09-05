@@ -13,6 +13,7 @@
 #include <util/base/prefix.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
+#include <unordered_map>
 
 /// An ESBMC intrinsic invoked from an *expression* position, as a
 /// `sideeffect2t` of allockind::function_call carrying the call's result type.
@@ -3154,11 +3155,63 @@ static void set_implicit_flag(exprt &e, bool implicit)
     e.implicit(true);
 }
 
+namespace
+{
+/** Legacy form of every node already visited, keyed by its address.
+ *
+ *  A propagated `with` chain over a nested array is a DAG -- each store
+ *  references the chain both as the store's source and inside the `index` of
+ *  the row it updates -- so an unmemoised expansion into the legacy tree
+ *  visits a number of paths exponential in the store count (R52 in
+ *  docs/roadmap/goto-symex-verification-plan.md).
+ *
+ *  Nothing is pinned, so no node's refcount moves and the copy-on-write
+ *  in-place rewrites elsewhere in the engine are unaffected. Keying on the
+ *  address is sound only while the outermost caller's `expr2tc` holds every
+ *  node the walk reaches, so the map is dropped when that call returns. */
+thread_local std::unordered_map<const expr2t *, exprt> expr_back_cache;
+thread_local unsigned expr_back_depth = 0;
+
+struct expr_back_scopet
+{
+  expr_back_scopet()
+  {
+    ++expr_back_depth;
+  }
+  ~expr_back_scopet()
+  {
+    if (--expr_back_depth == 0)
+      expr_back_cache.clear();
+  }
+};
+} // namespace
+
+static exprt migrate_expr_back_dispatch(const expr2tc &ref);
+
 exprt migrate_expr_back(const expr2tc &ref)
 {
   if (ref.get() == nullptr)
     return nil_exprt();
 
+  expr_back_scopet scope;
+
+  // An unshared node is reached once whatever we do, so caching it can only
+  // pay for the lookup, never recover it.
+  const expr2t *key = ref.get();
+  if (key->refcount.load(std::memory_order_acquire) <= 1)
+    return migrate_expr_back_dispatch(ref);
+
+  auto cached = expr_back_cache.find(key);
+  if (cached != expr_back_cache.end())
+    return cached->second;
+
+  exprt result = migrate_expr_back_dispatch(ref);
+  expr_back_cache.emplace(key, result);
+  return result;
+}
+
+static exprt migrate_expr_back_dispatch(const expr2tc &ref)
+{
   switch (ref->expr_id)
   {
   case expr2t::constant_int_id:
