@@ -160,6 +160,18 @@ void goto_loopst::create_function_loop(
   it1->set_size(size + 1);
 }
 
+/// True when a write target is storage reached through a pointer (`*p = ...`,
+/// `p->f = ...`, `p->e[i] = ...`, `((S *)v)->f = ...`): nothing named is
+/// written, so a havoc over named symbols cannot cover it. Writing the pointer
+/// variable itself (`p = ...`) names a symbol the havoc does cover.
+/// `modifies_pointer_array` reports the array shapes too, but only
+/// goto_k_induction reads that flag, so they are recognised here rather than
+/// deferred to it (#5224, #5230).
+static bool writes_through_pointer(const expr2tc &lhs)
+{
+  return !is_nil_expr(lhs) && !is_symbol2t(lhs) && indexes_through_pointer(lhs);
+}
+
 void goto_loopst::collect_loop_symbols(
   const expr2tc &expr,
   loopst::loop_varst &out) const
@@ -179,16 +191,14 @@ void goto_loopst::collect_loop_symbols(
 // distinction applied to the function-summary path.
 void goto_loopst::collect_lhs_symbols(
   const expr2tc &expr,
-  loopst::loop_varst &modified,
-  loopst::loop_varst &unmodified,
-  bool &modifies_pointer_array) const
+  function_summaryt &out) const
 {
   if (is_nil_expr(expr))
     return;
 
   if (is_dereference2t(expr))
   {
-    collect_loop_symbols(to_dereference2t(expr).value, unmodified);
+    collect_loop_symbols(to_dereference2t(expr).value, out.unmodified);
     return;
   }
   if (is_index2t(expr))
@@ -197,20 +207,17 @@ void goto_loopst::collect_lhs_symbols(
     // An array-element write into pointer-reached memory cannot be havoc'd
     // by the inductive step, making its hypothesis unsound (#5224).
     if (indexes_through_pointer(idx.source_value))
-      modifies_pointer_array = true;
-    collect_lhs_symbols(
-      idx.source_value, modified, unmodified, modifies_pointer_array);
-    collect_loop_symbols(idx.index, unmodified);
+      out.modifies_pointer_array = true;
+    collect_lhs_symbols(idx.source_value, out);
+    collect_loop_symbols(idx.index, out.unmodified);
     return;
   }
 
   expr->foreach_operand(
-    [this, &modified, &unmodified, &modifies_pointer_array](const expr2tc &e) {
-      collect_lhs_symbols(e, modified, unmodified, modifies_pointer_array);
-    });
+    [this, &out](const expr2tc &e) { collect_lhs_symbols(e, out); });
 
   if (is_symbol2t(expr) && check_var_name(expr))
-    modified.insert(expr);
+    out.modified.insert(expr);
 }
 
 bool goto_loopst::compute_function_summary(
@@ -227,6 +234,7 @@ bool goto_loopst::compute_function_summary(
     out.unmodified.insert(
       cached->second.unmodified.begin(), cached->second.unmodified.end());
     out.modifies_pointer_array |= cached->second.modifies_pointer_array;
+    out.writes_through_pointer |= cached->second.writes_through_pointer;
     return true;
   }
 
@@ -250,11 +258,9 @@ bool goto_loopst::compute_function_summary(
   {
     if (instr.is_assign())
     {
-      collect_lhs_symbols(
-        to_code_assign2t(instr.code).target,
-        local.modified,
-        local.unmodified,
-        local.modifies_pointer_array);
+      const expr2tc &target = to_code_assign2t(instr.code).target;
+      local.writes_through_pointer |= writes_through_pointer(target);
+      collect_lhs_symbols(target, local);
     }
     else if (instr.is_function_call())
     {
@@ -262,6 +268,7 @@ bool goto_loopst::compute_function_summary(
       if (is_dereference2t(call.function))
         continue;
 
+      local.writes_through_pointer |= writes_through_pointer(call.ret);
       collect_loop_symbols(call.ret, local.modified);
 
       const irep_idt &callee = to_symbol2t(call.function).thename;
@@ -291,10 +298,26 @@ bool goto_loopst::compute_function_summary(
   out.modified.insert(local.modified.begin(), local.modified.end());
   out.unmodified.insert(local.unmodified.begin(), local.unmodified.end());
   out.modifies_pointer_array |= local.modifies_pointer_array;
+  out.writes_through_pointer |= local.writes_through_pointer;
 
   if (complete)
     function_summary_cache[fname] = std::move(local);
   return complete;
+}
+
+/// A callee writing through its own parameter names storage the caller cannot:
+/// the parameter is out of scope at the call. The call's own pointer arguments
+/// are what it was handed, so record those and let the havoc reach the pointee
+/// through them. Recording an argument the callee never writes only widens the
+/// abstraction, which stays sound (issue #7478).
+static void
+record_callee_pointer_writes(loopst &loop, const code_function_call2t &call)
+{
+  loop.set_writes_through_pointer();
+
+  for (const expr2tc &arg : call.operands)
+    if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+      loop.add_pointer_array_write_ptr(arg);
 }
 
 void goto_loopst::get_modified_variables(
@@ -305,6 +328,8 @@ void goto_loopst::get_modified_variables(
   if (instruction->is_assign())
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
+    if (writes_through_pointer(assign.target))
+      loop->set_writes_through_pointer();
     add_loop_var(*loop, assign.target, true);
   }
   else if (instruction->is_function_call())
@@ -312,11 +337,19 @@ void goto_loopst::get_modified_variables(
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
-    // Don't do function pointers
+    // A call through a function pointer hides the callee's writes from the
+    // summary, so a pointer write inside it would leave the loop looking
+    // havoc-covered when it is not (issue #7478).
     if (is_dereference2t(function_call.function))
+    {
+      loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
       return;
+    }
 
     // First, add its return
+    if (writes_through_pointer(function_call.ret))
+      loop->set_writes_through_pointer();
     add_loop_var(*loop, function_call.ret, true);
 
     const irep_idt &identifier = to_symbol2t(function_call.function).thename;
@@ -336,6 +369,8 @@ void goto_loopst::get_modified_variables(
       loop->add_modified_var_to_loop(v);
     for (const auto &v : summary.unmodified)
       loop->add_unmodified_var_to_loop(v);
+    if (summary.writes_through_pointer)
+      record_callee_pointer_writes(*loop, function_call);
     if (summary.modifies_pointer_array)
     {
       loop->set_modifies_pointer_array();
@@ -372,6 +407,14 @@ void goto_loopst::add_loop_var(
   // pointer at loop entry — unsound if the loop never reassigns it.
   if (is_modified && is_dereference2t(expr))
   {
+    // The pointee has no named symbol, so record the pointer for the value-set
+    // resolution to turn into one; an unextractable pointer leaves the write
+    // uncoverable and the loop-invariant schema declines (#5230, #7478).
+    expr2tc ptr = extract_queried_pointer(expr);
+    if (is_nil_expr(ptr))
+      loop.set_pointer_array_write_unresolvable();
+    else
+      loop.add_pointer_array_write_ptr(ptr);
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }

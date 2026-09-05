@@ -91,10 +91,10 @@ and the symbol/function table layout.
 | Libc bridge extended to `strrchr` (reverse-scan search, returns ptr to last match / `NULL`; CBMC-modelled unlike `strstr`/`strspn`/`strcspn`/`strpbrk`/`memchr`) (§4.8, Phase 2) | ✅ (PR #6083) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Builtin-call rewrite for `realloc` FUNCTION_CALLs → `(ptr==NULL)?malloc:realloc` conditional (§4.8, Phase 2) | ✅ (PR #5794) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Builtin-call rewrite for `nearbyint`→`nearbyint` / `fma`→`ieee_fma` FUNCTION_CALLs (§4.8, Phase 2) | ✅ (PR #5796) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin` |
-| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
+| Width-aware constant rewrite: ≤64-bit wide constants no longer truncated to 32 bits (§4.3, Phase 3) | ✅ (PR #7419) | `cbmc_adapter.cpp::hex_to_bin` |
+| Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Tag-cache keyed by symbol name so **function-local** struct/union tags resolve (§4.3, Phase 3) | ✅ (PR #5925) | `cbmc_adapter.cpp::cbmc_adapt` |
 | Type rewrite for `c_bit_field` (bitfield members) → underlying bv narrowed to the bitfield width + `#bitfield`/`subtype` (§4.3, Phase 3) | ✅ (PR #5924) | `cbmc_adapter.cpp::fix_type` |
 | Operand-wrap for unary bit-builtins `popcount`/`bswap` (§4.4, Phase 2) | ✅ (PR #5910) | `cbmc_adapter.cpp::fix_expression` |
@@ -102,25 +102,25 @@ and the symbol/function table layout.
 | Expression rewrite for `ieee_float_notequal` → `notequal` (float `!=`; §4.4, Phase 2) | ✅ (PR #5909) | `cbmc_adapter.cpp::fix_expression` |
 | Builtin-call rewrite for integer `abs`/`labs`/`llabs`/`imaxabs` (+`__builtin_`) → `abs` expr (§4.8, Phase 2) | ✅ (PR #5912) | `cbmc_adapter.cpp::fix_builtin_call` |
 | Expression rewrite for `count_leading_zeros`/`count_trailing_zeros` (`__builtin_clz`/`ctz`) → popcount-based bit-count formula (§4.4, Phase 2) | ✅ (PR #5923) | `cbmc_adapter.cpp::fix_expression` |
-| Overflow predicates `overflow-+`/`overflow--`/`overflow-*` (+ `/`/`mod`/`shl`/`unary-`) wrapped (`__builtin_{add,sub,mul}_overflow_p`) (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
-| Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type` |
-| Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
-| Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
+| Overflow predicates `overflow-+`/`overflow--`/`overflow-*` (+ `/`/`mod`/`shl`/`unary-`) wrapped (`__builtin_{add,sub,mul}_overflow_p`) (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
+| 128-bit float constant width: `long double`/`float128` hex value converted to a 128-bit binary string instead of mistaken for an already-binary 32-bit value (§4.3, Phase 3) | ✅ (PR #7419) | `cbmc_adapter.cpp::hex_to_bin`, `fix_expression` |
+| Enum type reference `c_enum_tag` → bare `c_enum` so migrate yields a signed int (§4.3, Phase 3) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_type` |
+| Quantifier predicates `forall`/`exists` (`__CPROVER_forall`/`__CPROVER_exists`) + `=>` implication wrapped; bound-var `tuple` unwrapped; goto_check skips quantifier bodies (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression`, `goto_check.cpp::check_rec` |
+| Rotate expressions `rol`/`ror` (`__builtin_rotateleft`/`rotateright`) → `(x << d) \| (x >> (W − d))` with `d = n mod W` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call retarget for `memcpy`/`memset`/`memmove` FUNCTION_CALLs → ESBMC's `c:@F@__ESBMC_*` memory intrinsics (CBMC's ARRAY_COPY/REPLACE/SET body is unexecutable in ESBMC symex); `__*_impl` byte-loop fallbacks linked via the additions (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
 | Builtin-call retarget for `memcmp` FUNCTION_CALLs → `c:@F@__ESBMC_memcmp` intrinsic (CBMC's bodyless external returns nondet); `__memcmp_impl` byte-loop fallback linked via the additions (§4.8, Phase 2) | ✅ (PR #6042) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp` |
-| Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_builtin_call` |
-| Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_expression` |
-| `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #TBD) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
+| Builtin-call rewrite for `__builtin_nan`/`__builtin_nanf` FUNCTION_CALLs → `ieee_div(0.0, 0.0)` (quiet NaN, mirroring CBMC's own `floatbv_div(0,0,rm)` body); `nanl` left bodyless for parity (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Find-first-set builtin `find_first_set` (`__builtin_ffs`/`ffsl`/`ffsll`) → `(x==0)?0:popcount(~x&(x-1))+1` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
+| Builtin-call rewrite for `__builtin_huge_val{,f,l}`/`__builtin_inf{,f,l}` FUNCTION_CALLs → +∞ floatbv constant (sign 0, exponent all ones, mantissa 0), width-generic incl. 128-bit long double (§4.8, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_builtin_call` |
+| Bit-reversal expression `bitreverse` (`__builtin_bitreverse{8,16,32,64}`) → SWAR reversal via `bitand`/`shl`/`lshr`/`bitor` (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_expression` |
+| `_Complex` support: `complex` type → subtype form; constructor/`complex_real`/`complex_imag`/real→complex `typecast`/`+ - * /`/`unary-` lowered to the native component-wise forms (§4.3 type + §4.4 exprs, Phases 2–3) | ✅ (PR #7419) | `cbmc_adapter.cpp::fix_type`, `fix_expression` |
 | Libc body bridge extended to `<ctype.h>` classifiers/case-mappers `isalnum`/`isalpha`/`isblank`/`iscntrl`/`isdigit`/`isgraph`/`islower`/`isprint`/`ispunct`/`isspace`/`isupper`/`isxdigit`/`tolower`/`toupper` (bodyless externals → ESBMC's ASCII operational-model bodies) (§4.8, Phase 2) | ✅ (PR #6157) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Libc body bridge extended to `<stdlib.h>` string-to-integer parsers `atoi`/`atol`/`strtol` (byte-loop bodies, need `--unwind`; `atoll`/`strtoll` left bodyless — CBMC does not model them) (§4.8, Phase 2) | ✅ (PR #6158) | `parseoptions/goto_program.cpp::link_cbmc_libc_bodies` |
 | Computed `goto` (GNU labels-as-values): `address_of(label)` → unique `(void *)K` constant so CBMC's lowered label-address equality chain resolves (§4.4, Phase 2) | ✅ (PR #6161) | `cbmc_adapter.cpp::fix_expression` |
 | `__CPROVER_havoc_object`: `HAVOC_OBJECT &obj` → `ASSIGN obj := side_effect("nondet")` over the whole containing object; a pointer *value* operand is still declined (§4.4, Phase 2) | ✅ (PR #6830) | `cbmc_adapter.cpp::rewrite_havoc_object` |
 | `__CPROVER_array_set`: `ARRAY_SET &arr[0] v` → `ASSIGN arr := array_of((elem)v)` when the array is a whole object; member arrays / non-zero offsets / heap pointers still declined (§4.4, Phase 2) | ✅ (PR #6833) | `cbmc_adapter.cpp::rewrite_array_set_fill` |
 | `__CPROVER_array_copy` / `__CPROVER_array_replace`: `ARRAY_COPY dst src` → `ASSIGN dst := src` for same-extent whole-object arrays; mismatched extents declined (§4.4, Phase 2) | ✅ (PR #6834) | `cbmc_adapter.cpp::rewrite_array_copy` |
-| `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #TBD) | `cbmc_adapter.cpp::rewrite_array_equal` |
+| `__CPROVER_array_equal`: `ARRAY_EQUAL lhs rhs result` → `ASSIGN result := lhs[i] == rhs[i] && …` elementwise, because ESBMC's whole-array `==` reports may-differ on equal arrays (§4.4, Phase 2) | ✅ (PR #7419) | `cbmc_adapter.cpp::rewrite_array_equal` |
 | Contracts `requires` bridge: `__CPROVER_enforce_requires_is_fresh(&p, n, map)` -> `__cbmc_is_fresh_impl(&p, n)` in the additions, which allocates and writes through; closes a FAILED-vs-SUCCESSFUL false alarm. Separation map dropped (§4.6, Phase 4) | ✅ (PR #7405) | `cbmc_adapter.cpp::fix_builtin_call`, `parseoptions/goto_program.cpp::synthesize_cprover_additions` |
 | Fatal-signal reporting on by default: a SIGSEGV/SIGBUS no longer leaves rc=139 as its only trace, and an alternate signal stack keeps a stack-exhaustion fault reportable (corpus sweep ranked item 3) | ✅ (PR #7404) | `util/base/signal_catcher.cpp::install_fatal_signal_reporter` |
 
@@ -554,9 +554,35 @@ engines (`cbmc_assume_contradiction`). Remaining in this list:
 `byte_update`, big-endian byte ops (`byte_extract_big_endian`,
 `byte_update_little_endian`/`_big_endian` are absent from the wrap-set and have `migrate_expr`
 support, but goto-cc/goto-instrument never persist them into a `.goto` — they are introduced by
-CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). Needs a
-systematic audit of the CBMC `irep_idt` vocabulary against the adapter's wrap-set, not just
-gap-by-gap discovery.
+CBMC's own symex flattening, so a Kani-derived binary is needed to reproduce and test). **That audit is done (2026-08-30, PR #7423).** Method: instrument `fix_expression` to print
+every irep id and every `statement` id it sees, run it over 38 goto-binaries spanning plain C,
+aggregates, bitfields, unions, enums, floats, quantifiers, and every contract shape, and count
+ids by how many *distinct* binaries they appear in — that separates the vocabulary from
+program identifiers, which a single-run id list does not.
+
+The statement vocabulary is complete and small:
+
+| container | statements seen |
+|---|---|
+| `code` | `return`, `function_call`, `assign`, `skip`, `decl`, `dead`, `label`, `ifthenelse`, `expression`, `block`, `free` |
+| `side_effect` | `function_call`, `assign`, `nondet` |
+
+All are handled. The two that looked most dangerous — `side_effect/function_call` and
+`side_effect/assign`, i.e. a call or an assignment in *expression* position, the shape that
+made `object_size` crash — turn out to be lowered by `goto-cc` before it persists them:
+`int x = (y = 3) + 1;` and `int x = bump() + bump();` both agree with CBMC
+(`cbmc_side_effect_{assign,call}`).
+
+Of the expression ids in wide use, exactly one is matched by neither the adapter's wrap-set nor
+`migrate`: **`integer`**, CBMC's unbounded mathematical integer. It is benign in practice —
+nothing throws on it, since it survives only as the type of nodes that are rewritten before
+migration — and an experimental mapping to a pointer-width `signedbv` changed no verdict.
+`infinity` is handled by `migrate`.
+
+**The audit's ceiling, stated so it is not mistaken for completeness:** this enumerates what
+`goto-cc` and `goto-instrument` *persist*. CBMC's symex-internal vocabulary — `byte_update`,
+`byte_extract_big_endian` — never reaches a `.goto` from those tools and still needs a
+Kani-derived binary to exercise.
 
 Confirmed **not** a gap: the `printf` family. CBMC inlines its own
 `<builtin-library-printf>` model (a bodied function returning `__VERIFIER_nondet_int`), so
@@ -849,29 +875,35 @@ and it is not:
 third row. It is a CORE test here. The lesson is narrower than "measure before believing":
 when two independent fixes are in flight, a harness that touches both has **no meaningful
 verdict on either branch alone**, and reporting one is worse than reporting nothing.
-#### `__CPROVER_object_whole` in an `assigns` clause — a false alarm (§4.4, open — `cbmc_contract_frees`)
 
-A contract carrying `__CPROVER_assigns(__CPROVER_object_whole(p))` verifies SUCCESSFUL under
-CBMC and **FAILED** under ESBMC. The `frees` clause is irrelevant — `object_whole` alone
-reproduces it, and a plain `__CPROVER_assigns(*p)` does not.
+#### Object size is a property of the object, not the pointer (§4.4) — ✅ (PR #7417)
 
-**A void-typed cast used to abort this before it could report a verdict, and that was
-self-inflicted.** The `r_ok` encoding took its pointer-offset result type from the predicate's
-*size* operand; `__CPROVER_object_whole`'s lowering leaves that operand untyped, so the formula
-carried a `pointer_offset` of void type, and `pointer_offset2t::do_simplify`
-(`expr_simplifier.cpp`) then built a `typecast` to void that the encoder aborted on
-("Typecast for unexpected type"). `pointer_offset2t` requires a **signed, address-width**
-result type — the rule the `__CPROVER_POINTER_OFFSET` case already followed — and the encoding
-now obeys it. With that fixed the run reaches a verdict, and the verdict divergence above is
-what remains.
+`intrinsic_builtin_object_size` derived the extent from the **pointer's subtype** whenever the
+resolved object was not an array. Type-0 `__builtin_object_size` and `__CPROVER_OBJECT_SIZE`
+both mean "how big is the thing this addresses", so the object has to win. Taking the subtype
+reported `sizeof(*p)` instead:
 
-**How it was found, after four cheaper guesses failed.** The cast is not in the CBMC binary
-(instrumenting `fix_expression` prints targets `integer`, `pointer`, `signedbv`, `c_bool`,
-`unsignedbv` — never `empty`), `migrate_type0` *throws* rather than falling through to the
-empty type, `migrate_expr`'s typecast case never builds one, and `symex_other.cpp` only
-dereferences a discarded expression. What settled it was an `abort()` in **both**
-`typecast2t` constructors — the first probe instrumented only the primary one and caught
-nothing — plus `--segfault-handler` and `addr2line`, which named the simplifier directly.
+- `0` through a `void *` — `__CPROVER_OBJECT_SIZE(&scalar_static)` FAILED where CBMC proves it;
+- `1` through the `signed char *` CPROVER's write-set checks cast to — so a stack `int` came
+  back as one byte and `Check that i is valid` FAILED on every
+  `goto-instrument --apply-loop-contracts` binary, again where CBMC proves it;
+- `sizeof(struct S)` through a `struct S *` walking a `struct S[4]`, where the subtype resolved
+  through the symbol table rather than the object — 8 against GCC's 32.
+
+All three are fixed by preferring the dereferenced object's type. **The array-only tests hid
+it**: `cbmc_object_size{,_bytes,_static}` all address arrays, where the old code already
+preferred the object. `cbmc_object_size_scalar`, `cbmc_loop_invariant` and
+`builtin_object_size17{,_fail}` cover the three shapes it missed; restoring the pre-fix helper
+fails `builtin_object_size17{,_fail}`, `cbmc_loop_invariant` and `cbmc_contract_global_assigns`
+across `regression/{esbmc,extensions,goto-transcoder}`.
+
+Also measured while probing contracts, and *not* defects:
+
+- `__CPROVER_old` in an `ensures` agrees in both directions once the arithmetic is bounded.
+- **CBMC checks signed overflow by default and ESBMC does not.** An unbounded `*p + 1` makes
+  CBMC report FAILED and ESBMC SUCCESSFUL on the *same* contract — a defaults difference, not a
+  contracts gap. Bound the arithmetic, or pass `--overflow-check`, before reading anything into
+  such a divergence.
 
 #### IEEE-754 rounding mode — ✅ FIXED (PR #7428)
 
@@ -931,7 +963,7 @@ for when thread instructions land. Verdict parity with CBMC, dual-solver (Bitwuz
   so the flag carries no information ESBMC needs. `cbmc_weak_override{,_fail}`.
 - `is_property` — CBMC-internal assertion bookkeeping, no ESBMC counterpart needed.
 
-### 4.6 Contracts subsystem (Phase 4) — 🔶 loads & verifies; gap is the unserialised contract library
+### 4.6 Contracts subsystem (Phase 4) — 🟢 verdict parity across every shape measured
 `__CPROVER_contracts_*` (requires/ensures/assigns/frees, `is_fresh`, object/write sets) is a
 whole subsystem. ESBMC has its own contracts (`src/goto-programs/contracts/`, including native
 `is_fresh` handling — `contracts.cpp::is_fresh_function`); the work is to bridge CBMC's encoding
@@ -1030,6 +1062,26 @@ What is genuinely open is narrower than this section implied: **separation** bet
 `ensures` clause, and the `__CPROVER_contracts_*` object/write-set helpers beyond the
 `assigns` checks measured above.
 
+**Status 2026-08-30: every contract shape probed now matches CBMC**, and each is pinned in
+`regression/goto-transcoder/`. The `is_fresh` bridges closed the unserialised-library gap in
+both directions (assume side and check side); the rest needed no bridge at all, only the
+`object_size` extent fix that the write-set checks depend on.
+
+| shape | pinned as |
+|---|---|
+| `requires(is_fresh)` / `ensures(is_fresh)`, enforce and replace | `cbmc_contract_is_fresh*`, `cbmc_ensures_fresh_*` |
+| `ensures` scalar, enforce and `--replace-call-with-contract` | `cbmc_contract_{ensures,replace}*` |
+| `assigns` — plain lvalue, `object_whole`, `object_upto`, a global | `cbmc_contract_{frees,object_upto,global_assigns}*`, `cbmc_expr_*` |
+| `frees` | `cbmc_contract_frees` |
+| `__CPROVER_old` in an `ensures` | `cbmc_contract_old{,_fail}` |
+| `--apply-loop-contracts` loop invariants | `cbmc_loop_invariant{,_fail}` |
+| a contract calling a contracted callee (nested) | `cbmc_contract_nested{,_fail}` |
+
+What remains open is narrow and named above: separation between two `is_fresh`'d pointers is
+unmodelled (CBMC's memory-map argument is dropped, and it is not currently a divergence), and
+the `__CPROVER_contracts_*` helpers beyond the `assigns`/`frees` checks measured here have not
+been exercised.
+
 ### 4.7 Versioning & robustness (Phase 5) — 🔶 malformed-input recovery landed
 Only CBMC binary **version 6** is accepted (a wrong version, like a non-magic header, is
 already a clean `log_error` + `return true`). The low-level reader no longer `abort()`s on
@@ -1041,8 +1093,67 @@ the parse (subsequent reads no-op, the S/N/C child loops stop) and surfaces thro
 The symbol/function/instruction table counts are also bounded against the bytes left in the
 stream before `reserve()` runs — each element is ≥1 byte, so a count larger than the remaining
 input is corrupt and rejected rather than driving a multi-gigabyte allocation or a
-multi-billion-iteration spin (PR #5812). **Still open:** multi-version tolerance (accept/adapt
-versions other than 6).
+multi-billion-iteration spin (PR #5812).
+
+**Version rejection verified, 2026-08-30 (PR #7419).** Patching the version varint of a good
+binary to 0, 5 and 7 each produces `unsupported CBMC goto-binary version N (only 6 is
+supported)` and exit 6 — no crash. `cbmc_bad_version` pins it. Accepting versions other than 6
+still cannot be *validated* locally: cbmc 6.5.0 is the only CBMC here and it emits v6, so
+there is no v5 or v7 binary to adapt. That needs a second CBMC build.
+
+**Two malformed-input crashes found by sweeping and fixed (PR #7419).** The hardening above
+covered over-wide varints and implausible counts, but not a stream that simply *ends*:
+
+- `read_word`'s `while (in.good())` loop exited at EOF **without setting `failed_`**, returning
+  the partial value. A truncated binary therefore parsed into ireps with no id, and
+  `migrate_expr` `abort()`ed on them ("migrate expr failed"). Truncating one 6.7 kB binary at
+  183 offsets aborted at 2 of them; it now fails cleanly at all 183.
+- `migrate_expr`'s fallback `abort()`ed where `migrate_type0` beside it *throws*. An id it does
+  not know is reachable from external input — a corrupted binary carries any bytes it likes —
+  and `create_goto_program`'s handler turns a throw into a graceful error exit, whereas an
+  abort is indistinguishable from an ESBMC crash. Flipping three random bytes killed 1 run in
+  40; 60 runs now produce no signal.
+
+**The same sweep on the *native* reader found three more, fixed in PR #7420.** The CBMC reader
+had been hardened; `irep_serialization.cpp`, which every `--binary` read of ESBMC's own format
+goes through (including goto-transcoder's Rust output), had not:
+
+- `read_string` assigned `in.get()` — an `int` — to a `char`, so EOF (-1) narrowed to an
+  ordinary character and never matched the terminator. On a truncated stream the loop never
+  ended, doubling `read_buffer` until the process died: a **hang**, not a diagnostic.
+- `read_long` returned a partial word at EOF with nothing set, so counts and ids no longer
+  described the file. It now leaves the stream failed.
+- `read_irep` and `reference_convert` `abort()`ed on "irep not terminated" and a forward
+  reference — both statements about the *input*, both routine on a truncated file. They throw,
+  which `read_goto_binary`'s caller turns into a graceful error exit.
+
+Measured on a 15.8 kB native binary: **300 truncation offsets, previously hangs and 76 aborts,
+now zero of either** (`native_truncated` pins one). Corrupted — as opposed to truncated — native input is closed too (PR #7421). All four residual
+failures had one cause: `read_string_ref` sized its table with `1 + id * 2` in **32-bit**
+arithmetic, so a corrupted id of `0x80000000` wrapped to `resize(1)` and the very next index
+ran off the end of the map. Guarded the way the CBMC reader guards counts — an id is a dense
+counter and each new one costs at least a byte, so an id past the end of the file is corrupt —
+and the growth is now computed in `size_t` for the case where the stream is not seekable and
+the guard declines to guess. 140 corrupted binaries (3- and 8-byte flips) and 300 truncation
+offsets now produce no hang and no signal; `native_bad_string_id` pins it.
+
+**The sweep is now a script: `scripts/fuzz_goto_binary.py`.** It truncates a goto-binary at
+every Nth byte and flips random bytes, and reports any run that hangs or dies from a signal.
+Both readers parse untrusted input, so a malformed file must produce a diagnostic — never a
+crash, never an unbounded loop. Current status, 2026-08-30: **597 malformed inputs across a
+native pair, a plain CBMC binary and a contract-instrumented one, zero bad.** The script is
+self-checking in the sense that matters: reverting any of the five fixes above makes it report
+again (verified against the `read_string` EOF fix, which brings the hangs straight back).
+
+Worth running against a *new* input shape rather than only re-running it: every defect it found
+came from a shape not previously fed to the reader, not from more iterations of the same one.
+
+**Still open:** multi-version tolerance (accept/adapt versions other than 6). One level up from
+the irep layer — the symbol-table and function-table loops in `read_bin_goto_object.cpp` —
+was swept and is clean: corrupted counts (`0xffffffff`, `0x00ffffff`, `0xffff`) all fail in
+under a second, because the irep layer beneath now stops at the first bad record. The
+`assert(count == 0)` there is an invariant on ESBMC's *own* bundled libraries, read from
+`.rodata` by `cprover_library.cpp`, not on user input — correctly an assert.
 
 ### 4.8 Builtin-call rewrites (malloc, libm, ...) never reach CBMC-sourced GOTO (Phase 2) — 🔶 `malloc`/`sqrtf`/`alloca`/`free`/`fabsf`/`realloc`/`nearbyint`/`fma` landed, family audit still open
 Distinct from §4.4 (expression-id coverage): this is about **instruction-level

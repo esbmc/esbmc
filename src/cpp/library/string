@@ -498,9 +498,12 @@ public:
   const char &operator[](size_t pos) const;
   void push_back(char c);
   void reserve(size_t n = 0);
-  char at(size_t pos) const;
-  char front() const;
-  char back() const;
+  char &at(size_t pos);
+  const char &at(size_t pos) const;
+  char &front();
+  const char &front() const;
+  char &back();
+  const char &back() const;
   bool empty() const;
   void clear();
   size_t length() const;
@@ -997,6 +1000,9 @@ public:
   void insert(iterator p, InputIterator first, InputIterator last);
   size_t copy(char *s, size_t n, size_t pos = 0) const;
   const char *data() const;
+#if __cplusplus >= 201703L
+  char *data();
+#endif
 
   /* [string.substr]: pos == size() is in range and yields the empty string;
    * the count is min(n, size() - pos), so n is clamped rather than required
@@ -1522,15 +1528,15 @@ __ESBMC_HIDE:
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-char basic_string<CharT, Traits, Alloc>::at(size_t pos) const
+char &basic_string<CharT, Traits, Alloc>::at(size_t pos)
 {
   // [string.access]: at throws std::out_of_range when pos >= size(). The throw
-  // must stay lexically in this body -- ESBMC's exception lowering only marks a
+  // must stay lexically in each body -- ESBMC's exception lowering only marks a
   // function as throwing when the throw is directly in it, so routing it
-  // through a helper would silently drop the landing pad at the call site.
-  // Message-less, as in vector::at: constructing a std::string what_arg would
-  // drag a malloc/strlen into every at() call, and a catch of out_of_range or
-  // of exception still matches.
+  // through a helper, or delegating between the two overloads, would silently
+  // drop the landing pad at the call site. Message-less, as in vector::at:
+  // constructing a std::string what_arg would drag a malloc/strlen into every
+  // at() call, and a catch of out_of_range or of exception still matches.
   if (pos >= this->length())
     throw std::out_of_range();
 
@@ -1538,7 +1544,16 @@ char basic_string<CharT, Traits, Alloc>::at(size_t pos) const
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-char basic_string<CharT, Traits, Alloc>::front() const
+const char &basic_string<CharT, Traits, Alloc>::at(size_t pos) const
+{
+  if (pos >= this->length())
+    throw std::out_of_range();
+
+  return this->str[pos];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+char &basic_string<CharT, Traits, Alloc>::front()
 {
   __ESBMC_assert(
     this->length() > 0, "basic_string::front() failed: basic_string is empty");
@@ -1547,7 +1562,25 @@ char basic_string<CharT, Traits, Alloc>::front() const
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-char basic_string<CharT, Traits, Alloc>::back() const
+const char &basic_string<CharT, Traits, Alloc>::front() const
+{
+  __ESBMC_assert(
+    this->length() > 0, "basic_string::front() failed: basic_string is empty");
+
+  return this->str[0];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+char &basic_string<CharT, Traits, Alloc>::back()
+{
+  __ESBMC_assert(
+    this->length() > 0, "basic_string::back() failed: basic_string is empty");
+
+  return this->str[this->length() - 1];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+const char &basic_string<CharT, Traits, Alloc>::back() const
 {
   __ESBMC_assert(
     this->length() > 0, "basic_string::back() failed: basic_string is empty");
@@ -1862,6 +1895,14 @@ const char *basic_string<CharT, Traits, Alloc>::data() const
 {
   return this->str;
 }
+
+#if __cplusplus >= 201703L
+template <typename CharT, typename Traits, typename Alloc>
+char *basic_string<CharT, Traits, Alloc>::data()
+{
+  return this->str;
+}
+#endif
 
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc> &basic_string<CharT, Traits, Alloc>::append(

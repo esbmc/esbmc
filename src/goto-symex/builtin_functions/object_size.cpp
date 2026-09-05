@@ -6,8 +6,6 @@
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/message/message.h>
-#include <util/irep/migrate.h>
-#include <util/irep/std_types.h>
 
 namespace
 {
@@ -40,17 +38,11 @@ type2tc address_of_object_type(const expr2tc &ptr)
 type2tc addressed_object_type(
   const expr2tc &ptr,
   const expr2tc &deref,
-  const std::list<dereference_callbackt::internal_item> &deref_items,
-  const namespacet &ns)
+  const std::list<dereference_callbackt::internal_item> &deref_items)
 {
   if (type2tc named = address_of_object_type(ptr); !is_nil_type(named))
     return named;
 
-  const type2tc &resolved = deref_items.front().object->type;
-  if (!is_pointer_type(ptr->type))
-    return resolved;
-
-  const type2tc ptr_subtype = to_pointer_type(ptr->type).subtype;
   const auto &item = deref_items.front();
 
   if (
@@ -58,21 +50,14 @@ type2tc addressed_object_type(
     !is_nil_expr(deref) && !is_empty_type(deref->type))
     return deref->type;
 
-  if (is_symbol_type(ptr_subtype))
-  {
-    const symbol_type2t &symtype = to_symbol_type(ptr_subtype);
-    const symbolt *symbol = ns.lookup(symtype.symbol_name);
-    return symbol != nullptr ? migrate_symbol_type(*symbol) : resolved;
-  }
-
-  // A void* carries no size, so when the pointer's subtype is empty the
-  // resolved object is the only thing that knows how big it is. Falling back to
-  // the subtype there made every scalar reached through a void* report the
-  // unknown-size fallback -- visible as __CPROVER_OBJECT_SIZE(&scalar_static)
-  // failing where CBMC proves it, since the CPROVER lowering always casts to
-  // void* first.
-  return (is_array_type(resolved) || is_empty_type(ptr_subtype)) ? resolved
-                                                                 : ptr_subtype;
+  // The size of the whole object is a property of the object, not of the
+  // pointer that reaches it: type-0 __builtin_object_size and
+  // __CPROVER_OBJECT_SIZE both mean "how big is the thing this addresses".
+  // Taking the pointer's subtype instead reported sizeof(*p) -- 1 for the
+  // `signed char *` CPROVER's write-set checks cast to, 0 for a `void *`, and
+  // 8 for the `struct S *` that walks a `struct S[4]` -- so a stack `int` came
+  // back as 1 byte and the check failed where CBMC proves it.
+  return item.object->type;
 }
 } // namespace
 
@@ -129,12 +114,12 @@ void goto_symext::intrinsic_builtin_object_size(
   else
   {
     const type2tc addressed_type =
-      addressed_object_type(ptr, deref, internal_deref_items, ns);
+      addressed_object_type(ptr, deref, internal_deref_items);
 
     // Note: type_byte_size returns the allocated object size, not just the sum
     // of fields. For structs/unions this includes alignment and padding, which
     // matches GCC's __builtin_object_size semantics.
-    BigInt total_size = type_byte_size(addressed_type);
+    BigInt total_size = type_byte_size(addressed_type, &ns);
 
     if (consider_offset)
     {

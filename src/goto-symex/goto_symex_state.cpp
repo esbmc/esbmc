@@ -8,6 +8,7 @@
 #include <sstream>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
+#include <util/base/prefix.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
@@ -123,26 +124,6 @@ static std::optional<BigInt> array_element_count(const type2tc &t)
   return n * *sub;
 }
 
-/* A nested constant array whose leaves are all constants. */
-static bool is_constant_array_value(const expr2tc &e)
-{
-  if (is_nil_expr(e))
-    return false;
-
-  if (is_constant_array_of2t(e))
-    return is_constant_array_value(to_constant_array_of2t(e).initializer);
-
-  if (is_constant_array2t(e))
-  {
-    for (const expr2tc &m : to_constant_array2t(e).datatype_members)
-      if (!is_constant_array_value(m))
-        return false;
-    return true;
-  }
-
-  return is_constant_expr(e);
-}
-
 /* Whether an array value is cheap and well-formed enough to carry as a
  * propagated constant. */
 static bool array_may_propagate(const expr2tc &e)
@@ -157,17 +138,7 @@ static bool array_may_propagate(const expr2tc &e)
   if (!is_array_type(arr.subtype))
     return true;
 
-  // A multi-dimensional array propagates only as a whole constant. A `with`
-  // chain over one lets a second update land on an already-updated row, and
-  // the SMT flattening in convert_array_store()/decompose_store_chain() walks
-  // only the update-value spine: the earlier sibling store is dropped from the
-  // formula (silent wrong answers) or reaches mk_store()/mk_eq() with a row on
-  // one side and an element on the other. Folding the reads is what R42 needs;
-  // folding the writes is a separate, unfixed encoding gap.
-  if (!is_constant_array_value(e))
-    return false;
-
-  // And only while it stays small: a read at a symbolic index inlines the
+  // Only while it stays small: a read at a symbolic index inlines the
   // whole nested constant, so the cost grows with the element count. The cap
   // is R42's (docs/roadmap/goto-symex-verification-plan.md).
   std::optional<BigInt> elems = array_element_count(e->type);
@@ -197,6 +168,53 @@ static bool is_const_foldable_arith(const expr2tc &e)
 {
   return is_add2t(e) || is_sub2t(e) || is_mul2t(e) || is_div2t(e) ||
          is_modulus2t(e);
+}
+
+/// A (possibly typecast) symbol whose value can never change under
+/// it: a level2 SSA generation (assigned once) or a nondet$ free
+/// variable (never assigned; no level2 generation is minted for it).
+/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the
+/// symbol here is a member value inside a recorded aggregate, so a
+/// member read folds to the free variable the trace shows anyway.
+static bool is_immutable_value(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+  if (!is_symbol2t(*b))
+    return false;
+  // Scalars only: an aggregate-typed symbol must keep going through
+  // constant_propagation, whose array_may_propagate refuses the
+  // infinite-size modelling arrays and oversized nests.
+  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
+        is_pointer_type((*b)->type)))
+    return false;
+  const symbol2t &sym = to_symbol2t(*b);
+  if (
+    sym.rlevel == symbol_renaming_level::level2 ||
+    sym.rlevel == symbol_renaming_level::level2_global)
+    return true;
+  return has_prefix(sym.thename.as_string(), "nondet$");
+}
+
+/// Whether a constant aggregate literal may propagate: every element
+/// must itself propagate. A union literal may also carry a (typecast)
+/// symbol as its initializing member — constant_union's init_field
+/// keeps a later cross-member read visible as one.
+static bool aggregate_literal_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &expr)
+{
+  const bool is_union_literal = is_constant_union2t(expr);
+  bool noconst = true;
+
+  expr->foreach_operand([&](const expr2tc &e) {
+    if (
+      noconst && !(is_union_literal && is_immutable_value(e)) &&
+      !state.constant_propagation(e))
+      noconst = false;
+  });
+  return noconst;
 }
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
@@ -351,50 +369,19 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     // Handle WITH chains for unions where all updates are constants
     if (is_union_type(expr->type))
     {
-      // For unions, we can only safely propagate if all updates in the chain
-      // are to the SAME field and are all constants.
-      // If different fields are updated, we must not propagate because
-      // union members alias each other in memory: writing to one field
-      // affects what you read from another field.
-
-      bool all_constant_updates = true;
-      bool all_same_field = true;
-      std::string first_field;
-      expr2tc current = expr;
-
-      while (is_with2t(current))
+      // A chain touching several fields is safe to carry: member2t::do_simplify
+      // refuses to step past a `with` whose source is a union, so only a read
+      // of the last-written field folds and every aliased read stays symbolic.
+      // #7446: an update may also be an immutable symbol, not just a literal.
+      for (const expr2tc *current = &expr; is_with2t(*current);
+           current = &to_with2t(*current).source_value)
       {
-        const with2t &w = to_with2t(current);
-
-        if (!is_constant_expr(w.update_value))
-        {
-          all_constant_updates = false;
-          break;
-        }
-
-        if (is_constant_string2t(w.update_field))
-        {
-          std::string field_name =
-            to_constant_string2t(w.update_field).value.as_string();
-
-          if (first_field.empty())
-            first_field = field_name;
-          else if (field_name != first_field)
-          {
-            // Different field accessed: cannot constant propagate
-            all_same_field = false;
-            break;
-          }
-        }
-
-        current = w.source_value;
+        const expr2tc &update = to_with2t(*current).update_value;
+        if (!is_constant_expr(update) && !is_immutable_value(update))
+          return false;
       }
 
-      // Only allow propagation if all updates are constants and to the same field
-      if (all_constant_updates && all_same_field)
-        return true;
-
-      return false;
+      return true;
     }
 
     return false;
@@ -403,15 +390,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
     is_constant_array2t(expr))
-  {
-    bool noconst = true;
-
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
-        noconst = false;
-    });
-    return noconst;
-  }
+    return aggregate_literal_may_propagate(*this, expr);
 
   if (is_constant_expr(expr))
     return true;

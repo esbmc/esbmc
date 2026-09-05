@@ -120,8 +120,7 @@ exprt python_list::compare(
     auto resolve_map_id = [&](const symbolt *sym) -> std::string {
       const std::string direct_id = sym->id.as_string();
       auto has_map = [&](const std::string &id) {
-        auto it = list_type_map.find(id);
-        return it != list_type_map.end() && !it->second.empty();
+        return elem_types().find(id) != nullptr;
       };
 
       if (has_map(direct_id))
@@ -153,11 +152,11 @@ exprt python_list::compare(
     auto is_bool = [](const typet &t) { return t == bool_type(); };
 
     auto is_concrete_map = [&](const std::string &list_id) -> bool {
-      auto it = list_type_map.find(list_id);
-      if (it == list_type_map.end() || it->second.empty())
+      const auto *recorded = elem_types().find(list_id);
+      if (!recorded)
         return false;
 
-      for (const auto &entry : it->second)
+      for (const auto &entry : *recorded)
       {
         if (entry.first.empty())
           return false;
@@ -173,13 +172,13 @@ exprt python_list::compare(
     };
 
     auto has_mixed_int_float = [&](const std::string &list_id) -> bool {
-      auto it = list_type_map.find(list_id);
-      if (it == list_type_map.end() || it->second.empty())
+      const auto *recorded = elem_types().find(list_id);
+      if (!recorded)
         return false;
 
       bool has_int = false;
       bool has_float = false;
-      for (const auto &entry : it->second)
+      for (const auto &entry : *recorded)
       {
         const symbolt *elem_sym = converter_.find_symbol(entry.first);
         const typet t = elem_sym ? elem_sym->get_type() : entry.second;
@@ -210,13 +209,13 @@ exprt python_list::compare(
 
       const std::string lhs_list_id = resolve_map_id(lhs_list);
       const std::string rhs_list_id = resolve_map_id(rhs_list);
-      auto lhs_it = list_type_map.find(lhs_list_id);
-      auto rhs_it = list_type_map.find(rhs_list_id);
-      if (lhs_it == list_type_map.end() || rhs_it == list_type_map.end())
+      const auto *lhs_recorded = elem_types().find(lhs_list_id);
+      const auto *rhs_recorded = elem_types().find(rhs_list_id);
+      if (!lhs_recorded || !rhs_recorded)
         return false;
 
-      const std::size_t lhs_size = lhs_it->second.size();
-      const std::size_t rhs_size = rhs_it->second.size();
+      const std::size_t lhs_size = lhs_recorded->size();
+      const std::size_t rhs_size = rhs_recorded->size();
       if (lhs_size != rhs_size)
       {
         result = gen_false_expr();
@@ -228,8 +227,8 @@ exprt python_list::compare(
       result = gen_true_expr();
       for (std::size_t i = 0; i < lhs_size; ++i)
       {
-        const std::string lhs_elem_id = get_list_element_id(lhs_list_id, i);
-        const std::string rhs_elem_id = get_list_element_id(rhs_list_id, i);
+        const std::string lhs_elem_id = elem_types().element_id(lhs_list_id, i);
+        const std::string rhs_elem_id = elem_types().element_id(rhs_list_id, i);
         const symbolt *lhs_elem_sym = converter_.find_symbol(lhs_elem_id);
         const symbolt *rhs_elem_sym = converter_.find_symbol(rhs_elem_id);
         if (!lhs_elem_sym || !rhs_elem_sym)
@@ -289,8 +288,8 @@ exprt python_list::compare(
       return true;
     };
 
-    const typet lhs_first_type = get_list_element_type(lhs_id, 0);
-    const typet rhs_first_type = get_list_element_type(rhs_id, 0);
+    const typet lhs_first_type = elem_types().element_type(lhs_id, 0);
+    const typet rhs_first_type = elem_types().element_type(rhs_id, 0);
     if (lhs_first_type == list_model_type && rhs_first_type == list_model_type)
     {
       expr2tc nested_equal;
@@ -312,8 +311,8 @@ exprt python_list::compare(
       }
       else
       {
-        const size_t lhs_n = get_list_type_map_size(lhs_id);
-        const size_t rhs_n = get_list_type_map_size(rhs_id);
+        const size_t lhs_n = elem_types().size(lhs_id);
+        const size_t rhs_n = elem_types().size(rhs_id);
 
         if (lhs_n == rhs_n && lhs_n <= 64)
         {
@@ -322,16 +321,16 @@ exprt python_list::compare(
 
           for (size_t i = 0; i < lhs_n; ++i)
           {
-            const std::string lhs_elem_id = get_list_element_id(lhs_id, i);
-            const std::string rhs_elem_id = get_list_element_id(rhs_id, i);
+            const std::string lhs_elem_id = elem_types().element_id(lhs_id, i);
+            const std::string rhs_elem_id = elem_types().element_id(rhs_id, i);
             const symbolt *lhs_elem_sym = converter_.find_symbol(lhs_elem_id);
             const symbolt *rhs_elem_sym = converter_.find_symbol(rhs_elem_id);
-            const typet lhs_elem_type = lhs_elem_sym
-                                          ? lhs_elem_sym->get_type()
-                                          : get_list_element_type(lhs_id, i);
-            const typet rhs_elem_type = rhs_elem_sym
-                                          ? rhs_elem_sym->get_type()
-                                          : get_list_element_type(rhs_id, i);
+            const typet lhs_elem_type =
+              lhs_elem_sym ? lhs_elem_sym->get_type()
+                           : elem_types().element_type(lhs_id, i);
+            const typet rhs_elem_type =
+              rhs_elem_sym ? rhs_elem_sym->get_type()
+                           : elem_types().element_type(rhs_id, i);
             if (lhs_elem_type.is_nil() || rhs_elem_type.is_nil())
             {
               comparable = false;
@@ -420,12 +419,12 @@ exprt python_list::compare(
     // cross-type comparisons like [1,2] < [1.0,2.0] are handled correctly.
     int type_flag_lhs = 0, type_flag_rhs = 0;
     size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
-    get_list_type_flags(
+    elem_types().type_flags(
       lhs_symbol->id.as_string(),
       converter_.get_type_handler(),
       type_flag_lhs,
       float_type_id_lhs);
-    get_list_type_flags(
+    elem_types().type_flags(
       rhs_symbol->id.as_string(),
       converter_.get_type_handler(),
       type_flag_rhs,
@@ -511,12 +510,12 @@ exprt python_list::compare(
   // elements compare numerically (Python's 1 == 1.0), as list_lt already does.
   int type_flag_lhs = 0, type_flag_rhs = 0;
   size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
-  get_list_type_flags(
+  elem_types().type_flags(
     lhs_symbol->id.as_string(),
     converter_.get_type_handler(),
     type_flag_lhs,
     float_type_id_lhs);
-  get_list_type_flags(
+  elem_types().type_flags(
     rhs_symbol->id.as_string(),
     converter_.get_type_handler(),
     type_flag_rhs,
@@ -541,9 +540,9 @@ exprt python_list::compare(
       return 0;
     };
     const typet lt =
-      get_list_element_type(converted_l1.identifier().as_string(), 0);
+      elem_types().element_type(converted_l1.identifier().as_string(), 0);
     const typet rt =
-      get_list_element_type(converted_l2.identifier().as_string(), 0);
+      elem_types().element_type(converted_l2.identifier().as_string(), 0);
     size_t lw = lt.is_nil() ? 0 : scalar_width(lt);
     size_t rw = rt.is_nil() ? 0 : scalar_width(rt);
     if (lw != 0 && lw == rw)
@@ -629,7 +628,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   exprt elem_size = item_info.elem_size;
 
   // void* items (e.g. a loop variable over a string list) need the stored
-  // char-array type_id and runtime length recovered from list_type_map.
+  // char-array type_id and runtime length recovered from the registry.
   // The lookup is keyed by symbol name, so non-symbol receivers cannot carry
   // void* elements; skipping them is sound.
   if (
@@ -637,12 +636,12 @@ exprt python_list::contains(const exprt &item, const exprt &list)
     list.is_symbol())
   {
     const std::string &list_name = list.identifier().as_string();
-    auto type_map_it = list_type_map.find(list_name);
+    const auto *recorded = elem_types().find(list_name);
 
-    if (type_map_it != list_type_map.end() && !type_map_it->second.empty())
+    if (recorded)
     {
       // Look for a string array type (char array) in the list
-      for (const auto &stored_entry : type_map_it->second)
+      for (const auto &stored_entry : *recorded)
       {
         const typet &stored_type = stored_entry.second;
 
@@ -719,11 +718,12 @@ exprt python_list::build_min_max_for_mixed_numeric(
   const std::string &func_name,
   irep_idt comparison_op)
 {
-  const TypeInfo &type_info = list_type_map.at(list_id);
-  size_t n = type_info.size();
-
-  if (n == 0)
+  const auto *recorded = elem_types().find(list_id);
+  if (!recorded)
     throw std::runtime_error(func_name + "() arg is an empty sequence");
+
+  const auto &type_info = *recorded;
+  const size_t n = type_info.size();
 
   pointer_typet obj_ptr_type(
     converter_.get_type_handler().get_list_element_type());

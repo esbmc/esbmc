@@ -32,6 +32,8 @@ ignored_dirs=(
   "threading_thread_increment_race_no_flag_fail"
   "convert-byte-update2"
   "constants"
+  "uint64_pow_fold_recovers"
+  "uint64_pow_fold_recovers_fail"
   "decimal"
   "decimal_fail"
   "decimal4"

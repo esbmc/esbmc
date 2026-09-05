@@ -4,6 +4,8 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -16,6 +18,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_typecast.h>
 #include <util/expr/expr_util.h>
@@ -31,6 +34,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
@@ -503,6 +507,56 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
   return sym;
 }
 
+std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
+  const nlohmann::json &node) const
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return std::nullopt;
+
+  const std::string &type = node["_type"];
+
+  if (type == "Constant" && node.contains("_bigint"))
+    return BigInt(node["_bigint"].get<std::string>().c_str());
+
+  if (
+    type == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return BigInt(node["value"].get<long long>());
+
+  if (type == "UnaryOp" && node.contains("op") && node.contains("operand"))
+  {
+    const std::optional<BigInt> operand =
+      try_fold_constant_arith_json(node["operand"]);
+    if (operand.has_value() && node["op"]["_type"] == "USub")
+      return -(*operand);
+    return std::nullopt;
+  }
+
+  if (
+    type != "BinOp" || !node.contains("op") || !node.contains("left") ||
+    !node.contains("right"))
+    return std::nullopt;
+
+  const std::optional<BigInt> lhs = try_fold_constant_arith_json(node["left"]);
+  if (!lhs.has_value())
+    return std::nullopt;
+  const std::optional<BigInt> rhs = try_fold_constant_arith_json(node["right"]);
+  if (!rhs.has_value())
+    return std::nullopt;
+
+  const std::string &op = node["op"]["_type"];
+  if (op == "Add")
+    return *lhs + *rhs;
+  if (op == "Sub")
+    return *lhs - *rhs;
+  if (op == "Mult")
+    return *lhs * *rhs;
+  if (op == "Pow" && *rhs >= 0 && *rhs <= python_math::kMaxConstantFoldExponent)
+    return python_math::pow_bigint_non_negative(*lhs, *rhs);
+
+  return std::nullopt;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -873,37 +927,19 @@ exprt function_call_expr::build_constant_from_arg() const
       std::remove_if(str_val.begin(), str_val.end(), ::isspace), str_val.end());
 
     // Handle special float string values
-    if (str_val == "nan")
-    {
-      // Create NaN using IEEE float
-      ieee_floatt nan_val(ieee_float_spect::double_precision());
-      nan_val.make_NaN();
-      return nan_val.to_expr();
-    }
-    else if (
-      str_val == "inf" || str_val == "+inf" || str_val == "infinity" ||
-      str_val == "+infinity")
-    {
-      // Create positive infinity
-      ieee_floatt inf_val(ieee_float_spect::double_precision());
-      inf_val.make_plus_infinity();
-      return inf_val.to_expr();
-    }
-    else if (str_val == "-inf" || str_val == "-infinity")
-    {
-      // Create negative infinity
-      ieee_floatt inf_val(ieee_float_spect::double_precision());
-      inf_val.make_minus_infinity();
-      return inf_val.to_expr();
-    }
-    else
+    if (const auto special = nonfinite_float_from_spelling(str_val))
+      return special->to_expr();
     {
       // Try to parse as regular float
       {
         const std::string raw_val = arg["value"].get<std::string>();
+        // strtod does not know PEP 515, so drop the separators first (#7558).
+        std::string digits;
+        const bool separators_ok =
+          type_utils::strip_pep515_underscores(raw_val, digits);
         char *end = nullptr;
-        double dval = std::strtod(raw_val.c_str(), &end);
-        if (!end || end != raw_val.c_str() + raw_val.size())
+        double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+        if (!separators_ok || !end || end != digits.c_str() + digits.size())
         {
           std::string m =
             "could not convert string to float : '" + raw_val + "'";
@@ -1075,7 +1111,21 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   typet t = type_handler_.get_typet(func_name, arg_size);
-  exprt expr = converter_.get_expr(arg);
+  exprt expr;
+  try
+  {
+    expr = converter_.get_expr(arg);
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // e.g. uint64(2**64 - 1): 2**64 alone overflows, retry against t's width.
+    const std::optional<BigInt> folded = try_fold_constant_arith_json(arg);
+    if (
+      !folded.has_value() || !(t.is_signedbv() || t.is_unsignedbv()) ||
+      !python_math::fits_in_width(*folded, bv_width(t), t.is_signedbv()))
+      throw;
+    return from_integer(*folded, t);
+  }
 
   // For float(), emit a proper typecast instead of relabeling the type.
   // Simply changing expr.type() on an integer expression creates IR where
@@ -1390,7 +1440,7 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   const auto &func_value = call_["func"]["value"];
 
   // Subscript case: e.g. nested[0].append(99) — resolve the inner list symbol
-  // via the compile-time list_type_map rather than through a plain name lookup.
+  // via the compile-time element-type registry rather than a plain name lookup.
   if (func_value["_type"] == "Subscript")
   {
     const auto &base_node = func_value["value"];
@@ -1411,23 +1461,25 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     const std::string &base_id = base_sym->id.as_string();
 
     // Nested list (list-of-list) path: only meaningful when the base is itself
-    // a list, since list_type_map keys list-of-list types.  For non-list bases
+    // a list, since the registry keys list-of-list types.  For non-list bases
     // (e.g. dicts whose value is a list) we fall through to the get_expr
     // dispatch below, which can also resolve dict-subscript receivers.
     if (base_sym->get_type() == list_type)
     {
-      // Constant index: resolve directly from list_type_map.
+      // Constant index: resolve directly from the registry.
       if (
         slice_node["_type"] == "Constant" &&
         slice_node["value"].is_number_integer())
       {
         const size_t index = slice_node["value"].get<size_t>();
 
-        if (python_list::get_list_element_type(base_id, index) != list_type)
+        if (
+          converter_.get_element_type_registry().element_type(base_id, index) !=
+          list_type)
           return nullptr;
 
         const std::string inner_id =
-          python_list::get_list_element_id(base_id, index);
+          converter_.get_element_type_registry().element_id(base_id, index);
         if (inner_id.empty())
           return nullptr;
 
@@ -1436,10 +1488,10 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
       }
 
       // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
-      // subscript handler.  For comprehension-generated nested lists the handler
-      // hits the list_type_map early-return path and yields the template inner
-      // list symbol (the element produced inside the loop body) without emitting
-      // any runtime instructions.
+      // subscript handler.  For comprehension-generated nested lists the
+      // handler hits the registry early-return path and yields the template
+      // inner list symbol (the element produced inside the loop body) without
+      // emitting any runtime instructions.
       const exprt subscript_expr = converter_.get_expr(func_value);
       if (subscript_expr.is_symbol())
       {
@@ -1665,7 +1717,7 @@ exprt function_call_expr::handle_list_insert() const
   }
 
   python_list list(converter_, nlohmann::json());
-  list.add_type_info(
+  converter_.get_element_type_registry().record(
     list_symbol->id.as_string(),
     value_to_insert.identifier().as_string(),
     value_to_insert.type());
@@ -1799,7 +1851,7 @@ exprt function_call_expr::handle_list_appendleft() const
   }
 
   python_list list(converter_, nlohmann::json());
-  list.add_type_info(
+  converter_.get_element_type_registry().record(
     list_symbol->id.as_string(),
     value_to_insert.identifier().as_string(),
     value_to_insert.type());
@@ -2250,7 +2302,7 @@ exprt function_call_expr::handle_list_sort() const
 
   int type_flag = 0;
   size_t float_type_id = 0;
-  python_list::get_list_type_flags(
+  converter_.get_element_type_registry().type_flags(
     list_id, converter_.get_type_handler(), type_flag, float_type_id);
 
   // ── Locate the C model function ────────────────────────────────────────────
@@ -2287,7 +2339,7 @@ exprt function_call_expr::handle_list_sort() const
   reverse_call.type() = empty_typet();
   reverse_call.location() = converter_.get_location_from_decl(call_);
 
-  python_list::reverse_type_info(list_id);
+  converter_.get_element_type_registry().reverse(list_id);
 
   code_blockt block;
   block.copy_to_operands(sort_call);
@@ -2323,7 +2375,7 @@ exprt function_call_expr::handle_list_reverse() const
 
   // Reverse the compile-time type-info vector to mirror the runtime
   // reordering, so that subsequent index-based type lookups remain valid.
-  python_list::reverse_type_info(list_symbol->id.as_string());
+  converter_.get_element_type_registry().reverse(list_symbol->id.as_string());
 
   return reverse_call;
 }
@@ -2867,7 +2919,7 @@ exprt function_call_expr::handle_list_append() const
 
   python_list list(converter_, nlohmann::json());
 
-  list.add_type_info(
+  converter_.get_element_type_registry().record(
     list_symbol->id.as_string(),
     value_to_append.identifier().as_string(),
     value_to_append.type());
@@ -4496,7 +4548,7 @@ std::optional<exprt> function_call_expr::try_fold_sorted()
     list_id = list_arg.identifier().as_string();
   }
 
-  const size_t map_size = python_list::get_list_type_map_size(list_id);
+  const size_t map_size = converter_.get_element_type_registry().size(list_id);
   if (map_size == 0 || map_size > 32)
     return std::nullopt;
 
@@ -4546,7 +4598,8 @@ std::optional<exprt> function_call_expr::fold_sorted_int_list(
 
   for (size_t i = 0; i < map_size; ++i)
   {
-    const std::string elem_id = python_list::get_list_element_id(list_id, i);
+    const std::string elem_id =
+      converter_.get_element_type_registry().element_id(list_id, i);
     if (elem_id.empty())
     {
       all_constant_ints = false;
@@ -4706,7 +4759,8 @@ std::optional<exprt> function_call_expr::fold_sorted_constant_tuples(
 
   for (size_t i = 0; i < map_size && all_constant_tuples; ++i)
   {
-    const std::string elem_id = python_list::get_list_element_id(list_id, i);
+    const std::string elem_id =
+      converter_.get_element_type_registry().element_id(list_id, i);
     const symbolt *elem_sym =
       elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
     exprt val = elem_sym ? elem_sym->get_value() : exprt();
@@ -4854,7 +4908,8 @@ std::optional<exprt> function_call_expr::fold_sorted_symbolic_tuples(
   typet tuple_type;
   for (size_t i = 0; i < map_size; ++i)
   {
-    const std::string elem_id = python_list::get_list_element_id(list_id, i);
+    const std::string elem_id =
+      converter_.get_element_type_registry().element_id(list_id, i);
     const symbolt *elem_sym =
       elem_id.empty() ? nullptr : converter_.find_symbol(elem_id);
     if (
@@ -5107,13 +5162,16 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
       const std::string &list_id = list_arg.identifier().as_string();
       // Check that all elements have the same type and get the common type
       // Returns double_type() for mixed int/float lists (Python semantics)
-      elem_type = python_list::check_homogeneous_list_types(list_id, func_name);
+      elem_type =
+        converter_.get_element_type_registry().homogeneous_element_type(
+          list_id, func_name);
 
       // Mixed int/float list: inline the comparison to avoid type confusion
       // when passing the list to max_float/min_float model functions.
       if (
         elem_type.is_floatbv() && (func_name == "min" || func_name == "max") &&
-        python_list::has_mixed_numeric_types(list_id) && !has_default_kwarg)
+        converter_.get_element_type_registry().has_mixed_numeric(list_id) &&
+        !has_default_kwarg)
       {
         irep_idt comparison_op =
           (func_name == "max") ? exprt::i_gt : exprt::i_lt;
@@ -5929,6 +5987,12 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
+    // Tagged arguments aren't supported yet; refuse before goto-symex.
+    if (type_handler_.is_tagged_scalar_type(arg.type()))
+      throw std::runtime_error(
+        "passing a dynamically-typed variable to a function is not yet "
+        "supported");
+
     // A list passed to a callee may be mutated there (e.g. appended to), which
     // the caller's static length tracking does not observe. Mark the symbol so
     // later constant-index accesses fall back to the runtime bounds check
@@ -6216,7 +6280,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       const std::string &arg_id =
         type.arguments().at(0).identifier().as_string();
 
-      python_list::copy_type_info(arg.identifier().as_string(), arg_id);
+      converter_.get_element_type_registry().assign_from(
+        arg.identifier().as_string(), arg_id);
     }
 
     // All array function arguments (e.g. bytes type) are handled as pointers.

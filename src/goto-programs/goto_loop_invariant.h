@@ -73,6 +73,11 @@ protected:
   /// same limit so their searches are consistent.
   static constexpr size_t kMaxInvariantSearchBack = 10;
 
+  /// Largest pointee, in bits, the havoc will cover. Measured on
+  /// quantified_array_invariant: 128 bits is free, 4096 costs eight seconds and
+  /// 16384 nine minutes.
+  static constexpr unsigned kMaxHavocPointeeBits = 1024;
+
   void goto_loop_invariant();
 
   void convert_loop_with_invariant(loopst &loop);
@@ -104,13 +109,21 @@ protected:
     const std::vector<expr2tc> &invariants,
     const goto_programt &side_effects);
 
-  // Insert HAVOC and ASSUME before loop condition (inserts side_effects
-  // between the HAVOC block and the ASSUME).
+  // Insert HAVOC and ASSUME at \p loop_head, which must be the loop head's own
+  // instruction, so that everything the guard evaluates runs after the havoc
+  // (inserts side_effects between the HAVOC block and the ASSUME).
   // side_effects is non-const: if frame rule is active, old_snapshot assigns
   // are patched in-place so insert_inductive_step_and_termination (called
   // after this) sees the patched version too.
+  /// Havoc the objects the loop writes through a pointer. See the definition
+  /// for why a large aggregate pointee is left alone (issue #7502).
+  void havoc_pointees(
+    const loopst &loop,
+    const locationt &loc,
+    goto_programt &dest) const;
+
   void insert_havoc_and_assume_before_condition(
-    goto_programt::targett &loop_head,
+    goto_programt::targett loop_head,
     const loopst &loop,
     const std::vector<expr2tc> &invariants,
     const std::vector<expr2tc> &loop_assigns,
@@ -169,13 +182,15 @@ private:
   void insert_invariant_verification_branch(loopst &loop);
 
   /**
-   * Copy the loop body instructions (from the instruction immediately after
-   * @p loop_head up to, but not including, @p loop_exit) into @p out.
-   * Intra-loop jump targets are remapped to the copied instructions; targets
-   * outside the loop are left unchanged.
+   * Copy the loop body instructions (from @p body_begin up to, but not
+   * including, @p loop_exit) into @p out. Intra-loop jump targets are remapped
+   * to the copied instructions; targets outside the loop are left unchanged.
+   * @p body_begin is the instruction after the loop head when the head is the
+   * loop's guard, which ASSUME(entry_cond) models instead, and the head itself
+   * otherwise -- a do-while head is a body instruction (issue #7494).
    */
   void copy_loop_body(
-    goto_programt::targett loop_head,
+    goto_programt::targett body_begin,
     goto_programt::targett loop_exit,
     goto_programt &out) const;
 };

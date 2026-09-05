@@ -1,6 +1,8 @@
 #ifndef __STL_DEQUE
 #define __STL_DEQUE
 
+#include <memory> /* std::allocator, for the Allocator parameter */
+
 #include "iterator"
 #include "stdexcept"
 #if __cplusplus >= 201103L
@@ -11,7 +13,7 @@
 
 namespace std
 {
-template <class T>
+template <class T, class Allocator = std::allocator<T> >
 class deque
 {
 public:
@@ -439,6 +441,9 @@ public:
   typedef int size_type;
   typedef int difference_type;
   typedef T value_type;
+  /* The allocator is carried for name lookup and type identity only: this
+   * model never obtains storage through it. See the note in <memory>. */
+  typedef Allocator allocator_type;
   typedef T *pointer;
   typedef const T *const_pointer;
 
@@ -451,8 +456,18 @@ public:
     _capacity = 1;
   }
 
+  // [deque.cons]: the allocator-taking overloads, ignored here (#7493).
+  explicit deque(const allocator_type &) : _size(0), _capacity(1)
+  {
+    buf[0] = T();
+    buf[1] = T();
+  }
+
 #if __cplusplus >= 201103L
-  deque(std::initializer_list<T> init) : _size(0), _capacity(1)
+  deque(
+    std::initializer_list<T> init,
+    const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
     for (const T *it = init.begin(); it != init.end(); ++it)
       this->push_back(*it);
@@ -464,7 +479,10 @@ public:
     _size = 0;
   }
 
-  explicit deque(iterator t1, iterator t2) : _size(0)
+  /* No allocator-taking form: this constructor's size is off by one, so
+   * accepting the [deque.cons] spelling would return a wrong answer where it
+   * now gives a compile error. */
+  explicit deque(iterator t1, iterator t2) : _size(0), _capacity(1)
   {
     int n = 1;
     for (n = 1; t1 != t2; t1++)
@@ -475,7 +493,8 @@ public:
     verify_capacity();
   }
 
-  explicit deque(size_type n) : _size(0), _capacity(1)
+  explicit deque(size_type n, const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
     for (int i = 0; i < n; i++)
       push_back(T());
@@ -492,25 +511,26 @@ public:
     verify_capacity();
   }
 
-  explicit deque(size_type n, const T &x)
+  deque(size_type n, const T &x, const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
-    _size = 0;
     buf[0] = T();
     for (int i = 0; i < n; i++)
       push_back(x);
     verify_capacity();
   }
 
-  deque(const deque<T> &x) : _size(0), _capacity(1)
+  deque(const deque &x) : _size(0), _capacity(1)
   {
-    _size = 0;
-    buf[0] = T();
-    for (int i = 0; i < x.size(); i++)
-      push_back(x[i]);
-    verify_capacity();
+    _copy_from(x);
   }
 
-  deque<T> &operator=(const deque<T> &x)
+  deque(const deque &x, const allocator_type &) : _size(0), _capacity(1)
+  {
+    _copy_from(x);
+  }
+
+  deque &operator=(const deque &x)
   {
     _size = 0;
     buf[0] = T();
@@ -556,6 +576,11 @@ public:
     while ((t11 + i) < t21)
       push_back(t11[i++]);
     verify_capacity();
+  }
+
+  allocator_type get_allocator() const
+  {
+    return allocator_type();
   }
 
   // iterators:
@@ -751,6 +776,14 @@ public:
     verify_capacity();
   }
 
+  void _copy_from(const deque &x)
+  {
+    buf[0] = T();
+    for (int i = 0; i < x.size(); i++)
+      push_back(x[i]);
+    verify_capacity();
+  }
+
   void verify_capacity()
   {
     while (_size >= _capacity && _capacity < DEQUE_CAPACITY)
@@ -853,9 +886,9 @@ public:
     return it;
   }
 
-  void swap(deque<T> &v1)
+  void swap(deque &v1)
   {
-    deque<T> aux;
+    deque aux;
     aux = v1;
     v1 = *this;
     *this = aux;
@@ -870,7 +903,7 @@ public:
   }
 
   // comparators:
-  bool operator==(const deque<T> &rhv) const
+  bool operator==(const deque &rhv) const
   {
     if (this->size() != rhv.size())
       return false;
@@ -880,7 +913,7 @@ public:
     return true;
   }
 
-  bool operator!=(const deque<T> &rhv) const
+  bool operator!=(const deque &rhv) const
   {
     return (!(*this == rhv));
   }
@@ -889,7 +922,7 @@ public:
    * of the two ranges, so the first differing element decides it and the
    * lengths matter only when one range is a prefix of the other. Comparing
    * sizes instead made {2} <= {1, 3}. */
-  bool operator<(const deque<T> &rhv) const
+  bool operator<(const deque &rhv) const
   {
     size_type n = this->size() < rhv.size() ? this->size() : rhv.size();
     for (size_type i = 0; i < n; i++)
@@ -902,17 +935,17 @@ public:
     return this->size() < rhv.size();
   }
 
-  bool operator>(const deque<T> &rhv) const
+  bool operator>(const deque &rhv) const
   {
     return rhv < *this;
   }
 
-  bool operator>=(const deque<T> &rhv) const
+  bool operator>=(const deque &rhv) const
   {
     return !(*this < rhv);
   }
 
-  bool operator<=(const deque<T> &rhv) const
+  bool operator<=(const deque &rhv) const
   {
     return !(rhv < *this);
   }

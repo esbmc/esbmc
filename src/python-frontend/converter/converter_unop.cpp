@@ -1,6 +1,7 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -26,6 +27,17 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
+
+  // A tagged operand needs runtime dispatch.
+  if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
+  {
+    std::string unary_op = element["op"]["_type"].get<std::string>();
+    if (unary_op == "USub")
+      return dynamic_type_handler_.build_neg_tagged(unary_sub);
+    throw std::runtime_error(
+      "operator '" + unary_op +
+      "' on a dynamically-typed variable is not yet supported");
+  }
 
   // An unresolved method call yields a placeholder null (see
   // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
@@ -205,6 +217,17 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   // bool and the dunder never ran.
   unary_sub =
     apply_bool_dunder_for_not(op, unary_sub, get_location_from_decl(element));
+
+  /* Python's bool is a subclass of int, so every unary operator but `not`
+   * yields an int: -True is -1 and ~True is -2. Without the promotion the node
+   * is built over a bool-sorted operand and the SMT backend crashes (#7551).
+   * Matches the binary bitwise path in converter_binop.cpp. */
+  if (op != "Not" && unary_sub.type().is_bool())
+  {
+    const typet int_t = type_handler::python_int_typet();
+    unary_sub = typecast_exprt(unary_sub, int_t);
+    type = int_t;
+  }
 
   const typet result_type = (op == "Not") ? bool_type() : type;
   const std::string op_id = python_frontend::map_operator(op, result_type);

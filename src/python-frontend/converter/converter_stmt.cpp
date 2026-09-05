@@ -4449,21 +4449,15 @@ ast_node_name(const nlohmann::json &node, const std::string &fallback = "")
 /// one of src's entries has the same type. sorted()/reversed() permute their
 /// argument, so a per-position copy would misattribute the elements of a
 /// heterogeneous list; a homogeneous one is permutation-invariant.
-static void
-copy_homogeneous_elem_types(const std::string &src, const std::string &dest)
+static void copy_homogeneous_elem_types(
+  element_type_registry &registry,
+  const std::string &src,
+  const std::string &dest)
 {
-  const size_t n = python_list::get_list_type_map_size(src);
-  if (n == 0)
+  if (registry.uniform_element_type(src).is_nil())
     return;
 
-  const typet first = python_list::get_list_element_type(src, 0);
-  if (first.is_nil())
-    return;
-  for (size_t i = 1; i < n; ++i)
-    if (python_list::get_list_element_type(src, i) != first)
-      return;
-
-  python_list::copy_type_info(src, dest);
+  registry.assign_from(src, dest);
 }
 
 /// sorted()/reversed()/list() reorder or copy their argument, they do not
@@ -4506,7 +4500,8 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   {
     symbol_id arg_sid = create_symbol_id();
     arg_sid.set_object(arg["id"].get<std::string>());
-    copy_homogeneous_elem_types(arg_sid.to_string(), lhs_id);
+    copy_homogeneous_elem_types(
+      element_type_registry_, arg_sid.to_string(), lhs_id);
     return;
   }
 
@@ -4530,7 +4525,7 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   const std::string dict_id = dict_sid.to_string();
   const std::string &src =
     python_dict_handler::get_internal_list_id(dict_id, component == "keys");
-  copy_homogeneous_elem_types(src, lhs_id);
+  copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
 }
 
 void python_converter::handle_function_call_rhs(
@@ -4636,17 +4631,17 @@ void python_converter::handle_function_call_rhs(
     if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
         !ret.is_nil())
     {
-      python_list::copy_type_info(
+      element_type_registry_.assign_from(
         ret.op0().identifier().as_string(), lhs.identifier().as_string());
     }
 
-    // If list_type_map is still empty for the LHS
+    // If nothing is recorded for the LHS yet
     // e.g. the list was passed through as a parameter inside the function,
     // fall back to the called function's return-type annotation
     // to determine the element type.
     const std::string &lhs_id = lhs.identifier().as_string();
     copy_elem_types_from_reordering_builtin(ast_node, lhs_id);
-    if (python_list::get_list_type_map_size(lhs_id) == 0)
+    if (element_type_registry_.size(lhs_id) == 0)
     {
       std::string func_name;
       if (
@@ -4691,7 +4686,7 @@ void python_converter::handle_function_call_rhs(
                   returns["slice"]["id"].get<std::string>());
                 if (elem_type != typet())
                 {
-                  python_list::add_type_info_entry(
+                  element_type_registry_.record(
                     lhs_id, std::string(), elem_type);
                 }
               }
@@ -5443,7 +5438,7 @@ void python_converter::propagate_dict_member_list_type_info(
   if (src.empty())
     return;
 
-  python_list::copy_type_info(src, lhs_identifier);
+  element_type_registry_.assign_from(src, lhs_identifier);
 
   // Tuple values are recorded under the $dict_value_types$ key, not the
   // values-list id (github_3719_4), so the copy above is a no-op for them.
@@ -5455,8 +5450,8 @@ void python_converter::propagate_dict_member_list_type_info(
   typet tuple_t = dict_handler_->recorded_tuple_value_type(dict_sym);
   if (
     !tuple_t.is_nil() && !tuple_t.is_empty() &&
-    python_list::get_list_type_map_size(lhs_identifier) == 0)
-    python_list::add_type_info_entry(lhs_identifier, std::string(), tuple_t);
+    element_type_registry_.size(lhs_identifier) == 0)
+    element_type_registry_.record(lhs_identifier, std::string(), tuple_t);
 }
 
 void python_converter::propagate_list_type_info(
@@ -5466,11 +5461,11 @@ void python_converter::propagate_list_type_info(
 {
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
-  python_list::copy_type_info(rhs_identifier, lhs_identifier);
+  element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
 
   // When rhs is dict_sym.keys / dict_sym.values (a member expression
   // rather than a list symbol), rhs_identifier is empty and
-  // copy_type_info above is a no-op.  Look up the dict's internal
+  // assign_from above is a no-op.  Look up the dict's internal
   // keys-list or values-list symbol and propagate from there instead.
   if (rhs_identifier.empty() && rhs.id() == exprt::member)
     propagate_dict_member_list_type_info(rhs, lhs_identifier);
@@ -6681,6 +6676,35 @@ void python_converter::get_compound_assign(
       ast_node["target"]["_type"].get<std::string>());
   }
 
+  // Desugar `x op= v` into `x = x op v`, reusing get_var_assign's tagged
+  // dispatch instead of duplicating it here.
+  if (type_handler_.is_tagged_scalar_type(lhs.type()))
+  {
+    std::string op_type = ast_node["op"]["_type"].get<std::string>();
+    if (op_type != "Add" && op_type != "Sub" && op_type != "Div")
+      throw std::runtime_error(
+        "operator '" + op_type +
+        "' on a dynamically-typed variable is not yet supported");
+
+    nlohmann::json binop;
+    binop["_type"] = "BinOp";
+    binop["left"] = ast_node["target"];
+    binop["op"] = ast_node["op"];
+    binop["right"] = ast_node["value"];
+    copy_location_fields_from_decl(ast_node, binop);
+
+    nlohmann::json synthetic;
+    synthetic["_type"] = "Assign";
+    synthetic["targets"] = nlohmann::json::array({ast_node["target"]});
+    synthetic["value"] = binop;
+    copy_location_fields_from_decl(ast_node, synthetic);
+
+    is_converting_lhs = false;
+    is_converting_rhs = false;
+    get_var_assign(synthetic, target_block);
+    return;
+  }
+
   // For attribute assignments, use the type from the LHS expression
   // For other assignments, resolve the variable type
   if (!lhs.type().is_nil() && !lhs.type().id().empty())
@@ -7116,6 +7140,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       return cond;
     }
 
+    // A tagged value has no defined truthiness; refuse instead of building
+    // an ill-typed struct-to-bool node.
+    if (type_handler_.is_tagged_scalar_type(value_expr.type()))
+      throw std::runtime_error(
+        "truthiness of a dynamically-typed variable is not yet supported");
+
     exprt bool_expr = typecast_exprt(value_expr, bool_type());
     bool_expr.location() = get_location_from_decl(value_node);
     return bool_expr;
@@ -7269,6 +7299,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if (!cond.type().is_bool())
     {
       const locationt location = get_location_from_decl(ast_node["test"]);
+
+      // A tagged value has no defined truthiness; refuse instead of
+      // falling through to a struct-typed guard.
+      if (type_handler_.is_tagged_scalar_type(cond.type()))
+        throw std::runtime_error(
+          "truthiness of a dynamically-typed variable is not yet "
+          "supported");
+
       typet value_type = ns.follow(cond.type());
       if (value_type.is_pointer())
         value_type = ns.follow(value_type.subtype());

@@ -2,19 +2,19 @@
 #define _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_
 
 #include <cstdio>
+#include <map>
+#include <memory>
+#include <tuple>
 #include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
 #include <util/symtab/namespace.h>
 
-extern "C"
-{
-#include <bitwuzla/c/bitwuzla.h>
-}
+#include <bitwuzla/cpp/bitwuzla.h>
 
-class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm>
+class bitw_smt_ast : public solver_smt_ast<bitwuzla::Term>
 {
 public:
-  using solver_smt_ast<BitwuzlaTerm>::solver_smt_ast;
+  using solver_smt_ast<bitwuzla::Term>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
   smt_astt with_sort(smt_solver_baset *ctx, smt_sortt s) const override;
@@ -164,23 +164,45 @@ public:
     std::vector<smt_astt> lhs,
     smt_astt rhs) override;
 
-  // Members
-  Bitwuzla *bitw;
-  BitwuzlaOptions *bitw_options;
-  BitwuzlaTermManager *bitw_term_manager;
+  /* Declaration order is the destruction contract: bitw is destroyed before
+   * the term manager and options it was built from. */
+  bitwuzla::TermManager tm;
+  bitwuzla::Options bitw_options;
+  std::unique_ptr<bitwuzla::Bitwuzla> bitw;
 
   symtabt symtable;
 
   /** Uninterpreted-function declarations, keyed by name. Bitwuzla mints a fresh
-   *  constant on each bitwuzla_mk_const, so the function term is cached here and
-   *  reused across applications, giving native functional congruence. */
-  std::unordered_map<std::string, BitwuzlaTerm> uf_decls;
+   *  constant on each mk_const, so the function term is cached here
+   * and reused across applications, giving native functional congruence. */
+  std::unordered_map<std::string, bitwuzla::Term> uf_decls;
 
 private:
+  /** Identifies a sort by kind plus the two values that parameterise it: the
+   *  bit-width for bit-vectors, (exponent, significand) for floating-point, and
+   *  the domain and range sorts' addresses for arrays -- identity rather than
+   *  width, for the reason mk_array_sort gives. */
+  typedef std::tuple<smt_sort_kind, uint64_t, uint64_t> sort_keyt;
+
+  /** Sorts are immutable and outlive every context, so one instance per
+   *  distinct sort suffices. mk_extract, mk_concat and the extends ask for a
+   *  bit-vector sort per call, and neither the solver_smt_sort nor the
+   *  Bitwuzla sort reference behind it is ever freed. */
+  std::map<sort_keyt, smt_sortt> bitw_sorts;
+
+  template <typename buildt>
+  smt_sortt cached_sort(const sort_keyt &key, buildt build)
+  {
+    auto it = bitw_sorts.find(key);
+    if (it == bitw_sorts.end())
+      it = bitw_sorts.emplace(key, build()).first;
+    return it->second;
+  }
+
   smt_astt
-  mk_fp_arith(BitwuzlaKind kind, smt_astt lhs, smt_astt rhs, smt_astt rm);
-  smt_astt mk_fp_pred(BitwuzlaKind kind, smt_astt lhs, smt_astt rhs);
-  smt_astt mk_fp_class(BitwuzlaKind kind, smt_astt op);
+  mk_fp_arith(bitwuzla::Kind kind, smt_astt lhs, smt_astt rhs, smt_astt rm);
+  smt_astt mk_fp_pred(bitwuzla::Kind kind, smt_astt lhs, smt_astt rhs);
+  smt_astt mk_fp_class(bitwuzla::Kind kind, smt_astt op);
 
   /** Bitwuzla has no fp.to_ieee_bv, so the bit pattern of an FP term is
    *  reached through a fresh bit-vector symbol b constrained by
