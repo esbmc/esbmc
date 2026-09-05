@@ -194,7 +194,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"clang-c-irep2-adjust-only",
      NULL,
      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
-     "(Phase 6 hop-off; experimental, default off)"}}},
+     "(Phase 6 hop-off; experimental, default off)"},
+    {"clang-c-irep2-adjust-writeback-all",
+     NULL,
+     "Diagnostic: make the IREP2-native C adjuster refresh every symbol's "
+     "legacy value, not only the ones it changed. Without it a body the pass "
+     "did not touch still prints its converter tree under "
+     "--symbol-table-only, which is not what the pass produced"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {

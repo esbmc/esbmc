@@ -54,7 +54,10 @@ bool clang_c_adjust_irep2::adjust()
       // Only write back a value this pass actually changed, so symbols it does
       // not touch never make the round trip (python_adjust takes the same care,
       // for the bitfield and alignment losses migrate_type cannot carry).
-      if (value != before)
+      // writeback_all defeats the gate for diagnosis only: an unchanged body
+      // otherwise keeps its converter tree, which is not what this pass built
+      // (§135).
+      if (writeback_all || value != before)
         s->set_value(value);
     }
   }

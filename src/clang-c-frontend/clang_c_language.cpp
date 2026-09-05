@@ -480,7 +480,10 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
   // aborts on a construct migrate_expr cannot represent.
   if (irep2_only || config.options.get_bool_option("clang-c-irep2-adjust"))
   {
-    clang_c_adjust_irep2 irep2_adjuster(new_context, irep2_only);
+    clang_c_adjust_irep2 irep2_adjuster(
+      new_context,
+      irep2_only,
+      config.options.get_bool_option("clang-c-irep2-adjust-writeback-all"));
     if (irep2_adjuster.adjust())
       return true;
   }
