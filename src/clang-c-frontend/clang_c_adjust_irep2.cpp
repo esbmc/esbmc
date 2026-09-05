@@ -1391,11 +1391,14 @@ void clang_c_adjust_irep2::declare_polymorphic_builtin(expr2tc &expr)
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;
 
-  // Location stays per site, not in the call view: a code_function_call2t
-  // carries its own, a sideeffect2t borrows the enclosing statement's.
-  const locationt loc = is_code_function_call2t(expr)
-                          ? to_code_function_call2t(expr).location
-                          : enclosing_location;
+  // Location stays per site, not in the call view: both spellings carry one of
+  // their own; enclosing_location is the fallback for a sideeffect2t built
+  // without one (§136).
+  locationt loc = enclosing_location;
+  if (is_code_function_call2t(expr))
+    loc = to_code_function_call2t(expr).location;
+  else if (const locationt &l = to_sideeffect2t(expr).location; l.is_not_nil())
+    loc = l;
 
   // Every arm of the matcher selects on the first argument's *type* alone, so
   // the values need not cross the seam. A future arm that reads a value gets a
@@ -1440,13 +1443,16 @@ void clang_c_adjust_irep2::declare_implicit_callee(
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;
 
-  // Location stays per site: a code_function_call2t carries its own; a
-  // sideeffect2t has none, so the caller passes the enclosing statement's --
-  // the call's only when the call is the whole statement, the one position this
-  // is reached from.
-  const locationt loc = is_code_function_call2t(expr)
-                          ? to_code_function_call2t(expr).location
-                          : stmt_location;
+  // Location stays per site. Both spellings now carry one of their own, so the
+  // caller's stmt_location is only a fallback for a sideeffect2t built without
+  // it -- and it is a lossy one: the statement names the statement, not the
+  // callee, so `int x = f(1);` would report the column of `int`, not of `f`
+  // (§110.3, §136).
+  locationt loc = stmt_location;
+  if (is_code_function_call2t(expr))
+    loc = to_code_function_call2t(expr).location;
+  else if (const locationt &l = to_sideeffect2t(expr).location; l.is_not_nil())
+    loc = l;
 
   const irep_idt id = to_symbol2t(callee).thename;
   if (context.find_symbol(id) != nullptr)

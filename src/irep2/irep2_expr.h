@@ -60,7 +60,8 @@ enum class symbol_renaming_level
 };
 
 /** Debug-only consistency check for arith_2ops operands and result type.
- *  Called from add2t/sub2t/mul2t/div2t/modulus2t constructors; no-op in Release. */
+ *  Called from add2t/sub2t/mul2t/div2t/modulus2t constructors; no-op in
+ * Release. */
 void assert_arith_2ops_consistency(
   const type2tc &t,
   expr2t::expr_ids id,
@@ -452,9 +453,10 @@ public:
     // carry: the Python frontend stores class instances with a by-name
     // symbol_type and resolves it lazily, so migrating a constant aggregate
     // before the IREP2-native adjuster has followed the type would otherwise
-    // abort here. The adjuster re-establishes the strong invariant before symex;
-    // no frontend builds a constant_struct2t pre-adjust today, so this disjunct
-    // is staged enabling infra exercised by the --python-irep2-adjust path.
+    // abort here. The adjuster re-establishes the strong invariant before
+    // symex; no frontend builds a constant_struct2t pre-adjust today, so this
+    // disjunct is staged enabling infra exercised by the --python-irep2-adjust
+    // path.
     assert(
       type->type_id == type2t::struct_id ||
       type->type_id == type2t::complex_id ||
@@ -629,8 +631,8 @@ public:
   {
     /* At some point in the past, symbols named "NULL" and "0" were equivalent.
      * The symbol called "0" should no longer be created for uniformity reasons.
-     * Confirm that here, since support for it has been removed from smt_solver_baset.
-     * No other reason to disallow "0" as a symbol. */
+     * Confirm that here, since support for it has been removed from
+     * smt_solver_baset. No other reason to disallow "0" as a symbol. */
     assert(init != "0");
   }
 
@@ -1338,8 +1340,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Same-object operation. Checks whether two operands with pointer type have the
- *  same pointer object or not. Always has boolean result.
+/** Same-object operation. Checks whether two operands with pointer type have
+ * the same pointer object or not. Always has boolean result.
  * */
 class same_object2t : public expr2t
 {
@@ -1364,8 +1366,8 @@ public:
 };
 
 /** Extract pointer offset. From an expression of pointer type, produce the
- *  number of bytes difference between where this pointer points to and the start
- *  of the object it points at. */
+ *  number of bytes difference between where this pointer points to and the
+ * start of the object it points at. */
 class pointer_offset2t : public expr2t
 {
 public:
@@ -1473,9 +1475,9 @@ public:
 };
 
 /** Update byte. Takes a data object and updates the value of a particular
- *  byte in its byte representation, at a particular offset into the data object.
- *  Output of expression is a new copy of the source object, with the updated
- *  value. */
+ *  byte in its byte representation, at a particular offset into the data
+ * object. Output of expression is a new copy of the source object, with the
+ * updated value. */
 class byte_update2t : public expr2t
 {
 public:
@@ -1531,8 +1533,8 @@ public:
   /** Primary constructor.
    *  @param type Type of this expression; Same as source.
    *  @param source Data object to update.
-   *  @param field Field to update - a constant string naming the field if source
-   *         is a struct/union, or an integer index if source is an array. */
+   *  @param field Field to update - a constant string naming the field if
+   * source is a struct/union, or an integer index if source is an array. */
   with2t(
     const type2tc &type,
     const expr2tc &source,
@@ -1773,7 +1775,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
+/** Record a dynamicly allocated object. Exclusively for use in pointer
+ * analysis.
  * */
 class dynamic_object2t : public expr2t
 {
@@ -1848,26 +1851,34 @@ public:
   std::vector<expr2tc> arguments;
   type2tc alloctype;
   sideeffect_allockind kind;
+  locationt location; // not reflected: source loc travels with the stmt
+  static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
   /** Primary constructor.
    *  @param t Type this side-effect evaluates to.
    *  @param operand Not really certain. Sometimes turns up in string-irep.
    *  @param sz Size of dynamic allocation to make.
    *  @param alloct Type of piece of data to allocate.
-   *  @param a Vector of arguments to function call. */
+   *  @param a Vector of arguments to function call.
+   *  @param loc Source position of the side effect itself. A call in a
+   *  sub-expression is the case that needs it: the enclosing statement's
+   *  location names the statement, not the callee, so a consumer that falls
+   *  back to it reports the wrong column (scope-clang-c-irep2.md §110.3). */
   sideeffect2t(
     const type2tc &t,
     const expr2tc &oper,
     const expr2tc &sz,
     const std::vector<expr2tc> &a,
     const type2tc &alloct,
-    sideeffect_allockind k)
+    sideeffect_allockind k,
+    const locationt &loc = locationt())
     : expr2t(t, sideeffect_id),
       operand(oper),
       size(sz),
       arguments(a),
       alloctype(alloct),
-      kind(k)
+      kind(k),
+      location(loc)
   {
     if (k == sideeffect_allockind::alloca)
       assert(oper->type == sz->type);
