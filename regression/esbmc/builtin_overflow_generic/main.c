@@ -41,8 +41,13 @@ int main(void)
   assert(__builtin_add_overflow(-1, 0, &u));
 
   /* Subtraction, where the widening bound is least obvious: unsigned max
-     minus signed min needs the exact type to hold both ends. */
+     minus signed min needs the exact type to hold both ends. Proved against
+     the same wide reference as the addition above, over all int pairs. */
+  long long diff = (long long)a - (long long)b;
   int sr;
+  assert(__builtin_sub_overflow(a, b, &sr) ==
+         (diff < INT_MIN || diff > INT_MAX));
+  assert(sr == (int)diff);
   assert(!__builtin_sub_overflow(a, a, &sr) && sr == 0);
   assert(__builtin_sub_overflow(INT_MIN, 1, &sr));
   assert(!__builtin_sub_overflow(0u, 1u, &sr) && sr == -1);
