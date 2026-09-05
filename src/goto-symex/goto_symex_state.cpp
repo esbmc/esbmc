@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <sstream>
+#include <utility>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/base/prefix.h>
@@ -241,13 +242,15 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
-/* Above this many symbolic updates a `with` chain is left symbolic. A carried
- * chain is inlined at every read, so its cost is quadratic in its length;
- * before #7597 a symbolic update ended the chain, capping it implicitly, and
- * `for (i = 0; i < n; i++) a[i] = nondet();` is common enough that removing
- * that cap outright costs 47s at n=3200 against 2.3s with it. Chains whose
- * updates all propagate are unaffected, so pre-#7597 folding is unchanged. */
-static constexpr unsigned symbolic_chain_bound = 128;
+/* Raising this buys termination: a loop counter held in the aggregate being
+ * written (#7597) folds only while the writes stay under the bound. Above it
+ * the chain is left symbolic and the next update starts a fresh one, so a loop
+ * writing M elements of one aggregate walks O(M * symbolic_chain_bound) nodes,
+ * besides inlining the carried chain at every read. On
+ * `int a[M]; for (i = 0; i < M; i++) a[i] = nondet();` at M=8192: 0.7s at 128
+ * against 4.6s here. Chains whose updates all propagate are not counted, so
+ * pre-#7597 folding is unchanged. */
+static constexpr unsigned symbolic_chain_bound = 1024;
 
 /// Whether a `with` update value may be carried, counting in @p symbolic the
 /// ones only is_immutable_value accepts -- the class #7597 admits, and the one
@@ -259,7 +262,22 @@ static bool update_may_propagate(
 {
   if (state.constant_propagation(value))
     return true;
-  return is_immutable_value(value) && ++symbolic <= symbolic_chain_bound;
+  if (!is_immutable_value(value))
+    return false;
+  if (++symbolic <= symbolic_chain_bound)
+    return true;
+
+  // Warn once per process: dropping the chain is otherwise silent, and a loop
+  // bounded by a value held in the same object then unwinds forever with
+  // nothing in the output to say why.
+  static bool warned = false;
+  if (!std::exchange(warned, true))
+    log_warning(
+      "constant propagation gave up on a `with` chain past {} symbolic "
+      "updates; a loop bounded by a value held in the same object may not be "
+      "unwound to completion",
+      symbolic_chain_bound);
+  return false;
 }
 
 /// Whether a constant aggregate literal may propagate: every element must

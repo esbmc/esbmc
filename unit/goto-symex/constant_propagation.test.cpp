@@ -299,24 +299,27 @@ TEST_CASE(
   "a chain of symbolic updates is carried only up to the bound",
   "[symex][constant-propagation]")
 {
+  // goto_symex_state.cpp's symbolic_chain_bound, which is file-local there.
+  constexpr unsigned bound = 1024;
+
   engine e;
   const expr2tc arr = symbol_at(
-    int_array(4096), "c:test.c@F@main@A", symbol_renaming_level::level2);
+    int_array(bound + 2), "c:test.c@F@main@A", symbol_renaming_level::level2);
 
-  // Carrying a chain is quadratic in its length, so the updates only
+  // A carried chain is walked again at every write, so the updates only
   // is_immutable_value accepts are counted and capped (#7597).
   expr2tc chain = arr;
-  for (unsigned i = 0; i < 128; i++)
+  for (unsigned i = 0; i < bound; i++)
     chain = with_index(chain, int_const(i), nondet_int_symbol());
   REQUIRE(e.state().constant_propagation(chain));
 
   REQUIRE_FALSE(e.state().constant_propagation(
-    with_index(chain, int_const(128), nondet_int_symbol())));
+    with_index(chain, int_const(bound), nondet_int_symbol())));
 
   // Updates that propagate on their own are not counted, so a chain of them
   // is carried at any length -- pre-#7597 behaviour is unchanged.
   expr2tc literals = arr;
-  for (unsigned i = 0; i < 400; i++)
+  for (unsigned i = 0; i < bound + 2; i++)
     literals = with_index(literals, int_const(i), int_const(i));
   REQUIRE(e.state().constant_propagation(literals));
 }
