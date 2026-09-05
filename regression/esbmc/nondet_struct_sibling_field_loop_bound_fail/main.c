@@ -20,6 +20,7 @@ int main(void)
   nondet_val = nondet_float();
   for (VAR.INT_1 = 1; VAR.INT_1 <= 5; VAR.INT_1 = VAR.INT_1 + 1)
     VAR.REAL_1 = nondet_val;
-  __ESBMC_assert(VAR.INT_1 == 5, "loop counter wrongly asserted 5 after natural exit");
+  __ESBMC_assert(
+    VAR.INT_1 == 5, "loop counter wrongly asserted 5 after natural exit");
   return 0;
 }

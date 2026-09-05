@@ -236,13 +236,15 @@ static bool aggregate_literal_may_propagate(
   const bool is_struct_literal = is_constant_struct2t(expr);
   bool noconst = true;
 
-  expr->foreach_operand([&](const expr2tc &e) {
-    if (
-      noconst &&
-      !((is_union_literal || is_struct_literal) && is_immutable_value(e)) &&
-      !state.constant_propagation(e))
-      noconst = false;
-  });
+  expr->foreach_operand(
+    [&](const expr2tc &e)
+    {
+      if (
+        noconst &&
+        !((is_union_literal || is_struct_literal) && is_immutable_value(e)) &&
+        !state.constant_propagation(e))
+        noconst = false;
+    });
   return noconst;
 }
 
@@ -294,10 +296,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     // it can't itself be folded to a literal, but caching the arithmetic
     // expression built from it is still sound and lets a sibling field's
     // read walk past it structurally instead of hitting an opaque symbol.
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e) && !is_immutable_value(e))
-        noconst = false;
-    });
+    expr->foreach_operand(
+      [this, &noconst](const expr2tc &e)
+      {
+        if (noconst && !constant_propagation(e) && !is_immutable_value(e))
+          noconst = false;
+      });
 
     return noconst;
   }
