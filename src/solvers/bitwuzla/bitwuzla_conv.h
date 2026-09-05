@@ -1,6 +1,7 @@
 #ifndef _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_
 #define _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_
 
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <tuple>
