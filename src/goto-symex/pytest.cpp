@@ -63,6 +63,10 @@ struct nondet_model_scopet
   bool size = false;
   bool list = false;
   bool dict = false;
+  /// Key type of a `_nondet_dict_<key>_<value>` builder: "int", "str" or
+  /// "bool", empty outside one. The builders use concrete keys, so nothing
+  /// nondet records them and the rendered literal has to be typed from here.
+  std::string dict_key_kind;
 
   bool any() const
   {
@@ -95,7 +99,13 @@ nondet_model_scopet classify_nondet_model(const std::string &function_name)
   else if (base.rfind("_nondet_list_", 0) == 0 || base == "nondet_list")
     scope.list = true;
   else if (base.rfind("_nondet_dict_", 0) == 0 || base == "nondet_dict")
+  {
     scope.dict = true;
+    const std::string suffix = base.substr(std::strlen("_nondet_dict_"));
+    for (const char *kind : {"int", "str", "bool"})
+      if (suffix.rfind(kind, 0) == 0)
+        scope.dict_key_kind = kind;
+  }
   return scope;
 }
 } // namespace
@@ -730,6 +740,10 @@ void pytest_generator::collect(
     list_elems; // (nondet_symbol, elem_value_str)
   std::vector<std::pair<std::string, std::string>>
     dict_keys; // (nondet_symbol, key_value_str)
+  // Key type of the builder that produced this dict. The builders use concrete
+  // keys, so no nondet symbol records them and `dict_keys` stays empty for
+  // every key type -- the rendered literal has to be typed from here.
+  std::string dict_key_kind;
   std::vector<std::pair<std::string, std::string>>
     dict_values; // (nondet_symbol, value_value_str)
 
@@ -775,6 +789,8 @@ void pytest_generator::collect(
         const nondet_model_scopet scope = classify_nondet_model(func_name);
         const bool in_nondet_list = scope.list;
         const bool in_nondet_dict = scope.dict;
+        if (!scope.dict_key_kind.empty())
+          dict_key_kind = scope.dict_key_kind;
 
         // Track the role of internal variables.  The builders hold the size
         // in `size`/`bound` and produce each element from an anonymous
@@ -1043,6 +1059,10 @@ void pytest_generator::collect(
       std::string key_val;
       if (i < dict_keys.size())
         key_val = dict_keys[i].second;
+      else if (dict_key_kind == "str")
+        key_val = "\"" + std::to_string(i) + "\"";
+      else if (dict_key_kind == "bool")
+        key_val = i == 0 ? "False" : "True";
       else
         key_val = std::to_string(i);
 
@@ -1232,6 +1252,9 @@ void pytest_generator::generate_single(
   std::vector<BigInt> dict_sizes;
   std::vector<std::pair<std::string, std::string>> list_elems;
   std::vector<std::pair<std::string, std::string>> dict_keys;
+  // See the identically-named local in collect_nondet_values: dict keys are
+  // concrete, so the key type has to come from the builder name.
+  std::string dict_key_kind;
   std::vector<std::pair<std::string, std::string>> dict_values;
 
   // Extract function name
@@ -1271,6 +1294,8 @@ void pytest_generator::generate_single(
           classify_nondet_model(inner_func_name);
         const bool in_nondet_list = scope.list;
         const bool in_nondet_dict = scope.dict;
+        if (!scope.dict_key_kind.empty())
+          dict_key_kind = scope.dict_key_kind;
 
         // Track the role of internal variables.  The builders hold the size
         // in `size`/`bound` and produce each element from an anonymous
@@ -1534,6 +1559,10 @@ void pytest_generator::generate_single(
       std::string key_val;
       if (i < dict_keys.size())
         key_val = dict_keys[i].second;
+      else if (dict_key_kind == "str")
+        key_val = "\"" + std::to_string(i) + "\"";
+      else if (dict_key_kind == "bool")
+        key_val = i == 0 ? "False" : "True";
       else
         key_val = std::to_string(i);
 

@@ -114,7 +114,7 @@ def _nondet_dict_size(max_size: int) -> int:
     __ESBMC_assume(size <= max_size)
     return size
 
-def _str_key_bound(max_size: int) -> int:
+def _nondet_str_key_bound(max_size: int) -> int:
     """Clamp a requested size to the number of str keys this model can build."""
     # Clamped by hand rather than with `min`: routing two ints through the
     # builtin's operational model costs ~17s of conversion time on every
@@ -125,7 +125,7 @@ def _str_key_bound(max_size: int) -> int:
     return bound
 
 
-def _bool_key_bound(max_size: int) -> int:
+def _nondet_bool_key_bound(max_size: int) -> int:
     """Clamp a requested size to the two keys a bool admits."""
     bound: int = max_size
     if bound > _MAX_NONDET_BOOL_KEYS:  # pylint: disable=consider-using-min-builtin
@@ -246,7 +246,7 @@ def _nondet_dict_str_int(max_size: int) -> dict:
     # every index, collapsing the dict to one entry.
     keys: list[str] = ["0", "1", "2", "3", "4", "5", "6", "7"]
     result: dict[str, int] = {}
-    size: int = _nondet_dict_size(_str_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_str_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -264,7 +264,7 @@ def _nondet_dict_str_float(max_size: int) -> dict:
     # every index, collapsing the dict to one entry.
     keys: list[str] = ["0", "1", "2", "3", "4", "5", "6", "7"]
     result: dict[str, float] = {}
-    size: int = _nondet_dict_size(_str_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_str_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -282,7 +282,7 @@ def _nondet_dict_str_bool(max_size: int) -> dict:
     # every index, collapsing the dict to one entry.
     keys: list[str] = ["0", "1", "2", "3", "4", "5", "6", "7"]
     result: dict[str, bool] = {}
-    size: int = _nondet_dict_size(_str_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_str_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -300,7 +300,7 @@ def _nondet_dict_str_str(max_size: int) -> dict:
     # every index, collapsing the dict to one entry.
     keys: list[str] = ["0", "1", "2", "3", "4", "5", "6", "7"]
     result: dict[str, str] = {}
-    size: int = _nondet_dict_size(_str_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_str_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -313,7 +313,7 @@ def _nondet_dict_str_str(max_size: int) -> dict:
 def _nondet_dict_bool_int(max_size: int) -> dict:
     """Return a dict of size [0, max_size] mapping bool keys to independent int values."""
     result: dict[bool, int] = {}
-    size: int = _nondet_dict_size(_bool_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_bool_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -326,7 +326,7 @@ def _nondet_dict_bool_int(max_size: int) -> dict:
 def _nondet_dict_bool_float(max_size: int) -> dict:
     """Return a dict of size [0, max_size] mapping bool keys to independent float values."""
     result: dict[bool, float] = {}
-    size: int = _nondet_dict_size(_bool_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_bool_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -339,7 +339,7 @@ def _nondet_dict_bool_float(max_size: int) -> dict:
 def _nondet_dict_bool_bool(max_size: int) -> dict:
     """Return a dict of size [0, max_size] mapping bool keys to independent bool values."""
     result: dict[bool, bool] = {}
-    size: int = _nondet_dict_size(_bool_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_bool_key_bound(max_size))
 
     i: int = 0
     while i < size:
@@ -352,7 +352,7 @@ def _nondet_dict_bool_bool(max_size: int) -> dict:
 def _nondet_dict_bool_str(max_size: int) -> dict:
     """Return a dict of size [0, max_size] mapping bool keys to independent str values."""
     result: dict[bool, str] = {}
-    size: int = _nondet_dict_size(_bool_key_bound(max_size))
+    size: int = _nondet_dict_size(_nondet_bool_key_bound(max_size))
 
     i: int = 0
     while i < size:
