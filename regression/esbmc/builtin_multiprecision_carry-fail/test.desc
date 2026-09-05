@@ -2,3 +2,4 @@ CORE
 main.c
 
 ^VERIFICATION FAILED$
+^  assertion __builtin_addc\(0xffffffffu, 0u, 1u, &c\) == 0u && c == 0u$

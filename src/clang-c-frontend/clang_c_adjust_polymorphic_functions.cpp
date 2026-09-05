@@ -32,6 +32,49 @@ static bool is_overflow_or_carry_builtin(const irep_idt &identifier)
   return is_overflow_builtin(identifier) || is_carry_builtin(identifier);
 }
 
+/* _Bool __builtin_<op>_overflow(T1 a, T2 b, T3 *res): the operands and the
+ * result may all differ in type, and clang leaves these generic -- unlike the
+ * typed __builtin_sadd_overflow family, which it lowers itself.
+ * https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html
+ *
+ * Each operand keeps its own type: the operation is performed as if in
+ * infinite precision, so converting them to the result type up front would
+ * wrap away the very overflow being reported. */
+static exprt overflow_builtin_signature(
+  const irep_idt &identifier,
+  const exprt::operandst &arguments)
+{
+  code_typet t{
+    {code_typet::argumentt(arguments[0].type()),
+     code_typet::argumentt(arguments[1].type()),
+     code_typet::argumentt(arguments.back().type())},
+    bool_type()};
+  t.make_ellipsis();
+  return symbol_exprt{identifier, std::move(t)};
+}
+
+/* T __builtin_addc<suffix>(T a, T b, T carry_in, T *carry_out): all four share
+ * one type, fixed by the suffix. Returns the modular sum; stores whether
+ * either partial addition wrapped.
+ * clang.llvm.org/docs/LanguageExtensions.html
+ * #multiprecision-arithmetic-builtins */
+static exprt carry_builtin_signature(
+  const irep_idt &identifier,
+  const exprt::operandst &arguments)
+{
+  const exprt &carry_arg = arguments.back();
+  const typet &value_type = to_pointer_type(carry_arg.type()).subtype();
+
+  code_typet t{
+    {code_typet::argumentt(value_type),
+     code_typet::argumentt(value_type),
+     code_typet::argumentt(value_type),
+     code_typet::argumentt(carry_arg.type())},
+    value_type};
+  t.make_ellipsis();
+  return symbol_exprt{identifier, std::move(t)};
+}
+
 exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   const irep_idt &identifier,
   const exprt::operandst &arguments)
@@ -65,46 +108,11 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     return result;
   }
   else if (is_overflow_builtin(identifier))
-  {
-    /* _Bool __builtin_<op>_overflow(T1 a, T2 b, T3 *res): the operands and
-     * the result may all differ in type, and clang leaves these generic --
-     * unlike the typed __builtin_sadd_overflow family, which it lowers
-     * itself. https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html
-     *
-     * Each operand keeps its own type: the operation is performed as if in
-     * infinite precision, so converting them to the result type up front
-     * would wrap away the very overflow being reported. */
-    const exprt &res_arg = arguments.back();
+    return overflow_builtin_signature(identifier, arguments);
 
-    code_typet t{
-      {code_typet::argumentt(arguments[0].type()),
-       code_typet::argumentt(arguments[1].type()),
-       code_typet::argumentt(res_arg.type())},
-      bool_type()};
-    t.make_ellipsis();
-    symbol_exprt result{identifier, std::move(t)};
-    return result;
-  }
   else if (is_carry_builtin(identifier))
-  {
-    /* T __builtin_addc<suffix>(T a, T b, T carry_in, T *carry_out): all four
-     * share one type, fixed by the suffix. Returns the modular sum; stores
-     * whether either partial addition wrapped.
-     * clang.llvm.org/docs/LanguageExtensions.html
-     * #multiprecision-arithmetic-builtins */
-    const exprt &carry_arg = arguments.back();
-    const typet &value_type = to_pointer_type(carry_arg.type()).subtype();
+    return carry_builtin_signature(identifier, arguments);
 
-    code_typet t{
-      {code_typet::argumentt(value_type),
-       code_typet::argumentt(value_type),
-       code_typet::argumentt(value_type),
-       code_typet::argumentt(carry_arg.type())},
-      value_type};
-    t.make_ellipsis();
-    symbol_exprt result{identifier, std::move(t)};
-    return result;
-  }
   else if (
     has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
@@ -382,6 +390,157 @@ static void convert_expression_to_code(exprt &expr)
   expr.swap(code);
 }
 
+/* The exact result of `a <op> b`, stored truncated to the result type, plus a
+ * flag that is true when it did not fit. */
+static void instantiate_overflow_builtin(
+  const irep_idt &identifier,
+  const code_typet &code_type,
+  const locationt &new_loc,
+  code_blockt &block)
+{
+  /* GCC performs the operation "as if" in infinite precision and reports
+   * whether the exact result fits the type *res points at; *res always
+   * receives that exact result truncated to its own type. So the operation
+   * happens in a type wide enough for it to be exact, and only the fit into
+   * the result type is the overflow being reported -- not any wrapping of
+   * the operands.
+   * https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html */
+  const code_typet::argumentst &args = code_type.arguments();
+  const typet &res_type = to_pointer_type(args[2].type()).subtype();
+
+  const exprt a(symbol_exprt(args[0].cmt_identifier(), args[0].type()));
+  const exprt b(symbol_exprt(args[1].cmt_identifier(), args[1].type()));
+  const exprt res_ptr(symbol_exprt(args[2].cmt_identifier(), args[2].type()));
+
+  std::string op = "+";
+  if (has_prefix(identifier.as_string(), "c:@F@__builtin_sub_overflow"))
+    op = "-";
+  else if (has_prefix(identifier.as_string(), "c:@F@__builtin_mul_overflow"))
+    op = "*";
+
+  /* Signed, and wide enough that neither the operands nor the exact result
+   * can wrap: a product needs the two operand widths summed, a sum or
+   * difference one more than the wider operand. The result type joins the
+   * max so that truncating to it is the only narrowing, and the final +1
+   * carries an unsigned value's top bit into the signed type. */
+  const std::size_t w0 = bv_width(args[0].type());
+  const std::size_t w1 = bv_width(args[1].type());
+  const std::size_t operand_width = op == "*" ? w0 + w1 : std::max(w0, w1) + 1;
+  const std::size_t exact_width =
+    std::max(operand_width, std::size_t(bv_width(res_type))) + 1;
+
+  const typet exact_type = signedbv_typet(exact_width);
+
+  exprt wide_a("typecast", exact_type);
+  wide_a.copy_to_operands(a);
+  exprt wide_b("typecast", exact_type);
+  wide_b.copy_to_operands(b);
+
+  exprt exact(op, exact_type);
+  exact.copy_to_operands(wide_a, wide_b);
+  exact.location() = new_loc;
+
+  /* clang accepts a `_Bool *` result, and stores the exact value truncated
+   * to one bit: 1 + 1 stores 0, not the 1 a C cast to _Bool would give. Go
+   * through a 1-bit unsigned to reproduce that -- casting straight to bool
+   * tests against zero instead. */
+  const bool res_is_bool = res_type.id() == typet::t_bool;
+
+  exprt value("typecast", res_type);
+  if (res_is_bool)
+  {
+    exprt one_bit("typecast", unsignedbv_typet(1));
+    one_bit.copy_to_operands(exact);
+    one_bit.location() = new_loc;
+    value.copy_to_operands(one_bit);
+  }
+  else
+    value.copy_to_operands(exact);
+  value.location() = new_loc;
+
+  code_assignt store(dereference_exprt(res_ptr, args[2].type()), value);
+  store.location() = new_loc;
+  block.operands().push_back(store);
+
+  /* The reported condition is exactly "the exact result is outside the
+   * range of the result type". overflow-typecast- cannot express it: its
+   * lowering tests [0, 2^N) regardless of the destination's signedness.
+   * bool_typet carries no width, so bv_width would report 0 here and make
+   * the range [0, 0] -- every non-zero result an overflow. */
+  const std::size_t res_width = res_is_bool ? 1 : bv_width(res_type);
+  const bool res_signed = res_type.id() == typet::t_signedbv;
+  const BigInt lo = res_signed ? -BigInt::power2(res_width - 1) : BigInt(0);
+  const BigInt hi =
+    (res_signed ? BigInt::power2(res_width - 1) : BigInt::power2(res_width)) -
+    1;
+
+  exprt below("<", bool_type());
+  below.copy_to_operands(exact, from_integer(lo, exact_type));
+  exprt above(">", bool_type());
+  above.copy_to_operands(exact, from_integer(hi, exact_type));
+
+  exprt did_overflow("or", bool_type());
+  did_overflow.copy_to_operands(below, above);
+  did_overflow.location() = new_loc;
+
+  code_returnt ret;
+  ret.return_value() = did_overflow;
+  ret.location() = new_loc;
+  block.operands().push_back(ret);
+}
+
+/* The modular sum and the carry it produced. */
+static void instantiate_carry_builtin(
+  const irep_idt &identifier,
+  const code_typet &code_type,
+  const locationt &new_loc,
+  code_blockt &block)
+{
+  /* sum = (a <op> b) <op> carry_in, wrapping; *carry_out is set when either
+   * partial step wrapped. Both steps need their own predicate: a+b may fit
+   * and adding the carry then overflow, or the reverse for subtraction. */
+  const code_typet::argumentst &args = code_type.arguments();
+  const typet &value_type = args[0].type();
+  const bool is_add = has_prefix(identifier.as_string(), "c:@F@__builtin_addc");
+  const std::string op = is_add ? "+" : "-";
+
+  const exprt a(symbol_exprt(args[0].cmt_identifier(), value_type));
+  const exprt b(symbol_exprt(args[1].cmt_identifier(), value_type));
+  const exprt cin(symbol_exprt(args[2].cmt_identifier(), value_type));
+  const exprt cout_ptr(symbol_exprt(args[3].cmt_identifier(), args[3].type()));
+
+  exprt partial(op, value_type);
+  partial.copy_to_operands(a, b);
+  partial.location() = new_loc;
+
+  exprt sum(op, value_type);
+  sum.copy_to_operands(partial, cin);
+  sum.location() = new_loc;
+
+  exprt ov1("overflow-" + op, bool_type());
+  ov1.copy_to_operands(a, b);
+  exprt ov2("overflow-" + op, bool_type());
+  ov2.copy_to_operands(partial, cin);
+
+  exprt carry("or", bool_type());
+  carry.copy_to_operands(ov1, ov2);
+  carry.location() = new_loc;
+
+  /* The carry is 1 or 0 in the operand type, not a _Bool. */
+  exprt carry_value("typecast", value_type);
+  carry_value.copy_to_operands(carry);
+  carry_value.location() = new_loc;
+
+  code_assignt store(dereference_exprt(cout_ptr, args[3].type()), carry_value);
+  store.location() = new_loc;
+  block.operands().push_back(store);
+
+  code_returnt ret;
+  ret.return_value() = sum;
+  ret.location() = new_loc;
+  block.operands().push_back(ret);
+}
+
 code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   const irep_idt &identifier,
   const symbol_exprt &function_symbol,
@@ -531,147 +690,9 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     block.operands().push_back(ret);
   }
   else if (is_overflow_builtin(identifier))
-  {
-    /* GCC performs the operation "as if" in infinite precision and reports
-     * whether the exact result fits the type *res points at; *res always
-     * receives that exact result truncated to its own type. So the operation
-     * happens in a type wide enough for it to be exact, and only the fit into
-     * the result type is the overflow being reported -- not any wrapping of
-     * the operands.
-     * https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html */
-    const code_typet::argumentst &args = code_type.arguments();
-    const typet &res_type = to_pointer_type(args[2].type()).subtype();
-
-    const exprt a(symbol_exprt(args[0].cmt_identifier(), args[0].type()));
-    const exprt b(symbol_exprt(args[1].cmt_identifier(), args[1].type()));
-    const exprt res_ptr(symbol_exprt(args[2].cmt_identifier(), args[2].type()));
-
-    std::string op = "+";
-    if (has_prefix(identifier.as_string(), "c:@F@__builtin_sub_overflow"))
-      op = "-";
-    else if (has_prefix(identifier.as_string(), "c:@F@__builtin_mul_overflow"))
-      op = "*";
-
-    /* Signed, and wide enough that neither the operands nor the exact result
-     * can wrap: a product needs the two operand widths summed, a sum or
-     * difference one more than the wider operand. The result type joins the
-     * max so that truncating to it is the only narrowing, and the final +1
-     * carries an unsigned value's top bit into the signed type. */
-    const std::size_t w0 = bv_width(args[0].type());
-    const std::size_t w1 = bv_width(args[1].type());
-    const std::size_t operand_width =
-      op == "*" ? w0 + w1 : std::max(w0, w1) + 1;
-    const std::size_t exact_width =
-      std::max(operand_width, std::size_t(bv_width(res_type))) + 1;
-
-    const typet exact_type = signedbv_typet(exact_width);
-
-    exprt wide_a("typecast", exact_type);
-    wide_a.copy_to_operands(a);
-    exprt wide_b("typecast", exact_type);
-    wide_b.copy_to_operands(b);
-
-    exprt exact(op, exact_type);
-    exact.copy_to_operands(wide_a, wide_b);
-    exact.location() = new_loc;
-
-    /* clang accepts a `_Bool *` result, and stores the exact value truncated
-     * to one bit: 1 + 1 stores 0, not the 1 a C cast to _Bool would give. Go
-     * through a 1-bit unsigned to reproduce that -- casting straight to bool
-     * tests against zero instead. */
-    const bool res_is_bool = res_type.id() == typet::t_bool;
-
-    exprt value("typecast", res_type);
-    if (res_is_bool)
-    {
-      exprt one_bit("typecast", unsignedbv_typet(1));
-      one_bit.copy_to_operands(exact);
-      one_bit.location() = new_loc;
-      value.copy_to_operands(one_bit);
-    }
-    else
-      value.copy_to_operands(exact);
-    value.location() = new_loc;
-
-    code_assignt store(dereference_exprt(res_ptr, args[2].type()), value);
-    store.location() = new_loc;
-    block.operands().push_back(store);
-
-    /* The reported condition is exactly "the exact result is outside the
-     * range of the result type". overflow-typecast- cannot express it: its
-     * lowering tests [0, 2^N) regardless of the destination's signedness.
-     * bool_typet carries no width, so bv_width would report 0 here and make
-     * the range [0, 0] -- every non-zero result an overflow. */
-    const std::size_t res_width = res_is_bool ? 1 : bv_width(res_type);
-    const bool res_signed = res_type.id() == typet::t_signedbv;
-    const BigInt lo = res_signed ? -BigInt::power2(res_width - 1) : BigInt(0);
-    const BigInt hi =
-      (res_signed ? BigInt::power2(res_width - 1) : BigInt::power2(res_width)) -
-      1;
-
-    exprt below("<", bool_type());
-    below.copy_to_operands(exact, from_integer(lo, exact_type));
-    exprt above(">", bool_type());
-    above.copy_to_operands(exact, from_integer(hi, exact_type));
-
-    exprt did_overflow("or", bool_type());
-    did_overflow.copy_to_operands(below, above);
-    did_overflow.location() = new_loc;
-
-    code_returnt ret;
-    ret.return_value() = did_overflow;
-    ret.location() = new_loc;
-    block.operands().push_back(ret);
-  }
+    instantiate_overflow_builtin(identifier, code_type, new_loc, block);
   else if (is_carry_builtin(identifier))
-  {
-    /* sum = (a <op> b) <op> carry_in, wrapping; *carry_out is set when either
-     * partial step wrapped. Both steps need their own predicate: a+b may fit
-     * and adding the carry then overflow, or the reverse for subtraction. */
-    const code_typet::argumentst &args = code_type.arguments();
-    const typet &value_type = args[0].type();
-    const bool is_add =
-      has_prefix(identifier.as_string(), "c:@F@__builtin_addc");
-    const std::string op = is_add ? "+" : "-";
-
-    const exprt a(symbol_exprt(args[0].cmt_identifier(), value_type));
-    const exprt b(symbol_exprt(args[1].cmt_identifier(), value_type));
-    const exprt cin(symbol_exprt(args[2].cmt_identifier(), value_type));
-    const exprt cout_ptr(
-      symbol_exprt(args[3].cmt_identifier(), args[3].type()));
-
-    exprt partial(op, value_type);
-    partial.copy_to_operands(a, b);
-    partial.location() = new_loc;
-
-    exprt sum(op, value_type);
-    sum.copy_to_operands(partial, cin);
-    sum.location() = new_loc;
-
-    exprt ov1("overflow-" + op, bool_type());
-    ov1.copy_to_operands(a, b);
-    exprt ov2("overflow-" + op, bool_type());
-    ov2.copy_to_operands(partial, cin);
-
-    exprt carry("or", bool_type());
-    carry.copy_to_operands(ov1, ov2);
-    carry.location() = new_loc;
-
-    /* The carry is 1 or 0 in the operand type, not a _Bool. */
-    exprt carry_value("typecast", value_type);
-    carry_value.copy_to_operands(carry);
-    carry_value.location() = new_loc;
-
-    code_assignt store(
-      dereference_exprt(cout_ptr, args[3].type()), carry_value);
-    store.location() = new_loc;
-    block.operands().push_back(store);
-
-    code_returnt ret;
-    ret.return_value() = sum;
-    ret.location() = new_loc;
-    block.operands().push_back(ret);
-  }
+    instantiate_carry_builtin(identifier, code_type, new_loc, block);
   else if (has_prefix(
              identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
   {
