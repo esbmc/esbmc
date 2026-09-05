@@ -1,0 +1,95 @@
+name: Core set
+
+# Builds the fast lane's always-run core set (esbmc/esbmc#6735): the tests that
+# run on every PR regardless of the week's random sample. Rather than curating
+# it by hand, it is solved for -- greedy weighted set cover over each test's own
+# line coverage, picking the most lines reached per second of runtime.
+#
+# Monthly, because it costs one llvm-cov export per test over an instrumented
+# binary. The `select` step is cheap and can be re-run against a stored
+# collection with a different budget via workflow_dispatch.
+
+on:
+  schedule:
+    # 06:00 on the 1st, clear of the 02:00 nightly coverage job that shares
+    # this runner pool.
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+    inputs:
+      budget-seconds:
+        description: "Wall-clock the core set may occupy in the fast lane"
+        default: '180'
+        type: string
+      target:
+        description: "Stop once this fraction of reachable lines is covered"
+        default: '0.95'
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  core-set:
+    name: Solve the coverage cover
+    runs-on: ['self-hosted', 'Linux', 'x64', 'cov']
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v6
+
+      # -k ON also sets CORE_REGRESSION_ONLY, which is what we want here: the
+      # always-run set should not contain KNOWNBUG/FUTURE tests.
+      - name: Build with coverage instrumentation
+        run: ./scripts/build.sh -b Debug -k ON
+
+      # Only affects test properties, so this reconfigure costs no rebuild.
+      - name: Split the profiles per test
+        run: cmake -DENABLE_PER_TEST_COVERAGE=ON build
+
+      - name: Run the full suite
+        run: cd build && ctest -j"$(nproc)" --timeout 600 . || true
+
+      - name: Reduce the profiles to per-test line sets
+        run: |
+          python3 scripts/ci/coverage_core_set.py collect \
+            --profiles build/per-test-profiles \
+            --binary build/src/esbmc/esbmc \
+            --output "$RUNNER_TEMP/coverage" \
+            --jobs "$(nproc)"
+
+      - name: Solve for the core set
+        run: |
+          python3 scripts/ci/coverage_core_set.py select \
+            --coverage "$RUNNER_TEMP/coverage" \
+            --timings ci/test-timings.json \
+            --budget-seconds "${{ inputs.budget-seconds || '180' }}" \
+            --target "${{ inputs.target || '0.95' }}" \
+            --jobs 2 \
+            --output ci/core-set.txt \
+            --report "$GITHUB_STEP_SUMMARY"
+
+      - name: Save the line sets
+        # Keeps `select` re-runnable at a different budget without re-measuring.
+        # if: always() so a failing `select` doesn't discard `collect`'s
+        # multi-hour output along with it.
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: per-test-coverage
+          path: ${{ runner.temp }}/coverage
+          retention-days: 14
+
+      - name: Clean up temp directories
+        if: always()
+        run: rm -rf build/per-test-profiles /tmp/esbmc-headers-* /tmp/esbmc-test-*
+
+      - name: Commit the core set
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: '[ci] refresh the coverage-derived core set'
+          file_pattern: ci/core-set.txt
+          commit_user_name: 'github-actions'
+          commit_user_email: 'github-actions@github.com'
