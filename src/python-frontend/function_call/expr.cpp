@@ -318,8 +318,18 @@ void function_call_expr::get_function_type()
     const std::string caller_class = type_handler_.get_var_type(caller);
     const std::string method = func_node["attr"].template get<std::string>();
     bool is_static = false;
-    const nlohmann::json class_node =
+    // The receiver's class may be defined in an imported module, where the
+    // main module's body does not hold it (#7546).
+    nlohmann::json class_node =
       json_utils::find_class(converter_.ast()["body"], caller_class);
+    if (class_node.empty())
+    {
+      const auto [module_ast, module_path] =
+        converter_.find_imported_class_module(caller_class);
+      if (module_ast)
+        class_node =
+          json_utils::find_class((*module_ast)["body"], caller_class);
+    }
     if (!class_node.empty() && class_node.contains("body"))
       for (const auto &member : class_node["body"])
         if (
