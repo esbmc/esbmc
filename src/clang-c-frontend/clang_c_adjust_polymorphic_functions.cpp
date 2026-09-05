@@ -75,6 +75,87 @@ static exprt carry_builtin_signature(
   return symbol_exprt{identifier, std::move(t)};
 }
 
+/* The C11 <stdatomic.h> builtins are polymorphic in the atomic object's value
+ * type, so they need per-type bodies like the GCC family (issue #2174). Their
+ * names share no prefix with that family, so the two are matched
+ * independently. */
+static exprt c11_atomic_signature(
+  const irep_idt &identifier,
+  const exprt::operandst &arguments)
+{
+  // C11 7.17.7.4: `expected` is passed by pointer, `desired` by value.
+  if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
+  {
+    const exprt &ptr_arg = arguments.front();
+    const typet &value_type = to_pointer_type(ptr_arg.type()).subtype();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(pointer_typet(value_type)),
+       code_typet::argumentt(value_type),
+       code_typet::argumentt(int_type()),
+       code_typet::argumentt(int_type())},
+      bool_type());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_load"))
+  {
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(int_type())},
+      to_pointer_type(ptr_arg.type()).subtype());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_store"))
+  {
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
+       code_typet::argumentt(int_type())},
+      empty_typet());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_init"))
+  {
+    // C11 7.17.2.2: atomic_init takes no memory-order operand.
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype())},
+      empty_typet());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_exchange") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
+  {
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
+       code_typet::argumentt(int_type())},
+      to_pointer_type(ptr_arg.type()).subtype());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+
+  return nil_exprt();
+}
+
 exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   const irep_idt &identifier,
   const exprt::operandst &arguments)
@@ -289,80 +370,8 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, std::move(t));
     return result;
   }
-  // The C11 <stdatomic.h> builtins are polymorphic in the atomic object's value
-  // type, so they need per-type bodies like the GCC family above (issue #2174).
-  // C11 7.17.7.4: `expected` is passed by pointer, `desired` by value.
-  else if (has_prefix(
-             identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
-  {
-    const exprt &ptr_arg = arguments.front();
-    const typet &value_type = to_pointer_type(ptr_arg.type()).subtype();
 
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(pointer_typet(value_type)),
-       code_typet::argumentt(value_type),
-       code_typet::argumentt(int_type()),
-       code_typet::argumentt(int_type())},
-      bool_type());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_load"))
-  {
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(int_type())},
-      to_pointer_type(ptr_arg.type()).subtype());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_store"))
-  {
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
-       code_typet::argumentt(int_type())},
-      empty_typet());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_init"))
-  {
-    // C11 7.17.2.2: atomic_init takes no memory-order operand.
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype())},
-      empty_typet());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_exchange") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
-  {
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
-       code_typet::argumentt(int_type())},
-      to_pointer_type(ptr_arg.type()).subtype());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-
-  return nil_exprt();
+  return c11_atomic_signature(identifier, arguments);
 }
 
 static symbolt
@@ -541,6 +550,45 @@ static void instantiate_carry_builtin(
   block.operands().push_back(ret);
 }
 
+/* The arithmetic a `fetch_and_<op>` / `fetch_<op>` name selects. The __sync,
+ * __atomic and __c11_atomic families spell the same set of operations, and a
+ * name may carry a width suffix, hence the prefix match. The table is uniform
+ * over the three families, so it also names __c11_atomic_fetch_nand, which the
+ * caller's guard does not admit and clang_c_convert rejects earlier. */
+static exprt fetch_op_expr(const irep_idt &identifier, const typet &type)
+{
+  static const struct
+  {
+    const char *op;
+    const char *expr_id;
+    const char *float_expr_id;
+  } ops[] = {
+    {"add", "+", "ieee_add"},
+    {"sub", "-", "ieee_sub"},
+    {"or", "bitor", nullptr},
+    {"and", "bitand", nullptr},
+    {"xor", "bitxor", nullptr},
+    {"nand", "bitand", nullptr}};
+
+  const std::string &id = identifier.as_string();
+  for (const auto &entry : ops)
+  {
+    const std::string op = entry.op;
+    if (
+      !has_prefix(id, "c:@F@__sync_fetch_and_" + op) &&
+      !has_prefix(id, "c:@F@__atomic_fetch_" + op) &&
+      !has_prefix(id, "c:@F@__c11_atomic_fetch_" + op))
+      continue;
+
+    if (entry.float_expr_id && type.is_floatbv())
+      return exprt(entry.float_expr_id, type);
+
+    return exprt(entry.expr_id, type);
+  }
+
+  return exprt();
+}
+
 code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   const irep_idt &identifier,
   const symbol_exprt &function_symbol,
@@ -618,54 +666,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     assign.location() = new_loc;
     block.operands().push_back(assign);
 
-    exprt new_expr;
-    if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add"))
-    {
-      if (type.is_floatbv())
-        new_expr = exprt("ieee_add", type);
-      else
-        new_expr = exprt("+", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub"))
-    {
-      if (type.is_floatbv())
-        new_expr = exprt("ieee_sub", type);
-      else
-        new_expr = exprt("-", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or"))
-    {
-      new_expr = exprt("bitor", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and"))
-    {
-      new_expr = exprt("bitand", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_xor") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
-    {
-      new_expr = exprt("bitxor", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_nand"))
-    {
-      new_expr = exprt("bitand", type);
-    }
+    exprt new_expr = fetch_op_expr(identifier, type);
 
     dereference_exprt arg0_deref(
       symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
