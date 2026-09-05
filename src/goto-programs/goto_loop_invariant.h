@@ -73,6 +73,11 @@ protected:
   /// same limit so their searches are consistent.
   static constexpr size_t kMaxInvariantSearchBack = 10;
 
+  /// Largest pointee, in bits, the havoc will cover. Measured on
+  /// quantified_array_invariant: 128 bits is free, 4096 costs eight seconds and
+  /// 16384 nine minutes.
+  static constexpr unsigned kMaxHavocPointeeBits = 1024;
+
   void goto_loop_invariant();
 
   void convert_loop_with_invariant(loopst &loop);
@@ -110,6 +115,13 @@ protected:
   // side_effects is non-const: if frame rule is active, old_snapshot assigns
   // are patched in-place so insert_inductive_step_and_termination (called
   // after this) sees the patched version too.
+  /// Havoc the objects the loop writes through a pointer. See the definition
+  /// for why a large aggregate pointee is left alone (issue #7502).
+  void havoc_pointees(
+    const loopst &loop,
+    const locationt &loc,
+    goto_programt &dest) const;
+
   void insert_havoc_and_assume_before_condition(
     goto_programt::targett loop_head,
     const loopst &loop,

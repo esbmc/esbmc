@@ -166,37 +166,6 @@ void goto_loop_invariant(
   goto_functions.update();
 }
 
-static void
-collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols);
-
-/// True when some symbol the loop's guard reads is one the havoc covers. When
-/// nothing the guard reads is havoc'd, the exit edge is decided by the
-/// concrete pre-loop state and cannot change, so the claims after the loop are
-/// never reached rather than checked (issue #7478).
-static bool guard_reads_havocd_var(
-  goto_programt::targett head,
-  const goto_functiont &fn,
-  const loopst &loop)
-{
-  std::set<irep_idt> havocd_names;
-  for (const auto &v : loop.get_modified_loop_vars())
-    if (is_symbol2t(v))
-      havocd_names.insert(to_symbol2t(v).get_symbol_name());
-
-  for (goto_programt::targett it = head; it != fn.body.instructions.end(); ++it)
-  {
-    std::set<irep_idt> read;
-    collect_symbols_local(it->code, read);
-    collect_symbols_local(it->guard, read);
-    for (const auto &name : read)
-      if (havocd_names.count(name))
-        return true;
-    if (it->is_goto())
-      break;
-  }
-  return false;
-}
-
 void goto_loop_invariantt::goto_loop_invariant()
 {
   for (auto &function_loop : function_loops)
@@ -242,16 +211,16 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
 
-  // A write through a dereference has no named symbol for the havoc to cover.
-  // When the guard reads nothing the havoc does reach, the loop is left at its
-  // concrete pre-loop state: the exit edge cannot change, the invariant is
-  // discharged against one concrete iteration and every claim after the loop is
-  // dropped without being solved (issue #7478). Leave the loop for the unwinder
-  // rather than report a proof we did not make. The base case above is checked
-  // against the concrete pre-loop state and needs no havoc, so it still stands.
-  if (
-    loop.writes_through_pointer() &&
-    !guard_reads_havocd_var(std::prev(after_head), goto_function, loop))
+  // A write through a dereference has no named symbol for the havoc to cover,
+  // so resolve the pointer to the objects it may reference and havoc those
+  // instead. Where that abstains -- an unresolvable pointer, an unknown or heap
+  // pointee, a callee reached through a function pointer -- the loop would be
+  // symex'd from its concrete pre-loop state, the invariant discharged against
+  // one concrete iteration and the claims after the loop dropped unsolved
+  // (issue #7478). Leave the loop for the unwinder rather than report a proof
+  // we did not make. The base case above is checked against the concrete
+  // pre-loop state and needs no havoc, so it still stands.
+  if (loop.writes_through_pointer() && loop.pointer_array_write_unresolvable())
   {
     log_warning(
       "loop invariant at {} not checked beyond its base case: the loop writes "
@@ -610,6 +579,55 @@ void goto_loop_invariantt::insert_assert_before_loop(
   goto_function.body.insert_swap(loop_head, dest);
 }
 
+/// Storage a loop writes through a pointer has no named symbol, so havoc the
+/// pointed-to object through the pointer itself and let symex resolve it
+/// against its own value set. Without this the pointee keeps its pre-loop value
+/// across the abstract iteration and a claim about it after the loop is decided
+/// on state the loop overwrote (issue #7478).
+///
+/// A pointee is havoc'd as one nondet value, which for a large aggregate costs
+/// more to encode than the loop it replaces: the 1024-element `poly` of
+/// quantified_array_invariant goes from under a second to nine minutes, against
+/// eight seconds at 256 elements. Cover what is cheap and leave the rest to
+/// issue #7502 rather than trade a proof for a timeout.
+void goto_loop_invariantt::havoc_pointees(
+  const loopst &loop,
+  const locationt &loc,
+  goto_programt &dest) const
+{
+  const namespacet ns(context);
+
+  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
+  {
+    if (!is_pointer_type(ptr->type))
+      continue;
+
+    const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
+    if (is_empty_type(pointee) || is_code_type(pointee))
+      continue;
+
+    // get_width() throws on a VLA or an infinite array, and on a type the
+    // namespace could not resolve. A pointee with no static width has no
+    // nondet value to build either, so it is out of reach here.
+    unsigned width;
+    try
+    {
+      width = pointee->get_width();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      continue;
+    }
+    if (width > kMaxHavocPointeeBits)
+      continue;
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
+    t->location = loc;
+    t->location.comment("loop invariant havoc");
+  }
+}
+
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett loop_head,
   const loopst &loop,
@@ -654,6 +672,11 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     // called after this function and receives the same side_effects object.
     active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
   }
+
+  // Before Step 2: a pointer the loop reassigns is havoc'd there, and writing
+  // through it afterwards would reach an arbitrary object rather than the
+  // storage this loop writes.
+  havoc_pointees(loop, loop_head->location, dest);
 
   // =========================================================
   // Step 2: Standard Havoc — assign nondet to all modified variables

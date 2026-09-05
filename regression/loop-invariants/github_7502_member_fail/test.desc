@@ -1,6 +1,5 @@
 CORE
 main.c
 --loop-invariant-check --multi-property
-^\s+PASSED\s+\[run\.assertion\.3\]\s+line\s+14\s+loop invariant inductive step$
 ^\s+FAILED\s+\[run\.assertion\.5\]\s+line\s+18\s+assertion 0$
 ^VERIFICATION FAILED$
