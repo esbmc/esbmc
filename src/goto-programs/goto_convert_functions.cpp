@@ -3,6 +3,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_no_op.h>
+#include <util/irep/migrate.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
@@ -33,6 +34,7 @@ void goto_convert_functionst::goto_convert()
   for (auto &it : symbol_list)
   {
     convert_function(*it);
+    migrate_type_back_cache_clear();
   }
 
   functions.compute_location_numbers();

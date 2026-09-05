@@ -202,6 +202,25 @@ public:
     _size = 0;
   }
 
+  // Bulk pool copy bounded by x._next_free (the high-water mark — slots
+  // at indices >= _next_free have never been allocated and are
+  // unreachable through prev/next links). Copying by index instead of
+  // walking the linked list via x._storage.buf[i].next_idx lets ESBMC unroll
+  // with a concrete index bound: under a low --unwind the loop
+  // terminates naturally at x._next_free, instead of speculatively
+  // unrolling to --unwind with a fresh LIST_MAX_SIZE-way case split per
+  // step on the symbolic next_idx.
+  void _copy_from(const list &x)
+  {
+    __om_allocate();
+    _sentinel_prev = x._sentinel_prev;
+    _sentinel_next = x._sentinel_next;
+    _next_free = x._next_free;
+    _size = x._size;
+    for (size_type i = 0; i < x._next_free; i++)
+      _storage.buf[i] = x._storage.buf[i];
+  }
+
   size_type _alloc_idx(const value_type &x)
   {
     __ESBMC_assert(_next_free < LIST_MAX_SIZE, "list capacity exceeded");
@@ -361,8 +380,17 @@ public:
     _init();
   }
 
+  // [list.cons]: the allocator-taking overloads, ignored here (#7493).
+  explicit list(const allocator_type &)
+  {
+    __om_allocate();
+    _init();
+  }
+
 #if __cplusplus >= 201103L
-  list(std::initializer_list<value_type> init)
+  list(
+    std::initializer_list<value_type> init,
+    const allocator_type & = allocator_type())
   {
     __om_allocate();
     _init();
@@ -371,7 +399,10 @@ public:
   }
 #endif
 
-  list(size_type n, const value_type &value = value_type())
+  list(
+    size_type n,
+    const value_type &value = value_type(),
+    const allocator_type & = allocator_type())
   {
     __om_allocate();
     _init();
@@ -379,7 +410,18 @@ public:
       push_back(value);
   }
 
-  list(value_type *t1, value_type *t2)
+  explicit list(size_type n, const allocator_type &)
+  {
+    __om_allocate();
+    _init();
+    for (size_type i = 0; i < n; i++)
+      push_back(value_type());
+  }
+
+  list(
+    value_type *t1,
+    value_type *t2,
+    const allocator_type & = allocator_type())
   {
     __om_allocate();
     _init();
@@ -387,7 +429,10 @@ public:
       push_back(*p);
   }
 
-  list(iterator first, iterator last)
+  list(
+    iterator first,
+    iterator last,
+    const allocator_type & = allocator_type())
   {
     __om_allocate();
     _init();
@@ -395,23 +440,14 @@ public:
       push_back(*it);
   }
 
-  // Bulk pool copy bounded by x._next_free (the high-water mark — slots
-  // at indices >= _next_free have never been allocated and are
-  // unreachable through prev/next links). Copying by index instead of
-  // walking the linked list via x._storage.buf[i].next_idx lets ESBMC unroll
-  // with a concrete index bound: under a low --unwind the loop
-  // terminates naturally at x._next_free, instead of speculatively
-  // unrolling to --unwind with a fresh LIST_MAX_SIZE-way case split per
-  // step on the symbolic next_idx.
   list(const list &x)
   {
-    __om_allocate();
-    _sentinel_prev = x._sentinel_prev;
-    _sentinel_next = x._sentinel_next;
-    _next_free = x._next_free;
-    _size = x._size;
-    for (size_type i = 0; i < x._next_free; i++)
-      _storage.buf[i] = x._storage.buf[i];
+    _copy_from(x);
+  }
+
+  list(const list &x, const allocator_type &)
+  {
+    _copy_from(x);
   }
 
   list &operator=(const list &x)
