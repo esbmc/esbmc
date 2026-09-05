@@ -170,24 +170,43 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
-/// A (possibly typecast) symbol whose value can never change under
-/// it: a level2 SSA generation (assigned once) or a nondet$ free
-/// variable (never assigned; no level2 generation is minted for it).
-/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the
-/// symbol here is a member value inside a recorded aggregate, so a
-/// member read folds to the free variable the trace shows anyway.
+/// A (possibly typecast, possibly member/constant-index-selected) value
+/// that can never change under it: ultimately a level2 SSA generation
+/// (assigned once) or a nondet$ free variable (never assigned; no level2
+/// generation is minted for it). Unlike constant_propagation's bare-symbol
+/// nondet$ exclusion, the symbol here is a member value inside a recorded
+/// aggregate, so a member read folds to the free variable the trace shows
+/// anyway.
+///
+/// The base a member/index chain bottoms out at may be an aggregate of any
+/// size -- a level2 (or nondet$) symbol is immutable regardless of its
+/// type, since SSA never reassigns it -- but only the caller's *scalar*
+/// projection of it (checked up front, on the original expression) is ever
+/// treated as immutable here, never the aggregate as a whole. That keeps
+/// this from reopening the infinite/oversized-aggregate concerns that keep
+/// constant_propagation from inlining a full aggregate value (see
+/// array_may_propagate): nothing this function green-lights ever gets
+/// embedded as one, only referenced through the same field/index selector
+/// the trace already carries.
 static bool is_immutable_value(const expr2tc &expr)
 {
-  const expr2tc *b = &expr;
-  while (is_typecast2t(*b))
-    b = &to_typecast2t(*b).from;
-  if (!is_symbol2t(*b))
+  if (!(is_number_type(expr->type) || is_bool_type(expr->type) ||
+        is_pointer_type(expr->type)))
     return false;
-  // Scalars only: an aggregate-typed symbol must keep going through
-  // constant_propagation, whose array_may_propagate refuses the
-  // infinite-size modelling arrays and oversized nests.
-  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
-        is_pointer_type((*b)->type)))
+
+  const expr2tc *b = &expr;
+  for (;;)
+  {
+    if (is_typecast2t(*b))
+      b = &to_typecast2t(*b).from;
+    else if (is_member2t(*b))
+      b = &to_member2t(*b).source_value;
+    else if (is_index2t(*b) && is_constant_int2t(to_index2t(*b).index))
+      b = &to_index2t(*b).source_value;
+    else
+      break;
+  }
+  if (!is_symbol2t(*b))
     return false;
   const symbol2t &sym = to_symbol2t(*b);
   if (
@@ -200,17 +219,27 @@ static bool is_immutable_value(const expr2tc &expr)
 /// Whether a constant aggregate literal may propagate: every element
 /// must itself propagate. A union literal may also carry a (typecast)
 /// symbol as its initializing member — constant_union's init_field
-/// keeps a later cross-member read visible as one.
+/// keeps a later cross-member read visible as one. A struct literal gets
+/// the same allowance for an immutable (e.g. nondet-derived) member: unlike
+/// a union, distinct struct members don't alias, so one field carrying a
+/// free variable can't affect what a read of any *other*, still-constant
+/// field observes -- but caching nothing at all for the whole literal (the
+/// pre-fix behaviour) makes every field, including those still-constant
+/// ones, opaque to future member-of-with folding (e.g. a bounded loop whose
+/// counter is a sibling field of a nondet-assigned one would never be seen
+/// to terminate, unwinding forever).
 static bool aggregate_literal_may_propagate(
   const goto_symex_statet &state,
   const expr2tc &expr)
 {
   const bool is_union_literal = is_constant_union2t(expr);
+  const bool is_struct_literal = is_constant_struct2t(expr);
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
     if (
-      noconst && !(is_union_literal && is_immutable_value(e)) &&
+      noconst &&
+      !((is_union_literal || is_struct_literal) && is_immutable_value(e)) &&
       !state.constant_propagation(e))
       noconst = false;
   });
@@ -260,9 +289,13 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     bool noconst = true;
 
     // Use noconst as a flag to indicate (and short-circuit) when a non
-    // constant propagatable expr is found.
+    // constant propagatable expr is found. An immutable (e.g. nondet-
+    // derived, possibly member/index-projected) operand is also fine here:
+    // it can't itself be folded to a literal, but caching the arithmetic
+    // expression built from it is still sound and lets a sibling field's
+    // read walk past it structurally instead of hitting an opaque symbol.
     expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
+      if (noconst && !constant_propagation(e) && !is_immutable_value(e))
         noconst = false;
     });
 
@@ -328,7 +361,18 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
           (is_struct_type(uv->type) || is_array_type(uv->type) ||
            is_union_type(uv->type)) &&
           type_has_constant_size(uv->type) && struct_is_fixed_size;
-        if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
+        // A nondet (or otherwise never-reassigned) scalar sitting in one
+        // field must not poison propagation of the *other* fields: a
+        // member read of this same field folds to the free variable the
+        // trace shows anyway (see is_immutable_value), and a member read
+        // of any other field must still be able to walk past this WITH
+        // layer via member2t::do_simplify. Mirrors the union branch below
+        // (#7446), which already allows this for its aliasing-sensitive
+        // case; plain structs have independent fields, so it applies even
+        // more directly here.
+        if (
+          !(scalar_update || aggregate_update) ||
+          !(constant_propagation(uv) || is_immutable_value(uv)))
         {
           all_constant_updates = false;
           break;
