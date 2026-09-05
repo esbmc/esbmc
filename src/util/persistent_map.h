@@ -70,6 +70,22 @@ public:
     m_ = std::move(m_).set(k, v);
   }
 
+  // Move-in overload: immer's set takes its value by value, so handing it an
+  // rvalue moves rather than copies.
+  void set(const K &k, V &&v)
+  {
+    m_ = std::move(m_).set(k, std::move(v));
+  }
+
+  // Read-modify-write in one HAMT walk instead of find + set. fn receives the
+  // current value (value-initialised when the key is absent) and returns the
+  // new one.
+  template <class Fn>
+  void update(const K &k, Fn &&fn)
+  {
+    m_ = std::move(m_).update(k, std::forward<Fn>(fn));
+  }
+
   // Erase; true when the key was present. O(log N), shares subtrees.
   bool erase(const K &k)
   {

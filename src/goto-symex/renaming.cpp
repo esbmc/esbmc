@@ -238,13 +238,14 @@ void renaming::level2t::coveredinbees(
     "L2 assignment counters are keyed by the L1 name");
 
   const name_record rec(to_symbol2t(lhs_sym));
-  valuet entry = current_value(rec);
-  // I1: reissuing an index would let two program values share one SSA name.
-  SYMEX_INVARIANT(
-    entry.count <= count, "L2 assignment counter moved backwards");
-  entry.count = count;
-  entry.node_id = node_id;
-  current_names.set(rec, entry);
+  current_names.update(rec, [&](valuet entry) {
+    // I1: reissuing an index would let two program values share one SSA name.
+    SYMEX_INVARIANT(
+      entry.count <= count, "L2 assignment counter moved backwards");
+    entry.count = count;
+    entry.node_id = node_id;
+    return entry;
+  });
 }
 
 namespace
@@ -412,25 +413,25 @@ void renaming::level2t::make_assignment(
   rename(lhs_symbol, expected_count);
 
   // The rename callee (coveredinbees) re-keyed the same record to
-  // expected_count; re-read it (persistent map: no live reference to
-  // hold across the mutation) and confirm the key held.
-  valuet entry = current_value(rec);
-  SYMEX_INVARIANT(
-    entry.count == expected_count,
-    "renaming callee bumped a different L2 name record");
-
+  // expected_count. Fold the confirm-and-store into one HAMT walk (no live
+  // reference is held across the mutation): renumber the symbol from the
+  // stored generation and record the propagated value.
   symbol2t &symbol = to_symbol2t(lhs_symbol);
-  symbol2t::renaming_level lev =
+  const symbol2t::renaming_level lev =
     (symbol.rlevel == symbol_renaming_level::level0 ||
      symbol.rlevel == symbol_renaming_level::level1_global)
       ? symbol_renaming_level::level2_global
       : symbol_renaming_level::level2;
-  symbol.rlevel = lev;
-  symbol.level2_num = entry.count;
-  symbol.node_num = entry.node_id;
-
-  entry.constant = const_value;
-  current_names.set(rec, entry);
+  current_names.update(rec, [&](valuet entry) {
+    SYMEX_INVARIANT(
+      entry.count == expected_count,
+      "renaming callee bumped a different L2 name record");
+    symbol.rlevel = lev;
+    symbol.level2_num = entry.count;
+    symbol.node_num = entry.node_id;
+    entry.constant = const_value;
+    return entry;
+  });
 }
 
 void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)

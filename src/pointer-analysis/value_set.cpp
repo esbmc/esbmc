@@ -146,14 +146,14 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
       object_mapt trial = cv.second.object_map;
       if (make_union(trial, nv.second.object_map))
       {
-        entryt upd = cv.second;
-        upd.object_map.swap(trial);
+        entryt upd(cv.second.identifier, cv.second.suffix);
+        upd.object_map = std::move(trial);
         updates.emplace_back(cv.first, std::move(upd));
       }
     });
 
   for (auto &u : updates)
-    values.set(u.first, u.second);
+    values.set(u.first, std::move(u.second));
   return !updates.empty();
 }
 

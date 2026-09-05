@@ -5,22 +5,24 @@
 
  The subject is the shipped class: the `renaming::level2t` owned by a real
  `execution_statet`, its real `current_names` (a
- `std::unordered_map<name_record, valuet, name_rec_hash>`), and the real
+ `persistent_map<name_record, valuet, name_rec_hash>`), and the real
  `make_assignment` -> `rename` -> `coveredinbees` chain. Only the input symbols
  are constructed here.
 
  Discharges:
    I1  per key, make_assignment publishes count_before + 1 and stores it.
-   I2  the key `coveredinbees` recomputes is the caller's key, so the
-       `valuet &entry` make_assignment holds addresses the entry that is
-       updated (finding R3).
+   I2  the key `coveredinbees` recomputes is the caller's key, so
+       make_assignment's read-modify-write targets the entry that is updated
+       (finding R3).
    I3  rename is idempotent: an already-L2 symbol comes back unchanged.
    I4  get_original_name inverts rename, and a definition's renaming level
        never drops below L2 (H-B4). Listed unenforced in the plan's §4.2.
-   R3  the *memory-safety* half of the finding, tested rather than assumed:
-       [unord.req.general]/9 — "Rehashing invalidates iterators [...] but does
-       not invalidate pointers or references to elements" — so an insert inside
-       the nested lookup cannot dangle the held reference. See §15.
+   R3  the *memory-safety* half of the finding, now closed by construction:
+       the persistent map hands out no long-lived reference (find/at are valid
+       only until the next mutation), so make_assignment reads the value and
+       writes it back rather than holding a `valuet &` across the nested
+       coveredinbees mutation. The test pins what that guarantees: publishing
+       other keys does not disturb a recorded entry. See §15.
 
  \*******************************************************************/
 

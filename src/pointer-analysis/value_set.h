@@ -11,6 +11,7 @@
 #include <util/symtab/namespace.h>
 #include <util/base/numbering.h>
 #include <util/expr/type_byte_size.h>
+#include <util/persistent_map.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
@@ -48,8 +49,6 @@
 
 typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
 typedef hash_numbering<unsigned, std::hash<unsigned>> object_number_numberingt;
-
-#include <util/persistent_map.h>
 
 class value_sett
 {
@@ -531,32 +530,36 @@ public:
   }
 
   /** Overwrite (merge=false) or union-into (merge=true) the object map
-   *  recorded for the given entry. Only a genuine change writes the
-   *  map, so a no-op union never breaks structural sharing. */
+   *  recorded for the given entry. Only a genuine change writes the map, so a
+   *  no-op update never breaks the record's structural sharing. */
   bool update_object_map(const entryt &e, const object_mapt &om, bool merge)
   {
     irep_idt key = entry_key(e);
     const entryt *cur = values.find(key);
     if (cur == nullptr)
     {
-      entryt fresh = e;
+      entryt fresh(e.identifier, e.suffix);
       fresh.object_map = om;
-      values.set(key, fresh);
+      values.set(key, std::move(fresh));
       return true;
     }
+    // Rebuild the record from its keys only — the old object_map is either
+    // superseded (overwrite) or unioned into a fresh copy (merge), so copying
+    // it off `cur` would be wasted.
+    entryt upd(cur->identifier, cur->suffix);
     if (merge)
     {
-      object_mapt trial = cur->object_map;
-      if (!make_union(trial, om))
+      upd.object_map = cur->object_map;
+      if (!make_union(upd.object_map, om))
         return false;
-      entryt upd = *cur;
-      upd.object_map.swap(trial);
-      values.set(key, upd);
-      return true;
     }
-    entryt upd = *cur;
-    upd.object_map = om;
-    values.set(key, upd);
+    else
+    {
+      if (cur->object_map == om)
+        return false;
+      upd.object_map = om;
+    }
+    values.set(key, std::move(upd));
     return true;
   }
 

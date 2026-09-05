@@ -294,10 +294,11 @@ public:
   /// unconstrained exactly as erasure did.
   void retire(const name_record &rec)
   {
-    valuet entry = current_value(rec);
-    ++entry.count;
-    entry.constant = expr2tc();
-    current_names.set(rec, entry);
+    current_names.update(rec, [](valuet entry) {
+      ++entry.count;
+      entry.constant = expr2tc();
+      return entry;
+    });
   }
 
   /// Record `rec` at its initial version. phi_function merges only names that
