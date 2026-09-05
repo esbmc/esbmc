@@ -377,6 +377,21 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     return migrate_expr_back(typecast2tc(migrate_type(int_type()), expr2));
   }
 
+  // chr() folds a code point into a constant char array of its UTF-8 bytes.
+  // The runtime path below reads only the first, sign-extended, so
+  // ord(chr(200)) came back as -61 (#7552). Reuse the same walk the Name path
+  // uses. The char-subtype test keeps bytes out: those are long_long_int
+  // arrays, and admitting them would turn ord(b"\xc3") into an error.
+  if (
+    expr.is_constant() && expr.type().is_array() &&
+    expr.type().subtype() == char_type() && expr.has_operands())
+  {
+    symbolt folded;
+    folded.set_value(expr);
+    if (auto text = extract_string_from_symbol(&folded); text && !text->empty())
+      return build_ord_constant(arg, decode_utf8_codepoint(*text));
+  }
+
   // A runtime string: return the code point of its first character.
   if (type_utils::is_string_type(expr.type()))
     return converter_.get_string_handler().handle_ord_conversion(
