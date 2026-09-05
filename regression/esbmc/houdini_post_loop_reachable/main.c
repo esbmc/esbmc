@@ -2,7 +2,9 @@
  * only through the havoc-and-assume path. If that path is over-constrained --
  * or if a claim is wrongly carried over from an earlier Houdini round -- every
  * post-loop claim discharges without ever being solved. assert(0) is reachable
- * here, so anything but a violation means the pipeline stopped checking. */
+ * here, so a PASSED or a missing row means the pipeline stopped checking. The
+ * verdict is unknown, not failed: the claim sits downstream of the havoc, so
+ * its counterexample is against the abstraction (#7480). */
 #include <assert.h>
 
 int main()

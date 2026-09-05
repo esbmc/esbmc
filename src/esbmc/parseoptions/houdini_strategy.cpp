@@ -209,13 +209,22 @@ int esbmc_parseoptionst::do_houdini_strategy(
       user_claims - decided,
       user_claims);
     log_result("\nVERIFICATION UNKNOWN");
-    return 1;
+    return 0;
   }
 
   if (result == 0)
+  {
     log_result("\nVERIFICATION SUCCESSFUL");
-  else
-    log_fail("\nVERIFICATION FAILED");
+    return 0;
+  }
 
-  return result;
+  // Deferring the verdict skipped report_violation, and with it the mapping it
+  // applies: a satisfiable answer whose only violated claims lie downstream of
+  // the schema's havoc is checked against the invariant's over-approximation,
+  // so it witnesses a weak guess rather than a reachable bug (issue #7480).
+  // Inference makes weak guesses the common case, and without this the run
+  // prints FAILED over a table reading "0 properties failed" -- which
+  // parse_result() in esbmc-wrapper.py would score as a refutation.
+  bmc.report_violation();
+  return bmc.violation_is_abstraction_only() ? 0 : result;
 }
