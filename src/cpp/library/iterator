@@ -366,19 +366,103 @@ public:
   typedef typename std::iterator_traits<Iterator>::pointer pointer;
   typedef typename std::iterator_traits<Iterator>::reference reference;
 
-  Iterator base() const;
-  reference operator*() const;
-  reverse_iterator operator+(difference_type n) const;
-  reverse_iterator &operator++();
-  reverse_iterator operator++(int);
-  reverse_iterator &operator+=(difference_type n);
-  reverse_iterator operator-(difference_type n) const;
-  reverse_iterator &operator--();
-  reverse_iterator operator--(int);
-  reverse_iterator &operator-=(difference_type n);
-  pointer operator->() const;
-  reference operator[](difference_type n) const;
+  typedef Iterator iterator_type;
+
+  // [reverse.iter.cons]. Declaring these without definitions left the class
+  // unmodelled: explicit construction was a PARSING ERROR, and every member
+  // returned nondet, so dereferencing one was a false alarm (#7535).
+  reverse_iterator() : current()
+  {
+  }
+  explicit reverse_iterator(Iterator x) : current(x)
+  {
+  }
+  template <class U>
+  reverse_iterator(const reverse_iterator<U> &u) : current(u.base())
+  {
+  }
+
+  Iterator base() const
+  {
+    return current;
+  }
+
+  // [reverse.iter.elem]: a reverse iterator refers to the element before the
+  // one its base iterator addresses.
+  reference operator*() const
+  {
+    Iterator tmp = current;
+    return *--tmp;
+  }
+  pointer operator->() const
+  {
+    return &(operator*());
+  }
+  reference operator[](difference_type n) const
+  {
+    return current[-n - 1];
+  }
+
+  reverse_iterator operator+(difference_type n) const
+  {
+    return reverse_iterator(current - n);
+  }
+  reverse_iterator operator-(difference_type n) const
+  {
+    return reverse_iterator(current + n);
+  }
+  reverse_iterator &operator+=(difference_type n)
+  {
+    current -= n;
+    return *this;
+  }
+  reverse_iterator &operator-=(difference_type n)
+  {
+    current += n;
+    return *this;
+  }
+  reverse_iterator &operator++()
+  {
+    --current;
+    return *this;
+  }
+  reverse_iterator operator++(int)
+  {
+    reverse_iterator tmp = *this;
+    --current;
+    return tmp;
+  }
+  reverse_iterator &operator--()
+  {
+    ++current;
+    return *this;
+  }
+  reverse_iterator operator--(int)
+  {
+    reverse_iterator tmp = *this;
+    ++current;
+    return tmp;
+  }
+
+protected:
+  Iterator current;
 };
+
+template <class Iterator1, class Iterator2>
+bool operator==(
+  const reverse_iterator<Iterator1> &x,
+  const reverse_iterator<Iterator2> &y)
+{
+  return x.base() == y.base();
+}
+
+template <class Iterator1, class Iterator2>
+bool operator!=(
+  const reverse_iterator<Iterator1> &x,
+  const reverse_iterator<Iterator2> &y)
+{
+  return !(x == y);
+}
 
 template <
   class T,
