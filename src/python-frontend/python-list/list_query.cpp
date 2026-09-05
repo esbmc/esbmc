@@ -45,8 +45,11 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
-  const bool lhs_is_set = lhs_symbol->is_set;
-  const bool rhs_is_set = rhs_symbol->is_set;
+  auto is_keys_view = [](const exprt &e) {
+    return e.get_bool(PYTHON_KEYS_VIEW_ATTR);
+  };
+  const bool lhs_is_set = lhs_symbol->is_set || is_keys_view(l1);
+  const bool rhs_is_set = rhs_symbol->is_set || is_keys_view(l2);
   if (lhs_is_set || rhs_is_set)
   {
     if (!(lhs_is_set && rhs_is_set))
