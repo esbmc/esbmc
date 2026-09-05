@@ -242,6 +242,10 @@ STATIC_CAPABILITIES = {
     # materialised through it, so a negative offset is a different constant --
     # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
     "lp64_host",
+    # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
+    # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
+    # where such a test can only ever report a timeout.
+    "long_timeout",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:

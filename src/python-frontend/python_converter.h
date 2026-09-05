@@ -860,6 +860,20 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
+  /// @p method_name reached by walking the bases of @p class_name inside the
+  /// imported module that defines it. Ids are spelled against that module,
+  /// which an id rewritten against this file cannot name (#7398).
+  symbolt *find_function_in_imported_base_classes(
+    const std::string &class_name,
+    const std::string &method_name,
+    bool is_ctor) const;
+
+  /// AST and file path of the imported module that defines @p class_name, or
+  /// a null AST when no single imported module does. Ambiguity across modules
+  /// is declined rather than guessed.
+  std::pair<const nlohmann::json *, std::string>
+  find_imported_class_module(const std::string &class_name) const;
+
   /// @p method_name under @p base_class, as the module that defines the base
   /// spells it, or null when the base is not imported.
   symbolt *find_method_in_imported_base(
