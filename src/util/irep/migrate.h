@@ -43,6 +43,9 @@ void migrate_symbol_value(const symbolt &sym, expr2tc &dest);
 void set_symbol_type(symbolt &sym, const type2tc &t);
 
 typet migrate_type_back(const type2tc &ref);
+
+// Drop the memoised legacy forms of migrated aggregate types.
+void migrate_type_back_cache_clear();
 exprt migrate_expr_back(const expr2tc &ref);
 
 // --- Phase 4.2 construction helpers (Part IV §6: "build once, shared") -------

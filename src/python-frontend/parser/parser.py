@@ -37,6 +37,7 @@ _DEPS = load_parser_module_deps(__package__)
 add_type_annotation = _DEPS.constant_annotations.add_type_annotation
 annotate_constant_node = _DEPS.constant_annotations.annotate_constant_node
 tag_bignum_constants = _DEPS.constant_annotations.tag_bignum_constants
+tag_nonfinite_floats = _DEPS.constant_annotations.tag_nonfinite_floats
 _emit_file_as_json = _DEPS.json_emitter.emit_file_as_json
 _emit_module_json = _DEPS.json_emitter.emit_module_json
 _generate_ast_json = _DEPS.json_emitter.generate_ast_json
@@ -79,6 +80,7 @@ def generate_ast_json(
         deps=JsonEmitterDeps(
             import_resolver=import_resolver,
             tag_bignum_constants=tag_bignum_constants,
+            tag_nonfinite_floats=tag_nonfinite_floats,
         ),
     )
 
