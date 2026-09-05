@@ -225,9 +225,9 @@ TEST_CASE("make_union never shrinks the destination", "[symex][value-set]")
   REQUIRE(self.values.size() >= produced.values.size());
   for (const auto &entry : produced.values)
   {
-    auto it = self.values.find(entry.first);
-    REQUIRE(it != self.values.end());
-    REQUIRE(it->second.object_map.size() >= entry.second.object_map.size());
+    auto *it = self.values.find(entry.first);
+    REQUIRE(it != nullptr);
+    REQUIRE(it->object_map.size() >= entry.second.object_map.size());
   }
 }
 
@@ -245,4 +245,36 @@ TEST_CASE("make_union with an empty set loses nothing", "[symex][value-set]")
   merged.make_union(empty, true);
 
   REQUIRE(merged.values.size() == before);
+}
+
+TEST_CASE(
+  "make_union keepnew=false drops a source-only non-dynamic key",
+  "[symex][value-set]")
+{
+  engine e(two_arms);
+  e.run();
+  const value_sett &produced = e.value_set();
+
+  // Match on the exact L1 pointer name (two_arms' global `p`); a dynamic
+  // object or return value would carry a value_set:: identifier instead.
+  auto has_id = [](const value_sett &vs, const std::string &id) {
+    for (const auto &entry : vs.values)
+      if (entry.second.identifier == id)
+        return true;
+    return false;
+  };
+  REQUIRE(has_id(produced, "c:@p"));
+
+  // keepnew=false (the static value_set_domaint::merge path): a key present
+  // only in the source, and not a dynamic object or return value, is dropped.
+  value_sett drop = e.value_set();
+  drop.values.clear();
+  drop.make_union(produced.values, false);
+  REQUIRE_FALSE(has_id(drop, "c:@p"));
+
+  // keepnew=true (the symex path): the same key survives.
+  value_sett keep = e.value_set();
+  keep.values.clear();
+  keep.make_union(produced.values, true);
+  REQUIRE(has_id(keep, "c:@p"));
 }

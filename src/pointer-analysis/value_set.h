@@ -11,6 +11,7 @@
 #include <util/symtab/namespace.h>
 #include <util/base/numbering.h>
 #include <util/expr/type_byte_size.h>
+#include <util/persistent_map.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
@@ -146,6 +147,16 @@ public:
     {
       return offset_is_set && offset.is_zero();
     }
+    bool operator==(const objectt &o) const
+    {
+      return offset_is_set == o.offset_is_set &&
+             offset_alignment == o.offset_alignment &&
+             (!offset_is_set || offset == o.offset);
+    }
+    bool operator!=(const objectt &o) const
+    {
+      return !(*this == o);
+    }
   };
 
   /** Datatype for a value set: stores a mapping between some integers and
@@ -245,12 +256,28 @@ public:
       : identifier(std::move(_identifier)), suffix(_suffix)
     {
     }
+
+    /* Value equality so the persistent map can be structurally diffed
+     * (immer::diff). Only invoked on entries the diff cannot skip by
+     * pointer identity, i.e. the divergent leaves. */
+    bool operator==(const entryt &e) const
+    {
+      return identifier == e.identifier && suffix == e.suffix &&
+             object_map == e.object_map;
+    }
+    bool operator!=(const entryt &e) const
+    {
+      return !(*this == e);
+    }
   };
 
-  /** Type of the value-set containing structure. A hash map mapping variables
-   *  to an entryt, storing the value set of objects a variable might point
-   *  at. */
-  typedef std::unordered_map<irep_idt, entryt, irep_id_hash> valuest;
+  /** Maps each variable to the entryt holding the set of objects it may
+   *  point at. Persistent (structurally shared): symex snapshots the whole
+   *  map at every goto for the later merge, so a std::unordered_map would
+   *  copy O(N) per branch and make symex quadratic in the tracked-symbol
+   *  count on branch-heavy inputs. immer's HAMT makes the snapshot O(1) —
+   *  the same pattern level1 renaming and guard_seq use. */
+  typedef persistent_map<irep_idt, entryt, irep_id_hash> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -418,7 +445,7 @@ public:
    *  @return True when the erase succeeds, false otherwise. */
   bool erase(const std::string &name)
   {
-    return (values.erase(name) == 1);
+    return values.erase(name);
   }
 
   /** Get the set of things that an expression might point at. Interprets the
@@ -453,12 +480,12 @@ public:
    *  given record already exists. */
   void add_var(const std::string &id, const std::string &suffix)
   {
-    get_entry(id, suffix);
+    touch_entry(entryt(id, suffix));
   }
 
   void add_var(const entryt &e)
   {
-    get_entry(e.identifier, e.suffix);
+    touch_entry(e);
   }
 
   /** Delete the value set for the given variable name and suffix. */
@@ -472,32 +499,68 @@ public:
     values.erase(concat_key(id, suffix));
   }
 
-  /** Look up the value set for the given variable name and suffix. */
-  entryt &get_entry(const std::string &id, const std::string &suffix)
+  /** The map key is `identifier + suffix`. The suffix is empty on the
+   *  overwhelming majority of calls, so avoid building the
+   *  concatenated temporary in that case and key directly off the
+   *  identifier. */
+  static irep_idt entry_key(const entryt &e)
   {
-    return get_entry(entryt(id, suffix));
+    if (e.suffix.empty())
+      return e.identifier;
+    return concat_key(e.identifier, e.suffix);
   }
 
-  /** Look upt he value set for the variable name and suffix stored in the
-   *  given entryt. */
-  entryt &get_entry(const entryt &e)
+  /** Ensure a record exists for the given entry, without changing an
+   *  existing one. The persistent map's values are immutable, so a mutation
+   *  is a read-modify-set via get_object_map()/update_object_map(). */
+  void touch_entry(const entryt &e)
   {
-    // The map key is `identifier + suffix`. The suffix is empty on the
-    // overwhelming majority of calls (every plain l1 variable; suffixes
-    // only appear for array/struct-member pointer tracking), so avoid
-    // building the concatenated temporary string in that case and key
-    // directly off the identifier.
-    if (e.suffix.empty())
+    irep_idt key = entry_key(e);
+    if (values.find(key) == nullptr)
+      values.set(key, e);
+  }
+
+  /** Read the object map recorded for the given name+suffix, or an
+   *  empty map when there is no record. */
+  object_mapt
+  get_object_map(const std::string &id, const std::string &suffix) const
+  {
+    const entryt *e = values.find(entry_key(entryt(id, suffix)));
+    return e ? e->object_map : object_mapt{};
+  }
+
+  /** Overwrite (merge=false) or union-into (merge=true) the object map
+   *  recorded for the given entry. Only a genuine change writes the map, so a
+   *  no-op update never breaks the record's structural sharing. */
+  bool update_object_map(const entryt &e, const object_mapt &om, bool merge)
+  {
+    irep_idt key = entry_key(e);
+    const entryt *cur = values.find(key);
+    if (cur == nullptr)
     {
-      std::pair<valuest::iterator, bool> r =
-        values.insert(std::pair<irep_idt, entryt>(e.identifier, e));
-      return r.first->second;
+      entryt fresh(e.identifier, e.suffix);
+      fresh.object_map = om;
+      values.set(key, std::move(fresh));
+      return true;
     }
-
-    std::pair<valuest::iterator, bool> r = values.insert(
-      std::pair<irep_idt, entryt>(concat_key(e.identifier, e.suffix), e));
-
-    return r.first->second;
+    // Rebuild the record from its keys only — the old object_map is either
+    // superseded (overwrite) or unioned into a fresh copy (merge), so copying
+    // it off `cur` would be wasted.
+    entryt upd(cur->identifier, cur->suffix);
+    if (merge)
+    {
+      upd.object_map = cur->object_map;
+      if (!make_union(upd.object_map, om))
+        return false;
+    }
+    else
+    {
+      if (cur->object_map == om)
+        return false;
+      upd.object_map = om;
+    }
+    values.set(key, std::move(upd));
+    return true;
   }
 
   /** Compose the `identifier + suffix` map key into a single pre-sized

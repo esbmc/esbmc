@@ -122,42 +122,39 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
 
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
-  bool result = false;
-
-  // Iterate over all new values; if they're in the current value set, merge
-  // them. If not, only merge it in if keepnew is true.
-  for (const auto &new_value : new_values)
-  {
-    valuest::iterator it2 = values.find(new_value.first);
-
-    // If the new variable isn't in this set
-    if (it2 == values.end())
-    {
-      // We always track these when merging value sets, as these store data
-      // that's transferred back and forth between function calls. So, the
-      // variables not existing in the state we're merging into is irrelevant.
+  // At a control-flow merge cur and new_values both descend from the
+  // pre-branch snapshot and share most of their structure, so a structural
+  // diff visits only the paths' divergence — O(|diff|), not O(|map|). That
+  // keeps merge_value_sets linear in the divergence rather than the
+  // tracked-symbol count on branch-heavy inputs.
+  //
+  // added() fires for a key in new_values not in cur, removed() for a
+  // key in cur not in new_values (kept, no action). Collect writes and
+  // apply after the walk — the diff traverses the immutable map.
+  std::vector<std::pair<irep_idt, entryt>> updates;
+  values.diff(
+    new_values,
+    [&](const auto &nv) {
+      const entryt &e = nv.second;
       if (
-        has_prefix(
-          id2string(new_value.second.identifier),
-          "value_set::dynamic_object") ||
-        new_value.second.identifier == "value_set::return_value" || keepnew)
+        has_prefix(id2string(e.identifier), "value_set::dynamic_object") ||
+        e.identifier == "value_set::return_value" || keepnew)
+        updates.emplace_back(nv.first, e);
+    },
+    [](const auto &) {},
+    [&](const auto &cv, const auto &nv) {
+      object_mapt trial = cv.second.object_map;
+      if (make_union(trial, nv.second.object_map))
       {
-        values.insert(new_value);
-        result = true;
+        entryt upd(cv.second.identifier, cv.second.suffix);
+        upd.object_map = std::move(trial);
+        updates.emplace_back(cv.first, std::move(upd));
       }
+    });
 
-      continue;
-    }
-
-    // The variable was in this set, merge the values.
-    entryt &e = it2->second;
-    const entryt &new_e = new_value.second;
-
-    if (make_union(e.object_map, new_e.object_map))
-      result = true;
-  }
-
-  return result;
+  for (auto &u : updates)
+    values.set(u.first, std::move(u.second));
+  return !updates.empty();
 }
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
@@ -581,10 +578,10 @@ bool value_sett::get_symbol_value_set(
       ? sym.thename.as_string()
       : sym.get_symbol_name();
 
-  valuest::const_iterator v_it = values.find(base_name + suffix);
-  if (v_it != values.end())
+  const entryt *v = values.find(base_name + suffix);
+  if (v != nullptr)
   {
-    make_union(dest, v_it->second.object_map);
+    make_union(dest, v->object_map);
     return true;
   }
 
@@ -592,10 +589,10 @@ bool value_sett::get_symbol_value_set(
   for (const std::string &path :
        union_alias_paths(expr->type, suffix, original_type, ns))
   {
-    valuest::const_iterator a_it = values.find(base_name + path);
-    if (a_it != values.end())
+    const entryt *a = values.find(base_name + path);
+    if (a != nullptr)
     {
-      make_union(dest, a_it->second.object_map);
+      make_union(dest, a->object_map);
       aliased = true;
     }
   }
@@ -970,11 +967,11 @@ void value_sett::get_value_set_rec(
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
 
     // look it up
-    valuest::const_iterator v_it = values.find(name);
+    const entryt *v = values.find(name);
 
-    if (v_it != values.end())
+    if (v != nullptr)
     {
-      make_union(dest, v_it->second.object_map);
+      make_union(dest, v->object_map);
       return;
     }
   }
@@ -1667,9 +1664,10 @@ void value_sett::do_free(const expr2tc &op)
     }
   }
 
-  // mark these as 'may be invalid'
-  // this, unfortunately, destroys the sharing
-  for (auto &value : values)
+  // mark these as 'may be invalid' — only a changed record is
+  // rewritten, so untouched entries keep their structural sharing.
+  std::vector<std::pair<irep_idt, entryt>> changed_entries;
+  for (const auto &value : values)
   {
     object_mapt new_object_map;
 
@@ -1703,8 +1701,14 @@ void value_sett::do_free(const expr2tc &op)
     }
 
     if (changed)
-      value.second.object_map = new_object_map;
+    {
+      entryt upd = value.second;
+      upd.object_map = std::move(new_object_map);
+      changed_entries.emplace_back(value.first, std::move(upd));
+    }
   }
+  for (auto &kv : changed_entries)
+    values.set(kv.first, std::move(kv.second));
 }
 
 void value_sett::assign_rec(
@@ -1717,10 +1721,7 @@ void value_sett::assign_rec(
   {
     std::string identifier = to_symbol2t(lhs).get_symbol_name();
 
-    if (add_to_sets)
-      make_union(get_entry(identifier, suffix).object_map, values_rhs);
-    else
-      get_entry(identifier, suffix).object_map = values_rhs;
+    update_object_map(entryt(identifier, suffix), values_rhs, add_to_sets);
   }
   else if (is_dynamic_object2t(lhs))
   {
@@ -1733,7 +1734,7 @@ void value_sett::assign_rec(
       to_constant_int2t(dynamic_object.instance).value.to_uint64();
     const std::string name = "value_set::dynamic_object" + i2string(idnum);
 
-    make_union(get_entry(name, suffix).object_map, values_rhs);
+    update_object_map(entryt(name, suffix), values_rhs, true);
   }
   else if (is_dereference2t(lhs))
   {

@@ -5,22 +5,24 @@
 
  The subject is the shipped class: the `renaming::level2t` owned by a real
  `execution_statet`, its real `current_names` (a
- `std::unordered_map<name_record, valuet, name_rec_hash>`), and the real
+ `persistent_map<name_record, valuet, name_rec_hash>`), and the real
  `make_assignment` -> `rename` -> `coveredinbees` chain. Only the input symbols
  are constructed here.
 
  Discharges:
    I1  per key, make_assignment publishes count_before + 1 and stores it.
-   I2  the key `coveredinbees` recomputes is the caller's key, so the
-       `valuet &entry` make_assignment holds addresses the entry that is
-       updated (finding R3).
+   I2  the key `coveredinbees` recomputes is the caller's key, so
+       make_assignment's read-modify-write targets the entry that is updated
+       (finding R3).
    I3  rename is idempotent: an already-L2 symbol comes back unchanged.
    I4  get_original_name inverts rename, and a definition's renaming level
        never drops below L2 (H-B4). Listed unenforced in the plan's §4.2.
-   R3  the *memory-safety* half of the finding, tested rather than assumed:
-       [unord.req.general]/9 — "Rehashing invalidates iterators [...] but does
-       not invalidate pointers or references to elements" — so an insert inside
-       the nested lookup cannot dangle the held reference. See §15.
+   R3  the *memory-safety* half of the finding, now closed by construction:
+       the persistent map hands out no long-lived reference (find/at are valid
+       only until the next mutation), so make_assignment reads the value and
+       writes it back rather than holding a `valuet &` across the nested
+       coveredinbees mutation. The test pins what that guarantees: publishing
+       other keys does not disturb a recorded entry. See §15.
 
  \*******************************************************************/
 
@@ -193,7 +195,7 @@ TEST_CASE("keys differing in one field do not alias", "[symex][renaming]")
 }
 
 TEST_CASE(
-  "a reference into current_names survives the rehash R3 fears",
+  "an entry stays correct as the map grows (R3 without reference aliasing)",
   "[symex][renaming]")
 {
   engine e;
@@ -201,21 +203,17 @@ TEST_CASE(
   const expr2tc sym = l1_symbol("c:test.c@F@main@held");
 
   REQUIRE(publish(l2, sym) == 1);
-  const renaming::level2t::valuet *entry = &l2.current_names.at(key_of(sym));
-  const size_t buckets_before = l2.current_names.bucket_count();
 
-  // Force at least one rehash — this is the event R3 names as the trigger for
-  // a dangling `valuet &entry` in make_assignment.
+  // Grow the map well past any node-splitting threshold: publishing other
+  // keys must not disturb this one's entry (invariant R3). find()/at() return
+  // storage valid only to the next mutation, so the entry is re-read by value
+  // each time rather than held across the growth.
   for (unsigned i = 0; i < 256; i++)
     publish(l2, l1_symbol("c:test.c@F@main@filler" + std::to_string(i)));
-  REQUIRE(l2.current_names.bucket_count() > buckets_before);
 
-  // [unord.req.general]/9: rehashing does not invalidate pointers or
-  // references to elements. The held reference still addresses the live entry.
-  REQUIRE(&l2.current_names.at(key_of(sym)) == entry);
-  REQUIRE(entry->count == 1);
+  REQUIRE(l2.current_names.at(key_of(sym)).count == 1);
   REQUIRE(publish(l2, sym) == 2);
-  REQUIRE(entry->count == 2);
+  REQUIRE(l2.current_names.at(key_of(sym)).count == 2);
 }
 
 // ---------------------------------------------------------------------------

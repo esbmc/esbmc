@@ -30,10 +30,8 @@ unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 
 unsigned renaming::level2t::current_number(const name_record &symbol) const
 {
-  current_namest::const_iterator it = current_names.find(symbol);
-  if (it == current_names.end())
-    return 0;
-  return it->second.count;
+  const valuet *it = current_names.find(symbol);
+  return it ? it->count : 0;
 }
 
 unsigned int renaming::level1t::current_number(const irep_idt &name) const
@@ -74,14 +72,14 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
 {
   symbol2t &symbol = to_symbol2t(sym);
 
-  current_namest::const_iterator it = current_names.find(name_record(symbol));
+  const valuet *it = current_names.find(name_record(symbol));
 
   symbol2t::renaming_level lev = symbol.rlevel =
     (symbol.rlevel == symbol_renaming_level::level1)
       ? symbol_renaming_level::level2
       : symbol_renaming_level::level2_global;
 
-  if (it == current_names.end())
+  if (it == nullptr)
   {
     // Un-numbered so far.
     symbol.rlevel = lev;
@@ -91,8 +89,8 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
   }
 
   symbol.rlevel = lev;
-  symbol.level2_num = it->second.count;
-  symbol.node_num = it->second.node_id;
+  symbol.level2_num = it->count;
+  symbol.node_num = it->node_id;
 }
 
 void renaming::level1t::rename(expr2tc &expr)
@@ -178,10 +176,9 @@ void renaming::level2t::rename(expr2tc &expr)
     if (has_prefix(sym.thename.as_string(), "nondet$"))
       return;
 
-    const current_namest::const_iterator it =
-      current_names.find(name_record(sym));
+    const valuet *it = current_names.find(name_record(sym));
 
-    if (it != current_names.end())
+    if (it != nullptr)
     {
       // Is this a global symbol? Gets renamed differently.
       symbol2t::renaming_level lev;
@@ -192,17 +189,17 @@ void renaming::level2t::rename(expr2tc &expr)
       else
         lev = symbol_renaming_level::level2;
 
-      if (!is_nil_expr(it->second.constant))
-        expr = it->second.constant; // sym is now invalid reference
+      if (!is_nil_expr(it->constant))
+        expr = it->constant; // sym is now invalid reference
       else
         expr = symbol2tc(
           sym.type,
           sym.thename,
           lev,
           sym.level1_num,
-          it->second.count,
+          it->count,
           sym.thread_num,
-          it->second.node_id);
+          it->node_id);
     }
     else
     {
@@ -240,12 +237,15 @@ void renaming::level2t::coveredinbees(
       lev == symbol_renaming_level::level1_global,
     "L2 assignment counters are keyed by the L1 name");
 
-  valuet &entry = current_names[name_record(to_symbol2t(lhs_sym))];
-  // I1: reissuing an index would let two program values share one SSA name.
-  SYMEX_INVARIANT(
-    entry.count <= count, "L2 assignment counter moved backwards");
-  entry.count = count;
-  entry.node_id = node_id;
+  const name_record rec(to_symbol2t(lhs_sym));
+  current_names.update(rec, [&](valuet entry) {
+    // I1: reissuing an index would let two program values share one SSA name.
+    SYMEX_INVARIANT(
+      entry.count <= count, "L2 assignment counter moved backwards");
+    entry.count = count;
+    entry.node_id = node_id;
+    return entry;
+  });
 }
 
 namespace
@@ -408,30 +408,30 @@ void renaming::level2t::make_assignment(
     to_symbol2t(lhs_symbol).rlevel == symbol_renaming_level::level1 ||
       to_symbol2t(lhs_symbol).rlevel == symbol_renaming_level::level1_global,
     "L2 assignment counters are keyed by the L1 name");
-  valuet &entry = current_names[name_record(to_symbol2t(lhs_symbol))];
-
-  // This'll update entry beneath our feet; could re-engineer it in the future.
-  const unsigned expected_count = entry.count + 1;
+  const name_record rec(to_symbol2t(lhs_symbol));
+  const unsigned expected_count = current_value(rec).count + 1;
   rename(lhs_symbol, expected_count);
 
-  // I2: `entry` stays usable below only because the callee re-keyed to the
-  // same record; the counter is the cheapest witness that the key held.
-  SYMEX_INVARIANT(
-    entry.count == expected_count,
-    "renaming callee bumped a different L2 name record");
-
+  // The rename callee (coveredinbees) re-keyed the same record to
+  // expected_count. Fold the confirm-and-store into one HAMT walk (no live
+  // reference is held across the mutation): renumber the symbol from the
+  // stored generation and record the propagated value.
   symbol2t &symbol = to_symbol2t(lhs_symbol);
-  symbol2t::renaming_level lev =
+  const symbol2t::renaming_level lev =
     (symbol.rlevel == symbol_renaming_level::level0 ||
      symbol.rlevel == symbol_renaming_level::level1_global)
       ? symbol_renaming_level::level2_global
       : symbol_renaming_level::level2;
-  symbol.rlevel = lev;
-  // These fields were updated by the rename call,
-  symbol.level2_num = entry.count;
-  symbol.node_num = entry.node_id;
-
-  entry.constant = const_value;
+  current_names.update(rec, [&](valuet entry) {
+    SYMEX_INVARIANT(
+      entry.count == expected_count,
+      "renaming callee bumped a different L2 name record");
+    symbol.rlevel = lev;
+    symbol.level2_num = entry.count;
+    symbol.node_num = entry.node_id;
+    entry.constant = const_value;
+    return entry;
+  });
 }
 
 void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)
