@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --no-remove-unreachable --goto-functions-only
+main \(c:@F@main\):\n[^\n]*\n\s*ASSIGN a=NONDET\(_Bool\);\n[^\n]*\n\s*ASSIGN b=NONDET\(_Bool\);\n[^\n]*\n\s*GOTO \d+\n
