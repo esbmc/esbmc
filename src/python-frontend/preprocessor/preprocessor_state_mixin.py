@@ -17,6 +17,7 @@ class PreprocessorStateMixin:
         self.nondet_expand_counter = 0
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
+        self._builtin_shadow_names = None
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
