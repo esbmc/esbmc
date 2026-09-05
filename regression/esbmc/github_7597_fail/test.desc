@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-standard-checks
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line \d+\s+assertion VAR\.step == 5$
+^VERIFICATION FAILED$
