@@ -425,6 +425,45 @@ class CoreVisitorsMixin:
 
         return result
 
+    def _annotated_assign_for_value(self, target_id, node, was_defaultdict_call):
+        """The AnnAssign this assignment's value implies, or None for no annotation.
+
+        Two values imply one: a `defaultdict(...)` call, whose value type the
+        empty Dict literal replacing it no longer carries, and a rewritten
+        nondet builder, whose element types live in its name and which would
+        otherwise leave the converter no return type to infer from
+        (esbmc/esbmc#7575).
+
+        The two cannot both apply -- by the time this runs a defaultdict call
+        has become an `ast.Dict` -- but the nondet arm is still guarded on the
+        first yielding nothing, so the order matches the branches it replaced.
+        """
+        annotation = None
+        known_type = None
+
+        if was_defaultdict_call:
+            annotation = self._build_defaultdict_value_annotation(target_id, node)
+        if (annotation is None and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)):
+            annotation = self._nondet_builder_annotation(node.value.func.id)
+            known_type = self._infer_type_from_call(node.value)
+
+        if annotation is None:
+            return None
+
+        ann_assign = ast.AnnAssign(
+            target=ast.Name(id=target_id, ctx=ast.Store()),
+            annotation=annotation,
+            value=node.value,
+            simple=1,
+        )
+        self._copy_location_info(node, ann_assign)
+        ast.fix_missing_locations(ann_assign)
+        self.variable_annotations[target_id] = annotation
+        if known_type is not None:
+            self.known_variable_types[target_id] = known_type
+        return ann_assign
+
     def _handle_single_target_assign(self, node):
         target = node.targets[0]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -454,39 +493,10 @@ class CoreVisitorsMixin:
             was_defaultdict_call = (isinstance(node.value, ast.Call)
                                     and self._is_defaultdict_call(node.value))
             self._update_name_target_assignment_metadata(target.id, node)
-            if was_defaultdict_call:
-                annotation = self._build_defaultdict_value_annotation(target.id, node)
-                if annotation is not None:
-                    ann_assign = ast.AnnAssign(
-                        target=ast.Name(id=target.id, ctx=ast.Store()),
-                        annotation=annotation,
-                        value=node.value,
-                        simple=1,
-                    )
-                    self._copy_location_info(node, ann_assign)
-                    ast.fix_missing_locations(ann_assign)
-                    self.variable_annotations[target.id] = annotation
-                    return ann_assign
-
-            # A rewritten nondet builder carries its element types in its name,
-            # and an unannotated assignment leaves the converter no return type
-            # to infer from. Emit the annotation explicitly, as the inline
-            # expansion this rewrite replaced used to (esbmc/esbmc#7575).
-            if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
-                annotation = self._nondet_builder_annotation(node.value.func.id)
-                if annotation is not None:
-                    ann_assign = ast.AnnAssign(
-                        target=ast.Name(id=target.id, ctx=ast.Store()),
-                        annotation=annotation,
-                        value=node.value,
-                        simple=1,
-                    )
-                    self._copy_location_info(node, ann_assign)
-                    ast.fix_missing_locations(ann_assign)
-                    self.variable_annotations[target.id] = annotation
-                    self.known_variable_types[target.id] = \
-                        self._infer_type_from_call(node.value)
-                    return ann_assign
+            annotated = self._annotated_assign_for_value(target.id, node,
+                                                         was_defaultdict_call)
+            if annotated is not None:
+                return annotated
 
         if (isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name)
                 and node.value.value.id in self._defaultdict_factory):
