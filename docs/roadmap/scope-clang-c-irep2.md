@@ -7130,18 +7130,12 @@ descriptor's own flags produce is byte-identical between the two binaries,
 131/131.
 
 The same 131 run as an A/B against the hop-off — 5 pin the flag themselves and
-are excluded, leaving 126 scored — moves no test in either direction on either
-instrument. The two instruments disagree about the level, not the delta:
-
-| instrument | control | patched |
-|---|---|---|
-| goto program | 126 SAME / 0 DIFF | 126 SAME / 0 DIFF |
-| symbol table | 41 SAME / 85 DIFF | 41 SAME / 85 DIFF |
-
-The sample carries no incomplete tag, so it measures only that nothing
-regressed; the movement is the four rows above. A goto-level sweep of this
-corpus is close to saturated and will not resolve the residue — §133.3's causes
-are symbol-table-only, which is why that is the instrument to keep using here.
+are excluded, leaving 126 scored — moves no test in either direction on the
+symbol table: 41 SAME / 85 DIFF on both binaries. The sample carries no
+incomplete tag, so it measures only that nothing regressed; the movement is the
+four rows above. §134 tags that 85 and gives the goto-level figure, which an
+earlier draft of this section quoted from a harness that was silently
+discarding the hop-off flag (§134.1).
 
 ### 133.3 Next
 
@@ -7212,3 +7206,121 @@ The control binary diverges here identically, so this predates §133 and the
 follow was never what carried it — `V`'s type is a `vector_type2t` either way.
 It is the smaller half of the same arm and wants its own test, since §90.4's
 trap is an arm no test executes.
+
+## 134. The cause census §113.4 asked for — and the harness bug it found first
+## (2026-09-05)
+
+§113.4 stopped further arm-writing until a fresh cause census: "the old one is
+stale, and §113.1 shows it was reading the wrong stage." This is that census,
+over a stride-16 list of `regression/esbmc` (131 descriptors, 5 of which pin
+the hop-off themselves and are excluded, leaving 126 scored), legacy against
+`--clang-c-irep2-adjust-only` on one binary.
+
+### 134.1 `irep2_goto_dump` accepted a fourth argument and dropped it
+
+The first run reported **126 SAME / 0 DIFF** at the goto level. That number was
+manufactured. `irep2_symtab_dump` takes an optional `$4` extra flag;
+`irep2_goto_dump`, its sibling three lines above in the same file, did not —
+and bash discards a surplus positional silently. Every "hop-off" run in that
+sweep was therefore the *default* path, compared with itself.
+
+A sweep that compares a thing with itself does not fail, it passes: the failure
+mode is a clean, plausible, completely converged result. Nothing in the output
+distinguished it from real convergence, and the number was written into §133.2
+before a single-test spot check contradicted it —
+`regression/esbmc/atexit-1` diverges at the goto level under its own flags, but
+the helper scored it SAME.
+
+`irep2_goto_dump` now takes the same `$4`, with the argv guard its sibling
+already had. The check that catches this class: run the A/B on one test where
+the divergence is known by hand, and confirm the harness reports DIFF, before
+trusting the sweep's totals.
+
+### 134.2 The goto program is at 124 / 126, and both residuals are recorded
+
+Re-run with the fixed helper:
+
+| instrument | SAME | DIFF |
+|---|---:|---:|
+| goto program | **124** | 2 |
+| symbol table | 41 | 85 |
+
+Both goto residuals are the same cause, and it is §113.3's:
+
+```
+legacy:  FUNCTION_CALL:  atexit((void (*)())(&free_g2))
+hop-off: FUNCTION_CALL:  atexit(&free_g2)
+```
+
+`arg->type == params[i]` holds in IREP2 — `migrate_type` maps `void (*)(void)`
+and `void (*)()` to the same `code_type2t` — so the legacy cast is the identity
+and no pass reading IREP2 can know it is owed. §113.3 argued that emitting it
+to match the legacy printer is §110.2's mistake with a different node, and
+closing it for real needs `code_type2t` to carry the prototyped/unprototyped
+distinction. That argument stands; what is new is that this is now the *only*
+goto-level cause left on the sample.
+
+### 134.3 The symbol-table residue is 85, and 73 of it is already argued
+
+Tagging each of the 85, with leading/trailing whitespace and empty lines
+normalised away first:
+
+| class | tests | status |
+|---|---:|---|
+| whitespace / blank-line only | 24 | printer artefact; `symtab_sweep.sh` already diffs with `-B` |
+| `(void)0` vs `0` | 40 | §110.2 — the hop-off is the faithful side |
+| qualifier only (`const`/`volatile`) | 9 | §133.3 / R9 — no representation to carry it |
+| everything else | **12** | below |
+
+Those 24 split 16 blank-line-only and 8 indentation-only, and they are the
+reason a census must state its normalisation. One run, three defensible
+numbers: **85** by string equality, **69** under `diff -B` (what
+`symtab_sweep.sh` actually does — it ignores blank lines, not indentation), and
+**61** ignoring leading whitespace as well. None is wrong; quoting one without
+the rule is.
+
+Of the 12, four are the printer set §113.4 already named — the float literal
+suffix (`1.175494e-38` vs `1.175494e-38f`, `3.000000` vs `3.000000l`) and the
+`#cformat` / `#cpp_type` attributes the round-trip drops — and two are §134.2's
+`atexit`. That leaves **six** unclassified out of 126, and they are six
+distinct causes, not one:
+
+| test | divergence |
+|---|---|
+| `memset-const` | an array in a ternary arm is left undecayed (§134.4) |
+| `github_1590` | the same, in a binary `-` |
+| `builtin_memcpy` | a `char` array literal prints as integers, not characters |
+| `github_6966` | a symbol's `Location` is empty where legacy has one |
+| `cwe_excessive_alloc_vla_pass` | a VLA size prints as the full symbol id, not the base name |
+| `union-ptr-arith-bug` | an anonymous padding member appears in a union initialiser |
+
+### 134.4 The ternary decay, reduced — and why it does not reach symex
+
+```c
+#include <string.h>
+const char b[] = "abc";
+int main(int argc, char **argv)
+{
+  char a[2];
+  char *c = argc == 1 ? a : b;
+  memset(c, 0, 1);
+}
+```
+
+```
+legacy:  signed char * c=argc == 1 ? &a[0] : &b[0];
+hop-off: signed char * c=argc == 1 ? &a[0] : b;
+```
+
+The hop-off leaves an `array` -typed arm inside a pointer-typed `if2t`. Drop
+the `memset` and both paths print `&b[0]`: the value is written back only when
+the walk changed something (§133.3), so a clean body keeps the converter's own
+decayed form and the gap is invisible. That is the general shape of this
+residue — an unported conversion shows up only in functions that are dirty for
+some other reason.
+
+It does not reach symex today. `migrate_expr`'s `if` arm gives an array branch
+of a pointer-typed conditional its C conversion (§116.2), so the round-trip
+re-decays it and the goto programs are byte-identical. The obligation is real
+all the same: the ill-typed node is what a native `goto_convert` would receive
+once the round-trip is deleted, which is B-3. It is the next arm.
