@@ -619,11 +619,18 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   if (is_nil_expr(a.ptr_obj))
     return;
 
-  const type2tc obj_type = ns.follow(a.ptr_obj->type);
-  if (!is_array_type(obj_type))
+  // Test the operand's own type rather than ns.follow's resolution of it:
+  // migrate_type lowers an incomplete struct to an infinitely sized uint8
+  // array, so following decays `&s` on an incomplete-typed object to `&s[0]`,
+  // an index legacy never builds -- and there is no element to index, C11
+  // 6.5.3.2p3 giving the address the operand's own type.
+  //
+  // Legacy's is_array_like also admits a vector, which is_array_type does not;
+  // that half is a separate divergence, tracked but not reproduced here.
+  if (!is_array_type(a.ptr_obj->type))
     return;
 
-  const type2tc &elem = to_array_type(obj_type).subtype;
+  const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
   expr = address_of2tc(elem, idx, a.implicit);

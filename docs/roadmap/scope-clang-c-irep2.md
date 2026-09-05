@@ -7027,3 +7027,172 @@ stop decaying rather than to port an arm.
 
 Four tags have now dissolved on inspection in this scope, and every one of them
 was read from a census table rather than from a reduction. Reduce first.
+
+## 133. The incomplete tag is an array only after migration (2026-09-05)
+
+§132.4 left `github_1210-1-struct` with a suspect and an open question: legacy
+tests `is_array_like` on the *unfollowed* operand type, the hop-off on
+`ns.follow`'s resolution of it, and which of the two is right was undecided
+because the hop-off is the side doing more work.
+
+The reduction settles it:
+
+```c
+struct incomplete;
+extern struct incomplete JJ;
+void take(void *p);
+int main(void) { take(&JJ); }
+```
+
+```
+legacy:  FUNCTION_CALL:  take((void *)(&JJ))
+hop-off: FUNCTION_CALL:  take((void *)(&JJ[0]))
+```
+
+### 133.1 The array is manufactured by migrate_type, not present in the source
+
+`JJ`'s type is a `symbol_type2t` naming `tag-struct incomplete`, whose symbol
+carries an `incomplete_struct` legacy type. `migrate_type`'s
+`incomplete_struct` / `incomplete_union` arm (`src/util/irep/migrate.cpp`)
+lowers that to `array_type2tc(uint8, nil, /*infinite=*/true)` — "the most
+permissive approach to something that shouldn't happen", by its own comment.
+So `ns.follow` on the IREP2 side *always* reports an incomplete tag as an
+array, and `adjust_address_of` decayed every address of one.
+
+Legacy, testing the operand's own type, never reaches the array arm for a tag
+symbol, so the two paths cannot agree while the follow is there — and parity
+with legacy is the bar. The independent reason to prefer legacy's side is that
+there is no element to index: C11 6.5.3.2p3 gives `&JJ` the type "pointer to
+`struct incomplete`", and the array it would be indexing was invented by
+`migrate_type` two stages later. That clause does not by itself license the
+`&Q[0]` decay ESBMC keeps for real arrays either — read straight it says index
+nothing, since `&Q` is `int (*)[3]` — so it is corroboration here, not the
+ground.
+
+The fix is one predicate: test `a.ptr_obj->type`, not `ns.follow(...)` of it.
+The set this changes is exactly the set where a symbol type resolves to an
+array, and `clang::Type::Record` is the only `get_type` arm that builds a
+`symbol_typet` (`clang_c_convert.cpp`; the `Enum` arm builds the underlying
+integer type instead) — so the incomplete tag is the whole of it. `int Q[3]`
+is unaffected: a genuine array symbol carries `array_type2t` directly, and
+`extern int a[]` migrates through the `incomplete_array` arm to the same, both
+still decaying.
+
+The completeness argument is a case analysis, not a sample. Legacy's
+`is_array_like` (`src/util/irep/type.cpp`) admits exactly three ids; their
+images under `migrate_type` are:
+
+| legacy typet | `is_array_like` | migrates to | `is_array_type` | agree |
+|---|---|---|---|---|
+| `array` | yes | `array_type2t` | yes | yes |
+| `incomplete_array` | yes | `array_type2t(…, infinite)` | yes | yes |
+| `vector` | yes | `vector_type2t` | **no** | **no** |
+
+So the decays this predicate can miss relative to legacy are exactly the
+vectors, and it missed them before the patch too — `ns.follow` returns a
+non-symbol type unchanged, so `is_array_type(ns.follow(v))` was already false.
+That row is §133.3's third residue.
+
+### 133.2 Result
+
+`regression/esbmc/irep2_only_addrof_incomplete_tag` covers the struct and the
+union — both diverged, since `migrate_type` shares the arm — and fails on a
+control binary built from this tree, where the goto text reads `&JJ[0]` and
+`&UU[0]`.
+
+The divergence closes outright, on the reductions and on the corpus tests that
+carry the cause. Diff lines, legacy against the hop-off, on a control binary
+built from this tree and on the patched one:
+
+| input | instrument | control | patched |
+|---|---|---:|---:|
+| the four-line reduction above | symbol table | 3 | **0** |
+| the same plus a second `memcpy` | symbol table | 6 | **0** |
+| `github_1210-1-struct` | goto program | 4 | **0** |
+| `github_1210-1-union` | goto program | 4 | **0** |
+
+The two corpus tests flip SAME at the goto level — the program that reaches
+symex. Their *symbol tables* still differ, by 8 lines each and on two causes
+that are not this one (§133.3). Worth stating plainly: §100.1 makes the symbol
+table the instrument for adjuster questions, §116.3 scores its census on the
+goto program, and on this patch the two disagree about whether
+`github_1210-1-struct` is finished. Name the instrument with the number.
+
+The 94 descriptors pinning `--clang-c-irep2-adjust`* all pass, the new one
+included. Note that `ctest` will not see the new test until CMake is
+re-configured: a stale build directory runs 91 `irep2_only_*` tests and reports
+them green while omitting it.
+
+The default path cannot move: `clang_c_adjust_irep2` is constructed at one
+site, under those two flags (`clang_c_language.cpp`). Measured anyway — over a
+stride-16 list of `regression/esbmc` (131 descriptors), the symbol table each
+descriptor's own flags produce is byte-identical between the two binaries,
+131/131.
+
+The same 131 run as an A/B against the hop-off — 5 pin the flag themselves and
+are excluded, leaving 126 scored — moves no test in either direction on either
+instrument. The two instruments disagree about the level, not the delta:
+
+| instrument | control | patched |
+|---|---|---|
+| goto program | 126 SAME / 0 DIFF | 126 SAME / 0 DIFF |
+| symbol table | 41 SAME / 85 DIFF | 41 SAME / 85 DIFF |
+
+The sample carries no incomplete tag, so it measures only that nothing
+regressed; the movement is the four rows above. A goto-level sweep of this
+corpus is close to saturated and will not resolve the residue — §133.3's causes
+are symbol-table-only, which is why that is the instrument to keep using here.
+
+### 133.3 Next
+
+`github_1210-1-struct`'s goto program is done; its *symbol table* still carries
+two causes. Both are invisible to a goto-level A/B — check the instrument
+before concluding either way — and both reduce:
+
+```c
+#include <assert.h>          /* drop this line and both paths agree */
+#include <string.h>
+struct incomplete;
+extern struct incomplete JJ;
+int main(void) {
+  int k = 42; memcpy(&JJ, &k, sizeof(k));
+  int j;      memcpy(&j, &JJ, sizeof(k));
+  assert(j == 42);
+}
+```
+
+```
+$ esbmc r.c --symbol-table-only
+legacy:  memcpy((void *)(&JJ), (const void *)(&k), …)
+hop-off: memcpy((void *)(&JJ), (void *)(&k), …)
+```
+
+The hop-off drops the parameter's `const` qualifier on the argument cast, and
+only when `<assert.h>` is in the translation unit — without it both paths spell
+`(const void *)`, with `&JJ` present or not. `--goto-functions-only` prints no
+`const` in a cast at all, which is why this is a symbol-table finding and why a
+goto-level sweep scores the test as finished. That conditionality is the whole
+puzzle and it is not yet explained; take it next. The second residual is the
+`0` / `(void)0` ternary arm §110.2 already records as the hop-off being the
+faithful one.
+
+A third cause fell out of the same predicate and is *not* fixed here, because
+it is a different one: legacy's `is_array_like` accepts `vector` alongside
+`array` and `incomplete_array`, and the IREP2 arm tests `is_array_type` only.
+
+```c
+typedef int v4si __attribute__((vector_size(16)));
+v4si V;
+void take(void *p);
+int main(void) { take(&V); }
+```
+
+```
+legacy:  take((void *)(&V[0]))
+hop-off: take((void *)(&V))
+```
+
+The control binary diverges here identically, so this predates §133 and the
+follow was never what carried it — `V`'s type is a `vector_type2t` either way.
+It is the smaller half of the same arm and wants its own test, since §90.4's
+trap is an arm no test executes.
