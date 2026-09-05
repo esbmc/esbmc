@@ -122,49 +122,40 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
 
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
-  bool result = false;
-
-  // Iterate over all new values; if they're in the current value set, merge
-  // them. If not, only merge it in if keepnew is true.
-  for (const auto &new_value : new_values)
-  {
-    // Probe read-only: only a genuine change writes the persistent
-    // map, so the common no-op union at a goto merge keeps every
-    // snapshot structurally shared.
-    const entryt *cur = values.find(new_value.first);
-
-    // If the new variable isn't in this set
-    if (cur == nullptr)
-    {
-      // We always track these when merging value sets, as these store data
-      // that's transferred back and forth between function calls. So, the
-      // variables not existing in the state we're merging into is irrelevant.
+  // Structurally diff the two maps instead of walking every entry.
+  // At a control-flow merge cur and new_values both descend from the
+  // pre-branch snapshot and share most of their structure, so the diff
+  // visits only the paths' divergence — O(|diff|), not O(|map|). The
+  // per-entry walk this replaces made merge_value_sets quadratic in the
+  // tracked-symbol count on branch-heavy inputs.
+  //
+  // added() fires for a key in new_values not in cur, removed() for a
+  // key in cur not in new_values (kept, no action). Collect writes and
+  // apply after the walk — the diff traverses the immutable map.
+  std::vector<std::pair<irep_idt, entryt>> updates;
+  values.diff(
+    new_values,
+    [&](const auto &nv) {
+      const entryt &e = nv.second;
       if (
-        has_prefix(
-          id2string(new_value.second.identifier),
-          "value_set::dynamic_object") ||
-        new_value.second.identifier == "value_set::return_value" || keepnew)
+        has_prefix(id2string(e.identifier), "value_set::dynamic_object") ||
+        e.identifier == "value_set::return_value" || keepnew)
+        updates.emplace_back(nv.first, e);
+    },
+    [](const auto &) {},
+    [&](const auto &cv, const auto &nv) {
+      object_mapt trial = cv.second.object_map;
+      if (make_union(trial, nv.second.object_map))
       {
-        values.set(new_value.first, new_value.second);
-        result = true;
+        entryt upd = cv.second;
+        upd.object_map.swap(trial);
+        updates.emplace_back(cv.first, std::move(upd));
       }
+    });
 
-      continue;
-    }
-
-    // The variable was in this set: trial-merge its object map through
-    // the real union logic; only a change lands a new record.
-    object_mapt trial = cur->object_map;
-    if (make_union(trial, new_value.second.object_map))
-    {
-      entryt upd = *cur;
-      upd.object_map.swap(trial);
-      values.set(new_value.first, upd);
-      result = true;
-    }
-  }
-
-  return result;
+  for (auto &u : updates)
+    values.set(u.first, u.second);
+  return !updates.empty();
 }
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const

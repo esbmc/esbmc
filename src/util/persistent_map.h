@@ -2,6 +2,7 @@
 #define UTIL_PERSISTENT_MAP_H_
 
 #include <cstddef>
+#include <immer/algorithm.hpp>
 #include <immer/map.hpp>
 #include <immer/map_transient.hpp>
 #include <immer/memory_policy.hpp>
@@ -76,6 +77,28 @@ public:
   const_iterator end() const
   {
     return m_.end();
+  }
+
+  // Structural diff against another map: added(kv) for keys in `other`
+  // not here, removed(kv) for keys here not in `other`, changed(a, b)
+  // for a shared key whose value differs. O(|diff|) when the two maps
+  // share structure (both descend from a common snapshot), which is
+  // the case at a control-flow merge — so a merge costs the paths'
+  // divergence, not the whole map.
+  template <class Added, class Removed, class Changed>
+  void diff(
+    const persistent_map &other,
+    Added &&added,
+    Removed &&removed,
+    Changed &&changed) const
+  {
+    immer::diff(
+      m_,
+      other.m_,
+      immer::make_differ(
+        std::forward<Added>(added),
+        std::forward<Removed>(removed),
+        std::forward<Changed>(changed)));
   }
 };
 

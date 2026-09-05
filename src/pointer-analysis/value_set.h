@@ -148,6 +148,13 @@ public:
     {
       return offset_is_set && offset.is_zero();
     }
+    bool operator==(const objectt &o) const
+    {
+      return offset_is_set == o.offset_is_set &&
+             offset_alignment == o.offset_alignment &&
+             (!offset_is_set || offset == o.offset);
+    }
+    bool operator!=(const objectt &o) const { return !(*this == o); }
   };
 
   /** Datatype for a value set: stores a mapping between some integers and
@@ -247,6 +254,16 @@ public:
       : identifier(std::move(_identifier)), suffix(_suffix)
     {
     }
+
+    /* Value equality so the persistent map can be structurally diffed
+     * (immer::diff). Only invoked on entries the diff cannot skip by
+     * pointer identity, i.e. the divergent leaves. */
+    bool operator==(const entryt &e) const
+    {
+      return identifier == e.identifier && suffix == e.suffix &&
+             object_map == e.object_map;
+    }
+    bool operator!=(const entryt &e) const { return !(*this == e); }
   };
 
   /** Type of the value-set containing structure. A hash map mapping variables
