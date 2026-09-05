@@ -3135,6 +3135,10 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
   type_rec = to_array_type(type_rec).subtype;
   expr2tc arr_size2 = to_array_type(type_rec).array_size;
 
+  /* Every nil array_size is built alongside size_is_infinite, and an infinite
+   * outer level returned above, so none reached here carries one (#7481). */
+  assert(!is_nil_expr(arr_size1) && !is_nil_expr(arr_size2));
+
   if (arr_size1->type != arr_size2->type)
     arr_size1 = typecast2tc(arr_size2->type, arr_size1);
 
@@ -3142,11 +3146,10 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
 
   while (is_array_type(to_array_type(type_rec).subtype))
   {
-    arr_size = mul2tc(
-      arr_size1->type,
-      to_array_type(to_array_type(type_rec).subtype).array_size,
-      arr_size);
     type_rec = to_array_type(type_rec).subtype;
+    assert(!is_nil_expr(to_array_type(type_rec).array_size));
+    arr_size =
+      mul2tc(arr_size1->type, to_array_type(type_rec).array_size, arr_size);
   }
   simplify(arr_size);
   return array_type2tc(subtype, arr_size, false);
