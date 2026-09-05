@@ -767,9 +767,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           return migrate_expr_back(
             member2tc(migrate_type(list_type), dict2, "keys"));
         }
-        // Return the keys or values member directly
-        return migrate_expr_back(
+        exprt view = migrate_expr_back(
           member2tc(migrate_type(list_type), dict2, method_name));
+        // Only a keys view is set-like. The comparison layer sees a bare
+        // member and cannot tell one from the items placeholder above or from
+        // a user attribute called `keys` (#7553).
+        if (method_name == "keys")
+          view.set("#python_keys_view", true);
+        return view;
       }
     }
   }

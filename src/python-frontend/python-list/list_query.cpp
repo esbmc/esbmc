@@ -45,18 +45,12 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
-  // A dict keys view is set-like: it compares equal to a set holding the same
-  // elements. It reaches here as the dict's `keys` member, whose symbol is not
-  // marked, so exactly one operand was a set and the comparison folded to a
-  // constant whatever the contents (#7553). Treat it as a set for this
-  // comparison only -- marking it at the point d.keys() is lowered would drop
-  // the element type that slicing and tuple unpacking rely on.
-  auto is_dict_keys_view = [](const exprt &e) {
-    return e.id() == "member" &&
-           to_member_expr(e).get_component_name() == "keys";
+  // A dict keys view is set-like and must compare by content, not fold (#7553).
+  auto is_keys_view = [](const exprt &e) {
+    return e.get_bool("#python_keys_view");
   };
-  const bool lhs_is_set = lhs_symbol->is_set || is_dict_keys_view(l1);
-  const bool rhs_is_set = rhs_symbol->is_set || is_dict_keys_view(l2);
+  const bool lhs_is_set = lhs_symbol->is_set || is_keys_view(l1);
+  const bool rhs_is_set = rhs_symbol->is_set || is_keys_view(l2);
   if (lhs_is_set || rhs_is_set)
   {
     if (!(lhs_is_set && rhs_is_set))
