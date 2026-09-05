@@ -24,8 +24,6 @@
 
 namespace
 {
-const BigInt kMaxConstantFoldExponent = 1024;
-
 // Reconcile `value` to exactly `target_type`'s width. `c_implicit_typecast_
 // arithmetic` (the same arithmetic promotion clang_cpp_adjust's adjust_expr_rel
 // applies) buckets operands into coarse C ranks with a minimum promotion of
@@ -140,20 +138,6 @@ std::string make_math_dispatch_cache_key(
   return key;
 }
 
-BigInt pow_bigint_non_negative(BigInt base, BigInt exp)
-{
-  BigInt result = 1;
-  while (exp > 0)
-  {
-    if ((exp % 2) != 0)
-      result *= base;
-    exp /= 2;
-    if (exp > 0)
-      base *= base;
-  }
-  return result;
-}
-
 bool is_basic_math_expr(const exprt &expr)
 {
   const irep_idt &id = expr.id();
@@ -167,6 +151,33 @@ python_math::python_math(
   type_handler &th)
   : converter(conv), symbol_table(ctx), type_handler_(th)
 {
+}
+
+BigInt python_math::pow_bigint_non_negative(BigInt base, BigInt exp)
+{
+  BigInt result = 1;
+  while (exp > 0)
+  {
+    if ((exp % 2) != 0)
+      result *= base;
+    exp /= 2;
+    if (exp > 0)
+      base *= base;
+  }
+  return result;
+}
+
+const BigInt python_math::kMaxConstantFoldExponent = 1024;
+
+bool python_math::fits_in_width(
+  const BigInt &value,
+  unsigned width,
+  bool is_signed)
+{
+  const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
+  const BigInt max_val =
+    is_signed ? BigInt::power2(width - 1) - 1 : BigInt::power2(width) - 1;
+  return value >= min_val && value <= max_val;
 }
 
 bool python_math::is_math_dispatch_target(
@@ -592,10 +603,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
     // silently truncate. Bignum support tracked in #4642.
     const unsigned width = bv_width(lhs.type());
     const bool is_signed = lhs.type().is_signedbv();
-    const BigInt min_val = is_signed ? -BigInt::power2(width - 1) : BigInt(0);
-    const BigInt max_val =
-      is_signed ? BigInt::power2(width - 1) - 1 : BigInt::power2(width) - 1;
-    if (power_value < min_val || power_value > max_val)
+    if (!fits_in_width(power_value, width, is_signed))
     {
       // Under --ir the SMT layer drops widths and reasons over unbounded
       // Int. Widen the *result* of ** to the helper type (signedbv(512))
@@ -609,9 +617,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
       {
         const typet wide = type_handler::python_int_typet();
         const unsigned wide_width = type_handler::python_int_width();
-        const BigInt wide_min = -BigInt::power2(wide_width - 1);
-        const BigInt wide_max = BigInt::power2(wide_width - 1) - 1;
-        if (power_value >= wide_min && power_value <= wide_max)
+        if (fits_in_width(power_value, wide_width, true))
           return from_integer(power_value, wide);
       }
       throw python_int_overflow_excp(

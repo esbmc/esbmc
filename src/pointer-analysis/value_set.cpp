@@ -194,7 +194,7 @@ void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
   simplify(new_expr);
 
   // Then, start fetching values.
-  get_value_set_rec(new_expr, dest, "", new_expr->type);
+  get_value_set_rec_cached(new_expr, dest, "", new_expr->type);
 }
 
 /// An operand whose set holds nothing but `unknown` carries no object
@@ -267,8 +267,8 @@ static std::optional<std::pair<size_t, size_t>> match_leading_component(
 
 /* The suffixes naming a `target` held at @p offset in `type`, or held anywhere
  * in it when @p offset_known is false. A union contributes every member the
- * offset lands in, as the member2t arm of get_value_set_rec does, since an
- * offset alone cannot say which one is live. The walks themselves sit beside
+ * offset lands in, as the member2t arm of get_value_set_rec_cached does, since
+ * an offset alone cannot say which one is live. The walks themselves sit beside
  * the forward ones they invert, in util/expr/type_byte_size. */
 static std::vector<std::string> offset_paths(
   const type2tc &type,
@@ -391,7 +391,7 @@ void value_sett::get_constant_struct_value_set(
 
   if (comp && comp->first < cs.datatype_members.size())
   {
-    get_value_set_rec(
+    get_value_set_rec_cached(
       cs.datatype_members[comp->first],
       dest,
       rest.substr(comp->second),
@@ -400,8 +400,9 @@ void value_sett::get_constant_struct_value_set(
     return;
   }
 
-  /* Unanalysable is unknown, not nothing, as the tail of get_value_set_rec has
-   * it: an empty set asserts "points at nothing" to every consumer. */
+  /* Unanalysable is unknown, not nothing, as the tail of
+   * get_value_set_rec_cached has it: an empty set asserts "points at nothing"
+   * to every consumer. */
   insert(dest, unknown2tc(original_type), BigInt(0));
 }
 
@@ -426,7 +427,7 @@ void value_sett::get_constant_union_value_set(
       rest = rest.substr(1 + comp->second);
   }
 
-  get_value_set_rec(cu.datatype_members[0], dest, rest, original_type);
+  get_value_set_rec_cached(cu.datatype_members[0], dest, rest, original_type);
 }
 
 std::optional<BigInt> value_sett::constant_pointer_arith_offset(
@@ -600,6 +601,59 @@ bool value_sett::get_symbol_value_set(
   return aliased;
 }
 
+void value_sett::get_value_set_rec_cached(
+  const expr2tc &expr,
+  object_mapt &dest,
+  const std::string &suffix,
+  const type2tc &original_type,
+  bool under_deref) const
+{
+  const bool outermost = rec_cache == nullptr;
+  std::optional<rec_cachet> own;
+  if (outermost)
+  {
+    own.emplace();
+    rec_cache = &*own;
+  }
+
+  /* Declared after `own`, so the pointer is cleared before the map it names
+   * is destroyed. */
+  struct scopet
+  {
+    const value_sett &v;
+    bool outermost;
+    ~scopet()
+    {
+      if (outermost)
+        v.rec_cache = nullptr;
+    }
+  } scope{*this, outermost};
+
+  /* Strong references taken before the walk: they keep the keyed nodes alive
+   * for the cache's lifetime, so no address can be freed and recycled into a
+   * false hit, and they raise the refcount enough that detach() cannot rewrite
+   * a keyed node in place. Callers pass references *into* other nodes here
+   * (`new_expr->type`, `obj->type`), so binding them locally is what makes the
+   * key and the retained container provably name the same node. */
+  const expr2tc keyed_expr = expr;
+  const type2tc keyed_type = original_type;
+  rec_cache_keyt key{keyed_expr.get(), suffix, keyed_type.get(), under_deref};
+
+  auto cached = rec_cache->find(key);
+  if (cached != rec_cache->end())
+  {
+    make_union(dest, std::get<2>(cached->second));
+    return;
+  }
+
+  object_mapt produced;
+  get_value_set_rec(expr, produced, suffix, original_type, under_deref);
+  make_union(dest, produced);
+  rec_cache->emplace(
+    std::move(key),
+    std::make_tuple(keyed_expr, keyed_type, std::move(produced)));
+}
+
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
@@ -627,7 +681,8 @@ void value_sett::get_value_set_rec(
 
     // Attach '[]' to the suffix, identifying the variable tracking all the
     // pointers in this array.
-    get_value_set_rec(idx.source_value, dest, "[]" + suffix, original_type);
+    get_value_set_rec_cached(
+      idx.source_value, dest, "[]" + suffix, original_type);
     return;
   }
 
@@ -653,7 +708,7 @@ void value_sett::get_value_set_rec(
     {
       // Add '.$field' to the suffix, identifying the member from the other
       // members of the struct's variable.
-      get_value_set_rec(
+      get_value_set_rec_cached(
         memb.source_value,
         dest,
         "." + single_source.as_string() + suffix,
@@ -666,7 +721,7 @@ void value_sett::get_value_set_rec(
       assert(is_union_type(memb.source_value->type));
       for (const irep_idt &name :
            struct_union_member_names(memb.source_value->type))
-        get_value_set_rec(
+        get_value_set_rec_cached(
           memb.source_value,
           dest,
           "." + name.as_string() + suffix,
@@ -682,8 +737,8 @@ void value_sett::get_value_set_rec(
     // side.
     const if2t &ifval = to_if2t(expr);
 
-    get_value_set_rec(ifval.true_value, dest, suffix, original_type);
-    get_value_set_rec(ifval.false_value, dest, suffix, original_type);
+    get_value_set_rec_cached(ifval.true_value, dest, suffix, original_type);
+    get_value_set_rec_cached(ifval.false_value, dest, suffix, original_type);
     return;
   }
 
@@ -718,7 +773,7 @@ void value_sett::get_value_set_rec(
     for (const auto &it1 : reference_set)
     {
       const expr2tc &object = object_numbering[it1.first];
-      get_value_set_rec(object, dest, suffix, original_type);
+      get_value_set_rec_cached(object, dest, suffix, original_type);
 
       /* `&s.p` refers to the struct symbol with the member erased into a byte
        * offset, so the lookup above asks for `s`, which nothing keys -- the
@@ -735,7 +790,7 @@ void value_sett::get_value_set_rec(
              it1.second.offset_is_set,
              expr->type,
              ns))
-        get_value_set_rec(object, dest, path + suffix, original_type);
+        get_value_set_rec_cached(object, dest, path + suffix, original_type);
     }
 
     return;
@@ -749,7 +804,7 @@ void value_sett::get_value_set_rec(
       std::string remaining_suffix = suffix.substr(2); // Remove "[]" prefix
       expr->foreach_operand(
         [this, &dest, &remaining_suffix, &original_type](const expr2tc &e) {
-          get_value_set_rec(e, dest, remaining_suffix, original_type);
+          get_value_set_rec_cached(e, dest, remaining_suffix, original_type);
         });
       return;
     }
@@ -765,7 +820,7 @@ void value_sett::get_value_set_rec(
   {
     // Push straight through typecasts.
     const typecast2t &cast = to_typecast2t(expr);
-    get_value_set_rec(cast.from, dest, suffix, original_type);
+    get_value_set_rec_cached(cast.from, dest, suffix, original_type);
     return;
   }
 
@@ -773,7 +828,7 @@ void value_sett::get_value_set_rec(
   {
     // Bitcasts are just typecasts with additional semantics
     const bitcast2t &cast = to_bitcast2t(expr);
-    get_value_set_rec(cast.from, dest, suffix, original_type);
+    get_value_set_rec_cached(cast.from, dest, suffix, original_type);
     return;
   }
 
@@ -844,7 +899,8 @@ void value_sett::get_value_set_rec(
 
     // Always get the base array/struct values
     object_mapt tmp_map0;
-    get_value_set_rec(with.source_value, tmp_map0, suffix, original_type);
+    get_value_set_rec_cached(
+      with.source_value, tmp_map0, suffix, original_type);
     make_union(dest, tmp_map0);
 
     // Only consider the update value if we're actually accessing an element
@@ -887,7 +943,7 @@ void value_sett::get_value_set_rec(
     if (should_include_update)
     {
       object_mapt tmp_map2;
-      get_value_set_rec(with.update_value, tmp_map2, "", original_type);
+      get_value_set_rec_cached(with.update_value, tmp_map2, "", original_type);
       make_union(dest, tmp_map2);
     }
 
@@ -897,7 +953,7 @@ void value_sett::get_value_set_rec(
   if (is_constant_array_of2t(expr) || is_constant_array2t(expr))
   {
     // these are supposed to be done by assign()
-    assert(0 && "Encountered array irep in get_value_set_rec");
+    assert(0 && "Encountered array irep in get_value_set_rec_cached");
     return;
   }
 
@@ -933,22 +989,24 @@ void value_sett::get_value_set_rec(
     // byte extracted on the lhs. Thus, we need to blast through the byte
     // extract.
     const byte_extract2t &be = to_byte_extract2t(expr);
-    get_value_set_rec(be.source_value, dest, suffix, original_type);
+    get_value_set_rec_cached(be.source_value, dest, suffix, original_type);
     return;
   }
 
   if (is_byte_update2t(expr))
   {
     const byte_update2t &bu = to_byte_update2t(expr);
-    get_value_set_rec(bu.source_value, dest, suffix, original_type);
+    get_value_set_rec_cached(bu.source_value, dest, suffix, original_type);
     return;
   }
 
   if (is_bitor2t(expr) || is_bitand2t(expr) || is_bitxor2t(expr))
   {
     assert(expr->get_num_sub_exprs() == 2);
-    get_value_set_rec(*expr->get_sub_expr(0), dest, suffix, original_type);
-    get_value_set_rec(*expr->get_sub_expr(1), dest, suffix, original_type);
+    get_value_set_rec_cached(
+      *expr->get_sub_expr(0), dest, suffix, original_type);
+    get_value_set_rec_cached(
+      *expr->get_sub_expr(1), dest, suffix, original_type);
     return;
   }
 
@@ -1005,11 +1063,11 @@ void value_sett::get_value_set_rec(
     // new object maps.
     object_mapt op0_set;
     if (!is_pointer_type(op1))
-      get_value_set_rec(op0, op0_set, "", op0->type, false);
+      get_value_set_rec_cached(op0, op0_set, "", op0->type, false);
 
     object_mapt op1_set;
     if (!is_pointer_type(op0))
-      get_value_set_rec(op1, op1_set, "", op1->type, false);
+      get_value_set_rec_cached(op1, op1_set, "", op1->type, false);
 
     /* TODO: The case that both, op0_set and op1_set, are non-empty is not
      *       handled, yet. */
@@ -1077,11 +1135,11 @@ void value_sett::get_byte_stitching_value_set(
   {
     const byte_extract2t &ref = to_byte_extract2t(expr);
     // XXX XXX XXX this knackers offsets
-    get_value_set_rec(ref.source_value, dest, suffix, original_type);
+    get_value_set_rec_cached(ref.source_value, dest, suffix, original_type);
     return;
   }
 
-  get_value_set_rec(expr, dest, suffix, original_type);
+  get_value_set_rec_cached(expr, dest, suffix, original_type);
 }
 
 void value_sett::get_reference_set(
@@ -1138,7 +1196,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // The set of variables referred to here are the set of things the operand
     // may point at. So, find its value set, and return that.
     const dereference2t &deref = to_dereference2t(expr);
-    get_value_set_rec(deref.value, dest, "", deref.type);
+    get_value_set_rec_cached(deref.value, dest, "", deref.type);
     return;
   }
 

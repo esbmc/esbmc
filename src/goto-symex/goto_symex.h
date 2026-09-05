@@ -176,8 +176,11 @@ public:
 
   /**
    *  Record a copy chain for chase_copies after an unconditional
-   *  assignment, when the rhs is a (possibly typecast) L2 symbol.
-   *  The rhs is canonicalized through existing chains first.
+   *  assignment, when the rhs is a stable value: a (possibly
+   *  typecast) L2 symbol, or a pure bitvector computation over such
+   *  leaves. The rhs is canonicalized through existing chains first
+   *  and dropped if the canonical form exceeds
+   *  max_copy_definition_nodes.
    *  @param renamed_lhs L2 symbol generation just assigned.
    *  @param rhs Renamed, simplified assignment rhs.
    */
@@ -1431,6 +1434,12 @@ protected:
    */
   static constexpr size_t subsumption_map_capacity = 1 << 16;
   /**
+   *  Cap on one recorded copy definition's flattened node count:
+   *  canonicalization doubles nested arithmetic chains per link, and
+   *  an oversized definition costs more to match than it prunes.
+   */
+  static constexpr size_t max_copy_definition_nodes = 64;
+  /**
    *  Defining condition of each L2 guard symbol generation, i.e. the
    *  (renamed, simplified) rhs it was assigned in symex_goto. Guard
    *  symbols are SSA: each generation is assigned exactly once, so a
@@ -1444,13 +1453,15 @@ protected:
   std::unordered_map<irep_idt, expr2tc> guard_definitions;
   /**
    *  Copy chains between L2 symbol generations: lhs generation -> the
-   *  (possibly typecast) L2 symbol it was unconditionally assigned.
-   *  Values are canonicalized at insertion, so one substitution pass
-   *  reaches the root of a chain. Path-guard subsumption uses this to
-   *  rewrite branch conditions onto a common basis before structural
-   *  comparison — a value handed across a call boundary gets a fresh
-   *  symbol at every hop, and without the rewrite a callee's re-check
-   *  of a caller-established condition never matches. Deliberately NOT
+   *  stable value it was unconditionally assigned — a (possibly
+   *  typecast) L2 symbol, or a pure bitvector computation over such
+   *  leaves (the operand-split idiom). Values are canonicalized at
+   *  insertion, so one substitution pass reaches the root of a chain.
+   *  Path-guard subsumption uses this to rewrite branch conditions
+   *  onto a common basis before structural comparison — a value handed
+   *  across a call boundary gets a fresh symbol at every hop, and
+   *  without the rewrite a callee's re-check of a caller-established
+   *  condition never matches. Deliberately NOT
    *  fed into constant propagation: substituting copies globally slices
    *  away the originals' assignments and degrades counterexamples.
    */

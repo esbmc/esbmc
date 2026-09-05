@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 20
+^VERIFICATION SUCCESSFUL$
+^Generated [0-9]{1,2} VCC\(s\)

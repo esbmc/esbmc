@@ -1,12 +1,15 @@
 #ifndef _ESBMC_PROP_SMT_SMT_SOLVER_H_
 #define _ESBMC_PROP_SMT_SMT_SOLVER_H_
 
+#include <optional>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <memory>
 #include <mutex>
+#include <set>
+#include <utility>
 #include <unordered_set>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
@@ -304,6 +307,11 @@ public:
    *  @return Explicit assigned value of expr in the solver. May be nil, in
    *          which case the solver did not assign a value to it for some
    *          reason. */
+  /** get()'s index_id case: read one element out of the solver's array
+   *  model rather than materialising the whole array. Nullopt where the
+   *  case falls through to get()'s generic tail. */
+  std::optional<expr2tc> get_index_value(const expr2tc &expr, expr2tc &res);
+
   virtual expr2tc get(const expr2tc &expr);
 
   /** Solver name fetcher. Returns a string naming the solver being used, and
@@ -810,6 +818,17 @@ public:
   smt_astt convert_bitcast(const expr2tc &expr);
   /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
+  /** Record every division's operand pair in @p expr, recursively.
+   *  convert_modulus lowers a remainder compositionally only when its
+   *  operands appear here; unconditional lowering costs 3-5x on
+   *  rem-heavy proofs. */
+  void note_division_operands(const expr2tc &expr);
+  void note_division_operands(
+    const expr2tc &expr,
+    std::unordered_set<const expr2t *> &seen);
+  /** Encode a remainder: compositional via the matching division when
+   *  one exists in the formula, the solver's rem primitive otherwise. */
+  smt_astt convert_modulus(const modulus2t &m, smt_astt a, smt_astt b);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
 
@@ -828,6 +847,9 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
+
+  /** Operand pairs of every division seen by note_division_operands. */
+  std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
   /** Create and assert address space constraints on the given object ID
    *  number. Essentially, this asserts that all the objects to date don't
    *  overlap with /this/ one. */
@@ -906,6 +928,32 @@ public:
   expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
   /** Like decompose_select_chain, but for multidimensional stores. */
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
+
+  /** One element update an array `with` denotes, as an index into the array's
+   *  flattened form and the value stored there. */
+  struct flat_storet
+  {
+    expr2tc index;
+    expr2tc value;
+  };
+
+  /** Name every element of a row being written whole as a store of the
+   *  corresponding read out of it, at @p offset in the flattened array.
+   *  Requires the row's flattened size to be a compile-time constant, which
+   *  both call sites establish; false when a nested row's is not. */
+  bool expand_row_stores(
+    const expr2tc &row,
+    const expr2tc &offset,
+    std::vector<flat_storet> &stores);
+
+  /** Decompose an array `with` into the flat element updates it denotes,
+   *  oldest first, giving back the array the chain is rooted at. Unlike
+   *  decompose_store_chain(), keeps every store a row carries. */
+  bool decompose_stores(
+    const expr2tc &expr,
+    const expr2tc &offset,
+    std::vector<flat_storet> &stores,
+    expr2tc &base);
 
   /** Prepare an array_of expression by flattening its dimensions, if it
    *  has more than one. */

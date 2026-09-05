@@ -365,10 +365,11 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   smt_astt side2 = convert_ast(eq.side_2); // RHS
   side2->assign(this, side1);
 
-  // Put that into the smt cache, thus preserving the value of the assigned symbols.
-  // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
-  // in that one can choose to create a set of expressions and their ASTs, then
-  // store them in the cache, rather than have a more sophisticated conversion.
+  // Put that into the smt cache, thus preserving the value of the assigned
+  // symbols. IMPORTANT: the cache is now a fundamental part of how some
+  // flatteners work, in that one can choose to create a set of expressions and
+  // their ASTs, then store them in the cache, rather than have a more
+  // sophisticated conversion.
   {
     const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
     // Lock automatically released when it goes out of scope
@@ -556,10 +557,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       return (cache_result->ast);
   }
 
-  // A sizeof(T) node lowers to its eagerly-computed byte-size value. do_simplify
-  // normally folds it away, but under --no-simplify it survives to here, so
-  // lower it explicitly rather than hitting the unrecognised-format abort
-  // (esbmc/esbmc#5337).
+  // A sizeof(T) node lowers to its eagerly-computed byte-size value.
+  // do_simplify normally folds it away, but under --no-simplify it survives to
+  // here, so lower it explicitly rather than hitting the unrecognised-format
+  // abort (esbmc/esbmc#5337).
   if (is_sizeof2t(expr))
     return convert_ast(to_sizeof2t(expr).value);
   /* Vectors!
@@ -571,7 +572,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
    * The simplification module take care of all the operations, but if
    * for some reason we would like to run ESBMC without simplifications
    * then we need to apply it here.
-  */
+   */
   if (is_vector_type(expr))
   {
     if (is_neg2t(expr))
@@ -985,28 +986,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     break;
   }
   case expr2t::modulus_id:
-  {
-    auto m = to_modulus2t(expr);
-
-    if (int_encoding)
-    {
-      a = mk_mod(args[0], args[1]);
-    }
-    else if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
-    {
-      a = mk_bvsmod(args[0], args[1]);
-    }
-    else if (is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2))
-    {
-      a = mk_bvumod(args[0], args[1]);
-    }
-    else
-    {
-      assert(is_signedbv_type(m.side_1) || is_signedbv_type(m.side_2));
-      a = mk_bvsmod(args[0], args[1]);
-    }
+    a = convert_modulus(to_modulus2t(expr), args[0], args[1]);
     break;
-  }
   case expr2t::index_id:
   {
     a = convert_array_index(expr);
@@ -1168,8 +1149,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       else if (smt_fp_rounding_utils::is_nearest_rounding_mode(rm))
       {
         // Round half to even: tie goes to whichever of floor, floor+1 is even.
-        // floor/2 is an integer iff floor is even — works for negative floors too
-        // (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
+        // floor/2 is an integer iff floor is even — works for negative floors
+        // too (e.g. -2/2 = -1: integer = even; -3/2 = -1.5: not integer = odd).
         smt_astt two = mk_smt_real("2");
         smt_astt floor_is_even = mk_isint(mk_div(floor_v, two));
         smt_astt tie_rte = mk_ite(floor_is_even, floor_v, mk_add(floor_v, one));
@@ -1742,12 +1723,13 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::code_comma_id:
   {
-    /* 
+    /*
       TODO: for some reason comma expressions survive when they are under
       * RETURN statements. They should have been taken care of at the GOTO
       * level. Remove this code once we do!
 
-      the expression on the right side will become the value of the entire comma-separated expression.
+      the expression on the right side will become the value of the entire
+      comma-separated expression.
 
       e.g.
         return side_1, side_2;
@@ -1763,7 +1745,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::exists_id:
   {
     // TODO: technically the forall could be a list of symbols
-    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow,
+    // arithmetic-overflow, etc...
     expr2tc symbol;
     expr2tc predicate;
 
@@ -1778,7 +1761,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       predicate = to_exists2t(expr).side_2;
     }
 
-    // We only want expressions of typecast(address_of(symbol)) or address_of(symbol).
+    // We only want expressions of typecast(address_of(symbol)) or
+    // address_of(symbol).
     {
       if (const typecast2t *tc = try_to_typecast2t(symbol);
           tc && is_address_of2t(tc->from))
@@ -1839,6 +1823,54 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     smt_cache.insert(entry);
   }
   return a;
+}
+
+/// Encode a remainder: compositional as a - (a / b) * b when the
+/// formula also divides the same operands, the rem primitive otherwise.
+smt_astt
+smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
+{
+  if (int_encoding)
+    return mk_mod(a, b);
+  if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
+    return mk_bvsmod(a, b);
+
+  assert(is_bv_type(m.side_1) && is_bv_type(m.side_2));
+  const bool both_unsigned =
+    is_unsignedbv_type(m.side_1) && is_unsignedbv_type(m.side_2);
+  if (divided_operand_pairs.count({m.side_1, m.side_2}))
+  {
+    smt_astt quot = both_unsigned ? mk_bvudiv(a, b) : mk_bvsdiv(a, b);
+    return mk_bvsub(a, mk_bvmul(quot, b));
+  }
+  return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+void smt_solver_baset::note_division_operands(const expr2tc &expr)
+{
+  // A propagated `with` chain over a nested array references itself once per
+  // store, so an SSA step is a DAG and an unmemoised walk costs a number of
+  // paths exponential in the store count -- the same reason
+  // pre_register_addresses and get_value_set_rec memoise.
+  std::unordered_set<const expr2t *> seen;
+  note_division_operands(expr, seen);
+}
+
+void smt_solver_baset::note_division_operands(
+  const expr2tc &expr,
+  std::unordered_set<const expr2t *> &seen)
+{
+  if (is_nil_expr(expr))
+    return;
+  if (!seen.insert(expr.get()).second)
+    return;
+  if (is_div2t(expr))
+  {
+    const div2t &d = to_div2t(expr);
+    divided_operand_pairs.emplace(d.side_1, d.side_2);
+  }
+  expr->foreach_operand(
+    [this, &seen](const expr2tc &e) { note_division_operands(e, seen); });
 }
 
 void smt_solver_baset::assert_expr(const expr2tc &e)
@@ -1953,9 +1985,10 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
 
   case type2t::empty_id:
     // Empty type can appear during Solidity nested mapping encoding
-    // when the 'with' expression generates intermediate void-typed subexpressions.
-    // Return a minimal sort as placeholder — these are never directly used in
-    // solver queries and the verification result is unaffected.
+    // when the 'with' expression generates intermediate void-typed
+    // subexpressions. Return a minimal sort as placeholder — these are never
+    // directly used in solver queries and the verification result is
+    // unaffected.
     result = mk_int_bv_sort(1);
     break;
 
@@ -2785,9 +2818,189 @@ expr2tc smt_solver_baset::decompose_store_chain(
   return output;
 }
 
+/* The expression an array `with` chain is rooted at. */
+static const expr2tc &with_chain_base(const expr2tc &e)
+{
+  const expr2tc *p = &e;
+  while (is_with2t(*p))
+    p = &to_with2t(*p).source_value;
+  return *p;
+}
+
+/* Whether @p e denotes a *row* of a multi-dimensional array: an array-typed
+ * expression the SMT layer has no term for, because flatten_array_type()
+ * collapses the enclosing array and a partial index into the flat form selects
+ * an element rather than a row. Infinite arrays (Solidity's nested mappings)
+ * are not flattened, so they are encodable and excluded. */
+static bool is_flattened_row(const expr2tc &e)
+{
+  if (!is_array_type(e->type) || to_array_type(e->type).size_is_infinite)
+    return false;
+
+  if (is_index2t(e))
+  {
+    const expr2tc &src = to_index2t(e).source_value;
+    return is_array_type(src->type) &&
+           !to_array_type(src->type).size_is_infinite;
+  }
+
+  if (is_with2t(e))
+    return is_flattened_row(to_with2t(e).source_value);
+
+  return false;
+}
+
+/* Select-over-store, for a read out of a row of a flattened multi-dimensional
+ * array: `(R WITH [j:=v])[i]` becomes `i == j ? v : R[i]`. Repeated, this
+ * drives the read down to an index chain decompose_select_chain() can flatten.
+ * Nil when @p index does not read out of such a row. */
+static expr2tc lower_flattened_row_select(const index2t &index)
+{
+  const expr2tc &src = index.source_value;
+  /* Only a read down to an element: a read that itself yields a row leaves the
+   * unencodable shape in place, so there is nothing to gain by rewriting it.
+   * That first test cannot decide while array_may_propagate() stops at two
+   * dimensions: a source that is itself a row makes the whole array at least
+   * three deep, so wherever is_flattened_row() holds the read is to an
+   * element. It becomes live when that bound is lifted. */
+  if (is_array_type(index.type) || !is_flattened_row(src))
+    return expr2tc();
+
+  if (is_with2t(src))
+  {
+    const with2t &w = to_with2t(src);
+
+    /* Compared one bit wider than either operand. A narrowing comparison
+     * would let an out-of-range write alias an in-range read, so the widening
+     * is unconditional rather than a branch nothing exercises. */
+    unsigned w1 = index.index->type->get_width();
+    unsigned w2 = w.update_field->type->get_width();
+    type2tc common = get_uint_type((w1 > w2 ? w1 : w2) + 1);
+
+    return if2tc(
+      index.type,
+      equality2tc(
+        typecast2tc(common, index.index), typecast2tc(common, w.update_field)),
+      w.update_value,
+      index2tc(index.type, w.source_value, index.index));
+  }
+
+  return expr2tc();
+}
+
+/* Name every element of @p row, a row being written whole, as a store of the
+ * corresponding read out of it. Correct whatever the row denotes -- the read
+ * is of the row expression itself -- which is what makes it the general case
+ * behind decompose_stores()' in-place fast path. False when a nested row's
+ * length is not a compile-time constant, which leaves nothing to enumerate.
+ *
+ * @p row's own length is a caller's precondition, not something to re-test:
+ * both call sites reach here only after requiring the flattened form of this
+ * very type to have a constant size, and a flattened size is the product of
+ * the dimensions. */
+bool smt_solver_baset::expand_row_stores(
+  const expr2tc &row,
+  const expr2tc &offset,
+  std::vector<flat_storet> &stores)
+{
+  const array_type2t &rowtype = to_array_type(row->type);
+  const type2tc &dom = offset->type;
+  const bool nested = is_array_type(rowtype.subtype);
+
+  BigInt stride = 1;
+  if (nested)
+  {
+    type2tc flat = flatten_array_type(rowtype.subtype);
+    const array_type2t &sub = to_array_type(flat);
+    if (is_nil_expr(sub.array_size) || !is_constant_int2t(sub.array_size))
+      return false;
+    stride = to_constant_int2t(sub.array_size).value;
+  }
+
+  BigInt n = to_constant_int2t(rowtype.array_size).value;
+  for (BigInt k = 0; k < n; k = k + 1)
+  {
+    expr2tc off = add2tc(dom, offset, constant_int2tc(dom, k * stride));
+    expr2tc elem =
+      index2tc(rowtype.subtype, row, constant_int2tc(index_type2(), k));
+    if (nested)
+    {
+      if (!expand_row_stores(elem, off, stores))
+        return false;
+    }
+    else
+      stores.push_back({off, elem});
+  }
+
+  return true;
+}
+
+/* Decompose an array `with` into the flat element updates it denotes, oldest
+ * first, and give back the array the chain is rooted at. @p offset is the flat
+ * position of @p expr's own base within the outermost flattened array.
+ *
+ * decompose_store_chain() walks only the newest update's spine, so a row
+ * carrying more than one update -- which is what propagating a
+ * multi-dimensional array composes out of `a[1][0] = 5; a[1][1] = 4;` -- keeps
+ * its last store and silently loses the rest. This walks the chain *and* each
+ * row it updates. A row whose own chain is rooted at exactly the row being
+ * replaced is updated in place, which keeps the ordinary `a[i][j] = v` a
+ * single store; any other row is written out element by element. */
+bool smt_solver_baset::decompose_stores(
+  const expr2tc &expr,
+  const expr2tc &offset,
+  std::vector<flat_storet> &stores,
+  expr2tc &base)
+{
+  if (!is_with2t(expr))
+  {
+    base = expr;
+    return true;
+  }
+
+  const with2t &w = to_with2t(expr);
+  if (!decompose_stores(w.source_value, offset, stores, base))
+    return false;
+
+  const type2tc &dom = offset->type;
+  expr2tc field = typecast2tc(dom, w.update_field);
+
+  if (!is_array_type(w.update_value->type))
+  {
+    stores.push_back({add2tc(dom, offset, field), w.update_value});
+    return true;
+  }
+
+  type2tc flatrow = flatten_array_type(w.update_value->type);
+  const array_type2t &rowtype = to_array_type(flatrow);
+  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+    return false;
+
+  expr2tc origin = add2tc(
+    dom, offset, mul2tc(dom, field, typecast2tc(dom, rowtype.array_size)));
+
+  const expr2tc &rowbase = with_chain_base(w.update_value);
+  if (
+    is_index2t(rowbase) && to_index2t(rowbase).source_value == w.source_value &&
+    to_index2t(rowbase).index == w.update_field)
+  {
+    expr2tc rowbase_out;
+    return decompose_stores(w.update_value, origin, stores, rowbase_out);
+  }
+
+  return expand_row_stores(w.update_value, origin, stores);
+}
+
 smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
 {
   const index2t &index = to_index2t(expr);
+
+  /* A `with` over a row of a flattened multi-dimensional array has no term of
+   * its own, so push the read inside it rather than building one. */
+  expr2tc lowered = lower_flattened_row_select(index);
+  if (!is_nil_expr(lowered))
+    return convert_ast(lowered);
+
   expr2tc src_value = index.source_value;
 
   expr2tc newidx;
@@ -2840,8 +3053,32 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
     is_array_type(to_array_type(with.type).subtype) &&
     !to_array_type(with.type).size_is_infinite)
   {
-    // Finite multi-dimensional arrays: flatten into single array with extended
-    // domain via decompose_store_chain.
+    // Finite multi-dimensional arrays: flatten into a single array with an
+    // extended domain. Prefer the element-wise decomposition, which keeps
+    // every store a row carries; decompose_store_chain() keeps only the last.
+    type2tc dom =
+      make_array_domain_type(to_array_type(flatten_array_type(with.type)));
+    std::vector<flat_storet> stores;
+    expr2tc base;
+    if (decompose_stores(expr, gen_zero(dom), stores, base))
+    {
+      const bool bools_as_bv =
+        is_bool_type(get_flattened_array_subtype(expr->type)) &&
+        !array_api->supports_bools_in_arrays;
+
+      smt_astt src = convert_ast(base);
+      for (const flat_storet &s : stores)
+      {
+        expr2tc idx = s.index;
+        simplify(idx);
+        expr2tc val = bools_as_bv
+                        ? expr2tc(typecast2tc(get_uint_type(1), s.value))
+                        : s.value;
+        src = src->update(this, convert_ast(val), 0, idx);
+      }
+      return src;
+    }
+
     newidx = decompose_store_chain(expr, update_val);
   }
   else
@@ -3016,6 +3253,71 @@ void smt_solver_baset::pre_solve()
   array_api->add_array_constraints_for_solving();
 }
 
+/* get()'s index_id case: read one element out of the solver's array model
+ * rather than materialising the whole array. Nullopt where the case falls
+ * through to get()'s generic tail, having possibly rewritten @p res. */
+std::optional<expr2tc>
+smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
+{
+  // If we try to get an index from the solver, it will first
+  // return the whole array and then get the index, we can
+  // do better and call get_array_element directly
+  index2t index = to_index2t(res);
+
+  /* Same lowering convert_array_index() applies: a row of a flattened array
+     has no term, so convert_ast() below cannot be handed one. get() resolves
+     the ite this produces by asking the solver for its condition. */
+  expr2tc lowered = lower_flattened_row_select(index);
+  if (!is_nil_expr(lowered))
+    return get(lowered);
+
+  expr2tc src_value = index.source_value;
+
+  expr2tc newidx;
+  // Same NDEBUG-off safety guard as in convert_array_index() above.
+  const bool src_is_infinite_array =
+    is_array_type(index.source_value->type) &&
+    to_array_type(index.source_value->type).size_is_infinite;
+  if (is_index2t(index.source_value) && !src_is_infinite_array)
+  {
+    newidx = decompose_select_chain(expr, src_value);
+  }
+  else
+  {
+    newidx = fix_array_idx(index.index, index.source_value->type);
+  }
+
+  // if the source value is a constant, there's no need to
+  // call the array api
+  if (is_constant_number(src_value))
+    return src_value;
+
+  // Convert the idx, it must be an integer
+  expr2tc idx = get(newidx);
+  if (is_constant_int2t(idx))
+  {
+    // Convert the array so we can call the array api
+    smt_astt array = convert_ast(src_value);
+
+    // Retrieve the element
+    if (is_tuple_array_ast_type(src_value->type))
+      res = tuple_api->tuple_get_array_elem(
+        array, to_constant_int2t(idx).value.to_uint64(), res->type);
+    else
+      res = array_api->get_array_elem(
+        array,
+        to_constant_int2t(idx).value.to_uint64(),
+        get_flattened_array_subtype(res->type));
+
+    // If we got a nil result, return original expression
+    if (is_nil_expr(res))
+      return expr;
+  }
+
+  // TODO: Give up, then what?
+  return std::nullopt;
+}
+
 expr2tc smt_solver_baset::get(const expr2tc &expr)
 {
   if (is_constant_number(expr))
@@ -3030,57 +3332,9 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   switch (res->expr_id)
   {
   case expr2t::index_id:
-  {
-    // If we try to get an index from the solver, it will first
-    // return the whole array and then get the index, we can
-    // do better and call get_array_element directly
-    index2t index = to_index2t(res);
-    expr2tc src_value = index.source_value;
-
-    expr2tc newidx;
-    // Same NDEBUG-off safety guard as in convert_array_index() above.
-    const bool src_is_infinite_array =
-      is_array_type(index.source_value->type) &&
-      to_array_type(index.source_value->type).size_is_infinite;
-    if (is_index2t(index.source_value) && !src_is_infinite_array)
-    {
-      newidx = decompose_select_chain(expr, src_value);
-    }
-    else
-    {
-      newidx = fix_array_idx(index.index, index.source_value->type);
-    }
-
-    // if the source value is a constant, there's no need to
-    // call the array api
-    if (is_constant_number(src_value))
-      return src_value;
-
-    // Convert the idx, it must be an integer
-    expr2tc idx = get(newidx);
-    if (is_constant_int2t(idx))
-    {
-      // Convert the array so we can call the array api
-      smt_astt array = convert_ast(src_value);
-
-      // Retrieve the element
-      if (is_tuple_array_ast_type(src_value->type))
-        res = tuple_api->tuple_get_array_elem(
-          array, to_constant_int2t(idx).value.to_uint64(), res->type);
-      else
-        res = array_api->get_array_elem(
-          array,
-          to_constant_int2t(idx).value.to_uint64(),
-          get_flattened_array_subtype(res->type));
-
-      // If we got a nil result, return original expression
-      if (is_nil_expr(res))
-        return expr;
-    }
-
-    // TODO: Give up, then what?
+    if (auto v = get_index_value(expr, res))
+      return *v;
     break;
-  }
 
   case expr2t::with_id:
   {
@@ -3096,7 +3350,7 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
       decompose_store_chain(expr, update_val);
     }
 
-    /* Try to construct a constant struct when we handle  
+    /* Try to construct a constant struct when we handle
      * struct type "with" expr2tc
      *
      * Simplify the source value. If it is a constant,
@@ -3394,7 +3648,8 @@ double smt_solver_baset::convert_rational_to_double(
 
         if (result != nullptr)
         {
-          // 1a) as_string returns a pointer to the first digit; copy it forward.
+          // 1a) as_string returns a pointer to the first digit; copy it
+          // forward.
           size_t len = strnlen(result, buffer.size());
           if (len > 0 && len < buffer.size())
           {
@@ -3587,7 +3842,8 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 
   expr2tc arr_size;
   if (type == flat_type && !ar.size_is_infinite)
-    // avoid handelling the flattend multidimensional and malloc arrays(assume size is infinite)
+    // avoid handelling the flattend multidimensional and malloc arrays(assume
+    // size is infinite)
     arr_size = to_array_type(flat_type).array_size;
   else
     arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
@@ -4010,7 +4266,8 @@ expr2tc smt_solver_baset::get_by_value(const type2tc &type, BigInt value)
   {
     // Build the fixedbv from its spec + raw bit pattern directly, mirroring
     // fixedbvt::from_expr (spec from the type, v = the value's signed binary
-    // round-trip) without staging a legacy constant_exprt / type back-migration.
+    // round-trip) without staging a legacy constant_exprt / type
+    // back-migration.
     fixedbvt fbv(fixedbv_spect(to_fixedbv_type(type)));
     fbv.set_value(
       binary2integer(integer2binary(value, type->get_width()), true));
