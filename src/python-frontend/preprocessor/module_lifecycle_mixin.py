@@ -30,6 +30,15 @@ class ModuleLifecycleMixin:
                     continue
                 table.setdefault(key, value)
 
+        # static_methods is a set, not a signature table, so it needs its own
+        # pass: without it a method's parameters cross the module boundary
+        # while the staticmethod flag does not, and the importing module strips
+        # a real parameter as self again (#7546).
+        for name in other.static_methods:
+            owner, dot, _ = name.partition(".")
+            if owner in imported_names and (include_methods or not dot):
+                self.static_methods.add(name)
+
     def finalize_module(self, node):
         """Run generic_visit and inject helper nodes requested during traversal."""
         # Per-module scope for the eq-only set and call-origin map.
