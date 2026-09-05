@@ -1,0 +1,5 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --symbol-table-only
+^Symbol\.+: c:@F@undeclared_fn$
+^Location\.+: file .*main\.c line 7 column 11 function main$
