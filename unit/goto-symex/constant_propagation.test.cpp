@@ -17,7 +17,6 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
-#include <cstring>
 #include <string>
 #include <vector>
 
@@ -131,11 +130,13 @@ expr2tc index_of(
 }
 
 /** `with(source, field, value)`, the lowering of a member/element write. */
-expr2tc
-with_field(const expr2tc &source, const char *field, const expr2tc &value)
+expr2tc with_field(
+  const expr2tc &source,
+  const std::string &field,
+  const expr2tc &value)
 {
   const type2tc str_type =
-    array_type2tc(get_uint8_type(), gen_ulong(strlen(field) + 1), false);
+    array_type2tc(get_uint8_type(), gen_ulong(field.size() + 1), false);
   return with2tc(
     source->type,
     source,
