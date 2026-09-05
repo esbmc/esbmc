@@ -154,6 +154,18 @@ public:
   filebuf *_m_filebuf;
 };
 
+#if __cplusplus >= 201103L
+/* [fstream.syn]: the model's file streams are plain classes, so expose the
+ * standard's template names as alias templates, as istream/ostream already do
+ * (github #6063). Only the char instantiation is meaningful. */
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_ifstream = ifstream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_ofstream = ofstream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_fstream = fstream;
+#endif
+
 //=====================fstream===================
 fstream::fstream()
 {

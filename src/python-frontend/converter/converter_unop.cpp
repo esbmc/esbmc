@@ -206,6 +206,17 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   unary_sub =
     apply_bool_dunder_for_not(op, unary_sub, get_location_from_decl(element));
 
+  /* Python's bool is a subclass of int, so every unary operator but `not`
+   * yields an int: -True is -1 and ~True is -2. Without the promotion the node
+   * is built over a bool-sorted operand and the SMT backend crashes (#7551).
+   * Matches the binary bitwise path in converter_binop.cpp. */
+  if (op != "Not" && unary_sub.type().is_bool())
+  {
+    const typet int_t = type_handler::python_int_typet();
+    unary_sub = typecast_exprt(unary_sub, int_t);
+    type = int_t;
+  }
+
   const typet result_type = (op == "Not") ? bool_type() : type;
   const std::string op_id = python_frontend::map_operator(op, result_type);
 

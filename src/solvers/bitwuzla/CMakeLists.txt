@@ -1,4 +1,6 @@
-set(Bitwuzla_MIN_VERSION "0.1")
+# The BitwuzlaTermManager interface this backend is written against, and the
+# term/sort reference counting it uses, both arrived in 0.4.0 (Bitwuzla NEWS.md).
+set(Bitwuzla_MIN_VERSION "0.4")
 
 if(DEFINED Bitwuzla_DIR)
     set(ENABLE_BITWUZLA ON)

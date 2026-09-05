@@ -158,14 +158,15 @@ static bool array_may_propagate(const expr2tc &e)
   if (!is_array_type(arr.subtype))
     return true;
 
-  // A multi-dimensional array propagates only as a whole constant. A `with`
-  // chain over one lets a second update land on an already-updated row, and
-  // the SMT flattening in convert_array_store()/decompose_store_chain() walks
-  // only the update-value spine: the earlier sibling store is dropped from the
-  // formula (silent wrong answers) or reaches mk_store()/mk_eq() with a row on
-  // one side and an element on the other. Folding the reads is what R42 needs;
-  // folding the writes is a separate, unfixed encoding gap.
-  if (!is_constant_array_value(e))
+  // Past two dimensions a `with` chain propagates only as a whole constant.
+  // convert_array_store() decomposes a 2-D chain into flat element stores, but
+  // a deeper one names its leaves as reads out of a row, and
+  // decompose_select_chain() flattens straight past the enclosing `with` and
+  // hands the solver an element where a row is needed. Lifting this needs the
+  // encoder to lower a nested row read first (R50 residual).
+  if (
+    is_array_type(to_array_type(arr.subtype).subtype) &&
+    !is_constant_array_value(e))
     return false;
 
   // And only while it stays small: a read at a symbolic index inlines the
@@ -399,52 +400,19 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     // Handle WITH chains for unions where all updates are constants
     if (is_union_type(expr->type))
     {
-      // For unions, we can only safely propagate if all updates in the chain
-      // are to the SAME field and are all constants.
-      // If different fields are updated, we must not propagate because
-      // union members alias each other in memory: writing to one field
-      // affects what you read from another field.
-
-      bool all_constant_updates = true;
-      bool all_same_field = true;
-      std::string first_field;
-      expr2tc current = expr;
-
-      while (is_with2t(current))
+      // A chain touching several fields is safe to carry: member2t::do_simplify
+      // refuses to step past a `with` whose source is a union, so only a read
+      // of the last-written field folds and every aliased read stays symbolic.
+      // #7446: an update may also be an immutable symbol, not just a literal.
+      for (const expr2tc *current = &expr; is_with2t(*current);
+           current = &to_with2t(*current).source_value)
       {
-        const with2t &w = to_with2t(current);
-
-        if (
-          !is_constant_expr(w.update_value) &&
-          !is_immutable_value(w.update_value))
-        {
-          all_constant_updates = false;
-          break;
-        }
-
-        if (is_constant_string2t(w.update_field))
-        {
-          std::string field_name =
-            to_constant_string2t(w.update_field).value.as_string();
-
-          if (first_field.empty())
-            first_field = field_name;
-          else if (field_name != first_field)
-          {
-            // Different field accessed: cannot constant propagate
-            all_same_field = false;
-            break;
-          }
-        }
-
-        current = w.source_value;
+        const expr2tc &update = to_with2t(*current).update_value;
+        if (!is_constant_expr(update) && !is_immutable_value(update))
+          return false;
       }
 
-      // Only allow propagation if all updates are constants and to the same field
-      if (all_constant_updates && all_same_field)
-        return true;
-
-      return false;
+      return true;
     }
 
     return false;

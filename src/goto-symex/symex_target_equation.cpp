@@ -1,3 +1,4 @@
+#include <unordered_set>
 #include <cassert>
 #include <functional>
 #include <goto-symex/goto_symex.h>
@@ -39,8 +40,14 @@ void pre_register_addresses(
   // use happens to appear in the source.  Dynamic/automatic objects keep
   // their original lazy registration to avoid exposing later-allocated
   // memory to earlier casts.
+  // Shared subexpressions make an SSA step a DAG, not a tree -- a propagated
+  // `with` chain over a nested array references itself once per store -- so an
+  // unmemoised walk costs a number of paths exponential in the store count.
+  std::unordered_set<const expr2t *> seen;
   std::function<void(const expr2tc &)> walk = [&](const expr2tc &e) {
     if (!e)
+      return;
+    if (!seen.insert(e.get()).second)
       return;
     if (is_address_of2t(e))
     {

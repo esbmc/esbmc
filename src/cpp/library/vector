@@ -768,7 +768,7 @@ public:
     return buf[0];
   }
 
-  value_type back()
+  reference back()
   {
     return buf[_size - 1];
   }

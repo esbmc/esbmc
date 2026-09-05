@@ -162,6 +162,14 @@ public:
   typedef int streampos;
   typedef int streamoff;
 
+  /* [ios.overview]. pos_type/off_type follow the model's int stream positions
+   * (istream::tellg, ostream::tellp) rather than the traits' size_t/ptrdiff_t. */
+  typedef char char_type;
+  typedef char_traits<char> traits_type;
+  typedef traits_type::int_type int_type;
+  typedef streampos pos_type;
+  typedef streamoff off_type;
+
   ios()
   {
     __fill = ' ';

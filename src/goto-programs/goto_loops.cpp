@@ -305,6 +305,21 @@ bool goto_loopst::compute_function_summary(
   return complete;
 }
 
+/// A callee writing through its own parameter names storage the caller cannot:
+/// the parameter is out of scope at the call. The call's own pointer arguments
+/// are what it was handed, so record those and let the havoc reach the pointee
+/// through them. Recording an argument the callee never writes only widens the
+/// abstraction, which stays sound (issue #7478).
+static void
+record_callee_pointer_writes(loopst &loop, const code_function_call2t &call)
+{
+  loop.set_writes_through_pointer();
+
+  for (const expr2tc &arg : call.operands)
+    if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+      loop.add_pointer_array_write_ptr(arg);
+}
+
 void goto_loopst::get_modified_variables(
   goto_programt::instructionst::iterator instruction,
   function_loopst::iterator loop,
@@ -322,9 +337,15 @@ void goto_loopst::get_modified_variables(
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
-    // Don't do function pointers
+    // A call through a function pointer hides the callee's writes from the
+    // summary, so a pointer write inside it would leave the loop looking
+    // havoc-covered when it is not (issue #7478).
     if (is_dereference2t(function_call.function))
+    {
+      loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
       return;
+    }
 
     // First, add its return
     if (writes_through_pointer(function_call.ret))
@@ -349,7 +370,7 @@ void goto_loopst::get_modified_variables(
     for (const auto &v : summary.unmodified)
       loop->add_unmodified_var_to_loop(v);
     if (summary.writes_through_pointer)
-      loop->set_writes_through_pointer();
+      record_callee_pointer_writes(*loop, function_call);
     if (summary.modifies_pointer_array)
     {
       loop->set_modifies_pointer_array();
@@ -386,6 +407,14 @@ void goto_loopst::add_loop_var(
   // pointer at loop entry — unsound if the loop never reassigns it.
   if (is_modified && is_dereference2t(expr))
   {
+    // The pointee has no named symbol, so record the pointer for the value-set
+    // resolution to turn into one; an unextractable pointer leaves the write
+    // uncoverable and the loop-invariant schema declines (#5230, #7478).
+    expr2tc ptr = extract_queried_pointer(expr);
+    if (is_nil_expr(ptr))
+      loop.set_pointer_array_write_unresolvable();
+    else
+      loop.add_pointer_array_write_ptr(ptr);
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
