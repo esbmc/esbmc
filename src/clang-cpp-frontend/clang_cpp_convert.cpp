@@ -294,10 +294,46 @@ bool clang_cpp_convertert::get_type(
   return clang_c_convertert::get_type(q_type, new_type);
 }
 
+bool clang_cpp_convertert::get_member_pointer_type(
+  const clang::MemberPointerType &mpt,
+  typet &new_type)
+{
+  typet sub_type;
+  if (get_type(mpt.getPointeeType(), sub_type))
+    return true;
+
+  typet class_type;
+#if CLANG_VERSION_MAJOR >= 22
+  // Member-pointer qualifier is always a class type; assert before the
+  // (asserting) getAsType() call so a violation surfaces here.
+  assert(
+    mpt.getQualifier().getKind() == clang::NestedNameSpecifier::Kind::Type);
+  if (get_type(*mpt.getQualifier().getAsType(), class_type))
+    return true;
+#elif CLANG_VERSION_MAJOR >= 21
+  if (get_type(*mpt.getQualifier()->getAsType(), class_type))
+    return true;
+#else
+  if (get_type(*mpt.getClass(), class_type))
+    return true;
+#endif
+
+  new_type = gen_pointer_type(sub_type);
+  if (!mpt.isMemberFunctionPointer())
+    new_type.set("to-member", class_type);
+  return false;
+}
+
 bool clang_cpp_convertert::get_type(
   const clang::Type &the_type,
   typet &new_type)
 {
+  // C++-specific type classes recurse without reaching the base-class default
+  // case, so they need the same depth guard (#5048).
+  type_recursion_guardt type_guard(type_recursion_depth);
+  if (type_recursion_limit_reached())
+    return true;
+
   switch (the_type.getTypeClass())
   {
   case clang::Type::SubstTemplateTypeParm:
@@ -325,29 +361,9 @@ bool clang_cpp_convertert::get_type(
     const clang::MemberPointerType &mpt =
       static_cast<const clang::MemberPointerType &>(the_type);
 
-    typet sub_type;
-    if (get_type(mpt.getPointeeType(), sub_type))
+    if (get_member_pointer_type(mpt, new_type))
       return true;
 
-    typet class_type;
-#if CLANG_VERSION_MAJOR >= 22
-    // Member-pointer qualifier is always a class type; assert before the
-    // (asserting) getAsType() call so a violation surfaces here.
-    assert(
-      mpt.getQualifier().getKind() == clang::NestedNameSpecifier::Kind::Type);
-    if (get_type(*mpt.getQualifier().getAsType(), class_type))
-      return true;
-#elif CLANG_VERSION_MAJOR >= 21
-    if (get_type(*mpt.getQualifier()->getAsType(), class_type))
-      return true;
-#else
-    if (get_type(*mpt.getClass(), class_type))
-      return true;
-#endif
-
-    new_type = gen_pointer_type(sub_type);
-    if (!mpt.isMemberFunctionPointer())
-      new_type.set("to-member", class_type);
     break;
   }
 

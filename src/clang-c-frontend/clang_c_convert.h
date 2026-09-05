@@ -25,6 +25,7 @@ class RecordDecl;
 class QualType;
 class Type;
 class BuiltinType;
+class FunctionProtoType;
 class Stmt;
 class BinaryOperator;
 class CompoundAssignOperator;
@@ -100,6 +101,28 @@ protected:
 
   // class symbol id prefix `tag-`
   std::string tag_prefix = "tag-";
+
+  // get_type() walks a clang type by native recursion, so a long pointer chain
+  // `int ****…*p` overflowed the stack (SIGSEGV) instead of reporting an error.
+  // The bound sits far above any real type but well below the stack limit; the
+  // C++ frontend's get_type override reuses the same guard. See #5048.
+  unsigned type_recursion_depth = 0;
+  static constexpr unsigned max_type_recursion_depth = 256;
+
+  // Bumps type_recursion_depth for the lifetime of one get_type call.
+  struct type_recursion_guardt
+  {
+    unsigned &depth;
+    explicit type_recursion_guardt(unsigned &d) : depth(d)
+    {
+      ++depth;
+    }
+    ~type_recursion_guardt()
+    {
+      --depth;
+    }
+  };
+  bool type_recursion_limit_reached();
 
   unsigned int current_scope_var_num;
   /**
@@ -216,6 +239,10 @@ protected:
   void get_ref_to_struct_type(typet &type);
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
+
+  bool get_function_proto_type(
+    const clang::FunctionProtoType &func,
+    typet &new_type);
 
   bool get_bitfield_type(
     const clang::FieldDecl &,
