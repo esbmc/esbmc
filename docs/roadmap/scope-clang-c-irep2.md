@@ -7324,3 +7324,98 @@ of a pointer-typed conditional its C conversion (§116.2), so the round-trip
 re-decays it and the goto programs are byte-identical. The obligation is real
 all the same: the ill-typed node is what a native `goto_convert` would receive
 once the round-trip is deleted, which is B-3. It is the next arm.
+
+## 135. The symbol-table A/B shows the converter's tree, not the pass's
+## (2026-09-05)
+
+§134.3 left six unclassified causes and named the ternary array decay as the
+next arm. Two of the six are not arms, and the reason generalises to the
+instrument itself.
+
+### 135.1 The reduction, and what instrumenting it said
+
+```c
+char b[4]; char *d;
+void snk(void *);
+int main(int argc, char **argv) { char *c; c = argc==1 ? b : d; snk(c); }
+```
+
+```
+legacy:   c = argc == 1 ? &b[0] : d;
+hop-off:  c = argc == 1 ? b : d;
+```
+
+Read off the dump, that is a missing array-to-pointer decay in a conditional
+arm. It is not. Instrumented, `adjust_if_expr` receives the `if2t` with **all
+three types already `pointer`** — `migrate_expr`'s `coerce_ternary_branch`
+(§116.2) decayed the branch on the way in — and the pass has nothing to do.
+
+Replace `snk(c);` with `return c[0];` and the same program prints `&b[0]` under
+the hop-off. The instrumented difference between the two is one line:
+
+| last statement | `value != before` | printed |
+|---|---|---|
+| `return c[0];` | true | `&b[0]` |
+| `snk(c);` | **false** | `b` |
+
+`adjust()` refreshes a symbol's legacy value only when the walk changed
+something (§133.3's other half). When it changed nothing, `symbolt` keeps the
+**converter's** tree — and the converter does not decay an array in a ternary
+arm; `clang_c_adjust::adjust_if` does. So the dump is showing legacy's input
+where the hop-off's output was wanted. `memset-const`'s `main` reports
+`changed=false`, which is the whole of that test's remaining divergence.
+
+### 135.2 The instrument shows two different things
+
+This is worth stating plainly because §100.1 makes the symbol table *the*
+instrument for adjuster questions, and it is:
+
+- the **pass's** output for a body the pass changed, and
+- the **converter's** output for a body it did not,
+
+with nothing in the dump to say which. The two differ wherever `migrate_expr`
+normalises — the ternary decay above, and every other coercion its arms apply.
+So a symbol-table A/B systematically reports work as unported when the only
+thing missing is a write-back nobody wanted.
+
+`--clang-c-irep2-adjust-writeback-all` defeats the gate for diagnosis. It is
+not a mode to verify in: forcing the write-back makes every body pay
+`migrate_expr_back`'s losses, and over the same stride-16 sample it takes the
+residue the wrong way, 85 DIFF to 114. Its use is per-cause, one test at a
+time — does *this* line come back when the value is refreshed?
+
+Nothing downstream is affected. `goto_convert_functions.cpp` reads a body
+through `get_value2()` (the IREP2 value, always the pass's own); the remaining
+`get_value()` uses there are `is_nil` / `is_code` / `has_operands` predicates,
+which agree either way. That is why §134.2's goto census is 124/126 while the
+symbol table reads 85 DIFF.
+
+### 135.3 The six, re-scored
+
+| test | line under `--...-writeback-all` | verdict |
+|---|---|---|
+| `memset-const` | `? &b[0] :` — matches legacy | **artefact** |
+| `github_1590` | `- &buffer[0]` — matches legacy | **artefact** |
+| `builtin_memcpy` | unchanged | real, printer |
+| `cwe_excessive_alloc_vla_pass` | unchanged | real, printer |
+| `union-ptr-arith-bug` | unchanged | real |
+| `github_6966` | unchanged | **real** |
+
+`builtin_memcpy` is a representation difference the printer exposes: legacy
+keeps `const signed char [9] src={ 't', 'e', … }`, the hop-off prints
+`signed char [9] src={ 116, 101, … }` — `migrate_expr` turns the string
+constant into a `constant_array` of integers, and the qualifier goes with
+§133.3. `cwe_excessive_alloc_vla_pass` prints a VLA's size symbol by base name
+where legacy prints its full id; the hop-off is the more readable of the two
+and neither reaches symex.
+
+### 135.4 Next
+
+`github_6966` — a symbol whose `Location` is empty under the hop-off where
+legacy has `file main.c line 13 column 14 function log_msg`. It survives
+`--clang-c-irep2-adjust-writeback-all`, so it is the pass's own output, and it
+is the only one of the six that loses information a user sees: a location is
+what a counterexample step and a witness are printed from. §110.3 and §130.3
+each closed one place a location was dropped and each recorded that the general
+fix needs `sideeffect2t` to carry a `locationt`. This is the third; take it
+next, and check first whether it is that same missing field.
