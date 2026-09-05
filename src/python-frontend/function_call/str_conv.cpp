@@ -1252,9 +1252,12 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
     return from_double(0.0, type_handler_.get_typet("float", 0));
 
   {
+    std::string digits;
+    const bool separators_ok =
+      type_utils::strip_pep515_underscores(*value_opt, digits);
     char *end = nullptr;
-    double dval = std::strtod(value_opt->c_str(), &end);
-    if (!end || end != value_opt->c_str() + value_opt->size())
+    double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+    if (!separators_ok || !end || end != digits.c_str() + digits.size())
     {
       log_error(
         "Failed float conversion from string \"{}\": invalid argument",
@@ -1272,7 +1275,10 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
     return from_integer(0, type_handler_.get_typet("int", 0));
 
   const std::string &value = *value_opt;
-  if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
+  std::string digits;
+  if (
+    !type_utils::strip_pep515_underscores(value, digits) || digits.empty() ||
+    !std::all_of(digits.begin(), digits.end(), ::isdigit))
   {
     log_error("Invalid string for integer conversion: \"{}\"", value);
     return from_integer(0, type_handler_.get_typet("int", 0));
@@ -1280,7 +1286,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
 
   try
   {
-    int int_val = std::stoi(value);
+    int int_val = std::stoi(digits);
     return from_integer(int_val, type_handler_.get_typet("int", 0));
   }
   catch (const std::exception &e)
