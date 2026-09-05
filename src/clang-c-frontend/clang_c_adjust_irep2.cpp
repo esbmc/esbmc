@@ -1387,7 +1387,8 @@ void clang_c_adjust_irep2::declare_polymorphic_builtin(expr2tc &expr)
                           ? to_code_function_call2t(expr).location
                           : enclosing_location;
 
-  // Every arm of the matcher selects on the first argument's *type* alone, so
+  // Every arm of the matcher selects on argument *types* alone -- the first for
+  // the atomic/sync builtins, the last for the overflow and carry ones -- so
   // the values need not cross the seam. A future arm that reads a value gets a
   // nil operand and fails visibly rather than silently selecting wrong.
   exprt::operandst arg_types;

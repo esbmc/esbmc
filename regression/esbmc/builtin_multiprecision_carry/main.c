@@ -24,5 +24,18 @@ int main(void)
   unsigned long c3;
   assert(__builtin_subcl(0UL, 1UL, 0UL, &c3) == ~0UL && c3 == 1UL);
 
+  /* The narrow and wide suffixes share the arms but not the width. */
+  unsigned char c4;
+  assert(__builtin_addcb(0xffu, 1u, 0u, &c4) == 0u && c4 == 1u);
+
+  unsigned short c5;
+  assert(__builtin_subcs(0u, 0u, 1u, &c5) == 0xffffu && c5 == 1u);
+
+  unsigned long long c6;
+  assert(__builtin_addcll(0ULL, 0ULL, 0ULL, &c6) == 0ULL && c6 == 0ULL);
+
+  unsigned c7;
+  assert(__builtin_subc(5u, 3u, 0u, &c7) == 2u && c7 == 0u);
+
   return 0;
 }

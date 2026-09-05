@@ -40,5 +40,21 @@ int main(void)
   assert(!__builtin_add_overflow(-1, 1, &u) && u == 0u);
   assert(__builtin_add_overflow(-1, 0, &u));
 
+  /* Subtraction, where the widening bound is least obvious: unsigned max
+     minus signed min needs the exact type to hold both ends. */
+  int sr;
+  assert(!__builtin_sub_overflow(a, a, &sr) && sr == 0);
+  assert(__builtin_sub_overflow(INT_MIN, 1, &sr));
+  assert(!__builtin_sub_overflow(0u, 1u, &sr) && sr == -1);
+
+  unsigned char uc;
+  assert(__builtin_sub_overflow(0, 1, &uc));
+
+  /* clang accepts a _Bool result and stores the exact value truncated to one
+     bit, so 1 + 1 stores 0 rather than the 1 a cast to _Bool would give. */
+  _Bool bres;
+  assert(__builtin_add_overflow(1, 1, &bres) && bres == 0);
+  assert(!__builtin_add_overflow(0, 1, &bres) && bres == 1);
+
   return 0;
 }
