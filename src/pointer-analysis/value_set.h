@@ -49,6 +49,8 @@
 typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
 typedef hash_numbering<unsigned, std::hash<unsigned>> object_number_numberingt;
 
+#include <util/persistent_map.h>
+
 class value_sett
 {
 public:
@@ -250,7 +252,13 @@ public:
   /** Type of the value-set containing structure. A hash map mapping variables
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
-  typedef std::unordered_map<irep_idt, entryt, irep_id_hash> valuest;
+  /** Persistent (structurally shared) tracking map. symex snapshots
+   *  the whole state at every goto for the later merge; with a
+   *  std::unordered_map that copy was O(N) and made symex quadratic in
+   *  the number of tracked symbols on assume/branch-heavy inputs
+   *  (measured). immer's HAMT makes the copy O(1) — the same pattern
+   *  level1 renaming and guard_seq already use. */
+  typedef persistent_map<irep_idt, entryt, irep_id_hash> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is
@@ -418,7 +426,7 @@ public:
    *  @return True when the erase succeeds, false otherwise. */
   bool erase(const std::string &name)
   {
-    return (values.erase(name) == 1);
+    return values.erase(name);
   }
 
   /** Get the set of things that an expression might point at. Interprets the
@@ -453,12 +461,12 @@ public:
    *  given record already exists. */
   void add_var(const std::string &id, const std::string &suffix)
   {
-    get_entry(id, suffix);
+    touch_entry(entryt(id, suffix));
   }
 
   void add_var(const entryt &e)
   {
-    get_entry(e.identifier, e.suffix);
+    touch_entry(e);
   }
 
   /** Delete the value set for the given variable name and suffix. */
@@ -472,32 +480,65 @@ public:
     values.erase(concat_key(id, suffix));
   }
 
-  /** Look up the value set for the given variable name and suffix. */
-  entryt &get_entry(const std::string &id, const std::string &suffix)
+  /** The map key is `identifier + suffix`. The suffix is empty on the
+   *  overwhelming majority of calls, so avoid building the
+   *  concatenated temporary in that case and key directly off the
+   *  identifier. */
+  static irep_idt entry_key(const entryt &e)
   {
-    return get_entry(entryt(id, suffix));
+    if (e.suffix.empty())
+      return e.identifier;
+    return concat_key(e.identifier, e.suffix);
   }
 
-  /** Look upt he value set for the variable name and suffix stored in the
-   *  given entryt. */
-  entryt &get_entry(const entryt &e)
+  /** Ensure a record exists for the given entry, without changing an
+   *  existing one. The persistent map hands out immutable values, so
+   *  the old mutable get_entry() reference API becomes this plus
+   *  update_object_map()/get_object_map(). */
+  void touch_entry(const entryt &e)
   {
-    // The map key is `identifier + suffix`. The suffix is empty on the
-    // overwhelming majority of calls (every plain l1 variable; suffixes
-    // only appear for array/struct-member pointer tracking), so avoid
-    // building the concatenated temporary string in that case and key
-    // directly off the identifier.
-    if (e.suffix.empty())
+    irep_idt key = entry_key(e);
+    if (values.find(key) == nullptr)
+      values.set(key, e);
+  }
+
+  /** Read the object map recorded for the given name+suffix, or an
+   *  empty map when there is no record. */
+  object_mapt
+  get_object_map(const std::string &id, const std::string &suffix) const
+  {
+    const entryt *e = values.find(entry_key(entryt(id, suffix)));
+    return e ? e->object_map : object_mapt{};
+  }
+
+  /** Overwrite (merge=false) or union-into (merge=true) the object map
+   *  recorded for the given entry. Only a genuine change writes the
+   *  map, so a no-op union never breaks structural sharing. */
+  bool update_object_map(const entryt &e, const object_mapt &om, bool merge)
+  {
+    irep_idt key = entry_key(e);
+    const entryt *cur = values.find(key);
+    if (cur == nullptr)
     {
-      std::pair<valuest::iterator, bool> r =
-        values.insert(std::pair<irep_idt, entryt>(e.identifier, e));
-      return r.first->second;
+      entryt fresh = e;
+      fresh.object_map = om;
+      values.set(key, fresh);
+      return true;
     }
-
-    std::pair<valuest::iterator, bool> r = values.insert(
-      std::pair<irep_idt, entryt>(concat_key(e.identifier, e.suffix), e));
-
-    return r.first->second;
+    if (merge)
+    {
+      object_mapt trial = cur->object_map;
+      if (!make_union(trial, om))
+        return false;
+      entryt upd = *cur;
+      upd.object_map.swap(trial);
+      values.set(key, upd);
+      return true;
+    }
+    entryt upd = *cur;
+    upd.object_map = om;
+    values.set(key, upd);
+    return true;
   }
 
   /** Compose the `identifier + suffix` map key into a single pre-sized

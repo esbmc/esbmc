@@ -2,7 +2,7 @@
 #define _GOTO_SYMEX_RENAMING_H_
 
 #include <set>
-#include <goto-symex/level1_map.h>
+#include <util/persistent_map.h>
 #include <goto-symex/symex_invariant.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2_guard.h>

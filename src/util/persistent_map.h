@@ -1,5 +1,5 @@
-#ifndef GOTO_SYMEX_LEVEL1_MAP_H_
-#define GOTO_SYMEX_LEVEL1_MAP_H_
+#ifndef UTIL_PERSISTENT_MAP_H_
+#define UTIL_PERSISTENT_MAP_H_
 
 #include <cstddef>
 #include <immer/map.hpp>
@@ -55,9 +55,17 @@ public:
     m_ = std::move(m_).set(k, v);
   }
 
-  void erase(const K &k)
+  // Erase; true when the key was present. O(log N), shares subtrees.
+  bool erase(const K &k)
   {
+    std::size_t n = m_.size();
     m_ = std::move(m_).erase(k);
+    return m_.size() != n;
+  }
+
+  void clear()
+  {
+    m_ = map_t{};
   }
 
   using const_iterator = typename map_t::iterator;
@@ -71,4 +79,4 @@ public:
   }
 };
 
-#endif /* GOTO_SYMEX_LEVEL1_MAP_H_ */
+#endif /* UTIL_PERSISTENT_MAP_H_ */
