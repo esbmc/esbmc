@@ -88,7 +88,7 @@ bool breaks_straight_line(const goto_programt::targett &it)
 
 /// Instructions the body summary may step over. This is a whitelist because
 /// OTHER carries `free`, `delete` and `asm` (symex_other.cpp), whose effect the
-/// schema's havoc of get_modified_loop_vars() cannot describe: it names
+/// schema's havoc of get_modified_loop_vars() cannot express: it names
 /// variables and says nothing about heap validity. Cutting a loop over a
 /// `free` proved a post-loop use-after-free safe.
 bool is_inert_in_body(const goto_programt::targett &it)
@@ -135,6 +135,14 @@ bool is_integer(const expr2tc &expr)
 {
   return expr &&
          (is_unsignedbv_type(expr->type) || is_signedbv_type(expr->type));
+}
+
+/// Key for the per-variable write map. Every caller has already established
+/// the expression is a symbol, so this is the whole identity -- and cheaper
+/// than pretty(), which dumps the expression textually on every lookup.
+std::string write_key(const expr2tc &var)
+{
+  return to_symbol2t(var).thename.as_string();
 }
 
 bool is_constant_one(const expr2tc &expr)
@@ -370,12 +378,12 @@ static bool summarise_body(
 
     if (!writes
            .emplace(
-             assign.target->pretty(), std::make_pair(assign.target, addend))
+             write_key(assign.target), std::make_pair(assign.target, addend))
            .second)
       return false;
   }
 
-  const auto counter_write = writes.find(counter->pretty());
+  const auto counter_write = writes.find(write_key(counter));
   return counter_write != writes.end() &&
          is_constant_one(counter_write->second.second);
 }
@@ -398,7 +406,7 @@ static bool classify_accumulators(
     if (!is_symbol2t(var))
       return false;
 
-    const auto write = writes.find(var->pretty());
+    const auto write = writes.find(write_key(var));
     if (write == writes.end())
       return false;
 
@@ -423,7 +431,7 @@ static bool classify_accumulators(
     out.accumulators.begin(),
     out.accumulators.end(),
     [](const accumulatort &a, const accumulatort &b) {
-      return a.var->pretty() < b.var->pretty();
+      return write_key(a.var) < write_key(b.var);
     });
   return true;
 }
