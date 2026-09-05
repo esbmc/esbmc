@@ -2665,17 +2665,38 @@ class LoopMixin:
 
     @classmethod
     def _resolve_nondet_type(cls, node, allowed, func_name, role):
-        expected = ", ".join("nondet_%s()" % t for t in allowed)
+        expected = ", ".join(f"nondet_{t}()" for t in allowed)
         type_name = cls._nondet_generator_type(node)
         if type_name is None:
             raise SyntaxError(
-                "%s: %s must be a nondet generator, got %r; expected one of %s"
-                % (func_name, role, ast.unparse(node), expected))
+                f"{func_name}: {role} must be a nondet generator, got "
+                f"{ast.unparse(node)!r}; expected one of {expected}")
         if type_name not in allowed:
             raise SyntaxError(
-                "%s: unsupported %s 'nondet_%s()'; expected one of %s"
-                % (func_name, role, type_name, expected))
+                f"{func_name}: unsupported {role} 'nondet_{type_name}()'; "
+                f"expected one of {expected}")
         return type_name
+
+    @staticmethod
+    def _nondet_collection_keywords(call, func_name):
+        """Keyword arguments of a nondet collection call, keyed by name.
+
+        A keyword this model does not know is rejected rather than dropped: a
+        dropped one silently reverts the element type to int, which is the
+        vacuous-proof failure mode of esbmc/esbmc#7575 arriving through a typo.
+        ``**kwargs`` (``kw.arg is None``) hides the bound the same way.
+        """
+        accepted = ("max_size", "elem_type") if func_name == "nondet_list" \
+            else ("max_size", "key_type", "value_type")
+        keywords = {}
+        for kw in call.keywords:
+            if kw.arg not in accepted:
+                given = repr(kw.arg) if kw.arg else "**kwargs"
+                raise SyntaxError(
+                    f"{func_name}: unexpected keyword argument {given}; "
+                    f"accepts {', '.join(accepted)}")
+            keywords[kw.arg] = kw.value
+        return keywords
 
     def _parse_nondet_collection_call(self, call):
         """Resolve a ``nondet_list``/``nondet_dict`` call.
@@ -2703,43 +2724,30 @@ class LoopMixin:
         if positional and not leading_generator:
             max_size_node = positional.pop(0)
 
-        accepted = ("max_size", "elem_type") if func_name == "nondet_list" \
-            else ("max_size", "key_type", "value_type")
-        keyword = {}
-        for kw in call.keywords:
-            # A dropped keyword silently reverts the element type to int, which
-            # is the vacuous-proof failure mode of esbmc/esbmc#7575 arriving
-            # through a typo. **kwargs (kw.arg is None) hides the bound too.
-            if kw.arg not in accepted:
-                raise SyntaxError(
-                    "%s: unexpected keyword argument %s; accepts %s"
-                    % (func_name,
-                       repr(kw.arg) if kw.arg else "**kwargs",
-                       ", ".join(accepted)))
-            keyword[kw.arg] = kw.value
-        if "max_size" in keyword:
-            max_size_node = keyword["max_size"]
+        keywords = self._nondet_collection_keywords(call, func_name)
+        max_size_node = keywords.get("max_size", max_size_node)
         if max_size_node is None:
             max_size_node = ast.Constant(value=self._DEFAULT_NONDET_COLLECTION_SIZE)
 
         def slot(index, kw_name):
-            if kw_name in keyword:
-                return keyword[kw_name]
-            return positional[index] if len(positional) > index else None
+            fallback = positional[index] if len(positional) > index else None
+            return keywords.get(kw_name, fallback)
+
+        def resolve(node, allowed, role):
+            if node is None:
+                return "int"
+            return self._resolve_nondet_type(node, allowed, func_name, role)
 
         if func_name == "nondet_list":
-            elem_node = slot(0, "elem_type")
-            elem = "int" if elem_node is None else self._resolve_nondet_type(
-                elem_node, self._NONDET_LIST_ELEM_TYPES, func_name, "elem_type")
-            return "_nondet_list_%s" % elem, max_size_node
+            elem = resolve(slot(0, "elem_type"),
+                           self._NONDET_LIST_ELEM_TYPES, "elem_type")
+            return f"_nondet_list_{elem}", max_size_node
 
-        key_node = slot(0, "key_type")
-        val_node = slot(1, "value_type")
-        key = "int" if key_node is None else self._resolve_nondet_type(
-            key_node, self._NONDET_DICT_KEY_TYPES, func_name, "key_type")
-        val = "int" if val_node is None else self._resolve_nondet_type(
-            val_node, self._NONDET_DICT_VALUE_TYPES, func_name, "value_type")
-        return "_nondet_dict_%s_%s" % (key, val), max_size_node
+        key = resolve(slot(0, "key_type"),
+                      self._NONDET_DICT_KEY_TYPES, "key_type")
+        val = resolve(slot(1, "value_type"),
+                      self._NONDET_DICT_VALUE_TYPES, "value_type")
+        return f"_nondet_dict_{key}_{val}", max_size_node
 
     def _rewrite_nondet_collection_call(self, call):
         """Rewrite a nondet collection call to its monomorphic builder.
