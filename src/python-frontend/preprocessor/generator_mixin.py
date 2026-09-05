@@ -159,7 +159,11 @@ class GeneratorMixin:
         """
         for generator in node.generators:
             if getattr(generator, "is_async", False):
-                raise NotImplementedError("Async list comprehensions are not supported")
+                err = NotImplementedError("Async list comprehensions are not supported")
+                # Consumed by parser.main to locate the rejection in the user's
+                # file; the raising frame is inside ESBMC (#7547).
+                err.esbmc_location = (self.module_name, node.lineno, node.col_offset)
+                raise err
 
         node = self._rename_shadowing_targets(node)
 
