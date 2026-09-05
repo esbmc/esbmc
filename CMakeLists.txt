@@ -1,7 +1,7 @@
 #################################
 # Project Information           #
 #################################
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.24)
 
 # HACK: This msvc policy needs to be set before project()
 # This can be removed when we move to CMake >= 3.15
@@ -14,8 +14,8 @@ set(ESBMC_VERSION_MINOR 5)
 set(ESBMC_VERSION_PATCH 0)
 set(ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
-# The only default solver available is smtlib
-set(ESBMC_AVAILABLE_SOLVERS "smtlib")
+# Solver subdirectories append to this during configuration.
+set(ESBMC_AVAILABLE_SOLVERS "")
 
 set(MIN_SUPPORTED_LLVM_VERSION_MAJOR 18)
 set(MAX_SUPPORTED_LLVM_VERSION_MAJOR 22)
@@ -72,32 +72,7 @@ if(BUILD_STATIC)
   include(BuildStatic)
 endif()
 
-# Copied from https://stackoverflow.com/questions/53877344/cannot-configure-cmake-to-look-for-homebrew-installed-version-of-bison
-# On macOS, search Homebrew for keg-only versions of Bison and Flex. Xcode does
-# not provide new enough versions for us to use.
 if(CMAKE_HOST_SYSTEM_NAME MATCHES "Darwin")
-    execute_process(
-        COMMAND brew --prefix bison
-        RESULT_VARIABLE BREW_BISON
-        OUTPUT_VARIABLE BREW_BISON_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(BREW_BISON EQUAL 0 AND EXISTS "${BREW_BISON_PREFIX}")
-        message(STATUS "Found Bison keg installed by Homebrew at ${BREW_BISON_PREFIX}")
-        set(BISON_EXECUTABLE "${BREW_BISON_PREFIX}/bin/bison")
-    endif()
-
-    execute_process(
-        COMMAND brew --prefix flex
-        RESULT_VARIABLE BREW_FLEX
-        OUTPUT_VARIABLE BREW_FLEX_PREFIX
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if(BREW_FLEX EQUAL 0 AND EXISTS "${BREW_FLEX_PREFIX}")
-        message(STATUS "Found Flex keg installed by Homebrew at ${BREW_FLEX_PREFIX}")
-        set(FLEX_EXECUTABLE "${BREW_FLEX_PREFIX}/bin/flex")
-    endif()
-
     # Homebrew's static Boost.Iostreams injects bare -l names for its
     # compression/ICU backends (zstd + icu{data,i18n,uc}) with no search path,
     # so the static link fails with "library 'zstd' not found" (esbmc/esbmc#6234).

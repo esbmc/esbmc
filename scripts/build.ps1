@@ -1,8 +1,6 @@
 Write-Host "Set TLS1.2"
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
 choco install -y nsis.portable --ignore-checksums &&
-./scripts/winflexbison_install.ps1
-
 od.exe --version &&
 
 vcpkg.exe integrate install &&

@@ -22,8 +22,8 @@ extern "C"
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
 #include <util/base/cwe_mapping.h>
-#include <solvers/smt/smt_result.h>
-#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smt_result.h>
+#include <solvers/external_process_died.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
@@ -687,7 +687,7 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
     log_status("Inductive step aborted: {}", e.reason);
     res = P_ERROR;
   }
-  catch (const smtlib_convt::external_process_died &e)
+  catch (const external_process_died &e)
   {
     // An external SMT solver process (an --smtlib solver, or a one-shot
     // backend's model solver) died or returned an unusable response past the

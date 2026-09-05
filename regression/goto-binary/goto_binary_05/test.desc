@@ -1,4 +1,4 @@
 CORE
 main.goto
---binary --floatbv --no-simplify
+--binary --no-simplify
 ^VERIFICATION SUCCESSFUL$

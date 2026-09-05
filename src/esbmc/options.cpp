@@ -614,7 +614,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Check all interleavings, even if a bug was already found"}}},
   {"Solver",
    {{"list-solvers", NULL, "List available solvers and exit"},
-    {"boolector", NULL, "Use Boolector"},
     {"z3", NULL, "Use Z3"},
     {"z3-debug", NULL, "Extracts Z3 dump and SMT2 formula"},
     {"z3-debug-dump-file",
@@ -624,36 +623,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("log.smt2"),
      "Name for Z3 smt2 file"},
     {"mathsat", NULL, "Use MathSAT"},
-    {"cvc", NULL, "Alias for --cvc4; this may change in the future to --cvc5"},
-    {"cvc4", NULL, "Use CVC4"},
+    {"cvc", NULL, "Alias for --cvc5"},
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
-    {"bitwuzllob",
-     NULL,
-     "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
-     "running an external mallob binary in one-shot mono mode"},
-    {"bitwuzllob-prog",
-     boost::program_options::value<std::string>()->value_name("<cmd>"),
-     "Command running Mallob in mono mode; every %f is replaced by the "
-     "SMT-LIB2 formula file (default: \"mallob -mono=%f -mono-app=SMT\")"},
-    {"bitwuzllob-model-prog",
-     boost::program_options::value<std::string>()->value_name("<cmd>"),
-     "Local interactive SMT-LIB2 solver used to build the counterexample "
-     "when Bitwuzllob reports satisfiable (e.g. \"z3 -in\")"},
-    {"neurosym",
-     NULL,
-     "Use NeuroSym (neural-guided GAN + Z3 fallback, QF_BV) by running an "
-     "external NeuroSym Python program in one-shot batch mode"},
-    {"neurosym-prog",
-     boost::program_options::value<std::string>()->value_name("<cmd>"),
-     "Command running NeuroSym on an SMT-LIB2 file; every %f is replaced by "
-     "the formula file, appended when absent (default: \"python main.py "
-     "%f\")"},
-    {"neurosym-model-prog",
-     boost::program_options::value<std::string>()->value_name("<cmd>"),
-     "Local interactive SMT-LIB2 solver used to build the counterexample "
-     "when NeuroSym reports satisfiable (e.g. \"z3 -in\")"},
     {"bv", NULL, "Use solver with bit-vector arithmetic"},
     {"ir",
      NULL,
@@ -684,23 +657,36 @@ const struct group_opt_templ all_cmd_options[] = {
     {"smtlib-solver-prog",
 
      boost::program_options::value<std::string>(),
-     "Path to the SMT-LIB solver executable"},
+     "Interactive SMT-LIB solver executable and its flags, whitespace-"
+     "separated (e.g. \"z3 -in\"). Run directly, not through a shell: quotes "
+     "and shell metacharacters are not interpreted"},
+    {"smtlib-oneshot-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Solve by writing the formula to a file and running this command on it "
+     "once, instead of talking to an interactive solver. Every %f is replaced "
+     "by the file (appended when absent), and the verdict is read from the "
+     "command's output -- for solvers that cannot be linked in, such as "
+     "\"mallob -mono=%f -mono-app=SMT\" or \"python main.py %f\". Unlike "
+     "--smtlib-solver-prog this runs through a shell, so do not build it from "
+     "untrusted input"},
+    {"smtlib-oneshot-model-prog",
+     boost::program_options::value<std::string>()->value_name("<cmd>"),
+     "Local interactive SMT-LIB2 solver used to build the counterexample when "
+     "the one-shot command reports satisfiable (e.g. \"z3 -in\"); the "
+     "one-shot process has exited by then and cannot be queried. Without it, "
+     "satisfiable results need --result-only"},
+    {"smtlib-logic",
+     boost::program_options::value<std::string>()->value_name("<logic>"),
+     "Emit this logic in (set-logic ...) instead of the one implied by the "
+     "encoding, for a solver that accepts only a specific fragment (e.g. "
+     "QF_BV)"},
     {"output",
      boost::program_options::value<std::string>()->value_name("<filename>"),
      "Output VCCs in SMT lib format to given file (or stdout if it is '-')"},
-    {"floatbv",
-     NULL,
-     "Encode floating-point using the SMT floating-point theory (default)"},
-    {"fixedbv", NULL, "Encode floating-point as fixed bit-vectors"},
     {"fp2bv",
      NULL,
      "Encode floating-point as bit-vectors (default for solvers that don't "
      "support the SMT floating-point theory)"},
-    {"tuple-node-flattener", NULL, "Encode tuples using our tuple to node API"},
-    {"tuple-sym-flattener",
-     NULL,
-     "Encode tuples using our tuple to symbol API"},
-    {"array-flattener", NULL, "Encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,
      "Disable return value optimization to compute the stack size"}}},

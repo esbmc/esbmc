@@ -1741,6 +1741,8 @@ void goto_convertt::do_function_call_symbol(
     if (lhs.is_nil())
       return;
 
+    options.set_option("has-quantifiers", true);
+
     exprt rhs =
       exprt(base_name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
     rhs.copy_to_operands(arguments[0]);

@@ -22,11 +22,10 @@ extern "C"
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
 #include <util/base/cwe_mapping.h>
-#include <solvers/smt/smt_result.h>
-#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <irep2/simplification_check.h>
-#include <solvers/smt/simplification_equivalence.h>
+#include <solvers/simplification_equivalence.h>
 #include <algorithm>
 #include <cctype>
 #include <charconv>

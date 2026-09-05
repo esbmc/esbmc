@@ -343,7 +343,9 @@ c_typecastt::c_typet c_typecastt::get_c_type(const typet &type)
     return rank_integer(width, false);
   else if (type.is_bool())
     return BOOL;
-  else if (type.id() == "floatbv" || type.id() == "fixedbv")
+  else if (type.id() == "fixedbv")
+    return FIXED;
+  else if (type.id() == "floatbv")
     return rank_floating(width);
   else if (type.id() == "pointer")
   {
@@ -374,17 +376,17 @@ c_typecastt::c_typet c_typecastt::get_c_type(const type2tc &type)
     return rank_integer(to_unsignedbv_type(type).width, false);
   else if (is_bool_type(type))
     return BOOL;
-  else if (is_fixedbv_type(type) || is_floatbv_type(type))
+  else if (is_fixedbv_type(type))
+    return FIXED;
+  else if (is_floatbv_type(type))
   {
-    // The legacy typet overload above classifies "floatbv" and "fixedbv"
-    // together; this one only ever handled fixedbv, so every floatbv fell
-    // through to OTHER. OTHER outranks every arithmetic kind, so
-    // implicit_typecast_arithmetic promoted both operands to a type its switch
-    // has no case for and silently converted neither -- making the whole
-    // helper a no-op on any expr2tc pair with a floating-point operand.
-    return rank_floating(
-      is_fixedbv_type(type) ? to_fixedbv_type(type).width
-                            : to_floatbv_type(type).get_width());
+    // The legacy typet overload above classifies floats by width; this one
+    // only ever handled fixedbv, so every floatbv fell through to OTHER.
+    // OTHER outranks every arithmetic kind, so implicit_typecast_arithmetic
+    // promoted both operands to a type its switch has no case for and
+    // silently converted neither -- making the whole helper a no-op on any
+    // expr2tc pair with a floating-point operand.
+    return rank_floating(to_floatbv_type(type).get_width());
   }
   else if (is_pointer_type(type))
   {
@@ -831,12 +833,50 @@ void c_typecastt::implicit_typecast_followed(
     do_typecast(expr, dest_type);
 }
 
+/* TR 18037 4.1.4: the usual arithmetic conversions do not apply between
+ * fixed-point operands -- the operation is computed in the operands' common
+ * format (the solver's fixed-point layer does this natively), so no casts
+ * are inserted. An integer operand is reinterpreted as a zero-fraction
+ * fixed-point value of its own width and signedness, which is exact. */
+static typet zero_fraction_fixed_type(const typet &int_type)
+{
+  fixedbv_typet t;
+  unsigned width = atoi(int_type.width().c_str());
+  t.set_width(width);
+  t.set_integer_bits(width);
+  if (int_type.id() == "unsignedbv")
+    t.set("#esbmc_unsigned", "1");
+  return t;
+}
+
 void c_typecastt::implicit_typecast_arithmetic(exprt &expr1, exprt &expr2)
 {
   const typet &type1 = ns.follow(expr1.type());
   const typet &type2 = ns.follow(expr2.type());
 
   c_typet c_type1 = get_c_type(type1), c_type2 = get_c_type(type2);
+
+  if (c_type1 == FIXED && c_type2 == FIXED)
+    return; // computed in the operands' common format; no casts
+
+  if (c_type1 == FIXED || c_type2 == FIXED)
+  {
+    exprt &other_side = c_type1 == FIXED ? expr2 : expr1;
+    const c_typet other = c_type1 == FIXED ? c_type2 : c_type1;
+    /* Every integer kind, INT128/UINT128 included, now ranks below FIXED
+     * (C17 6.3.1.8), so integer-ness is a rank test. */
+    const bool other_is_int = other < FIXED;
+    if (other_is_int)
+    {
+      implicit_typecast_arithmetic(other_side, std::max(other, INT));
+      do_typecast(
+        other_side, zero_fraction_fixed_type(ns.follow(other_side.type())));
+      return;
+    }
+    // fixed op float falls through to the rank comparison below: the fixed
+    // operand promotes to the float rank, and the conversion itself is
+    // rejected with a clear error at encoding time.
+  }
 
   c_typet max_type = std::max(c_type1, c_type2);
   max_type = std::max(max_type, INT); // minimum promotion
@@ -854,6 +894,10 @@ void c_typecastt::implicit_typecast_arithmetic(exprt &expr1, exprt &expr2)
   }
 }
 
+/* Unlike the exprt overload above, this one has no FIXED arm: its callers are
+ * all in the python frontend, which has no fixed-point types. A FIXED operand
+ * would fall through to the switch's default and convert neither side; wire
+ * the arm in before using this from a frontend that can produce them. */
 void c_typecastt::implicit_typecast_arithmetic(expr2tc &expr1, expr2tc &expr2)
 {
   const type2tc &type1 = ns.follow(expr1->type);

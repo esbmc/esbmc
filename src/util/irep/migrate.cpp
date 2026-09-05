@@ -264,7 +264,12 @@ static type2tc migrate_type0(const typet &type)
     unsigned int width_bits = to_fixedbv_type(type).get_width();
     unsigned int int_bits = to_fixedbv_type(type).get_integer_bits();
 
-    return fixedbv_type2tc(width_bits, int_bits);
+    /* Absent attributes mean the legacy signed, non-saturating layout. */
+    return fixedbv_type2tc(
+      width_bits,
+      int_bits,
+      type.get("#esbmc_unsigned") != "1",
+      type.get("#esbmc_saturating") == "1");
   }
 
   if (type.id() == typet::t_floatbv)
@@ -1581,6 +1586,23 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   if (migrate_ieee_arith_2op(expr, new_expr_ref))
     return;
 
+  if (expr.id() == "ieee_rem")
+  {
+    type = migrate_type(expr.type());
+
+    assert(expr.operands().size() == 2);
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    /* fp.rem is exact, so no rounding mode participates; the field is the
+     * 2-op plumbing's and is fixed to the default symbol. */
+    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
+    return;
+  }
+
   if (expr.id() == "ieee_fma")
   {
     type = migrate_type(expr.type());
@@ -2785,6 +2807,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (expr.id() == "fixedbv_sqrt" || expr.id() == "fixedbv_exp")
+  {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    type2tc thetype = migrate_type(expr.type());
+    new_expr_ref = expr.id() == "fixedbv_sqrt"
+                     ? expr2tc(fixedbv_sqrt2tc(thetype, theval))
+                     : expr2tc(fixedbv_exp2tc(thetype, theval));
+    return;
+  }
+
   if (expr.id() == "bswap")
   {
     expr2tc theval;
@@ -3093,6 +3127,12 @@ typet migrate_type_back(const type2tc &ref)
     fixedbv_typet thetype;
     thetype.set_integer_bits(ref2.integer_bits);
     thetype.set_width(ref2.width);
+    /* Only mark the non-legacy variants, so round-tripping the historical
+     * signed non-saturating layout stays byte-identical. */
+    if (!ref2.is_signed)
+      thetype.set("#esbmc_unsigned", "1");
+    if (ref2.is_saturating)
+      thetype.set("#esbmc_saturating", "1");
     return thetype;
   }
   case type2t::floatbv_id:
@@ -4567,6 +4607,20 @@ exprt migrate_expr_back(const expr2tc &ref)
     const popcount2t &ref2 = to_popcount2t(ref);
     exprt back("popcount", migrate_type_back(ref->type));
     back.copy_to_operands(migrate_expr_back(ref2.operand));
+    return back;
+  }
+  case expr2t::fixedbv_sqrt_id:
+  {
+    const fixedbv_sqrt2t &ref2 = to_fixedbv_sqrt2t(ref);
+    exprt back("fixedbv_sqrt", migrate_type_back(ref->type));
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::fixedbv_exp_id:
+  {
+    const fixedbv_exp2t &ref2 = to_fixedbv_exp2t(ref);
+    exprt back("fixedbv_exp", migrate_type_back(ref->type));
+    back.copy_to_operands(migrate_expr_back(ref2.value));
     return back;
   }
   case expr2t::bswap_id:

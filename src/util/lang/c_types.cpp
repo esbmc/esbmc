@@ -5,13 +5,6 @@
 
 typet build_float_type(unsigned width)
 {
-  if (config.ansi_c.use_fixed_for_float)
-  {
-    fixedbv_typet result;
-    result.set_width(width);
-    result.set_integer_bits(width / 2);
-    return result;
-  }
   floatbv_typet result;
   result.set_width(width);
 
@@ -41,9 +34,6 @@ typet build_float_type(unsigned width)
 
 type2tc build_float_type2(unsigned width)
 {
-  if (config.ansi_c.use_fixed_for_float)
-    return fixedbv_type2tc(width, width / 2);
-
   unsigned fraction = 0;
   switch (width)
   {

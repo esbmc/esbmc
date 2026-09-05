@@ -482,10 +482,11 @@ fold_float_constant(expr2tc &expr, const irep_idt &name, bool &handled)
   if (!handled)
     return false;
 
-  // The fixed-point spelling is a bit pattern built off bv_width rather than
-  // an ieee_floatt, and has no constant_floatbv2t to land on. Decline instead
-  // of guessing: the call stays where this mode already had it.
-  if (config.ansi_c.use_fixed_for_float || !is_floatbv_type(expr->type))
+  // Only a floating-point result has a constant_floatbv2t to land on; the
+  // fixed-point spelling is a bit pattern with no such node. Decline instead
+  // of guessing. (Pre-camada this also tested use_fixed_for_float, the
+  // --floatbv mode this branch removed.)
+  if (!is_floatbv_type(expr->type))
     return false;
 
   const ieee_float_spect spec(to_floatbv_type(expr->type));

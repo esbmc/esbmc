@@ -229,6 +229,29 @@ static expr2tc try_simplification(const expr2tc &expr)
   return to_simplify;
 }
 
+/* fixedbvt models a signed, non-saturating fixed-point value; folding
+ * unsigned or _Sat constants through it would diverge from the encoder's
+ * (oracle-pinned) semantics, so those are left to the solver. */
+static bool fixedbv_type_foldable(const type2tc &t)
+{
+  if (!is_fixedbv_type(t))
+    return true;
+  const fixedbv_type2t &f = to_fixedbv_type(t);
+  return f.is_signed && !f.is_saturating;
+}
+
+/* fixedbvt's binary operators add/compare raw values, which is only
+ * meaningful when both operands share a format; mixed-format operations
+ * are left to the solver's common-format computation. */
+static bool fixedbv_same_format(const expr2tc &a, const expr2tc &b)
+{
+  if (!is_fixedbv_type(a) || !is_fixedbv_type(b))
+    return true;
+  const fixedbv_type2t &x = to_fixedbv_type(a->type);
+  const fixedbv_type2t &y = to_fixedbv_type(b->type);
+  return x.width == y.width && x.integer_bits == y.integer_bits;
+}
+
 static expr2tc typecast_check_return(const type2tc &type, const expr2tc &expr)
 {
   // If the expr is already nil, do nothing
@@ -269,9 +292,14 @@ struct int_kind
 struct fixedbv_kind
 {
   using value_type = fixedbvt;
+  /* fixedbvt models a signed, non-saturating value and its operators compare
+   * raw values, so folding unsigned/_Sat constants, or a mixed-format pair,
+   * would diverge from the encoder's (oracle-pinned) semantics. Decline those
+   * here -- this is the single point every fold dispatch goes through -- and
+   * leave them to the solver. */
   static bool is_type(const expr2tc &e)
   {
-    return is_fixedbv_type(e);
+    return is_fixedbv_type(e) && fixedbv_type_foldable(e->type);
   }
   static bool is_const(const expr2tc &e)
   {
@@ -332,6 +360,12 @@ template <
 static expr2tc fold_kind(const expr2tc &a, const expr2tc &b)
 {
   using V = typename Kind::value_type;
+  /* fixedbvt's binary operators add/compare raw values, which is only
+   * meaningful when both operands share a format; a mixed-format pair is left
+   * to the solver's common-format computation (TR 18037 4.1.4). */
+  if constexpr (std::is_same_v<Kind, fixedbv_kind>)
+    if (!fixedbv_same_format(a, b))
+      return expr2tc();
   return TFunctor<Wrap<V>>::simplify(a, b, &Kind::is_const, &Kind::value);
 }
 
@@ -388,6 +422,12 @@ static expr2tc simplify_arith_2ops(
 
   // This should be handled by ieee_*
   assert(!is_floatbv_type(type));
+
+  /* fixedbvt is signed and non-saturating: folding an unsigned or _Sat
+   * *result* here would clamp by fixedbvt's rules rather than the encoder's
+   * (oracle-pinned) ones. The operand side is declined in fixedbv_kind. */
+  if (!fixedbv_type_foldable(type))
+    return expr2tc();
 
   expr2tc simpl_res;
   if (is_vector_type(type))
@@ -1305,7 +1345,7 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
       simpl_res =
         from_integer(to_constant_int2t(simpl_res).value, simpl_res->type);
   }
-  else if (is_fixedbv_type(value))
+  else if (is_fixedbv_type(value) && fixedbv_type_foldable(value->type))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
@@ -3437,6 +3477,10 @@ static std::optional<expr2tc> fold_constant_bool_source(
 
   if (is_fixedbv_type(type))
   {
+    /* Folding into an unsigned or _Sat fixed-point result would diverge from
+     * the encoder's (oracle-pinned) semantics; leave it to the solver. */
+    if (!fixedbv_type_foldable(type))
+      return expr2tc();
     fixedbvt fbv;
     fbv.spec = fixedbv_spect(to_fixedbv_type(type));
     fbv.from_integer(to_constant_bool2t(simp).value);
@@ -3484,6 +3528,10 @@ static std::optional<expr2tc> fold_constant_bv_source(
 
   if (is_fixedbv_type(type))
   {
+    /* Folding into an unsigned or _Sat fixed-point result would diverge from
+     * the encoder's (oracle-pinned) semantics; leave it to the solver. */
+    if (!fixedbv_type_foldable(type))
+      return expr2tc();
     fixedbvt fbv;
     fbv.spec = fixedbv_spect(to_fixedbv_type(type));
     fbv.from_integer(theint.value);
@@ -3519,14 +3567,26 @@ static std::optional<expr2tc> fold_constant_fixedbv_source(
   const expr2tc &rounding_mode)
 {
   (void)rounding_mode;
+  /* fixedbvt models a signed, non-saturating value, so reading an unsigned or
+   * _Sat constant through it diverges from the encoder's (oracle-pinned)
+   * semantics whatever the target is. Decline the whole helper. */
+  if (!fixedbv_type_foldable(simp->type))
+    return std::nullopt;
+
   // float/double to int/float/double
   fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
   if (is_bv_type(type))
-    return constant_int2tc(type, fbv.to_integer());
+    /* toward-zero integral part, then modular conversion to the destination
+     * width -- from_integer performs the wrap, constant_int2tc would not. */
+    return from_integer(fbv.to_integer(), type);
 
   if (is_fixedbv_type(type))
   {
+    /* Folding into an unsigned or _Sat fixed-point result would diverge from
+     * the encoder's (oracle-pinned) semantics; leave it to the solver. */
+    if (!fixedbv_type_foldable(type))
+      return expr2tc();
     fbv.round(fixedbv_spect(to_fixedbv_type(type)));
     return constant_fixedbv2tc(fbv);
   }
@@ -5568,7 +5628,7 @@ static expr2tc simplify_floatbv_1op(const type2tc &type, const expr2tc &value)
 
   expr2tc simpl_res;
 
-  if (is_fixedbv_type(value))
+  if (is_fixedbv_type(value) && fixedbv_type_foldable(value->type))
   {
     std::function<constant_fixedbv2t &(expr2tc &)> to_constant =
       (constant_fixedbv2t & (*)(expr2tc &)) to_constant_fixedbv2t;
@@ -6475,3 +6535,17 @@ ESBMC_NIL_SIMPLIFY(hasattr)
 ESBMC_NIL_SIMPLIFY(isnone)
 
 #undef ESBMC_NIL_SIMPLIFY
+
+/* No constant folding for the fixed-point elementary functions: reproducing
+ * correctly-rounded sqrt/exp here would mean duplicating the very thing the
+ * solver is being asked for, and a folder that rounded differently would
+ * silently disagree with mkFXPSqrt/mkFXPExp. Leave both to the solver. */
+expr2tc fixedbv_sqrt2t::do_simplify() const
+{
+  return expr2tc();
+}
+
+expr2tc fixedbv_exp2t::do_simplify() const
+{
+  return expr2tc();
+}

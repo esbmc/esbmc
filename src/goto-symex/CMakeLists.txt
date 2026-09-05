@@ -24,7 +24,7 @@ target_include_directories(symex
 )
 target_compile_definitions(symex PUBLIC BOOST_ALL_NO_LIB YAML_CPP_STATIC_DEFINE)
 target_link_libraries(symex
-  PUBLIC  smt gotoprograms pointeranalysis abstract-interpretation
+  PUBLIC  solvers gotoprograms pointeranalysis abstract-interpretation
   PRIVATE nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt usr_utils
 )
 

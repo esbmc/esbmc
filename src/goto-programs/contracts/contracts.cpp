@@ -4476,9 +4476,11 @@ expr2tc code_contractst::fix_comparison_types(
             // Only recreate if something changed
             if (fixed_op1 != add.side_1 || fixed_op2 != add.side_2)
             {
-              // For floating-point types, use IEEE addition instead of regular addition
-              // This matches how floating-point operations are compiled in the actual code
-              if (is_fractional_type(cast.type))
+              // For floating-point types, use IEEE addition instead of regular
+              // addition This matches how floating-point operations are
+              // compiled in the actual code. Fixed-point additions stay add2t
+              // -- only floatbv lowers to ieee_add.
+              if (is_floatbv_type(cast.type))
               {
                 // Use IEEE floating-point addition with default rounding mode
                 expr2tc rounding_mode =
@@ -4663,8 +4665,9 @@ expr2tc code_contractst::normalize_fp_add_in_ensures(const expr2tc &expr) const
   {
     const add2t &add = to_add2t(expr);
 
-    // Only convert if this is a floating-point type
-    if (is_fractional_type(add.type))
+    // Only convert if this is a floating-point type; fixed-point additions
+    // are plain add2t (adjust_float_arith rewrites floatbv only).
+    if (is_floatbv_type(add.type))
     {
       // Use default rounding mode symbol (same as implementation)
       expr2tc rounding_mode =

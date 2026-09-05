@@ -1,4 +1,4 @@
 CORE
 main.c
---floatbv --overflow-check --nan-check
+--overflow-check --nan-check
 ^VERIFICATION FAILED$

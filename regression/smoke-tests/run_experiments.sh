@@ -1,7 +1,7 @@
 #!/bin/bash
 
 VERIFIER=esbmc
-SOLVER=--boolector 
+SOLVER=
 BINARY=
 CLAIM=--claim
 OVERFLOWCHECK=--overflow-check

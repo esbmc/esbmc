@@ -39,7 +39,7 @@ jobs:
             build-essential cmake ninja-build git wget curl \
             gcc-12 g++-12 g++-multilib libc6-dev-i386 \
             libboost-all-dev libgmp-dev libssl-dev \
-            bison flex python3
+            python3
 
       - name: Configure CMake (LD front-end with tests)
         run: |
@@ -49,7 +49,6 @@ jobs:
             -DCMAKE_C_COMPILER=gcc-12 \
             -DCMAKE_CXX_COMPILER=g++-12 \
             -DDOWNLOAD_DEPENDENCIES=On \
-            -DENABLE_BOOLECTOR=Off \
             -DENABLE_YICES=Off \
             -DENABLE_BITWUZLA=Off \
             -DENABLE_GOTO_CONTRACTOR=Off \
@@ -115,7 +114,7 @@ jobs:
             build-essential cmake ninja-build git wget curl \
             gcc-12 g++-12 g++-multilib libc6-dev-i386 \
             libboost-all-dev libgmp-dev libssl-dev \
-            bison flex python3
+            python3
 
       - name: Configure CMake (minimal PLC+ build)
         run: |
@@ -125,7 +124,6 @@ jobs:
             -DCMAKE_C_COMPILER=gcc-12 \
             -DCMAKE_CXX_COMPILER=g++-12 \
             -DDOWNLOAD_DEPENDENCIES=On \
-            -DENABLE_BOOLECTOR=Off \
             -DENABLE_YICES=Off \
             -DENABLE_BITWUZLA=Off \
             -DENABLE_GOTO_CONTRACTOR=Off \
@@ -144,7 +142,13 @@ jobs:
       - name: Fix RPATH and bundle Z3 library
         run: |
           sudo apt-get install -y patchelf
-          Z3_LIB=$(find build/Z3 -name "libz3.so" | head -1)
+          # Z3 arrives under camada's dependency tree, not the old build/Z3
+          # download dir, so search the whole build tree for it.
+          Z3_LIB=$(find build -name "libz3.so*" -type f | head -1)
+          if [ -z "$Z3_LIB" ]; then
+            echo "FAIL: no libz3.so found under build/"
+            exit 1
+          fi
           echo "Found Z3 lib: $Z3_LIB"
           cp "$Z3_LIB" libz3.so
           patchelf --set-rpath /usr/local/lib build/src/esbmc/esbmc

@@ -159,12 +159,6 @@ bool configt::set(const cmdlinet &cmdline)
         ansi_c.warnings.push_back(w);
     }
 
-  if (cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
-  {
-    log_error("Can't set both floatbv and fixedbv modes");
-    return true;
-  }
-
   if (cmdline.isset("no-slice-name"))
   {
     const std::list<std::string> &args = cmdline.get_values("no-slice-name");
@@ -176,8 +170,6 @@ bool configt::set(const cmdlinet &cmdline)
     const std::list<std::string> &args = cmdline.get_values("no-slice-id");
     no_slice_ids = {begin(args), end(args)};
   }
-
-  ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
 
   ansi_c.cheri = ansi_ct::CHERI_OFF;
   if (cmdline.isset("cheri"))

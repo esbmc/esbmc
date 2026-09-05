@@ -1623,6 +1623,53 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "uintptr_t";
     break;
 
+  // TR 18037 fixed-point types (-ffixed-point). Width, scale, signedness
+  // and saturation come from the target via getFixedPointSemantics --
+  // never hardcoded. integer_bits counts the sign bit when signed, so
+  // signed _Fract has integer_bits == 1 and unsigned _Fract == 0.
+  case clang::BuiltinType::ShortAccum:
+  case clang::BuiltinType::Accum:
+  case clang::BuiltinType::LongAccum:
+  case clang::BuiltinType::UShortAccum:
+  case clang::BuiltinType::UAccum:
+  case clang::BuiltinType::ULongAccum:
+  case clang::BuiltinType::ShortFract:
+  case clang::BuiltinType::Fract:
+  case clang::BuiltinType::LongFract:
+  case clang::BuiltinType::UShortFract:
+  case clang::BuiltinType::UFract:
+  case clang::BuiltinType::ULongFract:
+  case clang::BuiltinType::SatShortAccum:
+  case clang::BuiltinType::SatAccum:
+  case clang::BuiltinType::SatLongAccum:
+  case clang::BuiltinType::SatUShortAccum:
+  case clang::BuiltinType::SatUAccum:
+  case clang::BuiltinType::SatULongAccum:
+  case clang::BuiltinType::SatShortFract:
+  case clang::BuiltinType::SatFract:
+  case clang::BuiltinType::SatLongFract:
+  case clang::BuiltinType::SatUShortFract:
+  case clang::BuiltinType::SatUFract:
+  case clang::BuiltinType::SatULongFract:
+  {
+    const llvm::FixedPointSemantics sema =
+      ASTContext->getFixedPointSemantics(clang::QualType(&bt, 0));
+    // Padded unsigned formats would make (width, scale, signed) metadata
+    // insufficient; we never pass -fpadding-on-unsigned-fixed-point.
+    assert(!sema.hasUnsignedPadding());
+
+    fixedbv_typet t;
+    t.set_width(sema.getWidth());
+    t.set_integer_bits(sema.getWidth() - sema.getScale());
+    if (!sema.isSigned())
+      t.set("#esbmc_unsigned", "1");
+    if (sema.isSaturated())
+      t.set("#esbmc_saturating", "1");
+    new_type = t;
+    c_type = bt.getName(clang::PrintingPolicy(clang::LangOptions())).str();
+    break;
+  }
+
 #ifdef ESBMC_CHERI_CLANG
   case clang::BuiltinType::IntCap:
     new_type = intcap_typet();
@@ -2204,6 +2251,26 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (convert_float_literal(floating_literal, new_expr))
       return true;
 
+    break;
+  }
+
+  // TR 18037 fixed-point literal (0.5r, 1.5uk, ...): clang hands us the
+  // scaled raw integer (APFixedPoint), which is exactly the fixedbv bit
+  // pattern -- no host-float detour.
+  case clang::Stmt::FixedPointLiteralClass:
+  {
+    const clang::FixedPointLiteral &fixed_literal =
+      static_cast<const clang::FixedPointLiteral &>(stmt);
+
+    typet t;
+    if (get_type(fixed_literal.getType(), t))
+      return true;
+
+    llvm::APInt raw = fixed_literal.getValue();
+    new_expr = constant_exprt(
+      integer2binary(BigInt(raw.getSExtValue()), bv_width(t)),
+      fixed_literal.getValueAsString(10),
+      t);
     break;
   }
 
@@ -4071,6 +4138,15 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_FloatingToIntegral:
   case clang::CK_FloatingToBoolean:
   case clang::CK_FloatingCast:
+
+  // TR 18037 fixed-point conversions lower to plain typecasts; the fixed
+  // type (including _Sat) decides the semantics downstream.
+  case clang::CK_FixedPointCast:
+  case clang::CK_FixedPointToIntegral:
+  case clang::CK_IntegralToFixedPoint:
+  case clang::CK_FixedPointToBoolean:
+  case clang::CK_FloatingToFixedPoint:
+  case clang::CK_FixedPointToFloating:
 
   case clang::CK_ToVoid:
   case clang::CK_BitCast:

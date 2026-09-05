@@ -50,20 +50,16 @@ By default, ESBMC performs a "lazy" depth-first search of interleavings -- it ca
 Many SMT solvers are currently supported:
  * Z3 4.13+
  * Bitwuzla
- * Boolector 3.0+
  * MathSAT
- * CVC4
  * CVC5
  * Yices 2.2+
 
-In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although there are not insignificant overheads involved.
+In addition, ESBMC can drive any solver it is not linked against over SMT-LIB2, with `--smtlib`:
 
-Two further backends drive external one-shot solver processes over SMT-LIB2 files (built by default via `-DENABLE_BITWUZLLOB=On` / `-DENABLE_NEUROSYM=On`; the external program is only needed at runtime):
+ * `--smtlib-solver-prog CMD` pipes the script to an interactive solver that speaks SMT-LIB2 on stdin (e.g. `"z3 -in"`), although there are not insignificant overheads involved.
+ * `--smtlib-oneshot-prog CMD` writes the formula to a file and runs `CMD` on it once, reading the verdict from its output — for solvers that cannot be linked in or driven interactively. Every `%f` is replaced by the file. For example `"mallob -mono=%f -mono-app=SMT"` runs Bitwuzla on the massively parallel Mallob platform, and `"python main.py %f"` with `--smtlib-logic QF_BV` runs NeuroSym, a neural-guided SMT solver (a GAN proposes candidate models, with a Z3 fallback preserving soundness and completeness).
 
- * `--bitwuzllob` runs Bitwuzla on the massively parallel Mallob platform (`--bitwuzllob-prog`, default `mallob -mono=%f -mono-app=SMT`).
- * `--neurosym` runs NeuroSym, a neural-guided SMT solver (a GAN proposes candidate models, with a Z3 fallback preserving soundness and completeness) for the QF_BV fragment (`--neurosym-prog`, default `python main.py %f`, run from a NeuroSym checkout with Python, PyTorch and Z3 installed). ESBMC flattens arrays, structs and floating-point to pure bit-vectors for it; integer/real mode (`--ir`) is not supported.
-
-Both are one-shot backends: incremental strategies (`--k-induction`, `--incremental-bmc`, ...) are rejected, and counterexamples require a local interactive SMT-LIB2 model solver (`--bitwuzllob-model-prog` / `--neurosym-model-prog`, e.g. `"z3 -in"`) or `--result-only`.
+`--smtlib-logic` pins the emitted `(set-logic ...)` for a solver that accepts only one fragment; a logic without arrays or floating-point makes ESBMC flatten both to bit-vectors, and cannot serve `--ir`. A one-shot command solves once and exits, so incremental strategies (`--k-induction`, `--incremental-bmc`, ...) are rejected, and counterexamples require a local interactive model solver (`--smtlib-oneshot-model-prog`, e.g. `"z3 -in"`) or `--result-only`.
 
 ## Installing ESBMC
 

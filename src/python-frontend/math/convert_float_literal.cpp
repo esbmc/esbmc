@@ -36,56 +36,16 @@ void convert_float_literal(const std::string &src, exprt &dest)
     type_utils::set_cpp_type(dest.type(), "double");
   }
 
-  if (config.ansi_c.use_fixed_for_float)
-  {
-    unsigned width = atoi(dest.type().width().c_str());
-    unsigned fraction_bits;
-    const std::string &integer_bits = dest.type().integer_bits().as_string();
+  ieee_floatt a;
 
-    if (integer_bits == "")
-      fraction_bits = width / 2;
-    else
-      fraction_bits = width - atoi(integer_bits.c_str());
+  a.spec = to_floatbv_type(dest.type());
 
-    BigInt factor = BigInt(1) << fraction_bits;
-    BigInt value = significand * factor;
-
-    if (value != 0)
-    {
-      if (exponent < 0)
-        value /= power(base, -exponent);
-      else
-      {
-        value *= power(base, exponent);
-
-        if (value >= power(2, width - 1))
-        {
-          // saturate: use "biggest value"
-          value = power(2, width - 1) - 1;
-        }
-        else if (value <= -power(2, width - 1) - 1)
-        {
-          // saturate: use "smallest value"
-          value = -power(2, width - 1);
-        }
-      }
-    }
-
-    dest.value(integer2binary(value, width));
-  }
+  if (base == 10)
+    a.from_base10(significand, exponent);
+  else if (base == 2) // hex
+    a.build(significand, exponent);
   else
-  {
-    ieee_floatt a;
+    assert(false);
 
-    a.spec = to_floatbv_type(dest.type());
-
-    if (base == 10)
-      a.from_base10(significand, exponent);
-    else if (base == 2) // hex
-      a.build(significand, exponent);
-    else
-      assert(false);
-
-    dest.value(integer2binary(a.pack(), a.spec.width()));
-  }
+  dest.value(integer2binary(a.pack(), a.spec.width()));
 }

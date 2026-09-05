@@ -1,5 +1,5 @@
 CORE
 main.c
---bitwuzllob --bitwuzllob-prog fake-mallob.sh --bitwuzllob-model-prog "z3 -in" --result-only
-ignoring --bitwuzllob-model-prog
+--smtlib --smtlib-oneshot-prog fake-mallob.sh --smtlib-oneshot-model-prog "z3 -in" --result-only
+ignoring --smtlib-oneshot-model-prog
 ^VERIFICATION FAILED$
