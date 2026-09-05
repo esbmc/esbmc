@@ -3168,7 +3168,12 @@ namespace
  *  Nothing is pinned, so no node's refcount moves and the copy-on-write
  *  in-place rewrites elsewhere in the engine are unaffected. Keying on the
  *  address is sound only while the outermost caller's `expr2tc` holds every
- *  node the walk reaches, so the map is dropped when that call returns. */
+ *  node the walk reaches, so the map is dropped when that call returns.
+ *
+ *  renaming.cpp's sibling memo threads its cache as a parameter, which gets
+ *  that scoping from the language rather than from a counter. It is not an
+ *  option here: the dispatch recurses through 196 call sites and the
+ *  signature is public at 308 more. */
 thread_local std::unordered_map<const expr2t *, exprt> expr_back_cache;
 thread_local unsigned expr_back_depth = 0;
 
@@ -3195,19 +3200,13 @@ exprt migrate_expr_back(const expr2tc &ref)
 
   expr_back_scopet scope;
 
-  // An unshared node is reached once whatever we do, so caching it can only
-  // pay for the lookup, never recover it.
   const expr2t *key = ref.get();
-  if (key->refcount.load(std::memory_order_acquire) <= 1)
-    return migrate_expr_back_dispatch(ref);
-
   auto cached = expr_back_cache.find(key);
   if (cached != expr_back_cache.end())
     return cached->second;
 
   exprt result = migrate_expr_back_dispatch(ref);
-  expr_back_cache.emplace(key, result);
-  return result;
+  return expr_back_cache.emplace(key, std::move(result)).first->second;
 }
 
 static exprt migrate_expr_back_dispatch(const expr2tc &ref)

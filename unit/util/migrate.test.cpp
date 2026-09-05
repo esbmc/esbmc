@@ -723,35 +723,77 @@ TEST_CASE(
 // `with` chain over a nested array references its predecessor twice -- as the
 // store's source, and inside the `index` naming the row it updates -- so the
 // legacy form is reached along a number of paths exponential in the store
-// count. 30 stores is 2^30 paths without the memo and 30 nodes with it.
+// count.
+
+namespace
+{
+// `stores` levels of the DAG above, each store's value offset by `base` so two
+// chains of the same shape are distinguishable.
+expr2tc nested_store_dag(unsigned stores, unsigned base = 0)
+{
+  // Explicit-width indices, per the note on require_type_roundtrip above.
+  auto idx = [](unsigned v) {
+    return constant_int2tc(get_uint_type(64), BigInt(v));
+  };
+  const type2tc row = array_type2tc(get_int_type(32), idx(4), false);
+  const type2tc grid = array_type2tc(row, idx(4), false);
+
+  expr2tc chain = symbol2tc(grid, "grid");
+  for (unsigned k = 0; k < stores; ++k)
+  {
+    // Both operands name `chain`, which is what makes the result a DAG.
+    expr2tc old_row = index2tc(row, chain, idx(k % 4));
+    expr2tc updated = with2tc(
+      row, old_row, idx((k + 1) % 4), gen_long(get_int_type(32), base + k));
+    chain = with2tc(grid, chain, idx(k % 4), updated);
+  }
+  return chain;
+}
+} // namespace
 
 TEST_CASE("migrate_expr_back expands a shared subtree once", "[migrate]")
 {
   use_test_ns();
 
-  const type2tc row = array_type2tc(get_int_type(32), gen_ulong(4), false);
-  const type2tc grid = array_type2tc(row, gen_ulong(4), false);
+  const expr2tc chain = nested_store_dag(18);
 
-  expr2tc chain = symbol2tc(grid, "grid");
-  for (unsigned k = 0; k < 30; ++k)
-  {
-    // Both operands name `chain`, which is what makes the result a DAG.
-    expr2tc old_row = index2tc(row, chain, gen_ulong(k % 4));
-    expr2tc updated = with2tc(
-      row, old_row, gen_ulong((k + 1) % 4), gen_long(get_int_type(32), k));
-    chain = with2tc(grid, chain, gen_ulong(k % 4), updated);
-  }
-
-  // The bound is a stand-in for termination: the unmemoised walk visits 2^30
-  // paths and does not return, so any threshold separates the two.
+  // Wall-clock stands in for a node count the API does not expose. The
+  // separation it has to resolve is four orders of magnitude -- 18 stores
+  // expand along 2^18 paths unmemoised, measured at 1.5 s against under a
+  // millisecond -- so the threshold is not a tuned number.
   const auto started = std::chrono::steady_clock::now();
   const exprt legacy = migrate_expr_back(chain);
   const auto elapsed = std::chrono::steady_clock::now() - started;
   REQUIRE(
-    std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() < 5);
+    std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() <
+    300);
 
   REQUIRE(legacy.id() == "with");
-  const exprt &inner = legacy.op2().op0();
-  REQUIRE(inner.id() == "index");
-  REQUIRE(inner.op0().id() == "with");
+}
+
+TEST_CASE("migrate_expr_back round-trips a shared subtree", "[migrate]")
+{
+  use_test_ns();
+  require_expr_roundtrip(nested_store_dag(6));
+}
+
+TEST_CASE("migrate_expr_back keeps no cache between calls", "[migrate]")
+{
+  use_test_ns();
+
+  exprt first;
+  {
+    const expr2tc a = nested_store_dag(6);
+    first = migrate_expr_back(a);
+  } // a's nodes die here, freeing their addresses for the allocator to reissue
+
+  const expr2tc b = nested_store_dag(6, 100);
+  const exprt second = migrate_expr_back(b);
+
+  // The cache keys on the address, so one surviving the first call would
+  // answer the second out of `a` at whatever addresses `b` reused.
+  expr2tc there_and_back;
+  migrate_expr(second, there_and_back);
+  REQUIRE(there_and_back == b);
+  REQUIRE(!full_eq(first, second));
 }

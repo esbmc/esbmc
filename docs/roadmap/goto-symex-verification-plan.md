@@ -7922,9 +7922,19 @@ outermost caller's `expr2tc` already holds every node it reaches, so the cache
 needs no reference of its own and no node's refcount moves. What that buys is
 paid for by scope — an address is a valid key only while that caller is on the
 stack, so the map is dropped when the outermost call returns rather than
-persisting between calls. The `refcount > 1` test survives, but only as an
-optimisation: an unshared node is visited once anyway, so caching it could
-only pay for the lookup.
+persisting between calls.
+
+**The `refcount > 1` gate does not transfer either, and the reason is worth
+recording.** It was carried over from `get_original_name` on the argument that
+an unshared node is reached once anyway. That argument is false here, and
+measurably so: `migrate_type_back` is *not* memoised, so an array type's size
+expression -- owned by one `array_type2t`, hence `refcount == 1` -- is
+re-migrated once per occurrence of that type, 243 times in the worst walk over
+`regression/csmith/csmith02`. The gate was also worth nothing: 0.94 s with it
+and 0.95 s without, best-of-five on that input. It is dropped, which deletes a
+branch and a false comment at no measured cost. The same sentence in
+`renaming.cpp` *is* true, because that walk is a `Foreach_operand` and never
+descends into a type.
 
 **The reproducer still cannot be inspected, and the migration is no longer
 why.** The output *text* is exponential in the store count on its own, because
@@ -7937,12 +7947,19 @@ separate. Neither flag is passed by
 `scripts/competitions/svcomp/esbmc-wrapper.py`, so no competition verdict
 depends on it.
 
-**Pinned by a unit test, not a regression test.** `--show-vcc` exits before
-printing a verdict, so there is no verdict for a regression pair to change, and
-a store count small enough for the harness is small enough to pass either way.
-`migrate_expr_back expands a shared subtree once`
-(`unit/util/migrate.test.cpp`) builds a 30-level `with`/`index` DAG directly
-and is OOM-killed without the memo.
+**Pinned by unit tests, not a regression pair.** `--show-vcc` exits before
+printing a verdict, so there is no verdict for a pair to change, and a store
+count small enough for the harness is small enough to pass either way. Three
+cases in `unit/util/migrate.test.cpp` build the DAG directly, and two
+mutations discharge them. Bypassing the cache takes *expands a shared subtree
+once* from under a millisecond to 1538 ms against its 300 ms bound -- the
+store count is 18 rather than the 30 first written, because 30 exhausts memory
+instead of failing, and a test that OOM-kills its binary takes the rest of the
+suite with it. Removing the depth-0 clear aborts the run outright, which is
+what pins the one failure mode address keying actually has: nothing else stops
+a second call reading a freed node's entry at an address the allocator
+reissued. *round-trips a shared subtree* pins that the memoised expansion is
+correct rather than merely fast.
 
 ---
 
