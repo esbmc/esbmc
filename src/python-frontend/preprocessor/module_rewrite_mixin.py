@@ -479,13 +479,26 @@ class ModuleRewriteMixin:
         expecting ESBMC's model, not the stub's body.
         """
         intrinsics = ("nondet_list", "nondet_dict")
+
+        def parameter_names(fn_args):
+            """Every name a parameter list binds, across all five kinds."""
+            if fn_args is None:
+                return
+            for arg in (list(getattr(fn_args, "posonlyargs", [])) +
+                        list(fn_args.args) + list(fn_args.kwonlyargs)):
+                yield arg.arg
+            for arg in (fn_args.vararg, fn_args.kwarg):
+                if arg is not None:
+                    yield arg.arg
+
         for n in ast.walk(node):
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if n.name in intrinsics:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
+                              ast.Lambda)):
+                if getattr(n, "name", None) in intrinsics:
                     self.shadowed_nondet_collections.add(n.name)
-                for arg in getattr(getattr(n, "args", None), "args", []):
-                    if arg.arg in intrinsics:
-                        self.shadowed_nondet_collections.add(arg.arg)
+                for name in parameter_names(getattr(n, "args", None)):
+                    if name in intrinsics:
+                        self.shadowed_nondet_collections.add(name)
             elif isinstance(n, ast.Assign):
                 for target in n.targets:
                     if isinstance(target, ast.Name) and target.id in intrinsics:

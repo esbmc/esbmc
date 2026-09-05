@@ -2738,6 +2738,15 @@ class LoopMixin:
                 return "int"
             return self._resolve_nondet_type(node, allowed, func_name, role)
 
+        # An unknown keyword already raises; a surplus positional must too,
+        # or `nondet_list(3, nondet_int(), nondet_float())` silently ignores
+        # its second generator and returns the wrong collection (#7575).
+        consumed = 1 if func_name == "nondet_list" else 2
+        if len(positional) > consumed:
+            raise SyntaxError(
+                f"{func_name}: expected at most {consumed} type argument(s), got "
+                f"{len(positional)}: {', '.join(ast.unparse(a) for a in positional)}")
+
         if func_name == "nondet_list":
             elem = resolve(slot(0, "elem_type"),
                            self._NONDET_LIST_ELEM_TYPES, "elem_type")
