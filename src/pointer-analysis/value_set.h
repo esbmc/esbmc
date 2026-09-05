@@ -154,7 +154,10 @@ public:
              offset_alignment == o.offset_alignment &&
              (!offset_is_set || offset == o.offset);
     }
-    bool operator!=(const objectt &o) const { return !(*this == o); }
+    bool operator!=(const objectt &o) const
+    {
+      return !(*this == o);
+    }
   };
 
   /** Datatype for a value set: stores a mapping between some integers and
@@ -263,18 +266,18 @@ public:
       return identifier == e.identifier && suffix == e.suffix &&
              object_map == e.object_map;
     }
-    bool operator!=(const entryt &e) const { return !(*this == e); }
+    bool operator!=(const entryt &e) const
+    {
+      return !(*this == e);
+    }
   };
 
-  /** Type of the value-set containing structure. A hash map mapping variables
-   *  to an entryt, storing the value set of objects a variable might point
-   *  at. */
-  /** Persistent (structurally shared) tracking map. symex snapshots
-   *  the whole state at every goto for the later merge; with a
-   *  std::unordered_map that copy was O(N) and made symex quadratic in
-   *  the number of tracked symbols on assume/branch-heavy inputs
-   *  (measured). immer's HAMT makes the copy O(1) — the same pattern
-   *  level1 renaming and guard_seq already use. */
+  /** Maps each variable to the entryt holding the set of objects it may
+   *  point at. Persistent (structurally shared): symex snapshots the whole
+   *  map at every goto for the later merge, so a std::unordered_map would
+   *  copy O(N) per branch and make symex quadratic in the tracked-symbol
+   *  count on branch-heavy inputs. immer's HAMT makes the snapshot O(1) —
+   *  the same pattern level1 renaming and guard_seq use. */
   typedef persistent_map<irep_idt, entryt, irep_id_hash> valuest;
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
@@ -509,9 +512,8 @@ public:
   }
 
   /** Ensure a record exists for the given entry, without changing an
-   *  existing one. The persistent map hands out immutable values, so
-   *  the old mutable get_entry() reference API becomes this plus
-   *  update_object_map()/get_object_map(). */
+   *  existing one. The persistent map's values are immutable, so a mutation
+   *  is a read-modify-set via get_object_map()/update_object_map(). */
   void touch_entry(const entryt &e)
   {
     irep_idt key = entry_key(e);

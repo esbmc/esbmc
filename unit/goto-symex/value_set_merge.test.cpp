@@ -225,9 +225,9 @@ TEST_CASE("make_union never shrinks the destination", "[symex][value-set]")
   REQUIRE(self.values.size() >= produced.values.size());
   for (const auto &entry : produced.values)
   {
-    auto it = self.values.find(entry.first);
-    REQUIRE(it != self.values.end());
-    REQUIRE(it->second.object_map.size() >= entry.second.object_map.size());
+    auto *it = self.values.find(entry.first);
+    REQUIRE(it != nullptr);
+    REQUIRE(it->object_map.size() >= entry.second.object_map.size());
   }
 }
 

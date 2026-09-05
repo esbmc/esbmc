@@ -193,7 +193,7 @@ TEST_CASE("keys differing in one field do not alias", "[symex][renaming]")
 }
 
 TEST_CASE(
-  "a reference into current_names survives the rehash R3 fears",
+  "an entry stays correct as the map grows (R3 without reference aliasing)",
   "[symex][renaming]")
 {
   engine e;
@@ -201,21 +201,17 @@ TEST_CASE(
   const expr2tc sym = l1_symbol("c:test.c@F@main@held");
 
   REQUIRE(publish(l2, sym) == 1);
-  const renaming::level2t::valuet *entry = &l2.current_names.at(key_of(sym));
-  const size_t buckets_before = l2.current_names.bucket_count();
 
-  // Force at least one rehash — this is the event R3 names as the trigger for
-  // a dangling `valuet &entry` in make_assignment.
+  // Grow the map well past any node-splitting threshold: publishing other
+  // keys must not disturb this one's entry (invariant R3). find()/at() return
+  // storage valid only to the next mutation, so the entry is re-read by value
+  // each time rather than held across the growth.
   for (unsigned i = 0; i < 256; i++)
     publish(l2, l1_symbol("c:test.c@F@main@filler" + std::to_string(i)));
-  REQUIRE(l2.current_names.bucket_count() > buckets_before);
 
-  // [unord.req.general]/9: rehashing does not invalidate pointers or
-  // references to elements. The held reference still addresses the live entry.
-  REQUIRE(&l2.current_names.at(key_of(sym)) == entry);
-  REQUIRE(entry->count == 1);
+  REQUIRE(l2.current_names.at(key_of(sym)).count == 1);
   REQUIRE(publish(l2, sym) == 2);
-  REQUIRE(entry->count == 2);
+  REQUIRE(l2.current_names.at(key_of(sym)).count == 2);
 }
 
 // ---------------------------------------------------------------------------

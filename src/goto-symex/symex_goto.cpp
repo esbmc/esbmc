@@ -593,8 +593,19 @@ void goto_symext::merge_locality(const statet::merge_statet &src)
     return;
   }
 
-  cur_state->top().local_variables.insert(
-    src.local_variables.begin(), src.local_variables.end());
+  // Union the merged path's locals into this one. Both sets descend from the
+  // frame state at the branch, so the diff visits only the locals a path
+  // declared or retired since (O(divergence)); the names present in src but
+  // not here are the ones the union must add. Collect them first — mutating
+  // the set mid-diff would walk a container being reassigned underneath it.
+  auto &dst = cur_state->top().local_variables;
+  std::vector<renaming::level2t::name_record> added;
+  dst.diff(
+    src.local_variables,
+    [&](const renaming::level2t::name_record &k) { added.push_back(k); },
+    [](const renaming::level2t::name_record &) {});
+  for (const renaming::level2t::name_record &k : added)
+    dst.insert(k);
 }
 
 void goto_symext::merge_value_sets(const statet::merge_statet &src)
@@ -628,18 +639,16 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
   }
 
   // Only the names whose SSA record differs between the two paths need a
-  // phi. Structurally diff the two persistent maps to visit exactly
-  // those (O(divergence)) instead of walking every tracked name.
-  // added() — a name only the merge path has — and removed() — one only
-  // this path has (deleted in the merge branch) — get no phi, matching
-  // the walk-cur-only behaviour this replaces.
+  // phi. Structurally diff the two persistent maps to visit exactly those
+  // (O(divergence)) rather than every tracked name. A name on only one path
+  // — added() (merge only) or removed() (this path only) — gets no phi.
   std::vector<renaming::level2t::name_record> changed;
   variables.diff(
     merge_variables,
     [](const auto &) {},
     [](const auto &) {},
     [&](const auto &cur_kv, const auto &merge_kv) {
-      // The old loop keyed "changed" on the assignment counter alone.
+      // A differing assignment counter marks a name as needing a phi.
       if (cur_kv.second.count != merge_kv.second.count)
         changed.push_back(cur_kv.first);
     });

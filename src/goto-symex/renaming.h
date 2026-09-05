@@ -254,7 +254,10 @@ public:
     {
       return count == v.count && node_id == v.node_id && constant == v.constant;
     }
-    bool operator!=(const valuet &v) const { return !(*this == v); }
+    bool operator!=(const valuet &v) const
+    {
+      return !(*this == v);
+    }
   };
 
   virtual void make_assignment(
@@ -334,10 +337,10 @@ public:
   friend void build_goto_symex_classes();
   // Repeat of the above ignored friend directive.
   //
-  // Persistent (structurally shared) like level1's map: clone() runs at
-  // every branch to snapshot the state for the merge, and a std::
-  // unordered_map deep-copied there made symex quadratic in the tracked
-  // -name count. The immer HAMT makes the snapshot O(1) and lets
+  // Persistent (structurally shared) like level1's map. clone() snapshots
+  // this map at every branch for the later merge; a std::unordered_map would
+  // deep-copy there, O(tracked names) per branch and so symex quadratic on
+  // branch-heavy inputs. The immer HAMT makes the snapshot O(1) and lets
   // phi_function diff two states in O(divergence).
   typedef persistent_map<name_record, valuet, name_rec_hash> current_namest;
 

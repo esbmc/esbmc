@@ -122,11 +122,10 @@ expr2tc value_sett::to_expr(object_mapt::const_iterator it) const
 
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
-  // Structurally diff the two maps instead of walking every entry.
   // At a control-flow merge cur and new_values both descend from the
-  // pre-branch snapshot and share most of their structure, so the diff
-  // visits only the paths' divergence — O(|diff|), not O(|map|). The
-  // per-entry walk this replaces made merge_value_sets quadratic in the
+  // pre-branch snapshot and share most of their structure, so a structural
+  // diff visits only the paths' divergence — O(|diff|), not O(|map|). That
+  // keeps merge_value_sets linear in the divergence rather than the
   // tracked-symbol count on branch-heavy inputs.
   //
   // added() fires for a key in new_values not in cur, removed() for a
