@@ -613,9 +613,7 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
   if (merge_state.guard.is_false() && cur_state->guard.is_false())
     return;
 
-  // go over all variables to see what changed
   const auto &variables = cur_state->level2.current_names;
-
   const auto &merge_variables = merge_state.level2.current_names;
 
   guard2tc tmp_guard;
@@ -629,22 +627,29 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for (const auto &[variable, _] : variables)
-  {
-    if (
-      merge_state.level2.current_number(variable) ==
-      cur_state->level2.current_number(variable))
-      continue; // not changed
+  // Only the names whose SSA record differs between the two paths need a
+  // phi. Structurally diff the two persistent maps to visit exactly
+  // those (O(divergence)) instead of walking every tracked name.
+  // added() — a name only the merge path has — and removed() — one only
+  // this path has (deleted in the merge branch) — get no phi, matching
+  // the walk-cur-only behaviour this replaces.
+  std::vector<renaming::level2t::name_record> changed;
+  variables.diff(
+    merge_variables,
+    [](const auto &) {},
+    [](const auto &) {},
+    [&](const auto &cur_kv, const auto &merge_kv) {
+      // The old loop keyed "changed" on the assignment counter alone.
+      if (cur_kv.second.count != merge_kv.second.count)
+        changed.push_back(cur_kv.first);
+    });
 
+  for (const renaming::level2t::name_record &variable : changed)
+  {
     if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
     if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
-      continue;
-
-    // If the variable was deleted in this branch, don't create an assignment
-    // for it
-    if (merge_variables.find(variable) == merge_variables.end())
       continue;
 
     // changed!

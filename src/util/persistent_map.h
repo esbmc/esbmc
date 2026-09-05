@@ -43,6 +43,11 @@ public:
     return m_.size();
   }
 
+  bool empty() const
+  {
+    return m_.size() == 0;
+  }
+
   // nullptr if absent; otherwise a pointer into shared storage valid until
   // the next mutation. Callers must not stash it across a set()/erase().
   const V *find(const K &k) const

@@ -240,6 +240,23 @@ public:
   };
 
 public:
+  struct valuet
+  {
+    unsigned count;
+    expr2tc constant;
+    unsigned node_id;
+    valuet() : count(0), node_id(0)
+    {
+    }
+    // Value equality so the persistent map can be structurally diffed
+    // (phi_function). Only invoked on the divergent leaves.
+    bool operator==(const valuet &v) const
+    {
+      return count == v.count && node_id == v.node_id && constant == v.constant;
+    }
+    bool operator!=(const valuet &v) const { return !(*this == v); }
+  };
+
   virtual void make_assignment(
     expr2tc &lhs_symbol,
     const expr2tc &constant_value,
@@ -255,6 +272,15 @@ public:
     current_names.erase(name_record(to_symbol2t(symbol)));
   }
 
+  /// Get-or-default then re-store: the persistent map hands out
+  /// immutable values, so a "modify the entry in place" site reads a
+  /// copy, mutates it, and sets it back.
+  valuet current_value(const name_record &rec) const
+  {
+    const valuet *p = current_names.find(rec);
+    return p ? *p : valuet();
+  }
+
   /// Retire a name whose storage has gone out of scope. L1 names are never
   /// reused (symex_decl draws from a monotone per-identifier counter), so a
   /// popped frame's local can still be named -- through a dangling pointer --
@@ -265,9 +291,10 @@ public:
   /// unconstrained exactly as erasure did.
   void retire(const name_record &rec)
   {
-    valuet &entry = current_names[rec];
+    valuet entry = current_value(rec);
     ++entry.count;
     entry.constant = expr2tc();
+    current_names.set(rec, entry);
   }
 
   /// Record `rec` at its initial version. phi_function merges only names that
@@ -277,23 +304,14 @@ public:
   /// absent one, so declaring costs no SSA renumbering.
   void declare(const name_record &rec)
   {
-    current_names.emplace(rec, valuet());
+    if (current_names.find(rec) == nullptr)
+      current_names.set(rec, valuet());
   }
 
   void get_original_name(expr2tc &expr) const override
   {
     renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);
   }
-
-  struct valuet
-  {
-    unsigned count;
-    expr2tc constant;
-    unsigned node_id;
-    valuet() : count(0), node_id(0)
-    {
-    }
-  };
 
   unsigned current_number(const expr2tc &sym) const;
   unsigned current_number(const name_record &rec) const;
@@ -315,7 +333,13 @@ public:
 
   friend void build_goto_symex_classes();
   // Repeat of the above ignored friend directive.
-  typedef std::unordered_map<name_record, valuet, name_rec_hash> current_namest;
+  //
+  // Persistent (structurally shared) like level1's map: clone() runs at
+  // every branch to snapshot the state for the merge, and a std::
+  // unordered_map deep-copied there made symex quadratic in the tracked
+  // -name count. The immer HAMT makes the snapshot O(1) and lets
+  // phi_function diff two states in O(divergence).
+  typedef persistent_map<name_record, valuet, name_rec_hash> current_namest;
 
   current_namest current_names;
 };
