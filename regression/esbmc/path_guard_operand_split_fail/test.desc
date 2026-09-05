@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 136 --no-unwinding-assertions
+^.*legal encodings must stay reachable.*$
+^VERIFICATION FAILED$

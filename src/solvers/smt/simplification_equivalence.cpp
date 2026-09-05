@@ -489,7 +489,10 @@ void install_simplification_equivalence_check(
         verdict == simplification_equivalencet::skipped)
         return;
 
-      log_error(
+      /* One fold can be checked thousands of times, so report each distinct
+       * pair once and keep going: exiting on the first left the rest of a
+       * run's findings unreported (#7326). */
+      const std::string report = fmt::format(
         "{}\n  before: {}\n  after:  {}\n  where:  {}",
         verdict == simplification_equivalencet::differs
           ? "simplifier changed the meaning of an expression"
@@ -497,9 +500,13 @@ void install_simplification_equivalence_check(
         *before,
         *after,
         witness.empty() ? "(no free symbols)" : witness);
-      // Not abort(): it skips the stream flush, and this diagnostic is the
-      // entire point of the run.
-      exit(1);
+
+      ++simplification_check_stats::violations;
+      static std::mutex reported_mutex;
+      static std::set<std::string> reported;
+      const std::lock_guard<std::mutex> lock(reported_mutex);
+      if (reported.insert(report).second)
+        log_error("{}", report);
     });
 #else
   (void)ns;
@@ -511,6 +518,12 @@ simplification_check_scopet::~simplification_check_scopet()
 {
   simplification_check_stats::report();
   simplification_check::clear();
+#ifdef ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK
+  /* Deferred to here so one run reports every violation it found. Not abort():
+   * it skips the stream flush, and the diagnostics are the point of the run. */
+  if (simplification_check_stats::violations.load())
+    exit(1);
+#endif
 }
 
 namespace simplification_check_stats
@@ -518,17 +531,20 @@ namespace simplification_check_stats
 std::atomic<unsigned long> proved{0};
 std::atomic<unsigned long> declined{0};
 std::atomic<unsigned long> ill_sorted{0};
+std::atomic<unsigned long> violations{0};
 
 void report()
 {
   const unsigned long p = proved.load();
   const unsigned long d = declined.load();
   const unsigned long i = ill_sorted.load();
+  const unsigned long v = violations.load();
   if (p || d)
     log_status(
-      "simplifier equivalence check: {} rewrites proved, {} declined{}",
+      "simplifier equivalence check: {} rewrites proved, {} declined{}{}",
       p,
       d,
-      i ? fmt::format(" ({} ill-sorted)", i) : std::string());
+      i ? fmt::format(" ({} ill-sorted)", i) : std::string(),
+      v ? fmt::format(", {} violated", v) : std::string());
 }
 } // namespace simplification_check_stats
