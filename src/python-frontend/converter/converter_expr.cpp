@@ -1,4 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
+#include <optional>
 #include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
@@ -268,37 +269,43 @@ static double nonfinite_aware_double(
   return nonfinite_float_from_spelling(tag->get<std::string>())->to_double();
 }
 
+/// The complex constant @p annotated_node denotes, or empty when it is not one.
+/// @p element is the outer node, which is a UnaryOp when the literal is signed.
+static std::optional<exprt> get_complex_literal(
+  const nlohmann::json &element,
+  const nlohmann::json &annotated_node)
+{
+  if (
+    !annotated_node.contains("esbmc_type_annotation") ||
+    annotated_node["esbmc_type_annotation"] != "complex")
+    return std::nullopt;
+
+  double real = nonfinite_aware_double(annotated_node, "real_value", 0.0);
+  double imag = nonfinite_aware_double(annotated_node, "imag_value", 0.0);
+
+  // UnaryOp(USub, Constant(complex)) must preserve the sign.
+  if (
+    element.contains("_type") && element["_type"] == "UnaryOp" &&
+    element.contains("op") && element["op"].contains("_type") &&
+    element["op"]["_type"] == "USub")
+  {
+    real = -real;
+    imag = -imag;
+  }
+
+  return make_complex(
+    from_double(real, double_type()), from_double(imag, double_type()));
+}
+
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   const auto &annotated_node =
     (element["_type"] == "UnaryOp") ? element["operand"] : element;
 
-  // Handle Python complex constants emitted by parser annotations.
-  // This must run before generic string handling because complex constants
+  // Complex constants are checked before generic string handling because they
   // may carry a string-like "value" in the serialized AST.
-  if (
-    annotated_node.contains("esbmc_type_annotation") &&
-    annotated_node["esbmc_type_annotation"] == "complex")
-  {
-    double real = nonfinite_aware_double(annotated_node, "real_value", 0.0);
-    double imag = nonfinite_aware_double(annotated_node, "imag_value", 0.0);
-
-    // UnaryOp(USub, Constant(complex)) must preserve the sign.
-    if (
-      element.contains("_type") && element["_type"] == "UnaryOp" &&
-      element.contains("op") && element["op"].contains("_type"))
-    {
-      const std::string op_type = element["op"]["_type"].get<std::string>();
-      if (op_type == "USub")
-      {
-        real = -real;
-        imag = -imag;
-      }
-    }
-
-    return make_complex(
-      from_double(real, double_type()), from_double(imag, double_type()));
-  }
+  if (const auto complex_literal = get_complex_literal(element, annotated_node))
+    return *complex_literal;
 
   // Determine the source of the literal's value.
   const auto &value = (element["_type"] == "UnaryOp")

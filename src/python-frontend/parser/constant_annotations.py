@@ -17,7 +17,11 @@ __all__ = [
 # json.dump writes a non-finite float as the bare token Infinity/-Infinity/NaN,
 # which is not valid JSON, so the C++ reader rejects the file the parser just
 # wrote. Move the value to a string tag and null the number (#7545).
-_NONFINITE_FLOAT_KEYS = ("value", "real_value", "imag_value")
+#
+# Every non-finite float a Constant carries is tagged, whatever its key. An
+# allow-list of key names would miss `n`, the deprecated `Constant.value` alias
+# ast2json still emits on Python <= 3.13 -- one bare `Infinity` anywhere in the
+# file is enough to make the whole AST unreadable.
 
 # Python ints are arbitrary precision; the JSON wire format used by the C++
 # frontend stores them as numbers, which nlohmann::json silently truncates to
@@ -62,14 +66,13 @@ def _spell_nonfinite(v: float) -> str:
 def _tag_nonfinite_floats(node: object) -> None:
     if isinstance(node, dict):
         # Gated on Constant like _tag_bignum_constants: only a literal carries a
-        # raw float under these keys, and a future producer reusing the names
-        # should not be rewritten silently.
-        keys = _NONFINITE_FLOAT_KEYS if node.get("_type") == "Constant" else ()
-        for key in keys:
-            v = node.get(key)
-            if isinstance(v, float) and not math.isfinite(v):
-                node[key] = None
-                node[f"{key}_nonfinite"] = _spell_nonfinite(v)
+        # raw non-finite float, and a value a later pass computes should not be
+        # rewritten silently.
+        if node.get("_type") == "Constant":
+            for key, v in list(node.items()):
+                if isinstance(v, float) and not math.isfinite(v):
+                    node[key] = None
+                    node[f"{key}_nonfinite"] = _spell_nonfinite(v)
         for v in node.values():
             _tag_nonfinite_floats(v)
     elif isinstance(node, list):
