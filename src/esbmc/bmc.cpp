@@ -511,15 +511,19 @@ void bmct::report_unknown()
   log_fail("\nVERIFICATION UNKNOWN");
 }
 
+// When every violated claim sits downstream of a --loop-invariant-check havoc,
+// no counterexample witnesses a state the program can reach. An
+// over-approximation can prove, never refute: the invariant being too weak is
+// "cannot prove", not "the program is wrong" (issue #7480).
+bool bmct::violation_is_abstraction_only() const
+{
+  return weak_invariant_detected &&
+         !goto_functionst::property_verdicts.has_violation();
+}
+
 void bmct::report_violation()
 {
-  // When every violated claim sits downstream of a --loop-invariant-check
-  // havoc, no counterexample witnesses a state the program can reach. An
-  // over-approximation can prove, never refute: the invariant being too weak
-  // is "cannot prove", not "the program is wrong" (issue #7480).
-  if (
-    !weak_invariant_detected ||
-    goto_functionst::property_verdicts.has_violation())
+  if (!violation_is_abstraction_only())
   {
     report_failure();
     return;

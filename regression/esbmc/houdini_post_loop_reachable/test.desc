@@ -1,5 +1,6 @@
 CORE
 main.c
 --houdini-loop-invariants
-^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line 15\s+assertion 0$
-^VERIFICATION FAILED$
+UNKNOWN.*assertion 0
+loop invariant too weak to prove this claim
+^VERIFICATION UNKNOWN$
