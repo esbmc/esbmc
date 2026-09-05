@@ -201,25 +201,38 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
-/// A (possibly typecast) symbol whose value can never change under
-/// it: a level2 SSA generation (assigned once) or a nondet$ free
-/// variable (never assigned; no level2 generation is minted for it).
-/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the
-/// symbol here is a member value inside a recorded aggregate, so a
-/// member read folds to the free variable the trace shows anyway.
+/// A value that can never change once recorded: a level2 SSA generation
+/// (assigned once), a nondet$ free variable (never assigned; no level2
+/// generation is minted for it), or a member / fixed-index read out of one.
+/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the value
+/// here sits inside a recorded aggregate, so the read folds to the free
+/// variable the trace shows anyway.
 static bool is_immutable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
   while (is_typecast2t(*b))
     b = &to_typecast2t(*b).from;
-  if (!is_symbol2t(*b))
-    return false;
-  // Scalars only: an aggregate-typed symbol must keep going through
+
+  // Scalars only: an aggregate-typed value must keep going through
   // constant_propagation, whose array_may_propagate refuses the
   // infinite-size modelling arrays and oversized nests.
   if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
         is_pointer_type((*b)->type)))
     return false;
+
+  // A member or fixed-index read is immutable exactly when the object read
+  // from is. Only the scalar leaf is carried, so array_may_propagate's refusal
+  // to propagate an array does not apply here.
+  while (!is_symbol2t(*b))
+  {
+    if (is_member2t(*b))
+      b = &to_member2t(*b).source_value;
+    else if (is_index2t(*b) && is_constant_int2t(to_index2t(*b).index))
+      b = &to_index2t(*b).source_value;
+    else
+      return false;
+  }
+
   const symbol2t &sym = to_symbol2t(*b);
   if (
     sym.rlevel == symbol_renaming_level::level2 ||
@@ -228,21 +241,37 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
-/// Whether a constant aggregate literal may propagate: every element
-/// must itself propagate. A union literal may also carry a (typecast)
-/// symbol as its initializing member — constant_union's init_field
-/// keeps a later cross-member read visible as one.
+/* Above this many symbolic updates a `with` chain is left symbolic. A carried
+ * chain is inlined at every read, so its cost is quadratic in its length;
+ * before #7597 a symbolic update ended the chain, capping it implicitly, and
+ * `for (i = 0; i < n; i++) a[i] = nondet();` is common enough that removing
+ * that cap outright costs 47s at n=3200 against 2.3s with it. Chains whose
+ * updates all propagate are unaffected, so pre-#7597 folding is unchanged. */
+static constexpr unsigned symbolic_chain_bound = 128;
+
+/// Whether a `with` update value may be carried, counting in @p symbolic the
+/// ones only is_immutable_value accepts -- the class #7597 admits, and the one
+/// symbolic_chain_bound caps.
+static bool update_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &value,
+  unsigned &symbolic)
+{
+  if (state.constant_propagation(value))
+    return true;
+  return is_immutable_value(value) && ++symbolic <= symbolic_chain_bound;
+}
+
+/// Whether a constant aggregate literal may propagate: every element must
+/// itself propagate, or be immutable (#7597).
 static bool aggregate_literal_may_propagate(
   const goto_symex_statet &state,
   const expr2tc &expr)
 {
-  const bool is_union_literal = is_constant_union2t(expr);
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
-    if (
-      noconst && !(is_union_literal && is_immutable_value(e)) &&
-      !state.constant_propagation(e))
+    if (noconst && !is_immutable_value(e) && !state.constant_propagation(e))
       noconst = false;
   });
   return noconst;
@@ -338,6 +367,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // node.next_idx) concrete so pool loops fold instead of unrolling to
       // capacity.
       bool all_constant_updates = true;
+      unsigned symbolic_updates = 0;
       expr2tc current = expr;
 
       // Inlining an aggregate value is only sound when the whole enclosing
@@ -359,7 +389,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
           (is_struct_type(uv->type) || is_array_type(uv->type) ||
            is_union_type(uv->type)) &&
           type_has_constant_size(uv->type) && struct_is_fixed_size;
-        if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
+        if (
+          !(scalar_update || aggregate_update) ||
+          !update_may_propagate(*this, uv, symbolic_updates))
         {
           all_constant_updates = false;
           break;
@@ -379,12 +411,13 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     {
       // Check if this is a chain of WITHs with all constant updates
       bool all_constant_updates = true;
+      unsigned symbolic_updates = 0;
       expr2tc current = expr;
 
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
-        if (!constant_propagation(w.update_value))
+        if (!update_may_propagate(*this, w.update_value, symbolic_updates))
         {
           all_constant_updates = false;
           break;
@@ -403,7 +436,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // A chain touching several fields is safe to carry: member2t::do_simplify
       // refuses to step past a `with` whose source is a union, so only a read
       // of the last-written field folds and every aliased read stays symbolic.
-      // #7446: an update may also be an immutable symbol, not just a literal.
+      // #7446: an update may also be an immutable symbol, not just a literal --
+      // a cross-member read folds through fold_union_member_read only at equal
+      // width, and correctly, because the carried value cannot change.
       for (const expr2tc *current = &expr; is_with2t(*current);
            current = &to_with2t(*current).source_value)
       {

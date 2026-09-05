@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-standard-checks
+^VERIFICATION SUCCESSFUL$
