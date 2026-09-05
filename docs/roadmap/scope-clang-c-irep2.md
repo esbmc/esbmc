@@ -7146,35 +7146,51 @@ are symbol-table-only, which is why that is the instrument to keep using here.
 ### 133.3 Next
 
 `github_1210-1-struct`'s goto program is done; its *symbol table* still carries
-two causes. Both are invisible to a goto-level A/B — check the instrument
-before concluding either way — and both reduce:
+two causes, both invisible to a goto-level A/B — check the instrument before
+concluding either way.
+
+The first is the `const` qualifier on an argument cast, and it is **not** an
+adjuster arm. It reduces to five lines with no `assert`, no `memcpy` and no
+incomplete tag:
 
 ```c
-#include <assert.h>          /* drop this line and both paths agree */
-#include <string.h>
-struct incomplete;
-extern struct incomplete JJ;
-int main(void) {
-  int k = 42; memcpy(&JJ, &k, sizeof(k));
-  int j;      memcpy(&j, &JJ, sizeof(k));
-  assert(j == 42);
-}
+void snk(const void *p);
+int main(void) { int k = 0; snk(&k); return __builtin_expect(k, 0); }
 ```
 
 ```
 $ esbmc r.c --symbol-table-only
-legacy:  memcpy((void *)(&JJ), (const void *)(&k), …)
-hop-off: memcpy((void *)(&JJ), (void *)(&k), …)
+legacy:  snk((const void *)(&k));
+hop-off: snk((void *)(&k));
 ```
 
-The hop-off drops the parameter's `const` qualifier on the argument cast, and
-only when `<assert.h>` is in the translation unit — without it both paths spell
-`(const void *)`, with `&JJ` present or not. `--goto-functions-only` prints no
-`const` in a cast at all, which is why this is a symbol-table finding and why a
-goto-level sweep scores the test as finished. That conditionality is the whole
-puzzle and it is not yet explained; take it next. The second residual is the
-`0` / `(void)0` ternary arm §110.2 already records as the hop-off being the
-faithful one.
+Delete the `__builtin_expect` and both paths spell `(const void *)`. It is not
+the builtin either: `adjust()` writes a symbol's value back only when the walk
+changed it (`if (value != before) s->set_value(value)`), and `set_value` is a
+whole-body `migrate_expr_back`. **Any** adjustment anywhere in a function
+therefore round-trips every cast in that function, and `migrate_type_back`
+drops `const`, `volatile` and `_Atomic` because IREP2 has no representation for
+them — §130.2, and R9 in `irep2-migration.md`. The builtin is only what makes
+the body dirty; on Darwin `assert(e)` expands through `__builtin_expect`, which
+is why `github_1210-1-struct` shows it and why an earlier draft of this section
+blamed `<assert.h>`.
+
+So this residue is one instance of the recorded qualifier-carriage gap, not a
+new defect, and closing it is R9's job rather than a per-arm port. It is a
+*floor* on the symbol-table census: no amount of arm-porting reduces it, and
+porting more arms makes it worse by dirtying more bodies.
+
+It is also **not the lever**. Stripping `const ` and `volatile ` from both
+sides of the stride-16 A/B closes **0 of the 85** DIFFs — every one carries
+some other cause as well — so R9 would not move a single test in this sample.
+And it is soundness-neutral on what is measured: the `const`-write checks
+(`dereference.cpp`, `memory_ops.cpp`) read the *symbol's* type, which
+`set_value` never rewrites, so `const int C; *(int *)&C = 6;` reports
+`dereference failure: write access to const object 'C'` on both paths, with a
+dirty body and without.
+
+The second residual is the `0` / `(void)0` ternary arm §110.2 already records
+as the hop-off being the faithful one.
 
 A third cause fell out of the same predicate and is *not* fixed here, because
 it is a different one: legacy's `is_array_like` accepts `vector` alongside
