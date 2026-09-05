@@ -18,6 +18,16 @@ class CoreVisitorsMixin:
         "sort",
     }
     _PURE_DICT_METHODS = {"__getitem__", "copy", "get", "items", "keys", "values"}
+    # Positional-or-keyword parameters of the builtins whose call paths read
+    # positional arguments only, in declaration order (CPython 3.12). A leading
+    # positional-only parameter is spelled None so no keyword can bind it:
+    # int(x="10") is a TypeError, only int(x, base=...) names its second one.
+    _BUILTIN_POSITIONAL_PARAMS = {
+        "int": (None, "base"),
+        "pow": ("base", "exp", "mod"),
+        "round": ("number", "ndigits"),
+        "str": ("object", ),
+    }
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -695,6 +705,64 @@ class CoreVisitorsMixin:
                 expected_args = self.functionParams[func_name]
                 kwonly_args = self.functionKwonlyParams.get(func_name, [])
         return function_name, expected_args, kwonly_args
+
+    def _scan_builtin_shadow_names(self, module_node):
+        """Builtin names from the table that this module binds anywhere.
+
+        Python resolves a name at call time, so a ``def pow(...)`` below the
+        call shadows the builtin exactly as one above it does. A syntactic pass
+        cannot answer that per scope, so over-approximate: any binding of the
+        name anywhere disables the rewrite for the whole module.
+        """
+        bound = set()
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+                bound.add(n.id)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(n.name)
+            elif isinstance(n, ast.arg):
+                bound.add(n.arg)
+            elif isinstance(n, ast.ExceptHandler) and n.name:
+                bound.add(n.name)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                bound.update(a.asname or a.name.split(".")[0] for a in n.names)
+        return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+
+    def _builtin_is_shadowed(self, name):
+        # None means the module was never scanned: assume shadowed, so an
+        # unscanned path keeps the pre-existing behaviour instead of rewriting.
+        return self._builtin_shadow_names is None or name in self._builtin_shadow_names
+
+    def _normalize_builtin_keyword_args(self, node):
+        """Move a builtin call's keywords into their positional slots (#7557).
+
+        The builtin call paths read node.args and never node.keywords, so a
+        keyword spelling silently falls back to the parameter default and
+        proves the wrong value. Rewrite only a run of keywords that fills the
+        slots directly after the positional arguments; anything else (a gap, an
+        unknown name, **kwargs) is left alone rather than guessed at.
+        """
+        if not isinstance(node.func, ast.Name) or not node.keywords:
+            return
+        params = self._BUILTIN_POSITIONAL_PARAMS.get(node.func.id)
+        if params is None or self._builtin_is_shadowed(node.func.id):
+            return
+        if any(kw.arg is None for kw in node.keywords):
+            return  # **kwargs splat: the names are not statically known
+        keywords = self._build_keyword_map(node)
+        bound = []
+        for param in params[len(node.args):]:
+            if param not in keywords:
+                break
+            bound.append(keywords.pop(param))
+        if keywords:
+            return
+        slots = params[len(node.args):len(node.args) + len(bound)]
+        if [kw.arg for kw in node.keywords] != list(slots) and not all(
+                isinstance(value, (ast.Constant, ast.Name)) for value in bound):
+            return  # Python evaluates arguments in source order (ref/expressions)
+        node.args = node.args + bound
+        node.keywords = []
 
     def _build_keyword_map(self, node):
         keywords = {}
@@ -1507,6 +1575,7 @@ class CoreVisitorsMixin:
         if rewritten_ratio is not None:
             return rewritten_ratio
 
+        self._normalize_builtin_keyword_args(node)
         self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
