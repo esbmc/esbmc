@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^\s+PASSED\s+\[main\.assertion\.5\]\s+line\s+15\s+assertion i == 4$
+^VERIFICATION SUCCESSFUL$

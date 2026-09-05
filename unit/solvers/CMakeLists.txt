@@ -21,6 +21,12 @@ endif()
 # itself, natively or lowered (ArrayEncoding::Ackermann, TupleEncoding::Camada),
 # so the test that pinned array_convt's bounded select/store went with it.
 
+# Upstream's bitwuzla_sort_cache_test constructed bitwuzla_convt directly to
+# pin ESBMC's sort cache; camada owns sort lifetime now, so only its
+# backend-agnostic half ports -- see model_value_readback.test.cpp.
+new_unit_test(model_value_readback_test "model_value_readback.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
+
 # The SMT equivalence checker for simplifier rewrites (#4625). The installed
 # checker aborts on a mismatch, so only a direct call can assert that it
 # detects one. Any built-in solver serves; `solve` picks the default. After the

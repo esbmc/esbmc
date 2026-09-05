@@ -1105,6 +1105,20 @@ __ESBMC_HIDE:;
 // in the frontend (type_handler::get_typet("int")), so a 32-bit return here
 // makes the result symbol 32-bit and truncates a string pointer that is later
 // rebound through it (e.g. `a, b = s.split('-'); a = int(a)`). See issue #5159.
+/// Value of @p c as an alphanumeric digit (0-9, a-z, A-Z), or -1 when it is
+/// not one. The caller applies the base bound.
+static int __python_digit_value(unsigned char c)
+{
+__ESBMC_HIDE:;
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'z')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'Z')
+    return c - 'A' + 10;
+  return -1;
+}
+
 long long __python_int(const char *s, int base)
 {
 __ESBMC_HIDE:;
@@ -1137,6 +1151,8 @@ __ESBMC_HIDE:;
   {
     s++;
   }
+
+  const char *number_begin = s;
 
   if (base == 0)
   {
@@ -1186,34 +1202,41 @@ __ESBMC_HIDE:;
     return 0;
   }
 
+  const _Bool prefix_consumed = (s != number_begin);
+
   long long result = 0;
   _Bool found_digit = 0;
 
   while (*s)
   {
-    int digit_value = -1;
     unsigned char c = (unsigned char)*s;
 
-    if (c >= '0' && c <= '9')
+    /* PEP 515: in the int() constructor a single underscore may separate
+     * digits and may follow a base specifier, but may not lead, trail, or
+     * double. */
+    if (c == '_')
     {
-      digit_value = c - '0';
-    }
-    else if (c >= 'a' && c <= 'z')
-    {
-      digit_value = c - 'a' + 10;
-    }
-    else if (c >= 'A' && c <= 'Z')
-    {
-      digit_value = c - 'A' + 10;
-    }
-    else if (
-      c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r')
-    {
+      const int next = __python_digit_value((unsigned char)*(s + 1));
+      if ((!found_digit && !prefix_consumed) || next < 0 || next >= base)
+      {
+        __ESBMC_assert(0, "invalid literal for int() - invalid character");
+        return 0;
+      }
       s++;
       continue;
     }
-    else
+
+    int digit_value = __python_digit_value(c);
+
+    if (digit_value < 0)
     {
+      if (
+        c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+        c == '\r')
+      {
+        s++;
+        continue;
+      }
       __ESBMC_assert(0, "invalid literal for int() - invalid character");
       return 0;
     }
@@ -1260,6 +1283,37 @@ __ESBMC_HIDE:;
   return sign * result;
 }
 
+/// Scan a run of decimal digits starting at s[*i], folding them into *value and
+/// advancing *i past the run. PEP 515 allows a single underscore between two
+/// digits of the run; a leading, trailing or doubled one is rejected. Returns
+/// the digit count, or -1 on a misplaced underscore.
+static int
+__python_scan_digit_run(const char *s, size_t len, size_t *i, double *value)
+{
+__ESBMC_HIDE:;
+  int digits = 0;
+
+  while (*i < len)
+  {
+    if (s[*i] == '_')
+    {
+      if (digits == 0 || *i + 1 >= len || s[*i + 1] < '0' || s[*i + 1] > '9')
+        return -1;
+      (*i)++;
+      continue;
+    }
+
+    if (s[*i] < '0' || s[*i] > '9')
+      break;
+
+    *value = *value * 10.0 + (double)(s[*i] - '0');
+    digits++;
+    (*i)++;
+  }
+
+  return digits;
+}
+
 // Shared core for float(str): validates `s` as a Python float literal and, when
 // valid, writes the parsed value to *out. Returns 1 on success, 0 otherwise.
 // The accepted grammar is a subset of CPython's float(): optional surrounding
@@ -1297,28 +1351,23 @@ __ESBMC_HIDE:;
   // accumulating with a repeatedly-scaled 0.1 weight compounds rounding error.
   double value = 0.0;
   double divisor = 1.0;
-  _Bool any_digit = 0;
 
-  while (i < len && s[i] >= '0' && s[i] <= '9')
-  {
-    value = value * 10.0 + (double)(s[i] - '0');
-    any_digit = 1;
-    i++;
-  }
+  const int int_digits = __python_scan_digit_run(s, len, &i, &value);
+  if (int_digits < 0)
+    return 0;
 
+  int frac_digits = 0;
   if (i < len && s[i] == '.')
   {
     i++;
-    while (i < len && s[i] >= '0' && s[i] <= '9')
-    {
-      value = value * 10.0 + (double)(s[i] - '0');
+    frac_digits = __python_scan_digit_run(s, len, &i, &value);
+    if (frac_digits < 0)
+      return 0;
+    for (int k = 0; k < frac_digits; k++)
       divisor *= 10.0;
-      any_digit = 1;
-      i++;
-    }
   }
 
-  if (!any_digit)
+  if (int_digits == 0 && frac_digits == 0)
     return 0;
 
   while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
