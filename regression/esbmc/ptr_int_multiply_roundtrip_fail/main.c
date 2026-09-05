@@ -13,5 +13,5 @@ int main(void)
   u -= (uintptr_t)&s;
   int *p = (int *)u;
   *p = 3;
-  assert(s.x == 3);
+  assert(s.x == 4); // the recovered pointer wrote 3, not 4
 }
