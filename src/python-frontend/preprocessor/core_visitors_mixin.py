@@ -652,6 +652,15 @@ class CoreVisitorsMixin:
             return node
         return None
 
+    def _params_without_implicit_self(self, key):
+        """A method's parameters minus its implicit first argument.
+
+        A @staticmethod has no implicit first argument, so stripping one would
+        eat a real parameter and make every call look over-supplied (#7546).
+        """
+        params = self.functionParams[key]
+        return params if key in self.static_methods else params[1:]
+
     def _resolve_function_signature(self, node):
         function_name = None
         expected_args = None
@@ -677,18 +686,18 @@ class CoreVisitorsMixin:
                     qualified_name = f"{var_type}.{method_name}"
             if qualified_name and qualified_name in self.functionParams:
                 function_name = qualified_name
-                expected_args = self.functionParams[qualified_name][1:]
+                expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
             elif method_name in self.functionParams:
                 function_name = method_name
-                expected_args = self.functionParams[method_name][1:]
+                expected_args = self._params_without_implicit_self(method_name)
                 kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"
             if init_name in self.functionParams:
                 function_name = init_name
-                expected_args = self.functionParams[init_name][1:]
+                expected_args = self._params_without_implicit_self(init_name)
                 kwonly_args = self.functionKwonlyParams.get(init_name, [])
             elif func_name in self.functionParams:
                 function_name = func_name
@@ -1600,6 +1609,8 @@ class CoreVisitorsMixin:
 
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
             self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
+                self.static_methods.add(qualified_name)
             self._record_vararg_function(node, qualified_name)
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:

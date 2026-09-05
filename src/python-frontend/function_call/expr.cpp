@@ -310,7 +310,28 @@ void function_call_expr::get_function_type()
   }
   else if (!converter_.is_imported_module(caller))
   {
-    function_type_ = FunctionType::InstanceMethod;
+    // A @staticmethod takes no receiver, so an instance call binds its
+    // arguments exactly as a class-name call does. Classifying it as an
+    // instance method passes the receiver as the first parameter and shifts
+    // every real argument one slot (#7546). The decorator decides this, not
+    // the first parameter's name, which Python does not fix.
+    const std::string caller_class = type_handler_.get_var_type(caller);
+    const std::string method = func_node["attr"].template get<std::string>();
+    bool is_static = false;
+    const nlohmann::json class_node =
+      json_utils::find_class(converter_.ast()["body"], caller_class);
+    if (!class_node.empty() && class_node.contains("body"))
+      for (const auto &member : class_node["body"])
+        if (
+          node_type_of(member) == "FunctionDef" && member["name"] == method &&
+          member.contains("decorator_list"))
+          for (const auto &d : member["decorator_list"])
+            if (
+              node_type_of(d) == "Name" && d.contains("id") &&
+              d["id"] == "staticmethod")
+              is_static = true;
+    function_type_ =
+      is_static ? FunctionType::ClassMethod : FunctionType::InstanceMethod;
   }
 }
 
