@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cctype>
 #include <map>
 #include <string>
 
@@ -332,6 +333,30 @@ public:
       "complex",
       "frozenset"};
     return type_identifiers.find(name) != type_identifiers.end();
+  }
+
+  /// Copies @p s to @p out with PEP 515 underscore separators removed.
+  /// Returns false when one is misplaced: a numeric string may carry a single
+  /// underscore between two digits, never leading, trailing or doubled.
+  static bool strip_pep515_underscores(const std::string &s, std::string &out)
+  {
+    out.clear();
+    out.reserve(s.size());
+    for (std::size_t i = 0; i < s.size(); i++)
+    {
+      if (s[i] != '_')
+      {
+        out.push_back(s[i]);
+        continue;
+      }
+      const bool between_digits =
+        i > 0 && i + 1 < s.size() &&
+        isdigit(static_cast<unsigned char>(s[i - 1])) &&
+        isdigit(static_cast<unsigned char>(s[i + 1]));
+      if (!between_digits)
+        return false;
+    }
+    return true;
   }
 
 private:
