@@ -45,9 +45,8 @@ exprt python_list::compare(
   assert(lhs_symbol);
   assert(rhs_symbol);
 
-  // A dict keys view is set-like and must compare by content, not fold (#7553).
   auto is_keys_view = [](const exprt &e) {
-    return e.get_bool("#python_keys_view");
+    return e.get_bool(PYTHON_KEYS_VIEW_ATTR);
   };
   const bool lhs_is_set = lhs_symbol->is_set || is_keys_view(l1);
   const bool rhs_is_set = rhs_symbol->is_set || is_keys_view(l2);

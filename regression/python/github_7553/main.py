@@ -8,6 +8,7 @@ def main() -> None:
     assert {1: 1}.keys() != {2}
     assert {1: 1}.values() != {1}
     assert [1] != {1}
+    assert {1: 1}.keys() != [1]
     assert len({1: 1}.keys()) == 1
 
 
