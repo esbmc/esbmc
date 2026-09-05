@@ -918,9 +918,11 @@ class CoreVisitorsMixin:
             raise TypeError(
                 f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
             )
+        consumed = set()
         for i in range(len(node.args), len(expected_args)):
             if expected_args[i] in keywords:
                 node.args.append(keywords[expected_args[i]])
+                consumed.add(expected_args[i])
                 continue
             default_val = self.functionDefaults[(function_name, expected_args[i])]
             if isinstance(default_val, ast.AST):
@@ -930,6 +932,13 @@ class CoreVisitorsMixin:
                 node.args.append(default_expr)
             else:
                 node.args.append(ast.Constant(value=default_val))
+
+        # A keyword moved into a positional slot must leave node.keywords, or
+        # the node claims the same parameter twice. A range loop visits its body
+        # a second time, and the duplicate check then rejects the frontend's own
+        # output (#7542).
+        if consumed:
+            node.keywords = [kw for kw in node.keywords if kw.arg not in consumed]
 
     def _apply_call_signature_defaults(self, node):
         function_name, expected_args, kwonly_args = self._resolve_function_signature(node)
