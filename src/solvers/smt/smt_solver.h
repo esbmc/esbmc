@@ -21,8 +21,9 @@
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
- *  smt_solver_baset is the base class for everything that attempts to convert the
- *  contents of an SSA program into something else, generally SMT or SAT based.
+ *  smt_solver_baset is the base class for everything that attempts to convert
+ * the contents of an SSA program into something else, generally SMT or SAT
+ * based.
  *
  *  The class itself does various accounting and structuring of the conversion,
  *  however the challenge is that as we convert the SSA program into anything
@@ -43,9 +44,9 @@
  *  the class smt_solver_baset. Currently, create_solver() will do this, in the
  *  factory-pattern manner (ish). Each solver converter implements all the
  *  abstract methods of smt_solver_baset. When handed an expression to convert,
- *  smt_solver_baset deconstructs it into a series of function applications, which it
- *  creates by calling various abstract methods implemented by the converter
- *  (in particular mk_func_app).
+ *  smt_solver_baset deconstructs it into a series of function applications,
+ * which it creates by calling various abstract methods implemented by the
+ * converter (in particular mk_func_app).
  *
  *  The actual function applications are in smt_ast objects. Following the
  *  SMTLIB definition, these are basically a term.
@@ -113,8 +114,8 @@ class ra_apit;
  *  into the solver context.
  *
  *  The exact lifetime of smt asts here is currently undefined, unfortunately,
- *  although smt_solver_baset posesses a cache, so they generally have a reference
- *  in there. This will probably be fixed in the future.
+ *  although smt_solver_baset posesses a cache, so they generally have a
+ * reference in there. This will probably be fixed in the future.
  *
  *  In theory this class supports pushing and popping of solver contexts,
  *  although of course that depends too on the subclass supporting it. However,
@@ -153,7 +154,8 @@ public:
    *  before the object is used as a solver converter.
    *
    *  @param _ns Namespace for looking up the type of certain symbols.
-   *  @param _options Provide all the needed parameters to configure the solver. */
+   *  @param _options Provide all the needed parameters to configure the solver.
+   */
   smt_solver_baset(const namespacet &_ns, const optionst &_options);
 
   virtual ~smt_solver_baset();
@@ -285,15 +287,17 @@ public:
    *  @return Expression representation of a's value */
   expr2tc get_by_value(const type2tc &type, BigInt value);
 
-  /** Extract the assignment to a rational/real value from the SMT solvers model.
-   *  Used in integer/real arithmetic mode to get floating point values.
+  /** Extract the assignment to a rational/real value from the SMT solvers
+   * model. Used in integer/real arithmetic mode to get floating point values.
    *  @param a The AST whose value we wish to know.
    *  @param numerator Output parameter for the numerator of the rational.
    *  @param denominator Output parameter for the denominator of the rational.
-   *  @return True if the rational value was successfully extracted, false otherwise. */
+   *  @return True if the rational value was successfully extracted, false
+   * otherwise. */
   virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
   {
-    // Default implementation returns false - solver-specific implementations should override this
+    // Default implementation returns false - solver-specific implementations
+    // should override this
     (void)a;
     (void)numerator;
     (void)denominator;
@@ -332,7 +336,8 @@ public:
   /** @} */
 
   /** @{
-   *  @name Internal conversion API between smt_solver_baset and solver converter */
+   *  @name Internal conversion API between smt_solver_baset and solver
+   * converter */
 
   virtual smt_astt mk_add(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvadd(smt_astt a, smt_astt b);
@@ -467,17 +472,22 @@ public:
 
   // Returns SMT AST representing real zero
   smt_astt get_zero_real();
-  // Returns SMT AST representing double precision minimum normal value (2^-1022)
+  // Returns SMT AST representing double precision minimum normal value
+  // (2^-1022)
   smt_astt get_double_min_normal();
-  // Returns SMT AST representing double precision minimum subnormal value (2^-1074)
+  // Returns SMT AST representing double precision minimum subnormal value
+  // (2^-1074)
   smt_astt get_double_min_subnormal();
-  // Returns SMT AST representing double precision maximum normal value (~1.7976931348623157e+308)
+  // Returns SMT AST representing double precision maximum normal value
+  // (~1.7976931348623157e+308)
   smt_astt get_double_max_normal();
   // Returns SMT AST representing single precision minimum normal value (2^-126)
   smt_astt get_single_min_normal();
-  // Returns SMT AST representing single precision minimum subnormal value (2^-149)
+  // Returns SMT AST representing single precision minimum subnormal value
+  // (2^-149)
   smt_astt get_single_min_subnormal();
-  // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
+  // Returns SMT AST representing single precision maximum normal value
+  // (~3.4028234663852886e+38)
   smt_astt get_single_max_normal();
   // Under --ir-ieee, returns real zero when r lies in the region that
   // rounds to zero under the selected rounding mode; otherwise returns r
@@ -489,9 +499,11 @@ public:
     const floatbv_type2t &fbv_type,
     const expr2tc &rounding_mode);
 
-  // Returns SMT AST for the integer-encoding sentinel for double +∞: max_normal+1
+  // Returns SMT AST for the integer-encoding sentinel for double +∞:
+  // max_normal+1
   smt_astt get_double_inf_sentinel();
-  // Returns SMT AST for the integer-encoding sentinel for single +∞: max_normal+1
+  // Returns SMT AST for the integer-encoding sentinel for single +∞:
+  // max_normal+1
   smt_astt get_single_inf_sentinel();
   // Returns SMT AST for the double precision relative error bound under
   // round-to-nearest: half machine epsilon = 2^-53 ~ 1.11e-16
@@ -648,18 +660,19 @@ public:
    *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
    *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
    *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
-   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
-   *  Other formats return the original result unchanged.
-   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest constant
-   *  (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is asserted.
-   *  For symbolic or directed rounding modes the function falls back to a weak
-   *  unconstrained enclosure (sound but imprecise); tight directed bounds are
-   *  deferred to a future PR.
+   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range
+   * [1.401e-45, 1.175e-38). Other formats return the original result unchanged.
+   *  Under --ir-ieee, when rounding_mode is a concrete round-to-nearest
+   * constant (ROUND_TO_EVEN == 0), a tight symmetric epsilon enclosure is
+   * asserted. For symbolic or directed rounding modes the function falls back
+   * to a weak unconstrained enclosure (sound but imprecise); tight directed
+   * bounds are deferred to a future PR.
    *  @param real_result The result of exact real arithmetic operation
-   *  @param fbv_type The floating-point type information (exponent/fraction bits)
+   *  @param fbv_type The floating-point type information (exponent/fraction
+   * bits)
    *  @param operand_zero_check Optional boolean AST for special zero handling
-   *         (e.g., multiplication where either operand is zero should yield zero
-   *         regardless of the other operand, even if it would cause underflow)
+   *         (e.g., multiplication where either operand is zero should yield
+   * zero regardless of the other operand, even if it would cause underflow)
    *  @param rounding_mode The rounding mode expr2tc from the IR operation node;
    *         typically a constant_int2t or the __ESBMC_rounding_mode symbol.
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
@@ -716,8 +729,8 @@ public:
    *  conversion */
   smt_sortt convert_sort(const type2tc &type);
   /** Convert a terminal expression into an SMT AST. This dispatches control to
-   *  the appropriate method in the subclassing solver converter for the terminal
-   *  conversion */
+   *  the appropriate method in the subclassing solver converter for the
+   * terminal conversion */
   smt_astt convert_terminal(const expr2tc &expr);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
@@ -1030,7 +1043,8 @@ public:
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
-  /** Whether --ir-ieee mode is active (integer encoding with IEEE float semantics). */
+  /** Whether --ir-ieee mode is active (integer encoding with IEEE float
+   * semantics). */
   bool ir_ieee;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
@@ -1098,7 +1112,8 @@ public:
    */
   expr2tc current_valid_objects_sym;
 
-  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked with.
+  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked
+   * with.
    */
   expr2tc cur_dynamic;
 
