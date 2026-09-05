@@ -225,15 +225,6 @@ class CoreVisitorsMixin:
             return
         self._known_literal_values.pop(target_name, None)
 
-    def _maybe_expand_nondet_assign(self, node):
-        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
-            return None
-        if not (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)):
-            return None
-        if node.value.func.id not in ("nondet_list", "nondet_dict"):
-            return None
-        return self._expand_nondet_call(node.targets[0], node.value, node)
-
     @staticmethod
     def _build_stop_iteration_raise(source_node):
         raise_node = ast.Raise(
@@ -434,6 +425,45 @@ class CoreVisitorsMixin:
 
         return result
 
+    def _annotated_assign_for_value(self, target_id, node, was_defaultdict_call):
+        """The AnnAssign this assignment's value implies, or None for no annotation.
+
+        Two values imply one: a `defaultdict(...)` call, whose value type the
+        empty Dict literal replacing it no longer carries, and a rewritten
+        nondet builder, whose element types live in its name and which would
+        otherwise leave the converter no return type to infer from
+        (esbmc/esbmc#7575).
+
+        The two cannot both apply -- by the time this runs a defaultdict call
+        has become an `ast.Dict` -- but the nondet arm is still guarded on the
+        first yielding nothing, so the order matches the branches it replaced.
+        """
+        annotation = None
+        known_type = None
+
+        if was_defaultdict_call:
+            annotation = self._build_defaultdict_value_annotation(target_id, node)
+        if (annotation is None and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)):
+            annotation = self._nondet_builder_annotation(node.value.func.id)
+            known_type = self._infer_type_from_call(node.value)
+
+        if annotation is None:
+            return None
+
+        ann_assign = ast.AnnAssign(
+            target=ast.Name(id=target_id, ctx=ast.Store()),
+            annotation=annotation,
+            value=node.value,
+            simple=1,
+        )
+        self._copy_location_info(node, ann_assign)
+        ast.fix_missing_locations(ann_assign)
+        self.variable_annotations[target_id] = annotation
+        if known_type is not None:
+            self.known_variable_types[target_id] = known_type
+        return ann_assign
+
     def _handle_single_target_assign(self, node):
         target = node.targets[0]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -463,19 +493,9 @@ class CoreVisitorsMixin:
             was_defaultdict_call = (isinstance(node.value, ast.Call)
                                     and self._is_defaultdict_call(node.value))
             self._update_name_target_assignment_metadata(target.id, node)
-            if was_defaultdict_call:
-                annotation = self._build_defaultdict_value_annotation(target.id, node)
-                if annotation is not None:
-                    ann_assign = ast.AnnAssign(
-                        target=ast.Name(id=target.id, ctx=ast.Store()),
-                        annotation=annotation,
-                        value=node.value,
-                        simple=1,
-                    )
-                    self._copy_location_info(node, ann_assign)
-                    ast.fix_missing_locations(ann_assign)
-                    self.variable_annotations[target.id] = annotation
-                    return ann_assign
+            annotated = self._annotated_assign_for_value(target.id, node, was_defaultdict_call)
+            if annotated is not None:
+                return annotated
 
         if (isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name)
                 and node.value.value.id in self._defaultdict_factory):
@@ -1347,10 +1367,6 @@ class CoreVisitorsMixin:
         if neutralized_target is not None:
             self._known_literal_values.pop(neutralized_target, None)
 
-        expanded = self._maybe_expand_nondet_assign(node)
-        if expanded is not None:
-            return expanded
-
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
@@ -1481,6 +1497,10 @@ class CoreVisitorsMixin:
 
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         self._invalidate_list_literals_for_call(node)
+        rewritten_nondet = self._rewrite_nondet_collection_call(node)
+        if rewritten_nondet is not None:
+            self.generic_visit(rewritten_nondet)
+            return rewritten_nondet
         rewritten_dunder = self._maybe_rewrite_operator_dunder_call(node)
         if rewritten_dunder is not None:
             return rewritten_dunder

@@ -111,13 +111,22 @@ public:
     return consensus_func_to_type().at(name);
   }
 
+  /// True for the monomorphic collection builders in models/nondet.py
+  /// (`_nondet_list_int`, `_nondet_dict_str_float`, ...), which the
+  /// preprocessor substitutes for `nondet_list`/`nondet_dict`.
+  static bool is_nondet_collection_builder(const std::string &name)
+  {
+    return name.rfind("_nondet_list_", 0) == 0 ||
+           (name.rfind("_nondet_dict_", 0) == 0 && name != "_nondet_dict_size");
+  }
+
   static bool is_python_model_func(const std::string &name)
   {
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "conjugate" || name == "from_bytes" ||
       name == "to_bytes" || name == "randint" || name == "random" ||
-      name == "all");
+      name == "all" || is_nondet_collection_builder(name));
   }
 
   static bool is_python_exceptions(const std::string &name)

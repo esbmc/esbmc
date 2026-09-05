@@ -52,6 +52,64 @@ pytest_generator::generate_pytest_filename(const std::string &module_name)
   return "test_" + module_name + ".py";
 }
 
+namespace
+{
+/// Scope of a GOTO function that belongs to nondet.py's collection builders.
+/// The builders are monomorphic (`_nondet_list_int`, `_nondet_dict_str_float`,
+/// ...), so a prefix match replaces the old exact match on `nondet_list` /
+/// `nondet_dict` (esbmc/esbmc#7575).
+struct nondet_model_scopet
+{
+  bool size = false;
+  bool list = false;
+  bool dict = false;
+  /// Key type of a `_nondet_dict_<key>_<value>` builder: "int", "str" or
+  /// "bool", empty outside one. The builders use concrete keys, so nothing
+  /// nondet records them and the rendered literal has to be typed from here.
+  std::string dict_key_kind;
+
+  bool any() const
+  {
+    return size || list || dict;
+  }
+};
+
+/// Upper bound on entries rendered into a generated dict literal. The count
+/// comes from a solver model, so it is clamped here rather than trusting the
+/// operational model's own size assumption.
+constexpr size_t max_generated_dict_entries = 128;
+
+nondet_model_scopet classify_nondet_model(const std::string &function_name)
+{
+  std::string base = function_name;
+  const size_t sep_pos = base.rfind("::");
+  if (sep_pos != std::string::npos)
+    base = base.substr(sep_pos + 2);
+
+  nondet_model_scopet scope;
+  // `_nondet_dict_size` sizes a dict, so it is both a size helper and dict
+  // scope; it must be matched before the `_nondet_dict_` builder prefix.
+  if (base == "_nondet_dict_size")
+  {
+    scope.size = true;
+    scope.dict = true;
+  }
+  else if (base == "_nondet_size")
+    scope.size = true;
+  else if (base.rfind("_nondet_list_", 0) == 0 || base == "nondet_list")
+    scope.list = true;
+  else if (base.rfind("_nondet_dict_", 0) == 0 || base == "nondet_dict")
+  {
+    scope.dict = true;
+    const std::string suffix = base.substr(std::strlen("_nondet_dict_"));
+    for (const char *kind : {"int", "str", "bool"})
+      if (suffix.rfind(kind, 0) == 0)
+        scope.dict_key_kind = kind;
+  }
+  return scope;
+}
+} // namespace
+
 // Refuse to clobber a file we did not generate ourselves (github #6220, same
 // guard as --generate-ctest-testcase's #6214 fix). `file_path` is the full
 // path (output directory + filename) the caller is about to write.
@@ -154,9 +212,6 @@ std::string pytest_generator::extract_function_name(
     "__ESBMC_main",
     "python_user_main",
     "python_init",
-    "nondet_list",
-    "nondet_dict",
-    "_nondet_size",
   };
 
   std::string best_candidate;
@@ -184,7 +239,7 @@ std::string pytest_generator::extract_function_name(
         has_prefix(func_to_check, "nondet_") ||
         has_prefix(
           func_to_check, "__") || // Skip all double-underscore functions
-        func_to_check == "_nondet_size")
+        has_prefix(func_to_check, "_nondet_"))
         continue;
 
       // Skip C library functions
@@ -680,10 +735,15 @@ void pytest_generator::collect(
   // We collect size values and element values separately, then combine them
   std::vector<std::pair<std::string, BigInt>>
     list_sizes; // (nondet_symbol, size_value)
+  std::vector<BigInt> dict_sizes; // entry counts from a dict builder
   std::vector<std::pair<std::string, std::string>>
     list_elems; // (nondet_symbol, elem_value_str)
   std::vector<std::pair<std::string, std::string>>
     dict_keys; // (nondet_symbol, key_value_str)
+  // Key type of the builder that produced this dict. The builders use concrete
+  // keys, so no nondet symbol records them and `dict_keys` stays empty for
+  // every key type -- the rendered literal has to be typed from here.
+  std::string dict_key_kind;
   std::vector<std::pair<std::string, std::string>>
     dict_values; // (nondet_symbol, value_value_str)
 
@@ -719,62 +779,38 @@ void pytest_generator::collect(
       bool is_list_elem = false;
       bool is_dict_key = false;
       bool is_dict_value = false;
+      bool is_dict_size = false;
 
       if (SSA_step.source.pc->location.function() != "")
       {
         std::string func_name =
           SSA_step.source.pc->location.function().as_string();
 
-        // Check if we're inside an internal function
-        bool in_nondet_size = false;
-        bool in_nondet_list = false;
-        bool in_nondet_dict = false;
+        const nondet_model_scopet scope = classify_nondet_model(func_name);
+        const bool in_nondet_list = scope.list;
+        const bool in_nondet_dict = scope.dict;
+        if (!scope.dict_key_kind.empty())
+          dict_key_kind = scope.dict_key_kind;
 
-        if (func_name == "_nondet_size")
-          in_nondet_size = true;
-        else if (func_name == "nondet_list")
-          in_nondet_list = true;
-        else if (func_name == "nondet_dict")
-          in_nondet_dict = true;
-        else
+        // Track the role of internal variables.  The builders hold the size
+        // in `size`/`bound` and produce each element from an anonymous
+        // `nondet_T()` call, so anything else nondet in scope is an element
+        // (a dict's keys are concrete constants, only its values are nondet).
+        if (scope.any())
         {
-          // Check for mangled names
-          size_t sep_pos = func_name.rfind("::");
-          if (sep_pos != std::string::npos)
+          if (var_name == "size")
           {
-            std::string base_name = func_name.substr(sep_pos + 2);
-            if (base_name == "_nondet_size")
-              in_nondet_size = true;
-            else if (base_name == "nondet_list")
-              in_nondet_list = true;
-            else if (base_name == "nondet_dict")
-              in_nondet_dict = true;
+            is_list_size = true;
+            is_dict_size = in_nondet_dict;
           }
-        }
-
-        // Track the role of internal variables
-        // Check based on function context first
-        if (in_nondet_size && var_name == "size")
-        {
-          is_list_size = true;
-        }
-        else if (in_nondet_list)
-        {
-          if (var_name == "elem_type" || var_name == "elem")
+          else if (in_nondet_list)
             is_list_elem = true;
-        }
-        else if (in_nondet_dict)
-        {
-          if (var_name == "key_type" || var_name == "k")
-            is_dict_key = true;
-          else if (var_name == "value_type" || var_name == "v")
+          else if (in_nondet_dict)
             is_dict_value = true;
         }
 
         // Skip only loop counters and result variables (not nondet values)
-        if (
-          (in_nondet_list || in_nondet_dict || in_nondet_size) &&
-          (var_name == "i" || var_name == "result"))
+        if (scope.any() && (var_name == "i" || var_name == "result"))
         {
           continue;
         }
@@ -829,7 +865,10 @@ void pytest_generator::collect(
         // If this is a list/dict size, store it for later use
         if (is_list_size)
         {
-          list_sizes.push_back({sym.thename.as_string(), int_value});
+          if (is_dict_size)
+            dict_sizes.push_back(int_value);
+          else
+            list_sizes.push_back({sym.thename.as_string(), int_value});
           continue; // Don't add as regular param - will be combined later
         }
       }
@@ -922,8 +961,10 @@ void pytest_generator::collect(
   }
 
   // Determine if we're building a dict (has dict components)
-  // If so, skip list building because list_sizes are internal to dict construction
-  bool has_dict_components = !dict_keys.empty() || !dict_values.empty();
+  // If so, skip list building because list_sizes are internal to dict
+  // construction
+  bool has_dict_components =
+    !dict_keys.empty() || !dict_values.empty() || !dict_sizes.empty();
 
   // Build composite list values from collected size and element values
   // Skip if we have dict components - the sizes are for the dict, not a separate list
@@ -998,10 +1039,17 @@ void pytest_generator::collect(
   }
 
   // Build composite dict values from collected key and value values
-  if (!dict_keys.empty() || !dict_values.empty())
+  if (!dict_keys.empty() || !dict_values.empty() || !dict_sizes.empty())
   {
     std::string dict_str = "{";
     size_t num_entries = std::max(dict_keys.size(), dict_values.size());
+    for (const BigInt &entries : dict_sizes)
+    {
+      const int64_t count = entries.to_int64();
+      if (count > 0 && static_cast<size_t>(count) > num_entries)
+        num_entries =
+          std::min(static_cast<size_t>(count), max_generated_dict_entries);
+    }
 
     for (size_t i = 0; i < num_entries; ++i)
     {
@@ -1011,6 +1059,10 @@ void pytest_generator::collect(
       std::string key_val;
       if (i < dict_keys.size())
         key_val = dict_keys[i].second;
+      else if (dict_key_kind == "str")
+        key_val = "\"" + std::to_string(i) + "\"";
+      else if (dict_key_kind == "bool")
+        key_val = i == 0 ? "False" : "True";
       else
         key_val = std::to_string(i);
 
@@ -1197,8 +1249,12 @@ void pytest_generator::generate_single(
 
   // Track nondet_list/nondet_dict components for building composite values
   std::vector<std::pair<std::string, BigInt>> list_sizes;
+  std::vector<BigInt> dict_sizes;
   std::vector<std::pair<std::string, std::string>> list_elems;
   std::vector<std::pair<std::string, std::string>> dict_keys;
+  // See the identically-named local in collect_nondet_values: dict keys are
+  // concrete, so the key type has to come from the builder name.
+  std::string dict_key_kind;
   std::vector<std::pair<std::string, std::string>> dict_values;
 
   // Extract function name
@@ -1227,61 +1283,39 @@ void pytest_generator::generate_single(
       bool is_list_elem = false;
       bool is_dict_key = false;
       bool is_dict_value = false;
+      bool is_dict_size = false;
 
       if (SSA_step.source.pc->location.function() != "")
       {
         std::string inner_func_name =
           SSA_step.source.pc->location.function().as_string();
 
-        // Check if we're inside an internal function
-        bool in_nondet_size = false;
-        bool in_nondet_list = false;
-        bool in_nondet_dict = false;
+        const nondet_model_scopet scope =
+          classify_nondet_model(inner_func_name);
+        const bool in_nondet_list = scope.list;
+        const bool in_nondet_dict = scope.dict;
+        if (!scope.dict_key_kind.empty())
+          dict_key_kind = scope.dict_key_kind;
 
-        if (inner_func_name == "_nondet_size")
-          in_nondet_size = true;
-        else if (inner_func_name == "nondet_list")
-          in_nondet_list = true;
-        else if (inner_func_name == "nondet_dict")
-          in_nondet_dict = true;
-        else
+        // Track the role of internal variables.  The builders hold the size
+        // in `size`/`bound` and produce each element from an anonymous
+        // `nondet_T()` call, so anything else nondet in scope is an element
+        // (a dict's keys are concrete constants, only its values are nondet).
+        if (scope.any())
         {
-          // Check for mangled names
-          size_t sep_pos = inner_func_name.rfind("::");
-          if (sep_pos != std::string::npos)
+          if (var_name == "size")
           {
-            std::string base_name = inner_func_name.substr(sep_pos + 2);
-            if (base_name == "_nondet_size")
-              in_nondet_size = true;
-            else if (base_name == "nondet_list")
-              in_nondet_list = true;
-            else if (base_name == "nondet_dict")
-              in_nondet_dict = true;
+            is_list_size = true;
+            is_dict_size = in_nondet_dict;
           }
-        }
-
-        // Track the role of internal variables
-        if (in_nondet_size && var_name == "size")
-        {
-          is_list_size = true;
-        }
-        else if (in_nondet_list)
-        {
-          if (var_name == "elem_type" || var_name == "elem")
+          else if (in_nondet_list)
             is_list_elem = true;
-        }
-        else if (in_nondet_dict)
-        {
-          if (var_name == "key_type" || var_name == "k")
-            is_dict_key = true;
-          else if (var_name == "value_type" || var_name == "v")
+          else if (in_nondet_dict)
             is_dict_value = true;
         }
 
-        // Skip only loop counters and result variables
-        if (
-          (in_nondet_list || in_nondet_dict || in_nondet_size) &&
-          (var_name == "i" || var_name == "result"))
+        // Skip only loop counters and result variables (not nondet values)
+        if (scope.any() && (var_name == "i" || var_name == "result"))
         {
           continue;
         }
@@ -1331,7 +1365,10 @@ void pytest_generator::generate_single(
         // If this is a list/dict size, store it for later use
         if (is_list_size)
         {
-          list_sizes.push_back({sym.thename.as_string(), int_value});
+          if (is_dict_size)
+            dict_sizes.push_back(int_value);
+          else
+            list_sizes.push_back({sym.thename.as_string(), int_value});
           continue;
         }
       }
@@ -1424,8 +1461,10 @@ void pytest_generator::generate_single(
   }
 
   // Determine if we're building a dict (has dict components)
-  // If so, skip list building because list_sizes are internal to dict construction
-  bool has_dict_components = !dict_keys.empty() || !dict_values.empty();
+  // If so, skip list building because list_sizes are internal to dict
+  // construction
+  bool has_dict_components =
+    !dict_keys.empty() || !dict_values.empty() || !dict_sizes.empty();
 
   // Build composite list values from collected size and element values
   // Skip if we have dict components - the sizes are for the dict, not a separate list
@@ -1500,10 +1539,17 @@ void pytest_generator::generate_single(
   }
 
   // Build composite dict values from collected key and value values
-  if (!dict_keys.empty() || !dict_values.empty())
+  if (!dict_keys.empty() || !dict_values.empty() || !dict_sizes.empty())
   {
     std::string dict_str = "{";
     size_t num_entries = std::max(dict_keys.size(), dict_values.size());
+    for (const BigInt &entries : dict_sizes)
+    {
+      const int64_t count = entries.to_int64();
+      if (count > 0 && static_cast<size_t>(count) > num_entries)
+        num_entries =
+          std::min(static_cast<size_t>(count), max_generated_dict_entries);
+    }
 
     for (size_t i = 0; i < num_entries; ++i)
     {
@@ -1513,6 +1559,10 @@ void pytest_generator::generate_single(
       std::string key_val;
       if (i < dict_keys.size())
         key_val = dict_keys[i].second;
+      else if (dict_key_kind == "str")
+        key_val = "\"" + std::to_string(i) + "\"";
+      else if (dict_key_kind == "bool")
+        key_val = i == 0 ? "False" : "True";
       else
         key_val = std::to_string(i);
 
