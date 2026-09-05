@@ -117,14 +117,6 @@ bool is_unstatable_shape(const expr2tc &expr)
   if (!convertible_rounding_mode(expr))
     return true;
 
-  // overflow_cast()'s lowering builds its upper bound as
-  // constant_int(2^bits - 1) in the *operand's* type (smt_overflow.cpp), which
-  // is unrepresentable and wraps to -1 when bits equals a signed operand's
-  // width. The run's own --ir encoding does not wrap, so the disagreement is
-  // with the bitvector encoding this check forces, not with the fold.
-  if (is_overflow_cast2t(expr))
-    return true;
-
   // convert_terminal() asserts a fixedbv constant fits a uint64_t. --fixedbv
   // runs build wider ones (regression/esbmc/github_562), and the simplifier
   // folds them long before conversion would have rejected them.
