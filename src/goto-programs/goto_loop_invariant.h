@@ -10,6 +10,22 @@
 #include <unordered_set>
 #include <vector>
 
+/// Property tag that goto_synthesise_loop_invariants stamps on the
+/// LOOP_INVARIANT markers it emits. The extractor here accepts a tagged marker
+/// only when it sits immediately before the loop head it is being extracted
+/// for; a user-written __ESBMC_loop_invariant carries no tag and keeps the
+/// looser proximity rule. Without the tag the two passes share nothing but a
+/// 10-instruction window, and a synthesised invariant silently attaches itself
+/// to whichever loop happens to be nearby.
+extern const char *const kSynthesisedInvariantProperty;
+
+/// Instructions with no effect a caller needs to account for: no write to a
+/// tracked variable, no control-flow or heap/external effect. Shared by two
+/// scans that both need exactly this and nothing more -- the window between a
+/// synthesised marker and the loop head it was emitted for, and
+/// goto_invariant_synthesis's reading of a loop body.
+bool is_inert_scan_instruction(goto_programt::const_targett t);
+
 // Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
 class frame_enforcert;
 
@@ -39,6 +55,17 @@ void goto_loop_invariant_combined(goto_functionst &goto_functions);
 class goto_loop_invariantt : public goto_loopst
 {
 public:
+  /// Maximum number of instructions to search backwards from the loop head
+  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
+  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
+  /// for up to ~4 extra declarations before the invariant.  This is the only
+  /// definition: goto_loop_invariant.cpp's free functions name it qualified,
+  /// so extract_invariants_near, extract_loop_assigns and
+  /// extract_and_remove_side_effects search the same window, and so does
+  /// goto_synthesise_loop_invariants when deciding whether a loop already
+  /// carries a user-written invariant.
+  static constexpr size_t kMaxInvariantSearchBack = 10;
+
   goto_loop_invariantt(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
@@ -65,14 +92,6 @@ protected:
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
   /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
   std::vector<expr2tc> active_loop_assigns;
-  /// Maximum number of instructions to search backwards from the loop head
-  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
-  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
-  /// for up to ~4 extra declarations before the invariant.  Both
-  /// extract_loop_invariants and extract_and_remove_side_effects use this
-  /// same limit so their searches are consistent.
-  static constexpr size_t kMaxInvariantSearchBack = 10;
-
   /// Largest pointee, in bits, the havoc will cover. Measured on
   /// quantified_array_invariant: 128 bits is free, 4096 costs eight seconds and
   /// 16384 nine minutes.

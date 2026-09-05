@@ -45,9 +45,47 @@
 // Shared helper: extract the loop invariant near a loop head
 // ---------------------------------------------------------------------------
 
-/// Maximum number of instructions to search backwards from the loop head
-/// when locating the LOOP_INVARIANT instruction.
-static constexpr size_t kMaxInvariantSearchBack = 10;
+const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+
+bool is_inert_scan_instruction(goto_programt::const_targett t)
+{
+  return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
+         t->is_assume();
+}
+
+/// True for a name the frontend generated rather than the user: ESBMC spells
+/// those with a '$' (e.g. return_value$___ESBMC_forall$N).
+static bool is_generated_name(const irep_idt &name)
+{
+  return id2string(name).find('$') != std::string::npos;
+}
+
+/// Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
+/// FUNCTION_CALL.  These may legitimately appear between consecutive
+/// __ESBMC_loop_invariant() calls.  FUNCTION_CALL instructions arise when
+/// remove_function_call emits a DECL + FUNCTION_CALL pair for helper functions
+/// called inside an invariant.
+static bool is_compiler_temp(goto_programt::const_targett t)
+{
+  if (t->is_decl() && is_code_decl2t(t->code))
+    return is_generated_name(to_code_decl2t(t->code).value);
+
+  if (t->is_assign() && is_code_assign2t(t->code))
+  {
+    const expr2tc &target = to_code_assign2t(t->code).target;
+    return is_symbol2t(target) &&
+           is_generated_name(to_symbol2t(target).thename);
+  }
+
+  if (t->is_function_call() && is_code_function_call2t(t->code))
+  {
+    const expr2tc &ret = to_code_function_call2t(t->code).ret;
+    return !is_nil_expr(ret) && is_symbol2t(ret) &&
+           is_generated_name(to_symbol2t(ret).thename);
+  }
+
+  return false;
+}
 
 /// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
@@ -68,59 +106,57 @@ static std::vector<expr2tc> extract_invariants_near(
   // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
   // Multiple sub-expressions are combined with &&.
   auto collect = [&](const std::list<expr2tc> &lst) {
-    if (lst.size() == 1)
-    {
-      invariants.push_back(lst.front());
-    }
-    else
-    {
-      auto jt = lst.begin();
-      expr2tc combined = *jt;
-      for (++jt; jt != lst.end(); ++jt)
-        combined = and2tc(combined, *jt);
-      invariants.push_back(combined);
-    }
-  };
-
-  // Returns true if the instruction is a compiler-generated DECL, ASSIGN, or
-  // FUNCTION_CALL (name contains '$', e.g. return_value$___ESBMC_forall$N).
-  // These may legitimately appear between consecutive __ESBMC_loop_invariant()
-  // calls.  FUNCTION_CALL instructions arise when remove_function_call emits a
-  // DECL + FUNCTION_CALL pair for helper functions called inside an invariant.
-  auto is_compiler_temp = [](goto_programt::const_targett t) -> bool {
-    if (t->is_decl() && is_code_decl2t(t->code))
-      return id2string(to_code_decl2t(t->code).value).find('$') !=
-             std::string::npos;
-    if (t->is_assign() && is_code_assign2t(t->code))
-    {
-      const auto &assign = to_code_assign2t(t->code);
-      return is_symbol2t(assign.target) &&
-             id2string(to_symbol2t(assign.target).thename).find('$') !=
-               std::string::npos;
-    }
-    if (t->is_function_call() && is_code_function_call2t(t->code))
-    {
-      const auto &call = to_code_function_call2t(t->code);
-      return !is_nil_expr(call.ret) && is_symbol2t(call.ret) &&
-             id2string(to_symbol2t(call.ret).thename).find('$') !=
-               std::string::npos;
-    }
-    return false;
+    auto jt = lst.begin();
+    expr2tc combined = *jt;
+    for (++jt; jt != lst.end(); ++jt)
+      combined = and2tc(combined, *jt);
+    invariants.push_back(combined);
   };
 
   // Phase 1: skip non-invariant instructions (including for-init assignments)
   // until we find the closest LOOP_INVARIANT for this loop.
-  while (it != begin && dist < kMaxInvariantSearchBack)
+  // Whether the walk has stepped over an instruction that does real work. A
+  // synthesised marker is only ever emitted immediately before its own loop
+  // head, so crossing one means this marker belongs to a *different* loop and
+  // the proximity window has run past that loop's end. Without this check an
+  // affine loop followed by an unrecognised one had the first loop's invariant
+  // applied to the second, which was then havoc'd and cut under an invariant
+  // saying nothing about its variables -- a spurious failure on a correct
+  // program (regression/esbmc/synth_loop_invariant_adjacent).
+  bool crossed_real_instruction = false;
+
+  while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --it;
     ++dist;
 
     if (!it->is_loop_invariant())
+    {
+      if (!is_inert_scan_instruction(it) && !is_compiler_temp(it))
+        crossed_real_instruction = true;
       continue;
+    }
 
     const std::list<expr2tc> &inv_list = it->get_loop_invariants();
     if (inv_list.empty())
       continue;
+
+    // A user-written invariant keeps the historical proximity-only behaviour:
+    // the frontend may legitimately place it further from the head, and #3936
+    // depends on that latitude.
+    if (
+      it->location.property().as_string() == kSynthesisedInvariantProperty &&
+      crossed_real_instruction)
+    {
+      // The count line has already reported this as synthesised. Say so rather
+      // than drop it silently: the rule leans on the marker sitting immediately
+      // before its own head, so if a future pass ever inserts real work there,
+      // invariants would start disappearing with no signal at all.
+      log_debug(
+        "loop-invariant",
+        "ignoring a synthesised loop invariant that belongs to another loop");
+      return invariants;
+    }
 
     collect(inv_list);
 
@@ -132,7 +168,7 @@ static std::vector<expr2tc> extract_invariants_near(
     // a different context (e.g. outer-loop body), so we stop immediately.
     // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
     // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
-    while (it != begin && dist < kMaxInvariantSearchBack)
+    while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
     {
       --it;
       ++dist;
@@ -264,7 +300,7 @@ goto_loop_invariantt::extract_loop_assigns(const loopst &loop)
   size_t search_distance = 0;
 
   while (search_it != goto_function.body.instructions.begin() &&
-         search_distance < kMaxInvariantSearchBack)
+         search_distance < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --search_it;
     ++search_distance;
@@ -413,7 +449,7 @@ static void extract_and_remove_side_effects_impl(
   goto_programt::targett loop_inv_it = loop_head;
   size_t back_dist = 0;
   while (loop_inv_it != goto_function.body.instructions.begin() &&
-         back_dist < kMaxInvariantSearchBack)
+         back_dist < goto_loop_invariantt::kMaxInvariantSearchBack)
   {
     --loop_inv_it;
     ++back_dist;

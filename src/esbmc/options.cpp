@@ -565,6 +565,12 @@ const struct group_opt_templ all_cmd_options[] = {
      "Verify using loop invariant havoc abstraction (standalone mode). Cuts "
      "the loop, so cost is independent of the bound; the only mode that "
      "reasons about the loop exit condition"},
+    {"synthesise-loop-invariants",
+     NULL,
+     "Synthesise invariants for affine counter/accumulator loops and discharge "
+     "them with the loop-invariant havoc schema; implies "
+     "--loop-invariant-check, and --multi-property unless a k-induction phase "
+     "is selected"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
