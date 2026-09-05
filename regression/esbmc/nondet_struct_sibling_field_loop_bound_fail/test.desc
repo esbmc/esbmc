@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-unwinding-assertions
+^\s*VAR\.INT_1 == 5$
+^VERIFICATION FAILED$
