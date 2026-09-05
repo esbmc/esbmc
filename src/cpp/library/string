@@ -499,8 +499,10 @@ public:
   void push_back(char c);
   void reserve(size_t n = 0);
   char at(size_t pos) const;
-  char front() const;
-  char back() const;
+  char &front();
+  const char &front() const;
+  char &back();
+  const char &back() const;
   bool empty() const;
   void clear();
   size_t length() const;
@@ -1538,7 +1540,7 @@ char basic_string<CharT, Traits, Alloc>::at(size_t pos) const
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-char basic_string<CharT, Traits, Alloc>::front() const
+char &basic_string<CharT, Traits, Alloc>::front()
 {
   __ESBMC_assert(
     this->length() > 0, "basic_string::front() failed: basic_string is empty");
@@ -1547,7 +1549,25 @@ char basic_string<CharT, Traits, Alloc>::front() const
 }
 
 template <typename CharT, typename Traits, typename Alloc>
-char basic_string<CharT, Traits, Alloc>::back() const
+const char &basic_string<CharT, Traits, Alloc>::front() const
+{
+  __ESBMC_assert(
+    this->length() > 0, "basic_string::front() failed: basic_string is empty");
+
+  return this->str[0];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+char &basic_string<CharT, Traits, Alloc>::back()
+{
+  __ESBMC_assert(
+    this->length() > 0, "basic_string::back() failed: basic_string is empty");
+
+  return this->str[this->length() - 1];
+}
+
+template <typename CharT, typename Traits, typename Alloc>
+const char &basic_string<CharT, Traits, Alloc>::back() const
 {
   __ESBMC_assert(
     this->length() > 0, "basic_string::back() failed: basic_string is empty");

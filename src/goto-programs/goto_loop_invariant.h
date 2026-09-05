@@ -97,6 +97,12 @@ protected:
   /// came from; Houdini needs that to know which candidate to delete, and the
   /// vector loses the source instruction long before the ASSERT is built.
   std::vector<std::string> active_invariant_tags;
+
+  /// Largest pointee, in bits, the havoc will cover. Measured on
+  /// quantified_array_invariant: 128 bits is free, 4096 costs eight seconds and
+  /// 16384 nine minutes.
+  static constexpr unsigned kMaxHavocPointeeBits = 1024;
+
   void goto_loop_invariant();
 
   void convert_loop_with_invariant(loopst &loop);
@@ -141,6 +147,13 @@ protected:
   // side_effects is non-const: if frame rule is active, old_snapshot assigns
   // are patched in-place so insert_inductive_step_and_termination (called
   // after this) sees the patched version too.
+  /// Havoc the objects the loop writes through a pointer. See the definition
+  /// for why a large aggregate pointee is left alone (issue #7502).
+  void havoc_pointees(
+    const loopst &loop,
+    const locationt &loc,
+    goto_programt &dest) const;
+
   void insert_havoc_and_assume_before_condition(
     goto_programt::targett loop_head,
     const loopst &loop,
@@ -201,13 +214,15 @@ private:
   void insert_invariant_verification_branch(loopst &loop);
 
   /**
-   * Copy the loop body instructions (from the instruction immediately after
-   * @p loop_head up to, but not including, @p loop_exit) into @p out.
-   * Intra-loop jump targets are remapped to the copied instructions; targets
-   * outside the loop are left unchanged.
+   * Copy the loop body instructions (from @p body_begin up to, but not
+   * including, @p loop_exit) into @p out. Intra-loop jump targets are remapped
+   * to the copied instructions; targets outside the loop are left unchanged.
+   * @p body_begin is the instruction after the loop head when the head is the
+   * loop's guard, which ASSUME(entry_cond) models instead, and the head itself
+   * otherwise -- a do-while head is a body instruction (issue #7494).
    */
   void copy_loop_body(
-    goto_programt::targett loop_head,
+    goto_programt::targett body_begin,
     goto_programt::targett loop_exit,
     goto_programt &out) const;
 };

@@ -237,37 +237,6 @@ void goto_loop_invariant(
   goto_functions.update();
 }
 
-static void
-collect_symbols_local(const expr2tc &expr, std::set<irep_idt> &symbols);
-
-/// True when some symbol the loop's guard reads is one the havoc covers. When
-/// nothing the guard reads is havoc'd, the exit edge is decided by the
-/// concrete pre-loop state and cannot change, so the claims after the loop are
-/// never reached rather than checked (issue #7478).
-static bool guard_reads_havocd_var(
-  goto_programt::targett head,
-  const goto_functiont &fn,
-  const loopst &loop)
-{
-  std::set<irep_idt> havocd_names;
-  for (const auto &v : loop.get_modified_loop_vars())
-    if (is_symbol2t(v))
-      havocd_names.insert(to_symbol2t(v).get_symbol_name());
-
-  for (goto_programt::targett it = head; it != fn.body.instructions.end(); ++it)
-  {
-    std::set<irep_idt> read;
-    collect_symbols_local(it->code, read);
-    collect_symbols_local(it->guard, read);
-    for (const auto &name : read)
-      if (havocd_names.count(name))
-        return true;
-    if (it->is_goto())
-      break;
-  }
-  return false;
-}
-
 void goto_loop_invariantt::goto_loop_invariant()
 {
   for (auto &function_loop : function_loops)
@@ -313,16 +282,16 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants, side_effects);
 
-  // A write through a dereference has no named symbol for the havoc to cover.
-  // When the guard reads nothing the havoc does reach, the loop is left at its
-  // concrete pre-loop state: the exit edge cannot change, the invariant is
-  // discharged against one concrete iteration and every claim after the loop is
-  // dropped without being solved (issue #7478). Leave the loop for the unwinder
-  // rather than report a proof we did not make. The base case above is checked
-  // against the concrete pre-loop state and needs no havoc, so it still stands.
-  if (
-    loop.writes_through_pointer() &&
-    !guard_reads_havocd_var(std::prev(after_head), goto_function, loop))
+  // A write through a dereference has no named symbol for the havoc to cover,
+  // so resolve the pointer to the objects it may reference and havoc those
+  // instead. Where that abstains -- an unresolvable pointer, an unknown or heap
+  // pointee, a callee reached through a function pointer -- the loop would be
+  // symex'd from its concrete pre-loop state, the invariant discharged against
+  // one concrete iteration and the claims after the loop dropped unsolved
+  // (issue #7478). Leave the loop for the unwinder rather than report a proof
+  // we did not make. The base case above is checked against the concrete
+  // pre-loop state and needs no havoc, so it still stands.
+  if (loop.writes_through_pointer() && loop.pointer_array_write_unresolvable())
   {
     log_warning(
       "loop invariant at {} not checked beyond its base case: the loop writes "
@@ -694,6 +663,55 @@ void goto_loop_invariantt::insert_assert_before_loop(
   goto_function.body.insert_swap(loop_head, dest);
 }
 
+/// Storage a loop writes through a pointer has no named symbol, so havoc the
+/// pointed-to object through the pointer itself and let symex resolve it
+/// against its own value set. Without this the pointee keeps its pre-loop value
+/// across the abstract iteration and a claim about it after the loop is decided
+/// on state the loop overwrote (issue #7478).
+///
+/// A pointee is havoc'd as one nondet value, which for a large aggregate costs
+/// more to encode than the loop it replaces: the 1024-element `poly` of
+/// quantified_array_invariant goes from under a second to nine minutes, against
+/// eight seconds at 256 elements. Cover what is cheap and leave the rest to
+/// issue #7502 rather than trade a proof for a timeout.
+void goto_loop_invariantt::havoc_pointees(
+  const loopst &loop,
+  const locationt &loc,
+  goto_programt &dest) const
+{
+  const namespacet ns(context);
+
+  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
+  {
+    if (!is_pointer_type(ptr->type))
+      continue;
+
+    const type2tc pointee = ns.follow(to_pointer_type(ptr->type).subtype);
+    if (is_empty_type(pointee) || is_code_type(pointee))
+      continue;
+
+    // get_width() throws on a VLA or an infinite array, and on a type the
+    // namespace could not resolve. A pointee with no static width has no
+    // nondet value to build either, so it is out of reach here.
+    unsigned width;
+    try
+    {
+      width = pointee->get_width();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      continue;
+    }
+    if (width > kMaxHavocPointeeBits)
+      continue;
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(dereference2tc(pointee, ptr), gen_nondet(pointee));
+    t->location = loc;
+    t->location.comment("loop invariant havoc");
+  }
+}
+
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett loop_head,
   const loopst &loop,
@@ -739,6 +757,11 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     active_frame_enforcer->patch_old_snapshot_assigns(side_effects);
   }
 
+  // Before Step 2: a pointer the loop reassigns is havoc'd there, and writing
+  // through it afterwards would reach an arbitrary object rather than the
+  // storage this loop writes.
+  havoc_pointees(loop, loop_head->location, dest);
+
   // =========================================================
   // Step 2: Standard Havoc — assign nondet to all modified variables
   // =========================================================
@@ -759,6 +782,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->code = code_assign2tc(lhs, rhs);
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
+    t->loop_invariant_havoc = true;
   }
 
   // =========================================================
@@ -939,7 +963,7 @@ void goto_loop_invariant_combinedt::process_loops_combined()
 }
 
 void goto_loop_invariant_combinedt::copy_loop_body(
-  goto_programt::targett loop_head,
+  goto_programt::targett body_begin,
   goto_programt::targett loop_exit,
   goto_programt &out) const
 {
@@ -947,7 +971,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
   std::map<goto_programt::targett, unsigned> target_map;
   {
     unsigned count = 0;
-    for (auto t = std::next(loop_head); t != loop_exit; ++t, ++count)
+    for (auto t = body_begin; t != loop_exit; ++t, ++count)
       target_map[t] = count;
   }
 
@@ -955,7 +979,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
-  for (auto t = std::next(loop_head); t != loop_exit; ++t)
+  for (auto t = body_begin; t != loop_exit; ++t)
   {
     goto_programt::targett copied_t = out.add_instruction(*t);
     target_vector.push_back(copied_t);
@@ -973,6 +997,44 @@ void goto_loop_invariant_combinedt::copy_loop_body(
         target = target_vector[m_it->second];
     }
   }
+}
+
+/// The condition under which a while or for loop is entered: the negation of
+/// its head IF's guard, which ASSUME(entry_cond) stands in for so the head need
+/// not be copied. Nil for a do-while, whose head is not a conditional goto but
+/// the first instruction of the body -- it always enters (issue #7494).
+static expr2tc loop_entry_cond(goto_programt::targett loop_head)
+{
+  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
+    return not2tc(loop_head->guard);
+  return expr2tc();
+}
+
+/// Where the copied body starts: after the head when ASSUME(entry_cond) stands
+/// in for it, at the head otherwise, because a do-while head is a body
+/// instruction and skipping it left the verification branch empty (#7494).
+static goto_programt::targett
+loop_body_begin(goto_programt::targett loop_head, const expr2tc &entry_cond)
+{
+  return is_nil_expr(entry_cond) ? loop_head : std::next(loop_head);
+}
+
+/// Constrain the copied iteration to one another would follow. A do-while's
+/// exit test lives on its back edge, so the copy may be the last iteration, and
+/// a head invariant need not hold where the loop exits: `x <= 4` on
+/// `do x++; while (x < 5)` holds at every head and is false once the exiting
+/// iteration leaves x == 5. No-op for the unconditional back edge of a while or
+/// for loop (issue #7494).
+static void
+assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
+{
+  if (!loop_exit->is_goto() || is_true(loop_exit->guard))
+    return;
+
+  auto t = out.add_instruction(ASSUME);
+  t->guard = loop_exit->guard;
+  t->location = loop_exit->location;
+  t->location.comment("loop continue condition (verification branch)");
 }
 
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
@@ -995,18 +1057,11 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects);
 
-  // ── 2. Copy loop body
-  goto_programt body_copy;
-  copy_loop_body(loop_head, loop_exit, body_copy);
+  // ── 2. Copy loop body, and the entry condition that stands in for the head
+  const expr2tc entry_cond = loop_entry_cond(loop_head);
 
-  // ── 3. Extract the loop entry condition ───────────────────────────────────
-  // loop_head is "IF !(cond) GOTO exit", so the entry condition is "cond"
-  // i.e. the negation of the GOTO guard.
-  expr2tc entry_cond;
-  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
-    entry_cond = not2tc(loop_head->guard);
-  // If loop_head is not a conditional GOTO (e.g. do-while), entry_cond
-  // stays nil and we omit the ASSUME(entry_cond) — always enters.
+  goto_programt body_copy;
+  copy_loop_body(loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
 
   // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
   const auto &loop_vars = loop.get_modified_loop_vars();
@@ -1061,6 +1116,11 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4e] One iteration of the loop body
   branch1.destructive_insert(branch1.instructions.end(), body_copy);
 
+  // [4e'] Only an iteration another would follow has to preserve the invariant.
+  // PR #3777 describes this for the copied body; it never bit because a
+  // do-while's body was not copied at all (issue #7494).
+  assume_continue_cond(loop_exit, branch1);
+
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
     branch1.instructions.push_back(instr);
@@ -1094,10 +1154,15 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     branch1.destructive_insert(branch1.instructions.begin(), gate);
   }
 
-  // ── 6. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
-  // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
-  // k-induction will see the assumption at the end of every iteration without
-  // any modification to goto_k_induction itself.
+  // ── 6. Add ASSUME(INV) at the loop head (Branch 2) ───────────────────────
+  // The invariant holds where it is annotated, at the head of an iteration, so
+  // that is where k-induction gets to assume it. For a while or for loop the
+  // head is the guard, and the assumption goes just inside it, where the body
+  // begins. A do-while head is already the first body instruction: advancing
+  // past it puts the ASSUME at the body tail, ahead of the loop's own exit
+  // test, where a head invariant need not hold -- the exiting iteration then
+  // contradicts it, the exit edge is assumed away and every claim after the
+  // loop silently disappears (issue #7494).
 
   // ── 7. Insert before loop_head using splice (NOT insert_swap) ─────────────
   // splice() inserts before loop_head without moving it, so any existing
@@ -1113,7 +1178,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->guard = inv;
     t->location = loop_head->location;
     t->location.comment("loop invariant assume (k-induction hint)");
-    loop_head++;
+    if (!is_nil_expr(entry_cond))
+      loop_head++;
     goto_function.body.insert_swap(loop_head, assume_inv);
   }
 }
