@@ -14,11 +14,11 @@ exprt python_list::compare(
 
   // Convert member expressions into temporary symbols
   auto materialize_if_needed = [&](const exprt &e) -> exprt {
-    if (e.id() == "member")
+    // Anything that is not already a symbol -- a member, or a call result such
+    // as list(zip(...)) -- has no entry in the symbol table, and every use
+    // below dereferences the looked-up symbol (#7555).
+    if (e.id() != "symbol")
     {
-      // Extract member expression to a temporary variable
-      const member_exprt &member = to_member_expr(e);
-
       symbolt &temp_sym = converter_.create_tmp_symbol(
         list_value_, "$list_temp$", e.type(), exprt());
 
@@ -26,7 +26,7 @@ exprt python_list::compare(
       temp_decl.location() = converter_.get_location_from_decl(list_value_);
       converter_.add_instruction(temp_decl);
 
-      code_assignt temp_assign(build_symbol(temp_sym), member);
+      code_assignt temp_assign(build_symbol(temp_sym), e);
       temp_assign.location() = converter_.get_location_from_decl(list_value_);
       converter_.add_instruction(temp_assign);
 
