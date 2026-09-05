@@ -855,7 +855,7 @@ void goto_loop_invariant_combinedt::process_loops_combined()
 }
 
 void goto_loop_invariant_combinedt::copy_loop_body(
-  goto_programt::targett loop_head,
+  goto_programt::targett body_begin,
   goto_programt::targett loop_exit,
   goto_programt &out) const
 {
@@ -863,7 +863,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
   std::map<goto_programt::targett, unsigned> target_map;
   {
     unsigned count = 0;
-    for (auto t = std::next(loop_head); t != loop_exit; ++t, ++count)
+    for (auto t = body_begin; t != loop_exit; ++t, ++count)
       target_map[t] = count;
   }
 
@@ -871,7 +871,7 @@ void goto_loop_invariant_combinedt::copy_loop_body(
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
-  for (auto t = std::next(loop_head); t != loop_exit; ++t)
+  for (auto t = body_begin; t != loop_exit; ++t)
   {
     goto_programt::targett copied_t = out.add_instruction(*t);
     target_vector.push_back(copied_t);
@@ -889,6 +889,44 @@ void goto_loop_invariant_combinedt::copy_loop_body(
         target = target_vector[m_it->second];
     }
   }
+}
+
+/// The condition under which a while or for loop is entered: the negation of
+/// its head IF's guard, which ASSUME(entry_cond) stands in for so the head need
+/// not be copied. Nil for a do-while, whose head is not a conditional goto but
+/// the first instruction of the body -- it always enters (issue #7494).
+static expr2tc loop_entry_cond(goto_programt::targett loop_head)
+{
+  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
+    return not2tc(loop_head->guard);
+  return expr2tc();
+}
+
+/// Where the copied body starts: after the head when ASSUME(entry_cond) stands
+/// in for it, at the head otherwise, because a do-while head is a body
+/// instruction and skipping it left the verification branch empty (#7494).
+static goto_programt::targett
+loop_body_begin(goto_programt::targett loop_head, const expr2tc &entry_cond)
+{
+  return is_nil_expr(entry_cond) ? loop_head : std::next(loop_head);
+}
+
+/// Constrain the copied iteration to one another would follow. A do-while's
+/// exit test lives on its back edge, so the copy may be the last iteration, and
+/// a head invariant need not hold where the loop exits: `x <= 4` on
+/// `do x++; while (x < 5)` holds at every head and is false once the exiting
+/// iteration leaves x == 5. No-op for the unconditional back edge of a while or
+/// for loop (issue #7494).
+static void
+assume_continue_cond(goto_programt::targett loop_exit, goto_programt &out)
+{
+  if (!loop_exit->is_goto() || is_true(loop_exit->guard))
+    return;
+
+  auto t = out.add_instruction(ASSUME);
+  t->guard = loop_exit->guard;
+  t->location = loop_exit->location;
+  t->location.comment("loop continue condition (verification branch)");
 }
 
 void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
@@ -911,18 +949,11 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   extract_and_remove_side_effects_impl(
     goto_function, loop_head, loop, invariants, side_effects);
 
-  // ── 2. Copy loop body
-  goto_programt body_copy;
-  copy_loop_body(loop_head, loop_exit, body_copy);
+  // ── 2. Copy loop body, and the entry condition that stands in for the head
+  const expr2tc entry_cond = loop_entry_cond(loop_head);
 
-  // ── 3. Extract the loop entry condition ───────────────────────────────────
-  // loop_head is "IF !(cond) GOTO exit", so the entry condition is "cond"
-  // i.e. the negation of the GOTO guard.
-  expr2tc entry_cond;
-  if (loop_head->is_goto() && !loop_head->is_backwards_goto())
-    entry_cond = not2tc(loop_head->guard);
-  // If loop_head is not a conditional GOTO (e.g. do-while), entry_cond
-  // stays nil and we omit the ASSUME(entry_cond) — always enters.
+  goto_programt body_copy;
+  copy_loop_body(loop_body_begin(loop_head, entry_cond), loop_exit, body_copy);
 
   // ── 4. Build Branch 1 ─────────────────────────────────────────────────────
   const auto &loop_vars = loop.get_modified_loop_vars();
@@ -977,6 +1008,11 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
   // [4e] One iteration of the loop body
   branch1.destructive_insert(branch1.instructions.end(), body_copy);
 
+  // [4e'] Only an iteration another would follow has to preserve the invariant.
+  // PR #3777 describes this for the copied body; it never bit because a
+  // do-while's body was not copied at all (issue #7494).
+  assume_continue_cond(loop_exit, branch1);
+
   // [4f] Inductive-step ASSERT(INV)
   for (const auto &instr : side_effects.instructions)
     branch1.instructions.push_back(instr);
@@ -1010,10 +1046,15 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     branch1.destructive_insert(branch1.instructions.begin(), gate);
   }
 
-  // ── 6. Add ASSUME(INV) at end of original loop body (Branch 2) ───────────
-  // Inserting ASSUME(INV) just before loop_exit (the backward GOTO) means
-  // k-induction will see the assumption at the end of every iteration without
-  // any modification to goto_k_induction itself.
+  // ── 6. Add ASSUME(INV) at the loop head (Branch 2) ───────────────────────
+  // The invariant holds where it is annotated, at the head of an iteration, so
+  // that is where k-induction gets to assume it. For a while or for loop the
+  // head is the guard, and the assumption goes just inside it, where the body
+  // begins. A do-while head is already the first body instruction: advancing
+  // past it puts the ASSUME at the body tail, ahead of the loop's own exit
+  // test, where a head invariant need not hold -- the exiting iteration then
+  // contradicts it, the exit edge is assumed away and every claim after the
+  // loop silently disappears (issue #7494).
 
   // ── 7. Insert before loop_head using splice (NOT insert_swap) ─────────────
   // splice() inserts before loop_head without moving it, so any existing
@@ -1029,7 +1070,8 @@ void goto_loop_invariant_combinedt::insert_invariant_verification_branch(
     t->guard = inv;
     t->location = loop_head->location;
     t->location.comment("loop invariant assume (k-induction hint)");
-    loop_head++;
+    if (!is_nil_expr(entry_cond))
+      loop_head++;
     goto_function.body.insert_swap(loop_head, assume_inv);
   }
 }
