@@ -86,17 +86,6 @@ bool breaks_straight_line(const goto_programt::targett &it)
          it->is_atomic_end();
 }
 
-/// Instructions the body summary may step over. This is a whitelist because
-/// OTHER carries `free`, `delete` and `asm` (symex_other.cpp), whose effect the
-/// schema's havoc of get_modified_loop_vars() cannot express: it names
-/// variables and says nothing about heap validity. Cutting a loop over a
-/// `free` proved a post-loop use-after-free safe.
-bool is_inert_in_body(const goto_programt::targett &it)
-{
-  return it->is_skip() || it->is_location() || it->is_decl() ||
-         it->type == DEAD || it->is_assume();
-}
-
 /// `lhs = lhs + addend` — the only body assignment shape recognised here.
 bool is_self_increment(
   const expr2tc &target,
@@ -363,7 +352,12 @@ static bool summarise_body(
     }
     if (!it->is_assign())
     {
-      if (!is_inert_in_body(it))
+      // Whitelist rather than blacklist: OTHER carries `free`, `delete` and
+      // `asm` (symex_other.cpp), whose effect the schema's havoc of
+      // get_modified_loop_vars() cannot express -- it names variables and
+      // says nothing about heap validity. Cutting a loop over a `free` proved
+      // a post-loop use-after-free safe.
+      if (!is_inert_scan_instruction(it))
         return false;
       continue;
     }

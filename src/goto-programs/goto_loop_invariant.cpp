@@ -47,11 +47,7 @@
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 
-/// Instructions that may sit between a synthesised marker and the loop head it
-/// was emitted for. The marker is inserted immediately before that head, so
-/// only bookkeeping and the assumes a later pass (--interval-analysis) injects
-/// can legitimately intervene.
-static bool is_inert_before_loop_head(goto_programt::const_targett t)
+bool is_inert_scan_instruction(goto_programt::const_targett t)
 {
   return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
          t->is_assume();
@@ -136,7 +132,7 @@ static std::vector<expr2tc> extract_invariants_near(
 
     if (!it->is_loop_invariant())
     {
-      if (!is_inert_before_loop_head(it) && !is_compiler_temp(it))
+      if (!is_inert_scan_instruction(it) && !is_compiler_temp(it))
         crossed_real_instruction = true;
       continue;
     }
