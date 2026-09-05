@@ -1,0 +1,5 @@
+# Coverage-derived always-run core set (esbmc/esbmc#6735).
+#
+# Solved by .github/workflows/core-set.yml -- greedy weighted set cover over
+# per-test line coverage. Empty until its first run; the fast lane then falls
+# back to the stratified random sample alone.

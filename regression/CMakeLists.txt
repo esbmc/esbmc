@@ -35,6 +35,35 @@ set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
 
+# The fast lane's always-run core set is derived by greedy set cover over
+# per-test line coverage (esbmc/esbmc#6735), which needs each test's profile
+# kept apart instead of merged into one repo-wide total. Off by default: it
+# only makes sense on an ENABLE_COVERAGE build and costs a directory per test.
+option(ENABLE_PER_TEST_COVERAGE
+    "Write one LLVM raw profile per regression test, for the core-set build" OFF)
+set(ESBMC_PER_TEST_PROFILE_DIR "${CMAKE_BINARY_DIR}/per-test-profiles" CACHE PATH
+    "Directory ENABLE_PER_TEST_COVERAGE writes each test's raw profiles under")
+
+# Compute the LLVM_PROFILE_FILE entry to append to a test's ENVIRONMENT, or an
+# empty string when per-test coverage is off. '/' cannot appear in a directory
+# name and no ctest name contains '@', so the substitution is reversible --
+# scripts/ci/coverage_core_set.py reverses it to recover the test name.
+#
+# %m, not %p: a single test.desc runs ESBMC several times, and %m merges those
+# runs into one file per binary online instead of leaving one raw profile per
+# process. Over the whole suite that is the difference between a manageable
+# profile tree and tens of gigabytes of it. The profile runtime creates the
+# directory itself, so nothing here needs to.
+function(esbmc_per_test_profile_env out test_name)
+    if(NOT ENABLE_PER_TEST_COVERAGE)
+        set(${out} "" PARENT_SCOPE)
+        return()
+    endif()
+    string(REPLACE "/" "@" _profile_dir "${test_name}")
+    set(${out} ";LLVM_PROFILE_FILE=${ESBMC_PER_TEST_PROFILE_DIR}/${_profile_dir}/%m.profraw"
+        PARENT_SCOPE)
+endfunction()
+
 if(BENCHBRINGUP)
   # To run a specific benchmark in Github workflow and download the log archive when completed
   #   - BENCHMARK_TO_RUN: user-specified benchmark to run
@@ -156,10 +185,11 @@ function(add_esbmc_regression_test folder modes test)
                      --capabilities=${ESBMC_TEST_CAPABILITIES_ARG}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
     # Timeout and memory limit are passed via environment
+    esbmc_per_test_profile_env(profile_env "${test_name}")
     set_tests_properties(${test_name}
       PROPERTIES SKIP_RETURN_CODE 10
       TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT}
-      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+      ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}${profile_env}"
       LABELS "regression;${folder}/${extra_labels}")
 endfunction()
 
@@ -760,17 +790,21 @@ foreach(_t IN LISTS _slow_regression_tests)
         #    decides "no SUCCESSFUL printed -> KNOWNBUG satisfied".
         # The outer must comfortably exceed the inner so testing_tool
         # wins the race (kill + grace + regex check time).
+        # This resets ENVIRONMENT wholesale, so re-add the per-test profile
+        # entry add_esbmc_regression_test put there.
+        esbmc_per_test_profile_env(profile_env "${_t}")
         set_tests_properties(${_t} PROPERTIES
           TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_SLOW}
-          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}${profile_env}"
         )
     endif()
 endforeach()
 foreach(_t IN LISTS _very_slow_regression_tests)
     if(TEST ${_t})
+        esbmc_per_test_profile_env(profile_env "${_t}")
         set_tests_properties(${_t} PROPERTIES
           TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW}
-          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_VERY_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_VERY_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}${profile_env}"
         )
     endif()
 endforeach()
