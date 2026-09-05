@@ -594,20 +594,19 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
   return inv;
 }
 
-/// s == s0 + (i - i0) * e. Exact under the wrapping arithmetic ESBMC gives the
-/// operand types: the product only depends on (i - i0) modulo the accumulator's
-/// width, so narrowing the counter difference to that width is
-/// value-preserving.
+/// s == s0 + (i - i0) * e, with the difference taken at the accumulator's type.
+/// Widening the counter before subtracting rather than after is what makes this
+/// exact: a narrower counter's subtraction wraps at its own width and the
+/// widening does not follow it, so `int i` with a `long` accumulator failed its
+/// own inductive step at i near INT_MIN. Where the counter is at least as wide
+/// the two spellings agree, the product depending only on (i - i0) modulo the
+/// accumulator's width.
 expr2tc
 build_accumulator_invariant(const affine_loopt &shape, const accumulatort &acc)
 {
   const type2tc &t = acc.var->type;
-  const expr2tc elapsed = typecast2tc(
-    t,
-    sub2tc(
-      shape.counter->type,
-      shape.counter,
-      typecast2tc(shape.counter->type, shape.counter_entry)));
+  const expr2tc elapsed = sub2tc(
+    t, typecast2tc(t, shape.counter), typecast2tc(t, shape.counter_entry));
 
   expr2tc inv = equality2tc(
     acc.var,
