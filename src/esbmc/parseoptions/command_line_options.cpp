@@ -363,9 +363,10 @@ set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
   // inductive_step_instruction arm with k_induction false, which symex asserts
   // against (execution_state.cpp) -- ESBMC aborts.
   if (
-    cmdline.isset("synthesise-loop-invariants") && !options.is_kind() &&
-    !cmdline.isset("base-case") && !cmdline.isset("forward-condition") &&
-    !cmdline.isset("inductive-step"))
+    (cmdline.isset("synthesise-loop-invariants") ||
+     cmdline.isset("houdini-loop-invariants")) &&
+    !options.is_kind() && !cmdline.isset("base-case") &&
+    !cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
   {
     options.set_option("multi-property", true);
     options.set_option("base-case", true);
@@ -375,7 +376,12 @@ set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
     options.set_option("check-vacuity", false);
   else if (
     cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check") ||
-    cmdline.isset("synthesise-loop-invariants"))
+    cmdline.isset("synthesise-loop-invariants") ||
+    cmdline.isset("houdini-loop-invariants"))
+    // A candidate that implies the loop guard cuts the post-loop continuation
+    // away, and every downstream claim then discharges vacuously. Houdini
+    // guesses candidates it has no reason to believe, so it needs this probe
+    // at least as much as the modes that already default it on.
     options.set_option("check-vacuity", true);
 }
 

@@ -46,6 +46,7 @@
 // ---------------------------------------------------------------------------
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
+const char *const kHoudiniCandidatePrefix = "houdini-candidate:";
 
 /// Instructions that may sit between a synthesised marker and the loop head it
 /// was emitted for. The marker is inserted immediately before that head, so
@@ -91,13 +92,63 @@ static bool is_compiler_temp(goto_programt::const_targett t)
   return false;
 }
 
+/// A Houdini candidate marker, as opposed to a user-written or affine
+/// invariant. Houdini emits a whole pool immediately before the head, so these
+/// are exempt from the proximity window that bounds the backwards scan.
+static bool is_houdini_marker(goto_programt::const_targett t)
+{
+  const std::string p = t->location.property().as_string();
+  return p.rfind(kHoudiniCandidatePrefix, 0) == 0;
+}
+
+/// Phase 2 of extract_invariants_near: collect any further LOOP_INVARIANT
+/// instructions belonging to the same loop as the one just collected. These
+/// arise when the user writes multiple separate __ESBMC_loop_invariant() calls
+/// (issue #3936). Only compiler-generated temporaries may sit between
+/// consecutive same-loop invariants; any real instruction means we have crossed
+/// into a different context (e.g. an outer-loop body), so we stop immediately.
+/// @p dist is shared with phase 1 so the two together respect one
+/// kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
+template <typename Collect>
+static void cluster_same_loop_invariants(
+  goto_programt::targett &it,
+  goto_programt::targett begin,
+  size_t &dist,
+  Collect collect)
+{
+  while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
+  {
+    --it;
+    ++dist;
+    if (it->is_loop_invariant())
+    {
+      // A Houdini pool is one contiguous run of markers emitted immediately
+      // before this head, so it is a single group however long it is. The
+      // window bounds the scan over *ordinary* instructions; counting the pool
+      // against it would silently truncate the pool instead.
+      if (is_houdini_marker(it))
+        --dist;
+      if (!it->get_loop_invariants().empty())
+        collect(it);
+      continue;
+    }
+    if (is_compiler_temp(it))
+      continue;
+    break; // real instruction — stop clustering
+  }
+}
+
 /// Walk backwards from @p loop_head (up to kMaxInvariantSearchBack steps) and
 /// return the invariant expression(s) for the nearest LOOP_INVARIANT found.
 /// Multiple conjuncts are folded into a single and2tc.  Returns an empty
 /// vector when no annotated LOOP_INVARIANT is in range.
+///
+/// @p tags, when non-null, receives each returned invariant's source marker
+/// property, positionally aligned with the result.
 static std::vector<expr2tc> extract_invariants_near(
   goto_programt::targett loop_head,
-  goto_programt::targett begin)
+  goto_programt::targett begin,
+  std::vector<std::string> *tags = nullptr)
 {
   std::vector<expr2tc> invariants;
 
@@ -109,12 +160,15 @@ static std::vector<expr2tc> extract_invariants_near(
 
   // Fold a LOOP_INVARIANT instruction's expression list into `invariants`.
   // Multiple sub-expressions are combined with &&.
-  auto collect = [&](const std::list<expr2tc> &lst) {
+  auto collect = [&](goto_programt::const_targett src) {
+    const std::list<expr2tc> &lst = src->get_loop_invariants();
     auto jt = lst.begin();
     expr2tc combined = *jt;
     for (++jt; jt != lst.end(); ++jt)
       combined = and2tc(combined, *jt);
     invariants.push_back(combined);
+    if (tags)
+      tags->push_back(src->location.property().as_string());
   };
 
   // Phase 1: skip non-invariant instructions (including for-init assignments)
@@ -162,31 +216,8 @@ static std::vector<expr2tc> extract_invariants_near(
       return invariants;
     }
 
-    collect(inv_list);
-
-    // Phase 2: collect any additional LOOP_INVARIANT instructions that belong
-    // to the same loop.  These arise when the user writes multiple separate
-    // __ESBMC_loop_invariant() calls (issue #3936).  The only instructions
-    // that may appear between consecutive same-loop invariants are compiler-
-    // generated temporaries; any real instruction means we have crossed into
-    // a different context (e.g. outer-loop body), so we stop immediately.
-    // Reuse `dist` so that Phase 1 + Phase 2 together respect the same
-    // kMaxInvariantSearchBack bound and avoid an O(n) scan in large functions.
-    while (it != begin && dist < goto_loop_invariantt::kMaxInvariantSearchBack)
-    {
-      --it;
-      ++dist;
-      if (it->is_loop_invariant())
-      {
-        const std::list<expr2tc> &extra = it->get_loop_invariants();
-        if (!extra.empty())
-          collect(extra);
-        continue;
-      }
-      if (is_compiler_temp(it))
-        continue;
-      break; // real instruction — stop clustering
-    }
+    collect(it);
+    cluster_same_loop_invariants(it, begin, dist, collect);
     break; // done: found the invariant group for this loop
   }
 
@@ -285,8 +316,21 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
 std::vector<expr2tc>
 goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
+  active_invariant_tags.clear();
   return extract_invariants_near(
-    loop.get_original_loop_head(), goto_function.body.instructions.begin());
+    loop.get_original_loop_head(),
+    goto_function.body.instructions.begin(),
+    &active_invariant_tags);
+}
+
+std::string
+goto_loop_invariantt::invariant_claim_comment(const char *base, size_t i) const
+{
+  if (
+    i < active_invariant_tags.size() &&
+    active_invariant_tags[i].rfind(kHoudiniCandidatePrefix, 0) == 0)
+    return std::string(base) + " [" + active_invariant_tags[i] + "]";
+  return base;
 }
 
 std::vector<expr2tc>
@@ -605,13 +649,13 @@ void goto_loop_invariantt::insert_assert_before_loop(
   for (const auto &instr : side_effects.instructions)
     dest.instructions.push_back(instr);
 
-  for (const auto &invariant : invariants)
+  for (size_t i = 0; i < invariants.size(); ++i)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = invariant;
+    t->guard = invariants[i];
     t->location = loop_head->location;
-    t->location.comment("loop invariant base case");
+    t->location.comment(invariant_claim_comment("loop invariant base case", i));
     t->location.property("invariant-base-case");
   }
 
@@ -871,14 +915,15 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     conditional_back_edge ? not2tc(loop_exit->guard) : gen_false_expr();
 
   // 3. ASSERT for inductive step.
-  for (const auto &invariant : invariants)
+  for (size_t i = 0; i < invariants.size(); ++i)
   {
     // Create assert instruction for each invariant
     goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard =
-      conditional_back_edge ? expr2tc(or2tc(exit_cond, invariant)) : invariant;
+    t->guard = conditional_back_edge ? expr2tc(or2tc(exit_cond, invariants[i]))
+                                     : invariants[i];
     t->location = loop_exit->location;
-    t->location.comment("loop invariant inductive step");
+    t->location.comment(
+      invariant_claim_comment("loop invariant inductive step", i));
     t->location.property("invariant-inductive-step");
   }
 

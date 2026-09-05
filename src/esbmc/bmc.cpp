@@ -511,15 +511,19 @@ void bmct::report_unknown()
   log_fail("\nVERIFICATION UNKNOWN");
 }
 
+// When every violated claim sits downstream of a --loop-invariant-check havoc,
+// no counterexample witnesses a state the program can reach. An
+// over-approximation can prove, never refute: the invariant being too weak is
+// "cannot prove", not "the program is wrong" (issue #7480).
+bool bmct::violation_is_abstraction_only() const
+{
+  return weak_invariant_detected &&
+         !goto_functionst::property_verdicts.has_violation();
+}
+
 void bmct::report_violation()
 {
-  // When every violated claim sits downstream of a --loop-invariant-check
-  // havoc, no counterexample witnesses a state the program can reach. An
-  // over-approximation can prove, never refute: the invariant being too weak
-  // is "cannot prove", not "the program is wrong" (issue #7480).
-  if (
-    !weak_invariant_detected ||
-    goto_functionst::property_verdicts.has_violation())
+  if (!violation_is_abstraction_only())
   {
     report_failure();
     return;
@@ -1784,19 +1788,25 @@ void bmct::report_coverage_verbose(
   }
 }
 
+/// Modes where a global verdict from this level would be wrong or duplicated:
+/// k-induction prints its own messages; the diagnostic pass has already
+/// printed per-property results; a coverage run replaced the program's
+/// assertions with reachability probes, so its result is the [Coverage] block
+/// rather than a verdict; and a Houdini filtering round's verdict is about a
+/// guessed invariant set, not the program -- the user's own assertions
+/// routinely fail there while the pool is still being narrowed.
+static bool suppresses_global_verdict(const optionst &options)
+{
+  return options.get_bool_option("k-induction-parallel") ||
+         options.get_bool_option("diagnose-unknown-properties") ||
+         options.get_bool_option("coverage-measurement") ||
+         options.get_bool_option("houdini-probe") ||
+         options.get_bool_option("houdini-defer-verdict");
+}
+
 void bmct::report_result(smt_resultt &res)
 {
-  // k-induction prints its own messages
-  if (options.get_bool_option("k-induction-parallel"))
-    return;
-  // Diagnostic pass: report_property_verdicts already prints the per-property
-  // results; suppress any global verdict from this level.
-  if (options.get_bool_option("diagnose-unknown-properties"))
-    return;
-  // A coverage run replaced the program's assertions with reachability
-  // probes, so it neither proved nor refuted anything about the program.
-  // Its result is the [Coverage] block, not a verification verdict.
-  if (options.get_bool_option("coverage-measurement"))
+  if (suppresses_global_verdict(options))
     return;
 
   // Dead-code analysis is advisory. Its instrumented reachability probes are
@@ -3649,6 +3659,12 @@ void bmct::print_property_summary(size_t total, const property_countst &counts)
 
 void bmct::report_property_verdicts(smt_resultt res) const
 {
+  // See report_result: a filtering round's per-property table describes a
+  // candidate set, not the program. do_houdini_strategy still reads the
+  // verdicts programmatically from the table; this only suppresses printing.
+  if (options.get_bool_option("houdini-probe"))
+    return;
+
   const bool final = reports_final_verdict(res);
 
   // --dead-code-check turns --multi-property on implicitly. Its live-branch

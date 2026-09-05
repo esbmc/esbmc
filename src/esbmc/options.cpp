@@ -571,6 +571,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "them with the loop-invariant havoc schema; implies "
      "--loop-invariant-check, and --multi-property unless a k-induction phase "
      "is selected"},
+    {"houdini-loop-invariants",
+     NULL,
+     "Infer loop invariants by Houdini: guess a pool of candidate facts from "
+     "the program's own constants and delete the ones the solver refutes, "
+     "until the surviving set is inductive. Reaches loops with no affine "
+     "counter; implies --loop-invariant-check, and --multi-property unless a "
+     "k-induction phase is selected"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "

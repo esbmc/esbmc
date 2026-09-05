@@ -1,0 +1,6 @@
+CORE
+main.c
+--houdini-loop-invariants
+UNKNOWN.*assertion 0
+loop invariant too weak to prove this claim
+^VERIFICATION UNKNOWN$
