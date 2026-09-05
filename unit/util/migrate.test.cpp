@@ -29,6 +29,7 @@
 #include <util/lang/c_types.h>
 #include <util/arith/arith_tools.h>
 #include <chrono>
+#include <utility>
 
 namespace
 {
@@ -89,6 +90,15 @@ type2tc make_struct_type()
   std::vector<type2tc> members{get_int_type(32), get_bool_type()};
   std::vector<irep_idt> names{"x", "y"};
   return struct_type2tc(members, names, names, "s");
+}
+
+type2tc make_nested_struct_type()
+{
+  const type2tc arr = array_type2tc(
+    get_int_type(32), constant_int2tc(get_uint_type(32), BigInt(4)), false);
+  std::vector<type2tc> members{arr, make_struct_type(), get_uint_type(64)};
+  std::vector<irep_idt> names{"a", "inner", "z"};
+  return struct_type2tc(members, names, names, "outer");
 }
 } // namespace
 
@@ -796,4 +806,88 @@ TEST_CASE("migrate_expr_back keeps no cache between calls", "[migrate]")
   migrate_expr(second, there_and_back);
   REQUIRE(there_and_back == b);
   REQUIRE(!full_eq(first, second));
+}
+
+// migrate_type_back memoises aggregate types on node identity (#7571).
+//
+// full_eq short-circuits on shared irept data (irep.cpp:209), so comparing two
+// cache hits asserts nothing -- these compare pretty() text, which always walks
+// the structure.
+
+TEST_CASE("migrate_type_back is stable across repeated calls", "[migrate]")
+{
+  const type2tc s = make_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+
+  // Distinct nodes that compare equal must still back-migrate equally: the
+  // cache keys on address, so an equal-but-separate node takes the slow path.
+  const type2tc other = make_struct_type();
+  REQUIRE(other == s);
+  REQUIRE(migrate_type_back(other).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back recurses through nested aggregates", "[migrate]")
+{
+  // An array member routes the reverse migration through migrate_expr_back on
+  // the array size; a struct member exercises the recursive aggregate arm.
+  const type2tc s = make_nested_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+  REQUIRE(migrate_type_back(make_nested_struct_type()).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back survives cache eviction", "[migrate]")
+{
+  const type2tc probe = make_nested_struct_type();
+  type2tc pinned = make_struct_type();
+  migrate_type_back_cache_clear();
+  const std::string expected = migrate_type_back(probe).pretty();
+  migrate_type_back(pinned);
+
+  // Overflow the cache to exercise the eviction path. Every node stays pinned
+  // while cached, so no address can be recycled and each insert is a new key.
+  std::vector<type2tc> nodes;
+  for (unsigned int i = 0; i < 5000; i++)
+  {
+    std::vector<type2tc> members{get_int_type(32), get_bool_type()};
+    std::vector<irep_idt> names{"x", "y"};
+    nodes.push_back(
+      struct_type2tc(members, names, names, "s" + std::to_string(i)));
+    migrate_type_back(nodes.back());
+  }
+
+  // Eviction dropped the cache's reference, so `pinned` is uniquely owned
+  // again and this mutable access does not clone. Were the cache still
+  // holding it, copy-on-write would detach and the address would change --
+  // which is what makes this discriminate eviction from an unbounded cache.
+  const type2t *node = std::as_const(pinned).get();
+  to_struct_type(pinned).name = "evicted";
+  REQUIRE(std::as_const(pinned).get() == node);
+
+  REQUIRE(migrate_type_back(probe).pretty() == expected);
+}
+
+TEST_CASE("a cached type2t detaches rather than mutating", "[migrate]")
+{
+  type2tc s = make_struct_type();
+  const std::string before = migrate_type_back(s).pretty();
+
+  // Read the node address through the const accessor: the non-const get() is
+  // itself the detaching overload, so reading with it would perform the very
+  // clone the test is trying to observe.
+  const type2t *original = std::as_const(s).get();
+
+  // Copy-on-write: the cache's reference makes the refcount > 1, so this
+  // mutable access must clone. If it wrote through instead, the cached legacy
+  // form would silently describe a type nobody holds any more.
+  to_struct_type(s).name = "renamed";
+  REQUIRE(std::as_const(s).get() != original);
+
+  REQUIRE(migrate_type_back(s).pretty() != before);
+  REQUIRE(migrate_type_back(make_struct_type()).pretty() == before);
 }

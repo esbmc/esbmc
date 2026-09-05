@@ -927,30 +927,8 @@ exprt function_call_expr::build_constant_from_arg() const
       std::remove_if(str_val.begin(), str_val.end(), ::isspace), str_val.end());
 
     // Handle special float string values
-    if (str_val == "nan")
-    {
-      // Create NaN using IEEE float
-      ieee_floatt nan_val(ieee_float_spect::double_precision());
-      nan_val.make_NaN();
-      return nan_val.to_expr();
-    }
-    else if (
-      str_val == "inf" || str_val == "+inf" || str_val == "infinity" ||
-      str_val == "+infinity")
-    {
-      // Create positive infinity
-      ieee_floatt inf_val(ieee_float_spect::double_precision());
-      inf_val.make_plus_infinity();
-      return inf_val.to_expr();
-    }
-    else if (str_val == "-inf" || str_val == "-infinity")
-    {
-      // Create negative infinity
-      ieee_floatt inf_val(ieee_float_spect::double_precision());
-      inf_val.make_minus_infinity();
-      return inf_val.to_expr();
-    }
-    else
+    if (const auto special = nonfinite_float_from_spelling(str_val))
+      return special->to_expr();
     {
       // Try to parse as regular float
       {
@@ -6008,6 +5986,12 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     converter_.current_lhs = nullptr;
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
+
+    // Tagged arguments aren't supported yet; refuse before goto-symex.
+    if (type_handler_.is_tagged_scalar_type(arg.type()))
+      throw std::runtime_error(
+        "passing a dynamically-typed variable to a function is not yet "
+        "supported");
 
     // A list passed to a callee may be mutated there (e.g. appended to), which
     // the caller's static length tracking does not observe. Mark the symbol so
