@@ -468,7 +468,6 @@ class ModuleRewriteMixin:
                 local_binds, local_names = self._collect_scope_dict_binds(n.body)
                 self._record_scope_calls(n.body, local_binds, local_names, module_binds)
 
-
     def _scan_shadowed_nondet_collections(self, node):
         """Record `nondet_list`/`nondet_dict` names this module defines itself.
 
@@ -484,16 +483,15 @@ class ModuleRewriteMixin:
             """Every name a parameter list binds, across all five kinds."""
             if fn_args is None:
                 return
-            for arg in (list(getattr(fn_args, "posonlyargs", [])) +
-                        list(fn_args.args) + list(fn_args.kwonlyargs)):
+            for arg in (list(getattr(fn_args, "posonlyargs", [])) + list(fn_args.args) +
+                        list(fn_args.kwonlyargs)):
                 yield arg.arg
             for arg in (fn_args.vararg, fn_args.kwarg):
                 if arg is not None:
                     yield arg.arg
 
         for n in ast.walk(node):
-            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef,
-                              ast.Lambda)):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
                 if getattr(n, "name", None) in intrinsics:
                     self.shadowed_nondet_collections.add(n.name)
                 for name in parameter_names(getattr(n, "args", None)):

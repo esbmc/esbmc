@@ -114,6 +114,7 @@ def _nondet_dict_size(max_size: int) -> int:
     __ESBMC_assume(size <= max_size)
     return size
 
+
 def _nondet_str_key_bound(max_size: int) -> int:
     """Clamp a requested size to the number of str keys this model can build."""
     # Clamped by hand rather than with `min`: routing two ints through the
@@ -131,7 +132,6 @@ def _nondet_bool_key_bound(max_size: int) -> int:
     if bound > _MAX_NONDET_BOOL_KEYS:  # pylint: disable=consider-using-min-builtin
         bound = _MAX_NONDET_BOOL_KEYS
     return bound
-
 
 
 def _nondet_list_int(max_size: int) -> list:

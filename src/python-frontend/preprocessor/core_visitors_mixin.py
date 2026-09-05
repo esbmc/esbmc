@@ -493,8 +493,7 @@ class CoreVisitorsMixin:
             was_defaultdict_call = (isinstance(node.value, ast.Call)
                                     and self._is_defaultdict_call(node.value))
             self._update_name_target_assignment_metadata(target.id, node)
-            annotated = self._annotated_assign_for_value(target.id, node,
-                                                         was_defaultdict_call)
+            annotated = self._annotated_assign_for_value(target.id, node, was_defaultdict_call)
             if annotated is not None:
                 return annotated
 

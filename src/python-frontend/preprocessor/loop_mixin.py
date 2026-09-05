@@ -2668,13 +2668,11 @@ class LoopMixin:
         expected = ", ".join(f"nondet_{t}()" for t in allowed)
         type_name = cls._nondet_generator_type(node)
         if type_name is None:
-            raise SyntaxError(
-                f"{func_name}: {role} must be a nondet generator, got "
-                f"{ast.unparse(node)!r}; expected one of {expected}")
+            raise SyntaxError(f"{func_name}: {role} must be a nondet generator, got "
+                              f"{ast.unparse(node)!r}; expected one of {expected}")
         if type_name not in allowed:
-            raise SyntaxError(
-                f"{func_name}: unsupported {role} 'nondet_{type_name}()'; "
-                f"expected one of {expected}")
+            raise SyntaxError(f"{func_name}: unsupported {role} 'nondet_{type_name}()'; "
+                              f"expected one of {expected}")
         return type_name
 
     @staticmethod
@@ -2692,9 +2690,8 @@ class LoopMixin:
         for kw in call.keywords:
             if kw.arg not in accepted:
                 given = repr(kw.arg) if kw.arg else "**kwargs"
-                raise SyntaxError(
-                    f"{func_name}: unexpected keyword argument {given}; "
-                    f"accepts {', '.join(accepted)}")
+                raise SyntaxError(f"{func_name}: unexpected keyword argument {given}; "
+                                  f"accepts {', '.join(accepted)}")
             keywords[kw.arg] = kw.value
         return keywords
 
@@ -2743,19 +2740,15 @@ class LoopMixin:
         # its second generator and returns the wrong collection (#7575).
         consumed = 1 if func_name == "nondet_list" else 2
         if len(positional) > consumed:
-            raise SyntaxError(
-                f"{func_name}: expected at most {consumed} type argument(s), got "
-                f"{len(positional)}: {', '.join(ast.unparse(a) for a in positional)}")
+            raise SyntaxError(f"{func_name}: expected at most {consumed} type argument(s), got "
+                              f"{len(positional)}: {', '.join(ast.unparse(a) for a in positional)}")
 
         if func_name == "nondet_list":
-            elem = resolve(slot(0, "elem_type"),
-                           self._NONDET_LIST_ELEM_TYPES, "elem_type")
+            elem = resolve(slot(0, "elem_type"), self._NONDET_LIST_ELEM_TYPES, "elem_type")
             return f"_nondet_list_{elem}", max_size_node
 
-        key = resolve(slot(0, "key_type"),
-                      self._NONDET_DICT_KEY_TYPES, "key_type")
-        val = resolve(slot(1, "value_type"),
-                      self._NONDET_DICT_VALUE_TYPES, "value_type")
+        key = resolve(slot(0, "key_type"), self._NONDET_DICT_KEY_TYPES, "key_type")
+        val = resolve(slot(1, "value_type"), self._NONDET_DICT_VALUE_TYPES, "value_type")
         return f"_nondet_dict_{key}_{val}", max_size_node
 
     def _rewrite_nondet_collection_call(self, call):
@@ -2794,7 +2787,8 @@ class LoopMixin:
             return ast.Subscript(
                 value=ast.Name(id="dict", ctx=ast.Load()),
                 slice=ast.Tuple(
-                    elts=[ast.Name(id=key, ctx=ast.Load()), ast.Name(id=val, ctx=ast.Load())],
+                    elts=[ast.Name(id=key, ctx=ast.Load()),
+                          ast.Name(id=val, ctx=ast.Load())],
                     ctx=ast.Load(),
                 ),
                 ctx=ast.Load(),
