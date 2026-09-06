@@ -260,7 +260,7 @@ struct affine_loopt
 
 /// MSVC spells `assert(e)` as `(!!(e)) || (_wassert(...), 0)`, so on that
 /// target a loop body that asserts holds a branch around the ASSERT rather than
-/// the single one the glibc and Darwin spellings fold to in do_assert_fail().
+/// the single one do_assert_fail() folds the glibc and Darwin spellings to.
 /// The region such a branch spans writes nothing, so the per-iteration effect
 /// is still exactly the assignments outside it and stepping over it is sound.
 ///

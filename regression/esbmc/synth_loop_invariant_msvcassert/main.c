@@ -1,8 +1,9 @@
 /* MSVC spells assert(e) as `(!!(e)) || (_wassert(...), 0)`, so on Windows a
  * loop body that asserts holds a branch around the ASSERT rather than the
- * single one the glibc and Darwin spellings fold to. The expansion is written
- * out here so the shape is pinned on every host, not only on Windows, where it
- * made the synthesiser decline every loop whose body asserts. */
+ * single one the glibc and Darwin spellings fold to -- glibc leaves an OTHER
+ * beside it, which synth_loop_invariant_glibcassert pins. The expansion is
+ * written out here so the shape is pinned on every host, not only on Windows,
+ * where it made the synthesiser decline every loop whose body asserts. */
 #include <stddef.h>
 #include <stdint.h>
 void _wassert(const wchar_t *_Message, const wchar_t *_File, unsigned _Line);

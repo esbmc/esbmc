@@ -49,6 +49,13 @@ const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 
 bool is_inert_scan_instruction(goto_programt::const_targett t)
 {
+  // OTHER also carries `free`, `delete`, `printf` and `asm`, whose effects a
+  // caller cannot ignore; a code_expression2t is only an evaluation
+  // (symex_other.cpp). glibc spells assert(e) with a leading
+  // `(void) sizeof ((e) ? 1 : 0)`, which lands here.
+  if (t->type == OTHER)
+    return !is_nil_expr(t->code) && is_code_expression2t(t->code);
+
   return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
          t->is_assume();
 }
