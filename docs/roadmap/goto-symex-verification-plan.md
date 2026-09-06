@@ -26,6 +26,15 @@ traced out of this subsystem into `src/pointer-analysis`.
 R16/R19–R27 rows §9.2 records individually. R6 got its witness and its fix
 (#6785); A6.4, carried since M6, is discharged by the run-order invariant the
 engine now checks in release.
+
+**Self-verification, re-measured 2026-09-06 (§15 M9 (self-verification
+re-measure)).** ESBMC can now parse its own headers: `renaming.h` emits zero
+errors and G1–G11 are all closed. It cannot yet *convert* them — the blocker
+moved one stage downstream to **G12**/**G13** (§13.2). A weaker Tier B′ than
+WI-4 asks for does work today: `util/irep/irep.h` converts and drives the real
+`irep_idt`. §14 items 1(a) and 8 are correspondingly re-stated; the answer to
+"can ESBMC verify goto-symex" is still no, for a different and smaller reason.
+
 **Audience:** An engineer who will implement the harnesses and run the
 verification tasks directly from this document.
 **Companion:** `docs/irep2-verification-plan.md` (branch
@@ -101,6 +110,7 @@ Two probes were run against `build/src/esbmc/esbmc` (ESBMC 8.4.0, this tree):
 |---|---|---|
 | **P-1** | `std::unordered_map<std::string, POD>` + `std::make_shared` + `assert`, `--unwind 4` | `VERIFICATION SUCCESSFUL`, 2132 VCCs, 4.6 s. ESBMC's C++ operational models cover a useful STL subset. |
 | **P-2** | `#include <goto-symex/renaming.h>` with the real include paths | **`ERROR: PARSING ERROR`** — `no template named 'is_standard_layout' in namespace 'std'`, raised inside `immer/detail/combine_standard_layout.hpp` (pulled in by `level1_map.h`). |
+| **P-2′** | same, re-run 2026-09-06 on 8.5.0 | **Parses with zero errors.** The row above is closed; the blocker is now conversion, not parsing — see §13.2 (G12/G13) and §15 M9 (self-verification re-measure). The paragraph below still holds, for that different reason. |
 
 `src/goto-symex` is compiled `-std=gnu++23` (`build/compile_commands.json`) and
 links `immer`, `fmt`, Boost, `BigInt`, `yaml-cpp` and the whole of `irep2`.
@@ -1103,6 +1113,26 @@ It is also the cheapest to close.
 > accepting `named_subt` is a QoI extension the OM is not obliged to match.
 > Closing G9 means either matching that extension in the OM's `map`, or changing
 > `named_subt` — and the second is an ESBMC-wide change, not an OM one.
+>
+> **Re-measured 2026-09-06 — parsing is no longer the blocker at all; see §15
+> M9 (self-verification re-measure).** `--parse-tree-only` over
+> `#include <goto-symex/renaming.h>` emits **zero** errors. The three-item boost
+> residue the M9 (G9) entry named — `std::basic_string_view` and
+> `std::basic_streambuf` absent as templates, `swprintf`/`vswprintf` undeclared
+> — is gone. G1–G11 are all closed and this table is closed with them.
+>
+> **The blocker moved one stage downstream, to conversion.** The same include
+> with an empty `main` now aborts in `clang_c_convert.cpp:2875` on
+> `assert(init_stmt.getNumInits() == 1)`. Two new items, both in the frontend
+> rather than the operational model, and neither in ESBMC's own headers:
+>
+> | ID | Blocker | Reached through | Symptom |
+> |---|---|---|---|
+> | **G12** | Dependent `InitListExpr` of type `'void'` in an **uninstantiated** template body — `boost::detail::function::basic_vtable`'s `stored_vtable` | `irep2/irep2_expr.h` → `irep2/guard_seq.h` → `renaming.h` | `assert(init_stmt.getNumInits() == 1)` aborts the binary |
+> | **G13** | `__atomic_*` builtin applied to an anonymous-union member (`boost/smart_ptr/detail/spinlock_gcc_atomic.hpp:38`) | `util/symtab/symbol.h` | `ERROR: CONVERSION ERROR` |
+>
+> G12 is a *combination*, not a header: `boost/function.hpp` on its own
+> converts and verifies. Reducing it to a minimal case is the first step on it.
 
 ### 13.3 Tractability — parsing is necessary, not sufficient
 
@@ -1114,6 +1144,26 @@ separate axis, and the STL operational model's cost scales steeply:
 | 1-key `unordered_map<string,POD>` + `make_shared` | `--unwind 4` | `SUCCESSFUL`, **4.6 s**, 2132 VCCs |
 | 4-key `unordered_map` insert+read loop | `--unwind 5` | `SUCCESSFUL`, **85.9 s** |
 | same | `--unwind 8` | **> 280 s — timeout** |
+
+> **Re-measured 2026-09-06 — the cliff is gone; see §15 M9 (self-verification
+> re-measure).** The same 4-key probe, ESBMC 8.5.0:
+>
+> | `--unwind` | 2026-07-27 (8.4.0, Linux x86_64) | 2026-09-06 (8.5.0, macOS arm64) |
+> |---|---|---|
+> | 5 | 85.9 s | **54.9 s**, `SUCCESSFUL` |
+> | 8 | > 280 s — timeout | **97.4 s**, `SUCCESSFUL` |
+> | 12 | — | **181 s** |
+> | 16 | — | **305 s** |
+>
+> Cost is now roughly linear in the bound rather than falling off a cliff
+> between 5 and 8. **Machine and architecture differ from the original row, so
+> this is not a clean A/B and must be re-run on Linux before the figures are
+> cited elsewhere** — but "times out at `--unwind 8`" is no longer true on any
+> host. The conclusion below is *unchanged in direction*: driving the real
+> `irep_idt` with `string_pool::get`'s body in scope still times out at 500 s
+> (§15 M9 (self-verification re-measure)), so whole-TU verification of
+> `src/goto-symex` remains out of reach. What moved is the size of the
+> harness Tier B′ can afford, not the verdict on whole-TU work.
 
 **Conclusion, stated plainly: even with G1–G8 closed, whole-translation-unit
 verification of `src/goto-symex` will not be tractable.** The `immer` HAMT alone
@@ -1166,16 +1216,18 @@ defect-masking failure mode of §9.1. Rules:
 |---|---|---|---|---|
 | ~~**WI-1**~~ | ~~`<shared_mutex>` operational model (G2)~~ | — | M0 | **Done** — closed in-tree; re-measured §15 M9 (G-remeasure) |
 | ~~**WI-2**~~ | ~~`<type_traits>` completion (G1) + `<compare>` `strong_ordering` (G6) + `std::unreachable` (G7)~~ | — | M0–M1 | **Done** — G1 and G7 by #6631, G6 in-tree |
-| ~~**WI-3**~~ | ~~`std::initializer_list` (G3), `iterator_traits::difference_type` (G4), `this_thread::yield` (G5), `aligned_storage[_t]`~~ | — | M1 | **Done** — `renaming.h` now stops only at G9 |
-| **WI-4** | **Tier B′ pilot**: a reduced harness that `#include`s `renaming.h` and drives the real `level1t`. **Gate:** must parse *and* verify in < 60 s. If it does not, record the negative result in §13.3 and keep Tier A — do not force it. **Now blocked on G9 alone**, not on a missing header. | ~1 wk | M4 | Removes transcription drift for C1 |
+| ~~**WI-3**~~ | ~~`std::initializer_list` (G3), `iterator_traits::difference_type` (G4), `this_thread::yield` (G5), `aligned_storage[_t]`~~ | — | M1 | **Done** — `renaming.h` parses clean as of 2026-09-06 |
+| **WI-4** | **Tier B′ pilot**: a reduced harness that `#include`s `renaming.h` and drives the real `level1t`. **Gate:** must parse *and* verify in < 60 s. If it does not, record the negative result in §13.3 and keep Tier A — do not force it. **Half met as of 2026-09-06:** it parses with zero errors; it does not convert, blocked on **G12**, not on G9 (closed) and not on a missing header. A weaker Tier B′ already runs today — `util/irep/irep.h` converts and drives the real `irep_idt` in 10 s. | ~1 wk | M4 | Removes transcription drift for C1 |
 | **WI-5** | E1 container reference/iterator invalidation modelling | ~2–3 wk | M6 | Stating R3/H-A9 on the real class; benefits all STL verification |
 | **WI-6** | E2 native 2-safety / equivalence mode | unscoped | post-M7 | Promotes H-C1/H-C2 from sweep to proof |
 
 **Critical path:** ~~WI-1 → WI-2 → WI-3~~ — retired; all three are done
-(§15 M9 (G-remeasure)). What stands between here and WI-4 is **G9**, not this
-chain. WI-4 is a gated experiment with an explicit
-accept-the-negative-result branch. WI-5/WI-6 are stretch goals; neither is a
-precondition for any property claimed in §8.
+(§15 M9 (G-remeasure)). ~~What stands between here and WI-4 is **G9**~~ —
+also retired: G9 closed on 2026-08-17 and parsing closed entirely on
+2026-09-06. What stands between here and WI-4 is **G12**, a frontend
+conversion abort rather than an operational-model gap. WI-4 is a gated
+experiment with an explicit accept-the-negative-result branch. WI-5/WI-6 are
+stretch goals; neither is a precondition for any property claimed in §8.
 
 Each WI ships with the repo-mandated two regression tests (one passing, one
 failing) under the appropriate `regression/esbmc-cpp*` suite, and is filed as a
@@ -1202,10 +1254,24 @@ Stated plainly, to avoid over-claiming:
    templates, and `swprintf`/`vswprintf` undeclared. Still the operational
    model, still not ESBMC's own headers, and one item shorter than it looks:
    the wide-`printf` pair needs models, not declarations.
+   **Re-measured 2026-09-06: parsing is closed — `renaming.h` emits zero
+   errors, and `execution_state.cpp` is down to seven library-model errors
+   (`<regex>`, `u16string`/`u32string`, `basic_string::rbegin`, the `istream`
+   manipulator overload, ambiguous `abs`), none of them in ESBMC's own
+   headers.** What blocks (a) now is *conversion*, not parsing: **G12**, a
+   dependent `InitListExpr` in an uninstantiated boost template body that trips
+   `assert(init_stmt.getNumInits() == 1)` in `clang_c_convert.cpp:2875`, and
+   **G13**, an `__atomic_*` builtin on an anonymous-union member (§13.2).
    *(b) Tractability* — the measurements
    in §13.3 (a 4-key `unordered_map` loop takes 86 s at `--unwind 5` and times
    out at `--unwind 8`) put whole-TU verification out of reach **even after (a)
-   is fixed**. Tier A is therefore *transcription*, and its fidelity rests on the
+   is fixed**. **Re-measured 2026-09-06: those two figures are 54.9 s and
+   97.4 s, and the wall is now at `--unwind 16` (305 s) rather than 8 — but
+   (b) still stands**, because driving the real `irep_idt` with
+   `string_pool::get`'s body in scope times out at 500 s. ESBMC's C++ frontend
+   is also single-TU: passing two `.cpp` files processes only the last, so a
+   harness must `#include` the implementation it needs. Tier A is therefore
+   *transcription*, and its fidelity rests on the
    drift guard (§11.1), not on the compiler. **This remains the single largest
    soundness caveat of the whole plan and must be stated in every report** —
    closing §13.6 narrows it (Tier B′, §13.3) but does not eliminate it.
@@ -1235,7 +1301,11 @@ Stated plainly, to avoid over-claiming:
    and verifying the file. That is a corollary of item 1 and inherits its
    blocker: the file cannot be parsed, so the instrumentation cannot be
    verified. Confirmed on the R29 fix — the patched
-   `src/goto-symex/execution_state.cpp` stops at G9 alone. **What stands in for
+   `src/goto-symex/execution_state.cpp` stops at G9 alone. **Re-measured
+   2026-09-06: still blocked, but no longer for that reason.** G9 is closed and
+   `renaming.h` parses clean; what stops a goto-symex file now is the
+   conversion abort G12. The obligation is unchanged, its cause is not — a
+   report citing G9 for Mode C is quoting a closed item. **What stands in for
    it**, and what a report must say instead of claiming Mode C: an *empirical*
    reachability witness — an input that demonstrably drives the new branch and
    changes an observable. For R29's `dereference2t` arm that is three regression
@@ -8176,6 +8246,111 @@ a second call reading a freed node's entry at an address the allocator
 reissued. *round-trips a shared subtree* pins that the memoised expansion is
 correct rather than merely fast.
 
+### M9 (self-verification re-measure) — 2026-09-06, parsing closed, and the blocker moved to conversion
+
+§13.2's last two re-measurements and §14 items 1(a) and 8 were all stale, in
+the same direction: each named a blocker that had since closed. Re-run on
+ESBMC 8.5.0, tree `072b6f82dc`, macOS arm64, homebrew `immer` and boost.
+
+**Parsing is closed.** `--parse-tree-only` over
+`#include <goto-symex/renaming.h>` emits **zero** errors. The three-item boost
+residue M9 (G9) recorded — `std::basic_string_view` and `std::basic_streambuf`
+absent as templates, `swprintf`/`vswprintf` undeclared — is gone. A real
+translation unit, `src/goto-symex/execution_state.cpp`, is down to seven
+distinct errors, all library-model and none in ESBMC's own headers: `<regex>`
+not found, `std::u16string`/`u32string` absent, `basic_string::rbegin` absent,
+the `istream &(istream &)` manipulator overload missing (5 occurrences), and
+`abs` ambiguous.
+
+**The blocker moved one stage downstream, which is why nothing noticed it
+closing.** Every distance-to-parse probe in this document, from §13.1 onward,
+used `--parse-tree-only`, and that flag stops before conversion. The same
+include with an empty `main` aborts the binary at
+`src/clang-c-frontend/clang_c_convert.cpp:2875`,
+`assert(init_stmt.getNumInits() == 1)`. Bisecting `renaming.h`'s include graph
+one header at a time:
+
+| Header | Verdict |
+|---|---|
+| `immer/map.hpp`, `immer/vector.hpp` | converts, `VERIFICATION SUCCESSFUL` |
+| `goto-symex/level1_map.h`, `goto-symex/symex_invariant.h` | converts, `VERIFICATION SUCCESSFUL` |
+| `irep2/irep2.h`, `util/irep/irep.h`, `util/irep/std_expr.h`, `util/base/i2string.h` | converts, `VERIFICATION SUCCESSFUL` |
+| `irep2/irep2_expr.h` → `irep2/guard_seq.h` → `renaming.h` | **G12** — `assert(init_stmt.getNumInits() == 1)` aborts |
+| `util/symtab/symbol.h` | **G13** — `ERROR: CONVERSION ERROR` |
+
+**G12** is a dependent `InitListExpr` of type `'void'` inside an
+*uninstantiated* template body: `boost::detail::function::basic_vtable`'s
+`stored_vtable`, whose two initialisers are `DependentScopeDeclRefExpr`s. The
+`InitListExpr` arm handles struct/array/vector, union, and the empty-scalar
+case, then asserts a single initialiser; a dependent list matches none of
+them. It is a *combination*, not a header — `boost/function.hpp` on its own
+converts and verifies — so the first step on it is a reduction, which is what
+`creduce-reducer` is for. **G13** is an `__atomic_*` builtin applied to an
+anonymous-union member, `boost/smart_ptr/detail/spinlock_gcc_atomic.hpp:38`.
+
+**A weaker Tier B′ than WI-4 asks for already runs, and it is not vacuous.**
+The empty-`main` rows above prove only that a header's *declarations* convert;
+that trap is worth naming, because "`#include <X>` verified SUCCESSFUL" reads
+like far more than it is. Driving the real class is the real test:
+
+```cpp
+#include <util/irep/irep.h>
+int main() {
+  irep_idt a("alpha"), b("beta"), a2("alpha");
+  assert(a == a2);
+  assert(!(a == b));
+}
+```
+
+reports `VERIFICATION FAILED` in 10 s with a counterexample giving all three
+`.no = 4294967295`. **That is a harness artefact, not a defect**, and the
+distinction cost the run its value until it was chased: `string_pool::get` is
+declared in `string_pool.h` but defined in `string_pool.cpp`, so ESBMC treats
+it as unbodied and returns nondet, and nothing then distinguishes the three
+indices. Pulling the body in with `#include <util/base/string_pool.cpp>`
+**times out at 500 s** — the interning `unordered_map` is exactly §13.3's
+cost. Passing the two `.cpp` files on one command line does not work either:
+ESBMC's C++ frontend is single-TU and processes only the last, reporting
+`main symbol 'main' not found`.
+
+**Tractability moved, and the direction of §14 item 1(b) did not.** §13.3's
+4-key probe, re-run unchanged:
+
+| `--unwind` | 2026-07-27 (8.4.0, Linux x86_64) | 2026-09-06 (8.5.0, macOS arm64) |
+|---|---|---|
+| 5 | 85.9 s | 54.9 s, `SUCCESSFUL` |
+| 8 | > 280 s — timeout | 97.4 s, `SUCCESSFUL` |
+| 12 | — | 181 s |
+| 16 | — | 305 s |
+
+The cliff between 5 and 8 is gone and cost is roughly linear in the bound.
+**Host and architecture differ from the original row, so this is not a clean
+A/B and must be re-run on Linux before the figures are cited** — the same
+caveat M9 (G9) attached to its own residue, for the same reason. What the
+change buys is a larger affordable Tier B′ harness, not whole-TU verification:
+the `irep_idt` probe above still times out.
+
+**The lesson is M9 (R21)'s, applied to a different column.** R21 stayed
+recorded as a limitation for three weeks after a fix closed it, because a row
+closed as a limitation is a row nobody re-measures. §13.2 and §14 item 1(a)
+have the same shape — a *blocker* nobody re-measures — and did the same
+thing three times over: G1–G7 closed without notice, then G9, then the boost
+residue. All three were found by re-running the probe, never by prediction.
+The probe is eight lines and in Appendix C; it should be run at the top of
+every milestone, not when something else prompts it.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `#include <goto-symex/renaming.h>` | `--std c++23 --parse-tree-only` | 0 errors |
+| same | `--std c++23 --unwind 2` | abort, `clang_c_convert.cpp:2875` (G12) |
+| `#include <util/symtab/symbol.h>` | `--std c++23 --unwind 1` | `CONVERSION ERROR` (G13) |
+| `src/goto-symex/execution_state.cpp` | `--std c++23 --parse-tree-only` | 7 distinct errors, all library-model |
+| `irep_idt` probe, header only | `--std c++23 --unwind 6` | `FAILED` in 10 s — unbodied `get`, not a defect |
+| same, `#include`ing `string_pool.cpp` | `--std c++23 --unwind 6` | timeout at 500 s |
+
+**No §9.2 row moves and no property in §8 is claimed.** This entry re-measures
+§13 and §14 only.
+
 ---
 
 ## Appendix A — Methodological basis
@@ -8317,6 +8492,29 @@ build/src/esbmc/esbmc probe.cpp -Wc,-include,shim.h \
 ```
 
 Read §13.5 before using a shim for anything other than measurement.
+
+**Three corrections, learned by re-running this in 2026-09 (§15 M9
+(self-verification re-measure)).**
+
+1. **Use `--std c++23`, not `c++20`.** `std::unreachable` is a C++23 name and
+   the model gates it correctly; at c++20 the probe reports a closed item.
+2. **No shim is needed any more**, and `-Ibuild/_deps/immer-src` only exists
+   where `immer` was fetched rather than found — point `-I` at the tree the
+   build actually used (`/opt/homebrew/include` on macOS). A missing `-I` shows
+   up as `'immer/map.hpp' file not found`, which reads like a model gap and is
+   not one.
+3. **`--parse-tree-only` answers only half the question.** It stops before
+   conversion, so it kept reporting progress after the blocker had moved
+   downstream. Run the probe *without* it as well, and grep the second run for
+   `Assertion failed`/`CONVERSION ERROR` — and grep the parse run's stderr for
+   `PARSING ERROR`, not for `error:`, since the AST dump itself contains lines
+   matching `error:` (every `logic_error`/`runtime_error` declaration) and a
+   naive grep scores a clean parse as a failure.
+
+**Where the blocker is, header by header.** Bisect by compiling
+`#include <X>` with an empty `main` for each header on the include path;
+that isolates conversion of a header's declarations. It does *not* show the
+class can be driven — for that, call it and mutate the assertion.
 
 **Tractability scaling (§13.3).**
 
