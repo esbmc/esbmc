@@ -1,5 +1,5 @@
 THOROUGH
 main.c
---32
+--32 --fp2bv
 REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$
