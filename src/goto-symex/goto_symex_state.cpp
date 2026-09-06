@@ -216,9 +216,11 @@ static bool is_immutable_value(const expr2tc &expr)
 
   // Scalars only: an aggregate-typed value must keep going through
   // constant_propagation, whose array_may_propagate refuses the
-  // infinite-size modelling arrays and oversized nests.
-  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
-        is_pointer_type((*b)->type)))
+  // infinite-size modelling arrays and oversized nests. Pointers are out too
+  // -- carrying one resolves a later dereference against the wrong object, a
+  // false "Incorrect alignment when accessing data object" on the iterator
+  // read in regression/esbmc-cpp/cpp/github_5868_list_iterator_adl.
+  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type)))
     return false;
 
   // A member or fixed-index read is immutable exactly when the object read

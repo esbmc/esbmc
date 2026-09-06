@@ -92,6 +92,14 @@ type2tc pair_struct()
   return struct_type2tc(members, names, names, "pair");
 }
 
+/** `struct { int i; int *p; }`, a counter beside a pointer member. */
+type2tc counter_and_pointer_struct()
+{
+  std::vector<type2tc> members{int_type2(), pointer_type2tc(int_type2())};
+  std::vector<irep_idt> names{"i", "p"};
+  return struct_type2tc(members, names, names, "held");
+}
+
 /** `struct { pair inner; }`, to build a nested member read. */
 type2tc nest_struct()
 {
@@ -227,6 +235,28 @@ TEST_CASE(
     CAPTURE(get_expr_id(leaf));
     REQUIRE_FALSE(e.state().constant_propagation(with_field(base, "r", leaf)));
   }
+}
+
+TEST_CASE("a pointer leaf is not immutable", "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc base = symbol_at(
+    counter_and_pointer_struct(),
+    "c:test.c@F@main@VAR",
+    symbol_renaming_level::level2);
+
+  // The pointer is assigned-once, so it is as fixed as any other leaf, and it
+  // is still refused: carrying one resolves a later dereference against the
+  // wrong object (#7605).
+  const expr2tc ptr = symbol_at(
+    pointer_type2tc(int_type2()),
+    "c:test.c@F@main@q",
+    symbol_renaming_level::level2);
+  REQUIRE_FALSE(e.state().constant_propagation(with_field(base, "p", ptr)));
+
+  // Its integer sibling in the same struct still carries, so what the chain
+  // refuses is the type and not the write.
+  REQUIRE(e.state().constant_propagation(with_field(base, "i", l2_int())));
 }
 
 TEST_CASE(
