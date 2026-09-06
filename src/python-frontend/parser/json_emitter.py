@@ -37,6 +37,7 @@ class JsonEmitterDeps:
     """Dependencies required by AST->JSON emission."""
     import_resolver: ImportResolverLike
     tag_bignum_constants: Callable[[object], None]
+    tag_nonfinite_floats: Callable[[object], None]
 
 
 @dataclass(frozen=True)
@@ -187,12 +188,19 @@ def generate_ast_json(
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
     deps.tag_bignum_constants(ast_json)
+    deps.tag_nonfinite_floats(ast_json)
 
     json_filename = _compute_output_json_path(python_filename, output_dir, module_qualname)
     os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
     with open(json_filename, "w", encoding="utf-8") as json_file:
-        json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
+        # allow_nan=False: a non-finite float json.dump would write as the
+        # bare token Infinity/-Infinity/NaN is not JSON, and the C++ reader
+        # rejects the whole file with a byte offset rather than a location.
+        # tag_nonfinite_floats rewrites every one a Constant carries, so
+        # reaching here means a later pass produced one; fail at the source.
+        json.dump(
+            ast_json, json_file, indent=4, ensure_ascii=False, allow_nan=False)
 
 
 def emit_file_as_json(

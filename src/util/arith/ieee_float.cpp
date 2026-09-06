@@ -359,7 +359,9 @@ void ieee_floatt::unpack(const BigInt &i)
 
 bool ieee_floatt::is_normal() const
 {
-  return !NaN_flag && fraction >= power(2, spec.f);
+  // align() and operator/= set infinity_flag without clearing fraction, so
+  // the hidden-bit test alone leaves infinities in (C11 7.12.3.5; #7320).
+  return is_finite() && fraction >= power(2, spec.f);
 }
 
 BigInt ieee_floatt::pack() const

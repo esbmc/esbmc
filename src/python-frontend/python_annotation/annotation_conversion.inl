@@ -1732,6 +1732,15 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
     if (iterable_builtins.count(rhs_var_name))
       return builtin_functions().at(rhs_var_name);
 
+    // A class or a builtin type name bound to a name is a class object; the
+    // converter gives both the same representation (#7549). The module-level
+    // pass recognises the builtin names on its own, but a class body and a
+    // default argument reach inference only through here.
+    if (
+      json_utils::is_class(rhs_var_name, ast_) ||
+      type_utils::is_type_identifier(rhs_var_name))
+      return "type";
+
     const auto &lineno = element["lineno"].template get<int>();
 
     std::ostringstream oss;

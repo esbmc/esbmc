@@ -1,4 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
+#include <optional>
 #include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
@@ -254,37 +255,57 @@ exprt python_converter::make_char_array_expr(
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
+/// The double @p node carries for @p key. A non-finite literal has no JSON
+/// number form, so the parser nulls it and records the spelling under
+/// "<key>_nonfinite" (#7545).
+static double nonfinite_aware_double(
+  const nlohmann::json &node,
+  const std::string &key,
+  double fallback)
+{
+  const auto tag = node.find(key + "_nonfinite");
+  if (tag == node.end())
+    return node.value(key, fallback);
+  return nonfinite_float_from_spelling(tag->get<std::string>())->to_double();
+}
+
+/// The complex constant @p annotated_node denotes, or empty when it is not one.
+/// @p element is the outer node, which is a UnaryOp when the literal is signed.
+static std::optional<exprt> get_complex_literal(
+  const nlohmann::json &element,
+  const nlohmann::json &annotated_node)
+{
+  if (
+    !annotated_node.contains("esbmc_type_annotation") ||
+    annotated_node["esbmc_type_annotation"] != "complex")
+    return std::nullopt;
+
+  double real = nonfinite_aware_double(annotated_node, "real_value", 0.0);
+  double imag = nonfinite_aware_double(annotated_node, "imag_value", 0.0);
+
+  // UnaryOp(USub, Constant(complex)) must preserve the sign.
+  if (
+    element.contains("_type") && element["_type"] == "UnaryOp" &&
+    element.contains("op") && element["op"].contains("_type") &&
+    element["op"]["_type"] == "USub")
+  {
+    real = -real;
+    imag = -imag;
+  }
+
+  return make_complex(
+    from_double(real, double_type()), from_double(imag, double_type()));
+}
+
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   const auto &annotated_node =
     (element["_type"] == "UnaryOp") ? element["operand"] : element;
 
-  // Handle Python complex constants emitted by parser annotations.
-  // This must run before generic string handling because complex constants
+  // Complex constants are checked before generic string handling because they
   // may carry a string-like "value" in the serialized AST.
-  if (
-    annotated_node.contains("esbmc_type_annotation") &&
-    annotated_node["esbmc_type_annotation"] == "complex")
-  {
-    double real = annotated_node.value("real_value", 0.0);
-    double imag = annotated_node.value("imag_value", 0.0);
-
-    // UnaryOp(USub, Constant(complex)) must preserve the sign.
-    if (
-      element.contains("_type") && element["_type"] == "UnaryOp" &&
-      element.contains("op") && element["op"].contains("_type"))
-    {
-      const std::string op_type = element["op"]["_type"].get<std::string>();
-      if (op_type == "USub")
-      {
-        real = -real;
-        imag = -imag;
-      }
-    }
-
-    return make_complex(
-      from_double(real, double_type()), from_double(imag, double_type()));
-  }
+  if (const auto complex_literal = get_complex_literal(element, annotated_node))
+    return *complex_literal;
 
   // Determine the source of the literal's value.
   const auto &value = (element["_type"] == "UnaryOp")
@@ -310,6 +331,13 @@ exprt python_converter::get_literal(const nlohmann::json &element)
       "fixed-width bitvector; arbitrary-precision int support is tracked in "
       "issue #4642.");
   }
+
+  // A non-finite float literal reaches here with a nulled value and a tag
+  // naming the spelling (#7545).
+  if (element.contains("value_nonfinite"))
+    return nonfinite_float_from_spelling(
+             element["value_nonfinite"].get<std::string>())
+      ->to_expr();
 
   // Handle None literals (null values)
   if (value.is_null())
@@ -1635,13 +1663,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // A bare class name used as a value, e.g. `register(SomeClass)` or
           // `create_publisher(topic, Twist)` -- passing the class object itself
           // as an argument. Python classes are first-class objects, but ESBMC
-          // has no first-class type value, so model it as an opaque nondet
-          // placeholder. Inert uses (storing or forwarding the class) then
-          // convert instead of aborting; constructing through such a forwarded
-          // value is not modelled.
+          // has no first-class type value, so model one the way a builtin type
+          // identifier is modelled: the class name as a string constant. A
+          // nondet placeholder made two reads of the same class unequal
+          // (#7549). Constructing through such a forwarded value is not
+          // modelled, and two same-named classes in different modules compare
+          // equal. This is reached only after symbol lookup fails, so a name
+          // rebound to a value still resolves to that value.
           if (is_class(var_name, *ast_json))
           {
-            expr = side_effect_expr_nondett(any_type());
+            typet str_type =
+              type_handler_.build_array(char_type(), var_name.size() + 1);
+            expr = constant_exprt(var_name, var_name, str_type);
             expr.location() = get_location_from_decl(element);
             break;
           }

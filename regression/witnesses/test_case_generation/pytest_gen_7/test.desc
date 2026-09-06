@@ -1,5 +1,7 @@
 CORE
 main.py
 --unwind 3 --no-bounds-check --no-pointer-check --no-div-by-zero-check --no-align-check --branch-coverage --generate-pytest-testcase
-^Generated pytest test case with 3 test\(s\)\: test_main\.py
+^Generated pytest test case with 1 test\(s\)\: test_main\.py
 ^COVERAGE ANALYSIS INCOMPLETE
+CHECK_FILE esbmc-pytest/test_main.py contains @pytest\.mark\.parametrize\("dict0"
+CHECK_FILE esbmc-pytest/test_main.py contains \{0: 
