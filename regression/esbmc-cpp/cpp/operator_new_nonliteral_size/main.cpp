@@ -1,29 +1,27 @@
-// KNOWNBUG. The allocation size reaching ::operator new through a function
-// PARAMETER loses the heap object's extent, so an in-bounds write is reported
-// as out of bounds. g++ runs this program with all assertions holding.
+// KNOWNBUG. ::operator new loses the heap object's extent when its size
+// argument is not a literal, so even the first in-bounds write is reported out
+// of bounds. g++ runs this program with the assertion holding.
 //
-//   ::operator new(16) at the use site          -> SUCCESSFUL
-//   a callee whose size is a literal            -> SUCCESSFUL  (heap_size_literal)
-//   a callee whose size is its own parameter    -> FAILED      (this test)
+// It is ::operator new specifically, and it is the literal, not a call
+// boundary -- every one of these verifies:
 //
-// It is the parameter, not the call: a virtual callee with a literal size
-// verifies, while a plain free function taking the size does not. Any
-// allocator that forwards a byte count -- which is every allocator interface,
-// std::pmr::memory_resource::do_allocate included -- hits this.
+//   ::operator new(16)                        literal, same statement
+//   callee returning ::operator new(16)       literal inside a callee
+//   new int[n]                                array new, variable extent
+//   malloc(n) --force-malloc-success          malloc, variable size
+//
+// while ::operator new(n) with n a plain local does not. Any allocator that
+// forwards a byte count hits this, std::pmr::memory_resource::do_allocate
+// included.
 #include <new>
 #include <cassert>
 
-void *alloc(unsigned long n)
-{
-  return ::operator new(n);
-}
-
 int main()
 {
-  int *p = static_cast<int *>(alloc(16));
+  unsigned long n = 16;
+  int *p = static_cast<int *>(::operator new(n));
   p[0] = 11;
-  p[3] = 22;
-  assert(p[0] == 11 && p[3] == 22);
+  assert(p[0] == 11);
   ::operator delete(p);
   return 0;
 }
