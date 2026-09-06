@@ -1126,13 +1126,24 @@ It is also the cheapest to close.
 > `assert(init_stmt.getNumInits() == 1)`. Two new items, both in the frontend
 > rather than the operational model, and neither in ESBMC's own headers:
 >
-> | ID | Blocker | Reached through | Symptom |
+> | ID | Blocker | Smallest failing include | Symptom |
 > |---|---|---|---|
-> | **G12** | Dependent `InitListExpr` of type `'void'` in an **uninstantiated** template body — `boost::detail::function::basic_vtable`'s `stored_vtable` | `irep2/irep2_expr.h` → `irep2/guard_seq.h` → `renaming.h` | `assert(init_stmt.getNumInits() == 1)` aborts the binary |
-> | **G13** | `__atomic_*` builtin applied to an anonymous-union member (`boost/smart_ptr/detail/spinlock_gcc_atomic.hpp:38`) | `util/symtab/symbol.h` | `ERROR: CONVERSION ERROR` |
+> | **G12** | An `InitListExpr` shape the converter's fallback arm does not accept, somewhere in `irep2_type.h`'s own body | `irep2/irep2_type.h` | `assert(init_stmt.getNumInits() == 1)` aborts the binary |
+> | **G13** | `__atomic_test_and_set` and `__atomic_clear` are unhandled `AtomicExpr` kinds | `util/symtab/symbol.h`, via boost's spinlock | `ERROR: Unknown Atomic expression` → `CONVERSION ERROR` |
 >
-> G12 is a *combination*, not a header: `boost/function.hpp` on its own
-> converts and verifies. Reducing it to a minimal case is the first step on it.
+> **G13 is not C++-specific and has nothing to do with the union it was first
+> attributed to.** `clang_c_convert.cpp:4620-4700` handles 21 `AO__atomic_*`
+> cases; a seven-builtin census found `__atomic_load_n`, `store_n`,
+> `fetch_add`, `exchange_n` and `compare_exchange_n` all verify, and only
+> `test_and_set` and `clear` fail. Three lines of C reproduce it:
+> `unsigned char c; int main(){ return __atomic_test_and_set(&c, __ATOMIC_ACQUIRE); }`
+>
+> **G12 has no minimal reproducer yet, and its cause is not established.**
+> `irep2/irep2.h` converts and verifies, and so does every one of
+> `irep2_type.h`'s own includes, so the trigger is in that header's own 586
+> lines. Four hand-reductions — dependent typedef chains, nested initialiser
+> lists, `std::make_tuple` of member pointers, a `constexpr` static of
+> dependent type — all failed to reproduce it. C-Reduce is the next step.
 
 ### 13.3 Tractability — parsing is necessary, not sufficient
 
@@ -1258,10 +1269,11 @@ Stated plainly, to avoid over-claiming:
    errors, and `execution_state.cpp` is down to seven library-model errors
    (`<regex>`, `u16string`/`u32string`, `basic_string::rbegin`, the `istream`
    manipulator overload, ambiguous `abs`), none of them in ESBMC's own
-   headers.** What blocks (a) now is *conversion*, not parsing: **G12**, a
-   dependent `InitListExpr` in an uninstantiated boost template body that trips
+   headers.** What blocks (a) now is *conversion*, not parsing: **G12**, an
+   `InitListExpr` shape inside `irep2_type.h` that trips
    `assert(init_stmt.getNumInits() == 1)` in `clang_c_convert.cpp:2875`, and
-   **G13**, an `__atomic_*` builtin on an anonymous-union member (§13.2).
+   **G13**, the unhandled `__atomic_test_and_set` / `__atomic_clear`
+   `AtomicExpr` kinds (§13.2).
    *(b) Tractability* — the measurements
    in §13.3 (a 4-key `unordered_map` loop takes 86 s at `--unwind 5` and times
    out at `--unwind 8`) put whole-TU verification out of reach **even after (a)
@@ -8350,6 +8362,71 @@ every milestone, not when something else prompts it.
 
 **No §9.2 row moves and no property in §8 is claimed.** This entry re-measures
 §13 and §14 only.
+
+> **Correction, 2026-09-06 (same day) — both G12 and G13 were mis-attributed
+> above; see M9 (G12/G13 attribution corrected).** The G12 row named
+> `boost::detail::function::basic_vtable` and the G13 row named an
+> anonymous-union member. Neither is the cause. The tables in §13.2 and §14
+> item 1(a) carry the corrected text; this entry's own body is left as written
+> because §15 is append-only.
+
+### M9 (G12/G13 attribution corrected) — 2026-09-06, two causes asserted instead of bisected
+
+The entry above named a cause for each of G12 and G13. Both were wrong, and
+they were wrong in the same way: a plausible candidate was read off a large
+dump and asserted, rather than bisected to.
+
+**G13 is `__atomic_test_and_set` and `__atomic_clear`, not a union.** The row
+said "`__atomic_*` builtin applied to an anonymous-union member", taken from
+the source line `boost/smart_ptr/detail/spinlock_gcc_atomic.hpp:38` that the
+error pointed at — where an anonymous union does appear. Deleting the union
+from a hand-written copy changes nothing; both versions fail identically. A
+census of the seven builtins settles it:
+
+| Builtin | Verdict |
+|---|---|
+| `__atomic_load_n`, `__atomic_store_n`, `__atomic_fetch_add`, `__atomic_exchange_n`, `__atomic_compare_exchange_n` | `VERIFICATION SUCCESSFUL` |
+| `__atomic_test_and_set`, `__atomic_clear` | `ERROR: Unknown Atomic expression` → `CONVERSION ERROR` |
+
+`clang_c_convert.cpp:4620-4700` switches on 21 `AO__atomic_*` cases and those
+two are absent; `log_error("Unknown Atomic expression")` at 4701 is the default
+arm. It reproduces in three lines of **C**, so it is a `clang-c-frontend`
+defect and not a C++ or boost one at all:
+
+```c
+unsigned char c;
+int main(){ return __atomic_test_and_set(&c, __ATOMIC_ACQUIRE); }
+```
+
+**G12's cause is not established, and the boost attribution was a guess.** It
+came from picking one `InitListExpr` out of the 124 in a 328k-line AST dump
+because its shape — a dependent list of type `'void'` with two
+initialisers — matched the assertion. Bisecting the include graph one header at a time
+instead puts the trigger somewhere else entirely: `irep2/irep2.h` converts and
+verifies, **every** one of `irep2_type.h`'s own includes converts and verifies
+(`optional`, `irep2/irep2.h`), and `irep2/irep2_type.h` aborts. The trigger is
+in that header's own 586 lines, and boost is not on the path. Four
+hand-reductions failed to reproduce it — a dependent typedef chain, a nested
+initialiser list behind a parameter pack, `std::make_tuple` of member pointers
+as a `constexpr` static, and a `constexpr` static of dependent type — so the
+next step is C-Reduce, not another guess.
+
+**The lesson is M9 (R21)'s again, one level down.** R21 was a row nobody
+re-measured; this was a cause nobody bisected. Both cost the same thing: a
+plausible statement in a document that a later reader has no reason to doubt.
+The bisect that found the real answer took nine `esbmc` invocations and less
+time than writing the wrong sentence did. **A cause read off a dump is a
+hypothesis; only the bisect that isolates it makes it a finding**, and §9.2's
+own preamble already says as much for code-level findings — it applies to
+tooling blockers too.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| `__atomic_test_and_set` on a plain `unsigned char` | default, C | `Unknown Atomic expression` |
+| same, with the anonymous union restored | `--std c++23` | identical — the union is not load-bearing |
+| five other `__atomic_*` builtins | `--std c++23` | `VERIFICATION SUCCESSFUL` |
+| `#include <irep2/irep2.h>` | `--std c++23 --unwind 1` | `VERIFICATION SUCCESSFUL` |
+| `#include <irep2/irep2_type.h>` | `--std c++23 --unwind 1` | abort at `clang_c_convert.cpp:2875` |
 
 ---
 
