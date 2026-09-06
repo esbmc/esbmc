@@ -3,20 +3,18 @@
 
 #include <cstdio>
 #include <map>
+#include <memory>
 #include <tuple>
 #include <solvers/smt/smt_solver.h>
 #include <irep2/irep2.h>
 #include <util/symtab/namespace.h>
 
-extern "C"
-{
-#include <bitwuzla/c/bitwuzla.h>
-}
+#include <bitwuzla/cpp/bitwuzla.h>
 
-class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm>
+class bitw_smt_ast : public solver_smt_ast<bitwuzla::Term>
 {
 public:
-  using solver_smt_ast<BitwuzlaTerm>::solver_smt_ast;
+  using solver_smt_ast<bitwuzla::Term>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
   smt_astt with_sort(smt_solver_baset *ctx, smt_sortt s) const override;
@@ -166,17 +164,18 @@ public:
     std::vector<smt_astt> lhs,
     smt_astt rhs) override;
 
-  // Members
-  Bitwuzla *bitw;
-  BitwuzlaOptions *bitw_options;
-  BitwuzlaTermManager *bitw_term_manager;
+  /* Declaration order is the destruction contract: bitw is destroyed before
+   * the term manager and options it was built from. */
+  bitwuzla::TermManager tm;
+  bitwuzla::Options bitw_options;
+  std::unique_ptr<bitwuzla::Bitwuzla> bitw;
 
   symtabt symtable;
 
   /** Uninterpreted-function declarations, keyed by name. Bitwuzla mints a fresh
-   *  constant on each bitwuzla_mk_const, so the function term is cached here and
-   *  reused across applications, giving native functional congruence. */
-  std::unordered_map<std::string, BitwuzlaTerm> uf_decls;
+   *  constant on each mk_const, so the function term is cached here
+   * and reused across applications, giving native functional congruence. */
+  std::unordered_map<std::string, bitwuzla::Term> uf_decls;
 
 private:
   /** Identifies a sort by kind plus the two values that parameterise it: the
@@ -201,9 +200,9 @@ private:
   }
 
   smt_astt
-  mk_fp_arith(BitwuzlaKind kind, smt_astt lhs, smt_astt rhs, smt_astt rm);
-  smt_astt mk_fp_pred(BitwuzlaKind kind, smt_astt lhs, smt_astt rhs);
-  smt_astt mk_fp_class(BitwuzlaKind kind, smt_astt op);
+  mk_fp_arith(bitwuzla::Kind kind, smt_astt lhs, smt_astt rhs, smt_astt rm);
+  smt_astt mk_fp_pred(bitwuzla::Kind kind, smt_astt lhs, smt_astt rhs);
+  smt_astt mk_fp_class(bitwuzla::Kind kind, smt_astt op);
 
   /** Bitwuzla has no fp.to_ieee_bv, so the bit pattern of an FP term is
    *  reached through a fresh bit-vector symbol b constrained by

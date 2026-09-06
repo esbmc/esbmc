@@ -37,6 +37,16 @@ extern FILE *stderr;
 #define SEEK_END 2
 #define FILENAME_MAX 4096
 #define FOPEN_MAX 16
+#define L_tmpnam 20
+
+/* setvbuf buffering modes, C17 7.21.1 */
+#define _IOFBF 0
+#define _IOLBF 1
+#define _IONBF 2
+
+/* C17 7.21.1: an object type holding a stream's position. Opaque here; only
+   fgetpos/fsetpos consume it. */
+typedef long fpos_t;
 
 /* printf family — plain declarations so ESBMC's do_function_call sees the
  * base_name "printf" and routes them through symex_printf rather than
@@ -105,6 +115,8 @@ size_t fwrite(
 int fseek(FILE *stream, long offset, int whence);
 long ftell(FILE *stream);
 void rewind(FILE *stream);
+int fgetpos(FILE *__ESBMC_restrict stream, fpos_t *__ESBMC_restrict pos);
+int fsetpos(FILE *stream, const fpos_t *pos);
 int feof(FILE *stream);
 int ferror(FILE *stream);
 void clearerr(FILE *stream);
@@ -123,11 +135,19 @@ int fputs(const char *__ESBMC_restrict str, FILE *__ESBMC_restrict stream);
 char *gets(char *str);
 int puts(const char *str);
 int getw(FILE *stream);
+int ungetc(int c, FILE *stream);
 
 /* Misc */
 int remove(const char *pathname);
 int rename(const char *oldpath, const char *newpath);
 FILE *tmpfile(void);
 char *tmpnam(char *str);
+void perror(const char *s);
+void setbuf(FILE *__ESBMC_restrict stream, char *__ESBMC_restrict buf);
+int setvbuf(
+  FILE *__ESBMC_restrict stream,
+  char *__ESBMC_restrict buf,
+  int mode,
+  size_t size);
 
 __ESBMC_C_CPP_END

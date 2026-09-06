@@ -192,6 +192,20 @@ __ESBMC_HIDE:;
   return (a->size > b->size) - (a->size < b->size);
 }
 
+// Bounded strlen for a runtime string pointer -- a plain strlen never
+// finishes unwinding over a symbolic buffer.
+size_t __python_scalar_strlen_bounded(const char *s)
+{
+__ESBMC_HIDE:;
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (s[i] == '\0')
+      return i;
+  }
+  __ESBMC_assert(0, "tagged str exceeds the modelled bound");
+  return ESBMC_PY_STRNLEN_BOUND;
+}
+
 // Models a runtime type mismatch (e.g. `x + 1` where `x` holds a str) as a
 // Python TypeError, the same way IndexError/KeyError are modeled elsewhere
 // in this library: an assert on the path that would have raised.
@@ -230,12 +244,18 @@ __ESBMC_HIDE:;
   char *tagged_dst = tagged_is_left ? buffer : buffer + value_len;
   char *value_dst = tagged_is_left ? buffer + tagged_len : buffer;
 
-  // Zero-fill the tagged side on a mismatch instead of skipping it, so
-  // the buffer keeps the same shape either way.
-  if (type_matches)
-    __python_scalar_bytes_copy(tagged_dst, tagged->value, tagged_len);
-  else
-    memset(tagged_dst, 0, tagged_len);
+  // `tagged_len` can be symbolic after a branch join, so use a bounded
+  // loop instead of memcpy/memset, which never finish unwinding over it.
+  __ESBMC_assert(
+    tagged_len <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged str exceeds the modelled bound");
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= tagged_len)
+      break;
+    // Zero-fill on a mismatch so the buffer keeps the same shape either way.
+    tagged_dst[i] = type_matches ? ((const char *)tagged->value)[i] : 0;
+  }
   __python_scalar_bytes_copy(value_dst, value, value_len);
 
   buffer[tagged_len + value_len] = '\0';
