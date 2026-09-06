@@ -2,7 +2,7 @@
 
 import unittest
 from testing_tool import *
-from testing_tool import _add_test
+from testing_tool import _add_test, _capped_timeout, _TIMEOUT_CAP_ENVVAR
 
 
 class CTestGeneration(unittest.TestCase):
@@ -207,6 +207,78 @@ class TimeoutReapsProcessGroupTest(unittest.TestCase):
             # A reaped pid may be recycled, but not within this test's lifetime.
             with self.assertRaises(OSError):
                 os.kill(child_pid, 0)
+
+
+class CappedTimeoutTest(unittest.TestCase):
+    """`ctest --timeout` cannot narrow this suite: CMake gives every test a
+    TIMEOUT property, and ctest's flag only defaults tests that lack one. The
+    cap env var is the knob that does work (esbmc/esbmc#7628)."""
+
+    def setUp(self):
+        self.saved = os.environ.pop(_TIMEOUT_CAP_ENVVAR, None)
+
+    def tearDown(self):
+        os.environ.pop(_TIMEOUT_CAP_ENVVAR, None)
+        if self.saved is not None:
+            os.environ[_TIMEOUT_CAP_ENVVAR] = self.saved
+
+    def test_no_cap_leaves_the_budget_alone(self):
+        self.assertEqual(_capped_timeout(1200), 1200)
+        self.assertIsNone(_capped_timeout(None))
+
+    def test_a_tighter_cap_wins(self):
+        os.environ[_TIMEOUT_CAP_ENVVAR] = "45"
+        self.assertEqual(_capped_timeout(1200), 45)
+
+    def test_a_looser_cap_does_not_widen_the_budget(self):
+        os.environ[_TIMEOUT_CAP_ENVVAR] = "45"
+        self.assertEqual(_capped_timeout(30), 30)
+
+    def test_a_cap_applies_when_there_is_no_budget(self):
+        os.environ[_TIMEOUT_CAP_ENVVAR] = "45"
+        self.assertEqual(_capped_timeout(None), 45)
+
+
+class NarrowedBudgetFailsASlowTestTest(unittest.TestCase):
+    """The point of the cap: a test that passes on the configured budget must
+    fail once the budget is narrowed below its runtime. Without this the suite
+    reports a nine-minute run as `Passed` (esbmc/esbmc#7628)."""
+
+    def _run(self, extra_env):
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = os.path.join(tmp, "slow.py")
+            with open(tool, "w", encoding="utf-8") as f:
+                f.write("import time\n"
+                        "time.sleep(3)\n"
+                        "print('VERIFICATION SUCCESSFUL')\n")
+            test_dir = os.path.join(tmp, "slow")
+            os.mkdir(test_dir)
+            open(os.path.join(test_dir, "main.c"), "w").close()
+            with open(os.path.join(test_dir, "test.desc"), "w",
+                      encoding="utf-8") as f:
+                f.write("CORE\nmain.c\n\n^VERIFICATION SUCCESSFUL$\n")
+
+            env = dict(os.environ, ESBMC_REGRESS_TIMEOUT="600")
+            env.pop(_TIMEOUT_CAP_ENVVAR, None)
+            env.update(extra_env)
+            return subprocess.run(
+                [sys.executable, "testing_tool.py",
+                 "--tool={} {}".format(sys.executable, tool),
+                 "--regression=" + tmp, "--modes", "CORE", "--file=slow"],
+                cwd=os.path.dirname(os.path.abspath(__file__)),
+                env=env, stdout=PIPE, stderr=PIPE)
+
+    def test_the_slow_test_passes_on_the_configured_budget(self):
+        done = self._run({})
+        self.assertEqual(done.returncode, 0,
+                         done.stdout.decode() + done.stderr.decode())
+
+    def test_the_same_test_fails_once_the_budget_is_narrowed(self):
+        done = self._run({_TIMEOUT_CAP_ENVVAR: "1"})
+        output = done.stdout.decode() + done.stderr.decode()
+        self.assertNotEqual(done.returncode, 0, output)
+        self.assertIn("TIMEOUT TEST", output)
+        self.assertIn("narrowed by " + _TIMEOUT_CAP_ENVVAR, output)
 
 
 class PrivateCwdTest(unittest.TestCase):

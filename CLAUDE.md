@@ -115,7 +115,22 @@ bullet below.
   at **10 minutes** (600000 ms) — pass the timeout to the `Bash` tool's
   `timeout` parameter, or wrap the invocation with `timeout 10m …`. If the suite
   cannot complete in 10 minutes, narrow the scope (e.g. run only the affected
-  subset) or ask the user before extending the limit.
+  subset) or ask the user before extending the limit. `ctest --timeout` does
+  **not** cap this suite: CMake gives every test an explicit `TIMEOUT`
+  property, and ctest's flag only supplies a default for tests that have none.
+- **Per-test budget, and catching slowdowns.** Each test's real budget is
+  `ESBMC_REGRESS_TIMEOUT` (default 1200s), baked into the test's ctest
+  environment at configure time. To narrow it for one run without
+  re-configuring, set `ESBMC_REGRESS_TIMEOUT_MAX`:
+
+  ```sh
+  ESBMC_REGRESS_TIMEOUT_MAX=45 ctest -j$(nproc) -L loop-invariants
+  ```
+
+  Any test slower than the cap then fails, naming the cap in its message.
+  Without it the suite is blind to performance regressions: a test that went
+  from sub-second to nine minutes still reports `Passed` (#7628). Use it when a
+  change could affect solve time.
 - **Regression tests come in pairs, and both must bite.** A PR that changes
   verification behaviour adds **two** regression tests over the same construct:
   one pinning `^VERIFICATION SUCCESSFUL$` and one pinning
