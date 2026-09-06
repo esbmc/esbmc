@@ -145,6 +145,12 @@ private:
   void get_function_type();
 
   /*
+   * The AST node of the named class, from the main module or, when the main
+   * module's body does not hold it, from the module that defines it (#7546).
+   */
+  nlohmann::json find_class_node(const std::string &name) const;
+
+  /*
    * Retrieves the object (caller) name from the AST.
    */
   std::string get_object_name() const;

@@ -64,6 +64,54 @@ std::string node_type_of(const nlohmann::json &node)
   return node["_type"].get<std::string>();
 }
 
+/// Whether \p class_node declares \p method with a @staticmethod decorator.
+/// The decorator decides this, not the first parameter's name, which Python
+/// does not fix.
+bool declares_staticmethod(
+  const nlohmann::json &class_node,
+  const std::string &method)
+{
+  if (method.empty() || class_node.empty() || !class_node.contains("body"))
+    return false;
+
+  for (const auto &member : class_node["body"])
+  {
+    if (
+      node_type_of(member) != "FunctionDef" || member["name"] != method ||
+      !member.contains("decorator_list"))
+      continue;
+
+    for (const auto &d : member["decorator_list"])
+      if (
+        node_type_of(d) == "Name" && d.contains("id") &&
+        d["id"] == "staticmethod")
+        return true;
+  }
+  return false;
+}
+
+/// An explicit `Base.__init__(self, ...)` call invokes the named base class's
+/// constructor with self passed explicitly; it is not an object construction.
+/// Letting it fall through to the ClassMethod classification allocates no fresh
+/// self object -- the builder resolves it to the class's renamed constructor
+/// (@C@Base@F@Base) and the explicit self is the receiver. Classified as a
+/// Constructor it would instead write to a throwaway $ctor_self$ temp.
+bool is_explicit_class_init(
+  const nlohmann::json &func_node,
+  const nlohmann::json &ast)
+{
+  if (
+    !func_node.contains("_type") || func_node["_type"] != "Attribute" ||
+    !func_node.contains("attr") || func_node["attr"] != "__init__" ||
+    !func_node.contains("value") || !func_node["value"].is_object())
+    return false;
+
+  const nlohmann::json &value = func_node["value"];
+  return value.contains("_type") && value["_type"] == "Name" &&
+         value.contains("id") &&
+         json_utils::is_class(value["id"].get<std::string>(), ast);
+}
+
 /// True when the AST subtree rooted at \p node contains a call.
 bool contains_call(const nlohmann::json &node)
 {
@@ -217,28 +265,26 @@ exprt function_call_expr::build_temporary_receiver(
   return ctor_result;
 }
 
+nlohmann::json
+function_call_expr::find_class_node(const std::string &name) const
+{
+  nlohmann::json node = json_utils::find_class(converter_.ast()["body"], name);
+  if (!node.empty())
+    return node;
+
+  const auto [module_ast, module_path] =
+    converter_.find_imported_class_module(name);
+  return module_ast ? json_utils::find_class((*module_ast)["body"], name)
+                    : nlohmann::json();
+}
+
 void function_call_expr::get_function_type()
 {
   const auto &func_node = call_["func"];
 
-  // An explicit `Base.__init__(self, ...)` call invokes the named base class's
-  // constructor with self passed explicitly; it is not an object construction.
-  // Let it fall through to the ClassMethod classification (is_class(caller)
-  // below) so no fresh self object is allocated -- the builder resolves it to
-  // the class's renamed constructor (@C@Base@F@Base) and the explicit self is
-  // the receiver. Without this it would be classified Constructor and the
-  // constructor would write to a throwaway $ctor_self$ temp.
-  const bool is_explicit_class_init =
-    func_node.contains("_type") && func_node["_type"] == "Attribute" &&
-    func_node.contains("attr") && func_node["attr"] == "__init__" &&
-    func_node.contains("value") && func_node["value"].is_object() &&
-    func_node["value"].contains("_type") &&
-    func_node["value"]["_type"] == "Name" &&
-    func_node["value"].contains("id") &&
-    json_utils::is_class(
-      func_node["value"]["id"].get<std::string>(), converter_.ast());
-
-  if (!is_explicit_class_init && type_handler_.is_constructor_call(call_))
+  if (
+    !is_explicit_class_init(func_node, converter_.ast()) &&
+    type_handler_.is_constructor_call(call_))
   {
     function_type_ = FunctionType::Constructor;
     return;
@@ -313,35 +359,21 @@ void function_call_expr::get_function_type()
     // A @staticmethod takes no receiver, so an instance call binds its
     // arguments exactly as a class-name call does. Classifying it as an
     // instance method passes the receiver as the first parameter and shifts
-    // every real argument one slot (#7546). The decorator decides this, not
-    // the first parameter's name, which Python does not fix.
-    const std::string caller_class = type_handler_.get_var_type(caller);
-    const std::string method = func_node["attr"].template get<std::string>();
-    bool is_static = false;
-    // The receiver's class may be defined in an imported module, where the
-    // main module's body does not hold it (#7546).
-    nlohmann::json class_node =
-      json_utils::find_class(converter_.ast()["body"], caller_class);
-    if (class_node.empty())
-    {
-      const auto [module_ast, module_path] =
-        converter_.find_imported_class_module(caller_class);
-      if (module_ast)
-        class_node =
-          json_utils::find_class((*module_ast)["body"], caller_class);
-    }
-    if (!class_node.empty() && class_node.contains("body"))
-      for (const auto &member : class_node["body"])
-        if (
-          node_type_of(member) == "FunctionDef" && member["name"] == method &&
-          member.contains("decorator_list"))
-          for (const auto &d : member["decorator_list"])
-            if (
-              node_type_of(d) == "Name" && d.contains("id") &&
-              d["id"] == "staticmethod")
-              is_static = true;
-    function_type_ =
-      is_static ? FunctionType::ClassMethod : FunctionType::InstanceMethod;
+    // every real argument one slot (#7546).
+    //
+    // A malformed AST can spell attr as a non-string, and this runs from the
+    // constructor, so an unguarded read throws where the caller expects a
+    // classification (unit/python-frontend/function_call_expr_error_test.cpp).
+    // An empty name declares no method, which is the InstanceMethod default.
+    const std::string method =
+      func_node.contains("attr") && func_node["attr"].is_string()
+        ? func_node["attr"].template get<std::string>()
+        : std::string();
+    const nlohmann::json class_node =
+      find_class_node(type_handler_.get_var_type(caller));
+    function_type_ = declares_staticmethod(class_node, method)
+                       ? FunctionType::ClassMethod
+                       : FunctionType::InstanceMethod;
   }
 }
 

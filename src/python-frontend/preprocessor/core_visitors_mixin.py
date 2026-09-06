@@ -682,6 +682,11 @@ class CoreVisitorsMixin:
             return node
         return None
 
+    def _record_staticmethod(self, node, qualified_name):
+        """Note a @staticmethod, whose call binds no receiver (#7546)."""
+        if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
+            self.static_methods.add(qualified_name)
+
     def _params_without_implicit_self(self, key):
         """A method's parameters minus its implicit first argument.
 
@@ -1698,8 +1703,7 @@ class CoreVisitorsMixin:
 
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
             self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
-            if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
-                self.static_methods.add(qualified_name)
+            self._record_staticmethod(node, qualified_name)
             self._record_vararg_function(node, qualified_name)
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
