@@ -1459,6 +1459,26 @@ void goto_convertt::do_function_call_symbol(
   {
     assert(arguments.size() == 1);
 
+    // A byte count that is not a constant cannot be encoded in a type's
+    // width, and the fallback below would model operator new(n) as a
+    // *one-byte* object, reporting every in-bounds access through the returned
+    // pointer as out of bounds. Allocate the n bytes the call asks for
+    // instead, as an array new of unsigned char whose element count is the
+    // requested size: new[] already carries a symbolic extent, which is why
+    // `new T[n]` and `malloc(n)` never had this problem.
+    if (
+      sizeof_measured_type(arguments.front()).is_nil() &&
+      !arguments.front().is_constant())
+    {
+      side_effect_exprt new_array("cpp_new[]");
+      new_array.add("#location") = function.cmt_location();
+      new_array.size(arguments.front());
+      new_array.type() = pointer_typet(unsigned_char_type());
+      new_array.type().add("#location") = function.cmt_location();
+      do_cpp_new(lhs, new_array, dest);
+      return;
+    }
+
     // Change it into a cpp_new expression
     side_effect_exprt new_function("cpp_new");
     new_function.add("#location") = function.cmt_location();
