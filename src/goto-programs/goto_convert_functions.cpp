@@ -714,6 +714,16 @@ bool goto_convert_functionst::convert_native_rec(
       if (!stamp.get_file().empty())
         stamp_value_locations(op, stamp);
 
+      // convert_expression() restores the statement's own location onto a
+      // round-trip-stripped side effect before lowering it (goto_convert.cpp).
+      // The mutable read materialises an empty #location, which the assignment
+      // then replaces with the statement's -- nil included, and that is what
+      // remove_function_call copies onto the FUNCTION_CALL it emits. Skipping
+      // it here left a generated call carrying an empty-but-present location
+      // where the round-trip leaves it nil (esbmc/esbmc#6759).
+      if (op.id() == "sideeffect" && op.location().get_file().empty())
+        op.location() = expr_stmt.location;
+
       // convert_expression hands a side-effecting operand to remove_sideeffects
       // with result_is_used false, then emits an OTHER only if anything is left
       // (a lowered assignment nils itself, so most shapes emit nothing here).
