@@ -334,6 +334,26 @@ exprt function_call_expr::build_ord_constant(
   return expr;
 }
 
+std::optional<int>
+function_call_expr::folded_char_array_codepoint(const exprt &e) const
+{
+  // Reuse the walk the Name path uses. The char-subtype test keeps bytes out:
+  // those are long_long_int arrays, and admitting them would turn
+  // ord(b"\xc3") into an error rather than 195.
+  if (
+    !e.is_constant() || !e.type().is_array() ||
+    e.type().subtype() != char_type() || !e.has_operands())
+    return std::nullopt;
+
+  symbolt folded;
+  folded.set_value(e);
+  auto text = extract_string_from_symbol(&folded);
+  if (!text || text->empty())
+    return std::nullopt;
+
+  return decode_utf8_codepoint(*text);
+}
+
 exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 {
   // Fast path: constant string literal. Folding also handles multi-byte UTF-8
@@ -379,18 +399,9 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
   // chr() folds a code point into a constant char array of its UTF-8 bytes.
   // The runtime path below reads only the first, sign-extended, so
-  // ord(chr(200)) came back as -61 (#7552). Reuse the same walk the Name path
-  // uses. The char-subtype test keeps bytes out: those are long_long_int
-  // arrays, and admitting them would turn ord(b"\xc3") into an error.
-  if (
-    expr.is_constant() && expr.type().is_array() &&
-    expr.type().subtype() == char_type() && expr.has_operands())
-  {
-    symbolt folded;
-    folded.set_value(expr);
-    if (auto text = extract_string_from_symbol(&folded); text && !text->empty())
-      return build_ord_constant(arg, decode_utf8_codepoint(*text));
-  }
+  // ord(chr(200)) came back as -61 (#7552).
+  if (auto code_point = folded_char_array_codepoint(expr))
+    return build_ord_constant(arg, *code_point);
 
   // A runtime string: return the code point of its first character.
   if (type_utils::is_string_type(expr.type()))
