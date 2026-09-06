@@ -6138,9 +6138,16 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     const bool arg_is_complex_literal =
       arg_node["_type"] == "Constant" &&
       arg_node.value("esbmc_type_annotation", std::string()) == "complex";
+    // A bytes literal's JSON carries a string "value" too, but get_literal
+    // already built it as a raw byte array (elements are long_long_int).
+    // Rebuilding it as a NUL-terminated char array here left the callee
+    // reading 8-byte elements out of a 3-byte object -- "array bounds
+    // violated" on valid Python (#7550).
+    const bool arg_is_bytes_literal =
+      arg_node["_type"] == "Constant" && converter_.is_bytes_literal(arg_node);
     if (
-      !arg_is_complex_literal && arg_node["_type"] == "Constant" &&
-      arg_node["value"].is_string())
+      !arg_is_complex_literal && !arg_is_bytes_literal &&
+      arg_node["_type"] == "Constant" && arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
@@ -6309,7 +6316,9 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
             "parameters yet");
       }
 
-      if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+      if (
+        arg_node["_type"] == "Constant" && arg_node["value"].is_string() &&
+        !arg_is_bytes_literal)
       {
         arg = string_constantt(
           arg_node["value"].get<std::string>(),
