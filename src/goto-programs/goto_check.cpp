@@ -85,6 +85,12 @@ protected:
     const guard2tc &guard,
     const locationt &loc);
 
+  /** check a floating-point value converts into the destination integer type */
+  void fp_to_int_range_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const locationt &loc);
+
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /** check __builtin_clz* is not called with a zero argument (UB) */
@@ -259,43 +265,51 @@ void goto_checkt::float_overflow_check(
   }
 }
 
+/// C11 6.3.1.4p1 and [conv.fpint]/1: converting a floating value whose integral
+/// part is not representable in the destination integer type is undefined.
+/// cast_overflow_check's bitvector check is gated on --int-encoding, so in the
+/// default mode this conversion went unchecked (#7572). A NaN operand fails
+/// both comparisons, which is right -- it is equally undefined.
+void goto_checkt::fp_to_int_range_check(
+  const expr2tc &expr,
+  const guard2tc &guard,
+  const locationt &loc)
+{
+  if (!enable_overflow_check || !is_typecast2t(expr))
+    return;
+
+  const typecast2t &fp_cast = to_typecast2t(expr);
+  const type2tc &src_type = ns.follow(fp_cast.from->type);
+  const type2tc &dst_type = ns.follow(expr->type);
+  if (!is_floatbv_type(src_type))
+    return;
+
+  const bool is_signed = is_signedbv_type(dst_type);
+  if (!is_signed && !is_unsignedbv_type(dst_type))
+    return;
+
+  // Truncation is toward zero, so the representable operands are exactly
+  // [MIN, MAX + 1). Both bounds are powers of two and convert exactly.
+  const unsigned int w = dst_type->get_width();
+  const BigInt lo = is_signed ? -power(2, w - 1) : BigInt(0);
+  const BigInt hi = is_signed ? power(2, w - 1) : power(2, w);
+  add_guarded_claim(
+    and2tc(
+      greaterthanequal2tc(fp_cast.from, from_integer(lo, src_type)),
+      lessthan2tc(fp_cast.from, from_integer(hi, src_type))),
+    "floating-point conversion out of range of " + get_type_id(dst_type) +
+      " on " + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
+}
+
 void goto_checkt::cast_overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
   const locationt &loc)
 {
-  // C11 6.3.1.4p1 and [conv.fpint]/1: converting a floating value whose
-  // integral part is not representable in the destination integer type is
-  // undefined. The bitvector cast check below is gated on --int-encoding, so
-  // in the default mode this conversion went unchecked (#7572). A NaN operand
-  // fails both comparisons, which is right -- it is equally undefined.
-  if (enable_overflow_check && is_typecast2t(expr))
-  {
-    const typecast2t &fp_cast = to_typecast2t(expr);
-    const type2tc &src_type = ns.follow(fp_cast.from->type);
-    const type2tc &dst_type = ns.follow(expr->type);
-    if (
-      is_floatbv_type(src_type) &&
-      (is_signedbv_type(dst_type) || is_unsignedbv_type(dst_type)))
-    {
-      const unsigned int w = dst_type->get_width();
-      const bool is_signed = is_signedbv_type(dst_type);
-      // Truncation is toward zero, so the representable operands are exactly
-      // [MIN, MAX + 1). Both bounds are powers of two and convert exactly.
-      const BigInt lo = is_signed ? -power(2, w - 1) : BigInt(0);
-      const BigInt hi = is_signed ? power(2, w - 1) : power(2, w);
-      expr2tc in_range = and2tc(
-        greaterthanequal2tc(fp_cast.from, from_integer(lo, src_type)),
-        lessthan2tc(fp_cast.from, from_integer(hi, src_type)));
-      add_guarded_claim(
-        in_range,
-        "floating-point conversion out of range of " + get_type_id(dst_type) +
-          " on " + get_expr_id(expr),
-        "overflow",
-        loc,
-        guard);
-    }
-  }
+  fp_to_int_range_check(expr, guard, loc);
 
   // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
   // even in bitvector mode. Only apply to user .sol code, not C library models.
