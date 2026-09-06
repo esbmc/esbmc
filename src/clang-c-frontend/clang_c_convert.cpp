@@ -4919,12 +4919,35 @@ void clang_c_convertert::get_decl_name(
        * symex assigns a nondet return and the verdict is silently wrong
        * (esbmc/esbmc#6969). Qualify with the enclosing specialisation, which
        * is what clang's own USRs for the closure's methods already carry. */
-      const auto *parent =
-        llvm::dyn_cast_or_null<clang::FunctionDecl>(rd.getDeclContext());
-      if (parent && parent->getTemplateSpecializationArgs())
+      /* The same collision arises one level out: a lambda in a member function
+       * of a *class* template is a distinct type per instantiation, but the
+       * member carries no specialisation args -- the class does (#7528). A
+       * nested lambda adds a third shape: its context is the enclosing
+       * lambda's operator(), which carries none either (#7529). So walk out
+       * until a specialised context is found rather than testing only the
+       * immediate parent. */
+      const clang::FunctionDecl *qualifier = nullptr;
+      for (const clang::DeclContext *dc = rd.getDeclContext(); dc;
+           dc = dc->getParent())
+      {
+        const auto *fn = llvm::dyn_cast<clang::FunctionDecl>(dc);
+        if (!fn)
+          continue;
+        const auto *method = llvm::dyn_cast<clang::CXXMethodDecl>(fn);
+        if (
+          fn->getTemplateSpecializationArgs() ||
+          (method && llvm::isa<clang::ClassTemplateSpecializationDecl>(
+                       method->getParent())))
+        {
+          qualifier = fn;
+          break;
+        }
+      }
+
+      if (qualifier)
       {
         std::string parent_name, parent_id;
-        get_decl_name(*parent, parent_name, parent_id);
+        get_decl_name(*qualifier, parent_name, parent_id);
         name += "_" + parent_id;
       }
 
