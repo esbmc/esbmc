@@ -7419,3 +7419,109 @@ what a counterexample step and a witness are printed from. §110.3 and §130.3
 each closed one place a location was dropped and each recorded that the general
 fix needs `sideeffect2t` to carry a `locationt`. This is the third; take it
 next, and check first whether it is that same missing field.
+
+## 136. sideeffect2t carries a location (2026-09-05)
+
+§135.4 named `github_6966` as the one remaining cause that loses information a
+user sees. It is §110.3's and §130.3's open item, and this closes it.
+
+### 136.1 The reduction, and why the obvious patch is wrong
+
+```c
+int main(void) { int x = undeclared_fn(1); return x; }
+```
+
+```
+legacy:  Location....: file w1.c line 1 column 26 function main
+hop-off: Location....:
+```
+
+Three shapes split cleanly. A call with no visible declaration makes
+`declare_implicit_callee` create a symbol, and that symbol's location is:
+
+| statement | before |
+|---|---|
+| `undeclared_fn(1);` | correct — `adjust_expr` passes the statement's own location before the recursion |
+| `int x = undeclared_fn(1);` | **empty** |
+| `x = undeclared_fn(1);` | **empty** |
+
+The general call site passes the parameter's default `locationt()`. Passing
+`enclosing_location` there instead would give the right file and line and the
+**wrong column**: legacy reports column 26, where `undeclared_fn` starts; the
+statement starts at column 18. §110.3 already stated the rule — the statement's
+location is the call's only when the call is the whole statement — so the
+fallback is not a fix, and a fabricated column in a counterexample is worse
+than an empty one.
+
+### 136.2 The field, and why it does not disturb value identity
+
+`sideeffect2t` now carries a `locationt`, following the pattern `code_assign2t`
+and the V.4 structured-CF kinds already use: the member is **not** listed in
+`fields`, and `excluded_field_bytes` tells `fields_cover_class` to stop counting
+it as missed. So it takes no part in `cmp`/`crc`/`hash`/`tostring`, and two side
+effects differing only in position still compare equal — which the cross-run VCC
+cache and every consumer keyed on value identity depend on. The constructor
+parameter is defaulted, so no construction site changes.
+
+`declare_implicit_callee` and `declare_polymorphic_builtin` now read the node's
+own location, falling back to the statement's only for a `sideeffect2t` built
+without one. All three shapes match legacy, column included.
+
+`irep2_only_implicit_callee_location{_init,_assign}` pin the two shapes that
+were empty; both fail on a mutant that ignores the new field, while #7242's
+`irep2_only_implicit_callee_location{,_stmt}` keep passing on it — the
+pre-recursion path still covers the whole-statement case they test.
+
+### 136.3 The half that is not done here, and the number that decides it
+
+The first version of this patch also restored the location in
+`migrate_expr_back`. Measured against a master control over a stride-16 list of
+`regression/esbmc`, that moved **126 of 131** default-path goto programs:
+`goto_convert` falls back to the enclosing statement for a side effect carrying
+no location, so restoring one shifts the instruction's column corpus-wide.
+
+```
+- // file /esbmc-vfs/libc/library/io.c line 106 column 3 function fopen
++ // file /esbmc-vfs/libc/library/io.c line 106 column 13 function fopen
+```
+
+That is very likely the more faithful column — it is the call's, not the
+statement's — but it is a user-visible change to counterexamples and witnesses
+on the **default** path, so it needs its own PR and an SV-COMP run rather than
+riding along with a hop-off fix. The carriage here is forward-only. Re-measured
+with the back-arm dropped: **130 of 131 identical**, the one exception being
+`irep2_only_polymorphic_builtin_dowhile_fail`, which pins the hop-off flag in
+its own descriptor — §136.4.
+
+### 136.4 A test that pinned the fallback, not the behaviour
+
+`irep2_only_polymorphic_builtin_dowhile_fail` expected
+`line 9 ... dereference failure: NULL pointer`. Line 9 is the `do`; line 11 is
+the `atomic_load` call. Measured on three binaries:
+
+| path | property line |
+|---|---|
+| default | **11** |
+| hop-off, pre-patch | 9 |
+| hop-off, patched | **11** |
+
+So the test was pinning §130.3's enclosing-statement fallback, which the default
+path does not produce. Its expectation is updated to legacy's line, and its
+comment now says which line is whose. This is why the descriptor names the
+property line rather than only `^VERIFICATION FAILED$`: the divergence showed
+up as a red test, not as one more row in a dump nobody re-reads.
+
+### 136.5 A dead-code candidate, stated because the first answer was wrong
+
+With the field in place, the pre-recursion path in `adjust_expr` — the one that
+passes `stmt.location` for a bare `f(x);` — looks redundant: the whole hop-off
+corpus is **96/96** without it.
+
+An earlier run of this same experiment reported it as live, on one failing test.
+That run was contaminated: the test was `..._dowhile_fail`, which was failing on
+§136.4's stale expectation whatever the mutant did. Two tests had already passed
+without the branch, and it would have been easy to stop there and delete it on
+that evidence; it would have been equally easy to keep the wrong "it is live"
+conclusion. Neither is a measurement. **Removing it is not done here** — a
+branch deletion wants its own PR and a Mode C (C-Dead) proof per the
+dead-code rule, not a corpus that happens to be quiet.
