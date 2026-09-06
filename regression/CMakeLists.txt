@@ -691,11 +691,11 @@ set(_slow_regression_tests
     # against the 120s cap and timed out on the DebugOpt Linux runner in
     # #7073 CI -- a comment-only change that cannot reach its code path.
     "regression/esbmc/github_4634"
-    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
-    # over the 120s cap on aarch64, where the whole floats-regression suite runs
-    # ~3x slower while the rest of the suite matches x86 to within 5%. The
-    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
-    # armv8 leg green meanwhile.
+    # nn-tanh_5_unsafe is a single float query. It pinned --boolector, which
+    # camada does not carry, so it now runs on the default backend: ~400s
+    # locally, and over the 120s cap on aarch64, where the whole
+    # floats-regression suite runs ~3x slower while the rest matches x86 to
+    # within 5% (#7308). The 2x budget keeps the armv8 leg green.
     "regression/floats-regression/nn-tanh_5_unsafe"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
@@ -734,6 +734,14 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # The github_1352 trio pinned --boolector, which camada does not carry, so
+    # they now run on the default backend and no longer fit the 1x budget:
+    # ~625s locally against the 1200s cap, and over it on the slower CI runner.
+    # The query itself is unchanged, only which solver answers it. --fp2bv does
+    # not help -- bit-blasting this one is slower still, timing out even at 3x.
+    "regression/esbmc/github_1352"
+    "regression/esbmc/github_1352-32bit"
+    "regression/esbmc/github_1352-fail-32bit"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

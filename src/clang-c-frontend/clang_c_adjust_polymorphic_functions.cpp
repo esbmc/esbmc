@@ -5,18 +5,155 @@
 #include <util/expr/type2name.h>
 #include <util/arith/arith_tools.h>
 
-/* The overflow and carry builtins differ from every other name handled here:
- * they take their result pointer last rather than first, are pure computation
- * rather than shared-memory access, and their parameters do not all share one
- * type. */
-static bool is_overflow_or_carry_builtin(const irep_idt &identifier)
+#include <algorithm>
+
+static bool is_overflow_builtin(const irep_idt &identifier)
 {
   const std::string &id = identifier.as_string();
   return has_prefix(id, "c:@F@__builtin_add_overflow") ||
          has_prefix(id, "c:@F@__builtin_sub_overflow") ||
-         has_prefix(id, "c:@F@__builtin_mul_overflow") ||
-         has_prefix(id, "c:@F@__builtin_addc") ||
+         has_prefix(id, "c:@F@__builtin_mul_overflow");
+}
+
+/* One prefix per family: the suffixes (addcb, addcs, addc, addcl, addcll) all
+ * follow. */
+static bool is_carry_builtin(const irep_idt &identifier)
+{
+  const std::string &id = identifier.as_string();
+  return has_prefix(id, "c:@F@__builtin_addc") ||
          has_prefix(id, "c:@F@__builtin_subc");
+}
+
+/* These two families differ from every other name handled here: they take their
+ * result pointer last rather than first, are pure computation rather than
+ * shared-memory access, and their parameters do not all share one type. */
+static bool is_overflow_or_carry_builtin(const irep_idt &identifier)
+{
+  return is_overflow_builtin(identifier) || is_carry_builtin(identifier);
+}
+
+/* _Bool __builtin_<op>_overflow(T1 a, T2 b, T3 *res): the operands and the
+ * result may all differ in type, and clang leaves these generic -- unlike the
+ * typed __builtin_sadd_overflow family, which it lowers itself.
+ * https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html
+ *
+ * Each operand keeps its own type: the operation is performed as if in
+ * infinite precision, so converting them to the result type up front would
+ * wrap away the very overflow being reported. */
+static exprt overflow_builtin_signature(
+  const irep_idt &identifier,
+  const exprt::operandst &arguments)
+{
+  code_typet t{
+    {code_typet::argumentt(arguments[0].type()),
+     code_typet::argumentt(arguments[1].type()),
+     code_typet::argumentt(arguments.back().type())},
+    bool_type()};
+  t.make_ellipsis();
+  return symbol_exprt{identifier, std::move(t)};
+}
+
+/* T __builtin_addc<suffix>(T a, T b, T carry_in, T *carry_out): all four share
+ * one type, fixed by the suffix. Returns the modular sum; stores whether
+ * either partial addition wrapped.
+ * clang.llvm.org/docs/LanguageExtensions.html
+ * #multiprecision-arithmetic-builtins */
+static exprt carry_builtin_signature(
+  const irep_idt &identifier,
+  const exprt::operandst &arguments)
+{
+  const exprt &carry_arg = arguments.back();
+  const typet &value_type = to_pointer_type(carry_arg.type()).subtype();
+
+  code_typet t{
+    {code_typet::argumentt(value_type),
+     code_typet::argumentt(value_type),
+     code_typet::argumentt(value_type),
+     code_typet::argumentt(carry_arg.type())},
+    value_type};
+  t.make_ellipsis();
+  return symbol_exprt{identifier, std::move(t)};
+}
+
+/* The C11 <stdatomic.h> builtins are polymorphic in the atomic object's value
+ * type, so they need per-type bodies like the GCC family (issue #2174). Their
+ * names share no prefix with that family, so the two are matched
+ * independently. */
+static exprt c11_atomic_signature(
+  const irep_idt &identifier,
+  const exprt::operandst &arguments)
+{
+  // C11 7.17.7.4: `expected` is passed by pointer, `desired` by value.
+  if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
+  {
+    const exprt &ptr_arg = arguments.front();
+    const typet &value_type = to_pointer_type(ptr_arg.type()).subtype();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(pointer_typet(value_type)),
+       code_typet::argumentt(value_type),
+       code_typet::argumentt(int_type()),
+       code_typet::argumentt(int_type())},
+      bool_type());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_load"))
+  {
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(int_type())},
+      to_pointer_type(ptr_arg.type()).subtype());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_store"))
+  {
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
+       code_typet::argumentt(int_type())},
+      empty_typet());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_init"))
+  {
+    // C11 7.17.2.2: atomic_init takes no memory-order operand.
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype())},
+      empty_typet());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+  else if (
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_exchange") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or") ||
+    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
+  {
+    const exprt &ptr_arg = arguments.front();
+
+    code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
+       code_typet::argumentt(int_type())},
+      to_pointer_type(ptr_arg.type()).subtype());
+    symbol_exprt result(identifier, std::move(t));
+    return result;
+  }
+
+  return nil_exprt();
 }
 
 exprt clang_c_adjust::is_gcc_polymorphic_builtin(
@@ -51,52 +188,12 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result{identifier, std::move(t)};
     return result;
   }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__builtin_add_overflow") ||
-    has_prefix(identifier.as_string(), "c:@F@__builtin_sub_overflow") ||
-    has_prefix(identifier.as_string(), "c:@F@__builtin_mul_overflow"))
-  {
-    /* _Bool __builtin_<op>_overflow(T1 a, T2 b, T3 *res): the operands and
-     * the result may all differ in type, and clang leaves these generic --
-     * unlike the typed __builtin_sadd_overflow family, which it lowers
-     * itself. https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html
-     *
-     * Each operand keeps its own type: the operation is performed as if in
-     * infinite precision, so converting them to the result type up front
-     * would wrap away the very overflow being reported. */
-    const exprt &res_arg = arguments.back();
+  else if (is_overflow_builtin(identifier))
+    return overflow_builtin_signature(identifier, arguments);
 
-    code_typet t{
-      {code_typet::argumentt(arguments[0].type()),
-       code_typet::argumentt(arguments[1].type()),
-       code_typet::argumentt(res_arg.type())},
-      bool_type()};
-    t.make_ellipsis();
-    symbol_exprt result{identifier, std::move(t)};
-    return result;
-  }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__builtin_addc") ||
-    has_prefix(identifier.as_string(), "c:@F@__builtin_subc"))
-  {
-    /* T __builtin_addc<suffix>(T a, T b, T carry_in, T *carry_out): all four
-     * share one type, fixed by the suffix. Returns the modular sum; stores
-     * whether either partial addition wrapped.
-     * clang.llvm.org/docs/LanguageExtensions.html
-     * #multiprecision-arithmetic-builtins */
-    const exprt &carry_arg = arguments.back();
-    const typet &value_type = to_pointer_type(carry_arg.type()).subtype();
+  else if (is_carry_builtin(identifier))
+    return carry_builtin_signature(identifier, arguments);
 
-    code_typet t{
-      {code_typet::argumentt(value_type),
-       code_typet::argumentt(value_type),
-       code_typet::argumentt(value_type),
-       code_typet::argumentt(carry_arg.type())},
-      value_type};
-    t.make_ellipsis();
-    symbol_exprt result{identifier, std::move(t)};
-    return result;
-  }
   else if (
     has_prefix(identifier.as_string(), "c:@F@__sync_bool_compare_and_swap") ||
     has_prefix(identifier.as_string(), "c:@F@__sync_val_compare_and_swap"))
@@ -273,80 +370,8 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
     symbol_exprt result(identifier, std::move(t));
     return result;
   }
-  // The C11 <stdatomic.h> builtins are polymorphic in the atomic object's value
-  // type, so they need per-type bodies like the GCC family above (issue #2174).
-  // C11 7.17.7.4: `expected` is passed by pointer, `desired` by value.
-  else if (has_prefix(
-             identifier.as_string(), "c:@F@__c11_atomic_compare_exchange"))
-  {
-    const exprt &ptr_arg = arguments.front();
-    const typet &value_type = to_pointer_type(ptr_arg.type()).subtype();
 
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(pointer_typet(value_type)),
-       code_typet::argumentt(value_type),
-       code_typet::argumentt(int_type()),
-       code_typet::argumentt(int_type())},
-      bool_type());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_load"))
-  {
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(int_type())},
-      to_pointer_type(ptr_arg.type()).subtype());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_store"))
-  {
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
-       code_typet::argumentt(int_type())},
-      empty_typet());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (has_prefix(identifier.as_string(), "c:@F@__c11_atomic_init"))
-  {
-    // C11 7.17.2.2: atomic_init takes no memory-order operand.
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype())},
-      empty_typet());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_exchange") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
-  {
-    const exprt &ptr_arg = arguments.front();
-
-    code_typet t(
-      {code_typet::argumentt(ptr_arg.type()),
-       code_typet::argumentt(to_pointer_type(ptr_arg.type()).subtype()),
-       code_typet::argumentt(int_type())},
-      to_pointer_type(ptr_arg.type()).subtype());
-    symbol_exprt result(identifier, std::move(t));
-    return result;
-  }
-
-  return nil_exprt();
+  return c11_atomic_signature(identifier, arguments);
 }
 
 static symbolt
@@ -372,6 +397,196 @@ static void convert_expression_to_code(exprt &expr)
   code.move_to_operands(expr);
 
   expr.swap(code);
+}
+
+/* The exact result of `a <op> b`, stored truncated to the result type, plus a
+ * flag that is true when it did not fit. */
+static void instantiate_overflow_builtin(
+  const irep_idt &identifier,
+  const code_typet &code_type,
+  const locationt &new_loc,
+  code_blockt &block)
+{
+  /* GCC performs the operation "as if" in infinite precision and reports
+   * whether the exact result fits the type *res points at; *res always
+   * receives that exact result truncated to its own type. So the operation
+   * happens in a type wide enough for it to be exact, and only the fit into
+   * the result type is the overflow being reported -- not any wrapping of
+   * the operands.
+   * https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html */
+  const code_typet::argumentst &args = code_type.arguments();
+  const typet &res_type = to_pointer_type(args[2].type()).subtype();
+
+  const exprt a(symbol_exprt(args[0].cmt_identifier(), args[0].type()));
+  const exprt b(symbol_exprt(args[1].cmt_identifier(), args[1].type()));
+  const exprt res_ptr(symbol_exprt(args[2].cmt_identifier(), args[2].type()));
+
+  std::string op = "+";
+  if (has_prefix(identifier.as_string(), "c:@F@__builtin_sub_overflow"))
+    op = "-";
+  else if (has_prefix(identifier.as_string(), "c:@F@__builtin_mul_overflow"))
+    op = "*";
+
+  /* Signed, and wide enough that neither the operands nor the exact result
+   * can wrap: a product needs the two operand widths summed, a sum or
+   * difference one more than the wider operand. The result type joins the
+   * max so that truncating to it is the only narrowing, and the final +1
+   * carries an unsigned value's top bit into the signed type. */
+  const std::size_t w0 = bv_width(args[0].type());
+  const std::size_t w1 = bv_width(args[1].type());
+  const std::size_t operand_width = op == "*" ? w0 + w1 : std::max(w0, w1) + 1;
+  const std::size_t exact_width =
+    std::max(operand_width, std::size_t(bv_width(res_type))) + 1;
+
+  const typet exact_type = signedbv_typet(exact_width);
+
+  exprt wide_a("typecast", exact_type);
+  wide_a.copy_to_operands(a);
+  exprt wide_b("typecast", exact_type);
+  wide_b.copy_to_operands(b);
+
+  exprt exact(op, exact_type);
+  exact.copy_to_operands(wide_a, wide_b);
+  exact.location() = new_loc;
+
+  /* clang accepts a `_Bool *` result, and stores the exact value truncated
+   * to one bit: 1 + 1 stores 0, not the 1 a C cast to _Bool would give. Go
+   * through a 1-bit unsigned to reproduce that -- casting straight to bool
+   * tests against zero instead. */
+  const bool res_is_bool = res_type.id() == typet::t_bool;
+
+  exprt value("typecast", res_type);
+  if (res_is_bool)
+  {
+    exprt one_bit("typecast", unsignedbv_typet(1));
+    one_bit.copy_to_operands(exact);
+    one_bit.location() = new_loc;
+    value.copy_to_operands(one_bit);
+  }
+  else
+    value.copy_to_operands(exact);
+  value.location() = new_loc;
+
+  code_assignt store(dereference_exprt(res_ptr, args[2].type()), value);
+  store.location() = new_loc;
+  block.operands().push_back(store);
+
+  /* The reported condition is exactly "the exact result is outside the
+   * range of the result type". overflow-typecast- cannot express it: its
+   * lowering tests [0, 2^N) regardless of the destination's signedness.
+   * bool_typet carries no width, so bv_width would report 0 here and make
+   * the range [0, 0] -- every non-zero result an overflow. */
+  const std::size_t res_width = res_is_bool ? 1 : bv_width(res_type);
+  const bool res_signed = res_type.id() == typet::t_signedbv;
+  const BigInt lo = res_signed ? -BigInt::power2(res_width - 1) : BigInt(0);
+  const BigInt hi =
+    (res_signed ? BigInt::power2(res_width - 1) : BigInt::power2(res_width)) -
+    1;
+
+  exprt below("<", bool_type());
+  below.copy_to_operands(exact, from_integer(lo, exact_type));
+  exprt above(">", bool_type());
+  above.copy_to_operands(exact, from_integer(hi, exact_type));
+
+  exprt did_overflow("or", bool_type());
+  did_overflow.copy_to_operands(below, above);
+  did_overflow.location() = new_loc;
+
+  code_returnt ret;
+  ret.return_value() = did_overflow;
+  ret.location() = new_loc;
+  block.operands().push_back(ret);
+}
+
+/* The modular sum and the carry it produced. */
+static void instantiate_carry_builtin(
+  const irep_idt &identifier,
+  const code_typet &code_type,
+  const locationt &new_loc,
+  code_blockt &block)
+{
+  /* sum = (a <op> b) <op> carry_in, wrapping; *carry_out is set when either
+   * partial step wrapped. Both steps need their own predicate: a+b may fit
+   * and adding the carry then overflow, or the reverse for subtraction. */
+  const code_typet::argumentst &args = code_type.arguments();
+  const typet &value_type = args[0].type();
+  const bool is_add = has_prefix(identifier.as_string(), "c:@F@__builtin_addc");
+  const std::string op = is_add ? "+" : "-";
+
+  const exprt a(symbol_exprt(args[0].cmt_identifier(), value_type));
+  const exprt b(symbol_exprt(args[1].cmt_identifier(), value_type));
+  const exprt cin(symbol_exprt(args[2].cmt_identifier(), value_type));
+  const exprt cout_ptr(symbol_exprt(args[3].cmt_identifier(), args[3].type()));
+
+  exprt partial(op, value_type);
+  partial.copy_to_operands(a, b);
+  partial.location() = new_loc;
+
+  exprt sum(op, value_type);
+  sum.copy_to_operands(partial, cin);
+  sum.location() = new_loc;
+
+  exprt ov1("overflow-" + op, bool_type());
+  ov1.copy_to_operands(a, b);
+  exprt ov2("overflow-" + op, bool_type());
+  ov2.copy_to_operands(partial, cin);
+
+  exprt carry("or", bool_type());
+  carry.copy_to_operands(ov1, ov2);
+  carry.location() = new_loc;
+
+  /* The carry is 1 or 0 in the operand type, not a _Bool. */
+  exprt carry_value("typecast", value_type);
+  carry_value.copy_to_operands(carry);
+  carry_value.location() = new_loc;
+
+  code_assignt store(dereference_exprt(cout_ptr, args[3].type()), carry_value);
+  store.location() = new_loc;
+  block.operands().push_back(store);
+
+  code_returnt ret;
+  ret.return_value() = sum;
+  ret.location() = new_loc;
+  block.operands().push_back(ret);
+}
+
+/* The arithmetic a `fetch_and_<op>` / `fetch_<op>` name selects. The __sync,
+ * __atomic and __c11_atomic families spell the same set of operations, and a
+ * name may carry a width suffix, hence the prefix match. The table is uniform
+ * over the three families, so it also names __c11_atomic_fetch_nand, which the
+ * caller's guard does not admit and clang_c_convert rejects earlier. */
+static exprt fetch_op_expr(const irep_idt &identifier, const typet &type)
+{
+  static const struct
+  {
+    const char *op;
+    const char *expr_id;
+    const char *float_expr_id;
+  } ops[] = {
+    {"add", "+", "ieee_add"},
+    {"sub", "-", "ieee_sub"},
+    {"or", "bitor", nullptr},
+    {"and", "bitand", nullptr},
+    {"xor", "bitxor", nullptr},
+    {"nand", "bitand", nullptr}};
+
+  const std::string &id = identifier.as_string();
+  for (const auto &entry : ops)
+  {
+    const std::string op = entry.op;
+    if (
+      !has_prefix(id, "c:@F@__sync_fetch_and_" + op) &&
+      !has_prefix(id, "c:@F@__atomic_fetch_" + op) &&
+      !has_prefix(id, "c:@F@__c11_atomic_fetch_" + op))
+      continue;
+
+    if (entry.float_expr_id && type.is_floatbv())
+      return exprt(entry.float_expr_id, type);
+
+    return exprt(entry.expr_id, type);
+  }
+
+  return exprt();
 }
 
 code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
@@ -451,54 +666,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     assign.location() = new_loc;
     block.operands().push_back(assign);
 
-    exprt new_expr;
-    if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add"))
-    {
-      if (type.is_floatbv())
-        new_expr = exprt("ieee_add", type);
-      else
-        new_expr = exprt("+", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub"))
-    {
-      if (type.is_floatbv())
-        new_expr = exprt("ieee_sub", type);
-      else
-        new_expr = exprt("-", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or"))
-    {
-      new_expr = exprt("bitor", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and"))
-    {
-      new_expr = exprt("bitand", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_xor") ||
-      has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
-    {
-      new_expr = exprt("bitxor", type);
-    }
-    else if (
-      has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand") ||
-      has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_nand"))
-    {
-      new_expr = exprt("bitand", type);
-    }
+    exprt new_expr = fetch_op_expr(identifier, type);
 
     dereference_exprt arg0_deref(
       symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
@@ -522,137 +690,10 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
     ret.location() = new_loc;
     block.operands().push_back(ret);
   }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__builtin_add_overflow") ||
-    has_prefix(identifier.as_string(), "c:@F@__builtin_sub_overflow") ||
-    has_prefix(identifier.as_string(), "c:@F@__builtin_mul_overflow"))
-  {
-    /* GCC performs the operation "as if" in infinite precision and reports
-     * whether the exact result fits the type *res points at; *res always
-     * receives that exact result truncated to its own type. So the operation
-     * happens in a type wide enough for it to be exact, and only the fit into
-     * the result type is the overflow being reported -- not any wrapping of
-     * the operands.
-     * https://gcc.gnu.org/onlinedocs/gcc/Integer-Overflow-Builtins.html */
-    const code_typet::argumentst &args = code_type.arguments();
-    const typet &res_type = to_pointer_type(args[2].type()).subtype();
-
-    const exprt a(symbol_exprt(args[0].cmt_identifier(), args[0].type()));
-    const exprt b(symbol_exprt(args[1].cmt_identifier(), args[1].type()));
-    const exprt res_ptr(symbol_exprt(args[2].cmt_identifier(), args[2].type()));
-
-    std::string op = "+";
-    if (has_prefix(identifier.as_string(), "c:@F@__builtin_sub_overflow"))
-      op = "-";
-    else if (has_prefix(identifier.as_string(), "c:@F@__builtin_mul_overflow"))
-      op = "*";
-
-    /* Signed, and wide enough that neither the operands nor the exact result
-     * can wrap: a product needs the two operand widths summed, a sum or
-     * difference one more than the wider operand. The result type joins the
-     * max so that truncating to it is the only narrowing, and the final +1
-     * carries an unsigned value's top bit into the signed type. */
-    const std::size_t w0 = bv_width(args[0].type());
-    const std::size_t w1 = bv_width(args[1].type());
-    const std::size_t operand_width =
-      op == "*" ? w0 + w1 : std::max(w0, w1) + 1;
-    const std::size_t exact_width =
-      std::max(operand_width, std::size_t(bv_width(res_type))) + 1;
-
-    const typet exact_type = signedbv_typet(exact_width);
-
-    exprt wide_a("typecast", exact_type);
-    wide_a.copy_to_operands(a);
-    exprt wide_b("typecast", exact_type);
-    wide_b.copy_to_operands(b);
-
-    exprt exact(op, exact_type);
-    exact.copy_to_operands(wide_a, wide_b);
-    exact.location() = new_loc;
-
-    exprt value("typecast", res_type);
-    value.copy_to_operands(exact);
-    value.location() = new_loc;
-
-    code_assignt store(dereference_exprt(res_ptr, args[2].type()), value);
-    store.location() = new_loc;
-    block.operands().push_back(store);
-
-    /* The reported condition is exactly "the exact result is outside the
-     * range of the result type". overflow-typecast- cannot express it: its
-     * lowering tests [0, 2^N) regardless of the destination's signedness. */
-    const std::size_t res_width = bv_width(res_type);
-    const bool res_signed = res_type.id() == typet::t_signedbv;
-    const BigInt lo = res_signed ? -BigInt::power2(res_width - 1) : BigInt(0);
-    const BigInt hi =
-      (res_signed ? BigInt::power2(res_width - 1) : BigInt::power2(res_width)) -
-      1;
-
-    exprt below("<", bool_type());
-    below.copy_to_operands(exact, from_integer(lo, exact_type));
-    exprt above(">", bool_type());
-    above.copy_to_operands(exact, from_integer(hi, exact_type));
-
-    exprt did_overflow("or", bool_type());
-    did_overflow.copy_to_operands(below, above);
-    did_overflow.location() = new_loc;
-
-    code_returnt ret;
-    ret.return_value() = did_overflow;
-    ret.location() = new_loc;
-    block.operands().push_back(ret);
-  }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__builtin_addc") ||
-    has_prefix(identifier.as_string(), "c:@F@__builtin_subc"))
-  {
-    /* sum = (a <op> b) <op> carry_in, wrapping; *carry_out is set when either
-     * partial step wrapped. Both steps need their own predicate: a+b may fit
-     * and adding the carry then overflow, or the reverse for subtraction. */
-    const code_typet::argumentst &args = code_type.arguments();
-    const typet &value_type = args[0].type();
-    const bool is_add =
-      has_prefix(identifier.as_string(), "c:@F@__builtin_addc");
-    const std::string op = is_add ? "+" : "-";
-
-    const exprt a(symbol_exprt(args[0].cmt_identifier(), value_type));
-    const exprt b(symbol_exprt(args[1].cmt_identifier(), value_type));
-    const exprt cin(symbol_exprt(args[2].cmt_identifier(), value_type));
-    const exprt cout_ptr(
-      symbol_exprt(args[3].cmt_identifier(), args[3].type()));
-
-    exprt partial(op, value_type);
-    partial.copy_to_operands(a, b);
-    partial.location() = new_loc;
-
-    exprt sum(op, value_type);
-    sum.copy_to_operands(partial, cin);
-    sum.location() = new_loc;
-
-    exprt ov1("overflow-" + op, bool_type());
-    ov1.copy_to_operands(a, b);
-    exprt ov2("overflow-" + op, bool_type());
-    ov2.copy_to_operands(partial, cin);
-
-    exprt carry("or", bool_type());
-    carry.copy_to_operands(ov1, ov2);
-    carry.location() = new_loc;
-
-    /* The carry is 1 or 0 in the operand type, not a _Bool. */
-    exprt carry_value("typecast", value_type);
-    carry_value.copy_to_operands(carry);
-    carry_value.location() = new_loc;
-
-    code_assignt store(
-      dereference_exprt(cout_ptr, args[3].type()), carry_value);
-    store.location() = new_loc;
-    block.operands().push_back(store);
-
-    code_returnt ret;
-    ret.return_value() = sum;
-    ret.location() = new_loc;
-    block.operands().push_back(ret);
-  }
+  else if (is_overflow_builtin(identifier))
+    instantiate_overflow_builtin(identifier, code_type, new_loc, block);
+  else if (is_carry_builtin(identifier))
+    instantiate_carry_builtin(identifier, code_type, new_loc, block);
   else if (has_prefix(
              identifier.as_string(), "c:@F@__sync_bool_compare_and_swap"))
   {
@@ -918,6 +959,17 @@ exprt clang_c_adjust::declare_gcc_polymorphic_builtin(
   // builtins take it last, so require whichever the name implies rather than
   // only the front one.
   if (arguments.empty())
+    return nil_exprt();
+
+  // The arms below index their parameters directly, so the arity each name
+  // implies is a precondition, not something to discover mid-arm. A user
+  // function whose name merely shares one of these prefixes -- which compiles
+  // without a diagnostic -- reaches here with whatever arity it was declared
+  // with, and master got this floor for free by having no arm to fall into.
+  const std::size_t required_arity = is_overflow_builtin(identifier) ? 3
+                                     : is_carry_builtin(identifier)  ? 4
+                                                                     : 1;
+  if (arguments.size() < required_arity)
     return nil_exprt();
 
   const exprt &pointer_arg = is_overflow_or_carry_builtin(identifier)

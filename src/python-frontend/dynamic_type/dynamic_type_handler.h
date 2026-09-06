@@ -90,6 +90,11 @@ public:
     const locationt &location);
 
   /**
+   * @brief Builds unary minus on a tagged-scalar operand, as `0 - tagged`
+   */
+  exprt build_neg_tagged(const exprt &tagged);
+
+  /**
    * @brief Builds isinstance(tagged, type_name). `type_is_user_class` says
    * whether `type_name` names a class defined in the program, which a tag can
    * never hold

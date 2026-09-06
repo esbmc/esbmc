@@ -2,3 +2,4 @@ CORE
 main.c
 
 ^VERIFICATION FAILED$
+^  assertion !__builtin_mul_overflow\(0x7fffffff, 2, &r\)$
