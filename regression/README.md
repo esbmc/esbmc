@@ -12,7 +12,10 @@ You can see below some examples that you can from the build directory:
   test at 30s, failing anything slower. `ctest --timeout` cannot do this: CMake
   gives every test an explicit `TIMEOUT` property, and ctest's flag only
   supplies a default for tests that have none, so a slow test would still be
-  reported as passing (#7628).
+  reported as passing (#7628). Two kinds of test stay green under a cap
+  regardless of how long they take: `KNOWNBUG` and `FUTURE`, for which a
+  timeout satisfies the expectation, and `REQUIRES long_timeout`, which is
+  skipped once the effective budget drops under 600s.
 
 We also provide a script to validate the Python regression suite. You can run the following command from `ESBMC_Project/esbmc` directory as:
 

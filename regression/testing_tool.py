@@ -30,8 +30,24 @@ _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 _TIMEOUT_CAP_ENVVAR = "ESBMC_REGRESS_TIMEOUT_MAX"
 
 
+# CMake grants the long_timeout capability at configure time, from a budget the
+# cap has not been applied to yet (ESBMC_REGRESS_TIMEOUT GREATER_EQUAL 600 in
+# regression/CMakeLists.txt). A narrowed run still receives it on the command
+# line, and would fail the very tests it exists to skip.
+_LONG_TIMEOUT_SECONDS = 600
+
+
 def _timeout_cap():
-    return int(os.environ.get(_TIMEOUT_CAP_ENVVAR, 0)) or None
+    raw = os.environ.get(_TIMEOUT_CAP_ENVVAR, "").strip()
+    if not raw:
+        return None
+    # Rejected rather than ignored: a run that silently kept the 1200s budget
+    # after a typo would report every test as comfortably within it.
+    if not raw.isdigit() or int(raw) == 0:
+        sys.exit(
+            "{}={!r}: expected a positive whole number of seconds".format(
+                _TIMEOUT_CAP_ENVVAR, raw))
+    return int(raw)
 
 
 def _capped_timeout(budget):
@@ -689,11 +705,11 @@ def _add_test(test_case, executor):
                     )
                     return
                 cap = _timeout_cap()
-                narrowed = (" narrowed by " + _TIMEOUT_CAP_ENVVAR
-                            if cap is not None and executor.timeout == cap
-                            else "")
+                capped = (", capped by " + _TIMEOUT_CAP_ENVVAR
+                          if cap is not None and executor.timeout == cap
+                          else "")
                 timeout_message = "\nTIMEOUT TEST: {} (limit {}s{})".format(
-                    test_case.test_dir, executor.timeout or "none", narrowed)
+                    test_case.test_dir, executor.timeout or "none", capped)
                 if stderr:
                     timeout_message += "\n" + stderr.decode(errors="replace")
                 self.fail(timeout_message)
@@ -881,6 +897,9 @@ def _arg_parsing():
             f"{', '.join(sorted(unknown))}; known names are "
             f"{', '.join(sorted(STATIC_CAPABILITIES))}"
         )
+        if (RegressionBase.TIMEOUT is not None
+                and RegressionBase.TIMEOUT < _LONG_TIMEOUT_SECONDS):
+            capabilities.discard("long_timeout")
 
     gen_one_test(
         regression_path,

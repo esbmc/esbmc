@@ -127,10 +127,22 @@ bullet below.
   ESBMC_REGRESS_TIMEOUT_MAX=45 ctest -j$(nproc) -L loop-invariants
   ```
 
-  Any test slower than the cap then fails, naming the cap in its message.
-  Without it the suite is blind to performance regressions: a test that went
-  from sub-second to nine minutes still reports `Passed` (#7628). Use it when a
-  change could affect solve time.
+  A `CORE`/`THOROUGH` test slower than the cap then fails, naming the cap in
+  its message. Without it the suite is blind to performance regressions: a
+  test that went from sub-second to nine minutes still reports `Passed`
+  (#7628). Use it when a change could affect solve time.
+
+  Two exceptions, both of which read as green:
+
+  - `KNOWNBUG` and `FUTURE` tests treat a timeout as satisfying the
+    expectation (the `FAIL_MODES` branch in `regression/testing_tool.py`), so
+    a cap cannot measure them at all. They print `accepted under KNOWNBUG` and
+    pass. Grep for that line before reading a capped run as a clean bill of
+    health.
+  - `REQUIRES long_timeout` tests are skipped once the effective budget is
+    under 600s, matching how CMake grants the capability in
+    `regression/CMakeLists.txt`. A capped run does not measure
+    `floats-regression/nn-logistic_5_unsafe`.
 - **Regression tests come in pairs, and both must bite.** A PR that changes
   verification behaviour adds **two** regression tests over the same construct:
   one pinning `^VERIFICATION SUCCESSFUL$` and one pinning
