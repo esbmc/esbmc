@@ -704,37 +704,30 @@ smt_astt smt_solver_baset::convert_typecast_to_struct(const typecast2t &cast)
   return fresh;
 }
 
-smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_fp_intmode(const typecast2t &cast)
 {
-  const typecast2t &cast = to_typecast2t(expr);
-
-  // Under integer encoding (--ir/--ir-ieee), fp values are represented as reals.
-  // The following three cases handle fp<->int casts explicitly because the
-  // generic bitvector-based path is incorrect when operands are real-encoded.
+  if (!int_encoding)
+    return nullptr;
 
   // fp -> fp: reals are exact, no conversion needed
-  if (
-    int_encoding && is_floatbv_type(cast.from->type) &&
-    is_floatbv_type(cast.type))
+  if (is_floatbv_type(cast.from->type) && is_floatbv_type(cast.type))
     return convert_ast(cast.from);
 
   // fp -> int: round the real to the nearest integer
   if (
-    int_encoding && is_floatbv_type(cast.from->type) &&
+    is_floatbv_type(cast.from->type) &&
     (is_bv_type(cast.type) || is_fixedbv_type(cast.type)))
   {
     smt_astt from_real = convert_ast(cast.from);
 
     if (is_signedbv_type(cast.type))
       return round_real_to_int(from_real);
-    else
-    {
-      // Unsigned: clamp negative values to zero
-      smt_astt int_val = round_real_to_int(from_real);
-      smt_astt zero = mk_smt_int(BigInt(0));
-      smt_astt is_negative = mk_lt(int_val, zero);
-      return mk_ite(is_negative, zero, int_val);
-    }
+
+    // Unsigned: clamp negative values to zero
+    smt_astt int_val = round_real_to_int(from_real);
+    smt_astt zero = mk_smt_int(BigInt(0));
+    smt_astt is_negative = mk_lt(int_val, zero);
+    return mk_ite(is_negative, zero, int_val);
   }
 
   // int -> fp: lift integer to float under integer encoding.
@@ -743,7 +736,6 @@ smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
   // correctly rounded.  Plain --ir and fixedbv sources retain the previous
   // exact-lift behaviour.
   if (
-    int_encoding &&
     (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&
     is_floatbv_type(cast.type))
   {
@@ -755,6 +747,16 @@ smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
     }
     return mk_int2real(from_int);
   }
+
+  return nullptr;
+}
+
+smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
+{
+  const typecast2t &cast = to_typecast2t(expr);
+
+  if (smt_astt real_encoded = convert_typecast_fp_intmode(cast))
+    return real_encoded;
 
   if (cast.type == cast.from->type)
     return convert_ast(cast.from);

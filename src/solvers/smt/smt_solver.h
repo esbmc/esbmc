@@ -889,6 +889,11 @@ public:
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
+  /** Typecast a floatbv operand under integer encoding, where fp values are
+   *  reals and the generic bitvector path is incorrect. Casts with no floatbv
+   *  side go to convert_typecast_to_ints_intmode instead. Every handled case
+   *  yields a non-null ast, so nullptr means "not one of these". */
+  smt_astt convert_typecast_fp_intmode(const typecast2t &cast);
   /** Typecast to a floatbv*/
   smt_astt convert_typecast_to_fpbv(const typecast2t &cast);
   /** Typecast from a floatbv */
