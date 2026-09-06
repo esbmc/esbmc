@@ -7,8 +7,11 @@
 
 __ESBMC_C_CPP_BEGIN
 
-#define EXIT_FAILURE 0
-#define EXIT_SUCCESS 1
+/* C17 7.22: exit(EXIT_SUCCESS) must be equivalent to exit(0). These were
+   inverted, so a program returning EXIT_SUCCESS reported failure and one
+   returning EXIT_FAILURE reported success. */
+#define EXIT_SUCCESS 0
+#define EXIT_FAILURE 1
 
 typedef struct {
 	int quot;

@@ -10,12 +10,18 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/irep/std_expr.h>
+#include <iterator>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
-using guardst = std::unordered_map<unsigned, guard2tc>;
+using instructiont = goto_programt::instructiont;
+// Keyed on the branch itself, so a branch visited twice contributes one
+// conjunct to the emitted ASSUME. location_number would not separate two
+// branches a previous loop's transformation displaced: both carry 0.
+using guardst = std::unordered_map<const instructiont *, guard2tc>;
 
 /// Cached result of expanding a forward GOTO branch during the entry-
 /// condition collection. The boolean is the recursion's return value at
@@ -30,15 +36,18 @@ struct branch_cache_entryt
   bool reaches;
   guardst guards_to_merge;
 };
-using marked_branchst = std::unordered_map<unsigned, branch_cache_entryt>;
+using marked_branchst =
+  std::unordered_map<const instructiont *, branch_cache_entryt>;
 
 /// Walk the loop body and collect, into @p guards, the conditions under
 /// which control flows from @p loop_head to @p loop_exit. Used by
 /// transform_loop to derive the entry condition of the loop (the
 /// conjunction of every IF-branch guard taken along a body-reaching
-/// path). @p cache is a loop-scoped memoisation table keyed on each
-/// IF's location_number; cleared by transform_loop at the start of
-/// every loop.
+/// path). @p cache is a loop-scoped memoisation table keyed on the
+/// IF itself; transform_loop builds a fresh one per loop. Keying on
+/// location_number instead collides on every instruction a previous
+/// loop's transformation spliced in: those carry 0 until
+/// goto_functionst::update() runs.
 bool get_entry_cond_rec(
   const goto_programt::targett &loop_head,
   const goto_programt::targett &loop_exit,
@@ -59,7 +68,7 @@ bool get_entry_cond_rec(
   goto_programt::targett tmp_head = loop_head;
   for (; tmp_head != loop_exit; tmp_head++)
   {
-    auto it = cache.find(tmp_head->location_number);
+    auto it = cache.find(&*tmp_head);
     if (it != cache.end())
     {
       // Re-inject the guards the first visit collected here. Storing
@@ -95,15 +104,14 @@ bool get_entry_cond_rec(
       // We need to walk the branches and collect constraints that force
       // the path inside the loop and reach the end of the loop body
 
-      // Get the branch number for caching
-      auto const branch_number = tmp_head->location_number;
+      auto const branch = &*tmp_head;
 
       // Walk the true branch
       bool true_branch = true;
       guardst true_branch_guard;
       if (!is_false(g))
       {
-        true_branch_guard[branch_number].add(g);
+        true_branch_guard[branch].add(g);
         true_branch = get_entry_cond_rec(
           tmp_head->targets.front(), loop_exit, true_branch_guard, cache);
       }
@@ -115,7 +123,7 @@ bool get_entry_cond_rec(
       {
         goto_programt::targett new_tmp_head = tmp_head;
         make_not(g);
-        false_branch_guard[branch_number].add(g);
+        false_branch_guard[branch].add(g);
         false_branch = get_entry_cond_rec(
           ++new_tmp_head, loop_exit, false_branch_guard, cache);
       }
@@ -129,7 +137,7 @@ bool get_entry_cond_rec(
       // we can ignore them
       if (!(false_branch ^ true_branch))
       {
-        cache[branch_number] = std::move(entry);
+        cache[branch] = std::move(entry);
         return false_branch && true_branch;
       }
 
@@ -139,7 +147,7 @@ bool get_entry_cond_rec(
       {
         guards.insert(true_branch_guard.begin(), true_branch_guard.end());
         entry.guards_to_merge = std::move(true_branch_guard);
-        cache[branch_number] = std::move(entry);
+        cache[branch] = std::move(entry);
         return false;
       }
 
@@ -147,7 +155,7 @@ bool get_entry_cond_rec(
       {
         guards.insert(false_branch_guard.begin(), false_branch_guard.end());
         entry.guards_to_merge = std::move(false_branch_guard);
-        cache[branch_number] = std::move(entry);
+        cache[branch] = std::move(entry);
         return false;
       }
     }
@@ -156,84 +164,79 @@ bool get_entry_cond_rec(
   return false;
 }
 
-void make_nondet_assign(
-  goto_functiont &goto_function,
-  goto_programt::targett &loop_head,
-  const loopst &loop)
+/// The slot insert_swap writes the havoc block to. Every edge that reaches
+/// this instruction crosses the block — insert_swap keeps jumps pinned to
+/// the iterator and leaves the original content in the block's fall-through
+/// path — and no other edge does.
+goto_programt::targett
+havoc_slot(goto_functiont &goto_function, goto_programt::targett loop_head)
 {
-  // Track the original loop head
-  auto const original_loop_head = loop_head;
-
-  // Check if the loop_head is an assertion, and track it
-  const bool is_assert = loop_head->is_assert();
-
-  // If it's an assertion, adjust loop_head to insert assignments before it
-  if ((is_assert) && loop_head != goto_function.body.instructions.begin())
+  if (
+    loop_head->is_assert() &&
+    loop_head != goto_function.body.instructions.begin())
   {
     --loop_head;
     // We add instructions before a GOTO instruction
     // So we ensure we have one here
     assert(loop_head->is_goto());
   }
+  return loop_head;
+}
 
-  // Get the list of variables modified inside the loop
+/// loop_varst is an unordered_set hashed by irep2_hash, which folds in
+/// irep_idt::hash() -- the string's interning sequence number, not its text.
+/// Iteration order therefore depends on what else has been interned earlier in
+/// the run, so an unrelated pass that interns a string permutes these havocs
+/// (docs/roadmap/scope-clang-c-irep2.md §13). Order by printed form, which is
+/// stable across runs; the assignments are mutually independent, so only the
+/// order changes.
+std::vector<expr2tc> ordered_modified_vars(const loopst &loop)
+{
   auto const &loop_vars = loop.get_modified_loop_vars();
-
-  // loop_varst is an unordered_set hashed by irep2_hash, which folds in
-  // irep_idt::hash() -- the string's interning sequence number, not its text.
-  // Iteration order therefore depends on what else has been interned earlier in
-  // the run, so an unrelated pass that interns a string permutes these havocs
-  // (docs/roadmap/scope-clang-c-irep2.md §13). Order by printed form, which is
-  // stable across runs; the assignments are mutually independent, so only the
-  // order changes.
-  std::vector<expr2tc> ordered_vars(loop_vars.begin(), loop_vars.end());
+  std::vector<expr2tc> ordered(loop_vars.begin(), loop_vars.end());
   std::sort(
-    ordered_vars.begin(),
-    ordered_vars.end(),
-    [](const expr2tc &a, const expr2tc &b) {
+    ordered.begin(), ordered.end(), [](const expr2tc &a, const expr2tc &b) {
       return a->pretty() < b->pretty();
     });
+  return ordered;
+}
 
-  goto_programt dest;
-  size_t inserted = 0;
-  for (auto const &lhs : ordered_vars)
+void add_havoc_assigns(
+  goto_programt &dest,
+  const std::vector<expr2tc> &vars,
+  const locationt &location)
+{
+  for (auto const &lhs : vars)
   {
-    // Generate a nondeterministic value for the loop variable
-    expr2tc rhs = gen_nondet(lhs->type);
-
-    // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
-    t->code = code_assign2tc(lhs, rhs);
-    // Keep the same location as the loop head
-    t->location = loop_head->location;
-    ++inserted;
+    t->code = code_assign2tc(lhs, gen_nondet(lhs->type));
+    t->location = location;
   }
+}
 
-  // Insert the generated assignments before the loop head in the program
+void make_nondet_assign(
+  goto_functiont &goto_function,
+  goto_programt::targett &loop_head,
+  goto_programt::targett slot,
+  const std::vector<expr2tc> &vars)
+{
+  const goto_programt::targett original_loop_head = loop_head;
+  loop_head = slot;
+
+  goto_programt dest;
+  add_havoc_assigns(dest, vars, loop_head->location);
   goto_function.body.insert_swap(loop_head, dest);
 
-  // Restore loop_head to its original position. insert_swap leaves
-  // loop_head pointing at the *first* inserted instruction (or, when
-  // nothing was inserted, at the original loop head). We must advance
-  // it by exactly `inserted` positions so it ends up back at the
-  // original loop_head — and never further, even if a prior pass
-  // (e.g. assume_loop_entry_cond_before_loop) already placed an
-  // inductive_step_instruction right after the loop_head: the old
-  // "walk while inductive_step_instruction" heuristic happily swallowed
-  // that ASSUME too, leaving the back-edge retargeted past the loop's
-  // exit IF and the loop guard bypassed in BC/FC.
-  if (is_assert)
-  {
-    // Restore the original loop head if it was an assertion
+  // insert_swap leaves loop_head on the first inserted instruction, so put it
+  // back on the original head: exactly vars.size() forward, and never the old
+  // "walk while inductive_step_instruction" heuristic, which also swallowed an
+  // ASSUME a previous pass had left after the head and so retargeted the back
+  // edge past the loop's exit IF.
+  if (slot != original_loop_head)
     loop_head = original_loop_head;
-    assert(loop_head->is_assert());
-  }
   else
-  {
-    for (size_t i = 0; i < inserted; ++i)
-      ++loop_head;
-  }
+    std::advance(loop_head, vars.size());
 }
 
 bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
@@ -316,19 +319,12 @@ void assume_loop_entry_cond_before_loop(
   // path.
   //
   // Iterate the collected guards directly instead of walking the
-  // instruction range and looking each one up by location_number.
-  // After make_nondet_assign's insert_swap, location_number does NOT
-  // travel with the instruction content (instructiont::swap exchanges
-  // code, type, guard, targets, ... but not location_number — see
-  // goto_program.h), so the iterator advance leaves loop_head pointing
-  // at the original IF carrying the freshly-inserted slot's default
-  // location_number=0 instead of the IF's original number. The
-  // walk-and-lookup approach then misses every guard, the combined
-  // entry condition comes out empty, and no ASSUME is inserted before
-  // the IF — losing the inductive-hypothesis pin and regressing
-  // post-loop assertions in loop-invariants, incremental-smt,
-  // witnesses_validate, and esbmc-solidity tests (issue #4846).
-  // Conjunction is commutative, so iteration order is irrelevant.
+  // instruction range and looking each one up: after
+  // make_nondet_assign's insert_swap the walk-and-lookup approach
+  // missed every guard, so the combined entry condition came out empty
+  // and no ASSUME was inserted, regressing post-loop assertions in
+  // loop-invariants, incremental-smt, witnesses_validate and
+  // esbmc-solidity (issue #4846).
   guard2tc combined;
   for (auto const &kv : guards)
   {
@@ -383,6 +379,112 @@ void adjust_loop_head_and_exit(
   }
 }
 
+/// Whether control reaches the loop's back edge from @p from without leaving
+/// @p loop_range. The program-order range between the head and the back edge
+/// over-approximates the loop body: a block that only jumps out of the loop
+/// can sit inside the range, and havocing an edge into that block would
+/// clobber the loop's variables on a path that never runs the loop.
+bool reaches_back_edge(
+  const goto_programt &body,
+  goto_programt::const_targett from,
+  const std::unordered_set<const instructiont *> &loop_range,
+  const instructiont *back_edge)
+{
+  std::unordered_set<const instructiont *> seen;
+  std::vector<goto_programt::const_targett> work{from};
+  while (!work.empty())
+  {
+    const goto_programt::const_targett it = work.back();
+    work.pop_back();
+    if (&*it == back_edge)
+      return true;
+    if (!loop_range.count(&*it) || !seen.insert(&*it).second)
+      continue;
+
+    goto_programt::const_targetst successors;
+    body.get_successors(it, successors);
+    work.insert(work.end(), successors.begin(), successors.end());
+  }
+  return false;
+}
+
+/// The unconditional jumps that enter the loop somewhere the legacy havoc
+/// placement does not cover: a rotated (bottom-test) loop is entered at its
+/// test rather than at its head, and a switch dispatches through trampolines
+/// that jump past the head into the middle of the body. Without a havoc on
+/// those edges the inductive step symexes the concrete initial state and
+/// truncates at k instead of inducting (#7565). @p slot itself, and every jump
+/// to it, is already covered: insert_swap pins those to the block it writes
+/// there.
+///
+/// Only unconditional jumps qualify. The havocs go in front of the jump
+/// itself, so every execution reaching them goes on to enter the loop; a
+/// conditional jump also falls through to a non-entry path, so splitting that
+/// edge would need a trampoline block, and the new edges would have to be
+/// revalidated against goto_loopst, adjust_loop_head_and_exit's
+/// location_number == 0 heuristic and remove_unreachable. A loop whose only
+/// entry is conditional therefore stays un-havoced and can still be falsely
+/// proved -- one #7565 residual, pinned by
+/// regression/k-induction/github_7565_conditional_entry_fail.
+std::vector<goto_programt::targett> collect_entry_jumps(
+  goto_programt &body,
+  const loopst &loop,
+  goto_programt::const_targett slot)
+{
+  std::unordered_set<const instructiont *> loop_range;
+  for (goto_programt::targett it = loop.get_original_loop_head();
+       it != body.instructions.end();
+       ++it)
+  {
+    loop_range.insert(&*it);
+    if (it == loop.get_original_loop_exit())
+      break;
+  }
+  const instructiont *back_edge = &*loop.get_original_loop_exit();
+
+  std::vector<goto_programt::targett> jumps;
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+  {
+    if (
+      loop_range.count(&*it) || it == slot || !it->is_goto() ||
+      !is_true(it->guard))
+      continue;
+    for (const auto &target : it->targets)
+      if (
+        target != slot && loop_range.count(&*target) &&
+        reaches_back_edge(body, target, loop_range, back_edge))
+      {
+        jumps.push_back(it);
+        break;
+      }
+  }
+  return jumps;
+}
+
+/// Havoc the loop's modified variables on each edge in @p jumps, by splicing
+/// the assignments in front of the jump. insert_swap keeps them on every
+/// incoming edge, and because nothing but assignments is added the control
+/// flow graph is unchanged -- no block to place, no edge for loop detection
+/// to mistake for a back edge, and nothing for remove_unreachable to strip.
+/// Every other edge into the jump crosses the havocs too, which on an
+/// irreducible CFG costs precision but never soundness: a nondet assignment
+/// subsumes the concrete one it replaces.
+void havoc_entry_jumps(
+  goto_programt &body,
+  const std::vector<expr2tc> &vars,
+  const std::vector<goto_programt::targett> &jumps)
+{
+  for (const goto_programt::targett &jump : jumps)
+  {
+    // Only the slot is insert_swapped between collection and here, and
+    // collect_entry_jumps excluded it, so the iterator still holds the GOTO.
+    assert(jump->is_goto() && is_true(jump->guard));
+    goto_programt havocs;
+    add_havoc_assigns(havocs, vars, jump->location);
+    body.insert_swap(jump, havocs);
+  }
+}
+
 /// Per-loop k-induction transformation: havoc each loop's modified
 /// variables and inject an ASSUME of the loop entry condition right
 /// before the loop head.
@@ -391,9 +493,18 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
-  // Loop-scoped cache for get_entry_cond_rec. The cache key is the
-  // IF's location_number; nested loops in the same function don't
-  // reuse entries because we construct a fresh cache per call.
+  goto_programt::targett const slot = havoc_slot(goto_function, loop_head);
+
+  // Collected here, applied last: splicing a havoc block displaces the GOTO
+  // onto a fresh instruction whose location_number is 0, which is what
+  // adjust_loop_head_and_exit keys its loop-exit test on.
+  const std::vector<goto_programt::targett> entry_jumps =
+    collect_entry_jumps(goto_function.body, loop, slot);
+  const std::vector<expr2tc> vars = ordered_modified_vars(loop);
+
+  // Loop-scoped cache for get_entry_cond_rec. Nested loops in the same
+  // function don't reuse entries because we construct a fresh cache per
+  // call.
   marked_branchst cache;
   guardst guards;
   get_entry_cond_rec(loop_head, loop_exit, guards, cache);
@@ -410,7 +521,7 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
   // and the ASSUME ends up between the havocs and the IF.
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, loop);
+  make_nondet_assign(goto_function, loop_head, slot, vars);
 
   // Assume the loop entry condition before going into the loop
   assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
@@ -418,6 +529,8 @@ void transform_loop(goto_functiont &goto_function, loopst &loop)
   // Check if the loop exit needs to be updated. We must point to the
   // assume that was inserted in the previous transformation
   adjust_loop_head_and_exit(loop_head, loop_exit);
+
+  havoc_entry_jumps(goto_function.body, vars, entry_jumps);
 }
 
 /// Phase 2 (#5230): for a loop that writes array elements through a pointer,

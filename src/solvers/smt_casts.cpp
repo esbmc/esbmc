@@ -734,6 +734,18 @@ smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
     abort();
   }
 
+  // A cast between two array types of the same element type is a resize: the
+  // SMT array sort carries no length, so the source converts unchanged. Reached
+  // when a dynamic array's size is symbolic, e.g. a with2t over
+  // symex_dynamic::dynamic_N_array whose array_size is a member + 1 (#7544).
+  if (
+    is_array_type(cast.type) && is_array_type(cast.from->type) &&
+    base_type_eq(
+      to_array_type(cast.type).subtype,
+      to_array_type(cast.from->type).subtype,
+      ns))
+    return convert_ast(cast.from);
+
   log_error("Typecast for unexpected type\n{}", *expr);
   abort();
 }
