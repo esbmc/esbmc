@@ -49,6 +49,12 @@ bool returns_no_value(const typet &t);
 // constant, whose folding is what stops method-heavy programs from blowing up.
 #define PYTHON_UNRESOLVED_CALL_ATTR "#python_unresolved_call"
 
+// Marks a dict keys view, which is set-like and so compares with a set by
+// content. It must be stamped where `d.keys()` is lowered: by the time the
+// comparison sees it, it is a bare `keys` member indistinguishable from the
+// items placeholder or from a user attribute of that name.
+#define PYTHON_KEYS_VIEW_ATTR "#python_keys_view"
+
 // Stamp a Python internal-aggregate kind ("tuple", "dict", "optional") onto a
 // freshly created struct type.
 void set_python_aggregate_kind(typet &type, const irep_idt &kind);
