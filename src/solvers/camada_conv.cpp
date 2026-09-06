@@ -335,9 +335,9 @@ camada::SMTSolverRef create_esbmc_smtlib_solver(const optionst &options)
  * (last verdict wins, as in the live scan) so a solver that decided nothing
  * can be told apart from one that emitted no verdict at all. Substring
  * matching would misread a log line mentioning "unsat core". */
-std::optional<camada::checkResult> tail_verdict(const std::string &tail)
+std::optional<camada::CheckResult> tail_verdict(const std::string &tail)
 {
-  std::optional<camada::checkResult> found;
+  std::optional<camada::CheckResult> found;
   size_t pos = 0;
   while (pos <= tail.size())
   {
@@ -535,11 +535,11 @@ smt_resultt smt_solver_baset::dec_solve()
 
   switch (solver->check())
   {
-  case camada::checkResult::SAT:
+  case camada::CheckResult::SAT:
     return P_SATISFIABLE;
-  case camada::checkResult::UNSAT:
+  case camada::CheckResult::UNSAT:
     return P_UNSATISFIABLE;
-  case camada::checkResult::UNKNOWN:
+  case camada::CheckResult::UNKNOWN:
     return P_ERROR;
   }
   std::unreachable();
@@ -569,11 +569,11 @@ smt_resultt smt_solver_baset::oneshot_dec_solve()
   pre_solve();
 
   auto *smtlib = static_cast<camada::SMTLIBSolver *>(solver.get());
-  const camada::checkResult res = smtlib->check();
+  const camada::CheckResult res = smtlib->check();
 
-  if (res != camada::checkResult::SAT)
+  if (res != camada::CheckResult::SAT)
   {
-    if (res != camada::checkResult::UNKNOWN)
+    if (res != camada::CheckResult::UNKNOWN)
       return P_UNSATISFIABLE;
 
     /* Camada answers UNKNOWN for three distinct outcomes; they are worth
@@ -591,7 +591,7 @@ smt_resultt smt_solver_baset::oneshot_dec_solve()
         "smtlib",
         d.Command,
         d.ExitStatus);
-    else if (tail_verdict(d.OutputTail) == camada::checkResult::UNKNOWN)
+    else if (tail_verdict(d.OutputTail) == camada::CheckResult::UNKNOWN)
       /* The solver decided nothing and said so. */
       log_error("{}: solver returned unknown", "smtlib");
     else
@@ -610,9 +610,9 @@ smt_resultt smt_solver_baset::oneshot_dec_solve()
    * (it has no model to serve), so this must be distinguished from one that
    * never started or died -- otherwise a wrong-answer bug in the one-shot
    * solver is reported as a missing model. */
-  const std::optional<camada::checkResult> model =
+  const std::optional<camada::CheckResult> model =
     smtlib->oneShotModelVerdict();
-  if (model && *model != camada::checkResult::SAT)
+  if (model && *model != camada::CheckResult::SAT)
   {
     log_error(
       "{}: {} reported sat but the local model solver did not; refusing to "
@@ -627,7 +627,7 @@ smt_resultt smt_solver_baset::oneshot_dec_solve()
    * external_process_died when the counterexample is built. */
   if (
     !smtlib->oneShotModelSolverLive() &&
-    smtlib->oneShotModelVerdict() != camada::checkResult::SAT)
+    smtlib->oneShotModelVerdict() != camada::CheckResult::SAT)
   {
     if (options.get_bool_option("result-only"))
       return P_SATISFIABLE;
@@ -774,8 +774,11 @@ expr2tc smt_solver_baset::get_array_elem(
   const type2tc &subtype)
 {
   auto idx = make_index_expr(array->Sort->getIndexSort(), index);
-  auto elem = solver->getArrayElement(array, idx);
-  return get_by_ast(subtype, elem);
+  auto elem = unwrap_model_result(
+    solver->getArrayElement(array, idx), "array element", oneshot_label());
+  if (!elem)
+    return expr2tc();
+  return get_by_ast(subtype, *elem);
 }
 
 smt_astt smt_solver_baset::mk_add(smt_astt a, smt_astt b)
@@ -825,7 +828,7 @@ smt_astt smt_solver_baset::mk_bvnot(smt_astt a)
   if (int_encoding)
   {
     const unsigned width = signed_size_type2()->get_width();
-    return solver->mkBV2Int(solver->mkBVNot(solver->mkInt2BV(width, a)), true);
+    return solver->mkBV2Int(solver->mkBVNot(solver->mkInt2BV(a, width)), true);
   }
   return solver->mkBVNot(a);
 }
@@ -1056,12 +1059,12 @@ smt_solver_baset::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 
 smt_astt smt_solver_baset::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
-  return solver->mkBVSignExt(topwidth, a);
+  return solver->mkBVSignExt(a, topwidth);
 }
 
 smt_astt smt_solver_baset::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
-  return solver->mkBVZeroExt(topwidth, a);
+  return solver->mkBVZeroExt(a, topwidth);
 }
 
 smt_astt smt_solver_baset::tuple_create(const expr2tc &structdef)

@@ -1161,7 +1161,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else
     {
-      a = solver->mkFPtoIntegral(
+      a = solver->mkFPToIntegral(
         convert_ast(to_nearbyint2t(expr).from),
         convert_rounding_mode(to_nearbyint2t(expr).rounding_mode));
     }

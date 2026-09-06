@@ -1294,8 +1294,8 @@ private:
   smt_astt int_bitwise_binary(smt_astt a, smt_astt b, Fn &&op)
   {
     const unsigned width = signed_size_type2()->get_width();
-    auto a_bv = solver->mkInt2BV(width, a);
-    auto b_bv = solver->mkInt2BV(width, b);
+    auto a_bv = solver->mkInt2BV(a, width);
+    auto b_bv = solver->mkInt2BV(b, width);
     return solver->mkBV2Int(op(a_bv, b_bv), true);
   }
 };

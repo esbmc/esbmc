@@ -94,19 +94,19 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
   }
 
   if (is_unsignedbv_type(cast.from))
-    return solver->mkUBVtoFP(
+    return solver->mkUBVToFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
   if (is_signedbv_type(cast.from))
-    return solver->mkSBVtoFP(
+    return solver->mkSBVToFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
 
   if (is_floatbv_type(cast.from))
-    return solver->mkFPtoFP(
+    return solver->mkFPToFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
@@ -126,13 +126,13 @@ smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
 smt_astt smt_solver_baset::convert_typecast_from_fpbv(const typecast2t &cast)
 {
   if (is_unsignedbv_type(cast.type))
-    return solver->mkFPtoUBV(convert_ast(cast.from), cast.type->get_width());
+    return solver->mkFPToUBV(convert_ast(cast.from), cast.type->get_width());
 
   if (is_signedbv_type(cast.type))
-    return solver->mkFPtoSBV(convert_ast(cast.from), cast.type->get_width());
+    return solver->mkFPToSBV(convert_ast(cast.from), cast.type->get_width());
 
   if (is_floatbv_type(cast.type))
-    return solver->mkFPtoFP(
+    return solver->mkFPToFP(
       convert_ast(cast.from),
       convert_sort(cast.type),
       convert_rounding_mode(cast.rounding_mode));
