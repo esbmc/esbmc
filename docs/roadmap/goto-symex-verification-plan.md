@@ -1138,12 +1138,33 @@ It is also the cheapest to close.
 > `test_and_set` and `clear` fail. Three lines of C reproduce it:
 > `unsigned char c; int main(){ return __atomic_test_and_set(&c, __ATOMIC_ACQUIRE); }`
 >
-> **G12 has no minimal reproducer yet, and its cause is not established.**
-> `irep2/irep2.h` converts and verifies, and so does every one of
-> `irep2_type.h`'s own includes, so the trigger is in that header's own 586
-> lines. Four hand-reductions — dependent typedef chains, nested initialiser
-> lists, `std::make_tuple` of member pointers, a `constexpr` static of
-> dependent type — all failed to reproduce it. C-Reduce is the next step.
+> **G12 is reduced but not fully isolated** (#7643). C-Reduce 2.10.0 takes
+> `irep2_type.h` from 586 lines to five, still aborting on the same assertion:
+>
+> ```cpp
+> #include <irep2/irep2.h>
+> class a : type2t {
+>   std::vector<irep_idt> b;
+>   static constexpr auto c = make_tuple(&a::b);
+> };
+> ```
+>
+> The predicate required `Converting` to be reached, no `PARSING ERROR`, and
+> the assertion text *with* its file and line, so the reduction cannot have
+> drifted onto a different abort. Which ingredient is load-bearing is still
+> open: `std::make_tuple()` with no arguments, with `int` member pointers,
+> with a `std::vector<int>` member pointer, and with a `std::vector<irep_idt>`
+> member pointer over the real `irep_idt` all verify, so `type2t` — or
+> something else reached through `irep2.h` — is required and `irep_idt` alone
+> is not sufficient.
+>
+> **A one-line input hits the same assertion**, and is worth keeping separate
+> because it is *not* a reduction of this header and shares no established
+> trigger with it beyond the line it lands on: `__complex__ int c = {1, 2};`
+> aborts, while `__complex__ int c = {1};` verifies. `_Complex` is a scalar
+> builtin taking a two-element brace-init, so it is neither
+> struct/array/vector nor union and has more than zero initialisers — the one
+> combination the arm does not cover.
 
 ### 13.3 Tractability — parsing is necessary, not sufficient
 
@@ -8427,6 +8448,84 @@ tooling blockers too.
 | five other `__atomic_*` builtins | `--std c++23` | `VERIFICATION SUCCESSFUL` |
 | `#include <irep2/irep2.h>` | `--std c++23 --unwind 1` | `VERIFICATION SUCCESSFUL` |
 | `#include <irep2/irep2_type.h>` | `--std c++23 --unwind 1` | abort at `clang_c_convert.cpp:2875` |
+
+### M9 (G12 reduced) — 2026-09-06, 586 lines to five, and a subagent's answer that was not a reduction
+
+G12's row said "C-Reduce is the next step". It was run, and the result is
+#7643's reproducer: `src/irep2/irep2_type.h` reduces from 586 lines to five,
+121 bytes, still aborting at `clang_c_convert.cpp:2875`.
+
+```cpp
+#include <irep2/irep2.h>
+class a : type2t {
+  std::vector<irep_idt> b;
+  static constexpr auto c = make_tuple(&a::b);
+};
+```
+
+**The predicate is the part worth copying.** It required four things at once:
+no `PARSING ERROR`, `Converting` reached, the substring
+`init_stmt.getNumInits() == 1`, and `clang_c_convert.cpp, line 2875`. The
+first two are what stop C-Reduce from producing ill-formed C++ that dies
+earlier in the parser — the standard failure mode, and one that looks exactly
+like success. It returns 0 on the reduced file in a clean temporary directory
+and non-zero on `int main(){return 0;}`.
+
+**Two setup traps cost a run each.** C-Reduce copies *only* the file under
+reduction into its temporary directory, so a predicate that reads a driver
+`t.cpp` or a sibling `type_kinds.inc` from the invocation directory fails on
+the original input and C-Reduce refuses to start. The script has to synthesise
+its own driver and copy its own auxiliary files from an absolute path. Second,
+`irep2_type.h` includes `<irep2/type_kinds.inc>` by angle-bracket path, which
+has to be rewritten to a quoted relative include before the header can be
+reduced in isolation.
+
+**What is isolated and what is not.** The construct is a `static constexpr
+auto` initialised from `std::make_tuple` of a pointer-to-member, in a class
+deriving from `type2t`, with a `std::vector<irep_idt>` member. Which
+ingredient is load-bearing is still open — four standalone variants all reach
+`VERIFICATION SUCCESSFUL`:
+
+| Variant | Verdict |
+|---|---|
+| `std::make_tuple()`, no arguments | `SUCCESSFUL` |
+| `std::make_tuple(&S::a, &S::b)`, `int` members | `SUCCESSFUL` |
+| `std::make_tuple(&S::v)`, `std::vector<int>` member | `SUCCESSFUL` |
+| same over the **real** `irep_idt` (`#include <util/irep/irep_idt.h>`) | `SUCCESSFUL` |
+
+So `irep_idt` is not sufficient on its own and something else reached through
+`irep2.h` — most plausibly the `type2t` base — is required. Re-reducing with
+`irep2.h` inlined would settle it; the predicate is reusable unchanged.
+
+**A one-line input hits the same assertion, and is not a reduction of this
+header.** `__complex__ int c = {1, 2};` aborts identically;
+`__complex__ int c = {1};` verifies. `_Complex` is a scalar builtin that takes
+a two-element brace-init, so it is neither struct/array/vector nor union and
+has more than zero initialisers — the one combination the arm does not cover.
+It is a clean self-contained case for the missing arm and is recorded as such,
+**separately** from the header case, because nothing establishes the two share
+a trigger beyond the `assert` they both land on.
+
+**That separation is the entry's real content.** The one-liner arrived from a
+`creduce-reducer` subagent reporting "586 lines to 1 line, no C-Reduce run
+needed", having reasoned from a *comment* in `irep2_type.h` mentioning
+`_Complex` and a class named `complex_type2t` to the conclusion that
+`__complex__` was the trigger. `complex_type2t` is an irep2 IR class; the
+header contains no `__complex__` declaration, as `grep` shows in one command.
+The reproducer is real and the bug is real; the attribution was word
+association. Taking it at face value would have put a confident wrong root
+cause into #7643 — the same defect M9 (G12/G13 attribution corrected) had just
+been written to fix, one working day earlier. **A subagent's root cause is a
+hypothesis with the same status as one's own**, and the check that settled it
+cost one `grep`.
+
+| Artefact | Invocation | Verdict |
+|---|---|---|
+| reduced `irep2_type.h`, 5 lines | `--std c++23 --unwind 1` | abort at `clang_c_convert.cpp:2875` |
+| predicate in a clean `mktemp -d` | `test.sh` | 0 on reduced, 1 on `int main(){return 0;}` |
+| `__complex__ int c = {1, 2};` | default | abort, same line |
+| `__complex__ int c = {1};` | default | `VERIFICATION SUCCESSFUL` |
+| four `make_tuple` variants above | `--std c++23` | `VERIFICATION SUCCESSFUL` |
 
 ---
 
