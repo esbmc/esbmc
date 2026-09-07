@@ -31,7 +31,8 @@ TEST_CASE("split_bound reads the counter and bound", "[invariant-synthesis]")
 
   SECTION("i < n is exclusive")
   {
-    REQUIRE(split_bound(lessthan2tc(var("i"), var("n")), counter, bound, inclusive));
+    REQUIRE(
+      split_bound(lessthan2tc(var("i"), var("n")), counter, bound, inclusive));
     REQUIRE(counter == var("i"));
     REQUIRE(bound == var("n"));
     REQUIRE_FALSE(inclusive);
@@ -39,8 +40,8 @@ TEST_CASE("split_bound reads the counter and bound", "[invariant-synthesis]")
 
   SECTION("i <= n is inclusive")
   {
-    REQUIRE(
-      split_bound(lessthanequal2tc(var("i"), var("n")), counter, bound, inclusive));
+    REQUIRE(split_bound(
+      lessthanequal2tc(var("i"), var("n")), counter, bound, inclusive));
     REQUIRE(counter == var("i"));
     REQUIRE(bound == var("n"));
     REQUIRE(inclusive);
@@ -48,15 +49,16 @@ TEST_CASE("split_bound reads the counter and bound", "[invariant-synthesis]")
 
   SECTION("the sides are not commuted")
   {
-    REQUIRE(split_bound(lessthan2tc(lit(3), var("i")), counter, bound, inclusive));
+    REQUIRE(
+      split_bound(lessthan2tc(lit(3), var("i")), counter, bound, inclusive));
     REQUIRE(counter == lit(3));
     REQUIRE(bound == var("i"));
   }
 
   SECTION("comparisons the pass does not handle are declined")
   {
-    REQUIRE_FALSE(
-      split_bound(greaterthan2tc(var("i"), var("n")), counter, bound, inclusive));
+    REQUIRE_FALSE(split_bound(
+      greaterthan2tc(var("i"), var("n")), counter, bound, inclusive));
     REQUIRE_FALSE(split_bound(
       greaterthanequal2tc(var("i"), var("n")), counter, bound, inclusive));
     REQUIRE_FALSE(
@@ -73,12 +75,12 @@ TEST_CASE("is_self_increment matches lhs = lhs + e", "[invariant-synthesis]")
 
   SECTION("both operand orders are accepted")
   {
-    REQUIRE(is_self_increment(
-      var("s"), add2tc(u32(), var("s"), var("e")), addend));
+    REQUIRE(
+      is_self_increment(var("s"), add2tc(u32(), var("s"), var("e")), addend));
     REQUIRE(addend == var("e"));
 
-    REQUIRE(is_self_increment(
-      var("s"), add2tc(u32(), var("e"), var("s")), addend));
+    REQUIRE(
+      is_self_increment(var("s"), add2tc(u32(), var("e"), var("s")), addend));
     REQUIRE(addend == var("e"));
   }
 
@@ -135,7 +137,7 @@ TEST_CASE(
   {
     REQUIRE_FALSE(entry_admits_two_disjunct_bound(var("i0"), true));
     REQUIRE_FALSE(entry_admits_two_disjunct_bound(var("i0"), false));
-    REQUIRE_FALSE(entry_admits_two_disjunct_bound(
-      add2tc(u32(), var("i0"), lit(1)), true));
+    REQUIRE_FALSE(
+      entry_admits_two_disjunct_bound(add2tc(u32(), var("i0"), lit(1)), true));
   }
 }
