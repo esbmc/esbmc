@@ -2,3 +2,4 @@ CORE
 main.c
 --synthesise-loop-invariants --termination
 ^ERROR: --synthesise-loop-invariants cannot be combined with --termination$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

@@ -108,7 +108,11 @@ bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive);
 /// loop is declined (has_user_invariant), and so is synthesis inside any
 /// function a user invariant's expression calls, transitively -- otherwise the
 /// user's own marker reads a havoc-abstracted return value. See
-/// collect_invariant_dependencies.
+/// collect_invariant_dependencies. It is a call-graph rule and nothing wider:
+/// the same value reaching a marker through a local this pass has cut is not
+/// declined, and does not need to be -- the closed form describes that local
+/// exactly, where a cut callee's return value is only havoc plus whatever the
+/// invariant on its own loop happens to say.
 ///
 /// `i >= i0` prunes havoced states below the entry value, where `i - i0` wraps.
 /// It is emitted for unsigned counters only: a signed `i == n == INT_MAX` still

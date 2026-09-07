@@ -196,62 +196,74 @@ bool has_user_invariant(
   return false;
 }
 
-/// Functions a user-written invariant's *expression* depends on.
+/// Functions a user-written invariant's expression can depend on.
 ///
 /// The frontend lowers `__ESBMC_loop_invariant(f(x) == 1)` to a FUNCTION_CALL
-/// into a temporary immediately ahead of the LOOP_INVARIANT marker, so the call
-/// is an instruction in the marker block rather than a subexpression of it.
-/// has_user_invariant therefore does not see it: it protects the annotated loop
-/// but not `f`. Synthesising inside `f` cuts its loop, and the user's marker
-/// then reads a havoc-abstracted return value -- including in the base case,
-/// the one obligation evaluated at the concrete pre-loop state, which no havoc
-/// should reach. A user invariant is authoritative, so leave every function it
-/// calls, and everything those call in turn, alone.
+/// into a temporary ahead of the LOOP_INVARIANT marker, so the call is an
+/// instruction the marker consumes rather than a subexpression of it, and
+/// has_user_invariant does not see it. Synthesising inside `f` cuts its loop,
+/// and the user's marker then reads a havoc-abstracted return value --
+/// including in the base case, the one obligation evaluated at the concrete
+/// pre-loop state, which no havoc should reach.
 ///
-/// `protect_all` is set when a call in a marker block names something other
-/// than a symbol (a call through a pointer): the callee cannot be named, so the
-/// only conservative answer is to synthesise nothing.
+/// Exactly which calls a marker consumes is the extractor's rule
+/// (extract_and_remove_side_effects_impl in goto_loop_invariant.cpp), and that
+/// rule walks back across branches: an invariant spelling its operand behind a
+/// `?:` puts a join label between the call and the marker. Re-deriving the rule
+/// here is how the two drift apart, so take every call ahead of a marker in the
+/// same function instead. Over-protecting costs a missed invariant;
+/// under-protecting costs the user theirs.
+///
+/// `protect_all` is set when such a call names something other than a symbol (a
+/// call through a pointer): the callee cannot be named, so the only
+/// conservative answer is to synthesise nothing at all.
 struct invariant_dependenciest
 {
   std::set<irep_idt> functions;
   bool protect_all = false;
 };
 
-/// Instructions that can sit between a call evaluating an invariant operand and
-/// the LOOP_INVARIANT marker consuming it. Anything else ends the marker block,
-/// so a call before it belongs to the user's ordinary code rather than to the
-/// annotation.
-bool is_marker_block_instruction(const goto_programt::instructiont &i)
+/// The callee of a FUNCTION_CALL, or nil when it is not named by a symbol.
+expr2tc call_target(const goto_programt::instructiont &i)
 {
-  return i.is_loop_invariant() || i.is_function_call() || i.is_assign() ||
-         i.is_decl() || i.is_skip() || i.is_location() || i.is_other();
+  if (is_nil_expr(i.code) || !is_code_function_call2t(i.code))
+    return expr2tc();
+  return to_code_function_call2t(i.code).function;
 }
 
-void collect_marker_block_callees(
+/// One forward pass: hold each call until a marker is reached, then record the
+/// held calls as that marker's dependencies. A call after the last marker in
+/// the function cannot feed one, so it is dropped.
+void collect_marker_dependencies(
   const goto_programt &body,
-  goto_programt::const_targett marker,
   invariant_dependenciest &deps)
 {
-  goto_programt::const_targett it = marker;
-  while (it != body.instructions.begin())
+  std::vector<irep_idt> pending;
+  bool pending_unnameable = false;
+
+  forall_goto_program_instructions (it, body)
   {
-    --it;
-    if (!is_marker_block_instruction(*it) || it->is_target())
-      return;
-    if (!it->is_function_call())
+    if (it->is_function_call())
+    {
+      const expr2tc callee = call_target(*it);
+      if (is_nil_expr(callee) || !is_symbol2t(callee))
+        pending_unnameable = true;
+      else
+        pending.push_back(to_symbol2t(callee).thename);
+      continue;
+    }
+
+    if (!it->is_loop_invariant())
       continue;
 
-    const expr2tc &callee = to_code_function_call2t(it->code).function;
-    if (!is_symbol2t(callee))
-    {
-      deps.protect_all = true;
-      return;
-    }
-    deps.functions.insert(to_symbol2t(callee).thename);
+    deps.functions.insert(pending.begin(), pending.end());
+    pending.clear();
+    deps.protect_all |= pending_unnameable;
+    pending_unnameable = false;
   }
 }
 
-/// Close the marker-block callees over the call graph: abstracting a loop
+/// Close the marker dependencies over the call graph: abstracting a loop
 /// anywhere below the call changes the value the user's marker reads.
 invariant_dependenciest
 collect_invariant_dependencies(const goto_functionst &goto_functions)
@@ -260,9 +272,7 @@ collect_invariant_dependencies(const goto_functionst &goto_functions)
 
   forall_goto_functions (f, goto_functions)
     if (f->second.body_available)
-      forall_goto_program_instructions (it, f->second.body)
-        if (it->is_loop_invariant())
-          collect_marker_block_callees(f->second.body, it, deps);
+      collect_marker_dependencies(f->second.body, deps);
 
   std::vector<irep_idt> worklist(deps.functions.begin(), deps.functions.end());
   while (!worklist.empty() && !deps.protect_all)
@@ -278,8 +288,8 @@ collect_invariant_dependencies(const goto_functionst &goto_functions)
     {
       if (!it->is_function_call())
         continue;
-      const expr2tc &callee = to_code_function_call2t(it->code).function;
-      if (!is_symbol2t(callee))
+      const expr2tc callee = call_target(*it);
+      if (is_nil_expr(callee) || !is_symbol2t(callee))
       {
         deps.protect_all = true;
         return deps;
@@ -764,9 +774,9 @@ void goto_synthesise_loop_invariants(
   if (deps.protect_all)
   {
     log_warning(
-      "--synthesise-loop-invariants: a user-written loop invariant calls "
-      "through a function pointer, whose callee cannot be named. Synthesising "
-      "nothing rather than risk weakening that invariant");
+      "--synthesise-loop-invariants: a user-written loop invariant reaches a "
+      "call through a function pointer, whose callee cannot be named. "
+      "Synthesising nothing rather than risk weakening that invariant");
     return;
   }
 
@@ -813,13 +823,14 @@ void goto_synthesise_loop_invariants(
       synthesised == 1 ? "" : "s");
   else if (k_induction_ran)
     log_warning(
-      "--synthesise-loop-invariants recognised no loop: the k-induction "
-      "transform has already rewritten the loop heads it matches on. Drop "
-      "--k-induction to use it");
+      "--synthesise-loop-invariants added no invariant: the k-induction "
+      "transform has already rewritten the loop heads it matches on. Drop the "
+      "k-induction phase to use it");
   else
     log_warning(
-      "--synthesise-loop-invariants recognised no loop matching the affine "
-      "counter/accumulator shape; the run proceeds unchanged");
+      "--synthesise-loop-invariants added no invariant: no loop matched the "
+      "affine counter/accumulator shape, or every match was declined; the run "
+      "proceeds unchanged");
 
   goto_functions.update();
 }
