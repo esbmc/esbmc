@@ -7027,3 +7027,501 @@ stop decaying rather than to port an arm.
 
 Four tags have now dissolved on inspection in this scope, and every one of them
 was read from a census table rather than from a reduction. Reduce first.
+
+## 133. The incomplete tag is an array only after migration (2026-09-05)
+
+§132.4 left `github_1210-1-struct` with a suspect and an open question: legacy
+tests `is_array_like` on the *unfollowed* operand type, the hop-off on
+`ns.follow`'s resolution of it, and which of the two is right was undecided
+because the hop-off is the side doing more work.
+
+The reduction settles it:
+
+```c
+struct incomplete;
+extern struct incomplete JJ;
+void take(void *p);
+int main(void) { take(&JJ); }
+```
+
+```
+legacy:  FUNCTION_CALL:  take((void *)(&JJ))
+hop-off: FUNCTION_CALL:  take((void *)(&JJ[0]))
+```
+
+### 133.1 The array is manufactured by migrate_type, not present in the source
+
+`JJ`'s type is a `symbol_type2t` naming `tag-struct incomplete`, whose symbol
+carries an `incomplete_struct` legacy type. `migrate_type`'s
+`incomplete_struct` / `incomplete_union` arm (`src/util/irep/migrate.cpp`)
+lowers that to `array_type2tc(uint8, nil, /*infinite=*/true)` — "the most
+permissive approach to something that shouldn't happen", by its own comment.
+So `ns.follow` on the IREP2 side *always* reports an incomplete tag as an
+array, and `adjust_address_of` decayed every address of one.
+
+Legacy, testing the operand's own type, never reaches the array arm for a tag
+symbol, so the two paths cannot agree while the follow is there — and parity
+with legacy is the bar. The independent reason to prefer legacy's side is that
+there is no element to index: C11 6.5.3.2p3 gives `&JJ` the type "pointer to
+`struct incomplete`", and the array it would be indexing was invented by
+`migrate_type` two stages later. That clause does not by itself license the
+`&Q[0]` decay ESBMC keeps for real arrays either — read straight it says index
+nothing, since `&Q` is `int (*)[3]` — so it is corroboration here, not the
+ground.
+
+The fix is one predicate: test `a.ptr_obj->type`, not `ns.follow(...)` of it.
+The set this changes is exactly the set where a symbol type resolves to an
+array, and `clang::Type::Record` is the only `get_type` arm that builds a
+`symbol_typet` (`clang_c_convert.cpp`; the `Enum` arm builds the underlying
+integer type instead) — so the incomplete tag is the whole of it. `int Q[3]`
+is unaffected: a genuine array symbol carries `array_type2t` directly, and
+`extern int a[]` migrates through the `incomplete_array` arm to the same, both
+still decaying.
+
+The completeness argument is a case analysis, not a sample. Legacy's
+`is_array_like` (`src/util/irep/type.cpp`) admits exactly three ids; their
+images under `migrate_type` are:
+
+| legacy typet | `is_array_like` | migrates to | `is_array_type` | agree |
+|---|---|---|---|---|
+| `array` | yes | `array_type2t` | yes | yes |
+| `incomplete_array` | yes | `array_type2t(…, infinite)` | yes | yes |
+| `vector` | yes | `vector_type2t` | **no** | **no** |
+
+So the decays this predicate can miss relative to legacy are exactly the
+vectors, and it missed them before the patch too — `ns.follow` returns a
+non-symbol type unchanged, so `is_array_type(ns.follow(v))` was already false.
+That row is §133.3's third residue.
+
+### 133.2 Result
+
+`regression/esbmc/irep2_only_addrof_incomplete_tag` covers the struct and the
+union — both diverged, since `migrate_type` shares the arm — and fails on a
+control binary built from this tree, where the goto text reads `&JJ[0]` and
+`&UU[0]`.
+
+The divergence closes outright, on the reductions and on the corpus tests that
+carry the cause. Diff lines, legacy against the hop-off, on a control binary
+built from this tree and on the patched one:
+
+| input | instrument | control | patched |
+|---|---|---:|---:|
+| the four-line reduction above | symbol table | 3 | **0** |
+| the same plus a second `memcpy` | symbol table | 6 | **0** |
+| `github_1210-1-struct` | goto program | 4 | **0** |
+| `github_1210-1-union` | goto program | 4 | **0** |
+
+The two corpus tests flip SAME at the goto level — the program that reaches
+symex. Their *symbol tables* still differ, by 8 lines each and on two causes
+that are not this one (§133.3). Worth stating plainly: §100.1 makes the symbol
+table the instrument for adjuster questions, §116.3 scores its census on the
+goto program, and on this patch the two disagree about whether
+`github_1210-1-struct` is finished. Name the instrument with the number.
+
+The 94 descriptors pinning `--clang-c-irep2-adjust`* all pass, the new one
+included. Note that `ctest` will not see the new test until CMake is
+re-configured: a stale build directory runs 91 `irep2_only_*` tests and reports
+them green while omitting it.
+
+The default path cannot move: `clang_c_adjust_irep2` is constructed at one
+site, under those two flags (`clang_c_language.cpp`). Measured anyway — over a
+stride-16 list of `regression/esbmc` (131 descriptors), the symbol table each
+descriptor's own flags produce is byte-identical between the two binaries,
+131/131.
+
+The same 131 run as an A/B against the hop-off — 5 pin the flag themselves and
+are excluded, leaving 126 scored — moves no test in either direction on the
+symbol table: 41 SAME / 85 DIFF on both binaries. The sample carries no
+incomplete tag, so it measures only that nothing regressed; the movement is the
+four rows above. §134 tags that 85 and gives the goto-level figure, which an
+earlier draft of this section quoted from a harness that was silently
+discarding the hop-off flag (§134.1).
+
+### 133.3 Next
+
+`github_1210-1-struct`'s goto program is done; its *symbol table* still carries
+two causes, both invisible to a goto-level A/B — check the instrument before
+concluding either way.
+
+The first is the `const` qualifier on an argument cast, and it is **not** an
+adjuster arm. It reduces to five lines with no `assert`, no `memcpy` and no
+incomplete tag:
+
+```c
+void snk(const void *p);
+int main(void) { int k = 0; snk(&k); return __builtin_expect(k, 0); }
+```
+
+```
+$ esbmc r.c --symbol-table-only
+legacy:  snk((const void *)(&k));
+hop-off: snk((void *)(&k));
+```
+
+Delete the `__builtin_expect` and both paths spell `(const void *)`. It is not
+the builtin either: `adjust()` writes a symbol's value back only when the walk
+changed it (`if (value != before) s->set_value(value)`), and `set_value` is a
+whole-body `migrate_expr_back`. **Any** adjustment anywhere in a function
+therefore round-trips every cast in that function, and `migrate_type_back`
+drops `const`, `volatile` and `_Atomic` because IREP2 has no representation for
+them — §130.2, and R9 in `irep2-migration.md`. The builtin is only what makes
+the body dirty; on Darwin `assert(e)` expands through `__builtin_expect`, which
+is why `github_1210-1-struct` shows it and why an earlier draft of this section
+blamed `<assert.h>`.
+
+So this residue is one instance of the recorded qualifier-carriage gap, not a
+new defect, and closing it is R9's job rather than a per-arm port. It is a
+*floor* on the symbol-table census: no amount of arm-porting reduces it, and
+porting more arms makes it worse by dirtying more bodies.
+
+It is also **not the lever**. Stripping `const ` and `volatile ` from both
+sides of the stride-16 A/B closes **0 of the 85** DIFFs — every one carries
+some other cause as well — so R9 would not move a single test in this sample.
+And it is soundness-neutral on what is measured: the `const`-write checks
+(`dereference.cpp`, `memory_ops.cpp`) read the *symbol's* type, which
+`set_value` never rewrites, so `const int C; *(int *)&C = 6;` reports
+`dereference failure: write access to const object 'C'` on both paths, with a
+dirty body and without.
+
+The second residual is the `0` / `(void)0` ternary arm §110.2 already records
+as the hop-off being the faithful one.
+
+A third cause fell out of the same predicate and is *not* fixed here, because
+it is a different one: legacy's `is_array_like` accepts `vector` alongside
+`array` and `incomplete_array`, and the IREP2 arm tests `is_array_type` only.
+
+```c
+typedef int v4si __attribute__((vector_size(16)));
+v4si V;
+void take(void *p);
+int main(void) { take(&V); }
+```
+
+```
+legacy:  take((void *)(&V[0]))
+hop-off: take((void *)(&V))
+```
+
+The control binary diverges here identically, so this predates §133 and the
+follow was never what carried it — `V`'s type is a `vector_type2t` either way.
+It is the smaller half of the same arm and wants its own test, since §90.4's
+trap is an arm no test executes.
+
+## 134. The cause census §113.4 asked for — and the harness bug it found first
+## (2026-09-05)
+
+§113.4 stopped further arm-writing until a fresh cause census: "the old one is
+stale, and §113.1 shows it was reading the wrong stage." This is that census,
+over a stride-16 list of `regression/esbmc` (131 descriptors, 5 of which pin
+the hop-off themselves and are excluded, leaving 126 scored), legacy against
+`--clang-c-irep2-adjust-only` on one binary.
+
+### 134.1 `irep2_goto_dump` accepted a fourth argument and dropped it
+
+The first run reported **126 SAME / 0 DIFF** at the goto level. That number was
+manufactured. `irep2_symtab_dump` takes an optional `$4` extra flag;
+`irep2_goto_dump`, its sibling three lines above in the same file, did not —
+and bash discards a surplus positional silently. Every "hop-off" run in that
+sweep was therefore the *default* path, compared with itself.
+
+A sweep that compares a thing with itself does not fail, it passes: the failure
+mode is a clean, plausible, completely converged result. Nothing in the output
+distinguished it from real convergence, and the number was written into §133.2
+before a single-test spot check contradicted it —
+`regression/esbmc/atexit-1` diverges at the goto level under its own flags, but
+the helper scored it SAME.
+
+`irep2_goto_dump` now takes the same `$4`, with the argv guard its sibling
+already had. The check that catches this class: run the A/B on one test where
+the divergence is known by hand, and confirm the harness reports DIFF, before
+trusting the sweep's totals.
+
+### 134.2 The goto program is at 124 / 126, and both residuals are recorded
+
+Re-run with the fixed helper:
+
+| instrument | SAME | DIFF |
+|---|---:|---:|
+| goto program | **124** | 2 |
+| symbol table | 41 | 85 |
+
+Both goto residuals are the same cause, and it is §113.3's:
+
+```
+legacy:  FUNCTION_CALL:  atexit((void (*)())(&free_g2))
+hop-off: FUNCTION_CALL:  atexit(&free_g2)
+```
+
+`arg->type == params[i]` holds in IREP2 — `migrate_type` maps `void (*)(void)`
+and `void (*)()` to the same `code_type2t` — so the legacy cast is the identity
+and no pass reading IREP2 can know it is owed. §113.3 argued that emitting it
+to match the legacy printer is §110.2's mistake with a different node, and
+closing it for real needs `code_type2t` to carry the prototyped/unprototyped
+distinction. That argument stands; what is new is that this is now the *only*
+goto-level cause left on the sample.
+
+### 134.3 The symbol-table residue is 85, and 73 of it is already argued
+
+Tagging each of the 85, with leading/trailing whitespace and empty lines
+normalised away first:
+
+| class | tests | status |
+|---|---:|---|
+| whitespace / blank-line only | 24 | printer artefact; `symtab_sweep.sh` already diffs with `-B` |
+| `(void)0` vs `0` | 40 | §110.2 — the hop-off is the faithful side |
+| qualifier only (`const`/`volatile`) | 9 | §133.3 / R9 — no representation to carry it |
+| everything else | **12** | below |
+
+Those 24 split 16 blank-line-only and 8 indentation-only, and they are the
+reason a census must state its normalisation. One run, three defensible
+numbers: **85** by string equality, **69** under `diff -B` (what
+`symtab_sweep.sh` actually does — it ignores blank lines, not indentation), and
+**61** ignoring leading whitespace as well. None is wrong; quoting one without
+the rule is.
+
+Of the 12, four are the printer set §113.4 already named — the float literal
+suffix (`1.175494e-38` vs `1.175494e-38f`, `3.000000` vs `3.000000l`) and the
+`#cformat` / `#cpp_type` attributes the round-trip drops — and two are §134.2's
+`atexit`. That leaves **six** unclassified out of 126, and they are six
+distinct causes, not one:
+
+| test | divergence |
+|---|---|
+| `memset-const` | an array in a ternary arm is left undecayed (§134.4) |
+| `github_1590` | the same, in a binary `-` |
+| `builtin_memcpy` | a `char` array literal prints as integers, not characters |
+| `github_6966` | a symbol's `Location` is empty where legacy has one |
+| `cwe_excessive_alloc_vla_pass` | a VLA size prints as the full symbol id, not the base name |
+| `union-ptr-arith-bug` | an anonymous padding member appears in a union initialiser |
+
+### 134.4 The ternary decay, reduced — and why it does not reach symex
+
+```c
+#include <string.h>
+const char b[] = "abc";
+int main(int argc, char **argv)
+{
+  char a[2];
+  char *c = argc == 1 ? a : b;
+  memset(c, 0, 1);
+}
+```
+
+```
+legacy:  signed char * c=argc == 1 ? &a[0] : &b[0];
+hop-off: signed char * c=argc == 1 ? &a[0] : b;
+```
+
+The hop-off leaves an `array` -typed arm inside a pointer-typed `if2t`. Drop
+the `memset` and both paths print `&b[0]`: the value is written back only when
+the walk changed something (§133.3), so a clean body keeps the converter's own
+decayed form and the gap is invisible. That is the general shape of this
+residue — an unported conversion shows up only in functions that are dirty for
+some other reason.
+
+It does not reach symex today. `migrate_expr`'s `if` arm gives an array branch
+of a pointer-typed conditional its C conversion (§116.2), so the round-trip
+re-decays it and the goto programs are byte-identical. The obligation is real
+all the same: the ill-typed node is what a native `goto_convert` would receive
+once the round-trip is deleted, which is B-3. It is the next arm.
+
+## 135. The symbol-table A/B shows the converter's tree, not the pass's
+## (2026-09-05)
+
+§134.3 left six unclassified causes and named the ternary array decay as the
+next arm. Two of the six are not arms, and the reason generalises to the
+instrument itself.
+
+### 135.1 The reduction, and what instrumenting it said
+
+```c
+char b[4]; char *d;
+void snk(void *);
+int main(int argc, char **argv) { char *c; c = argc==1 ? b : d; snk(c); }
+```
+
+```
+legacy:   c = argc == 1 ? &b[0] : d;
+hop-off:  c = argc == 1 ? b : d;
+```
+
+Read off the dump, that is a missing array-to-pointer decay in a conditional
+arm. It is not. Instrumented, `adjust_if_expr` receives the `if2t` with **all
+three types already `pointer`** — `migrate_expr`'s `coerce_ternary_branch`
+(§116.2) decayed the branch on the way in — and the pass has nothing to do.
+
+Replace `snk(c);` with `return c[0];` and the same program prints `&b[0]` under
+the hop-off. The instrumented difference between the two is one line:
+
+| last statement | `value != before` | printed |
+|---|---|---|
+| `return c[0];` | true | `&b[0]` |
+| `snk(c);` | **false** | `b` |
+
+`adjust()` refreshes a symbol's legacy value only when the walk changed
+something (§133.3's other half). When it changed nothing, `symbolt` keeps the
+**converter's** tree — and the converter does not decay an array in a ternary
+arm; `clang_c_adjust::adjust_if` does. So the dump is showing legacy's input
+where the hop-off's output was wanted. `memset-const`'s `main` reports
+`changed=false`, which is the whole of that test's remaining divergence.
+
+### 135.2 The instrument shows two different things
+
+This is worth stating plainly because §100.1 makes the symbol table *the*
+instrument for adjuster questions, and it is:
+
+- the **pass's** output for a body the pass changed, and
+- the **converter's** output for a body it did not,
+
+with nothing in the dump to say which. The two differ wherever `migrate_expr`
+normalises — the ternary decay above, and every other coercion its arms apply.
+So a symbol-table A/B systematically reports work as unported when the only
+thing missing is a write-back nobody wanted.
+
+`--clang-c-irep2-adjust-writeback-all` defeats the gate for diagnosis. It is
+not a mode to verify in: forcing the write-back makes every body pay
+`migrate_expr_back`'s losses, and over the same stride-16 sample it takes the
+residue the wrong way, 85 DIFF to 114. Its use is per-cause, one test at a
+time — does *this* line come back when the value is refreshed?
+
+Nothing downstream is affected. `goto_convert_functions.cpp` reads a body
+through `get_value2()` (the IREP2 value, always the pass's own); the remaining
+`get_value()` uses there are `is_nil` / `is_code` / `has_operands` predicates,
+which agree either way. That is why §134.2's goto census is 124/126 while the
+symbol table reads 85 DIFF.
+
+### 135.3 The six, re-scored
+
+| test | line under `--...-writeback-all` | verdict |
+|---|---|---|
+| `memset-const` | `? &b[0] :` — matches legacy | **artefact** |
+| `github_1590` | `- &buffer[0]` — matches legacy | **artefact** |
+| `builtin_memcpy` | unchanged | real, printer |
+| `cwe_excessive_alloc_vla_pass` | unchanged | real, printer |
+| `union-ptr-arith-bug` | unchanged | real |
+| `github_6966` | unchanged | **real** |
+
+`builtin_memcpy` is a representation difference the printer exposes: legacy
+keeps `const signed char [9] src={ 't', 'e', … }`, the hop-off prints
+`signed char [9] src={ 116, 101, … }` — `migrate_expr` turns the string
+constant into a `constant_array` of integers, and the qualifier goes with
+§133.3. `cwe_excessive_alloc_vla_pass` prints a VLA's size symbol by base name
+where legacy prints its full id; the hop-off is the more readable of the two
+and neither reaches symex.
+
+### 135.4 Next
+
+`github_6966` — a symbol whose `Location` is empty under the hop-off where
+legacy has `file main.c line 13 column 14 function log_msg`. It survives
+`--clang-c-irep2-adjust-writeback-all`, so it is the pass's own output, and it
+is the only one of the six that loses information a user sees: a location is
+what a counterexample step and a witness are printed from. §110.3 and §130.3
+each closed one place a location was dropped and each recorded that the general
+fix needs `sideeffect2t` to carry a `locationt`. This is the third; take it
+next, and check first whether it is that same missing field.
+
+## 136. sideeffect2t carries a location (2026-09-05)
+
+§135.4 named `github_6966` as the one remaining cause that loses information a
+user sees. It is §110.3's and §130.3's open item, and this closes it.
+
+### 136.1 The reduction, and why the obvious patch is wrong
+
+```c
+int main(void) { int x = undeclared_fn(1); return x; }
+```
+
+```
+legacy:  Location....: file w1.c line 1 column 26 function main
+hop-off: Location....:
+```
+
+Three shapes split cleanly. A call with no visible declaration makes
+`declare_implicit_callee` create a symbol, and that symbol's location is:
+
+| statement | before |
+|---|---|
+| `undeclared_fn(1);` | correct — `adjust_expr` passes the statement's own location before the recursion |
+| `int x = undeclared_fn(1);` | **empty** |
+| `x = undeclared_fn(1);` | **empty** |
+
+The general call site passes the parameter's default `locationt()`. Passing
+`enclosing_location` there instead would give the right file and line and the
+**wrong column**: legacy reports column 26, where `undeclared_fn` starts; the
+statement starts at column 18. §110.3 already stated the rule — the statement's
+location is the call's only when the call is the whole statement — so the
+fallback is not a fix, and a fabricated column in a counterexample is worse
+than an empty one.
+
+### 136.2 The field, and why it does not disturb value identity
+
+`sideeffect2t` now carries a `locationt`, following the pattern `code_assign2t`
+and the V.4 structured-CF kinds already use: the member is **not** listed in
+`fields`, and `excluded_field_bytes` tells `fields_cover_class` to stop counting
+it as missed. So it takes no part in `cmp`/`crc`/`hash`/`tostring`, and two side
+effects differing only in position still compare equal — which the cross-run VCC
+cache and every consumer keyed on value identity depend on. The constructor
+parameter is defaulted, so no construction site changes.
+
+`declare_implicit_callee` and `declare_polymorphic_builtin` now read the node's
+own location, falling back to the statement's only for a `sideeffect2t` built
+without one. All three shapes match legacy, column included.
+
+`irep2_only_implicit_callee_location{_init,_assign}` pin the two shapes that
+were empty; both fail on a mutant that ignores the new field, while #7242's
+`irep2_only_implicit_callee_location{,_stmt}` keep passing on it — the
+pre-recursion path still covers the whole-statement case they test.
+
+### 136.3 The half that is not done here, and the number that decides it
+
+The first version of this patch also restored the location in
+`migrate_expr_back`. Measured against a master control over a stride-16 list of
+`regression/esbmc`, that moved **126 of 131** default-path goto programs:
+`goto_convert` falls back to the enclosing statement for a side effect carrying
+no location, so restoring one shifts the instruction's column corpus-wide.
+
+```
+- // file /esbmc-vfs/libc/library/io.c line 106 column 3 function fopen
++ // file /esbmc-vfs/libc/library/io.c line 106 column 13 function fopen
+```
+
+That is very likely the more faithful column — it is the call's, not the
+statement's — but it is a user-visible change to counterexamples and witnesses
+on the **default** path, so it needs its own PR and an SV-COMP run rather than
+riding along with a hop-off fix. The carriage here is forward-only. Re-measured
+with the back-arm dropped: **130 of 131 identical**, the one exception being
+`irep2_only_polymorphic_builtin_dowhile_fail`, which pins the hop-off flag in
+its own descriptor — §136.4.
+
+### 136.4 A test that pinned the fallback, not the behaviour
+
+`irep2_only_polymorphic_builtin_dowhile_fail` expected
+`line 9 ... dereference failure: NULL pointer`. Line 9 is the `do`; line 11 is
+the `atomic_load` call. Measured on three binaries:
+
+| path | property line |
+|---|---|
+| default | **11** |
+| hop-off, pre-patch | 9 |
+| hop-off, patched | **11** |
+
+So the test was pinning §130.3's enclosing-statement fallback, which the default
+path does not produce. Its expectation is updated to legacy's line, and its
+comment now says which line is whose. This is why the descriptor names the
+property line rather than only `^VERIFICATION FAILED$`: the divergence showed
+up as a red test, not as one more row in a dump nobody re-reads.
+
+### 136.5 A dead-code candidate, stated because the first answer was wrong
+
+With the field in place, the pre-recursion path in `adjust_expr` — the one that
+passes `stmt.location` for a bare `f(x);` — looks redundant: the whole hop-off
+corpus is **96/96** without it.
+
+An earlier run of this same experiment reported it as live, on one failing test.
+That run was contaminated: the test was `..._dowhile_fail`, which was failing on
+§136.4's stale expectation whatever the mutant did. Two tests had already passed
+without the branch, and it would have been easy to stop there and delete it on
+that evidence; it would have been equally easy to keep the wrong "it is live"
+conclusion. Neither is a measurement. **Removing it is not done here** — a
+branch deletion wants its own PR and a Mode C (C-Dead) proof per the
+dead-code rule, not a corpus that happens to be quiet.
