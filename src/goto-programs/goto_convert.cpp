@@ -888,25 +888,45 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   {
     // An array of class objects: get_destructor matches a class type, not an
     // array of one, so no element destructor was ever scheduled and RAII held
-    // in an array never released. Schedule one call per element.
-    // [class.dtor]/? destroys elements in reverse order of construction, which
-    // is what pushing them in index order gives once the stack unwinds LIFO.
-    const typet &decl_type = ns.follow(s->get_type());
-    code_function_callt elem_destructor;
-    BigInt count;
-    if (
-      decl_type.is_array() &&
-      get_destructor(ns, ns.follow(decl_type.subtype()), elem_destructor) &&
-      !to_integer(to_array_type(decl_type).size(), count) && count > 0)
+    // in an array never released. Schedule one call per element, recursing so
+    // a multi-dimensional array reaches its leaves. [class.dtor] destroys
+    // elements in reverse order of construction, which is what pushing them
+    // in index order gives once the stack unwinds LIFO.
+    schedule_array_element_destructors(symbol_expr, ns.follow(s->get_type()));
+  }
+}
+
+/// Push a destructor call for every element of an array of class objects,
+/// recursing through nested array types so a multi-dimensional array reaches
+/// its leaves. Does nothing for a non-array, an element type without a
+/// destructor, or an extent that is not a constant.
+void goto_convertt::schedule_array_element_destructors(
+  const exprt &base,
+  const typet &type)
+{
+  if (!type.is_array())
+    return;
+
+  const typet &elem = ns.follow(type.subtype());
+  BigInt count;
+  if (to_integer(to_array_type(type).size(), count) || count <= 0)
+    return;
+
+  code_function_callt elem_destructor;
+  const bool leaf_has_destructor = get_destructor(ns, elem, elem_destructor);
+  if (!leaf_has_destructor && !elem.is_array())
+    return;
+
+  for (BigInt i = 0; i < count; i = i + 1)
+  {
+    index_exprt element(base, from_integer(i, index_type()), type.subtype());
+    if (elem.is_array())
+      schedule_array_element_destructors(element, elem);
+    else
     {
-      for (BigInt i = 0; i < count; i = i + 1)
-      {
-        code_function_callt element = elem_destructor;
-        index_exprt elem(
-          symbol_expr, from_integer(i, index_type()), decl_type.subtype());
-        element.arguments().push_back(address_of_exprt(elem));
-        targets.destructor_stack.push_back(element);
-      }
+      code_function_callt d = elem_destructor;
+      d.arguments().push_back(address_of_exprt(element));
+      targets.destructor_stack.push_back(d);
     }
   }
 }
