@@ -494,6 +494,75 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
  * arrays. */
 static constexpr unsigned pinned_array_bound = 64;
 
+/// Replace every refused element of @p elems with the read `read_of(i, type)`
+/// names for it. False when nothing was refused, so nothing changed.
+template <typename read_oft>
+static bool pin_refused_elements(
+  const goto_symex_statet &state,
+  std::vector<expr2tc> &elems,
+  read_oft read_of)
+{
+  bool pinned_any = false;
+  for (size_t i = 0; i < elems.size(); i++)
+  {
+    if (state.constant_propagation(elems[i]) || is_immutable_value(elems[i]))
+      continue;
+    pinned_any = true;
+    elems[i] = read_of(i, elems[i]->type);
+  }
+  return pinned_any;
+}
+
+/// Pin a struct literal's refused members to reads out of @p l2_lhs.
+static expr2tc pin_struct_literal(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  // Guard on l2_lhs, the expression the reads are built from, as read_of_field
+  // does: a `_Complex` literal is a constant_struct2t over a type that names no
+  // members, and guarding on one expression's type while dereferencing
+  // another's is what made a `_Complex` throw here once already.
+  if (!is_struct_type(l2_lhs))
+    return expr2tc();
+
+  std::vector<expr2tc> elems = to_constant_struct2t(rhs).datatype_members;
+
+  // A literal whose element count disagrees with the object's names no member
+  // for some element; do not index past the names to find out.
+  const std::vector<irep_idt> names = struct_union_member_names(l2_lhs->type);
+  if (names.size() != elems.size())
+    return expr2tc();
+
+  if (!pin_refused_elements(state, elems, [&](size_t i, const type2tc &type) {
+        return member2tc(type, l2_lhs, names[i]);
+      }))
+    return expr2tc();
+
+  expr2tc rebuilt = constant_struct2tc(rhs->type, elems);
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
+/// Pin an array literal's refused elements to reads out of @p l2_lhs.
+static expr2tc pin_array_literal(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  if (!is_array_type(l2_lhs))
+    return expr2tc();
+
+  std::vector<expr2tc> elems = to_constant_array2t(rhs).datatype_members;
+
+  if (!pin_refused_elements(state, elems, [&](size_t i, const type2tc &type) {
+        return index2tc(type, l2_lhs, gen_ulong(i));
+      }))
+    return expr2tc();
+
+  expr2tc rebuilt = constant_array2tc(rhs->type, elems);
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
 /// Pin the literal's elements. do_simplify folds a `with` over a propagated
 /// literal back into a literal, so a refused write reaches assignment() in this
 /// shape whenever the object still carried one -- which is exactly the case
@@ -503,40 +572,8 @@ static expr2tc pin_literal_elements(
   const expr2tc &rhs,
   const expr2tc &l2_lhs)
 {
-  // A `_Complex` literal is a constant_struct2t over a *complex* type, which
-  // names no members. Dispatch on the type the reads below are built from, the
-  // same rule read_of_field uses -- guarding on one expression's type and
-  // dereferencing another's is what made a `_Complex` throw here once already.
-  const bool is_struct = is_constant_struct2t(rhs) && is_struct_type(rhs->type);
-  if (!is_struct && !(is_constant_array2t(rhs) && is_array_type(rhs->type)))
-    return expr2tc();
-
-  std::vector<expr2tc> elems = is_struct
-                                 ? to_constant_struct2t(rhs).datatype_members
-                                 : to_constant_array2t(rhs).datatype_members;
-
-  // A literal whose element count disagrees with its type names no member for
-  // some element; do not index past the names to find out.
-  const std::vector<irep_idt> names =
-    is_struct ? struct_union_member_names(rhs->type) : std::vector<irep_idt>();
-  if (is_struct && names.size() != elems.size())
-    return expr2tc();
-
-  bool pinned_any = false;
-  for (size_t i = 0; i < elems.size(); i++)
-  {
-    if (state.constant_propagation(elems[i]) || is_immutable_value(elems[i]))
-      continue;
-    pinned_any = true;
-    elems[i] = is_struct ? member2tc(elems[i]->type, l2_lhs, names[i])
-                         : index2tc(elems[i]->type, l2_lhs, gen_ulong(i));
-  }
-  if (!pinned_any)
-    return expr2tc();
-
-  expr2tc rebuilt = is_struct ? constant_struct2tc(rhs->type, elems)
-                              : constant_array2tc(rhs->type, elems);
-  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+  return is_constant_struct2t(rhs) ? pin_struct_literal(state, rhs, l2_lhs)
+                                   : pin_array_literal(state, rhs, l2_lhs);
 }
 
 /// Pin the chain's refused updates, rebuilding from the base up.

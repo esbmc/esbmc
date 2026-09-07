@@ -482,6 +482,30 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "an element write at a symbolic index is not pinned",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc refused = add2tc(int_type2(), member_of(io, "i"), int_const(1));
+  const expr2tc arr =
+    symbol_at(int_array(2), "c:test.c@F@main@A", symbol_renaming_level::level2);
+
+  // A write at a constant index is re-offered as a read of that element, ...
+  REQUIRE_FALSE(is_nil_expr(e.state().pin_symbolic_updates(
+    with_index(arr, int_const(1), refused), arr)));
+
+  // ... but only a constant index reads back to an immutable value, so a
+  // symbolic one ends the chain and the object stays unpropagated as before.
+  // Two guards hold this and either alone suffices: read_of_field declines to
+  // offer the read, and is_immutable_value refuses it at the acceptance
+  // re-test. The case flips only with both removed.
+  REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(
+    with_index(arr, nondet_int_symbol(), refused), arr)));
+}
+
+TEST_CASE(
   "pinning declines when it would change nothing",
   "[symex][constant-propagation]")
 {
