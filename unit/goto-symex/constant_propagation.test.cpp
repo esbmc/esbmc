@@ -179,6 +179,14 @@ private:
   bool saved;
 };
 
+/** `struct { int i; int a[4]; }`, a counter beside an array member. */
+type2tc counter_and_array_struct()
+{
+  std::vector<type2tc> members{int_type2(), int_array(4)};
+  std::vector<irep_idt> names{"i", "a"};
+  return struct_type2tc(members, names, names, "held_array");
+}
+
 /** `struct { int i; float _Complex z; }`: a member a read *is* offered for --
  *  the object is a struct -- but whose complex type the acceptance re-test then
  *  refuses, so the rebuild is dropped after an element was pinned. */
@@ -503,6 +511,60 @@ TEST_CASE(
   // re-test. The case flips only with both removed.
   REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(
     with_index(arr, nondet_int_symbol(), refused), arr)));
+}
+
+TEST_CASE(
+  "a write into an array member is pinned to a read of the member",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc var = symbol_at(
+    counter_and_array_struct(),
+    "c:test.c@F@main@VAR",
+    symbol_renaming_level::level2);
+
+  // `VAR.a[VAR.i] = x + 1` lowers to a `with` on VAR whose update value is
+  // itself a `with` over the array member -- aggregate-typed, so neither
+  // constant_propagation nor a scalar-only immutability test accepts it, and
+  // the counter beside it used to be dropped with the object
+  // (InduByte/esbmc-evaluation#4).
+  const expr2tc member_read = member_of(var, "a", int_array(4));
+  const expr2tc refused = with_index(
+    member_read,
+    nondet_int_symbol(),
+    add2tc(int_type2(), nondet_int_symbol(), int_const(1)));
+
+  const expr2tc pinned = e.state().pin_symbolic_updates(
+    with_field(with_field(var, "i", int_const(3)), "a", refused), var);
+
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+  REQUIRE(to_with2t(pinned).update_value == member_read);
+  // ... and the sibling counter folds again, which is the point.
+  REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
+  "a pointer member read is still not carried",
+  "[symex][constant-propagation]")
+{
+  // The aggregate widening above admits fixed-size struct and array reads only.
+  // A pointer stays out: carrying one resolves a later dereference against the
+  // wrong object, the false alarm in
+  // regression/esbmc-cpp/cpp/github_5868_list_iterator_adl.
+  engine e;
+  const expr2tc io = symbol_at(
+    counter_and_pointer_struct(),
+    "c:test.c@F@main@IO",
+    symbol_renaming_level::level2);
+  const expr2tc var = symbol_at(
+    counter_and_pointer_struct(),
+    "c:test.c@F@main@VAR",
+    symbol_renaming_level::level2);
+
+  const expr2tc ptr_read = member_of(io, "p", pointer_type2tc(int_type2()));
+  REQUIRE_FALSE(e.state().constant_propagation(
+    with_field(with_field(var, "i", int_const(3)), "p", ptr_read)));
 }
 
 TEST_CASE(
