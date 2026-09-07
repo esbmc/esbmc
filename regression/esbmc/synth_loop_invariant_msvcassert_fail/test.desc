@@ -2,6 +2,5 @@ CORE
 main.c
 --synthesise-loop-invariants --unwind 12
 ^Synthesised loop invariants for 1 loop$
-UNKNOWN.*assertion sn < \(uint64_t\)n \* a
-loop invariant too weak to prove this claim
-^VERIFICATION UNKNOWN$
+FAILED.*assertion sn < \(uint64_t\)n \* a
+^VERIFICATION FAILED$
