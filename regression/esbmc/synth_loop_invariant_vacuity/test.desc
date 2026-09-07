@@ -1,0 +1,4 @@
+CORE
+main.c
+--synthesise-loop-invariants
+^VERIFICATION UNKNOWN$
