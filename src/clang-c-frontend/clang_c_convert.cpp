@@ -4951,6 +4951,18 @@ void clang_c_convertert::get_decl_name(
         name += "_" + parent_id;
       }
 
+      /* Everything a macro expands reports the expansion location, so two
+       * lambdas in one macro body share a file, line and column and the second
+       * reuses the first's record (esbmc/esbmc#7530). Their spelling locations
+       * inside the macro body differ, so add that offset. Clang's lambda
+       * mangling number does not help: it is 0 for both. */
+      const clang::SourceLocation dloc = rd.getLocation();
+      if (dloc.isMacroID() && sm)
+      {
+        const clang::SourceLocation spelling = sm->getSpellingLoc(dloc);
+        name += "_m" + std::to_string(sm->getFileOffset(spelling));
+      }
+
       std::replace(name.begin(), name.end(), '.', '_');
     }
     else if (
