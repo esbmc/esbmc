@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output-graphml - --witness-programfile programfile.c
+^VERIFICATION FAILED$
+<data key="startline">12</data>
+(?s)\A(?!.*key="originfile">)

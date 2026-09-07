@@ -36,6 +36,19 @@ template <class CharT, class Traits>
 class basic_streambuf;
 typedef basic_streambuf<char, char_traits<char> > streambuf;
 
+/* libstdc++ declares basic_string from <iosfwd> (via <bits/stringfwd.h>), so
+ * `#include <iosfwd>` alone is enough to name std::basic_string<char> there.
+ * Rejecting that is a false PARSING ERROR on code the host toolchain accepts,
+ * so follow the implementation. Unlike basic_streambuf above, the default
+ * arguments live here rather than with the definition: naming
+ * basic_string<char> needs them, and clang rejects a second declaration that
+ * repeats them, so <string> declares its definition without. */
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_string;
+
 template <
   class CharT,
   class Traits = char_traits<CharT>,
@@ -56,6 +69,26 @@ template <
   class Traits = char_traits<CharT>,
   class Alloc = allocator<CharT> >
 class basic_stringstream;
+
+/* [iosfwd.syn] declares these alias templates here, and here only. The model's
+ * istream/ostream/file streams are concrete classes, so the standard's template
+ * names are alias templates onto them; only the char instantiation is
+ * meaningful. They must not be repeated in <istream>/<ostream>/<fstream>:
+ * clang rejects a default template argument declared twice (#7531). */
+#if __cplusplus >= 201103L
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_istream = istream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_ostream = ostream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_iostream = iostream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_ifstream = ifstream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_ofstream = ofstream;
+template <class CharT, class Traits = char_traits<CharT>>
+using basic_fstream = fstream;
+#endif
 
 typedef basic_stringbuf<char> stringbuf;
 typedef basic_istringstream<char> istringstream;

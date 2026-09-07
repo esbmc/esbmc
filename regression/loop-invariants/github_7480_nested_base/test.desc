@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+13\s+loop invariant base case$
+^\s+UNKNOWN\s+\[main\.assertion\.3\]\s+line\s+17\s+loop invariant base case \(loop invariant too weak
+^VERIFICATION UNKNOWN$

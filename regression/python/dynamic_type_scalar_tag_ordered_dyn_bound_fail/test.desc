@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^.*tagged str exceeds the modelled bound.*$

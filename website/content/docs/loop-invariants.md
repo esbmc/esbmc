@@ -95,12 +95,46 @@ cost does not grow with the loop bound. It is the only mode that performs exit
 reasoning (`invariant && !condition` at the loop exit), which makes it the
 required choice for the second row of [Choosing a Mode](#choosing-a-mode).
 
-Two caveats:
+Three caveats:
 
-- It **may produce spurious counterexamples** for invariants that are correct
-  but too weak, because the havoc step can assign values outside the expected
-  program state without proper constraint propagation. Strengthen the invariant
-  until it entails the property you are proving.
+- A claim after the loop is checked against the abstraction, not against the
+  program, so a **correct but too weak invariant admits states the program
+  cannot reach**. Such a claim is reported `UNKNOWN` rather than `FAILED`, with
+  the reason attached — an over-approximation can prove a claim, never refute
+  it:
+
+  ```
+  ** Results:
+  main.c, function main
+    PASSED   [main.assertion.1]  line 11  loop invariant base case
+    PASSED   [main.assertion.2]  line 11  loop invariant inductive step
+    UNKNOWN  [main.assertion.3]  line 16  assertion s == 3 (loop invariant too
+             weak to prove this claim: the counterexample is against the havoc
+             abstraction, not a reachable state of the program)
+
+  ** 0 of 3 properties failed, 2 passed, 1 unknown
+  WARNING: every violated claim lies downstream of a loop invariant havoc, so
+  its counterexample is against the abstraction rather than the program;
+  strengthen the invariant to decide the claim
+
+  VERIFICATION UNKNOWN
+  ```
+
+  Strengthen the invariant until it entails the property. **This mode cannot
+  report a bug after an annotated loop**; plain BMC and `--k-induction`, whose
+  base case keeps the original loop, remain the modes that refute. What keeps
+  reporting `FAILED` is a claim *ahead* of every havoc, the invariant's own
+  inductive step and its assigns-compliance check, and a loop the schema
+  declined. An **outermost** loop's base case does too, since no havoc precedes
+  it; an inner loop's base case sits inside the outer body, downstream of the
+  outer havoc, so it is downgraded with everything else there.
+- The schema **declines a loop it cannot havoc soundly** instead of claiming a
+  proof: a body (or a callee) that writes only through a pointer, where the
+  guard reads nothing the havoc covers, leaves nothing for the modified-variable
+  analysis to record. Such a loop is left to the unwinder, with a warning —
+  `loop invariant at <location> not checked beyond its base case: the loop
+  writes through a pointer the havoc cannot cover` — and its base case is still
+  checked, since that runs from the concrete pre-loop state.
 - Cutting the loop establishes **partial correctness** only: termination is not
   proved. Use `--termination` separately if you need it.
 
@@ -201,21 +235,26 @@ loops requires further refinement.
 **Manual Invariant Specification:** Users must manually specify correct loop
 invariants. ESBMC will not infer or validate invariants before verification. An
 incorrect invariant will lead to a failed base-case assertion in
-`--loop-invariant` mode, or potentially a spurious result in
-`--loop-invariant-check` mode.
+`--loop-invariant` mode, or an undecided claim in `--loop-invariant-check` mode.
 
 > **Note:** `--loop-invariant-check` havocs every loop-modified variable, so an
-> invariant that does not constrain them enough can yield a false positive
-> (commonly an integer-overflow report). `--loop-invariant` does not have this
-> failure mode. If you hit it, either strengthen the invariant or, when the
-> property follows from the invariant alone, switch to `--loop-invariant`.
+> invariant that does not constrain them enough leaves the claims after the loop
+> undecided (commonly an integer-overflow report), and they are reported
+> `UNKNOWN`. `--loop-invariant` does not have this failure mode. If you hit it,
+> either strengthen the invariant or, when the property follows from the
+> invariant alone, switch to `--loop-invariant`.
+
+**`--k-induction-parallel` still reports a downgraded claim as `FAILED`.** The
+downgrade is recorded in the parallel driver but the verdict does not follow it
+back across the fork
+([#7516](https://github.com/esbmc/esbmc/issues/7516)).
 
 ## Mode Summary
 
 |                          | Unrolls the loop | Exit reasoning | Weak invariant           |
 | ------------------------ | ---------------- | -------------- | ------------------------ |
 | `--loop-invariant`       | yes              | no             | falls back to unrolling  |
-| `--loop-invariant-check` | no               | yes            | may report false positive |
+| `--loop-invariant-check` | no               | yes            | reports `UNKNOWN`        |
 
 Programs without loop invariant annotations continue to use the standard
 k-induction unwinding approach under either flag.

@@ -2665,7 +2665,13 @@ expr2tc code_contractst::replace_is_fresh_temps(
           lessthanequal2tc(off, have),
           lessthanequal2tc(n, sub2tc(size_type2(), have, off)));
 
-        return and2tc(valid_obj, or2tc(not2tc(is_dynamic), fits));
+        // The !is_dynamic escape was here because DYNAMIC_SIZE says nothing
+        // about automatic storage, so demanding the extent would have rejected
+        // every stack caller (#6542). symex now resolves DYNAMIC_SIZE and
+        // VALID_OBJECT against the object the value set names (#7464), so the
+        // extent is meaningful there too, and the escape would only make the
+        // check vacuous for exactly the callers it was meant to admit.
+        return and2tc(valid_obj, fits);
       }
     }
   }
@@ -3819,6 +3825,50 @@ code_contractst::materialize_arr_elem_snapshots(
     const irep_idt &arr_id = to_symbol2t(arr_ptr).thename;
     const std::string &arr_name = id2string(arr_id);
 
+    // A clause names its targets in the pre-state: `__ESBMC_assigns(buf[head])`
+    // grants the element `head` denoted on entry. Read back after the body, a
+    // body that moves `head` -- itself in the clause, as the ring-buffer idiom
+    // needs -- chooses after the fact which element it had been granted, so an
+    // off-by-one write verifies. Same defect as #7103 on the global-array path.
+    //
+    // That path maps the index through `in_pre_state`, which resolves a symbol
+    // against `active_snapshots` -- the globals snapshotted at 3b-i. Not enough
+    // here: `collect_global_variables` skips pointer types, so an index reached
+    // through one (`__ESBMC_assigns(buf[*p], *p)`, the same idiom with the
+    // cursor passed in rather than global) resolves to nothing and is read back
+    // live. Capturing each index outright covers both.
+    std::vector<expr2tc> declared_indices;
+    for (const expr2tc &idx : group.indices)
+    {
+      std::string didx_sym_name = "__ESBMC_frame_arr_didx_" + func_name + "_" +
+                                  arr_name + "_" + cnt_str + "_" +
+                                  std::to_string(declared_indices.size());
+
+      symbolt didx_obj;
+      didx_obj.name = didx_sym_name;
+      didx_obj.id = didx_sym_name;
+      set_symbol_type(didx_obj, idx->type);
+      didx_obj.lvalue = true;
+      didx_obj.static_lifetime = false;
+      didx_obj.file_local = false;
+      symbolt *didx_added = context.move_symbol_to_context(didx_obj);
+      expr2tc didx = symbol2tc(idx->type, didx_added->id);
+
+      goto_programt::targett didx_decl = wrapper.add_instruction(DECL);
+      didx_decl->code = code_decl2tc(idx->type, didx_added->id);
+      didx_decl->location = location;
+      didx_decl->location.comment(
+        "frame: array-elem declared index (Phase 2B)");
+
+      goto_programt::targett didx_assign = wrapper.add_instruction(ASSIGN);
+      didx_assign->code = code_assign2tc(didx, idx);
+      didx_assign->location = location;
+      didx_assign->location.comment(
+        "frame: capture declared index pre-state (Phase 2B)");
+
+      declared_indices.push_back(didx);
+    }
+
     // Create nondet witness index j
     std::string j_sym_name =
       "__ESBMC_frame_arr_j_" + func_name + "_" + arr_name + "_" + cnt_str;
@@ -3879,7 +3929,7 @@ code_contractst::materialize_arr_elem_snapshots(
           greaterthanequal2tc(witness_j, gen_zero(j_type)),
           lessthan2tc(witness_j, j_hi)),
         witness_j,
-        idx_expr));
+        declared_indices.front()));
     j_clamp->location = location;
     j_clamp->location.comment(
       "frame: clamp witness index to valid array range (Phase 2B)");
@@ -3917,7 +3967,7 @@ code_contractst::materialize_arr_elem_snapshots(
     entry.arr_ptr = arr_ptr;
     entry.arr_add_type = arr_add_type;
     entry.elem_type = elem_type;
-    entry.declared_indices = group.indices;
+    entry.declared_indices = declared_indices;
     entry.witness_idx = witness_j;
     entry.snapshot_sym = snapshot_sym;
     result.push_back(entry);
@@ -3967,39 +4017,27 @@ expr2tc code_contractst::materialize_ptr_region_old_snapshot(
   goto_programt &wrapper,
   const std::string &func_name,
   const locationt &location,
-  const std::map<irep_idt, param_extentt> &param_extents,
+  const expr2tc &extent_bytes,
   size_t snap_idx) const
 {
   // __ESBMC_old(ptr[j]): no named object to snapshot -- only N bytes
-  // reachable through ptr, N given by ptr's __ESBMC_is_fresh extent.
-  // Materialize a real array-typed temp and fill it with an explicit
-  // element-wise copy loop; there is no array rvalue to read through
-  // a pointer in one whole-value ASSIGN the way the named-array case
-  // above can. #7057.
-  if (!is_symbol2t(original_expr))
+  // reachable through ptr, N given by ptr's __ESBMC_is_fresh extent (already
+  // resolved to \p extent_bytes by the caller, which -- unlike this function
+  // -- knows whether that resolution came from param_extents (wrapper mode)
+  // or a call-site is_fresh rebinding (call-site mode, #7057), and validates
+  // accordingly). \p original_expr only needs to be POINTER-TYPED, not a
+  // bare symbol: wrapper mode always passes the callee's own parameter
+  // symbol, but a replaced call site's actual argument is frequently an
+  // array-decay expression instead (`address_of(index(x, 0))` for `foo(x,
+  // ...)` where `x` is `int x[N]`) -- perfectly valid to do pointer
+  // arithmetic on, just not a symbol2t. Requiring one here would reject
+  // exactly the common case call-site materialization needs (#7057).
+  if (!is_pointer_type(original_expr->type))
   {
     log_error(
-      "{}: __ESBMC_old(...[...]) region snapshot expected a bare "
-      "pointer parameter symbol (#7057)",
+      "{}: __ESBMC_old(...[...]) region snapshot expected a pointer-typed "
+      "expression (#7057)",
       func_name);
-    abort();
-  }
-  const irep_idt &ptr_thename = to_symbol2t(original_expr).thename;
-  auto extent_it = param_extents.find(ptr_thename);
-  // from_is_fresh, not just justified: justified is also true for the
-  // #6483 one-element struct stack backing, which is real memory but
-  // not an extent the contract itself stated (#7057).
-  if (
-    extent_it == param_extents.end() || !extent_it->second.justified ||
-    !extent_it->second.from_is_fresh)
-  {
-    log_error(
-      "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
-      "stated by an unconditional, direct __ESBMC_is_fresh({}, N); "
-      "none found (#7057)",
-      func_name,
-      id2string(ptr_thename),
-      id2string(ptr_thename));
     abort();
   }
 
@@ -4015,13 +4053,12 @@ expr2tc code_contractst::materialize_ptr_region_old_snapshot(
   if (elem_sz <= 0)
   {
     log_error(
-      "{}: __ESBMC_old({}[...]) has a zero-size element type, so no "
+      "{}: __ESBMC_old(...[...]) has a zero-size element type, so no "
       "element count can be derived from its byte extent (#7057)",
-      func_name,
-      id2string(ptr_thename));
+      func_name);
     abort();
   }
-  const expr2tc &bytes = extent_it->second.bytes;
+  const expr2tc &bytes = extent_bytes;
   expr2tc n_elems = typecast2tc(
     idx_type,
     div2tc(bytes->type, bytes, constant_int2tc(bytes->type, elem_sz)));
@@ -4141,13 +4178,45 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
 
       if (old_snapshots[i].is_ptr_region)
       {
+        // Wrapper mode: original_expr is always the callee's own parameter
+        // symbol (never an array-decay expression, since this path never
+        // substitutes a caller's actual argument), so param_extents' lookup
+        // key and the extent's own validation both belong here, before
+        // calling into the now mode-agnostic materializer (#7057).
+        if (!is_symbol2t(original_expr))
+        {
+          log_error(
+            "{}: __ESBMC_old(...[...]) region snapshot expected a bare "
+            "pointer parameter symbol (#7057)",
+            func_name);
+          abort();
+        }
+        const irep_idt &ptr_thename = to_symbol2t(original_expr).thename;
+        auto extent_it = param_extents.find(ptr_thename);
+        // from_is_fresh, not just justified: justified is also true for the
+        // #6483 one-element struct stack backing, which is real memory but
+        // not an extent the contract itself stated (#7057).
+        if (
+          extent_it == param_extents.end() || !extent_it->second.justified ||
+          !extent_it->second.from_is_fresh)
+        {
+          log_error(
+            "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
+            "stated by an unconditional, direct __ESBMC_is_fresh({}, N); "
+            "none found (#7057)",
+            func_name,
+            id2string(ptr_thename),
+            id2string(ptr_thename));
+          abort();
+        }
+
         new_snapshot_var = materialize_ptr_region_old_snapshot(
           original_expr,
           old_snapshots[i].region_elem_type,
           wrapper,
           func_name,
           location,
-          param_extents,
+          extent_it->second.bytes,
           snap_idx);
       }
       else
@@ -4186,11 +4255,18 @@ std::vector<code_contractst::old_snapshot_t>
 code_contractst::materialize_old_snapshots_at_callsite(
   const std::vector<code_contractst::old_snapshot_t> &old_snapshots,
   const symbolt &function_symbol,
+  const goto_programt &function_body,
+  const expr2tc &requires_clause,
   const std::vector<expr2tc> &actual_args,
   goto_programt &replacement,
   const locationt &call_location) const
 {
   std::vector<old_snapshot_t> callsite_snapshots;
+
+  const code_typet::argumentst *params =
+    function_symbol.get_type().is_code()
+      ? &to_code_type(function_symbol.get_type()).arguments()
+      : nullptr;
 
   // For each old() in the original body, create a call-site snapshot:
   //   - Evaluate the original expression with actual arguments
@@ -4198,59 +4274,101 @@ code_contractst::materialize_old_snapshots_at_callsite(
   //   - Remember mapping from the original temp variable to the snapshot
   for (size_t i = 0; i < old_snapshots.size(); ++i)
   {
-    // A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer parameter) needs
-    // the copy loop generate_checking_wrapper builds from param_extents,
-    // which this call-site path has no equivalent of -- there is no
-    // allocation to read an extent from at a replaced call site, only a
-    // valid_object assertion (lower_is_fresh_in_requires). Silently
-    // proceeding would create a pointer-typed snapshot_var that
-    // replace_old_in_expr's region match then tries to index. Reject
-    // cleanly instead; --replace-call-with-contract support is a follow-up
-    // (#7057).
-    if (old_snapshots[i].is_ptr_region)
-    {
-      log_error(
-        "{}: __ESBMC_old(...[...]) on a pointer parameter is not yet "
-        "supported under --replace-call-with-contract (#7057)",
-        id2string(function_symbol.name));
-      abort();
-    }
-
+    // raw_ptr_param keeps the callee's OWN parameter symbol (e.g. `r`), as
+    // named in the callee's own __ESBMC_is_fresh(r, ...) clause -- needed
+    // to look that clause up below, before the substitution two lines down
+    // rebinds it to whatever the caller actually passed.
+    expr2tc raw_ptr_param = old_snapshots[i].original_expr;
     expr2tc original_expr = old_snapshots[i].original_expr;
     expr2tc temp_var = old_snapshots[i].snapshot_var; // temp var from body
 
     // Apply the same parameter substitution used for requires/ensures
-    if (function_symbol.get_type().is_code())
+    if (params)
     {
-      const code_typet &code_type = to_code_type(function_symbol.get_type());
-      const code_typet::argumentst &params = code_type.arguments();
-
-      for (size_t j = 0; j < params.size() && j < actual_args.size(); ++j)
+      for (size_t j = 0; j < params->size() && j < actual_args.size(); ++j)
       {
-        irep_idt param_id = params[j].get_identifier();
+        irep_idt param_id = (*params)[j].get_identifier();
         expr2tc param_expr =
-          symbol2tc(migrate_type(params[j].type()), param_id);
+          symbol2tc(migrate_type((*params)[j].type()), param_id);
         original_expr =
           replace_symbol_in_expr(original_expr, param_expr, actual_args[j]);
       }
     }
 
-    // Create a NEW snapshot variable for the call site
-    expr2tc snapshot_var = create_snapshot_variable(
-      original_expr, id2string(function_symbol.name) + "_call", i);
+    expr2tc snapshot_var;
 
-    // Generate snapshot declaration at call site
-    goto_programt::targett decl_inst = replacement.add_instruction(DECL);
-    decl_inst->code =
-      code_decl2tc(original_expr->type, to_symbol2t(snapshot_var).thename);
-    decl_inst->location = call_location;
-    decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
+    if (old_snapshots[i].is_ptr_region)
+    {
+      // __ESBMC_old(ptr[j]), ptr a pointer parameter: no named object to
+      // snapshot at the call site either, same as the
+      // materialize_ptr_region_old_snapshot (wrapper/enforce-mode) case --
+      // only N bytes reachable through the CALLER's actual argument, N
+      // given by the callee's own __ESBMC_is_fresh(ptr, N) clause. That
+      // clause is stated in terms of the callee's formal parameters, so
+      // rebind it to the caller's actual arguments the same way
+      // lower_is_fresh_in_requires rebinds the requires-clause copy of it a
+      // few lines later in generate_replacement_at_call, then reuse the
+      // now mode-agnostic copy-loop builder the enforce-mode path already
+      // uses -- it only needs a target program to append to and the
+      // already-resolved extent, neither of which is enforce-mode-specific
+      // (#7057). Unlike wrapper mode, original_expr here is frequently NOT
+      // a bare symbol -- a decayed array argument (`foo(x, ...)` for `int
+      // x[N]`) substitutes to `address_of(index(x, 0))` -- so the lookup
+      // below is keyed on raw_ptr_param (the callee's OWN, pre-substitution
+      // parameter name, always a symbol) rather than original_expr itself.
+      expr2tc extent_size;
+      bool found = params && find_callsite_is_fresh_extent(
+                               function_body,
+                               raw_ptr_param,
+                               requires_clause,
+                               *params,
+                               actual_args,
+                               extent_size);
+      if (!found)
+      {
+        log_error(
+          "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
+          "stated by an unconditional, direct __ESBMC_is_fresh({}, N); "
+          "none found (#7057)",
+          id2string(function_symbol.name),
+          is_symbol2t(raw_ptr_param)
+            ? id2string(to_symbol2t(raw_ptr_param).thename)
+            : "<non-symbol>",
+          is_symbol2t(raw_ptr_param)
+            ? id2string(to_symbol2t(raw_ptr_param).thename)
+            : "<non-symbol>");
+        abort();
+      }
 
-    // Generate snapshot assignment: snapshot_var = original_expr
-    goto_programt::targett assign_inst = replacement.add_instruction(ASSIGN);
-    assign_inst->code = code_assign2tc(snapshot_var, original_expr);
-    assign_inst->location = call_location;
-    assign_inst->location.comment("__ESBMC_old call-site snapshot assignment");
+      snapshot_var = materialize_ptr_region_old_snapshot(
+        original_expr,
+        old_snapshots[i].region_elem_type,
+        replacement,
+        id2string(function_symbol.name) + "_call",
+        call_location,
+        extent_size,
+        i);
+    }
+    else
+    {
+      // Create a NEW snapshot variable for the call site
+      snapshot_var = create_snapshot_variable(
+        original_expr, id2string(function_symbol.name) + "_call", i);
+
+      // Generate snapshot declaration at call site
+      goto_programt::targett decl_inst = replacement.add_instruction(DECL);
+      decl_inst->code =
+        code_decl2tc(original_expr->type, to_symbol2t(snapshot_var).thename);
+      decl_inst->location = call_location;
+      decl_inst->location.comment("__ESBMC_old call-site snapshot declaration");
+
+      // Generate snapshot assignment: snapshot_var = original_expr
+      goto_programt::targett assign_inst = replacement.add_instruction(ASSIGN);
+      assign_inst->code = code_assign2tc(snapshot_var, original_expr);
+      assign_inst->location = call_location;
+      assign_inst->location.comment(
+        "__ESBMC_old call-site snapshot assignment");
+    }
 
     // Store mapping: temp var from original body -> call-site snapshot var.
     code_contractst::old_snapshot_t snap_entry;
@@ -4985,6 +5103,104 @@ as_is_fresh_call(goto_programt::const_targett it)
   return &c;
 }
 
+/// Find the __ESBMC_is_fresh(ptr, size) call in \p function_body whose ptr
+/// operand (after stripping the frontend's void* typecast) is the bare
+/// parameter symbol \p target_param AND which \p requires_clause asserts
+/// unconditionally (the same test lower_is_fresh_in_requires applies via
+/// asserted_unconditionally, a few lines later in generate_replacement_at_
+/// call, for the identical reason: a guarded is_fresh states nothing on the
+/// branch that does not take it, so treating it as a hard extent there would
+/// be wrong regardless of who reads it). \p requires_clause is the same
+/// already-parameter-substituted requires_clause generate_replacement_at_
+/// call already has in hand at the call site (substitution never touches
+/// an is_fresh temp, only formals, so this is safe to reuse without a
+/// fresh un-substituted copy). On a match, returns its size operand with
+/// the callee's formal \p params rebound to \p actual_args -- the
+/// identical rebinding lower_is_fresh_in_requires applies -- needed here to
+/// build a call-site-visible extent for a __ESBMC_old(ptr[j]) region
+/// snapshot under --replace-call-with-contract (#7057).
+///
+/// Returns false, \p out_size untouched, if no qualifying is_fresh call is
+/// found (e.g. the only one present is conditional, or the pointer is an
+/// indirect lvalue rather than a bare parameter -- both already unsupported
+/// by the enforce-mode counterpart, materialize_ptr_region_old_snapshot,
+/// for the same reason). Hard-errors if MORE than one qualifying is_fresh
+/// call names the same pointer: silently picking one would materialise
+/// whichever extent happened to be scanned first, which is exactly the
+/// wrong-extent defect this function exists to rule out, not just move
+/// elsewhere.
+bool code_contractst::find_callsite_is_fresh_extent(
+  const goto_programt &function_body,
+  const expr2tc &target_param,
+  const expr2tc &requires_clause,
+  const code_typet::argumentst &params,
+  const std::vector<expr2tc> &actual_args,
+  expr2tc &out_size) const
+{
+  if (!is_symbol2t(target_param))
+    return false;
+  const irep_idt &target_name = to_symbol2t(target_param).thename;
+
+  std::vector<expr2tc> matches;
+  forall_goto_program_instructions (it, function_body)
+  {
+    const code_function_call2t *call = as_is_fresh_call(it);
+    if (!call)
+      continue;
+
+    expr2tc ptr = call->operands[0];
+    while (is_typecast2t(ptr))
+      ptr = to_typecast2t(ptr).from;
+
+    if (!is_symbol2t(ptr) || to_symbol2t(ptr).thename != target_name)
+      continue;
+
+    if (!asserted_unconditionally(
+          requires_clause, to_symbol2t(call->ret).thename))
+      continue;
+
+    // Only formal parameters are substituted: they are the only names in
+    // size that vary per call and need closing over the caller's actuals.
+    // Anything else the size expression names (a global, a named constant)
+    // is deliberately left as-is -- it is not scoped to the callee, so it
+    // resolves identically at the call site without rewriting, the same way
+    // it already resolves inside the callee's own is_fresh clause. See
+    // github_4219_old_in_forall_array_param_replace_mode_global_extent for
+    // this in practice.
+    expr2tc size = call->operands[1];
+    for (size_t i = 0; i < params.size() && i < actual_args.size(); ++i)
+    {
+      expr2tc param_expr =
+        symbol2tc(migrate_type(params[i].type()), params[i].get_identifier());
+      size = replace_symbol_in_expr(size, param_expr, actual_args[i]);
+    }
+    // A repeated, identically-resolved is_fresh(r, N) clause (redundant but
+    // not conflicting) should not trip the ambiguity check below -- only
+    // genuinely differing extents make the choice of which one to use
+    // undefined.
+    if (std::find(matches.begin(), matches.end(), size) == matches.end())
+      matches.push_back(size);
+  }
+
+  if (matches.empty())
+    return false;
+
+  if (matches.size() > 1)
+  {
+    log_error(
+      "__ESBMC_old({}[...]) region snapshot's extent is ambiguous: {} "
+      "unconditional __ESBMC_is_fresh({}, N) clauses name this pointer "
+      "with different extents; state it once (#7057)",
+      id2string(target_name),
+      matches.size(),
+      id2string(target_name));
+    abort();
+  }
+
+  out_size = matches.front();
+  return true;
+}
+
 /// The position of the parameter \p ptr names, or params.size() if it names
 /// none. Recorded before rebinding to actual arguments, which makes two
 /// formals bound to one actual indistinguishable from one formal named twice.
@@ -5386,7 +5602,13 @@ void code_contractst::generate_replacement_at_call(
     collect_old_snapshots_from_body(function_body);
   std::vector<old_snapshot_t> callsite_snapshots =
     materialize_old_snapshots_at_callsite(
-      body_snapshots, function_symbol, actual_args, replacement, call_location);
+      body_snapshots,
+      function_symbol,
+      function_body,
+      requires_clause,
+      actual_args,
+      replacement,
+      call_location);
 
   // Lambda function to add contract clause instruction (ASSERT or ASSUME)
   // Used for both requires (ASSERT) and ensures (ASSUME) clauses

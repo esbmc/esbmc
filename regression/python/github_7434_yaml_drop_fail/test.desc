@@ -1,0 +1,7 @@
+CORE
+main.py
+--witness-output-yaml -
+^VERIFICATION FAILED$
+(?s)\A(?!.*function: "__ESBMC)
+file_name: "[^"]*main\.py"
+line: 8$

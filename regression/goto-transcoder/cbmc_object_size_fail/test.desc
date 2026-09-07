@@ -1,0 +1,4 @@
+CORE
+cbmc_object_size_fail.goto
+--binary
+^VERIFICATION FAILED$

@@ -542,20 +542,15 @@ typet python_dict_handler::recorded_tuple_value_type(
   if (vals_id.empty())
     return empty_typet();
 
-  auto it = python_list::list_type_map.find(dict_value_types_key(vals_id));
-  if (it == python_list::list_type_map.end() || it->second.empty())
+  const typet uniform =
+    converter_.get_element_type_registry().uniform_element_type(
+      vals_id, type_slot::dict_value_types);
+  if (uniform == typet())
     return empty_typet();
 
-  const typet &first = it->second.front().second;
-  const bool all_same_tuple =
-    converter_.get_tuple_handler().is_tuple_type(first) &&
-    std::all_of(
-      it->second.begin(),
-      it->second.end(),
-      [&first](const std::pair<std::string, typet> &e) {
-        return e.second == first;
-      });
-  return all_same_tuple ? first : static_cast<typet>(empty_typet());
+  return converter_.get_tuple_handler().is_tuple_type(uniform)
+           ? uniform
+           : static_cast<typet>(empty_typet());
 }
 
 typet python_dict_handler::get_dict_key_type_from_annotation(

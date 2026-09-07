@@ -8,6 +8,7 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
+#include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/set/python_set.h>
@@ -187,6 +188,16 @@ public:
   type_handler &get_type_handler()
   {
     return type_handler_;
+  }
+
+  element_type_registry &get_element_type_registry()
+  {
+    return element_type_registry_;
+  }
+
+  const element_type_registry &get_element_type_registry() const
+  {
+    return element_type_registry_;
   }
 
   /// Record that a list symbol escaped into a function/method call and may have
@@ -848,6 +859,20 @@ private:
     const std::string &symbol_id,
     std::string method_name,
     bool is_ctor) const;
+
+  /// @p method_name reached by walking the bases of @p class_name inside the
+  /// imported module that defines it. Ids are spelled against that module,
+  /// which an id rewritten against this file cannot name (#7398).
+  symbolt *find_function_in_imported_base_classes(
+    const std::string &class_name,
+    const std::string &method_name,
+    bool is_ctor) const;
+
+  /// AST and file path of the imported module that defines @p class_name, or
+  /// a null AST when no single imported module does. Ambiguity across modules
+  /// is declined rather than guessed.
+  std::pair<const nlohmann::json *, std::string>
+  find_imported_class_module(const std::string &class_name) const;
 
   /// @p method_name under @p base_class, as the module that defines the base
   /// spells it, or null when the base is not imported.
@@ -1777,6 +1802,7 @@ private:
   const std::vector<nlohmann::json> *extra_asts_;
   const global_scope &global_scope_;
   type_handler type_handler_;
+  element_type_registry element_type_registry_;
   string_builder *string_builder_;
   symbol_generator sym_generator_;
 
@@ -1895,7 +1921,7 @@ private:
 
   /// List symbols passed as an argument to a function/method call, keyed by
   /// symbol id. Such a list may have been mutated (e.g. appended to) by the
-  /// callee, which the caller's static length tracking (list_type_map / the AST
+  /// callee, which the caller's static length tracking (the registry / the AST
   /// literal) does not observe. The convert-time constant-index bounds check in
   /// python-list/list_access.cpp is therefore suppressed for these lists, so
   /// the access falls back to the sound runtime __ESBMC_list_at path (GitHub

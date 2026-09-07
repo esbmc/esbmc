@@ -4,6 +4,7 @@
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
+#include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
@@ -401,7 +402,8 @@ std::optional<typet> subscript_element_type(
   const nlohmann::json &arg,
   const nlohmann::json &scope,
   const std::string &prefix,
-  const typet &list_type)
+  const typet &list_type,
+  const element_type_registry &elem_types)
 {
   if (
     arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
@@ -422,12 +424,12 @@ std::optional<typet> subscript_element_type(
   const std::string list_id = prefix + base_name;
   const size_t index = slice["value"].get<size_t>();
 
-  // get_list_element_type() clamps an out-of-range index to element 0, so the
-  // recorded element id is what says the index names a real element.
-  if (python_list::get_list_element_id(list_id, index).empty())
+  // element_type() clamps an out-of-range index to element 0, so the recorded
+  // element id is what says the index names a real element.
+  if (elem_types.element_id(list_id, index).empty())
     return std::nullopt;
 
-  const typet elem = python_list::get_list_element_type(list_id, index);
+  const typet elem = elem_types.element_type(list_id, index);
   if (elem == typet() || elem == empty_typet() || elem == list_type)
     return std::nullopt;
   return elem;
@@ -469,7 +471,11 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
     for (const nlohmann::json *arg : scan.args)
     {
       const std::optional<typet> from_arg = subscript_element_type(
-        *arg, *scope, prefix, type_handler_.get_list_type());
+        *arg,
+        *scope,
+        prefix,
+        type_handler_.get_list_type(),
+        converter_.get_element_type_registry());
 
       // Every call has to agree: one disagreeing call means the single frozen
       // signature cannot serve them all, so leave the parameter as it was.

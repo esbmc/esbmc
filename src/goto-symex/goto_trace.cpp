@@ -10,6 +10,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/base/cwe_mapping.h>
 #include <util/irep/std_types.h>
+#include <optional>
 #include <ostream>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
@@ -233,8 +234,8 @@ void show_goto_trace_gui(
 
 /*
    Return true if
-   - the location's file_name matches the user input or one of the
-     user-supplied include files
+   - the location's file_name matches one of the user's input files or one of
+     the user-supplied include files
    - the location is explicitly labeled as user_provided
    - the location is empty
    - the location is the esbmc_intrinsics.h exception
@@ -247,8 +248,12 @@ bool input_file_check(const locationt &l)
   const irep_idt &f_name = l.get_file();
   if (f_name.empty())
     return true;
-  if (f_name == config.options.get_option("input-file"))
-    return true;
+  /* config.args, not options["input-file"]: the latter retains only the last
+     positional argument, so under multiple input files every step from an
+     earlier one would look foreign. */
+  for (const std::string &arg : config.args)
+    if (f_name == arg)
+      return true;
   for (const auto &inc : config.ansi_c.include_files)
   {
     if (f_name == inc)
@@ -260,6 +265,87 @@ bool input_file_check(const locationt &l)
     return true;
 
   return false;
+}
+
+/* The step's own file, when the witness does not already describe it.
+   A consumer resolves a bare line number against the program file, so a step
+   from a header or an operational model has to name where it came from.
+   The reference is the verified file, because that is the only case in which
+   witness_start_line expresses the line in the program file. */
+static std::string
+witness_origin_file(const locationt &loc, const std::string &verified_file)
+{
+  const std::string file = loc.get_file().as_string();
+  return file == verified_file ? "" : file;
+}
+
+static BigInt witness_start_line(
+  const locationt &loc,
+  const std::string &verified_file,
+  optionst &options)
+{
+  BigInt line = std::atoi(loc.get_line().c_str());
+  /* get_line_number() remaps by matching the text of verified_file's line into
+     the program file, which says nothing about a line of some other file. */
+  const irep_idt &file = loc.get_file();
+  if (!file.empty() && file.as_string() != verified_file)
+    return line;
+  return get_line_number(verified_file, line, options);
+}
+
+static std::string
+witness_waypoint_file(const locationt &loc, const std::string &verified_file)
+{
+  const irep_idt &file = loc.get_file();
+  return file.empty() ? verified_file : file.as_string();
+}
+
+static waypoint witness_waypoint(
+  const locationt &loc,
+  const std::string &verified_file,
+  optionst &options)
+{
+  waypoint wp;
+  wp.file = witness_waypoint_file(loc, verified_file);
+  wp.line = witness_start_line(loc, verified_file, options);
+  wp.column = loc.get_column().c_str();
+  wp.function = loc.function().c_str();
+  return wp;
+}
+
+/* README-YAML.md requires a waypoint's file_name to be one of the task's input
+   files, so a step inside a header or an operational model is reported at its
+   innermost call site that is one. Null when no frame qualifies. */
+static const locationt *witness_input_location(const goto_trace_stept &step)
+{
+  if (input_file_check(step.pc->location))
+    return &step.pc->location;
+
+  for (const auto &frame : step.stack_trace)
+    if (
+      frame.src != nullptr && frame.src->is_set &&
+      input_file_check(frame.src->pc->location))
+      return &frame.src->pc->location;
+
+  return nullptr;
+}
+
+/* A violation witness whose target waypoint is missing guides a validator
+   nowhere, so an unhoistable target is attributed to the verified file rather
+   than dropped: a file_name the validator was never given makes the witness
+   ill-formed, while a line it cannot match only costs confirmation. */
+static waypoint witness_target_waypoint(
+  const goto_trace_stept &step,
+  const std::string &verified_file,
+  optionst &options)
+{
+  const locationt *loc = witness_input_location(step);
+  waypoint wp =
+    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  wp.type = waypoint::target;
+  if (loc == nullptr)
+    wp.file = verified_file;
+  return wp;
 }
 
 void show_state_header(
@@ -317,10 +403,10 @@ void violation_graphml_goto_trace(
 
         edget violation_edge(prev_node, violation_node);
         violation_edge.thread_id = std::to_string(step.thread_nr);
-        violation_edge.start_line = get_line_number(
-          graph.verified_file,
-          std::atoi(step.pc->location.get_line().c_str()),
-          options);
+        violation_edge.origin_file =
+          witness_origin_file(step.pc->location, graph.verified_file);
+        violation_edge.start_line =
+          witness_start_line(step.pc->location, graph.verified_file, options);
 
         graph.edges.push_back(violation_edge);
 
@@ -345,10 +431,10 @@ void violation_graphml_goto_trace(
         edget new_edge;
         new_edge.thread_id = std::to_string(step.thread_nr);
         new_edge.assumption = assignment;
-        new_edge.start_line = get_line_number(
-          graph.verified_file,
-          std::atoi(step.pc->location.get_line().c_str()),
-          options);
+        new_edge.origin_file =
+          witness_origin_file(step.pc->location, graph.verified_file);
+        new_edge.start_line =
+          witness_start_line(step.pc->location, graph.verified_file, options);
 
         nodet *new_node = new nodet();
         new_edge.from_node = prev_node;
@@ -362,6 +448,36 @@ void violation_graphml_goto_trace(
       continue;
     }
   }
+}
+
+/* The \result value of a nondet call, when this step carries one a validator
+   can act on. */
+static std::optional<waypoint> witness_nondet_waypoint(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  const std::string &verified_file,
+  optionst &options)
+{
+  if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
+    return {};
+
+  if (!input_file_check(step.pc->location))
+    return {};
+
+  std::string assignment = get_formated_assignment(ns, step, true);
+  if (assignment.empty())
+    return {};
+
+  // Extract just the value part ("lhs == value" -> "value") for \result
+  std::string value_str;
+  auto eq_pos = assignment.find(" == ");
+  if (eq_pos != std::string::npos)
+    value_str = assignment.substr(eq_pos + 4);
+
+  waypoint wp = witness_waypoint(step.pc->location, verified_file, options);
+  wp.type = waypoint::function_return;
+  wp.value = "\\result == " + value_str;
+  return wp;
 }
 
 void violation_yaml_goto_trace(
@@ -381,16 +497,8 @@ void violation_yaml_goto_trace(
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
-        waypoint wp;
-        wp.type = waypoint::target;
-        wp.file = yml.verified_file;
-        wp.line = get_line_number(
-          yml.verified_file,
-          std::atoi(step.pc->location.get_line().c_str()),
-          options);
-        wp.column = step.pc->location.get_column().c_str();
-        wp.function = step.pc->location.function().c_str();
-        yml.segments.push_back(wp);
+        yml.segments.push_back(
+          witness_target_waypoint(step, yml.verified_file, options));
 
         /* having printed a property violation, don't print more steps. */
 
@@ -402,16 +510,15 @@ void violation_yaml_goto_trace(
     case goto_trace_stept::BREANCHING:
       if (step.pc->is_goto())
       {
-        waypoint wp;
+        /* A validator cannot match a follow waypoint against a file it was
+           not given; dropping one only weakens guidance. */
+        if (!input_file_check(step.pc->location))
+          break;
+
+        waypoint wp =
+          witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
-        wp.file = yml.verified_file;
         wp.value = !step.guard ? "true" : "false";
-        wp.line = get_line_number(
-          yml.verified_file,
-          std::atoi(step.pc->location.get_line().c_str()),
-          options);
-        wp.column = step.pc->location.get_column().c_str();
-        wp.function = step.pc->location.function().c_str();
         yml.segments.push_back(wp);
       }
       break;
@@ -422,31 +529,10 @@ void violation_yaml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        // Only emit waypoints for nondet variables
-        if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
-          break;
-
-        std::string assignment = get_formated_assignment(ns, step, true);
-        if (assignment.empty())
-          break;
-
-        // Extract just the value part ("lhs == value" → "value") for \result
-        std::string value_str;
-        auto eq_pos = assignment.find(" == ");
-        if (eq_pos != std::string::npos)
-          value_str = assignment.substr(eq_pos + 4);
-
-        waypoint wp;
-        wp.type = waypoint::function_return;
-        wp.file = yml.verified_file;
-        wp.value = "\\result == " + value_str;
-        wp.line = get_line_number(
-          yml.verified_file,
-          std::atoi(step.pc->location.get_line().c_str()),
-          options);
-        wp.column = step.pc->location.get_column().c_str();
-        wp.function = step.pc->location.function().c_str();
-        yml.segments.push_back(wp);
+        if (
+          auto wp =
+            witness_nondet_waypoint(ns, step, yml.verified_file, options))
+          yml.segments.push_back(*wp);
       }
       break;
 
@@ -488,10 +574,10 @@ void correctness_graphml_goto_trace(
     nodet *new_node = new nodet();
     edget *new_edge = new edget();
     std::string function = step.pc->location.get_function().c_str();
-    new_edge->start_line = get_line_number(
-      graph.verified_file,
-      std::atoi(step.pc->location.get_line().c_str()),
-      options);
+    new_edge->origin_file =
+      witness_origin_file(step.pc->location, graph.verified_file);
+    new_edge->start_line =
+      witness_start_line(step.pc->location, graph.verified_file, options);
     new_node->invariant = invariant;
     new_node->invariant_scope = function;
 

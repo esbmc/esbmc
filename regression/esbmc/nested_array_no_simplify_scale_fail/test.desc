@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-simplify
+^\s+the last store must not be misread$
+^VERIFICATION FAILED$

@@ -242,6 +242,10 @@ STATIC_CAPABILITIES = {
     # materialised through it, so a negative offset is a different constant --
     # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
     "lp64_host",
+    # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
+    # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
+    # where such a test can only ever report a timeout.
+    "long_timeout",
 }
 
 # Capabilities of the frontend itself, which the build system cannot answer:
@@ -488,9 +492,9 @@ class TestCase:
         assert os.path.exists(test_dir)
         assert os.path.exists(os.path.join(test_dir, "test.desc"))
         self.name = name
-        # A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
-        # temporary cwd, where a test_dir relative to the invoking cwd no longer
-        # resolves. Anchor it here so every derived path survives the chdir.
+        # Every test runs ESBMC in a private temporary cwd, where a test_dir
+        # relative to the invoking cwd no longer resolves. Anchor it here so
+        # every derived path survives the chdir.
         self.test_dir = os.path.abspath(test_dir)
         self.test_args = None
         self.test_file = None
@@ -543,6 +547,11 @@ _TERM_GRACE = 3
 class Executor:
     def __init__(self, tool="esbmc"):
         self.tool = shlex.split(tool)
+        # Each test runs in its own cwd, and Popen chdirs before exec, so an
+        # explicitly-pathed tool has to be anchored here. A bare name keeps
+        # going through PATH.
+        if os.sep in self.tool[0]:
+            self.tool[0] = os.path.abspath(self.tool[0])
         self.timeout = RegressionBase.TIMEOUT
 
     def run(self, test_case: TestCase, cwd=None):
@@ -635,13 +644,13 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        # Per-test cwd so parallel CHECK_JSON/CHECK_FILE tests don't race on
-        # output files.
-        tmp_dir = (
-            tempfile.mkdtemp(prefix="esbmc-regress-")
-            if test_case.check_json or test_case.check_file
-            or test_case.seed_file else None
-        )
+        # Every test gets a private cwd. Relative output paths in test.desc
+        # (--witness-output, --cex-output, --output) otherwise land in the
+        # runner's cwd -- build/regression under ctest, the invocation
+        # directory when testing_tool.py is run by hand, which is how the
+        # artefacts once tracked under regression/ came to be overwritten on
+        # every run. It also races parallel CHECK_JSON/CHECK_FILE tests.
+        tmp_dir = tempfile.mkdtemp(prefix="esbmc-regress-")
         try:
             for seed in test_case.seed_file:
                 _run_seed_file(seed, tmp_dir)
@@ -741,8 +750,7 @@ def _add_test(test_case, executor):
                         )
                 self.fail(error_message_prefix + error_message)
         finally:
-            if tmp_dir is not None:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return test
 

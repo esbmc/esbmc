@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s+the loop reads the first write$
+^VERIFICATION FAILED$

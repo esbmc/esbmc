@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 40
+^VERIFICATION SUCCESSFUL$
+^Generated [0-9]{1,4} VCC\(s\)

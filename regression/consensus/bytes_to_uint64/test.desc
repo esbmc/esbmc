@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc --function bytes_to_uint64
+^VERIFICATION FAILED$

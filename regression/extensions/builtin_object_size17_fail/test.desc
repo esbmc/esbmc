@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED .*assertion __builtin_object_size\(p, 0\) == 8$
+^VERIFICATION FAILED$

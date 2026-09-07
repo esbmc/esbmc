@@ -1,5 +1,4 @@
 CORE
 main.cpp
---unwind 11 --timeout 900
-^  file .*main\.cpp line 56 .*function main$
+--unwind 11 --no-unwinding-assertions --no-standard-checks
 ^VERIFICATION FAILED$

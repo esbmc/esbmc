@@ -95,11 +95,27 @@ or a value reachable through a pointer.
 It also works under a quantifier, as `__ESBMC_old(r->coeffs[j])` inside an
 `__ESBMC_forall` over `j`. A quantified index cannot be snapshotted one element
 at a time — the snapshot is taken once, before the body runs, while `j` still
-ranges — so the whole region is copied at entry and indexed afterwards. That
-needs a named object to copy: an array wrapped in a struct, or an array named
-directly, both work. A bare `int r[N]` parameter (which is a pointer, with its
-extent stated only in an `__ESBMC_is_fresh` clause the rewrite never sees) and
-an `int (*r)[N]` parameter are declined, and say so
+ranges — so the whole region is copied at entry and indexed afterwards. An array
+wrapped in a struct and an array named directly both work, and so does a bare
+`int r[N]` parameter under `--enforce-contract`: the region's extent is taken
+from the pointer's own `__ESBMC_requires(__ESBMC_is_fresh(r, N * sizeof(int)))`
+clause and copied element-wise at entry, which is what makes an element-wise
+postcondition such as
+
+```c
+__ESBMC_ensures(__ESBMC_forall(&j, !(j < N) || (r[j] == __ESBMC_old(r[j]) + 1)));
+```
+
+expressible on a function that takes its array the usual way.
+
+Four shapes are declined with a diagnostic naming the reason: an extent that is
+not stated by an unconditional, direct `__ESBMC_is_fresh` on the parameter; a
+zero-size element type, from which no element count can be derived; the same
+pointer used both as `__ESBMC_old(ptr)` and as a per-element
+`__ESBMC_old(ptr[j])` in one contract; and `--replace-call-with-contract`, which
+has no extent tracking at a call site. An `int (*r)[N]` parameter is a separate
+gap — it reaches the dereference layer and aborts there rather than being
+declined, and is pinned as `KNOWNBUG`
 ([#7057](https://github.com/esbmc/esbmc/issues/7057)).
 
 ## What a function may modify: `__ESBMC_assigns`
@@ -144,6 +160,12 @@ stronger guarantees.
 | `__ESBMC_assigns(p->sub->field)`            | A path through more than one pointer, rooted at a parameter |
 | `__ESBMC_assigns(x, y, z)`                  | Multiple targets (up to 5)         |
 | `__ESBMC_assigns()` or `__ESBMC_assigns(0)` | Nothing — declares a pure function |
+
+An index in an assigns target is read **in the pre-state**: `__ESBMC_assigns(buf[head], head)`
+grants the element `head` denoted on entry, so the ring-buffer idiom that writes
+`buf[head]` and then advances `head` complies, while a body that advances `head`
+first and writes the next element does not. This holds for a global array and
+for a pointer parameter alike.
 
 ### What happens when there is no `assigns` clause?
 
@@ -413,6 +435,15 @@ shares no object with any other pointer argument, and that the object it points
 into really does extend `size` bytes past it. Both halves are obligations on
 the caller, so a program that passed a smaller object than the contract asked
 for now reports a violated `requires` where it previously verified.
+
+Which object the argument names decides the extent, not how the call site spells
+it: `buf`, `&buf[0]`, a local `int *q = buf`, and a pointer forwarded through a
+parameter all reach the same object, and all have their extent checked — it is
+no longer skipped for automatic or static storage, so a call handing the
+contract a smaller object than it demands is rejected there rather than passing
+silently. The separation half is a separate obligation and is unaffected: a
+correctly-sized global still fails the aliasing check if another pointer
+argument can name it.
 
 Two consequences worth knowing:
 
@@ -767,6 +798,15 @@ to `o->x` is caught. It does not extend through the inner pointer — a write to
 — because the pointee of `o->sub` is not a parameter and has nothing to root a
 snapshot at. A path rooted at a *global* pointer (`__ESBMC_assigns(g->sub->a)`)
 still generates no verification conditions at all.
+
+**A `requires` over a global is evaluated at program start under enforce.** The
+enforce harness begins where every global still holds its static initialiser, so
+`__ESBMC_requires(other == 1)` on a global that `main` sets to `1` before the
+call cannot be satisfied there: the precondition lowers to a false assumption,
+the body is never reached, and the run reports `VERIFICATION SUCCESSFUL` over
+zero verification conditions. Parameters are unaffected, being nondeterministic,
+so state the precondition over a parameter where the choice exists
+([#7356](https://github.com/esbmc/esbmc/issues/7356)).
 
 **Quantifiers require Z3.** `__ESBMC_forall` and `__ESBMC_exists` are not
 supported by Boolector or other backends. Pass `--z3` when using quantified

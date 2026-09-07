@@ -14,7 +14,6 @@
 class python_converter;
 class type_handler;
 
-
 class dynamic_type_handler
 {
 public:
@@ -89,6 +88,11 @@ public:
     const exprt &lhs,
     const exprt &rhs,
     const locationt &location);
+
+  /**
+   * @brief Builds unary minus on a tagged-scalar operand, as `0 - tagged`
+   */
+  exprt build_neg_tagged(const exprt &tagged);
 
   /**
    * @brief Builds isinstance(tagged, type_name). `type_is_user_class` says
@@ -180,6 +184,8 @@ private:
     const std::string &op,
     const exprt &tagged,
     const exprt &literal);
+  exprt
+  build_ordered_obj(const std::string &op, const exprt &lhs, const exprt &rhs);
   exprt build_add_literal(
     const exprt &tagged,
     const exprt &literal,
@@ -222,4 +228,3 @@ private:
   // point is surviving the join.
   std::unordered_map<std::string, std::string> aliases_;
 };
-

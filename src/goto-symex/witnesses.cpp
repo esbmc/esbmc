@@ -303,6 +303,13 @@ void create_edge_node(edget &edge, xmlnodet &edgenode)
   edgenode.add("<xmlattr>.id", edge.id);
   edgenode.add("<xmlattr>.source", edge.from_node->id);
   edgenode.add("<xmlattr>.target", edge.to_node->id);
+  if (!edge.origin_file.empty())
+  {
+    xmlnodet data_originFileName;
+    data_originFileName.add("<xmlattr>.key", "originfile");
+    data_originFileName.put_value(edge.origin_file);
+    edgenode.add_child("data", data_originFileName);
+  }
   if (edge.start_line != c_nonset)
   {
     xmlnodet data_lineNumberInOrigin;
@@ -515,6 +522,20 @@ void create_graphml(xmlnodet &graphml)
     xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
   source_code_node.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", source_code_node);
+
+  /* README-GraphML.md defines no per-edge origin-file key: programfile is
+     graph-level, so a conforming validator ignores this and still resolves
+     startline against programfile. Emitted anyway because it is the only place
+     a consumer can learn which file a step came from, and the edges it appears
+     on were unmatchable either way. */
+  xmlnodet origin_file_node;
+  origin_file_node.add("<xmlattr>.id", "originfile");
+  origin_file_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.name", '|'), "originFileName");
+  origin_file_node.put(
+    xmlnodet::path_type("<xmlattr>|attr.type", '|'), "string");
+  origin_file_node.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", origin_file_node);
 
   xmlnodet start_line_node;
   start_line_node.add("<xmlattr>.id", "startline");
@@ -788,15 +809,25 @@ void _create_yaml_metadata_emitter(
 
   metadata << YAML::Key << "task" << YAML::BeginMap;
 
+  /* Every positional argument: a waypoint may name any of them, and
+     README-YAML.md requires a waypoint's file_name to be in this list. */
+  std::vector<std::string> input_files = config.args;
+  if (input_files.empty())
+    input_files.push_back(verifiedfile);
+
   metadata << YAML::Key << "input_files" << YAML::BeginSeq;
-  metadata << YAML::DoubleQuoted << verifiedfile;
+  for (const std::string &input_file : input_files)
+    metadata << YAML::DoubleQuoted << input_file;
   metadata << YAML::EndSeq;
 
-  std::string file_hash;
-  generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
   metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
-  metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
-           << YAML::DoubleQuoted << file_hash;
+  for (const std::string &input_file : input_files)
+  {
+    std::string file_hash;
+    generate_sha256_hash_for_file(input_file.c_str(), file_hash);
+    metadata << YAML::Key << YAML::DoubleQuoted << input_file << YAML::Value
+             << YAML::DoubleQuoted << file_hash;
+  }
   metadata << YAML::EndMap;
 
   std::string spec;
@@ -952,7 +983,7 @@ bool is_valid_witness_expr(
 }
 
 BigInt get_line_number(
-  std::string &verified_file,
+  const std::string &verified_file,
   BigInt relative_line_number,
   optionst &options)
 {

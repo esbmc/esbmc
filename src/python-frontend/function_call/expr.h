@@ -131,6 +131,9 @@ private:
    */
   exprt build_constant_from_arg() const;
 
+  std::optional<BigInt>
+  try_fold_constant_arith_json(const nlohmann::json &node) const;
+
   /*
    * Folds bytes.fromhex("..") over a constant hex string into a byte array.
    */
@@ -150,7 +153,7 @@ private:
    * Resolves the list symbol for a list method call.
    * Handles both a plain name (e.g. mylist.append()) and a subscript of
    * a nested list (e.g. nested[0].append()) by looking up the inner list
-   * symbol via list_type_map.  Returns nullptr when not found.
+   * symbol via the element-type registry.  Returns nullptr when not found.
    * On return, `display_name` holds a human-readable identifier suitable
    * for error messages (e.g. "mylist" or "nested[0]").
    */
@@ -354,6 +357,11 @@ private:
    * Rewrites the argument AST node into an integer Constant holding the given
    * code point and returns the resulting int expression. Helper for handle_ord.
    */
+  /// Code point of a constant char array -- what chr() folds to -- or nullopt
+  /// when @p e is not one. bytes are long_long_int arrays and are excluded, so
+  /// ord(b"\xc3") keeps its existing behaviour rather than becoming an error.
+  std::optional<int> folded_char_array_codepoint(const exprt &e) const;
+
   exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
 
   /*

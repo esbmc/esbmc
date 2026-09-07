@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 16
+^VERIFICATION FAILED$
+^ *FAILED .*assertion v\[11\]\[0\] == 555$

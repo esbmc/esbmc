@@ -38,7 +38,7 @@ exprt python_list::build_set_membership_call(
   // widened to a long by get_list_element_info, but the type map must keep the
   // logical bool type so bool-specific inference (e.g. isinstance) stays right.
   if (method_name == "add")
-    add_type_info(
+    elem_types().record(
       set.id.as_string(), elem_info.elem_symbol->id.as_string(), elem.type());
 
   return converter_.convert_expression_to_code(call);

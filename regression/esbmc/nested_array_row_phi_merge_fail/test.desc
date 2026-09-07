@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s+the else arm.s store survives the merge$
+^VERIFICATION FAILED$

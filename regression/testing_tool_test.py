@@ -2,6 +2,7 @@
 
 import unittest
 from testing_tool import *
+from testing_tool import _add_test
 
 
 class CTestGeneration(unittest.TestCase):
@@ -152,9 +153,9 @@ class ToolTest2(CTest4):
 
 
 class RelativeTestDirTest(unittest.TestCase):
-    """A CHECK_JSON / CHECK_FILE / SEED_FILE test runs ESBMC in a private
-    temporary cwd, so every path the runner hands ESBMC must be absolute
-    however the test directory was spelled (esbmc/esbmc#4331)."""
+    """Every test runs ESBMC in a private temporary cwd, so every path the
+    runner hands ESBMC must be absolute however the test directory was
+    spelled (esbmc/esbmc#4331)."""
 
     def test_paths_survive_a_chdir(self):
         test_case = TestCase("./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
@@ -206,6 +207,53 @@ class TimeoutReapsProcessGroupTest(unittest.TestCase):
             # A reaped pid may be recycled, but not within this test's lifetime.
             with self.assertRaises(OSError):
                 os.kill(child_pid, 0)
+
+
+class PrivateCwdTest(unittest.TestCase):
+    """A relative output path in the flags line must land in the test's own
+    temporary cwd. Letting it resolve against the invocation directory
+    overwrote artefacts tracked under regression/ on every run."""
+
+    def _stub(self, tmp):
+        """A stand-in for ESBMC that writes the relative file it is given."""
+        tool = os.path.join(tmp, "writes_output.py")
+        with open(tool, "w", encoding="utf-8") as f:
+            f.write("#!" + sys.executable + "\n"
+                    "import sys\n"
+                    "open(sys.argv[sys.argv.index('--cex-output') + 1], 'w').close()\n"
+                    "print('VERIFICATION SUCCESSFUL')\n")
+        os.chmod(tool, 0o755)
+        test_dir = os.path.join(tmp, "writes")
+        os.mkdir(test_dir)
+        open(os.path.join(test_dir, "main.c"), "w").close()
+        with open(os.path.join(test_dir, "test.desc"), "w", encoding="utf-8") as f:
+            f.write("CORE\nmain.c\n--cex-output sideeffect.txt\n"
+                    "^VERIFICATION SUCCESSFUL$\n")
+        return tool, test_dir
+
+    def _run_from(self, cwd, tool, test_dir):
+        previous = os.getcwd()
+        try:
+            # The runner anchors a relative tool path against the directory it
+            # was launched from, so build the executor after the chdir.
+            os.chdir(cwd)
+            _add_test(TestCase(test_dir, "writes"), Executor(tool))(self)
+        finally:
+            os.chdir(previous)
+
+    def test_relative_output_stays_out_of_the_invocation_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tool, test_dir = self._stub(tmp)
+            elsewhere = os.path.join(tmp, "elsewhere")
+            os.mkdir(elsewhere)
+            self._run_from(elsewhere, tool, test_dir)
+            self.assertEqual(os.listdir(elsewhere), [])
+
+    def test_relative_tool_path_resolves_against_the_caller(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tool, test_dir = self._stub(tmp)
+            relative = os.path.join(os.path.curdir, os.path.basename(tool))
+            self._run_from(tmp, relative, test_dir)
 
 
 if __name__ == '__main__':

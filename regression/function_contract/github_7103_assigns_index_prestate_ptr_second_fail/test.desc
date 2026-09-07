@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract push_tail_bad --function push_tail_bad
+^VERIFICATION FAILED$
+^.*buf\[j\] not in assigns clause.*$

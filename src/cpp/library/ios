@@ -11,6 +11,14 @@ namespace std
 // definitions.h (github #6063).
 using ::streamsize;
 
+// [iosfwd.syn] declares both at namespace scope, and every seekoff/seekpos
+// signature spells them there; the model had them only inside class ios.
+// Their width is left as the model's int: the standard wants an offset wide
+// enough for the target's largest file, but widening them here changes every
+// out-of-line seekg/seekp signature in <istream>/<ostream> (#7540).
+typedef int streamoff;
+typedef int streampos;
+
 enum _Ios_Fmtflags
 {
   __boolalpha = 1L << 0,
@@ -159,8 +167,16 @@ public:
 class ios : public ios_base
 {
 public:
-  typedef int streampos;
-  typedef int streamoff;
+  typedef std::streampos streampos;
+  typedef std::streamoff streamoff;
+
+  /* [ios.overview]. pos_type/off_type follow the model's int stream positions
+   * (istream::tellg, ostream::tellp) rather than the traits' size_t/ptrdiff_t. */
+  typedef char char_type;
+  typedef char_traits<char> traits_type;
+  typedef traits_type::int_type int_type;
+  typedef streampos pos_type;
+  typedef streamoff off_type;
 
   ios()
   {

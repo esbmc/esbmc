@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant
+^\s+FAILED\s+\[main\.assertion\.4\]\s+line\s+14\s+assertion x == 4$
+^VERIFICATION FAILED$

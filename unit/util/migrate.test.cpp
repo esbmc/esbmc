@@ -28,6 +28,8 @@
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
 #include <util/arith/arith_tools.h>
+#include <chrono>
+#include <utility>
 
 namespace
 {
@@ -88,6 +90,15 @@ type2tc make_struct_type()
   std::vector<type2tc> members{get_int_type(32), get_bool_type()};
   std::vector<irep_idt> names{"x", "y"};
   return struct_type2tc(members, names, names, "s");
+}
+
+type2tc make_nested_struct_type()
+{
+  const type2tc arr = array_type2tc(
+    get_int_type(32), constant_int2tc(get_uint_type(32), BigInt(4)), false);
+  std::vector<type2tc> members{arr, make_struct_type(), get_uint_type(64)};
+  std::vector<irep_idt> names{"a", "inner", "z"};
+  return struct_type2tc(members, names, names, "outer");
 }
 } // namespace
 
@@ -715,4 +726,168 @@ TEST_CASE(
 
   REQUIRE(via_helper == via_legacy); // faithful drop-in
   require_expr_roundtrip(via_helper);
+}
+
+// migrate_expr_back memoises on node identity so a shared subtree is expanded
+// once (R52 in docs/roadmap/goto-symex-verification-plan.md). A propagated
+// `with` chain over a nested array references its predecessor twice -- as the
+// store's source, and inside the `index` naming the row it updates -- so the
+// legacy form is reached along a number of paths exponential in the store
+// count.
+
+namespace
+{
+// `stores` levels of the DAG above, each store's value offset by `base` so two
+// chains of the same shape are distinguishable.
+expr2tc nested_store_dag(unsigned stores, unsigned base = 0)
+{
+  // Explicit-width indices, per the note on require_type_roundtrip above.
+  auto idx = [](unsigned v) {
+    return constant_int2tc(get_uint_type(64), BigInt(v));
+  };
+  const type2tc row = array_type2tc(get_int_type(32), idx(4), false);
+  const type2tc grid = array_type2tc(row, idx(4), false);
+
+  expr2tc chain = symbol2tc(grid, "grid");
+  for (unsigned k = 0; k < stores; ++k)
+  {
+    // Both operands name `chain`, which is what makes the result a DAG.
+    expr2tc old_row = index2tc(row, chain, idx(k % 4));
+    expr2tc updated = with2tc(
+      row, old_row, idx((k + 1) % 4), gen_long(get_int_type(32), base + k));
+    chain = with2tc(grid, chain, idx(k % 4), updated);
+  }
+  return chain;
+}
+} // namespace
+
+TEST_CASE("migrate_expr_back expands a shared subtree once", "[migrate]")
+{
+  use_test_ns();
+
+  const expr2tc chain = nested_store_dag(18);
+
+  // Wall-clock stands in for a node count the API does not expose. The
+  // separation it has to resolve is four orders of magnitude -- 18 stores
+  // expand along 2^18 paths unmemoised, measured at 1.5 s against under a
+  // millisecond -- so the threshold is not a tuned number.
+  const auto started = std::chrono::steady_clock::now();
+  const exprt legacy = migrate_expr_back(chain);
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  REQUIRE(
+    std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() <
+    300);
+
+  REQUIRE(legacy.id() == "with");
+}
+
+TEST_CASE("migrate_expr_back round-trips a shared subtree", "[migrate]")
+{
+  use_test_ns();
+  require_expr_roundtrip(nested_store_dag(6));
+}
+
+TEST_CASE("migrate_expr_back keeps no cache between calls", "[migrate]")
+{
+  use_test_ns();
+
+  exprt first;
+  {
+    const expr2tc a = nested_store_dag(6);
+    first = migrate_expr_back(a);
+  } // a's nodes die here, freeing their addresses for the allocator to reissue
+
+  const expr2tc b = nested_store_dag(6, 100);
+  const exprt second = migrate_expr_back(b);
+
+  // The cache keys on the address, so one surviving the first call would
+  // answer the second out of `a` at whatever addresses `b` reused.
+  expr2tc there_and_back;
+  migrate_expr(second, there_and_back);
+  REQUIRE(there_and_back == b);
+  REQUIRE(!full_eq(first, second));
+}
+
+// migrate_type_back memoises aggregate types on node identity (#7571).
+//
+// full_eq short-circuits on shared irept data (irep.cpp:209), so comparing two
+// cache hits asserts nothing -- these compare pretty() text, which always walks
+// the structure.
+
+TEST_CASE("migrate_type_back is stable across repeated calls", "[migrate]")
+{
+  const type2tc s = make_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+
+  // Distinct nodes that compare equal must still back-migrate equally: the
+  // cache keys on address, so an equal-but-separate node takes the slow path.
+  const type2tc other = make_struct_type();
+  REQUIRE(other == s);
+  REQUIRE(migrate_type_back(other).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back recurses through nested aggregates", "[migrate]")
+{
+  // An array member routes the reverse migration through migrate_expr_back on
+  // the array size; a struct member exercises the recursive aggregate arm.
+  const type2tc s = make_nested_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+  REQUIRE(migrate_type_back(make_nested_struct_type()).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back survives cache eviction", "[migrate]")
+{
+  const type2tc probe = make_nested_struct_type();
+  type2tc pinned = make_struct_type();
+  migrate_type_back_cache_clear();
+  const std::string expected = migrate_type_back(probe).pretty();
+  migrate_type_back(pinned);
+
+  // Overflow the cache to exercise the eviction path. Every node stays pinned
+  // while cached, so no address can be recycled and each insert is a new key.
+  std::vector<type2tc> nodes;
+  for (unsigned int i = 0; i < 5000; i++)
+  {
+    std::vector<type2tc> members{get_int_type(32), get_bool_type()};
+    std::vector<irep_idt> names{"x", "y"};
+    nodes.push_back(
+      struct_type2tc(members, names, names, "s" + std::to_string(i)));
+    migrate_type_back(nodes.back());
+  }
+
+  // Eviction dropped the cache's reference, so `pinned` is uniquely owned
+  // again and this mutable access does not clone. Were the cache still
+  // holding it, copy-on-write would detach and the address would change --
+  // which is what makes this discriminate eviction from an unbounded cache.
+  const type2t *node = std::as_const(pinned).get();
+  to_struct_type(pinned).name = "evicted";
+  REQUIRE(std::as_const(pinned).get() == node);
+
+  REQUIRE(migrate_type_back(probe).pretty() == expected);
+}
+
+TEST_CASE("a cached type2t detaches rather than mutating", "[migrate]")
+{
+  type2tc s = make_struct_type();
+  const std::string before = migrate_type_back(s).pretty();
+
+  // Read the node address through the const accessor: the non-const get() is
+  // itself the detaching overload, so reading with it would perform the very
+  // clone the test is trying to observe.
+  const type2t *original = std::as_const(s).get();
+
+  // Copy-on-write: the cache's reference makes the refcount > 1, so this
+  // mutable access must clone. If it wrote through instead, the cached legacy
+  // form would silently describe a type nobody holds any more.
+  to_struct_type(s).name = "renamed";
+  REQUIRE(std::as_const(s).get() != original);
+
+  REQUIRE(migrate_type_back(s).pretty() != before);
+  REQUIRE(migrate_type_back(make_struct_type()).pretty() == before);
 }

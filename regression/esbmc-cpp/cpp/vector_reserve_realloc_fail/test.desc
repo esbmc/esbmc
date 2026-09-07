@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 40
+^VERIFICATION FAILED$
+^ *FAILED .*assertion v\[19\] == 999$

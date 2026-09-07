@@ -58,39 +58,6 @@ __ESBMC_HIDE:;
   return *(const long long *)tagged->value == value;
 }
 
-// Tagged-vs-tagged equality. Dispatching on `type_id` before any byte compare
-// keeps the numeric arm at a fixed width, so only two tagged strings reach
-// the byte loop below, which the numeric case would otherwise pay for too.
-int __python_scalar_eq_obj(
-  const PyObject *a,
-  const PyObject *b,
-  size_t num_type_id)
-{
-__ESBMC_HIDE:;
-  // Python compares across types as unequal rather than coercing.
-  if (a->type_id != b->type_id)
-    return 0;
-  if (a->type_id == num_type_id)
-    return *(const long long *)a->value == *(const long long *)b->value;
-  if (a->size != b->size)
-    return 0;
-  // `.size` is only known at runtime, so memcmp's loop bound would be
-  // symbolic and never unwind to completion; a compile-time bound keeps this
-  // loop finite. Do not "simplify" it back to memcmp. `.size` counts the
-  // trailing NUL, so the limit here is 255 characters -- one below the length
-  // bound __python_strnlen_bounded applies.
-  __ESBMC_assert(
-    a->size <= ESBMC_PY_STRNLEN_BOUND, "tagged str exceeds the modelled bound");
-  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
-  {
-    if (i >= a->size)
-      break;
-    if (((const uint8_t *)a->value)[i] != ((const uint8_t *)b->value)[i])
-      return 0;
-  }
-  return 1;
-}
-
 int __python_scalar_eq_str(
   const PyObject *tagged,
   size_t type_id,
@@ -155,6 +122,90 @@ __ESBMC_HIDE:;
   return tagged->size > value_size ? 1 : 0;
 }
 
+// Tagged-vs-tagged equality. `bool` and `int` compare equal in real
+// Python (`True == 1`), so both count as numeric here.
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id,
+  size_t bool_type_id)
+{
+__ESBMC_HIDE:;
+  int a_num = a->type_id == num_type_id || a->type_id == bool_type_id;
+  int b_num = b->type_id == num_type_id || b->type_id == bool_type_id;
+  if (a_num || b_num)
+    return a_num && b_num &&
+           *(const long long *)a->value == *(const long long *)b->value;
+  // Python compares across types as unequal rather than coercing.
+  if (a->type_id != b->type_id || a->size != b->size)
+    return 0;
+  __ESBMC_assert(
+    a->size <= ESBMC_PY_STRNLEN_BOUND, "tagged str exceeds the modelled bound");
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= a->size)
+      break;
+    if (((const uint8_t *)a->value)[i] != ((const uint8_t *)b->value)[i])
+      return 0;
+  }
+  return 1;
+}
+
+// Three-way compare (-1/0/1) between two tagged scalars, for Lt/LtE/Gt/GtE.
+// A type mismatch here is a genuine TypeError, unlike equality.
+int __python_scalar_cmp_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id,
+  size_t bool_type_id)
+{
+__ESBMC_HIDE:;
+  int a_num = a->type_id == num_type_id || a->type_id == bool_type_id;
+  int b_num = b->type_id == num_type_id || b->type_id == bool_type_id;
+  __ESBMC_assert(
+    a_num == b_num && (a_num || a->type_id == b->type_id),
+    "TypeError: comparison not supported between these types");
+  if (!(a_num == b_num && (a_num || a->type_id == b->type_id)))
+    return 0;
+  if (a_num)
+  {
+    long long av = *(const long long *)a->value;
+    long long bv = *(const long long *)b->value;
+    if (av < bv)
+      return -1;
+    if (av > bv)
+      return 1;
+    return 0;
+  }
+  __ESBMC_assert(
+    a->size <= ESBMC_PY_STRNLEN_BOUND && b->size <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged str exceeds the modelled bound");
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= a->size || i >= b->size)
+      break;
+    unsigned char av = ((const unsigned char *)a->value)[i];
+    unsigned char bv = ((const unsigned char *)b->value)[i];
+    if (av != bv)
+      return av < bv ? -1 : 1;
+  }
+  return (a->size > b->size) - (a->size < b->size);
+}
+
+// Bounded strlen for a runtime string pointer -- a plain strlen never
+// finishes unwinding over a symbolic buffer.
+size_t __python_scalar_strlen_bounded(const char *s)
+{
+__ESBMC_HIDE:;
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (s[i] == '\0')
+      return i;
+  }
+  __ESBMC_assert(0, "tagged str exceeds the modelled bound");
+  return ESBMC_PY_STRNLEN_BOUND;
+}
+
 // Models a runtime type mismatch (e.g. `x + 1` where `x` holds a str) as a
 // Python TypeError, the same way IndexError/KeyError are modeled elsewhere
 // in this library: an assert on the path that would have raised.
@@ -193,12 +244,18 @@ __ESBMC_HIDE:;
   char *tagged_dst = tagged_is_left ? buffer : buffer + value_len;
   char *value_dst = tagged_is_left ? buffer + tagged_len : buffer;
 
-  // Zero-fill the tagged side on a mismatch instead of skipping it, so
-  // the buffer keeps the same shape either way.
-  if (type_matches)
-    __python_scalar_bytes_copy(tagged_dst, tagged->value, tagged_len);
-  else
-    memset(tagged_dst, 0, tagged_len);
+  // `tagged_len` can be symbolic after a branch join, so use a bounded
+  // loop instead of memcpy/memset, which never finish unwinding over it.
+  __ESBMC_assert(
+    tagged_len <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged str exceeds the modelled bound");
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= tagged_len)
+      break;
+    // Zero-fill on a mismatch so the buffer keeps the same shape either way.
+    tagged_dst[i] = type_matches ? ((const char *)tagged->value)[i] : 0;
+  }
   __python_scalar_bytes_copy(value_dst, value, value_len);
 
   buffer[tagged_len + value_len] = '\0';

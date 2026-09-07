@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-standard-checks
+^WARNING: constant propagation gave up on a `with` chain past 1024 symbolic updates
+^VERIFICATION SUCCESSFUL$

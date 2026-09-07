@@ -48,6 +48,16 @@ flagged. This can be tuned:
   permits; the non-`NULL` alternative stays reachable, and the object it yields
   can be freed but not accessed
 
+Every path that sizes an object — `malloc`, `calloc`, `realloc`, `alloca` and a
+variable-length array declaration — is capped at `PTRDIFF_MAX`, as glibc 2.30
+and later do. Above that an object's offset reads negative in the bounds checks,
+in pointer subtraction and in the relational comparator, so one-past-the-end
+would sort below the base. A constant request past the cap is *reported*; a
+symbolic one is bounded by assumption where the path has no failure outcome to
+report, and `realloc` joins the cap to its failure condition so C17 7.22.3.5
+still holds. Two flags opt out: `--force-realloc-success` skips the `realloc`
+cap and `--no-vla-size-check` the VLA bound.
+
 ## Properties checked
 
 From the model above, ESBMC derives the standard spatial and temporal
@@ -68,7 +78,11 @@ non-dynamic storage.
 
 Memory-leak detection is enabled with `--memory-leak-check`: a dynamic object
 that is still reachable-but-unfreed (or unreachable, "forgotten memory") at the
-end of `main` is reported.
+end of `main` is reported. `--no-reachable-memory-leak` keeps only the
+unreachable half, and the reachability walk follows the object's contents as
+well as its type, so an object held only through an allocation that was never
+cast at the site — a `void *` returned by a `safe_malloc`-style wrapper, which
+is modelled as a flat byte array — is not mistaken for forgotten memory.
 
 ## Why formulas are pointer-heavy
 

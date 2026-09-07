@@ -1,0 +1,4 @@
+CORE
+main.c
+--sv-comp --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --no-vla-size-check --32 --enable-unreachability-intrinsic --no-pointer-check --interval-analysis --no-bounds-check --goto-unwind --unlimited-goto-unwind --k-induction --max-inductive-step 3 --max-k-step 6 --gcse
+^VERIFICATION UNKNOWN$

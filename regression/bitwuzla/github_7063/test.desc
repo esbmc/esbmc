@@ -4,5 +4,6 @@ main.c
 ^VERIFICATION FAILED$
 ^Violated property:$
 ^  FAILED +\[main\.assertion\.1\] +line 15 +loop invariant base case$
-^\*\* 3 of 4 properties failed, 1 passed$
+^  UNKNOWN +\[main\.array-bounds-violated\.1\] +line 17 .*loop invariant too weak
+^\*\* 2 of 4 properties failed, 1 passed, 1 unknown$
 \A(?![\s\S]*Can't get boolean value)[\s\S]*\Z

@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_signbit.goto
+--binary
+^VERIFICATION SUCCESSFUL$

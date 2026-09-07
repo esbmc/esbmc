@@ -104,7 +104,7 @@ void python_converter::update_symbol(const exprt &expr) const
 static std::pair<std::string, std::string>
 from_import_binding(const nlohmann::json &ast, const std::string &bound)
 {
-  std::pair<std::string, std::string> binding;
+  std::pair<std::string, std::string> binding, wildcard;
 
   for (const auto &stmt : ast["body"])
   {
@@ -117,6 +117,13 @@ from_import_binding(const nlohmann::json &ast, const std::string &bound)
     for (const auto &alias : stmt["names"])
     {
       const std::string name = alias.value("name", "");
+      // `from m import *` binds every name m defines, this one included, but
+      // an explicit import of the name still wins over it (#7399).
+      if (name == "*")
+      {
+        wildcard = {stmt["full_path"].get<std::string>(), bound};
+        continue;
+      }
       const bool aliased =
         alias.contains("asname") && !alias["asname"].is_null();
       if ((aliased ? alias["asname"].get<std::string>() : name) == bound)
@@ -124,7 +131,71 @@ from_import_binding(const nlohmann::json &ast, const std::string &bound)
     }
   }
 
-  return binding;
+  return binding.first.empty() ? wildcard : binding;
+}
+
+/// Class name a `bases` entry denotes. A qualified base (`module.Class`)
+/// parses as an Attribute carrying `attr` instead of `id` -- reading `id`
+/// unconditionally aborted on any model-provided base such as
+/// unittest.TestCase (#6745). The symbol id uses the bare name either way.
+static std::string base_class_name(const nlohmann::json &base_class_node)
+{
+  return base_class_node.contains("id")
+           ? base_class_node["id"].get<std::string>()
+           : base_class_node.value("attr", "");
+}
+
+std::pair<const nlohmann::json *, std::string>
+python_converter::find_imported_class_module(
+  const std::string &class_name) const
+{
+  std::pair<const nlohmann::json *, std::string> found{nullptr, {}};
+
+  for (const auto &[module_name, module_ast] : module_ast_pool_)
+  {
+    const std::string path = get_imported_module_path(module_name);
+    if (path.empty())
+      continue;
+    if (json_utils::find_class(module_ast["body"], class_name).is_null())
+      continue;
+    if (found.first)
+      return {nullptr, {}}; // defined in 2+ modules -- don't guess
+    found = {&module_ast, path};
+  }
+
+  return found;
+}
+
+symbolt *python_converter::find_function_in_imported_base_classes(
+  const std::string &class_name,
+  const std::string &method_name,
+  bool is_ctor) const
+{
+  const auto [module_ast, module_path] = find_imported_class_module(class_name);
+  if (!module_ast)
+    return nullptr;
+
+  nlohmann::json class_node =
+    json_utils::find_class((*module_ast)["body"], class_name);
+
+  for (const auto &base_class_node : class_node["bases"])
+  {
+    const std::string base_class = base_class_name(base_class_node);
+    if (base_class.empty())
+      continue;
+
+    class symbol_id base_id(
+      module_path, base_class, is_ctor ? base_class : method_name);
+    if (symbolt *func = symbol_table_.find_symbol(base_id.to_string()))
+      return func;
+
+    if (
+      symbolt *func = find_function_in_imported_base_classes(
+        base_class, method_name, is_ctor))
+      return func;
+  }
+
+  return nullptr;
 }
 
 /// A base reached through an import lives in that module's file, so an id
@@ -190,13 +261,7 @@ symbolt *python_converter::find_function_in_base_classes(
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
   {
-    /* A qualified base (`module.Class`) parses as an Attribute, which carries
-     * `attr` instead of `id` -- reading `id` unconditionally aborted on any
-     * model-provided base such as unittest.TestCase (#6745). The symbol id
-     * uses the bare class name either way. */
-    const std::string base_class = base_class_node.contains("id")
-                                     ? base_class_node["id"].get<std::string>()
-                                     : base_class_node.value("attr", "");
+    const std::string base_class = base_class_name(base_class_node);
     if (base_class.empty())
       continue;
 
@@ -219,6 +284,13 @@ symbolt *python_converter::find_function_in_base_classes(
     if (
       symbolt *func = find_function_in_base_classes(
         base_class, sym_id, base_func_name, is_ctor))
+      return func;
+
+    // The base itself is defined in an imported module, whose classes this
+    // AST does not hold, so that descent stopped one level too early (#7398).
+    if (
+      symbolt *func = find_function_in_imported_base_classes(
+        base_class, method_name, is_ctor))
       return func;
   }
 

@@ -92,7 +92,20 @@ PyListObject *__ESBMC_list_create()
 
 size_t __ESBMC_list_size(const PyListObject *l)
 {
-  return l ? l->size : 0;
+  // Assert the null case rather than folding it to 0 with a conditional: a
+  // `l ? l->size : 0` return does not constant-propagate even when l is a
+  // concrete address, so every loop bounded by len() -- sum(), max(), the
+  // slice lowering -- unwound to --unwind instead of the list's own length
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4). An assert keeps the null
+  // case reported, which is closer to CPython's TypeError than silently
+  // answering 0.
+  __ESBMC_assert(l != NULL, "TypeError: object of this type has no len()");
+  // The claim above reports the null case; without also assuming it away the
+  // read below still runs on the failing path (--multi-property keeps going
+  // past a violated claim), dereferencing NULL for a garbage size and a
+  // spurious out-of-bounds report downstream.
+  __ESBMC_assume(l != NULL);
+  return l->size;
 }
 
 // ptr_free=1: payload has no pointer field, so we can reinterpret it as
@@ -259,12 +272,16 @@ static bool __ESBMC_list_push_shallow_sz(
   return __ESBMC_list_push_object(l, o, float_type_id, 0);
 }
 
+// elem_size is threaded straight to the size-aware core above: the slice
+// lowering knows the source list's element width, and passing it keeps the
+// per-element copy off memcpy's byte loop. 0 keeps the previous behaviour.
 bool __ESBMC_list_push_shallow(
   PyListObject *l,
   PyObject *o,
-  size_t list_type_id)
+  size_t list_type_id,
+  size_t elem_size)
 {
-  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, 0, 0);
+  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, elem_size, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
@@ -695,7 +712,17 @@ size_t __ESBMC_list_index_range(
 
 /* ---------- extend list ---------- */
 
-void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
+// elem_size: the statically-known element byte width from the frontend, used
+// as the copy length so __ESBMC_copy_value sees a compile-time constant and
+// takes its branch-free fast path. Without it the length is the symbolic field
+// read elem->size, which drops the copy into memcpy's per-byte loop and
+// unwinds it once per element (__ESBMC_list_store_elem threads the same
+// constant for the same reason, see above). 0 means the frontend could not
+// supply a width and reproduces the previous behaviour exactly.
+void __ESBMC_list_extend(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t elem_size)
 {
   if (!l || !other)
     return;
@@ -706,8 +733,9 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
     const PyObject *elem = &other->items[i];
 
     // Reuse the float-aware copier so the SMT model tracks size.
+    size_t copy_size = (elem_size != 0) ? elem_size : elem->size;
     void *copied_value =
-      __ESBMC_copy_value(elem->value, elem->size, elem->type_id, 0, NULL, 0);
+      __ESBMC_copy_value(elem->value, copy_size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
     l->items[l->size].float_idx = elem->float_idx;
@@ -1264,45 +1292,71 @@ void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
 
       bool prev_greater = false;
 
-      if (prev->size == 8 && type_flag == 0)
+      // Dispatch on type_flag, not on prev->size. type_flag is a literal from
+      // the frontend, so symex decides it and never enters the arm it did not
+      // select; prev->size is a field read through the element array, which
+      // does not fold, so leading with it made every numeric comparison also
+      // symex the memcmp below and unwind its byte loop to --unwind (#7361's
+      // defect class, docs/roadmap/symex-dead-work-cost-plan.md §3).
+      if (type_flag != 2)
       {
-        // All-integer list: compare as int64_t.
-        // Stays entirely in integer arithmetic — fast for the SMT solver.
-        int64_t a = *(const int64_t *)prev->value;
-        int64_t b = *(const int64_t *)tmp.value;
-        prev_greater = (a > b);
-      }
-      else if (prev->size == 8 && type_flag == 1)
-      {
-        // All-float list: read bits directly as IEEE 754 double.
-        double a = *(const double *)prev->value;
-        double b = *(const double *)tmp.value;
-        prev_greater = (a > b);
-      }
-      else if (prev->size == 8 && type_flag == 3)
-      {
-        // Mixed int + float list.
-        // Per-element dispatch: check each element's own type_id.
-        //   float element → read bits as double
-        //   int element   → numeric cast (double)(int64_t)  [exact up to 2^53]
-        double a = (prev->type_id == float_type_id)
-                     ? (*(const double *)prev->value)
-                     : ((double)(*(const int64_t *)prev->value));
-        double b = (tmp.type_id == float_type_id)
-                     ? (*(const double *)tmp.value)
-                     : ((double)(*(const int64_t *)tmp.value));
-        prev_greater = (a > b);
+        // Numeric list: no lexicographic arm. The frontend widens every
+        // numeric element to 8 bytes (bools arrive as bool_as_long), so the
+        // size-1 arm below is currently unreachable and kept only because
+        // removing it is a separate change; a byte compare of two numbers
+        // would be wrong anyway, which is why the memcmp arm is gone.
+        if (prev->size == 8)
+        {
+          if (type_flag == 0)
+          {
+            // All-integer list: compare as int64_t.
+            // Stays entirely in integer arithmetic — fast for the SMT solver.
+            int64_t a = *(const int64_t *)prev->value;
+            int64_t b = *(const int64_t *)tmp.value;
+            prev_greater = (a > b);
+          }
+          else if (type_flag == 1)
+          {
+            // All-float list: read bits directly as IEEE 754 double.
+            double a = *(const double *)prev->value;
+            double b = *(const double *)tmp.value;
+            prev_greater = (a > b);
+          }
+          else if (type_flag == 3)
+          {
+            // Mixed int + float list.
+            // Per-element dispatch: check each element's own type_id.
+            //   float element → read bits as double
+            //   int element   → numeric cast (double)(int64_t) [exact to 2^53]
+            double a = (prev->type_id == float_type_id)
+                         ? (*(const double *)prev->value)
+                         : ((double)(*(const int64_t *)prev->value));
+            double b = (tmp.type_id == float_type_id)
+                         ? (*(const double *)tmp.value)
+                         : ((double)(*(const int64_t *)tmp.value));
+            prev_greater = (a > b);
+          }
+        }
+        else if (prev->size == 1)
+        {
+          // bool / single-byte
+          uint8_t a = *(const uint8_t *)prev->value;
+          uint8_t b = *(const uint8_t *)tmp.value;
+          prev_greater = (a > b);
+        }
       }
       else if (prev->size == 1)
       {
-        // bool / single-byte
+        // The empty string, whose only byte is the terminator. Kept ahead of
+        // the memcmp arm so this reads exactly as it did before the dispatch
+        // was reordered.
         uint8_t a = *(const uint8_t *)prev->value;
         uint8_t b = *(const uint8_t *)tmp.value;
         prev_greater = (a > b);
       }
       else
       {
-        // type_flag == 2: string / lexicographic comparison.
+        // String / lexicographic comparison.
         //
         // Must use min(prev->size, tmp->size) as the memcmp length.
         // Using prev->size alone reads past the end of tmp's buffer when

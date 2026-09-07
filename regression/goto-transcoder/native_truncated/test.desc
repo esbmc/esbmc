@@ -1,0 +1,4 @@
+CORE
+main.goto
+--binary library.goto
+goto binary: irep not terminated

@@ -1,0 +1,4 @@
+CORE
+main.c
+--segfault-handler
+^VERIFICATION FAILED$

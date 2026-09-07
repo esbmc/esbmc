@@ -1,0 +1,7 @@
+CORE
+main.cpp
+--std=c++11 --incremental-bmc
+^Violated property:$
+^  file .*main\.cpp line \d+ column \d+ function main$
+^  assertion sum == 4$
+^VERIFICATION FAILED$
