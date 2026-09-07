@@ -884,6 +884,31 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 
     targets.destructor_stack.push_back(destructor);
   }
+  else if (s->name != "array_init$")
+  {
+    // An array of class objects: get_destructor matches a class type, not an
+    // array of one, so no element destructor was ever scheduled and RAII held
+    // in an array never released. Schedule one call per element.
+    // [class.dtor]/? destroys elements in reverse order of construction, which
+    // is what pushing them in index order gives once the stack unwinds LIFO.
+    const typet &decl_type = ns.follow(s->get_type());
+    code_function_callt elem_destructor;
+    BigInt count;
+    if (
+      decl_type.is_array() &&
+      get_destructor(ns, ns.follow(decl_type.subtype()), elem_destructor) &&
+      !to_integer(to_array_type(decl_type).size(), count) && count > 0)
+    {
+      for (BigInt i = 0; i < count; i = i + 1)
+      {
+        code_function_callt element = elem_destructor;
+        index_exprt elem(
+          symbol_expr, from_integer(i, index_type()), decl_type.subtype());
+        element.arguments().push_back(address_of_exprt(elem));
+        targets.destructor_stack.push_back(element);
+      }
+    }
+  }
 }
 
 void goto_convertt::convert_decl_block(const codet &code, goto_programt &dest)
