@@ -1,0 +1,4 @@
+CORE
+main.c
+--synthesise-loop-invariants --k-induction
+^WARNING: --synthesise-loop-invariants recognised no loop: the k-induction transform has already rewritten the loop heads it matches on\. Drop --k-induction to use it$

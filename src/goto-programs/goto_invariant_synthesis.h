@@ -74,8 +74,13 @@ struct overflow_checkst
 /// and are declined where that weakness is observable — a body that asserts, or
 /// a run with signed overflow checking on. --unsigned-overflow-check
 /// declines every loop, signed or not; see overflow_checkst.
+/// `k_induction_ran` reports whether goto_k_induction has already rewritten the
+/// loop heads. It is a diagnostic input only: the recogniser matches on a head
+/// this pass then no longer finds, so the run is a no-op and the user is told
+/// why rather than left with a silent one.
 void goto_synthesise_loop_invariants(
   goto_functionst &goto_functions,
-  const overflow_checkst &overflow);
+  const overflow_checkst &overflow,
+  bool k_induction_ran);
 
 #endif /* GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_ */

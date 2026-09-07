@@ -421,7 +421,7 @@ bool esbmc_parseoptionst::process_goto_program(
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (wants_loop_invariants())
-        apply_loop_invariants(goto_functions, context, options);
+        apply_loop_invariants(goto_functions, context, options, is_k_induction);
     }
 
     // --termination: reduce non-termination to a reachability safety
@@ -849,7 +849,8 @@ bool esbmc_parseoptionst::wants_loop_invariants() const
 void esbmc_parseoptionst::apply_loop_invariants(
   goto_functionst &goto_functions,
   contextt &context,
-  const optionst &options)
+  const optionst &options,
+  bool k_induction_ran)
 {
   if (cmdline.isset("synthesise-loop-invariants"))
     // Read from `options`, the same object goto_check consults
@@ -861,7 +862,8 @@ void esbmc_parseoptionst::apply_loop_invariants(
       goto_functions,
       overflow_checkst{
         options.get_bool_option("overflow-check"),
-        options.get_bool_option("unsigned-overflow-check")});
+        options.get_bool_option("unsigned-overflow-check")},
+      k_induction_ran);
 
   bool use_frame_rule = cmdline.isset("loop-frame-rule");
   goto_loop_invariant(goto_functions, context, use_frame_rule);

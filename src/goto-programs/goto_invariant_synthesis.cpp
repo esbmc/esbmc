@@ -651,7 +651,8 @@ void emit_invariant(
 
 void goto_synthesise_loop_invariants(
   goto_functionst &goto_functions,
-  const overflow_checkst &overflow)
+  const overflow_checkst &overflow,
+  bool k_induction_ran)
 {
   size_t synthesised = 0;
 
@@ -693,6 +694,15 @@ void goto_synthesise_loop_invariants(
       "Synthesised loop invariants for {} loop{}",
       synthesised,
       synthesised == 1 ? "" : "s");
+  else if (k_induction_ran)
+    log_warning(
+      "--synthesise-loop-invariants recognised no loop: the k-induction "
+      "transform has already rewritten the loop heads it matches on. Drop "
+      "--k-induction to use it");
+  else
+    log_warning(
+      "--synthesise-loop-invariants recognised no loop matching the affine "
+      "counter/accumulator shape; the run proceeds unchanged");
 
   goto_functions.update();
 }
