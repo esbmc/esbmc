@@ -859,7 +859,9 @@ void print_interval(
   out << name;
 
   if (i.upper)
-    out << " <= " << i.get_upper() << "\n";
+    out << " <= " << i.get_upper();
+
+  out << "\n";
 }
 
 // TODO: refactor
