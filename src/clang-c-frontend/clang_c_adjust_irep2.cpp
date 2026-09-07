@@ -54,7 +54,10 @@ bool clang_c_adjust_irep2::adjust()
       // Only write back a value this pass actually changed, so symbols it does
       // not touch never make the round trip (python_adjust takes the same care,
       // for the bitfield and alignment losses migrate_type cannot carry).
-      if (value != before)
+      // writeback_all defeats the gate for diagnosis only: an unchanged body
+      // otherwise keeps its converter tree, which is not what this pass built
+      // (§135).
+      if (writeback_all || value != before)
         s->set_value(value);
     }
   }
@@ -619,11 +622,18 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   if (is_nil_expr(a.ptr_obj))
     return;
 
-  const type2tc obj_type = ns.follow(a.ptr_obj->type);
-  if (!is_array_type(obj_type))
+  // Test the operand's own type rather than ns.follow's resolution of it:
+  // migrate_type lowers an incomplete struct to an infinitely sized uint8
+  // array, so following decays `&s` on an incomplete-typed object to `&s[0]`,
+  // an index legacy never builds -- and there is no element to index, C11
+  // 6.5.3.2p3 giving the address the operand's own type.
+  //
+  // Legacy's is_array_like also admits a vector, which is_array_type does not;
+  // that half is a separate divergence, tracked but not reproduced here.
+  if (!is_array_type(a.ptr_obj->type))
     return;
 
-  const type2tc &elem = to_array_type(obj_type).subtype;
+  const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
   expr = address_of2tc(elem, idx, a.implicit);
@@ -1381,13 +1391,17 @@ void clang_c_adjust_irep2::declare_polymorphic_builtin(expr2tc &expr)
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;
 
-  // Location stays per site, not in the call view: a code_function_call2t
-  // carries its own, a sideeffect2t borrows the enclosing statement's.
-  const locationt loc = is_code_function_call2t(expr)
-                          ? to_code_function_call2t(expr).location
-                          : enclosing_location;
+  // Location stays per site, not in the call view: both spellings carry one of
+  // their own; enclosing_location is the fallback for a sideeffect2t built
+  // without one (§136).
+  locationt loc = enclosing_location;
+  if (is_code_function_call2t(expr))
+    loc = to_code_function_call2t(expr).location;
+  else if (const locationt &l = to_sideeffect2t(expr).location; l.is_not_nil())
+    loc = l;
 
-  // Every arm of the matcher selects on the first argument's *type* alone, so
+  // Every arm of the matcher selects on argument *types* alone -- the first for
+  // the atomic/sync builtins, the last for the overflow and carry ones -- so
   // the values need not cross the seam. A future arm that reads a value gets a
   // nil operand and fails visibly rather than silently selecting wrong.
   exprt::operandst arg_types;
@@ -1430,13 +1444,16 @@ void clang_c_adjust_irep2::declare_implicit_callee(
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;
 
-  // Location stays per site: a code_function_call2t carries its own; a
-  // sideeffect2t has none, so the caller passes the enclosing statement's --
-  // the call's only when the call is the whole statement, the one position this
-  // is reached from.
-  const locationt loc = is_code_function_call2t(expr)
-                          ? to_code_function_call2t(expr).location
-                          : stmt_location;
+  // Location stays per site. Both spellings now carry one of their own, so the
+  // caller's stmt_location is only a fallback for a sideeffect2t built without
+  // it -- and it is a lossy one: the statement names the statement, not the
+  // callee, so `int x = f(1);` would report the column of `int`, not of `f`
+  // (§110.3, §136).
+  locationt loc = stmt_location;
+  if (is_code_function_call2t(expr))
+    loc = to_code_function_call2t(expr).location;
+  else if (const locationt &l = to_sideeffect2t(expr).location; l.is_not_nil())
+    loc = l;
 
   const irep_idt id = to_symbol2t(callee).thename;
   if (context.find_symbol(id) != nullptr)

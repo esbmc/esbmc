@@ -6676,6 +6676,35 @@ void python_converter::get_compound_assign(
       ast_node["target"]["_type"].get<std::string>());
   }
 
+  // Desugar `x op= v` into `x = x op v`, reusing get_var_assign's tagged
+  // dispatch instead of duplicating it here.
+  if (type_handler_.is_tagged_scalar_type(lhs.type()))
+  {
+    std::string op_type = ast_node["op"]["_type"].get<std::string>();
+    if (op_type != "Add" && op_type != "Sub" && op_type != "Div")
+      throw std::runtime_error(
+        "operator '" + op_type +
+        "' on a dynamically-typed variable is not yet supported");
+
+    nlohmann::json binop;
+    binop["_type"] = "BinOp";
+    binop["left"] = ast_node["target"];
+    binop["op"] = ast_node["op"];
+    binop["right"] = ast_node["value"];
+    copy_location_fields_from_decl(ast_node, binop);
+
+    nlohmann::json synthetic;
+    synthetic["_type"] = "Assign";
+    synthetic["targets"] = nlohmann::json::array({ast_node["target"]});
+    synthetic["value"] = binop;
+    copy_location_fields_from_decl(ast_node, synthetic);
+
+    is_converting_lhs = false;
+    is_converting_rhs = false;
+    get_var_assign(synthetic, target_block);
+    return;
+  }
+
   // For attribute assignments, use the type from the LHS expression
   // For other assignments, resolve the variable type
   if (!lhs.type().is_nil() && !lhs.type().id().empty())
@@ -7111,6 +7140,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       return cond;
     }
 
+    // A tagged value has no defined truthiness; refuse instead of building
+    // an ill-typed struct-to-bool node.
+    if (type_handler_.is_tagged_scalar_type(value_expr.type()))
+      throw std::runtime_error(
+        "truthiness of a dynamically-typed variable is not yet supported");
+
     exprt bool_expr = typecast_exprt(value_expr, bool_type());
     bool_expr.location() = get_location_from_decl(value_node);
     return bool_expr;
@@ -7264,6 +7299,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if (!cond.type().is_bool())
     {
       const locationt location = get_location_from_decl(ast_node["test"]);
+
+      // A tagged value has no defined truthiness; refuse instead of
+      // falling through to a struct-typed guard.
+      if (type_handler_.is_tagged_scalar_type(cond.type()))
+        throw std::runtime_error(
+          "truthiness of a dynamically-typed variable is not yet "
+          "supported");
+
       typet value_type = ns.follow(cond.type());
       if (value_type.is_pointer())
         value_type = ns.follow(value_type.subtype());

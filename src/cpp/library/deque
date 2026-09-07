@@ -456,8 +456,18 @@ public:
     _capacity = 1;
   }
 
+  // [deque.cons]: the allocator-taking overloads, ignored here (#7493).
+  explicit deque(const allocator_type &) : _size(0), _capacity(1)
+  {
+    buf[0] = T();
+    buf[1] = T();
+  }
+
 #if __cplusplus >= 201103L
-  deque(std::initializer_list<T> init) : _size(0), _capacity(1)
+  deque(
+    std::initializer_list<T> init,
+    const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
     for (const T *it = init.begin(); it != init.end(); ++it)
       this->push_back(*it);
@@ -469,7 +479,10 @@ public:
     _size = 0;
   }
 
-  explicit deque(iterator t1, iterator t2) : _size(0)
+  /* No allocator-taking form: this constructor's size is off by one, so
+   * accepting the [deque.cons] spelling would return a wrong answer where it
+   * now gives a compile error. */
+  explicit deque(iterator t1, iterator t2) : _size(0), _capacity(1)
   {
     int n = 1;
     for (n = 1; t1 != t2; t1++)
@@ -480,7 +493,8 @@ public:
     verify_capacity();
   }
 
-  explicit deque(size_type n) : _size(0), _capacity(1)
+  explicit deque(size_type n, const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
     for (int i = 0; i < n; i++)
       push_back(T());
@@ -497,9 +511,9 @@ public:
     verify_capacity();
   }
 
-  explicit deque(size_type n, const T &x)
+  deque(size_type n, const T &x, const allocator_type & = allocator_type())
+    : _size(0), _capacity(1)
   {
-    _size = 0;
     buf[0] = T();
     for (int i = 0; i < n; i++)
       push_back(x);
@@ -508,11 +522,12 @@ public:
 
   deque(const deque &x) : _size(0), _capacity(1)
   {
-    _size = 0;
-    buf[0] = T();
-    for (int i = 0; i < x.size(); i++)
-      push_back(x[i]);
-    verify_capacity();
+    _copy_from(x);
+  }
+
+  deque(const deque &x, const allocator_type &) : _size(0), _capacity(1)
+  {
+    _copy_from(x);
   }
 
   deque &operator=(const deque &x)
@@ -758,6 +773,14 @@ public:
     assert(0 <= _size);
     assert(_size < DEQUE_CAPACITY);
     insert(begin(), x);
+    verify_capacity();
+  }
+
+  void _copy_from(const deque &x)
+  {
+    buf[0] = T();
+    for (int i = 0; i < x.size(); i++)
+      push_back(x[i]);
     verify_capacity();
   }
 

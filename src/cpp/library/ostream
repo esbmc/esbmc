@@ -1,6 +1,7 @@
 #ifndef STL_OSTREAM
 #define STL_OSTREAM
 
+#include "iosfwd"
 #include "ios"
 #include "definitions.h"
 #include "cstring"
@@ -219,10 +220,7 @@ inline ostream &operator<<(ostream &o, const smanip &val)
 // names as alias templates so declarations mentioning
 // std::basic_ostream<CharT, Traits> parse (github #6063). Only the char
 // instantiation is meaningful.
-template <class charT>
-struct char_traits;
-template <class CharT, class Traits = char_traits<CharT>>
-using basic_ostream = ostream;
+/* basic_ostream is an alias template declared in <iosfwd> (#7531). */
 
 /* [ostream.rvalue] as amended by LWG 1203: the return type is the *derived*
  * stream, not basic_ostream, so `std::ostringstream{} << x` stays an

@@ -1,6 +1,7 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -26,6 +27,17 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // Get the operand expression
   exprt unary_sub = get_expr(element["operand"]);
+
+  // A tagged operand needs runtime dispatch.
+  if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
+  {
+    std::string unary_op = element["op"]["_type"].get<std::string>();
+    if (unary_op == "USub")
+      return dynamic_type_handler_.build_neg_tagged(unary_sub);
+    throw std::runtime_error(
+      "operator '" + unary_op +
+      "' on a dynamically-typed variable is not yet supported");
+  }
 
   // An unresolved method call yields a placeholder null (see
   // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let

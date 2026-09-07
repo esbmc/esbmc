@@ -4360,11 +4360,82 @@ static expr2tc cancel_common_unary_operand(
   return expr2tc();
 }
 
+// Returns a Boolean constant when a pointer comparison against NULL is
+// decidable, nil otherwise. `eq` selects the polarity. A pointer value
+// is an (object, offset) pair and no object lives at address zero, so
+// the non-null side peels casts and constant ± offsets down to its
+// root before the address_of root check: `(T *)(&sym + k) == NULL`
+// folds exactly like `&sym == NULL`.
+static expr2tc
+simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  if (!is_pointer_type(s1) && !is_pointer_type(s2))
+    return expr2tc();
+  bool n1 = is_null_pointer_value(s1);
+  bool n2 = is_null_pointer_value(s2);
+  if (n1 && n2)
+    return eq ? gen_true_expr() : gen_false_expr();
+  if (n1 == n2)
+    return expr2tc();
+  // Only pointer-typed links preserve nullness: a cast through an
+  // integer type may truncate, and integer arithmetic can wrap to
+  // zero, so the peel stops at the first non-pointer node.
+  const expr2tc *p = n1 ? &s2 : &s1;
+  while (is_pointer_type((*p)->type))
+  {
+    if (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from->type))
+      p = &to_typecast2t(*p).from;
+    else if (is_add2t(*p) && is_constant_int2t(to_add2t(*p).side_2))
+      p = &to_add2t(*p).side_1;
+    else if (is_add2t(*p) && is_constant_int2t(to_add2t(*p).side_1))
+      p = &to_add2t(*p).side_2;
+    else if (is_sub2t(*p) && is_constant_int2t(to_sub2t(*p).side_2))
+      p = &to_sub2t(*p).side_1;
+    else
+      break;
+  }
+  if (address_of_is_provably_non_null(*p))
+    return eq ? gen_false_expr() : gen_true_expr();
+  return expr2tc();
+}
+
+/// (x * c) == 0 -> x == 0 when c is odd, or nothing. Restricted to odd
+/// constants because modular bv multiplication is injective only for
+/// invertibles mod 2^width — i.e. constants coprime to 2^width, which
+/// for power-of-two moduli is exactly the odd constants. With c=2 in
+/// 8-bit unsigned, for example, x=128 also satisfies x*2 == 0 (mod
+/// 256), so dropping the multiplication would silently strengthen the
+/// predicate. The type guards keep the rewritten equality homogeneous.
+static expr2tc
+fold_odd_multiple_of_zero(const expr2tc &side_1, const expr2tc &side_2)
+{
+  if (!is_mul2t(side_1) || !is_constant_int2t(side_2))
+    return expr2tc();
+  if (!to_constant_int2t(side_2).value.is_zero())
+    return expr2tc();
+
+  const mul2t &mul_expr = to_mul2t(side_1);
+  if (
+    is_constant_int2t(mul_expr.side_2) &&
+    mul_expr.side_1->type == side_2->type &&
+    to_constant_int2t(mul_expr.side_2).value.is_odd())
+    return equality2tc(mul_expr.side_1, side_2);
+  if (
+    is_constant_int2t(mul_expr.side_1) &&
+    mul_expr.side_2->type == side_2->type &&
+    to_constant_int2t(mul_expr.side_1).value.is_odd())
+    return equality2tc(mul_expr.side_2, side_2);
+  return expr2tc();
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
+
+  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, true))
+    return r;
 
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
@@ -4388,44 +4459,8 @@ expr2tc equality2t::do_simplify() const
       !is_nil_expr(r))
     return r;
 
-  // (x * c) == 0 -> x == 0 when c is odd. Restricted to odd constants
-  // because modular bv multiplication is injective only for invertibles
-  // mod 2^width — i.e. constants coprime to 2^width, which for power-of-two
-  // moduli is exactly the odd constants. With c=2 in 8-bit unsigned, for
-  // example, x=128 also satisfies x*2 == 0 (mod 256), so dropping the
-  // multiplication would silently strengthen the predicate.
-  //
-  // Defensive type guard: equality2tc requires both sides to share a type.
-  // A well-formed mul2t already has homogeneous operands, but if a future
-  // construction path produces a mixed-width mul, the rewritten equality
-  // would mix widths too. Skip the rewrite unless mul.side_*->type matches
-  // side_2->type.
-  if (is_mul2t(side_1) && is_constant_int2t(side_2))
-  {
-    const mul2t &mul_expr = to_mul2t(side_1);
-    const BigInt &c2 = to_constant_int2t(side_2).value;
-
-    if (c2 == 0)
-    {
-      if (
-        is_constant_int2t(mul_expr.side_2) &&
-        mul_expr.side_1->type == side_2->type)
-      {
-        const BigInt &c1 = to_constant_int2t(mul_expr.side_2).value;
-        if (c1.is_odd())
-          return equality2tc(mul_expr.side_1, side_2);
-      }
-
-      if (
-        is_constant_int2t(mul_expr.side_1) &&
-        mul_expr.side_2->type == side_2->type)
-      {
-        const BigInt &c1 = to_constant_int2t(mul_expr.side_1).value;
-        if (c1.is_odd())
-          return equality2tc(mul_expr.side_2, side_2);
-      }
-    }
-  }
+  if (expr2tc r = fold_odd_multiple_of_zero(side_1, side_2); !is_nil_expr(r))
+    return r;
 
   if (expr2tc r = cancel_common_addend_operand(side_1, side_2, rebuild_eq);
       !is_nil_expr(r))
@@ -4490,6 +4525,9 @@ expr2tc notequal2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
+  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, false))
+    return r;
+
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
@@ -4499,12 +4537,6 @@ expr2tc notequal2t::do_simplify() const
   if (expr2tc b = widened_bool_compared_to_zero(side_1, side_2);
       !is_nil_expr(b))
     return b;
-
-  // &x != NULL is true, the mirror of the == NULL rule same_object2t has.
-  if (is_null_pointer_value(side_1) && address_of_is_provably_non_null(side_2))
-    return gen_true_expr();
-  if (is_null_pointer_value(side_2) && address_of_is_provably_non_null(side_1))
-    return gen_true_expr();
 
   // The shape-canonicalizations below mirror equality2t::do_simplify. They are
   // the same rewrites: != x y holds iff == x y doesn't, so any rewrite that
