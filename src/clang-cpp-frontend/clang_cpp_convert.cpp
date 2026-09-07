@@ -2330,10 +2330,14 @@ bool clang_cpp_convertert::get_function_body(
         initializers.push_back(initializer);
         init_sym_uptodate = false;
       }
-      else if (init->isMemberInitializer())
+      else if (
+        init->isMemberInitializer() || init->isIndirectMemberInitializer())
       {
-        // parsing non-static member initializer
-        const clang::FieldDecl *member_decl = init->getMember();
+        // parsing non-static member initializer. A member reached through an
+        // anonymous union or struct is an IndirectFieldDecl, for which clang
+        // sets isIndirectMemberInitializer instead; getAnyMember() yields the
+        // underlying FieldDecl for both (#7560).
+        const clang::FieldDecl *member_decl = init->getAnyMember();
 
         exprt member;
         member.set("#member_init", 1);
@@ -2348,7 +2352,37 @@ bool clang_cpp_convertert::get_function_body(
         if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
-        build_member_from_component(fd, member);
+        // A member of an anonymous union/struct is not a component of the
+        // enclosing class: the anonymous field is, and the member sits inside
+        // it. IndirectFieldDecl::chain() runs outermost-first and ends at the
+        // member itself, so walking it yields this-><anon>.m; building
+        // this->m directly reads at the wrong offset (#7560).
+        if (init->isIndirectMemberInitializer())
+        {
+          exprt path;
+          bool rooted = false;
+          for (const clang::NamedDecl *nd : init->getIndirectMember()->chain())
+          {
+            const auto *link = llvm::dyn_cast<clang::FieldDecl>(nd);
+            if (!link)
+              return true;
+            exprt hop;
+            if (get_decl_ref(*link, hop))
+              return true;
+            if (!rooted)
+            {
+              build_member_from_component(fd, hop);
+              path = hop;
+              rooted = true;
+            }
+            else
+              path = member_exprt(path, hop.name(), hop.type());
+          }
+          member = path;
+        }
+        else
+          build_member_from_component(fd, member);
+
         // set #member_init flag again, as it has been cleared between the first call...
         member.set("#member_init", 1);
 
