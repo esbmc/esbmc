@@ -190,6 +190,21 @@ static bool incompatible_flags(const cmdlinet &cmdline)
     return true;
   }
 
+  // --termination havocs every loop head k-induction-style (goto_termination),
+  // and the loop-invariant modes have already rewritten those heads: the
+  // establishment ASSERT now sits where havoc_slot expects the guard, and it
+  // aborts on `loop_head->is_goto()` (goto_k_induction.cpp). Composing the two
+  // would be meaningless even if it did not abort -- a loop the invariant
+  // schema has cut no longer has the iteration behaviour --termination is
+  // asking about. Reject the combination.
+  for (const char *mode :
+       {"synthesise-loop-invariants", "loop-invariant-check", "loop-invariant"})
+    if (cmdline.isset(mode) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", mode);
+      return true;
+    }
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).
