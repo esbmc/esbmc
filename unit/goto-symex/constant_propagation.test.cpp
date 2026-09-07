@@ -24,6 +24,7 @@
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/namespace.h>
 
@@ -156,6 +157,39 @@ expr2tc
 with_index(const expr2tc &source, const expr2tc &idx, const expr2tc &value)
 {
   return with2tc(source->type, source, idx, value);
+}
+
+/** Restores a global option however the case leaves: REQUIRE throws, and a
+ *  leaked k-induction would fail every later case in this binary instead. */
+class scoped_option
+{
+public:
+  scoped_option(const char *name, bool value)
+    : name(name), saved(config.options.get_bool_option(name))
+  {
+    config.options.set_option(name, value);
+  }
+  ~scoped_option()
+  {
+    config.options.set_option(name, saved);
+  }
+
+private:
+  const char *name;
+  bool saved;
+};
+
+/** `struct { int i; float _Complex z; }`: a member a read *is* offered for --
+ *  the object is a struct -- but whose complex type the acceptance re-test then
+ *  refuses, so the rebuild is dropped after an element was pinned. */
+type2tc counter_and_complex_struct()
+{
+  std::vector<type2tc> members{
+    int_type2(),
+    complex_type2tc(float_type2()),
+  };
+  std::vector<irep_idt> names{"i", "z"};
+  return struct_type2tc(members, names, names, "held_complex");
 }
 } // namespace
 
@@ -352,4 +386,190 @@ TEST_CASE(
   for (unsigned i = 0; i < bound + 2; i++)
     literals = with_index(literals, int_const(i), int_const(i));
   REQUIRE(e.state().constant_propagation(literals));
+}
+
+/* The rest cover pin_symbolic_updates. #7605 widened which *values* may be
+ * carried; an operator around an immutable read is still not one of them, so
+ * the object -- and the sibling counter in it -- was dropped as before. Rather
+ * than widen the class again, a refused write is re-offered as a read of the
+ * name the assignment has just defined, which denotes it exactly. */
+
+TEST_CASE(
+  "an operator around an immutable read is not itself immutable",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+
+  // The bare read #7605 admits.
+  REQUIRE(
+    e.state().constant_propagation(with_field(var, "r", member_of(io, "i"))));
+
+  // Wrapped in any operator it is refused, and the whole object goes with it.
+  const expr2tc sum = add2tc(int_type2(), member_of(io, "i"), int_const(1));
+  REQUIRE_FALSE(e.state().constant_propagation(with_field(var, "r", sum)));
+}
+
+TEST_CASE(
+  "a refused chain update is pinned to a read of the assigned name",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+  const expr2tc sum = add2tc(int_type2(), member_of(io, "i"), int_const(1));
+
+  // `VAR.i = 3; VAR.r = IO.i + 1;` as symex lowers it.
+  const expr2tc rhs = with_field(with_field(var, "i", int_const(3)), "r", sum);
+  const expr2tc pinned = e.state().pin_symbolic_updates(rhs, var);
+
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+
+  // The refused value now reads out of VAR itself, ...
+  REQUIRE(to_with2t(pinned).update_value == member_of(var, "r"));
+  // ... and the sibling counter folds again, which is the point.
+  REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
+  "a refused literal element is pinned too",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+  const expr2tc sum = add2tc(int_type2(), member_of(io, "i"), int_const(1));
+
+  // do_simplify folds a `with` over a propagated literal back into a literal,
+  // so the same write reaches assignment() in this shape as well.
+  const expr2tc literal =
+    constant_struct2tc(pair_struct(), std::vector<expr2tc>{int_const(3), sum});
+  const expr2tc pinned = e.state().pin_symbolic_updates(literal, var);
+
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+  REQUIRE(
+    to_constant_struct2t(pinned).datatype_members[1] == member_of(var, "r"));
+  REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
+  "an array element is pinned to an index read",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc arr =
+    symbol_at(int_array(2), "c:test.c@F@main@A", symbol_renaming_level::level2);
+  const expr2tc sum = add2tc(int_type2(), nondet_int_symbol(), int_const(1));
+
+  const expr2tc literal =
+    constant_array2tc(int_array(2), std::vector<expr2tc>{int_const(3), sum});
+  const expr2tc pinned = e.state().pin_symbolic_updates(literal, arr);
+
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+  REQUIRE(
+    to_constant_array2t(pinned).datatype_members[1] ==
+    index_of(arr, gen_ulong(1)));
+}
+
+TEST_CASE(
+  "pinning declines when it would change nothing",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+
+  // Every update already propagates, so the value assignment() recorded is
+  // already the right one and there is nothing to re-offer.
+  REQUIRE(is_nil_expr(
+    e.state().pin_symbolic_updates(with_field(var, "i", int_const(3)), var)));
+
+  // A shape that is neither a chain nor an aggregate literal is left alone.
+  REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(int_const(3), var)));
+}
+
+TEST_CASE(
+  "pinning is off under the incremental strategies",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+
+  // A literal, not a chain: the `with` branch of constant_propagation opts out
+  // under these strategies on its own, so the chain path would decline at its
+  // own acceptance test. The literal branch has no such opt-out to inherit,
+  // and this is the shape that needs the explicit one.
+  const expr2tc literal = constant_struct2tc(
+    pair_struct(),
+    std::vector<expr2tc>{
+      int_const(3), add2tc(int_type2(), member_of(io, "i"), int_const(1))});
+
+  REQUIRE_FALSE(is_nil_expr(e.state().pin_symbolic_updates(literal, var)));
+
+  {
+    const scoped_option k("k-induction", true);
+    REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(literal, var)));
+  }
+
+  REQUIRE_FALSE(is_nil_expr(e.state().pin_symbolic_updates(literal, var)));
+}
+
+TEST_CASE(
+  "a pinned read constant_propagation still refuses ends the chain",
+  "[symex][constant-propagation]")
+{
+  // The acceptance re-test is what contains the feature: pinning offers a read,
+  // it does not decide that the read may be carried. A `_Complex` member is
+  // offered as `member(VAR, "z")`, which is neither a scalar nor a fixed-size
+  // aggregate update, so the rebuild is refused and the object stays
+  // unpropagated -- exactly as before #7597.
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc var = symbol_at(
+    counter_and_complex_struct(),
+    "c:test.c@F@main@VAR",
+    symbol_renaming_level::level2);
+
+  const expr2tc refused = typecast2tc(
+    complex_type2tc(float_type2()),
+    add2tc(int_type2(), member_of(io, "i"), int_const(1)));
+  REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(
+    with_field(with_field(var, "i", int_const(3)), "z", refused), var)));
+}
+
+TEST_CASE("a large array is left unpropagated", "[symex][constant-propagation]")
+{
+  // goto_symex_state.cpp's pinned_array_bound, which is file-local there.
+  constexpr unsigned bound = 64;
+
+  engine e;
+  const expr2tc io = symbol_at(
+    pair_struct(), "c:test.c@F@main@IO", symbol_renaming_level::level2);
+  const expr2tc refused = add2tc(int_type2(), member_of(io, "i"), int_const(1));
+
+  // Carrying a big array costs a rebuild per element write and buys nothing:
+  // nothing reads a sibling of an array a loop is filling.
+  const expr2tc small = symbol_at(
+    int_array(bound), "c:test.c@F@main@A", symbol_renaming_level::level2);
+  REQUIRE_FALSE(is_nil_expr(e.state().pin_symbolic_updates(
+    with_index(small, int_const(0), refused), small)));
+
+  const expr2tc big = symbol_at(
+    int_array(bound + 1), "c:test.c@F@main@B", symbol_renaming_level::level2);
+  REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(
+    with_index(big, int_const(0), refused), big)));
 }
