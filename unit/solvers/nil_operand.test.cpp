@@ -29,8 +29,9 @@
 #  include <sys/wait.h>
 #  include <unistd.h>
 
-SCENARIO("converting a nil operand slot is reported, not crashed on",
-         "[solvers][smt]")
+SCENARIO(
+  "converting a nil operand slot is reported, not crashed on",
+  "[solvers][smt]")
 {
   config.ansi_c.set_data_model(configt::LP64);
 
