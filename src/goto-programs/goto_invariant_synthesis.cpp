@@ -92,6 +92,13 @@ using namespace invariant_synthesis;
 /// How far back from the loop head to look for the entry assignment of a
 /// counter/accumulator. The scan stops early at any control flow, so this is
 /// only a guard against walking a very long straight-line prologue.
+///
+/// Independent of goto_loop_invariantt::kMaxInvariantSearchBack, the other
+/// window over the same prologue: that one has to agree with the extractor
+/// that discharges the marker, so it is that pass's constant and is used
+/// verbatim by has_user_invariant. This one bounds a search for an assignment
+/// and answers to nothing but its own cost. Neither bound constrains the
+/// other; a change to either is local.
 constexpr size_t kMaxEntryScanBack = 64;
 
 bool mentions_modified_var(
@@ -679,15 +686,9 @@ expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
       and2tc(inv, or2tc(entered, equality2tc(shape.counter, entry_as_counter)));
   }
 
-  // The counter never goes below its entry value, and saying so matters: the
-  // havoc is otherwise free to pick i < i0, where (i - i0) wraps and the
-  // accumulator's closed form describes a state the loop can never reach. That
-  // shows up as a false alarm on the user's own in-loop assertions, and as
-  // overflow claims on arithmetic the user never wrote. Costs one comparison
-  // and no extra multiplier branch; for i0 == 0 it simplifies away entirely.
-  // Unsigned counters only; a signed counter's `i + 1` wraps at the type
-  // maximum while still inside the guard, making this false after a legitimate
-  // iteration. See the header. Pinned by the lowerbnd and entrytwo tests.
+  // `i >= i0`, unsigned counters only -- see the header for why it is needed
+  // and why a signed counter cannot carry it. Pinned by the lowerbnd and
+  // entrytwo tests.
   if (is_unsignedbv_type(shape.counter->type))
     inv = and2tc(
       inv,

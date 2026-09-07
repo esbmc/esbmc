@@ -93,6 +93,17 @@ bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive);
 ///                     guard and the closed form reports an accumulator the
 ///                     loop could not produce.
 ///
+/// TWO PRECONDITIONS THE ABSTRACTION ITSELF DOES NOT ENFORCE.
+///
+/// Concurrency. Cutting a loop deletes its interleaving points, so a claim
+/// another thread could only violate through one of them is no longer reachable
+/// in the cut program. What keeps that from being a false proof is not the
+/// abstraction: it is #7491's classifier, which reports every claim downstream
+/// of a havoc as UNKNOWN rather than SUCCESSFUL
+/// (regression/esbmc/synth_loop_invariant_thread pins this). Were that
+/// classifier ever wrong for a cross-thread claim, this shape becomes unsound.
+/// It is a dependency of the design, not a property of it.
+///
 /// A user-written invariant is authoritative. A synthesised marker on the same
 /// loop is declined (has_user_invariant), and so is synthesis inside any
 /// function a user invariant's expression calls, transitively -- otherwise the
