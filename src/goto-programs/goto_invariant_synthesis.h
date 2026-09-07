@@ -67,6 +67,12 @@ struct overflow_checkst
 ///                     guard and the closed form reports an accumulator the
 ///                     loop could not produce.
 ///
+/// A user-written invariant is authoritative. A synthesised marker on the same
+/// loop is declined (has_user_invariant), and so is synthesis inside any
+/// function a user invariant's expression calls, transitively -- otherwise the
+/// user's own marker reads a havoc-abstracted return value. See
+/// collect_invariant_dependencies.
+///
 /// `i >= i0` prunes havoced states below the entry value, where `i - i0` wraps.
 /// It is emitted for unsigned counters only: a signed `i == n == INT_MAX` still
 /// satisfies the guard, so the body's `i + 1` wraps and the conjunct is false
