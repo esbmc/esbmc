@@ -1,4 +1,7 @@
 CORE
 main.cpp
 
+^\s*PASSED\s+\[main\.assertion\.1\]\s+line\s+8\s+assertion __atomic_test_and_set\(&flag, __ATOMIC_SEQ_CST\) == false$
+^\s*PASSED\s+\[main\.assertion\.4\]\s+line\s+14\s+assertion flag == 0$
+^\*\* 0 of 8 properties failed, 8 passed$
 ^VERIFICATION SUCCESSFUL$

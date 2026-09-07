@@ -1,4 +1,7 @@
 CORE
 main.c
 
+^\s*PASSED\s+\[main\.assertion\.1\]\s+line\s+8\s+assertion __atomic_test_and_set\(&flag, __ATOMIC_SEQ_CST\) == 0$
+^\s*PASSED\s+\[main\.assertion\.5\]\s+line\s+15\s+assertion flag == 0$
+^\*\* 0 of 11 properties failed, 11 passed$
 ^VERIFICATION SUCCESSFUL$
