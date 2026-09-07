@@ -772,6 +772,26 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   return empty_typet();
 }
 
+std::string type_handler::resolve_builtin_alias(const std::string &name) const
+{
+  const nlohmann::json &decl =
+    json_utils::find_var_decl(name, "", converter_.ast());
+  if (decl.empty() || !decl.contains("value") || !decl["value"].is_object())
+    return "";
+
+  const nlohmann::json &value = decl["value"];
+  if (
+    !value.contains("_type") || value["_type"] != "Name" ||
+    !value.contains("id"))
+    return "";
+
+  const std::string &target = value["id"];
+  if (target != name && type_utils::is_builtin_type(target))
+    return target;
+
+  return "";
+}
+
 typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
 {
   std::string func_name;
