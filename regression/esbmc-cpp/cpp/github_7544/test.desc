@@ -1,5 +1,6 @@
 CORE
 main.cpp
 --unwind 4
-^\*\* 0 of 22 properties failed, 22 passed$
+^\s*PASSED\s+\[main\.assertion\.1\]\s+line \d+\s+assertion dst\[0\] == f\.g\[0\]$
+^\*\* 0 of [0-9]+ properties failed, [0-9]+ passed$
 ^VERIFICATION SUCCESSFUL$
