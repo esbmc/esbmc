@@ -56,6 +56,16 @@ class ExpressionRewriteMixin:
             ast.fix_missing_locations(set_call)
             return set_call
 
+        def visit_GeneratorExp(self, node):
+            """Lower a genexp not already handled above (any/all/join/...)."""
+            # pylint: disable=protected-access
+            listcomp = ast.ListComp(elt=node.elt, generators=node.generators)
+            ast.copy_location(listcomp, node)
+            ast.fix_missing_locations(listcomp)
+            prefix, result_expr = self.preprocessor._lower_listcomp(listcomp)
+            self.statements.extend(prefix)
+            return result_expr
+
         def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"
                     and len(node.args) == 1 and not node.keywords
