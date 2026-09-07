@@ -191,14 +191,21 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   }
 
   // --termination havocs every loop head k-induction-style (goto_termination),
-  // and the loop-invariant modes have already rewritten those heads: the
-  // establishment ASSERT now sits where havoc_slot expects the guard, and it
-  // aborts on `loop_head->is_goto()` (goto_k_induction.cpp). Composing the two
-  // would be meaningless even if it did not abort -- a loop the invariant
-  // schema has cut no longer has the iteration behaviour --termination is
-  // asking about. Reject the combination.
+  // and the standalone schema has already rewritten those heads: goto_loop_
+  // invariant uses insert_swap, which leaves the establishment ASSERT in the
+  // head's slot, and havoc_slot then aborts on `loop_head->is_goto()`
+  // (goto_k_induction.cpp). Composing the two would be meaningless even if it
+  // did not abort -- a loop the schema has cut no longer has the iteration
+  // behaviour --termination asks about.
+  //
+  // Combined mode is exempt, and so is --validate-correctness-witness, which
+  // routes to it: goto_loop_invariant_combined splices its verification branch
+  // *before* the head with destructive_insert, so the head is still the guard
+  // GOTO when goto_termination reaches it. Measured on an unbounded loop with
+  // a witness-injected loop invariant, where the ranking check does not
+  // short-circuit: the run completes.
   for (const char *mode :
-       {"synthesise-loop-invariants", "loop-invariant-check", "loop-invariant"})
+       {"synthesise-loop-invariants", "loop-invariant-check"})
     if (cmdline.isset(mode) && cmdline.isset("termination"))
     {
       log_error("--{} cannot be combined with --termination", mode);
