@@ -80,6 +80,19 @@ public:
    * conclude a specific functional result, but we cannot wrongly conclude
    * SAFE either).
    */
+  /// repr() of a constant f-string operand under !r / !a, or empty when the
+  /// spelling is one this does not fold. Only an int's digits and a string
+  /// needing no escape are folded: reproducing CPython's quote choice and
+  /// escaping here would be easy to get subtly wrong (#7559).
+  static std::string fstring_repr_of_constant(const nlohmann::json &operand);
+
+  /// The rendered part for an f-string replacement field carrying a !r / !a
+  /// conversion: the folded repr where possible, else a sound nondet string.
+  exprt build_fstring_conversion(
+    const nlohmann::json &value,
+    int conversion,
+    const locationt &location);
+
   exprt build_nondet_string_fallback(const locationt &location);
 
   /**
