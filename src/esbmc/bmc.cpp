@@ -239,7 +239,8 @@ static const char *const weak_invariant_note =
 void bmct::record_satisfiable_claim(
   const claim_slicer &claim,
   const property_locationt &loc,
-  bool inductive_step)
+  bool inductive_step,
+  symex_target_equationt &local_eq)
 {
   // Neither answer refutes the program. An inductive-step run starts from an
   // arbitrary state, and a claim downstream of a loop-invariant havoc is
@@ -255,9 +256,12 @@ void bmct::record_satisfiable_claim(
     return;
   }
 
+  // A claim downstream of the havoc is unknowable only while the abstraction
+  // admits it holding (issue #7585).
   if (
     claim.claim_after_invariant_havoc &&
-    !is_loop_invariant_obligation(claim.claim_location))
+    !is_loop_invariant_obligation(claim.claim_location) &&
+    check_claim_unsatisfiable(local_eq) != P_UNSATISFIABLE)
   {
     weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
@@ -284,6 +288,7 @@ void bmct::record_violated_properties(
   // Symex emits a linear trace, so once the loop-invariant schema's havoc has
   // run every later claim on it is checked against the abstract state.
   bool seen_invariant_havoc = false;
+  size_t claim_index = 0;
 
   for (const auto &step : eq.SSA_steps)
   {
@@ -293,6 +298,8 @@ void bmct::record_violated_properties(
     if (!step.is_assert() || step.ignore)
       continue;
 
+    ++claim_index;
+
     // Same idiom as build_goto_trace: an unevaluatable condition renders as
     // violated, not as held.
     if (smt_conv.l_get(step.cond_expr).is_true())
@@ -300,8 +307,10 @@ void bmct::record_violated_properties(
 
     const locationt &location = step.source.pc->location;
     const std::string description = id2string(step.comment);
-    const bool weak_invariant =
+    const bool abstraction_derived =
       seen_invariant_havoc && !is_loop_invariant_obligation(location);
+    const bool weak_invariant =
+      abstraction_derived && !invariant_refutes(eq, claim_index);
     if (weak_invariant)
       weak_invariant_detected = true;
     goto_functionst::property_verdicts.record(
@@ -532,13 +541,39 @@ void bmct::report_violation()
   verdict_is_unknown = true;
 }
 
+/// UNSAT iff no feasible path satisfies the kept claim. A violation found
+/// downstream of a loop-invariant havoc is then one the invariant itself
+/// forces, not an artefact of the abstraction (issue #7585).
+smt_resultt
+bmct::check_claim_unsatisfiable(symex_target_equationt &local_eq) const
+{
+  std::unique_ptr<smt_convt> solver = create_solver(ns, options);
+  local_eq.convert(
+    *solver, symex_target_equationt::assertion_modet::Satisfiable);
+  return solver->dec_solve();
+}
+
+/// Whether the invariant leaves the claim at \p claim_index no way to hold.
+/// The single-formula path has no per-claim equation, so slice one the way
+/// multi_property_check does and run the same probe.
+bool bmct::invariant_refutes(
+  const symex_target_equationt &eq,
+  size_t claim_index)
+{
+  symex_target_equationt local_eq = eq;
+  claim_slicer claim(claim_index, false, false, ns);
+  claim.run(local_eq.SSA_steps);
+  return check_claim_unsatisfiable(local_eq) == P_UNSATISFIABLE;
+}
+
 smt_resultt bmct::check_vacuity(symex_target_equationt &local_eq) const
 {
   // Re-encode in vacuity mode: each kept assertion contributes its path
   // assumption to the OR'd disjunction instead of `not(assumpt -> claim)`.
   // The result is UNSAT iff the path to every kept claim is unreachable.
   std::unique_ptr<smt_convt> solver = create_solver(ns, options);
-  local_eq.convert(*solver, /*vacuity_mode=*/true);
+  local_eq.convert(
+    *solver, symex_target_equationt::assertion_modet::PathReachable);
   return solver->dec_solve();
 }
 
@@ -3097,7 +3132,7 @@ smt_resultt bmct::multi_property_check(
                        "invariant, requires clause, or upstream assume"
                      : "");
       else if (solver_result == P_SATISFIABLE)
-        record_satisfiable_claim(claim, claim_ploc, is);
+        record_satisfiable_claim(claim, claim_ploc, is, local_eq);
       else
       {
         // No answer at all. A coverage run suppresses the verdict that would

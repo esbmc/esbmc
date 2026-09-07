@@ -2328,8 +2328,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         id2string(expr.statement());
     }
 
-    new_expr_ref =
-      sideeffect2tc(plaintype, operand, thesize, args, cmt_type, t);
+    new_expr_ref = sideeffect2tc(
+      plaintype, operand, thesize, args, cmt_type, t, expr.location());
     return;
   }
 
@@ -3429,6 +3429,15 @@ static exprt back_sideeffect(const expr2tc &ref)
     size.is_not_nil())
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
+
+  // ref2.location is deliberately *not* restored onto the legacy node.
+  // goto_convert falls back to the enclosing statement's location for a side
+  // effect carrying none, so writing this one back moves the instruction's
+  // column on the default path -- measured at 126 of 131 goto programs over a
+  // stride-16 sample of regression/esbmc. That is very likely the more
+  // faithful column, but it is a user-visible change to counterexamples and
+  // witnesses, so it needs its own PR and an SV-COMP run
+  // (scope-clang-c-irep2.md §136.3).
   return theexpr;
 }
 
