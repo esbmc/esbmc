@@ -11,8 +11,84 @@
 #include <set>
 #include <vector>
 
+namespace invariant_synthesis
+{
+/// Split `cond` into counter and bound for the `<`/`<=` shapes this pass
+/// handles, and report which one it was. Other comparisons (and decrementing
+/// loops) are left to a later revision.
+bool split_bound(
+  const expr2tc &cond,
+  expr2tc &counter,
+  expr2tc &bound,
+  bool &inclusive)
+{
+  if (is_lessthanequal2t(cond))
+  {
+    counter = to_lessthanequal2t(cond).side_1;
+    bound = to_lessthanequal2t(cond).side_2;
+    inclusive = true;
+    return true;
+  }
+  if (is_lessthan2t(cond))
+  {
+    counter = to_lessthan2t(cond).side_1;
+    bound = to_lessthan2t(cond).side_2;
+    inclusive = false;
+    return true;
+  }
+  return false;
+}
+
+/// `lhs = lhs + addend` — the only body assignment shape recognised here.
+bool is_self_increment(
+  const expr2tc &target,
+  const expr2tc &source,
+  expr2tc &addend)
+{
+  if (!is_add2t(source))
+    return false;
+
+  const auto &add = to_add2t(source);
+  if (add.side_1 == target)
+  {
+    addend = add.side_2;
+    return true;
+  }
+  if (add.side_2 == target)
+  {
+    addend = add.side_1;
+    return true;
+  }
+  return false;
+}
+
+/// The two-disjunct bound `(i <op> B) || i == E` is established only when the
+/// counter's entry value cannot sit past the loop's exit value. Working the
+/// cases through for a constant i0:
+///
+///   `<=`, E = B+1: establishment fails iff i0 > B and i0 != B+1. At i0 == 1
+///                  the first conjunct forces B == 0, which makes E == 1 == i0,
+///                  so it cannot fail; at i0 == 0 it cannot fail either.
+///                  i0 >= 2 admits B <= i0 - 2 and does fail.
+///   `<`,  E = B:   establishment fails iff i0 > B, which only i0 == 0 rules
+///                  out.
+///
+/// Anything else needs the third disjunct, which only the constant-addend
+/// regime can afford; see the header.
+bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive)
+{
+  if (!is_constant_int2t(entry))
+    return false;
+
+  const BigInt &v = to_constant_int2t(entry).value;
+  return v == 0 || (inclusive && v == 1);
+}
+} // namespace invariant_synthesis
+
 namespace
 {
+using namespace invariant_synthesis;
+
 /// How far back from the loop head to look for the entry assignment of a
 /// counter/accumulator. The scan stops early at any control flow, so this is
 /// only a guard against walking a very long straight-line prologue.
@@ -51,32 +127,6 @@ bool guard_condition(const goto_programt::targett &head_if, expr2tc &cond)
   return true;
 }
 
-/// Split `cond` into counter and bound for the `<`/`<=` shapes this pass
-/// handles, and report which one it was. Other comparisons (and decrementing
-/// loops) are left to a later revision.
-bool split_bound(
-  const expr2tc &cond,
-  expr2tc &counter,
-  expr2tc &bound,
-  bool &inclusive)
-{
-  if (is_lessthanequal2t(cond))
-  {
-    counter = to_lessthanequal2t(cond).side_1;
-    bound = to_lessthanequal2t(cond).side_2;
-    inclusive = true;
-    return true;
-  }
-  if (is_lessthan2t(cond))
-  {
-    counter = to_lessthan2t(cond).side_1;
-    bound = to_lessthan2t(cond).side_2;
-    inclusive = false;
-    return true;
-  }
-  return false;
-}
-
 /// True when the instruction cannot appear in a body this pass is willing to
 /// summarise. Branches would make the per-iteration effect conditional, and a
 /// call or return can write the counter or accumulator out of sight.
@@ -85,29 +135,6 @@ bool breaks_straight_line(const goto_programt::targett &it)
   return it->is_goto() || it->is_function_call() || it->is_return() ||
          it->is_throw() || it->is_catch() || it->is_atomic_begin() ||
          it->is_atomic_end();
-}
-
-/// `lhs = lhs + addend` — the only body assignment shape recognised here.
-bool is_self_increment(
-  const expr2tc &target,
-  const expr2tc &source,
-  expr2tc &addend)
-{
-  if (!is_add2t(source))
-    return false;
-
-  const auto &add = to_add2t(source);
-  if (add.side_1 == target)
-  {
-    addend = add.side_2;
-    return true;
-  }
-  if (add.side_2 == target)
-  {
-    addend = add.side_1;
-    return true;
-  }
-  return false;
 }
 
 /// Gate for the symbolic-addend regime and for the `i >= i0` conjunct; see the
@@ -306,28 +333,6 @@ bool entry_value(
     return true;
   }
   return false;
-}
-
-/// The two-disjunct bound `(i <op> B) || i == E` is established only when the
-/// counter's entry value cannot sit past the loop's exit value. Working the
-/// cases through for a constant i0:
-///
-///   `<=`, E = B+1: establishment fails iff i0 > B and i0 != B+1. At i0 == 1
-///                  the first conjunct forces B == 0, which makes E == 1 == i0,
-///                  so it cannot fail; at i0 == 0 it cannot fail either.
-///                  i0 >= 2 admits B <= i0 - 2 and does fail.
-///   `<`,  E = B:   establishment fails iff i0 > B, which only i0 == 0 rules
-///                  out.
-///
-/// Anything else needs the third disjunct, which only the constant-addend
-/// regime can afford; see the header.
-bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive)
-{
-  if (!is_constant_int2t(entry))
-    return false;
-
-  const BigInt &v = to_constant_int2t(entry).value;
-  return v == 0 || (inclusive && v == 1);
 }
 
 struct accumulatort

@@ -2,6 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_
 
 #include <goto-programs/goto_functions.h>
+#include <irep2/irep2_expr.h>
 
 /// What goto_check will instrument on the guards this pass emits. It checks
 /// every instruction guard, including the synthesised ones, so a closed form
@@ -16,6 +17,31 @@ struct overflow_checkst
   /// type is safe to emit the closed form at, so synthesis declines outright.
   bool unsigned_arith = false;
 };
+
+/// The recogniser's pure syntactic predicates. Exposed for unit testing: every
+/// other route to them runs through a frontend and a solver, where a predicate
+/// that never fires is indistinguishable from one that answers correctly.
+namespace invariant_synthesis
+{
+/// Split `cond` into counter and bound for the `<`/`<=` shapes this pass
+/// handles, and report which one it was. Other comparisons (and decrementing
+/// loops) are left to a later revision.
+bool split_bound(
+  const expr2tc &cond,
+  expr2tc &counter,
+  expr2tc &bound,
+  bool &inclusive);
+
+/// `lhs = lhs + addend` -- the only body assignment shape recognised here.
+bool is_self_increment(
+  const expr2tc &target,
+  const expr2tc &source,
+  expr2tc &addend);
+
+/// Whether the two-disjunct bound `(i <op> B) || i == E` is established from a
+/// counter entry value of `entry`. See the definition for the case analysis.
+bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive);
+} // namespace invariant_synthesis
 
 /// Synthesise loop invariants for affine counter/accumulator loops and attach
 /// them as LOOP_INVARIANT instructions, exactly as if the user had written
