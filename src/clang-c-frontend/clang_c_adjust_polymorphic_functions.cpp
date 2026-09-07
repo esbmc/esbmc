@@ -6,6 +6,7 @@
 #include <util/arith/arith_tools.h>
 
 #include <algorithm>
+#include <initializer_list>
 
 static bool is_overflow_builtin(const irep_idt &identifier)
 {
@@ -22,6 +23,73 @@ static bool is_carry_builtin(const irep_idt &identifier)
   const std::string &id = identifier.as_string();
   return has_prefix(id, "c:@F@__builtin_addc") ||
          has_prefix(id, "c:@F@__builtin_subc");
+}
+
+static bool has_any_prefix(
+  const irep_idt &identifier,
+  std::initializer_list<const char *> names)
+{
+  const std::string &id = identifier.as_string();
+  for (const char *name : names)
+    if (has_prefix(id, name))
+      return true;
+  return false;
+}
+
+/* Every __sync name that reads a word, applies one binary op and writes it
+ * back: the fetch-then-op and op-then-fetch spellings, plus the lock variant
+ * that takes the same (pointer, value) shape. */
+static bool is_sync_read_modify_write_builtin(const irep_idt &identifier)
+{
+  return has_any_prefix(
+    identifier,
+    {"c:@F@__sync_fetch_and_add",
+     "c:@F@__sync_fetch_and_sub",
+     "c:@F@__sync_fetch_and_or",
+     "c:@F@__sync_fetch_and_and",
+     "c:@F@__sync_fetch_and_xor",
+     "c:@F@__sync_fetch_and_nand",
+     "c:@F@__sync_add_and_fetch",
+     "c:@F@__sync_sub_and_fetch",
+     "c:@F@__sync_or_and_fetch",
+     "c:@F@__sync_and_and_fetch",
+     "c:@F@__sync_xor_and_fetch",
+     "c:@F@__sync_nand_and_fetch",
+     "c:@F@__sync_lock_test_and_set"});
+}
+
+/* The three families spelling "read the old value, apply <op>, store it back,
+ * return the old value". __c11_atomic has no nand, so this is not a plain
+ * product of the families and the operations. */
+static bool is_fetch_then_op_builtin(const irep_idt &identifier)
+{
+  return has_any_prefix(
+    identifier,
+    {"c:@F@__sync_fetch_and_add",
+     "c:@F@__sync_fetch_and_sub",
+     "c:@F@__sync_fetch_and_or",
+     "c:@F@__sync_fetch_and_and",
+     "c:@F@__sync_fetch_and_xor",
+     "c:@F@__sync_fetch_and_nand",
+     "c:@F@__atomic_fetch_add",
+     "c:@F@__atomic_fetch_sub",
+     "c:@F@__atomic_fetch_or",
+     "c:@F@__atomic_fetch_and",
+     "c:@F@__atomic_fetch_xor",
+     "c:@F@__atomic_fetch_nand",
+     "c:@F@__c11_atomic_fetch_add",
+     "c:@F@__c11_atomic_fetch_sub",
+     "c:@F@__c11_atomic_fetch_or",
+     "c:@F@__c11_atomic_fetch_and",
+     "c:@F@__c11_atomic_fetch_xor"});
+}
+
+/* bool __atomic_test_and_set(void *, int) and void __atomic_clear(bool *, int):
+ * the only two that name the byte they write instead of taking it. */
+static bool is_atomic_flag_builtin(const irep_idt &identifier)
+{
+  return has_any_prefix(
+    identifier, {"c:@F@__atomic_test_and_set", "c:@F@__atomic_clear"});
 }
 
 /* These two families differ from every other name handled here: they take their
@@ -160,20 +228,7 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
   const irep_idt &identifier,
   const exprt::operandst &arguments)
 {
-  if (
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_add_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_sub_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_or_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_and_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_xor_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_nand_and_fetch") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
+  if (is_sync_read_modify_write_builtin(identifier))
   {
     // These are polymorphic, see
     // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fsync-Builtins.html
@@ -268,6 +323,24 @@ exprt clang_c_adjust::is_gcc_polymorphic_builtin(
        code_typet::argumentt(base_type),
        code_typet::argumentt(int_type())},
       base_type);
+    symbol_exprt result(identifier, t);
+    return result;
+  }
+  else if (is_atomic_flag_builtin(identifier))
+  {
+    // bool __atomic_test_and_set (void *ptr, int memorder)
+    // void __atomic_clear (bool *ptr, int memorder)
+    // https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
+    const exprt &ptr_arg = arguments.front();
+
+    typet return_type = empty_typet();
+    if (has_prefix(identifier.as_string(), "c:@F@__atomic_test_and_set"))
+      return_type = bool_type();
+
+    const code_typet t(
+      {code_typet::argumentt(ptr_arg.type()),
+       code_typet::argumentt(int_type())},
+      return_type);
     symbol_exprt result(identifier, t);
     return result;
   }
@@ -631,24 +704,7 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   {
     // TODO
   }
-  else if (
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_add") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_sub") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_or") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_and") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_xor") ||
-    has_prefix(identifier.as_string(), "c:@F@__sync_fetch_and_nand") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_add") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_sub") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_or") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_and") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_xor") ||
-    has_prefix(identifier.as_string(), "c:@F@__atomic_fetch_nand") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_add") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_sub") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_or") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_and") ||
-    has_prefix(identifier.as_string(), "c:@F@__c11_atomic_fetch_xor"))
+  else if (is_fetch_then_op_builtin(identifier))
   {
     const typet &type = code_type.return_type();
 
@@ -711,6 +767,58 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   else if (has_prefix(identifier.as_string(), "c:@F@__sync_lock_test_and_set"))
   {
     // TODO
+  }
+  else if (is_atomic_flag_builtin(identifier))
+  {
+    code_typet::argumentt arg0 = code_type.arguments()[0];
+    const typet &byte_type = to_pointer_type(arg0.type()).subtype();
+    dereference_exprt byte(
+      symbol_exprt(arg0.cmt_identifier(), arg0.type()), arg0.type());
+
+    const bool test_and_set =
+      has_prefix(identifier.as_string(), "c:@F@__atomic_test_and_set");
+
+    if (test_and_set)
+    {
+      // The return is true iff the byte was already set, so the old value has
+      // to be read before the store. GCC leaves the "set" value
+      // implementation-defined and both gcc and clang store 1.
+      const exprt &result = symbol_expr(
+        result_symbol(identifier_with_type, code_type.return_type(), context));
+      block.operands().push_back(code_declt(result));
+
+      exprt was_set("notequal", bool_type());
+      was_set.copy_to_operands(byte, gen_zero(byte_type));
+
+      code_assignt assign_old(result, was_set);
+      assign_old.location() = new_loc;
+      block.operands().push_back(assign_old);
+
+      code_assignt assign_set(byte, from_integer(1, byte_type));
+      assign_set.location() = new_loc;
+      block.operands().push_back(assign_set);
+
+      side_effect_expr_function_callt atomic_end;
+      atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+      convert_expression_to_code(atomic_end);
+      block.operands().push_back(atomic_end);
+
+      code_returnt ret;
+      ret.return_value() = result;
+      ret.location() = new_loc;
+      block.operands().push_back(ret);
+    }
+    else
+    {
+      code_assignt assign_clear(byte, gen_zero(byte_type));
+      assign_clear.location() = new_loc;
+      block.operands().push_back(assign_clear);
+
+      side_effect_expr_function_callt atomic_end;
+      atomic_end.function() = symbol_exprt("c:@F@__ESBMC_atomic_end");
+      convert_expression_to_code(atomic_end);
+      block.operands().push_back(atomic_end);
+    }
   }
   else if (
     has_prefix(identifier.as_string(), "c:@F@__atomic_load_n") ||

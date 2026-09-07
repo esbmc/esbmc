@@ -4556,6 +4556,23 @@ bool clang_c_convertert::get_compound_assign_expr(
   return false;
 }
 
+// A load has nothing to write, and test_and_set/clear name the byte they write
+// (a nonzero "set" value, and 0) rather than taking it as an operand, so these
+// four carry only the pointer and the memory order.
+static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
+{
+  switch (op)
+  {
+  case clang::AtomicExpr::AO__c11_atomic_load:
+  case clang::AtomicExpr::AO__atomic_load_n:
+  case clang::AtomicExpr::AO__atomic_test_and_set:
+  case clang::AtomicExpr::AO__atomic_clear:
+    return false;
+  default:
+    return true;
+  }
+}
+
 bool clang_c_convertert::get_atomic_expr(
   const clang::AtomicExpr &atm,
   exprt &new_expr)
@@ -4697,6 +4714,14 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+  case clang::AtomicExpr::AO__atomic_test_and_set:
+    name = "__atomic_test_and_set";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_clear:
+    name = "__atomic_clear";
+    break;
+
   default:
     log_error("Unknown Atomic expression");
     std::ostringstream oss;
@@ -4716,9 +4741,7 @@ bool clang_c_convertert::get_atomic_expr(
   fake_call.arguments().push_back(ptr);
 
   // Val1
-  if (
-    atm.getOp() != clang::AtomicExpr::AO__c11_atomic_load &&
-    atm.getOp() != clang::AtomicExpr::AO__atomic_load_n)
+  if (atomic_has_value_operand(atm.getOp()))
   {
     exprt val1;
     if (get_expr(*atm.getVal1(), val1))
