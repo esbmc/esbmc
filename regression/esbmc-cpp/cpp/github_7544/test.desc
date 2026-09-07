@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 4
+^\*\* 0 of 22 properties failed, 22 passed$
+^VERIFICATION SUCCESSFUL$
