@@ -12,3 +12,4 @@ new_unit_test(value-set-merge-test "value_set_merge.test.cpp" "test_goto_factory
 new_unit_test(assumption-discharge-test "assumption_discharge.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(context-stack-test "context_stack.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
 new_unit_test(overapproximation-test "overapproximation.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
+new_unit_test(constant-propagation-test "constant_propagation.test.cpp" "test_goto_factory;symex;solvers;gotoalgorithms;pointeranalysis;clangcppfrontend;clibs;filesystem;langapi")
