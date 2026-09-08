@@ -128,7 +128,11 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   if (func_name == "__init__")
     return true;
 
-  if (type_utils::is_builtin_type(func_name))
+  // Consensus type names (Gwei, uint64, ...) are typed casts, not
+  // constructor calls, even when also declared as a plain user class.
+  if (
+    type_utils::is_builtin_type(func_name) ||
+    type_utils::is_consensus_type(func_name))
     return false;
 
   /* The statement is a constructor call if the function call on the
