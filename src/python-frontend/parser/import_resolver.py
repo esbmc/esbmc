@@ -102,17 +102,15 @@ def _has_model_file(module_name: str, output_dir: str) -> bool:
     `string.templatelib`, which the converter would then look for in vain.
     """
     base = os.path.join(output_dir, "models", *module_name.split("."))
-    return os.path.exists(base + ".py") or os.path.exists(
-        os.path.join(base, "__init__.py"))
+    return os.path.exists(base + ".py") or os.path.exists(os.path.join(base, "__init__.py"))
 
 
 def _warn_unmodelled_module(module_name: str) -> None:
     if module_name in _reported_unmodelled:
         return
     _reported_unmodelled.add(module_name)
-    _resolver_warning(
-        f"no operational model for module '{module_name}'; "
-        "its names will be unresolved")
+    _resolver_warning(f"no operational model for module '{module_name}'; "
+                      "its names will be unresolved")
 
 
 def _warn_module_file_not_found(module_name: str) -> None:
