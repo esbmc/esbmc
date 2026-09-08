@@ -200,15 +200,21 @@ TEST_CASE("closure survives constant array indices", "[symex][slice]")
 {
   // scan_array_uses / index_reads: a store to one constant index may be elided
   // only if no retained read can observe it.
+  // The values are expressions, not bare nondet symbols: a chain of immutable
+  // updates propagates instead of reaching the slicer (#7597). One shared
+  // definition, so eliding the dead stores does not strand it -- an elided
+  // store's rhs still names its operands even though its encoding no longer
+  // does, and the audit below reads the rhs.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
 {
   int arr[4];
-  arr[0] = nondet_int();
-  arr[1] = nondet_int();
-  arr[2] = nondet_int();
-  arr[3] = nondet_int();
+  int x = nondet_int();
+  arr[0] = x + 1;
+  arr[1] = x + 2;
+  arr[2] = x + 3;
+  arr[3] = x + 4;
   __ESBMC_assert(arr[1] != 424242, "read one index");
   return 0;
 }
@@ -229,16 +235,19 @@ int main(void)
 TEST_CASE("a symbolic array index disqualifies the array", "[symex][slice]")
 {
   // The shape H-A4's twin targets: with a symbolic index the slicer cannot know
-  // which element is read, so it must retain every store to that array.
+  // which element is read, so it must retain every store to that array. Same
+  // non-propagating stores as the case above, so the two differ only in the
+  // index and `elided_stores == 0` cannot hold for want of a store.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
 {
   int arr[4];
-  arr[0] = nondet_int();
-  arr[1] = nondet_int();
-  arr[2] = nondet_int();
-  arr[3] = nondet_int();
+  int x = nondet_int();
+  arr[0] = x + 1;
+  arr[1] = x + 2;
+  arr[2] = x + 3;
+  arr[3] = x + 4;
   int i = nondet_int();
   __ESBMC_assume(i >= 0 && i < 4);
   __ESBMC_assert(arr[i] != 424242, "symbolic read");

@@ -115,7 +115,34 @@ bullet below.
   at **10 minutes** (600000 ms) — pass the timeout to the `Bash` tool's
   `timeout` parameter, or wrap the invocation with `timeout 10m …`. If the suite
   cannot complete in 10 minutes, narrow the scope (e.g. run only the affected
-  subset) or ask the user before extending the limit.
+  subset) or ask the user before extending the limit. `ctest --timeout` does
+  **not** cap this suite: CMake gives every test an explicit `TIMEOUT`
+  property, and ctest's flag only supplies a default for tests that have none.
+- **Per-test budget, and catching slowdowns.** Each test's real budget is
+  `ESBMC_REGRESS_TIMEOUT` (default 1200s), baked into the test's ctest
+  environment at configure time. To narrow it for one run without
+  re-configuring, set `ESBMC_REGRESS_TIMEOUT_MAX`:
+
+  ```sh
+  ESBMC_REGRESS_TIMEOUT_MAX=45 ctest -j$(nproc) -L loop-invariants
+  ```
+
+  A `CORE`/`THOROUGH` test slower than the cap then fails, naming the cap in
+  its message. Without it the suite is blind to performance regressions: a
+  test that went from sub-second to nine minutes still reports `Passed`
+  (#7628). Use it when a change could affect solve time.
+
+  Two exceptions, both of which read as green:
+
+  - `KNOWNBUG` and `FUTURE` tests treat a timeout as satisfying the
+    expectation (the `FAIL_MODES` branch in `regression/testing_tool.py`), so
+    a cap cannot measure them at all. They print `accepted under KNOWNBUG` and
+    pass. Grep for that line before reading a capped run as a clean bill of
+    health.
+  - `REQUIRES long_timeout` tests are skipped once the effective budget is
+    under 600s, matching how CMake grants the capability in
+    `regression/CMakeLists.txt`. A capped run does not measure
+    `floats-regression/nn-logistic_5_unsafe`.
 - **Regression tests come in pairs, and both must bite.** A PR that changes
   verification behaviour adds **two** regression tests over the same construct:
   one pinning `^VERIFICATION SUCCESSFUL$` and one pinning
@@ -503,6 +530,13 @@ an open PR.
 - Target PRs to `master`
 - Check formatting with clang-format before submitting
 - No agent attribution in the description — see _Commit Conventions_
+- A PR description, issue, or review comment states only what a reader can
+  verify from the repository — a test, a command, a file and line. It does
+  not rely on private tooling, unnamed inputs, or local runs nobody else can
+  reproduce. If a claim matters enough to make, it belongs in the repository
+  as a test or as steps someone can follow; if it cannot be put there, leave
+  it out rather than present it as verification. (This applies even when the
+  claim is true — the point is reproducibility, not honesty.)
 
 ## Issue and PR Labels
 

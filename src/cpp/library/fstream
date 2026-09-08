@@ -1,6 +1,7 @@
 #ifndef STL_FSTREAM
 #define STL_FSTREAM
 
+#include "iosfwd"
 #include "streambuf"
 #include "string"
 #include "istream"
@@ -155,15 +156,7 @@ public:
 };
 
 #if __cplusplus >= 201103L
-/* [fstream.syn]: the model's file streams are plain classes, so expose the
- * standard's template names as alias templates, as istream/ostream already do
- * (github #6063). Only the char instantiation is meaningful. */
-template <class CharT, class Traits = char_traits<CharT>>
-using basic_ifstream = ifstream;
-template <class CharT, class Traits = char_traits<CharT>>
-using basic_ofstream = ofstream;
-template <class CharT, class Traits = char_traits<CharT>>
-using basic_fstream = fstream;
+/* The basic_* file-stream alias templates are declared in <iosfwd> (#7531). */
 #endif
 
 //=====================fstream===================
