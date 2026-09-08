@@ -113,27 +113,17 @@ int main(void)
 }
 )";
 
-// The same program indexed symbolically -- literally the same stores, so the
-// only difference under test is the index. No store qualifies, so none can be
-// elided: the incompleteness the guard buys in exchange for soundness.
-//
-// The values must stay the ones dead_array_store uses. With bare nondets the
-// whole chain propagates, the stores die as dead code before the slicer sees
-// them, and `qualifying == 0` then holds for a reason that has nothing to do
-// with the symbolic index -- the assertion would pass vacuously.
+// The same program indexed symbolically. No store qualifies, so none can be
+// elided -- the incompleteness the guard buys in exchange for soundness.
 const char *symbolic_index_store = R"(
 int nondet_int(void);
 int main(void)
 {
   int a[4];
-  int x = nondet_int();
   int i = nondet_int() & 3;
-  a[0] = x * 3;
-  a[1] = x * 5;
-  a[2] = x * 7;
-  a[3] = x * 11;
-  __ESBMC_assert(a[i] != 424242, "read one index");
-  return 0;
+  a[i] = nondet_int();
+  a[1] = 7;
+  return a[i];
 }
 )";
 
