@@ -361,7 +361,9 @@ void python_converter::pre_collect_module_asts(
   auto try_collect = [&](const nlohmann::json &node) {
     if (node["_type"] != "ImportFrom" && node["_type"] != "Import")
       return;
-    if (node.value("module_not_found", false))
+    if (
+      node.value("module_not_found", false) ||
+      node.value("module_unmodelled", false))
       return;
     const std::string module_name = import_module_name(node);
     if (module_ast_pool_.count(module_name))
@@ -417,32 +419,43 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
 
-  for (const auto &elem : (*ast_json)["body"])
-  {
-    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+  auto convert_import = [&](const nlohmann::json &node) {
+    const std::string module_name = import_module_name(node);
+
+    if (node.value("module_not_found", false))
     {
-      if (elem.value("module_not_found", false))
-      {
-        const std::string module_name = import_module_name(elem);
-        log_warning("skipping unresolvable import: {}", module_name);
-        continue;
-      }
-      is_importing_module = true;
-      if (!import_module_into_block(elem, locator, all_imports_block))
-      {
-        const std::string module_name = import_module_name(elem);
-        // Relative import with no module name (`from . import X`): there is no
-        // module file to open. Treat it as unresolved and continue (#6281).
-        if (module_name.empty())
-        {
-          log_warning("skipping relative import with no module name");
-          continue;
-        }
-        throw std::runtime_error(
-          "Cannot open file: " + locator.module_path(module_name));
-      }
+      log_warning("skipping unresolvable import: {}", module_name);
+      return;
     }
-  }
+
+    // The module imports under CPython but has neither an emit-able source
+    // file nor an operational model, so there is no AST to convert. Skip it
+    // and let each use of its names fail at its own site, as an unresolvable
+    // import does; the parser has already named it (#7674).
+    if (node.value("module_unmodelled", false))
+      return;
+
+    is_importing_module = true;
+    if (import_module_into_block(node, locator, all_imports_block))
+      return;
+
+    // Relative import with no module name (`from . import X`): there is no
+    // module file to open. Treat it as unresolved and continue (#6281).
+    if (module_name.empty())
+    {
+      log_warning("skipping relative import with no module name");
+      return;
+    }
+
+    throw std::runtime_error(
+      "Cannot open the AST of module '" + module_name + "' imported at line " +
+      std::to_string(node.value("lineno", 0)) + "; expected " +
+      locator.module_path(module_name));
+  };
+
+  for (const auto &elem : (*ast_json)["body"])
+    if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
+      convert_import(elem);
 
   // Do the same for imports that appear directly inside functions.
   for (const auto &elem : (*ast_json)["body"])
@@ -453,25 +466,8 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
       continue;
 
     for (const auto &stmt : elem["body"])
-    {
-      if (stmt["_type"] != "ImportFrom" && stmt["_type"] != "Import")
-        continue;
-
-      is_importing_module = true;
-      if (!import_module_into_block(stmt, locator, all_imports_block))
-      {
-        const std::string module_name = import_module_name(stmt);
-        // Relative import with no module name (`from . import X`): nothing to
-        // open — treat as unresolved and continue (#6281).
-        if (module_name.empty())
-        {
-          log_warning("skipping relative import with no module name");
-          continue;
-        }
-        throw std::runtime_error(
-          "Cannot open file: " + locator.module_path(module_name));
-      }
-    }
+      if (stmt["_type"] == "ImportFrom" || stmt["_type"] == "Import")
+        convert_import(stmt);
   }
 
   is_importing_module = false;

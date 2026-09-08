@@ -42,6 +42,7 @@ module_imports: dict[str, ModuleImportInfo] = {}
 module_exports: dict[str, tuple[set[str], dict[str, str], set[str] | None]] = {}
 _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
+_reported_unmodelled: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,7 @@ def reset_state() -> None:
     module_exports.clear()
     _reported_cycles.clear()
     _reported_resolution_failures.clear()
+    _reported_unmodelled.clear()
     imported_signature_sources.clear()
     default_helper_exports.clear()
 
@@ -92,6 +94,28 @@ def _mark_import_resolution(
     node.module_resolution_reason = reason
 
 
+def _has_model_file(module_name: str, output_dir: str) -> bool:
+    base = os.path.join(output_dir, "models", _base_module_name(module_name))
+    return os.path.exists(base + ".py") or os.path.exists(
+        os.path.join(base, "__init__.py"))
+
+
+def _warn_unmodelled_module(module_name: str) -> None:
+    if module_name in _reported_unmodelled:
+        return
+    _reported_unmodelled.add(module_name)
+    _resolver_warning(
+        f"no operational model for module '{module_name}'; "
+        "its names will be unresolved")
+
+
+def _warn_module_file_not_found(module_name: str) -> None:
+    """Report a module with no emit-able AST, unless already reported."""
+    if module_name in _reported_unmodelled:
+        return
+    _resolver_warning(f"{module_name} module-file-not-found")
+
+
 def _warn_resolution_failure(module_name: str, node: ast.AST, reason: str) -> None:
     location = _node_location(node)
     key = (module_name, reason, location)
@@ -118,6 +142,7 @@ def _is_imported_model(module_name: str) -> bool:
         "queue",
         "torch",
         "unittest",
+        "sys",
     }
     return module_name in models
 
@@ -274,9 +299,17 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             continue
         filename = _module_filename(module)
         if filename is None:
-            # Keep historical behavior: modules without an emit-able file
-            # (e.g., standard library/builtins) are skipped, not treated as
-            # missing imports.
+            # The module imports under CPython but has no AST to emit: a
+            # builtin (`sys`), or a stdlib file `_is_standard_library_file`
+            # filters out (`json`). Without a model to stand in for it, the
+            # converter must skip the import rather than look for an AST that
+            # was never written (#7674). This is deliberately *not*
+            # `module_not_found`: that flag makes `except ImportError` the
+            # statically-selected branch, which would be wrong for a module
+            # CPython imports fine.
+            if not _has_model_file(module_name, output_dir):
+                node.module_unmodelled = True
+                _warn_unmodelled_module(module_name)
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
 
@@ -423,7 +456,7 @@ def process_collected_imports(output_dir: str, callbacks: ResolverCallbacks) -> 
             visited.add(module_name)
             filename = resolve_module_file(module_name, output_dir)
             if not filename:
-                _resolver_warning(f"{module_name} module-file-not-found")
+                _warn_module_file_not_found(module_name)
                 continue
             try:
                 tree, preprocessor = callbacks.parse_file_canonicalised(filename)
@@ -588,7 +621,7 @@ def emit_module_json(
     """Parse and emit JSON for one module resolved by qualified name."""
     filename = resolve_module_file(module_qualname, output_dir)
     if not filename:
-        _resolver_warning(f"{module_qualname} module-file-not-found")
+        _warn_module_file_not_found(module_qualname)
         return
     try:
         tree, _preprocessor = parse_file_canonicalised_fn(filename)
