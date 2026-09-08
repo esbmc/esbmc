@@ -466,6 +466,13 @@ protected:
   void
   emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
 
+  // Lower a value-discarding `&&` / `||` as `if (A) B;` / `if (!A) B;`; false
+  // when the rewrite does not apply and the ternary rebuild should run.
+  bool lower_discarded_short_circuit(
+    exprt &expr,
+    goto_programt &dest,
+    bool result_is_used);
+
   // The same four hooks differ only in arity and in which argument carries the
   // failing expression; `expr_arg` names the latter.
   void do_assert_fail(

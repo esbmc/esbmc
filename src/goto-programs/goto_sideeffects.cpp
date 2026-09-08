@@ -1404,6 +1404,71 @@ void goto_convertt::flatten_contract_clause(exprt &clause, goto_programt &dest)
   remove_sideeffects(clause, dest);
 }
 
+/// Lower a short-circuit `&&` / `||` whose value is discarded as the statement
+/// it stands for -- `A && B` is `if (A) B;`, `A || B` is `if (!A) B;` -- rather
+/// than as nested ternaries over `true`/`false`. Both encode the same control
+/// flow, but the ternary form materialises the discarded boolean, which leaves
+/// the branch carrying B alongside the instructions computing that value. The
+/// assert-folds in generate_ifthenelse then no longer recognise a branch whose
+/// body is a lone `assert(false)`, which is how MSVC's <assert.h> spells an
+/// assertion: `(void)((!!(e)) || (_wassert(...), 0))`. Unfolded, the claim
+/// stays an `ASSERT 0` guarded by `!e` instead of the `ASSERT e` the glibc and
+/// Darwin spellings fold to, and a claim that *is* the constant false is
+/// unsatisfiable on every path -- which silently defeats every consumer that
+/// asks whether the claim can hold, such as the loop-invariant probe of #7585.
+///
+/// Returns false, leaving \p expr untouched, where the rewrite does not apply:
+/// the value is used, the tail carries no side effect (its evaluation may still
+/// raise a dereference claim the ternary form keeps), condition coverage is
+/// counting the operands of the original `&&` / `||`, or witness validation is
+/// steering paths through the conditional GOTOs the ternary form emits -- the
+/// last two are why generate_ifthenelse gates its own folds the same way.
+bool goto_convertt::lower_discarded_short_circuit(
+  exprt &expr,
+  goto_programt &dest,
+  bool result_is_used)
+{
+  if (result_is_used || expr.operands().size() < 2)
+    return false;
+
+  if (
+    options.get_bool_option("condition-coverage") ||
+    options.get_bool_option("condition-coverage-claims") ||
+    options.get_bool_option("condition-coverage-rm") ||
+    options.get_bool_option("condition-coverage-claims-rm") ||
+    options.get_bool_option("validate-violation-witness"))
+    return false;
+
+  exprt::operandst ops = expr.operands();
+  exprt tail = ops.back();
+  if (ops.size() > 2)
+  {
+    tail = exprt(expr.id(), expr.type());
+    tail.operands().assign(ops.begin() + 1, ops.end());
+    tail.location() = expr.location();
+  }
+
+  if (!has_sideeffect(tail))
+    return false;
+
+  const locationt location = expr.location();
+  exprt guard = ops.front();
+  guard.location() = location;
+  remove_sideeffects(guard, dest, true);
+  if (expr.is_or())
+    guard = boolean_negate(guard);
+
+  goto_programt body;
+  remove_sideeffects(tail, body, false);
+  if (tail.is_not_nil())
+    convert(code_expressiont(tail), body);
+
+  goto_programt no_else;
+  generate_ifthenelse(guard, body, no_else, location, dest);
+  expr.make_nil();
+  return true;
+}
+
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
@@ -1434,6 +1499,9 @@ void goto_convertt::remove_sideeffects(
         "{} must be Boolean, but got {}", expr.id_string(), expr.pretty());
       abort();
     }
+
+    if (lower_discarded_short_circuit(expr, dest, result_is_used))
+      return;
 
     exprt tmp;
 
