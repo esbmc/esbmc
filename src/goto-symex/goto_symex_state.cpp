@@ -590,41 +590,83 @@ static expr2tc pin_literal_elements(
                                    : pin_array_literal(state, rhs, l2_lhs);
 }
 
-/// @p e simplified, or @p e itself: expr2t::simplify returns nil for "no rule
-/// applied", which is not a value a comparison can use.
-static expr2tc simplified(const expr2tc &e)
+/// The value @p arm holds for member @p name, or nil when the shape does not
+/// say. Deliberately not member2tc(..)->simplify(): expr2t::simplify walks the
+/// operands before applying the projection, so asking a large carried value for
+/// one member would cost the size of the whole value, once per member.
+static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
 {
-  expr2tc s = e->simplify();
-  return is_nil_expr(s) ? e : s;
+  const expr2tc *cur = &arm;
+  while (is_with2t(*cur) && is_struct_type((*cur)->type))
+  {
+    const with2t &w = to_with2t(*cur);
+    if (!is_constant_string2t(w.update_field))
+      return expr2tc();
+    if (to_constant_string2t(w.update_field).value == name)
+      return w.update_value;
+    cur = &w.source_value;
+  }
+  if (!is_constant_struct2t(*cur))
+    return expr2tc();
+  const std::optional<unsigned> i =
+    struct_union_get_component_number((*cur)->type, name);
+  if (!i)
+    return expr2tc();
+  return to_constant_struct2t(*cur).datatype_members[*i];
 }
 
-/// Decompose a merge into per-position values, or nothing when a position the
-/// arms disagree on cannot be re-offered. @p read_of names the read a position
-/// is pinned to; @p at projects a position out of one arm.
-template <typename at_t, typename read_oft>
+/// The value @p arm holds at index @p i, or nil when the shape does not say --
+/// a symbolic index on the way down means the chain cannot be read off. Same
+/// reason as project_member for not going through the simplifier.
+static expr2tc project_index(const expr2tc &arm, size_t i)
+{
+  const expr2tc *cur = &arm;
+  while (is_with2t(*cur))
+  {
+    const with2t &w = to_with2t(*cur);
+    if (!is_constant_int2t(w.update_field))
+      return expr2tc();
+    if (to_constant_int2t(w.update_field).value == BigInt(i))
+      return w.update_value;
+    cur = &w.source_value;
+  }
+  if (!is_constant_array2t(*cur))
+    return expr2tc();
+  const std::vector<expr2tc> &m = to_constant_array2t(*cur).datatype_members;
+  return i < m.size() ? m[i] : expr2tc();
+}
+
+/// Decompose a merge into per-position values, or nothing when no position
+/// agrees -- a rebuild that names every position folds nothing. @p project
+/// reads a position out of one arm, @p read_of names the read a disagreeing
+/// position is pinned to.
+template <typename project_t, typename read_oft>
 static std::optional<std::vector<expr2tc>> split_phi(
   const goto_symex_statet &state,
   const if2t &phi,
   size_t count,
-  at_t at,
+  project_t project,
   read_oft read_of)
 {
   std::vector<expr2tc> elems;
   elems.reserve(count);
   bool pinned_any = false;
+  bool agreed_any = false;
   for (size_t i = 0; i < count; i++)
   {
-    const expr2tc taken = simplified(at(phi.true_value, i));
-    const expr2tc other = simplified(at(phi.false_value, i));
-    if (taken == other && state.constant_propagation(taken))
+    const expr2tc taken = project(phi.true_value, i);
+    if (
+      !is_nil_expr(taken) && taken == project(phi.false_value, i) &&
+      state.constant_propagation(taken))
     {
+      agreed_any = true;
       elems.push_back(taken);
       continue;
     }
     pinned_any = true;
     elems.push_back(read_of(i));
   }
-  if (!pinned_any)
+  if (!pinned_any || !agreed_any)
     return {};
   return elems;
 }
@@ -636,8 +678,8 @@ static std::optional<std::vector<expr2tc>> split_phi(
 /// #7597. Rebuild it position by position: where the two arms agree the value
 /// is the branch's regardless of `g` and folds, and where they differ the
 /// position becomes a read of the name just defined, which denotes the merged
-/// value and cannot grow across iterations. An array is decomposed the same
-/// way; pin_symbolic_updates has already capped its element count.
+/// value and cannot grow across iterations. An array decomposes the same way;
+/// pin_symbolic_updates has already capped its element count.
 static expr2tc pin_phi_members(
   const goto_symex_statet &state,
   const expr2tc &rhs,
@@ -654,6 +696,10 @@ static expr2tc pin_phi_members(
     phi.false_value->type != l2_lhs->type)
     return expr2tc();
 
+  // Rebuilt as a literal, not as a `with` over one arm: the literal is a normal
+  // form, so the carried value stays one node per position however many merges
+  // the loop makes. A `with` chain accumulates one node per disagreeing
+  // position per merge instead, which measures superlinear as the bound rises.
   std::optional<std::vector<expr2tc>> elems;
   if (is_struct_type(l2_lhs))
   {
@@ -663,7 +709,7 @@ static expr2tc pin_phi_members(
       phi,
       st.members.size(),
       [&](const expr2tc &arm, size_t i) {
-        return member2tc(st.members[i], arm, st.member_names[i]);
+        return project_member(arm, st.member_names[i]);
       },
       [&](size_t i) {
         return member2tc(st.members[i], l2_lhs, st.member_names[i]);
@@ -679,9 +725,7 @@ static expr2tc pin_phi_members(
       state,
       phi,
       count->to_uint64(),
-      [&](const expr2tc &arm, size_t i) {
-        return index2tc(at.subtype, arm, gen_ulong(i));
-      },
+      [](const expr2tc &arm, size_t i) { return project_index(arm, i); },
       [&](size_t i) { return index2tc(at.subtype, l2_lhs, gen_ulong(i)); });
   }
   if (!elems)
