@@ -714,6 +714,99 @@ void goto_convertt::generate_dynamic_size_vla(
   t_s_s->location = loc;
 }
 
+/// Lower the initializer of a declaration into @p dest. Kept out of
+/// convert_decl so that neither exceeds the complexity gate.
+void goto_convertt::convert_decl_initializer(
+  const exprt &var,
+  exprt &initializer,
+  const codet &new_code,
+  const symbolt &s,
+  goto_programt &dest)
+{
+  // A temporary_object initializer carrying a constructor (C++ `T t;` or
+  // `T t = T(...)`) constructs the object in place: retarget the
+  // constructor's new_object to `var` and emit it directly, instead of
+  // constructing a separate temporary and copying it. The copy path would
+  // leave that temporary with its own scope-exit destructor -- a spurious
+  // second destructor for what is semantically a single object.
+  if (
+    initializer.id() == "sideeffect" &&
+    initializer.statement() == "temporary_object" &&
+    static_cast<const exprt &>(initializer.initializer()).is_not_nil())
+  {
+    exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
+    replace_new_object(var, ctor_code);
+    convert(to_code(ctor_code), dest);
+  }
+  else if (
+    initializer.id() == "sideeffect" &&
+    initializer.statement() == "temporary_object" &&
+    initializer.operands().size() == 1 &&
+    initializer.op0().id() == "sideeffect" &&
+    initializer.op0().statement() == "function_call")
+  {
+    // A temporary_object wrapping a plain (non-constructor) function call
+    // (C++ `T t = f(...);` where f returns T by value): call it with `var`
+    // as the lhs directly instead of routing the result through a fresh
+    // return_value$ temporary. The generic path below would give that
+    // temporary its own scope-exit destructor for what is semantically the
+    // same object as `var` (github #2306). `var`'s own destructor is
+    // scheduled below via targets.destructor_stack regardless of which
+    // branch above ran; if that destructor appears to not fire for a
+    // function ending in an explicit `return <expr>;`, look at
+    // convert_return's handling of its local unwind program instead of
+    // here -- that path is a separate, pre-existing gap.
+    const exprt &call_expr = initializer.op0();
+    code_function_callt call;
+    call.location() = call_expr.location();
+    call.lhs() = var;
+    call.function() = call_expr.op0();
+    call.arguments() = call_expr.op1().operands();
+    convert_function_call(call, dest);
+  }
+  else
+  {
+    std::size_t stack_size = targets.destructor_stack.size();
+
+    goto_programt sideeffects;
+    // the side effect is not just removed. Actually, it's converted and
+    // removed.
+    remove_sideeffects(initializer, sideeffects);
+    dest.destructive_append(sideeffects);
+
+    code_assignt assign(var, initializer);
+    assign.location() = new_code.location();
+    copy(assign, ASSIGN, dest);
+
+    // Temporaries materialized while lowering the initializer die at the
+    // end of the full expression (C++ [class.temporary]/4, github #6075):
+    // emit their pending scope-exit entries (destructor then DEAD) right
+    // after the assignment. A reference declaration extends its
+    // temporary's lifetime to the scope ([class.temporary]/6) and a
+    // destructor-free tail (plain DEADs of C-style temps) keeps
+    // block-level scope, so both retain the old shape.
+    if (!is_lvalue_or_rvalue_reference(s.get_type()))
+    {
+      bool have_destructor = false;
+      for (std::size_t i = stack_size; i < targets.destructor_stack.size(); i++)
+        if (targets.destructor_stack[i].get_statement() == "function_call")
+        {
+          have_destructor = true;
+          break;
+        }
+
+      if (have_destructor)
+        while (targets.destructor_stack.size() > stack_size)
+        {
+          codet d_code = targets.destructor_stack.back();
+          targets.destructor_stack.pop_back();
+          d_code.location() = new_code.location();
+          convert(d_code, dest);
+        }
+    }
+  }
+}
+
 void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
 {
   if (code.operands().size() != 1 && code.operands().size() != 2)
@@ -770,90 +863,7 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
     generate_dynamic_size_vla(var, new_code.location(), dest);
 
   if (!initializer.is_nil())
-  {
-    // A temporary_object initializer carrying a constructor (C++ `T t;` or
-    // `T t = T(...)`) constructs the object in place: retarget the
-    // constructor's new_object to `var` and emit it directly, instead of
-    // constructing a separate temporary and copying it. The copy path would
-    // leave that temporary with its own scope-exit destructor -- a spurious
-    // second destructor for what is semantically a single object.
-    if (
-      initializer.id() == "sideeffect" &&
-      initializer.statement() == "temporary_object" &&
-      static_cast<const exprt &>(initializer.initializer()).is_not_nil())
-    {
-      exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
-      replace_new_object(var, ctor_code);
-      convert(to_code(ctor_code), dest);
-    }
-    else if (
-      initializer.id() == "sideeffect" &&
-      initializer.statement() == "temporary_object" &&
-      initializer.operands().size() == 1 &&
-      initializer.op0().id() == "sideeffect" &&
-      initializer.op0().statement() == "function_call")
-    {
-      // A temporary_object wrapping a plain (non-constructor) function call
-      // (C++ `T t = f(...);` where f returns T by value): call it with `var`
-      // as the lhs directly instead of routing the result through a fresh
-      // return_value$ temporary. The generic path below would give that
-      // temporary its own scope-exit destructor for what is semantically the
-      // same object as `var` (github #2306). `var`'s own destructor is
-      // scheduled below via targets.destructor_stack regardless of which
-      // branch above ran; if that destructor appears to not fire for a
-      // function ending in an explicit `return <expr>;`, look at
-      // convert_return's handling of its local unwind program instead of
-      // here -- that path is a separate, pre-existing gap.
-      const exprt &call_expr = initializer.op0();
-      code_function_callt call;
-      call.location() = call_expr.location();
-      call.lhs() = var;
-      call.function() = call_expr.op0();
-      call.arguments() = call_expr.op1().operands();
-      convert_function_call(call, dest);
-    }
-    else
-    {
-      std::size_t stack_size = targets.destructor_stack.size();
-
-      goto_programt sideeffects;
-      // the side effect is not just removed. Actually, it's converted and removed.
-      remove_sideeffects(initializer, sideeffects);
-      dest.destructive_append(sideeffects);
-
-      code_assignt assign(var, initializer);
-      assign.location() = new_code.location();
-      copy(assign, ASSIGN, dest);
-
-      // Temporaries materialized while lowering the initializer die at the
-      // end of the full expression (C++ [class.temporary]/4, github #6075):
-      // emit their pending scope-exit entries (destructor then DEAD) right
-      // after the assignment. A reference declaration extends its
-      // temporary's lifetime to the scope ([class.temporary]/6) and a
-      // destructor-free tail (plain DEADs of C-style temps) keeps
-      // block-level scope, so both retain the old shape.
-      if (!is_lvalue_or_rvalue_reference(s->get_type()))
-      {
-        bool have_destructor = false;
-        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
-             i++)
-          if (targets.destructor_stack[i].get_statement() == "function_call")
-          {
-            have_destructor = true;
-            break;
-          }
-
-        if (have_destructor)
-          while (targets.destructor_stack.size() > stack_size)
-          {
-            codet d_code = targets.destructor_stack.back();
-            targets.destructor_stack.pop_back();
-            d_code.location() = new_code.location();
-            convert(d_code, dest);
-          }
-      }
-    }
-  }
+    convert_decl_initializer(var, initializer, new_code, *s, dest);
 
   // now create a 'dead' instruction -- will be added after the
   // destructor created below as unwind_destructor_stack pops off the
