@@ -116,7 +116,7 @@ def _warn_unmodelled_module(module_name: str) -> None:
 
 
 def _warn_module_file_not_found(module_name: str) -> None:
-    """Report a module with no emit-able AST, unless already reported."""
+    """Warn unless `_warn_unmodelled_module` already named this module."""
     if module_name in _reported_unmodelled:
         return
     _resolver_warning(f"{module_name} module-file-not-found")
@@ -310,10 +310,9 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             continue
         filename = _module_filename(module)
         if filename is None:
-            # The module imports under CPython but has no AST to emit, and no
-            # model stands in for it, so there is nothing to convert (#7674).
-            # Not `module_not_found`: that flag statically selects an
-            # `except ImportError` branch, wrong for an importable module.
+            # Importable under CPython, no AST to emit, no model standing in
+            # for it: nothing to convert (#7674). Not `module_not_found` --
+            # that flag statically selects an `except ImportError` branch.
             if not _has_model_file(module_name, output_dir):
                 _warn_unmodelled_module(module_name)
                 if module_name == converter_target:

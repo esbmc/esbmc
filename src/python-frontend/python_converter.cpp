@@ -428,10 +428,8 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
       return;
     }
 
-    // The module imports under CPython but has neither an emit-able source
-    // file nor an operational model, so there is no AST to convert. Skip it
-    // and let each use of its names fail at its own site, as an unresolvable
-    // import does; the parser has already named it (#7674).
+    // No AST was emitted for this module; its names fail at their use sites
+    // instead, as an unresolvable import's do (#7674).
     if (node.value("module_unmodelled", false))
       return;
 
