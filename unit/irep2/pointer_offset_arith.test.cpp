@@ -16,6 +16,14 @@
 
 TEST_CASE("pointer_offset over add2t folds for named structs", "[irep2]")
 {
+  // config lives in another translation unit and is zero-initialised, so
+  // address_width is 0 until a model is pinned — and pointer_offset2t
+  // asserts its type's width equals it. Without this the test aborts under
+  // any build with asserts on (CI's DebugOpt); a RelWithDebInfo build
+  // compiles the assert out and hides it. LP64 keeps the expectation
+  // below unchanged: 2 * sizeof(struct{int;int;}) == 16.
+  config.ansi_c.set_data_model(configt::LP64);
+
   // A two-member struct registered in a namespace under a tag, so the
   // symbol type resolves the way a frontend-declared struct does.
   contextt ctx;
