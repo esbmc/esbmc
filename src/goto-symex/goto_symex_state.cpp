@@ -213,13 +213,11 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
-/// A pure bitvector computation over immutable leaves is itself immutable.
-/// is_immutable_value carries a value that was *copied* into an aggregate;
-/// this carries one that was *assembled* there. Byte-combining is how a
-/// multi-byte field is read out of a stream --
-/// `out->class_ref = ((out->b0 & 255) << 8) | (out->b1 & 255)` -- and a bound
-/// so assembled (`npairs = (code[pc+3] << 8) | code[pc+4]`) otherwise leaves
-/// the loop it bounds unfoldable, which is the #7597 symptom one step earlier.
+/// A pure bitvector computation over immutable leaves is itself immutable --
+/// the byte-assembly idiom `(hi & 255) << 8 | (lo & 255)`, which
+/// is_immutable_value refuses because the update is an expression over
+/// immutable reads rather than one of them. A bound so assembled otherwise
+/// leaves the loop it bounds unfoldable (#7597).
 static bool is_immutable_computation(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
@@ -229,19 +227,16 @@ static bool is_immutable_computation(const expr2tc &expr)
   if (is_immutable_value(*b))
     return true;
 
-  // Constant leaves stay scalar. An aggregate literal keeps going through
-  // constant_propagation so array_may_propagate still decides it: that gate
-  // refuses the infinite-size modelling arrays outright, and caps a nested
-  // array at multidim_propagation_bound elements because a read at a symbolic
-  // index inlines the whole constant. Admitting literals here would bypass
-  // both.
+  // Constant leaves stay scalar: an aggregate literal keeps routing through
+  // constant_propagation, so array_may_propagate still refuses the
+  // infinite-size arrays and caps nested ones at multidim_propagation_bound.
   if (is_constant_expr(*b))
     return !is_constant_struct2t(*b) && !is_constant_union2t(*b) &&
            !is_constant_array2t(*b) && !is_constant_array_of2t(*b) &&
            !is_constant_vector2t(*b) && !is_constant_string2t(*b);
 
-  // Bitvector operands only: the width the result is truncated to is the
-  // operator's own, so a float or fixedbv arm would change value here.
+  // Bitvector operands only, as is_stable_value does (#7501): a pointer-typed
+  // add2t would otherwise be accepted here.
   if (!is_bv_type((*b)->type))
     return false;
 

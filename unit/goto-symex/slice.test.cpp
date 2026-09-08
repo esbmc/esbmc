@@ -54,12 +54,9 @@ struct slice_result
   size_t elided_stores;
 };
 
-/** True if the slicer rewrote this assignment's encoding to the elided form:
- *  `lhs = with(src, idx, val)` encoded as `lhs = src`, the store dropped.
- *
- *  Asserting the exact elided form, not merely that the encoding differs from
- *  the rhs: `cond != (lhs == rhs)` also holds for an encoding that kept the
- *  store but got `src` wrong, which is the case this audit exists to catch. */
+/** True if the slicer encoded `lhs = with(src, idx, val)` as `lhs = src`.
+ *  The exact form matters: `cond != (lhs == rhs)` also holds for a retained
+ *  store with the wrong source, the case this audit exists to catch. */
 bool store_elided(const symex_target_equationt::SSA_stept &step)
 {
   if (!step.is_assignment() || is_nil_expr(step.rhs) || is_nil_expr(step.cond))
@@ -213,17 +210,10 @@ TEST_CASE("closure survives constant array indices", "[symex][slice]")
 {
   // scan_array_uses / index_reads: a store to one constant index may be elided
   // only if no retained read can observe it.
-  // The values are expressions, not bare nondet symbols: a chain of immutable
-  // updates propagates instead of reaching the slicer (#7597). One shared
-  // definition, so eliding the dead stores does not strand it -- an elided
-  // store's rhs still names its operands even though its encoding no longer
-  // does, and the audit below reads the rhs.
-  //
-  // The operator is a multiplication, not the `x + n` this case used before:
-  // is_immutable_computation carries add/sub and the bitwise ops over an
-  // immutable leaf, so an addition here would propagate too and the stores
-  // would never reach the slicer at all. Multiplication is outside that set,
-  // which is what keeps the elision exercised.
+  // Expressions, not bare nondets: an immutable chain propagates instead of
+  // reaching the slicer (#7597). One shared definition, so eliding the dead
+  // stores does not strand it. Multiplication, not addition, because
+  // is_immutable_computation carries add/sub over an immutable leaf.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
