@@ -6,8 +6,13 @@ introspection API are not modelled.
 
 Values describe the 64-bit little-endian target ESBMC's C models assume and
 the IEEE-754 binary64 float the frontend maps `float` onto; they match CPython
-on that target. `platform` and `version_info` cannot be derived that way and
-name the target the models assume, not the host interpreter.
+on that target. `platform` names the target the models assume, not the host
+interpreter.
+
+`version_info` is deliberately absent: the frontend does not dispatch
+`__getitem__`, so the usual `sys.version_info[0]` would report a spurious
+IndexError. An attribute-only stand-in that turns the common form into a false
+alarm is worse than no attribute at all.
 """
 # The attribute names are the stdlib's API, not names this module chooses.
 # pylint: disable=invalid-name,too-few-public-methods,too-many-instance-attributes
@@ -30,19 +35,7 @@ class _FloatInfo:
         self.rounds: int = 1
 
 
-class _VersionInfo:
-    """sys.version_info — the Python level the frontend accepts."""
-
-    def __init__(self) -> None:
-        self.major: int = 3
-        self.minor: int = 12
-        self.micro: int = 0
-        self.releaselevel: str = "final"
-        self.serial: int = 0
-
-
 float_info: _FloatInfo = _FloatInfo()
-version_info: _VersionInfo = _VersionInfo()
 
 maxsize: int = 9223372036854775807
 maxunicode: int = 1114111

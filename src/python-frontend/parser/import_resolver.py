@@ -282,6 +282,11 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
     if not module_names:
         return
 
+    # `import_module_name` in python_converter.cpp resolves an `import a, b`
+    # node to its first name alone, so only that name decides whether the node
+    # is convertible; flagging it for `b` would drop `a` too.
+    converter_target = module_names[0]
+
     for module_name in module_names:
         if module_name not in module_imports:
             module_imports[module_name] = {'import_all': False, 'specific_names': set()}
@@ -299,17 +304,14 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             continue
         filename = _module_filename(module)
         if filename is None:
-            # The module imports under CPython but has no AST to emit: a
-            # builtin (`sys`), or a stdlib file `_is_standard_library_file`
-            # filters out (`json`). Without a model to stand in for it, the
-            # converter must skip the import rather than look for an AST that
-            # was never written (#7674). This is deliberately *not*
-            # `module_not_found`: that flag makes `except ImportError` the
-            # statically-selected branch, which would be wrong for a module
-            # CPython imports fine.
+            # The module imports under CPython but has no AST to emit, and no
+            # model stands in for it, so there is nothing to convert (#7674).
+            # Not `module_not_found`: that flag statically selects an
+            # `except ImportError` branch, wrong for an importable module.
             if not _has_model_file(module_name, output_dir):
-                node.module_unmodelled = True
                 _warn_unmodelled_module(module_name)
+                if module_name == converter_target:
+                    node.module_unmodelled = True
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
 

@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s*FAILED\s+\[main\.assertion\.1\].*assertion pi < 3\.000000$
+^VERIFICATION FAILED$

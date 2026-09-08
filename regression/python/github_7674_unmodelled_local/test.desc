@@ -2,4 +2,5 @@ CORE
 main.py
 
 ^WARNING: no operational model for module 'json'; its names will be unresolved$
+^ERROR: Could not resolve type of receiver in member call '\.json\.dumps\(\)'\.
 \A(?![\s\S]*Cannot open the AST)[\s\S]*\Z
