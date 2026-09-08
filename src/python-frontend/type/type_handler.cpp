@@ -246,16 +246,25 @@ std::string type_handler::get_var_type(const std::string &var_name) const
 
   const auto &annotation = ref["annotation"];
 
+  // A simple `Alias = bytes`-style annotation names the alias, not the
+  // builtin; dispatch decisions elsewhere (e.g. len()'s strlen-vs-
+  // get_object_size choice, builder.cpp) key off the builtin name.
+  auto resolve = [this](const std::string &name) -> std::string
+  {
+    const std::string resolved = resolve_builtin_alias(name);
+    return resolved.empty() ? name : resolved;
+  };
+
   // Handle simple type annotations: int, str, list, etc.
   if (annotation.is_object() && annotation.contains("id"))
-    return annotation["id"].get<std::string>();
+    return resolve(annotation["id"].get<std::string>());
 
   // Handle subscripted types: List[str], Optional[int], etc.
   if (
     annotation.is_object() && annotation.contains("_type") &&
     annotation["_type"] == "Subscript" && annotation.contains("value") &&
     annotation["value"].is_object() && annotation["value"].contains("id"))
-    return annotation["value"]["id"];
+    return resolve(annotation["value"]["id"]);
 
   // Handle Union types (e.g., list[str] | None, str | int)
   // Union is represented as BinOp with BitOr operator
@@ -276,13 +285,13 @@ std::string type_handler::get_var_type(const std::string &var_name) const
       {
         // Recursively extract type from left side
         if (left.contains("id"))
-          return left["id"].get<std::string>();
+          return resolve(left["id"].get<std::string>());
 
         // Handle subscripted types on left: list[str] | None
         if (
           left["_type"] == "Subscript" && left.contains("value") &&
           left["value"].contains("id"))
-          return left["value"]["id"].get<std::string>();
+          return resolve(left["value"]["id"].get<std::string>());
       }
     }
 
@@ -295,12 +304,12 @@ std::string type_handler::get_var_type(const std::string &var_name) const
             right.contains("value") && right["value"].is_null()))
       {
         if (right.contains("id"))
-          return right["id"].get<std::string>();
+          return resolve(right["id"].get<std::string>());
 
         if (
           right["_type"] == "Subscript" && right.contains("value") &&
           right["value"].contains("id"))
-          return right["value"]["id"].get<std::string>();
+          return resolve(right["value"]["id"].get<std::string>());
       }
     }
   }
