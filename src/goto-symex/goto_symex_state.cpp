@@ -189,7 +189,12 @@ static bool immutable_read_type(const expr2tc &e)
     return false;
   if (is_array_type(e->type))
     return array_may_propagate(e);
-  return is_struct_type(e->type);
+  // A union too, but only as a *read*: member2t::do_simplify steps past a
+  // `with` whose source is a union at no member, and fold_union_member_read
+  // projects out of a constant_union2t only, so a read folds no cross-member
+  // access and the aliasing a carried union literal would expose does not
+  // arise. It is the enclosing object's other members this keeps foldable.
+  return is_struct_type(e->type) || is_union_type(e->type);
 }
 
 /// A value that can never change once recorded: a level2 SSA generation

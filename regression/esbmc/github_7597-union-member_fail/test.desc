@@ -1,0 +1,7 @@
+CORE
+main.c
+--no-standard-checks --multi-property
+^\s*FAILED\s+\[main\.assertion\.1\]\s+line\s+\d+\s+assertion VAR\.step == 5$
+^\s*FAILED\s+\[main\.assertion\.2\]\s+line\s+\d+\s+assertion VAR\.m\.as_signed == \(int\)\(IO\.in \+ 2u\)$
+^\s*FAILED\s+\[main\.assertion\.3\]\s+line\s+\d+\s+assertion VAR\.step == 6$
+^VERIFICATION FAILED$
