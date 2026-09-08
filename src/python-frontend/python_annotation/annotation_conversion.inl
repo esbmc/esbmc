@@ -1565,6 +1565,26 @@ std::string python_annotation<Json>::get_function_return_type(
     }
   }
 
+  // `Alias = bytes`-style constructor call (e.g. an unannotated
+  // `x = Alias(3)`): resolve to the aliased builtin's name.
+  {
+    const Json &decl =
+      json_utils::find_var_decl(func_name, get_current_func_name(), ast_);
+    if (
+      !decl.empty() && decl.contains("value") && decl["value"].is_object() &&
+      decl["value"].value("_type", "") == "Name" &&
+      decl["value"].contains("id"))
+    {
+      const std::string target =
+        decl["value"]["id"].template get<std::string>();
+      if (type_utils::is_builtin_type(target))
+      {
+        functions_in_analysis_.erase(func_name);
+        return target;
+      }
+    }
+  }
+
   functions_in_analysis_.erase(func_name);
 
   std::ostringstream oss;
