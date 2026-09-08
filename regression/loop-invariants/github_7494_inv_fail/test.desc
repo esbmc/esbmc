@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+10\s+loop invariant inductive step$
+^VERIFICATION FAILED$

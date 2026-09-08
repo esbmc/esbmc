@@ -93,37 +93,47 @@ bool store_elided(const symex_target_equationt::SSA_stept &step)
 // the elision branch has to fire. Reading through an assertion, not the return
 // value, keeps the array live: a returned expression is itself sliced away, and
 // then the stores go with `ignore` rather than reaching the branch at all.
-// The stored values are `nondet * 3`, not bare nondets, on purpose: a
-// chain of (typecast) symbol stores now constant-propagates wholly, the
-// read folds to the stored symbol at rename time, the array is never
-// tracked, and every store dies as plain dead code before the elision
-// branch can fire. A multiplication over a nondet is refused by the
-// propagator, so these chains stay in the SSA and keep the exercise real.
+// The values are expressions, not bare nondet symbols, for the reason
+// slice.test.cpp's "closure survives constant array indices" gives (#7597),
+// and multiplications rather than additions because is_immutable_computation
+// carries add/sub over an immutable leaf -- an addition would propagate and
+// the stores would never reach the slicer.
 const char *dead_array_store = R"(
 int nondet_int(void);
 int main(void)
 {
   int a[4];
-  a[0] = nondet_int() * 3;
-  a[1] = nondet_int() * 3;
-  a[2] = nondet_int() * 3;
-  a[3] = nondet_int() * 3;
+  int x = nondet_int();
+  a[0] = x * 3;
+  a[1] = x * 5;
+  a[2] = x * 7;
+  a[3] = x * 11;
   __ESBMC_assert(a[1] != 424242, "read one index");
   return 0;
 }
 )";
 
-// The same program indexed symbolically. No store qualifies, so none can be
-// elided -- the incompleteness the guard buys in exchange for soundness.
+// The same program indexed symbolically -- literally the same stores, so the
+// only difference under test is the index. No store qualifies, so none can be
+// elided: the incompleteness the guard buys in exchange for soundness.
+//
+// The values must stay the ones dead_array_store uses. With bare nondets the
+// whole chain propagates, the stores die as dead code before the slicer sees
+// them, and `qualifying == 0` then holds for a reason that has nothing to do
+// with the symbolic index -- the assertion would pass vacuously.
 const char *symbolic_index_store = R"(
 int nondet_int(void);
 int main(void)
 {
   int a[4];
+  int x = nondet_int();
   int i = nondet_int() & 3;
-  a[i] = nondet_int();
-  a[1] = 7;
-  return a[i];
+  a[0] = x * 3;
+  a[1] = x * 5;
+  a[2] = x * 7;
+  a[3] = x * 11;
+  __ESBMC_assert(a[i] != 424242, "read one index");
+  return 0;
 }
 )";
 

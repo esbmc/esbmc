@@ -1,6 +1,7 @@
 #ifndef STL_FSTREAM
 #define STL_FSTREAM
 
+#include "iosfwd"
 #include "streambuf"
 #include "string"
 #include "istream"
@@ -153,6 +154,10 @@ public:
   bool _fileopen = false;
   filebuf *_m_filebuf;
 };
+
+#if __cplusplus >= 201103L
+/* The basic_* file-stream alias templates are declared in <iosfwd> (#7531). */
+#endif
 
 //=====================fstream===================
 fstream::fstream()

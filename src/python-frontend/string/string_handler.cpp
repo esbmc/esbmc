@@ -535,6 +535,52 @@ bool string_handler::try_extract_const_string_expr(
   return false;
 }
 
+std::string
+string_handler::fstring_repr_of_constant(const nlohmann::json &operand)
+{
+  if (operand["_type"] != "Constant")
+    return {};
+
+  const nlohmann::json &literal = operand["value"];
+  if (literal.is_number_integer())
+    return std::to_string(literal.get<long long>());
+
+  if (!literal.is_string())
+    return {};
+
+  const std::string text = literal.get<std::string>();
+  const bool needs_escape =
+    std::any_of(text.begin(), text.end(), [](unsigned char c) {
+      return c < 0x20 || c > 0x7e || c == '\'' || c == '"' || c == '\\';
+    });
+  return needs_escape ? std::string() : "'" + text + "'";
+}
+
+exprt string_handler::build_fstring_conversion(
+  const nlohmann::json &value,
+  int conversion,
+  const locationt &location)
+{
+  // !r and !a render repr(); fold the spellings whose repr is exactly the
+  // digits or the quoted text (#7559).
+  const bool reprs = conversion == 'r' || conversion == 'a';
+  const std::string repr =
+    reprs ? fstring_repr_of_constant(value["value"]) : std::string();
+
+  if (repr.empty())
+  {
+    log_warning(
+      "f-string conversion '!{}' is not modelled: using a nondet string",
+      static_cast<char>(conversion));
+    return build_nondet_string_fallback(location);
+  }
+
+  typet string_type = type_handler_.build_array(char_type(), repr.size() + 1);
+  std::vector<unsigned char> chars(repr.begin(), repr.end());
+  chars.push_back('\0');
+  return make_char_array_expr(chars, string_type);
+}
+
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
   // Sound over-approximation when a str.*() handler cannot extract a
@@ -1337,13 +1383,8 @@ exprt string_handler::get_fstring_expr(const nlohmann::json &element)
             ? value["conversion"].get<int>()
             : -1;
         if (conversion != -1 && conversion != 's')
-        {
-          log_warning(
-            "f-string conversion '!{}' is not modelled: using a nondet "
-            "string",
-            static_cast<char>(conversion));
-          part_expr = build_nondet_string_fallback(expr.location());
-        }
+          part_expr =
+            build_fstring_conversion(value, conversion, expr.location());
         // Handle format specification if present
         else if (
           value.contains("format_spec") && !value["format_spec"].is_null())

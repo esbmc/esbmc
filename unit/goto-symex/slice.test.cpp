@@ -54,14 +54,20 @@ struct slice_result
   size_t elided_stores;
 };
 
-/** True if the slicer rewrote this assignment's encoding away from its rhs. */
+/** True if the slicer rewrote this assignment's encoding to the elided form:
+ *  `lhs = with(src, idx, val)` encoded as `lhs = src`, the store dropped.
+ *
+ *  Asserting the exact elided form, not merely that the encoding differs from
+ *  the rhs: `cond != (lhs == rhs)` also holds for an encoding that kept the
+ *  store but got `src` wrong, which is the case this audit exists to catch. */
 bool store_elided(const symex_target_equationt::SSA_stept &step)
 {
   if (!step.is_assignment() || is_nil_expr(step.rhs) || is_nil_expr(step.cond))
     return false;
   if (!is_with2t(step.rhs))
     return false;
-  return step.cond != expr2tc(equality2tc(step.lhs, step.rhs));
+  return step.cond ==
+         expr2tc(equality2tc(step.lhs, to_with2t(step.rhs).source_value));
 }
 
 /** Run the real slicer over `eq` and audit what it left behind. */
@@ -207,20 +213,27 @@ TEST_CASE("closure survives constant array indices", "[symex][slice]")
 {
   // scan_array_uses / index_reads: a store to one constant index may be elided
   // only if no retained read can observe it.
-  // The stored values are `nondet * 3` on purpose: bare symbol chains
-  // now constant-propagate wholly and the read folds away, so the array
-  // is never tracked and the stores die as plain dead code before the
-  // elision. A multiplication over a nondet is refused by the
-  // propagator, keeping the elision exercised.
+  // The values are expressions, not bare nondet symbols: a chain of immutable
+  // updates propagates instead of reaching the slicer (#7597). One shared
+  // definition, so eliding the dead stores does not strand it -- an elided
+  // store's rhs still names its operands even though its encoding no longer
+  // does, and the audit below reads the rhs.
+  //
+  // The operator is a multiplication, not the `x + n` this case used before:
+  // is_immutable_computation carries add/sub and the bitwise ops over an
+  // immutable leaf, so an addition here would propagate too and the stores
+  // would never reach the slicer at all. Multiplication is outside that set,
+  // which is what keeps the elision exercised.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
 {
   int arr[4];
-  arr[0] = nondet_int() * 3;
-  arr[1] = nondet_int() * 3;
-  arr[2] = nondet_int() * 3;
-  arr[3] = nondet_int() * 3;
+  int x = nondet_int();
+  arr[0] = x * 3;
+  arr[1] = x * 5;
+  arr[2] = x * 7;
+  arr[3] = x * 11;
   __ESBMC_assert(arr[1] != 424242, "read one index");
   return 0;
 }
@@ -241,16 +254,19 @@ int main(void)
 TEST_CASE("a symbolic array index disqualifies the array", "[symex][slice]")
 {
   // The shape H-A4's twin targets: with a symbolic index the slicer cannot know
-  // which element is read, so it must retain every store to that array.
+  // which element is read, so it must retain every store to that array. Same
+  // non-propagating stores as the case above, so the two differ only in the
+  // index and `elided_stores == 0` cannot hold for want of a store.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
 {
   int arr[4];
-  arr[0] = nondet_int();
-  arr[1] = nondet_int();
-  arr[2] = nondet_int();
-  arr[3] = nondet_int();
+  int x = nondet_int();
+  arr[0] = x + 1;
+  arr[1] = x + 2;
+  arr[2] = x + 3;
+  arr[3] = x + 4;
   int i = nondet_int();
   __ESBMC_assume(i >= 0 && i < 4);
   __ESBMC_assert(arr[i] != 424242, "symbolic read");

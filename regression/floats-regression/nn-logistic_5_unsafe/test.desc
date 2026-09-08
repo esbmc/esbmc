@@ -1,4 +1,5 @@
 THOROUGH
 logistic_5_unsafe.c-amalgamation.c
 -I . --boolector
+REQUIRES long_timeout
 ^VERIFICATION FAILED$

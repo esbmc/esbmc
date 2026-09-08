@@ -76,6 +76,13 @@ public:
    */
   python_math(python_converter &conv, contextt &ctx, type_handler &th);
 
+  static BigInt pow_bigint_non_negative(BigInt base, BigInt exp);
+
+  static bool
+  fits_in_width(const BigInt &value, unsigned width, bool is_signed);
+
+  static const BigInt kMaxConstantFoldExponent;
+
   /**
    * @brief Classify whether a call should be handled by math dispatch.
    *

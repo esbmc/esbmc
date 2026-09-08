@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 136 --no-unwinding-assertions
+^Generated \d+ VCC\(s\), 0 remaining after simplification \(\d+ assignments\)$
+^VERIFICATION SUCCESSFUL$

@@ -4,6 +4,8 @@
 #include <python-frontend/math/complex_handler_utils.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/math_guard_utils.h>
+#include <python-frontend/math/python_int_overflow.h>
+#include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -16,6 +18,7 @@
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_typecast.h>
 #include <util/expr/expr_util.h>
@@ -31,6 +34,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
@@ -503,6 +507,56 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
   return sym;
 }
 
+std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
+  const nlohmann::json &node) const
+{
+  if (!node.is_object() || !node.contains("_type"))
+    return std::nullopt;
+
+  const std::string &type = node["_type"];
+
+  if (type == "Constant" && node.contains("_bigint"))
+    return BigInt(node["_bigint"].get<std::string>().c_str());
+
+  if (
+    type == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return BigInt(node["value"].get<long long>());
+
+  if (type == "UnaryOp" && node.contains("op") && node.contains("operand"))
+  {
+    const std::optional<BigInt> operand =
+      try_fold_constant_arith_json(node["operand"]);
+    if (operand.has_value() && node["op"]["_type"] == "USub")
+      return -(*operand);
+    return std::nullopt;
+  }
+
+  if (
+    type != "BinOp" || !node.contains("op") || !node.contains("left") ||
+    !node.contains("right"))
+    return std::nullopt;
+
+  const std::optional<BigInt> lhs = try_fold_constant_arith_json(node["left"]);
+  if (!lhs.has_value())
+    return std::nullopt;
+  const std::optional<BigInt> rhs = try_fold_constant_arith_json(node["right"]);
+  if (!rhs.has_value())
+    return std::nullopt;
+
+  const std::string &op = node["op"]["_type"];
+  if (op == "Add")
+    return *lhs + *rhs;
+  if (op == "Sub")
+    return *lhs - *rhs;
+  if (op == "Mult")
+    return *lhs * *rhs;
+  if (op == "Pow" && *rhs >= 0 && *rhs <= python_math::kMaxConstantFoldExponent)
+    return python_math::pow_bigint_non_negative(*lhs, *rhs);
+
+  return std::nullopt;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -873,37 +927,19 @@ exprt function_call_expr::build_constant_from_arg() const
       std::remove_if(str_val.begin(), str_val.end(), ::isspace), str_val.end());
 
     // Handle special float string values
-    if (str_val == "nan")
-    {
-      // Create NaN using IEEE float
-      ieee_floatt nan_val(ieee_float_spect::double_precision());
-      nan_val.make_NaN();
-      return nan_val.to_expr();
-    }
-    else if (
-      str_val == "inf" || str_val == "+inf" || str_val == "infinity" ||
-      str_val == "+infinity")
-    {
-      // Create positive infinity
-      ieee_floatt inf_val(ieee_float_spect::double_precision());
-      inf_val.make_plus_infinity();
-      return inf_val.to_expr();
-    }
-    else if (str_val == "-inf" || str_val == "-infinity")
-    {
-      // Create negative infinity
-      ieee_floatt inf_val(ieee_float_spect::double_precision());
-      inf_val.make_minus_infinity();
-      return inf_val.to_expr();
-    }
-    else
+    if (const auto special = nonfinite_float_from_spelling(str_val))
+      return special->to_expr();
     {
       // Try to parse as regular float
       {
         const std::string raw_val = arg["value"].get<std::string>();
+        // strtod does not know PEP 515, so drop the separators first (#7558).
+        std::string digits;
+        const bool separators_ok =
+          type_utils::strip_pep515_underscores(raw_val, digits);
         char *end = nullptr;
-        double dval = std::strtod(raw_val.c_str(), &end);
-        if (!end || end != raw_val.c_str() + raw_val.size())
+        double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+        if (!separators_ok || !end || end != digits.c_str() + digits.size())
         {
           std::string m =
             "could not convert string to float : '" + raw_val + "'";
@@ -1075,7 +1111,21 @@ exprt function_call_expr::build_constant_from_arg() const
   }
 
   typet t = type_handler_.get_typet(func_name, arg_size);
-  exprt expr = converter_.get_expr(arg);
+  exprt expr;
+  try
+  {
+    expr = converter_.get_expr(arg);
+  }
+  catch (const python_int_overflow_excp &)
+  {
+    // e.g. uint64(2**64 - 1): 2**64 alone overflows, retry against t's width.
+    const std::optional<BigInt> folded = try_fold_constant_arith_json(arg);
+    if (
+      !folded.has_value() || !(t.is_signedbv() || t.is_unsignedbv()) ||
+      !python_math::fits_in_width(*folded, bv_width(t), t.is_signedbv()))
+      throw;
+    return from_integer(*folded, t);
+  }
 
   // For float(), emit a proper typecast instead of relabeling the type.
   // Simply changing expr.type() on an integer expression creates IR where
@@ -5937,6 +5987,12 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
+    // Tagged arguments aren't supported yet; refuse before goto-symex.
+    if (type_handler_.is_tagged_scalar_type(arg.type()))
+      throw std::runtime_error(
+        "passing a dynamically-typed variable to a function is not yet "
+        "supported");
+
     // A list passed to a callee may be mutated there (e.g. appended to), which
     // the caller's static length tracking does not observe. Mark the symbol so
     // later constant-index accesses fall back to the runtime bounds check
@@ -6082,9 +6138,16 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     const bool arg_is_complex_literal =
       arg_node["_type"] == "Constant" &&
       arg_node.value("esbmc_type_annotation", std::string()) == "complex";
+    // A bytes literal's JSON carries a string "value" too, but get_literal
+    // already built it as a raw byte array (elements are long_long_int).
+    // Rebuilding it as a NUL-terminated char array here left the callee
+    // reading 8-byte elements out of a 3-byte object -- "array bounds
+    // violated" on valid Python (#7550).
+    const bool arg_is_bytes_literal =
+      arg_node["_type"] == "Constant" && converter_.is_bytes_literal(arg_node);
     if (
-      !arg_is_complex_literal && arg_node["_type"] == "Constant" &&
-      arg_node["value"].is_string())
+      !arg_is_complex_literal && !arg_is_bytes_literal &&
+      arg_node["_type"] == "Constant" && arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
@@ -6253,7 +6316,9 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
             "parameters yet");
       }
 
-      if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+      if (
+        arg_node["_type"] == "Constant" && arg_node["value"].is_string() &&
+        !arg_is_bytes_literal)
       {
         arg = string_constantt(
           arg_node["value"].get<std::string>(),

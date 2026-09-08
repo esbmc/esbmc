@@ -8,7 +8,14 @@ You can see below some examples that you can from the build directory:
 - `ctest -L esbmc-cpp/*`. Executes all tests matching esbmc-cpp/*.
 - `ctest -LE esbmc-cpp*`. Executes all tests except the ones inside esbmc-cpp.
 - `ctest --progress`. Show testing progress in one line.
-- `ctest -j4 -L python --progress --timeout 30`. Sets a timeout of 30s.
+- `ESBMC_REGRESS_TIMEOUT_MAX=30 ctest -j4 -L python --progress`. Caps every
+  test at 30s, failing anything slower. `ctest --timeout` cannot do this: CMake
+  gives every test an explicit `TIMEOUT` property, and ctest's flag only
+  supplies a default for tests that have none, so a slow test would still be
+  reported as passing (#7628). Two kinds of test stay green under a cap
+  regardless of how long they take: `KNOWNBUG` and `FUTURE`, for which a
+  timeout satisfies the expectation, and `REQUIRES long_timeout`, which is
+  skipped once the effective budget drops under 600s.
 
 We also provide a script to validate the Python regression suite. You can run the following command from `ESBMC_Project/esbmc` directory as:
 
@@ -29,7 +36,7 @@ A `test.desc` file may also contain `CHECK_FILE` lines for non-JSON output files
 - `<op>`. Either `contains` (the regex must match somewhere in the file) or `absent` (the regex must not match).
 - `<regex>`. A Python regex matched with `re.MULTILINE`; the rest of the line, so it may contain spaces.
 
-When any `CHECK_JSON` or `CHECK_FILE` directive is present the runner executes ESBMC in a fresh temporary directory so parallel tests cannot clobber each other's output files. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE` passes.
+The runner executes every test in a fresh temporary directory, so parallel tests cannot clobber each other's output files and a relative output path in the flags line (`--witness-output`, `--cex-output`, `--output`) never lands in the source tree. Paths in `CHECK_JSON`/`CHECK_FILE`/`SEED_FILE` resolve there. The directory is removed when the test ends; a run hard-killed by ctest's `TIMEOUT` leaks one, named `esbmc-regress-*` under `TMPDIR`. The test passes only if every regex matches and every `CHECK_JSON`/`CHECK_FILE` passes.
 
 For example, `regression/smtlib/github_6059/test.desc` asserts the `--output` dump holds the real formula and not the status string that used to overwrite it:
 
