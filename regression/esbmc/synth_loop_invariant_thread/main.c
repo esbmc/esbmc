@@ -2,9 +2,15 @@
  * reader can no longer observe g == 1 or g == 2. The claim is downstream of
  * the havoc, so it is reported UNKNOWN rather than passing silently -- pinned
  * here because the alternative would be a false proof. Under BMC this is
- * VERIFICATION FAILED. */
+ * VERIFICATION FAILED.
+ *
+ * __ESBMC_assert, not assert: MSVC spells assert(e) as
+ * `(!!(e)) || (_wassert(...), 0)`, whose lowering leaves an `ASSERT 0` guarded
+ * by `!e` where glibc and Darwin fold an unguarded `ASSERT e`. #7585's probe
+ * asks whether the abstraction still admits the claim holding, and a claim that
+ * *is* the constant false answers no on every path, so that spelling would pin
+ * the host's <assert.h> rather than the havoc. */
 #include <pthread.h>
-#include <assert.h>
 
 unsigned int g;
 
@@ -22,7 +28,7 @@ void *writer(void *arg)
 
 void *reader(void *arg)
 {
-  assert(g == 0 || g == 3);
+  __ESBMC_assert(g == 0 || g == 3, "g == 0 || g == 3");
   return 0;
 }
 
