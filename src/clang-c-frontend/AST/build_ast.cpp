@@ -3,6 +3,7 @@
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/ASTImporter.h>
+#include <clang/AST/ASTImporterSharedState.h>
 #include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
@@ -225,12 +226,23 @@ void mergeASTs(
   FromUnit->enableSourceFileDiagnostics();
   ToUnit->enableSourceFileDiagnostics();
 
+  /* Without a shared state the importer resolves every name through
+   * DeclContext::localUncachedLookup -- a linear, deliberately uncached scan of
+   * a destination context that grows with each imported decl, so merging is
+   * quadratic and two C++ TUs do not finish (#7556). Supplying the state gives
+   * ASTImporter::findDeclsInToCtx its hash-based lookup table instead; the
+   * header notes the fallback explicitly ("If not set then the original C/C++
+   * lookup is used"). */
+  auto SharedState = std::make_shared<clang::ASTImporterSharedState>(
+    *ToUnit->getASTContext().getTranslationUnitDecl());
+
   clang::ASTImporter Importer(
     ToUnit->getASTContext(),
     ToUnit->getFileManager(),
     FromUnit->getASTContext(),
     FromUnit->getFileManager(),
-    false);
+    false,
+    SharedState);
 
   Importer.setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
 

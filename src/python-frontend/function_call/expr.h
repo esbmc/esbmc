@@ -145,6 +145,12 @@ private:
   void get_function_type();
 
   /*
+   * The AST node of the named class, from the main module or, when the main
+   * module's body does not hold it, from the module that defines it (#7546).
+   */
+  nlohmann::json find_class_node(const std::string &name) const;
+
+  /*
    * Retrieves the object (caller) name from the AST.
    */
   std::string get_object_name() const;
@@ -357,6 +363,11 @@ private:
    * Rewrites the argument AST node into an integer Constant holding the given
    * code point and returns the resulting int expression. Helper for handle_ord.
    */
+  /// Code point of a constant char array -- what chr() folds to -- or nullopt
+  /// when @p e is not one. bytes are long_long_int arrays and are excluded, so
+  /// ord(b"\xc3") keeps its existing behaviour rather than becoming an error.
+  std::optional<int> folded_char_array_codepoint(const exprt &e) const;
+
   exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
 
   /*

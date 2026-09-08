@@ -12,17 +12,18 @@
 /// in-place recursive walk over `expr2tc` rather than the converter's
 /// out-parameter seam.
 ///
-/// At this stage the walk is deliberately **read-only**: it reads each code
-/// symbol's IREP2 value and recurses, and never writes one back. That keeps the
-/// pass inert by construction rather than by argument -- there is no write path
-/// to be wrong -- while still exercising `migrate_expr` over every construct
-/// the C corpus contains, since `symbolt::get_value2()` migrates the legacy
-/// value on demand. A construct that cannot migrate aborts here instead of much
-/// later.
+/// The walk reads each code symbol's IREP2 value, recurses, and writes the
+/// result back only when it changed something. That gate keeps an untouched
+/// body clear of the round-trip losses `python_adjust` documents (a bitfield's
+/// `#bitfield` flag, an explicit alignment attribute, the C qualifiers), which
+/// C headers are exactly the place to hit -- and it exercises `migrate_expr`
+/// over every construct the C corpus contains either way, since
+/// `symbolt::get_value2()` migrates on demand and a construct that cannot
+/// migrate aborts here rather than much later.
 ///
-/// Read-only also side-steps the round-trip losses `python_adjust` documents
-/// (a bitfield's `#bitfield` flag, an explicit alignment attribute): those only
-/// matter to a write-back, and C headers are exactly the place they occur.
+/// The gate has a cost worth knowing about when reading a symbol-table A/B: an
+/// unchanged body still prints its *converter* tree, which is not what this
+/// pass produced. See `writeback_all` below and §135.
 ///
 /// Known limitation: the walk aborts on a union constant whose type is still a
 /// by-name tag -- `migrate_expr` hands `migrate_type`'s `symbol_type2t` to
@@ -39,8 +40,21 @@ public:
   /// -- declaring an implicitly-declared callee (§70) -- must run only then:
   /// in shadow mode the legacy pass has already done it, and doing it twice
   /// adds conflicting symbols for library functions.
-  explicit clang_c_adjust_irep2(contextt &_context, bool sole_adjuster = false)
-    : context(_context), sole_adjuster(sole_adjuster)
+  /// @param writeback_all diagnostic only
+  /// (--clang-c-irep2-adjust-writeback-all): refresh every symbol's legacy
+  /// value, not just the ones this pass changed. adjust() gates the write-back
+  /// on `value != before` so an untouched body never pays migrate_expr_back's
+  /// losses -- but that also means `--symbol-table-only` prints the
+  /// *converter's* tree for those bodies, not this pass's, and the two differ
+  /// wherever migrate_expr normalises (§135). Set this to see what the pass
+  /// actually produced.
+  explicit clang_c_adjust_irep2(
+    contextt &_context,
+    bool sole_adjuster = false,
+    bool writeback_all = false)
+    : context(_context),
+      sole_adjuster(sole_adjuster),
+      writeback_all(writeback_all)
   {
   }
 
@@ -222,6 +236,7 @@ private:
 
   contextt &context;
   const bool sole_adjuster;
+  const bool writeback_all;
   /// Location of the innermost enclosing statement, for the nodes that carry
   /// none of their own.
   locationt enclosing_location;

@@ -86,6 +86,12 @@ protected:
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
 
+  /// Whether the kept claim can hold at all on a feasible path.
+  smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
+
+  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
+
   // Set by the vacuity probe when at least one kept claim discharged
   // vacuously; consulted by report_result to map the final verdict from
   // SUCCESSFUL to UNKNOWN. Atomic because multi_property_check writes from
@@ -231,7 +237,8 @@ private:
   void record_satisfiable_claim(
     const claim_slicer &claim,
     const property_locationt &loc,
-    bool inductive_step);
+    bool inductive_step,
+    symex_target_equationt &local_eq);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself

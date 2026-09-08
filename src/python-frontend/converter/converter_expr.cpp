@@ -1670,7 +1670,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // modelled, and two same-named classes in different modules compare
           // equal. This is reached only after symbol lookup fails, so a name
           // rebound to a value still resolves to that value.
-          if (is_class(var_name, *ast_json))
+          // A builtin exception is a class too, but it is declared by the
+          // exceptions model rather than by this AST, so is_class does not
+          // see it (esbmc/esbmc#7549).
+          if (
+            is_class(var_name, *ast_json) ||
+            type_utils::is_python_exceptions(var_name))
           {
             typet str_type =
               type_handler_.build_array(char_type(), var_name.size() + 1);
