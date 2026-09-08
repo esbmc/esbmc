@@ -320,12 +320,16 @@ static inline expr2tc gen_value_by_byte(
      * See GitHub Issue #639
      *
      */
+    // A member-less union occupies no storage: no member to write into.
+    size_t n = to_union_type(type).members.size();
+    if (n == 0)
+      return expr2tc();
+
     expr2tc result = gen_zero(type);
     constant_union2t &data = to_constant_union2t(result);
 
     uint64_t union_total_size = type_byte_size(type).to_uint64();
     // Let's find a member with the biggest size
-    size_t n = to_union_type(type).members.size();
     size_t selected_member_index = n;
 
     for (size_t i = 0; i < n; i++)
