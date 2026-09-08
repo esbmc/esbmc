@@ -595,12 +595,29 @@ static expr2tc pin_literal_elements(
                                    : pin_array_literal(state, rhs, l2_lhs);
 }
 
-/// @p e simplified, or @p e itself: expr2t::simplify returns nil for "no rule
-/// applied", which is not a value a comparison can use.
-static expr2tc simplified(const expr2tc &e)
+/// The value @p arm holds for member @p name, or nil when the shape does not
+/// say. Deliberately not member2tc(..)->simplify(): expr2t::simplify walks the
+/// operands before applying the projection, so asking a large carried value for
+/// one member would cost the size of the whole value, once per member.
+static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
 {
-  expr2tc s = e->simplify();
-  return is_nil_expr(s) ? e : s;
+  const expr2tc *cur = &arm;
+  while (is_with2t(*cur) && is_struct_type((*cur)->type))
+  {
+    const with2t &w = to_with2t(*cur);
+    if (!is_constant_string2t(w.update_field))
+      return expr2tc();
+    if (to_constant_string2t(w.update_field).value == name)
+      return w.update_value;
+    cur = &w.source_value;
+  }
+  if (!is_constant_struct2t(*cur))
+    return expr2tc();
+  const std::optional<unsigned> i =
+    struct_union_get_component_number((*cur)->type, name);
+  if (!i)
+    return expr2tc();
+  return to_constant_struct2t(*cur).datatype_members[*i];
 }
 
 /// Pin a merge. phi_function spells a branch that wrote one member as
@@ -629,25 +646,34 @@ static expr2tc pin_phi_members(
     phi.false_value->type != l2_lhs->type)
     return expr2tc();
 
+  // Rebuilt as a literal, not as a `with` over one arm: the literal is a normal
+  // form, so the carried value stays one node per member however many merges
+  // the loop makes. A `with` chain accumulates one node per disagreeing member
+  // per merge instead, which measures superlinear as the unwind bound rises.
   const struct_type2t &st = to_struct_type(l2_lhs->type);
   std::vector<expr2tc> elems;
   elems.reserve(st.members.size());
   bool pinned_any = false;
+  bool agreed_any = false;
   for (size_t i = 0; i < st.members.size(); i++)
   {
-    const type2tc &type = st.members[i];
     const irep_idt &name = st.member_names[i];
-    const expr2tc taken = simplified(member2tc(type, phi.true_value, name));
-    const expr2tc other = simplified(member2tc(type, phi.false_value, name));
-    if (taken == other && state.constant_propagation(taken))
+    const expr2tc taken = project_member(phi.true_value, name);
+    if (
+      !is_nil_expr(taken) && taken == project_member(phi.false_value, name) &&
+      state.constant_propagation(taken))
     {
+      agreed_any = true;
       elems.push_back(taken);
       continue;
     }
     pinned_any = true;
-    elems.push_back(member2tc(type, l2_lhs, name));
+    elems.push_back(member2tc(st.members[i], l2_lhs, name));
   }
-  if (!pinned_any)
+
+  // Nothing agreed: every member would read back out of l2_lhs, which folds
+  // nothing and is not worth carrying.
+  if (!pinned_any || !agreed_any)
     return expr2tc();
 
   expr2tc rebuilt = constant_struct2tc(l2_lhs->type, elems);
