@@ -787,8 +787,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
 std::string type_handler::resolve_builtin_alias(const std::string &name) const
 {
-  const nlohmann::json &decl =
-    json_utils::find_var_decl(name, "", converter_.ast());
+  const nlohmann::json &decl = json_utils::find_var_decl(
+    name, converter_.current_function_name(), converter_.ast());
   if (decl.empty() || !decl.contains("value") || !decl["value"].is_object())
     return "";
 
@@ -799,7 +799,7 @@ std::string type_handler::resolve_builtin_alias(const std::string &name) const
     return "";
 
   const std::string &target = value["id"];
-  if (target != name && type_utils::is_builtin_type(target))
+  if (type_utils::is_builtin_type(target))
     return target;
 
   return "";
