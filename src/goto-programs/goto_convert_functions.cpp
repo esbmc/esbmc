@@ -113,6 +113,19 @@ static void stamp_value_locations(exprt &expr, const locationt &loc)
     stamp_value_locations(*it, loc);
 }
 
+// convert_expression() restores the statement's own location onto a
+// round-trip-stripped side effect before lowering it (goto_convert.cpp). The
+// mutable read materialises an empty #location, which the assignment then
+// replaces with the statement's -- nil included, and that is what
+// remove_function_call copies onto the FUNCTION_CALL it emits. Skipping it left
+// a generated call carrying an empty-but-present location where the round-trip
+// leaves it nil (esbmc/esbmc#6759).
+static void restore_sideeffect_location(exprt &op, const locationt &stmt)
+{
+  if (op.id() == "sideeffect" && op.location().get_file().empty())
+    op.location() = stmt;
+}
+
 // IREP2 value-level expressions carry no source location (only the
 // structured-CF code kinds got the V.4.1/V.4.5 non-reflected `location` field).
 // The clang frontends stamp every sub-expression of a statement with that
@@ -713,6 +726,8 @@ bool goto_convert_functionst::convert_native_rec(
         effective_location(expr_stmt.location, inherited);
       if (!stamp.get_file().empty())
         stamp_value_locations(op, stamp);
+
+      restore_sideeffect_location(op, expr_stmt.location);
 
       // convert_expression hands a side-effecting operand to remove_sideeffects
       // with result_is_used false, then emits an OTHER only if anything is left
