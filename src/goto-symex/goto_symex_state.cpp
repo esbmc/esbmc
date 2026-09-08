@@ -590,6 +590,65 @@ static expr2tc pin_literal_elements(
                                    : pin_array_literal(state, rhs, l2_lhs);
 }
 
+/// @p e simplified, or @p e itself: expr2t::simplify returns nil for "no rule
+/// applied", which is not a value a comparison can use.
+static expr2tc simplified(const expr2tc &e)
+{
+  expr2tc s = e->simplify();
+  return is_nil_expr(s) ? e : s;
+}
+
+/// Pin a merge. phi_function spells a branch that wrote one member as
+/// `VAR = if(g, then, else)` (symex_goto.cpp), a shape constant_propagation
+/// carries at no arm, so a conditional write drops the object -- and the
+/// counter beside the written member -- exactly as a refused write did before
+/// #7597. Rebuild it member by member: where the two arms agree the value is
+/// the branch's regardless of `g` and folds, and where they differ the member
+/// becomes a read of the name just defined, which denotes the merged value and
+/// cannot grow across iterations. Structs only: decomposing a phi over a bare
+/// array would rebuild a literal per element, the cost pinned_array_bound
+/// exists to avoid.
+static expr2tc pin_phi_members(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  if (!is_struct_type(l2_lhs) || !type_has_constant_size(l2_lhs->type))
+    return expr2tc();
+
+  const if2t &phi = to_if2t(rhs);
+  // The reads below are built from all three, so all three must name the same
+  // members; a phi whose arms are not the assigned object is not one of ours.
+  if (
+    phi.true_value->type != l2_lhs->type ||
+    phi.false_value->type != l2_lhs->type)
+    return expr2tc();
+
+  const struct_type2t &st = to_struct_type(l2_lhs->type);
+  std::vector<expr2tc> elems;
+  elems.reserve(st.members.size());
+  bool pinned_any = false;
+  for (size_t i = 0; i < st.members.size(); i++)
+  {
+    const type2tc &type = st.members[i];
+    const irep_idt &name = st.member_names[i];
+    const expr2tc taken = simplified(member2tc(type, phi.true_value, name));
+    const expr2tc other = simplified(member2tc(type, phi.false_value, name));
+    if (taken == other && state.constant_propagation(taken))
+    {
+      elems.push_back(taken);
+      continue;
+    }
+    pinned_any = true;
+    elems.push_back(member2tc(type, l2_lhs, name));
+  }
+  if (!pinned_any)
+    return expr2tc();
+
+  expr2tc rebuilt = constant_struct2tc(l2_lhs->type, elems);
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
 /// Pin the chain's refused updates, rebuilding from the base up.
 static expr2tc pin_chain_updates(
   const goto_symex_statet &state,
@@ -629,7 +688,7 @@ expr2tc goto_symex_statet::pin_symbolic_updates(
   // Shape first: every other assignment -- every scalar one -- leaves here
   // without paying for the option lookups below.
   const bool is_literal = is_constant_struct2t(rhs) || is_constant_array2t(rhs);
-  if (!is_literal && !is_with2t(rhs))
+  if (!is_literal && !is_with2t(rhs) && !is_if2t(rhs))
     return expr2tc();
 
   // Redundant -- every path below ends at a constant_propagation that already
@@ -652,6 +711,8 @@ expr2tc goto_symex_statet::pin_symbolic_updates(
   // Whether a pinned read is accepted is left to constant_propagation alone: a
   // read it still refuses -- an aggregate member, an array write at a symbolic
   // index -- leaves the object unpropagated, exactly as before.
+  if (is_if2t(rhs))
+    return pin_phi_members(*this, rhs, l2_lhs);
   return is_literal ? pin_literal_elements(*this, rhs, l2_lhs)
                     : pin_chain_updates(*this, rhs, l2_lhs);
 }

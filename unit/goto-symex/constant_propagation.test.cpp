@@ -568,6 +568,58 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "a merged object is pinned member by member",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+  const expr2tc cond = symbol_at(
+    get_bool_type(), "nondet$symex::g", symbol_renaming_level::level0);
+
+  // phi_function's shape after `if (g) VAR.r = ...;` inside a loop: the counter
+  // agrees on both arms, the written member does not. constant_propagation
+  // carries an `if` at no arm, so the whole object used to be dropped
+  // (InduByte/esbmc-evaluation#5).
+  const expr2tc taken = constant_struct2tc(
+    pair_struct(), std::vector<expr2tc>{int_const(3), int_const(7)});
+  const expr2tc other = constant_struct2tc(
+    pair_struct(), std::vector<expr2tc>{int_const(3), int_const(9)});
+  const expr2tc phi = if2tc(pair_struct(), cond, taken, other);
+
+  REQUIRE_FALSE(e.state().constant_propagation(phi));
+
+  const expr2tc pinned = e.state().pin_symbolic_updates(phi, var);
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+
+  // The member the branch disagrees on reads out of VAR itself, ...
+  REQUIRE(
+    to_constant_struct2t(pinned).datatype_members[1] == member_of(var, "r"));
+  // ... and the counter both arms agree on folds again, which is the point.
+  REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
+  "a merge both arms agree on needs no pinning",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc var = symbol_at(
+    pair_struct(), "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+  const expr2tc cond = symbol_at(
+    get_bool_type(), "nondet$symex::g", symbol_renaming_level::level0);
+
+  // Nothing to re-offer: every member is the branch's value either way, so the
+  // rebuild would carry no read and pinning declines.
+  const expr2tc same = constant_struct2tc(
+    pair_struct(), std::vector<expr2tc>{int_const(3), int_const(7)});
+
+  REQUIRE(is_nil_expr(e.state().pin_symbolic_updates(
+    if2tc(pair_struct(), cond, same, same), var)));
+}
+
+TEST_CASE(
   "pinning declines when it would change nothing",
   "[symex][constant-propagation]")
 {
