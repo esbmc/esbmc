@@ -1936,6 +1936,23 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
 {
   std::string type("");
 
+  // random.choice / random.sample resolve to the models/random.py variant
+  // matching the argument's element type, so the base model's `-> int` is not
+  // this call's return type. Defer to the argument, as min/max/sum do by being
+  // "Any" in builtin_functions() (issue #7673).
+  if (
+    call["func"].contains("value") && call["func"]["value"].is_object() &&
+    call["func"]["value"].value("_type", std::string()) == "Name" &&
+    call["func"]["value"].value("id", std::string()) == "random" &&
+    call["func"].contains("attr"))
+  {
+    const std::string &method = call["func"]["attr"];
+    if (method == "choice")
+      return "Any";
+    if (method == "sample")
+      return "list";
+  }
+
   // Handle method calls on constant literals
   // When Python code has " ".join(l), the func["value"] is a Constant node
   // We need to map string method names to their return types directly
