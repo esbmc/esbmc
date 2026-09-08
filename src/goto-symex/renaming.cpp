@@ -413,25 +413,35 @@ void renaming::level2t::make_assignment(
   rename(lhs_symbol, expected_count);
 
   // The rename callee (coveredinbees) re-keyed the same record to
-  // expected_count. Fold the confirm-and-store into one HAMT walk (no live
-  // reference is held across the mutation): renumber the symbol from the
-  // stored generation and record the propagated value.
+  // expected_count. Read it, check the invariant, and only then mutate:
+  // doing the renumbering inside an update functor would rely on immer
+  // calling it exactly once, and a throwing SYMEX_INVARIANT there would
+  // leave the symbol renumbered against an entry that was never stored.
+  // The extra HAMT walk is not on a hot path.
   symbol2t &symbol = to_symbol2t(lhs_symbol);
   const symbol2t::renaming_level lev =
     (symbol.rlevel == symbol_renaming_level::level0 ||
      symbol.rlevel == symbol_renaming_level::level1_global)
       ? symbol_renaming_level::level2_global
       : symbol_renaming_level::level2;
-  current_names.update(rec, [&](valuet entry) {
-    SYMEX_INVARIANT(
-      entry.count == expected_count,
-      "renaming callee bumped a different L2 name record");
-    symbol.rlevel = lev;
-    symbol.level2_num = entry.count;
-    symbol.node_num = entry.node_id;
-    entry.constant = const_value;
-    return entry;
-  });
+
+  const valuet *cur = current_names.find(rec);
+  SYMEX_INVARIANT(
+    cur != nullptr && cur->count == expected_count,
+    "renaming callee bumped a different L2 name record");
+
+  // Copy the generation out before storing: `cur` points into the map, and
+  // set() replaces it, so the pointer must not be read afterwards.
+  valuet entry = *cur;
+  const unsigned generation = entry.count;
+  const unsigned node = entry.node_id;
+
+  entry.constant = const_value;
+  current_names.set(rec, std::move(entry));
+
+  symbol.rlevel = lev;
+  symbol.level2_num = generation;
+  symbol.node_num = node;
 }
 
 void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)
