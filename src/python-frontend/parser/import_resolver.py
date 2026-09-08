@@ -95,7 +95,13 @@ def _mark_import_resolution(
 
 
 def _has_model_file(module_name: str, output_dir: str) -> bool:
-    base = os.path.join(output_dir, "models", _base_module_name(module_name))
+    """Whether a model stands in for this exact module.
+
+    The dotted name matters: `_emit_model_jsons` emits one JSON per
+    `models/*.py`, so a model for `string` says nothing about
+    `string.templatelib`, which the converter would then look for in vain.
+    """
+    base = os.path.join(output_dir, "models", *module_name.split("."))
     return os.path.exists(base + ".py") or os.path.exists(
         os.path.join(base, "__init__.py"))
 
