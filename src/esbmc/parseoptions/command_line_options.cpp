@@ -23,8 +23,7 @@ extern "C"
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/sarif.h>
 #include <util/base/cwe_mapping.h>
-#include <solvers/smt/smt_result.h>
-#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <cctype>
 #include <charconv>
@@ -384,32 +383,20 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   // --ir requests integer/real arithmetic encoding via the SMT Int sort.
-  // Bitwuzla and Boolector are bit-vector-only backends; pairing them with
-  // --ir silently produces wrong-answer behaviour at solve time. cvc4, cvc5,
-  // yices, and mathsat all support Int and are left alone.
-  if (cmdline.isset("ir") || cmdline.isset("ir-ieee"))
+  // Bitwuzla is a bit-vector-only backend; pairing it with --ir silently
+  // produces wrong-answer behaviour at solve time. cvc5, yices, and mathsat
+  // all support Int and are left alone.
+  if (
+    (cmdline.isset("ir") || cmdline.isset("ir-ieee")) &&
+    cmdline.isset("bitwuzla"))
   {
-    for (const char *s : {"bitwuzla", "boolector"})
-    {
-      if (cmdline.isset(s))
-      {
-        log_error(
-          "--{} requires a solver that supports integer/real arithmetic. "
-          "--{} only supports bit-vector arithmetic. Re-run without --{}, "
-          "or drop --{} (--ir defaults to Z3).",
-          cmdline.isset("ir-ieee") ? "ir-ieee" : "ir",
-          s,
-          s,
-          s);
-        exit(1);
-      }
-    }
+    log_error(
+      "--{} requires a solver that supports integer/real arithmetic. "
+      "--bitwuzla only supports bit-vector arithmetic. Re-run without "
+      "--bitwuzla (--ir defaults to Z3).",
+      cmdline.isset("ir-ieee") ? "ir-ieee" : "ir");
+    exit(1);
   }
-  if (cmdline.isset("fixedbv"))
-    options.set_option("fixedbv", true);
-  else
-    options.set_option("floatbv", true);
-
   if (cmdline.isset("context-bound"))
     options.set_option("context-bound", cmdline.getval("context-bound"));
   else
@@ -726,9 +713,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("base-case", true);
   }
 
-  /* compatibility: --cvc maps to --cvc4 */
+  /* compatibility: --cvc maps to --cvc5 */
   if (cmdline.isset("cvc"))
-    options.set_option("cvc4", true);
+    options.set_option("cvc5", true);
 
   if (cmdline.isset("log-message"))
     options.set_option("log-message", true);

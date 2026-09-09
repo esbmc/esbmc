@@ -5,8 +5,8 @@
 // omitted `floatbv` entirely -- absent as a destination in every source branch
 // and absent as a source branch of its own -- so it fell through to its final
 // `return true` and rejected every implicit conversion involving a float.
-// ESBMC represents a float as floatbv unless --fixedbv is given, so that
-// rejected the default representation outright, and c_implicit_typecast became
+// ESBMC represents a float as floatbv, so that rejected the only float
+// representation there is, and c_implicit_typecast became
 // a silent no-op for its callers: python_adjust's assignment arm left an
 // integer stored into a `double` lvalue
 // (docs/roadmap/scope-relational-float-reconciliation.md §18.3). The same
@@ -52,6 +52,25 @@ struct migrate_lookupt
 // operands OTHER until this change, escaping promotion entirely; a
 // drift-only check cannot say which side is wrong, the common-type
 // assertion can.
+// Fixed-point operands go through the exprt overload only. The expr2tc copy
+// deliberately has no FIXED arm -- its callers are all in the python frontend,
+// which has no fixed-point types -- so a FIXED operand falls through to its
+// switch default and converts neither side (c_typecast.cpp). Asserting parity
+// there would pin a promise the code does not make; this harness checks the
+// overload that does handle them, and the divergence is pinned separately.
+static void require_legacy_arith_operands(
+  const namespacet &ns,
+  const exprt &a,
+  const exprt &b,
+  const typet &expected_a,
+  const typet &expected_b)
+{
+  exprt legacy_a = a, legacy_b = b;
+  REQUIRE_FALSE(c_implicit_typecast_arithmetic(legacy_a, legacy_b, ns));
+  REQUIRE(legacy_a.type() == expected_a);
+  REQUIRE(legacy_b.type() == expected_b);
+}
+
 // The general form: each operand has its own expected type, so the pointer
 // cases (6.5.6 converts neither) share one harness with the arithmetic ones
 // (6.3.1.8 converts both to a common type).
@@ -188,9 +207,8 @@ static bool native_admits(const typet &src, const typet &dest)
   return !check_c_implicit_typecast(migrate_type(src), migrate_type(dest));
 }
 
-// Rebuilt per call: the floating entries are spelled floatbv or fixedbv
-// depending on config.ansi_c.use_fixed_for_float, which test cases toggle --
-// a cached table would freeze whichever mode was built first.
+// Built per call rather than cached: the entries are constructed from the
+// current configuration, which a test case may have adjusted.
 static std::vector<std::pair<std::string, typet>> scalar_types()
 {
   return {
@@ -214,21 +232,29 @@ static std::vector<std::pair<std::string, typet>> scalar_types()
   };
 }
 
-// ESBMC represents C floats as fixedbv under --fixedbv: build_float_type
-// switches spelling on this flag for both IRs (c_types.cpp). Scoped so a
-// failing assertion cannot leak the mode into later test cases.
-struct fixedbv_modet
+// TR 18037 fixed-point types, built the way clang_c_convertert does from
+// clang's FixedPointSemantics: width, integer bits, and the signedness and
+// saturation flags. Floats are always floatbv now, so these are the only
+// fixedbv values a program can produce.
+static typet fixedbv_type(unsigned width, unsigned integer_bits, bool is_signed)
 {
-  fixedbv_modet() : saved(config.ansi_c.use_fixed_for_float)
-  {
-    config.ansi_c.use_fixed_for_float = true;
-  }
-  ~fixedbv_modet()
-  {
-    config.ansi_c.use_fixed_for_float = saved;
-  }
-  bool saved;
-};
+  fixedbv_typet t;
+  t.set_width(width);
+  t.set_integer_bits(integer_bits);
+  if (!is_signed)
+    t.set("#esbmc_unsigned", "1");
+  return t;
+}
+
+// _Fract is s0.15 and _Accum s15.16, the natural narrow/wide pair.
+static typet fract_type()
+{
+  return fixedbv_type(16, 1, true);
+}
+static typet accum_type()
+{
+  return fixedbv_type(32, 16, true);
+}
 
 TEST_CASE(
   "admission parity: every scalar pair agrees across the two copies",
@@ -242,8 +268,7 @@ TEST_CASE(
     }
 }
 
-// Rebuilt per call for the same reason as scalar_types(): the `double` entry
-// is spelled fixedbv under --fixedbv.
+// Built per call for the same reason as scalar_types().
 static std::vector<std::pair<std::string, typet>> pointer_shape_types()
 {
   const typet int_ptr = pointer_typet(int_type());
@@ -337,18 +362,14 @@ TEST_CASE(
   }
 }
 
-// The same matrix under the --fixedbv representation: with
-// use_fixed_for_float set, the scalar table's floating entries are spelled
-// fixedbv (build_float_type switches both IRs on the flag), so the float
-// rows and columns become the fixedbv cases. get_c_type ranks fixedbv beside
-// floatbv by width and both check_c_implicit_typecast copies admit it in
-// every scalar branch; the matrix pins that the two spellings stay in
-// lockstep.
+// The same matrix with the TR 18037 fixed-point types added to the scalar
+// table. get_c_type ranks fixedbv beside floatbv by width and both
+// check_c_implicit_typecast copies admit it in every scalar branch; the
+// matrix pins that the two copies stay in lockstep over fixedbv too.
 TEST_CASE(
-  "admission parity: the scalar matrix under the fixedbv representation",
+  "admission parity: the scalar matrix including fixed-point types",
   "[c_typecast]")
 {
-  fixedbv_modet fixedbv;
   contextt ctx;
   namespacet ns(ctx);
 
@@ -361,15 +382,14 @@ TEST_CASE(
     REQUIRE(legacy_failed == native_failed);
   };
 
-  for (const auto &[src_name, src] : scalar_types())
-    for (const auto &[dest_name, dest] : scalar_types())
-    {
-      INFO("src: " + src_name + " dest: " + dest_name);
-      require_both_overloads(src, dest);
-    }
+  std::vector<std::pair<std::string, typet>> types = scalar_types();
+  types.emplace_back("_Fract", fract_type());
+  types.emplace_back("_Accum", accum_type());
+  types.emplace_back("unsigned _Fract", fixedbv_type(16, 0, false));
+  types.emplace_back("unsigned _Accum", fixedbv_type(32, 16, false));
 
-  for (const auto &[src_name, src] : pointer_shape_types())
-    for (const auto &[dest_name, dest] : pointer_shape_types())
+  for (const auto &[src_name, src] : types)
+    for (const auto &[dest_name, dest] : types)
     {
       INFO("src: " + src_name + " dest: " + dest_name);
       require_both_overloads(src, dest);
@@ -670,47 +690,62 @@ TEST_CASE(
 }
 
 TEST_CASE(
-  "both c_implicit_typecast overloads agree under the fixedbv representation",
+  "both c_implicit_typecast overloads agree over fixed-point types",
   "[c_typecast]")
 {
-  fixedbv_modet fixedbv;
   contextt ctx;
   namespacet ns(ctx);
 
-  // float_type()/double_type() are fixedbv-spelled in this mode, so these
-  // are the fixedbv cases; the expected common types stay C17 6.3.1.8's.
-  SECTION("fixedbv and int promote to the fixedbv")
+  // c_typecast.h ranks FIXED between the integers and the floats, so a
+  // fixed-point operand outranks any integer and yields to any float. The
+  // integer side does not adopt the fixedbv operand's format: it becomes a
+  // zero-fraction fixedbv of its own width, so the arithmetic happens without
+  // discarding any of its value.
+  SECTION("int becomes a zero-fraction fixedbv of its own width")
   {
-    require_arith_result(
+    require_legacy_arith_operands(
       ns,
-      symbol_exprt("f", float_type()),
+      symbol_exprt("f", accum_type()),
       symbol_exprt("i", int_type()),
-      float_type());
+      accum_type(),
+      fixedbv_type(32, 32, true));
   }
-  SECTION("narrow and wide fixedbv promote to the wide one")
+  SECTION("two fixedbv operands are left in their own formats")
+  {
+    // fixed op fixed returns early: the operation is computed in the
+    // operands' common format, so neither side is cast (c_typecast.cpp).
+    require_legacy_arith_operands(
+      ns,
+      symbol_exprt("r", fract_type()),
+      symbol_exprt("a", accum_type()),
+      fract_type(),
+      accum_type());
+  }
+  SECTION("a 128-bit integer keeps its width, and the fixedbv is untouched")
+  {
+    // Integer rank, however wide, never outranks a fixed-point type, so the
+    // fixedbv operand is left alone rather than widened to 128 bits.
+    require_legacy_arith_operands(
+      ns,
+      symbol_exprt("f", accum_type()),
+      symbol_exprt("w", int128_type()),
+      accum_type(),
+      fixedbv_type(128, 128, true));
+  }
+  SECTION("fixedbv yields to a floating type")
   {
     require_arith_result(
       ns,
-      symbol_exprt("f", float_type()),
+      symbol_exprt("f", accum_type()),
       symbol_exprt("d", double_type()),
       double_type());
   }
-  SECTION("fixedbv and __int128 promote to the fixedbv")
-  {
-    // INT128 ranks below SINGLE after the enum reorder: integer rank,
-    // however wide, never outranks a floating type.
-    require_arith_result(
-      ns,
-      symbol_exprt("f", float_type()),
-      symbol_exprt("w", int128_type()),
-      float_type());
-  }
   SECTION("int constant folds into a fixedbv destination")
   {
-    require_overloads_agree(ns, from_integer(1, int_type()), double_type());
+    require_overloads_agree(ns, from_integer(1, int_type()), accum_type());
   }
   SECTION("fixedbv symbol converts to int")
   {
-    require_overloads_agree(ns, symbol_exprt("f", float_type()), int_type());
+    require_overloads_agree(ns, symbol_exprt("f", accum_type()), int_type());
   }
 }

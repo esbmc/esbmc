@@ -6,7 +6,7 @@
 #include <goto-symex/symex_invariant.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_util.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>

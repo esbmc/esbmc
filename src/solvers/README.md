@@ -8,14 +8,17 @@ the right starting points.*
 
 This directory reduces SSA programs produced by ESBMC's symbolic execution
 engine into SMT formulae, hands them to a back-end solver, and reads the
-resulting model back out.  Backends are pluggable: each lives in its own
-subdirectory and implements a small set of abstract interfaces defined in
-`smt/`.
+resulting model back out.
 
-The cleanest reference backend is `bitwuzla/` (~1 kLoC, modern Bitwuzla
-C API).  The most thorough in-source documentation is the file-level
-Doxygen comment at the top of [`smt/smt_conv.h`](smt/smt_conv.h) — start
-there if you want a deep dive.
+There is one backend, [`camada_conv.cpp`](camada_conv.cpp), which reaches
+every solver through [camada](https://github.com/mikhailramalho/camada) — Z3,
+cvc5, MathSAT, Yices and Bitwuzla natively, plus any other solver over
+SMT-LIB2, interactively or as a one-shot subprocess. It implements
+`smt_solver_baset`, the interface the rest of this directory is written
+against.
+
+The most thorough in-source documentation is the file-level Doxygen comment at
+the top of [`smt_conv.h`](smt_conv.h) — start there if you want a deep dive.
 
 ## Where this fits in the ESBMC pipeline
 
@@ -59,15 +62,23 @@ this pipeline and are worth a skim:
 - [Architecture](../../website/content/docs/development/architecture.md)
   — project structure and conventions for contributors.
 
-## Directory layout
+## Layout
+
+One flat directory, one `solvers` library. There is a single backend now
+(camada, covering every solver it supports plus its SMT-LIB text mode), so the
+per-backend subdirectories the old structure was built around are gone.
 
 | Path | Contents |
 |------|----------|
-| `smt/` | Solver-agnostic core: `smt_convt`, `smt_ast`, `smt_sort`, byte ops, casts, memory model, overflow encoding |
-| `smt/tuple/` | Tuple flattening for solvers that lack native tuples (node-based and symbol-based variants) |
-| `smt/fp/` | Floating-point flattening (`fp_convt`) for solvers without native FP |
-| `prop/` | Shared with SAT backends: `literal.h`, `pointer_logic.{cpp,h}` |
-| `bitwuzla/`, `z3/`, `boolector/`, `cvc4/`, `cvc5/`, `mathsat/`, `yices/`, `smtlib/`, `minisat/`, `sat/` | Per-backend subclasses |
+| `smt_solver.{cpp,h}` | `smt_solver_baset`: the solver-agnostic core, and the interfaces a backend implements |
+| `smt_conv.{cpp,h}` | `smt_convt`, the slim expr2tc-level facade the rest of ESBMC talks to |
+| `smt_byteops.cpp`, `smt_casts.cpp`, `smt_bitcast.cpp`, `smt_overflow.cpp` | Lowering shared by every backend |
+| `smt_memspace.cpp`, `pointer_logic.{cpp,h}` | The C memory address space and its bookkeeping |
+| `smt_fp_conv.cpp` | IEEE754 constants, semantics and FP predicates |
+| `ir_ieee_conv.{cpp,h}` | Real-arithmetic FP encoding (`--ir --ir-ieee`) |
+| `smt_sort.h`, `smt_result.h` | Solver-handle and result vocabulary |
+| `camada_conv.cpp` | The backend |
+| `oneshot_options.{cpp,h}` | Option and temp-file policy for `--smtlib-oneshot-prog` |
 | `solve.{cpp,h}` | Factory that picks and instantiates a backend |
 | `solver_config.h.in` | Compile-time configuration (`#cmakedefine` per solver) |
 
@@ -79,12 +90,12 @@ Three abstract classes carry the design:
   the memory model, byte-op lowering, casts, union flattening, FP
   fall-backs, and the dispatcher `mk_func_app`.  Each backend subclasses
   it and implements solver-specific function/sort/literal builders.
-- **`smt_ast`** — wraps a single term in the backend's native AST type.
-  Backends typically subclass the templated helper
-  `solver_smt_ast<NativeTerm>` (see `bitw_smt_ast` in
-  `bitwuzla/bitwuzla_conv.h` for the canonical pattern).
-- **`smt_sort`** — wraps a sort.  Some backends (e.g. Boolector) get
-  away without subclassing it.
+- **`smt_astt`** / **`smt_sortt`** — aliases for camada's own `SMTExprRef`
+  and `SMTSortRef` handles (`smt_sort.h`), not ESBMC wrappers around them.
+  A camada expression carries its own sort, so nothing here stores one.
+  Operations that depend on the operand's sort rather than its C++ type
+  (`ast_eq`, `ast_assign`, `ast_update`, `ast_select`, `ast_project`) are
+  methods on `smt_solver_baset`.
 
 `smt_convt` flattens, *for every backend*: the C memory address space,
 pointer representation, casts, byte extract/update, fixed-bv float
@@ -93,9 +104,6 @@ a backend opt in to native handling where the solver supports it:
 
 | Interface | If implemented | Fallback |
 |-----------|----------------|----------|
-| `array_iface` | Solver's native arrays | `array_conv` (Kroening's decision procedure) |
-| `tuple_iface` | Solver's native tuples / datatypes | `smt_tuple_node` or `smt_tuple_sym` |
-| `fp_convt` (subclassed) | Solver's native FP theory | IEEE 754 bit-vector encoding |
 
 If you find yourself flattening anything *more* than the items above —
 for instance, anything that touches pointer dereferencing, control-flow
@@ -126,126 +134,28 @@ asserted via `assert_ast`, the solver is invoked exactly once per
 verdict via `dec_solve`, and model values are extracted only after a
 SAT result.
 
-## Adding a new SMT backend
+## Adding a new solver
 
-The canonical small reference is `bitwuzla/`.  There is also a longer
-narrative on the wiki:
-[Integrate a new SMT solver into the ESBMC backend][wiki-solver].
-That page is written against `z3/` as the template and some of its
-line-number citations have drifted; treat `bitwuzla/` as the up-to-date
-reference and the wiki as background.
+There is no ESBMC-side backend to write any more: a new solver is added to
+[camada](https://github.com/mikhailramalho/camada), and ESBMC picks it up
+through `camada_conv.cpp`. Two routes:
 
-### Quick start
+**Linked in.** Implement camada's `SMTSolverImpl` for the solver's C/C++ API
+(see camada's own `z3solver`, `bitwuzlasolver`, … for the pattern). On the
+ESBMC side: add a `camada_backendt` enumerator, construct it in
+`camada_convt`'s ctor switch, add a `create_new_<name>_solver` factory, and
+register the name in `solve.cpp`'s `esbmc_solvers` map plus the `ENABLE_<NAME>`
+plumbing in `CMakeLists.txt` and `solver_config.h.in`.
 
-1. Copy `bitwuzla/` to `<name>/` and rename `bitwuzla` → `<name>`
-   throughout.  Replace Bitwuzla API calls with your solver's API; keep
-   the class hierarchy intact.
-2. Wire it into the build and CLI as described in *In-tree* and
-   *Out-of-tree* below.
-3. From a clean rebuild, smoke-test with a one-line C program:
+**Over SMT-LIB2, no code at all.** If the solver speaks SMT-LIB2 on stdin,
+`--smtlib --smtlib-solver-prog "<cmd>"` already drives it. If it only reads a
+file and prints a verdict, `--smtlib --smtlib-oneshot-prog "<cmd> %f"` does
+that, with `--smtlib-oneshot-model-prog` supplying the model for
+counterexamples and `--smtlib-logic` pinning the fragment it accepts. Mallob
+and NeuroSym are driven this way.
 
-   ```sh
-   echo 'int main(){int x; assert(x == x);}' > t.c
-   esbmc t.c --<name>          # expect: VERIFICATION SUCCESSFUL
-   esbmc t.c --<name> --smtlib --smt-formula-only --output /dev/stdout
-   ```
-
-   The first command exercises the full lifecycle (`convert_ast` →
-   `assert_ast` → `dec_solve` → no model needed); the second dumps the
-   formula your backend would receive — invaluable when a real query
-   misbehaves.  Once that works, run the regression suite filtered by
-   `-L esbmc` with your `--<name>` flag wired in.
-
-   If the first command does *not* return `VERIFICATION SUCCESSFUL`,
-   the cause is almost always in Stage 1: a missing literal builder
-   (`mk_smt_bool` / `mk_smt_bv` / `mk_smt_symbol`) or equality
-   (`mk_eq`), or a broken solver hand-off (`assert_ast` / `dec_solve`).
-   Start by implementing `dump_smt` and re-running with
-   `--smt-formula-only` to see exactly what your backend produced.
-
-### In-tree (under `src/solvers/`)
-
-1. Create `src/solvers/<name>/` with `<name>_conv.{h,cpp}` and a
-   `CMakeLists.txt`.
-2. Declare your AST wrapper:
-   `class <name>_smt_ast : public solver_smt_ast<NativeTerm>`.
-3. Declare your converter:
-   `class <name>_convt : public smt_convt, public array_iface, public fp_convt`
-   (mirror `bitwuzla_convt`).  Drop `array_iface` / `fp_convt` if the
-   solver lacks native arrays / FP and you intend to use the fall-backs.
-4. Implement the overrides.  The base class declares ~50 virtual methods;
-   build them up in this order — each stage produces a backend that can
-   run progressively richer programs.
-
-   **Stage 1 — Core (minimum to compile and solve a trivial query).**
-   These methods are pure-virtual in `smt_convt`, or their defaults
-   `abort()`.  Without them the class will not instantiate, or will die
-   on the first call.
-
-   - Solver lifecycle: `assert_ast`, `dec_solve`, `push_ctx`, `pop_ctx`,
-     `solver_text`.
-   - Sorts: `mk_bool_sort`, `mk_bv_sort`.
-   - Literals and symbols: `mk_smt_bool`, `mk_smt_bv`, `mk_smt_symbol`.
-   - Boolean glue: `mk_and`, `mk_or`, `mk_not`, `mk_eq`, `mk_neq`,
-     `mk_ite`.
-   - Bit slicing: `mk_extract`, `mk_sign_ext`, `mk_zero_ext`,
-     `mk_concat`.
-   - Model readback: `get_bool`, `get_bv`.
-
-   At this point a trivial program with `--<name>` should reach
-   `VERIFICATION SUCCESSFUL` / `FAILED` cleanly.  **This is your first
-   milestone — the backend is correctly wired end-to-end and every
-   subsequent stage is additive.**
-
-   **Stage 2 — Common (any non-trivial C program needs these).**
-
-   - Bit-vector arithmetic and logic: `mk_bv{add,sub,mul,sdiv,udiv,smod,umod,shl,ashr,lshr,neg,not,and,or,xor}`.
-   - Bit-vector comparison: `mk_bv{ult,slt,ugt,sgt,ule,sle,uge,sge}`.
-   - Boolean extras: `mk_xor`, `mk_implies`.
-   - Arrays: `mk_array_sort`, `mk_array_symbol`, `mk_store`,
-     `mk_select`, `convert_array_of`, `get_array_elem`.
-   - Floats (BV-encoded): `mk_fbv_sort`, `mk_bvfp_sort`,
-     `mk_bvfp_rm_sort`.
-
-   After Stage 2, most of the `regression/esbmc` suite should run.
-
-   **Stage 3 — Advanced and optional.**
-
-   - Integer / real theories: `mk_smt_int`, `mk_smt_real` — only needed
-     for solvers used with `--ir-ieee` or other non-BV encodings.
-   - Quantifiers: `mk_quantifier` — required only if you intend to
-     support `__ESBMC_forall` / `__ESBMC_exists`.
-   - Overflow: `overflow_arith` — if your solver has native overflow
-     predicates; otherwise the BV fall-back is fine.
-   - Debug helpers: `dump_smt`, `print_model` — non-functional but
-     greatly speed up triage; implement before Stage 2 if you can.
-
-5. Expose a factory function
-   `smt_convt *create_new_<name>_solver(const optionst &, const namespacet &, ...)`
-   and register it in [`solve.cpp`](solve.cpp): add a `solver_creator`
-   forward declaration, an entry in `esbmc_solvers` under
-   `#ifdef <NAME>`, and add `"<name>"` to the `all_solvers` priority
-   list (its position determines default-selection order when no
-   solver is explicitly requested).
-6. Wire CMake.  Mirror `bitwuzla/CMakeLists.txt`: a guarded
-   `add_library(solver<name> ...)`, link it with
-   `target_link_libraries(solvers INTERFACE solver<name>)`, then set
-   `ESBMC_ENABLE_<name> 1 PARENT_SCOPE` and append `<name>` to
-   `ESBMC_AVAILABLE_SOLVERS`.
-7. Add `add_subdirectory(<name>)` to [`CMakeLists.txt`](CMakeLists.txt).
-
-**Out-of-tree (elsewhere in the repo):**
-
-- `src/solvers/solver_config.h.in` — add the `#cmakedefine <NAME>`.
-- `src/esbmc/options.cpp` — register the `--<solver>` command-line flag.
-- `src/esbmc/esbmc_parseoptions.cpp` — extend solver-selection.
-- Top-level [`README.md`](../../README.md) and `scripts/build.sh` —
-  install/dependency notes for the new solver.
-- `.github/workflows/build.yml` and `.github/workflows/release.yml` —
-  add the new solver to the CI matrix.
-- `regression/esbmc/` — add at least one passing and one failing
-  regression test exercising `--<solver>` (per the project's two-test
-  minimum for new features).
+Prefer the second route unless the solver's native API buys something the
+text interface cannot.
 
 ## Adding a new SMT theory or encoding
 
@@ -258,7 +168,7 @@ wiki has a narrative walkthrough:
 The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
 (summarised below); its entry point is
 `smt_convt::apply_ieee754_semantics` in
-[`smt/smt_conv.cpp`](smt/smt_conv.cpp).  Touch-points to expect:
+[`smt_conv.cpp`](smt_conv.cpp).  Touch-points to expect:
 
 - `src/esbmc/options.cpp` — new CLI option.
 - `src/esbmc/esbmc_parseoptions.cpp` — propagate the option into the
@@ -266,12 +176,12 @@ The in-tree exemplar is the `--ir-ieee` real-arithmetic FP mode
 - `src/esbmc/bmc.cpp` — wire the option into the BMC pipeline.
 - `src/pointer-analysis/dereference.cpp` — only if the encoding changes
   the pointer/memory model.
-- `src/solvers/smt/smt_conv.{h,cpp}` — encoding flag, any new
+- `src/solvers/smt_conv.{h,cpp}` — encoding flag, any new
   `smt_func_kind` entries, and the encoding hook itself.
 - `src/util/expr/expr_simplifier.cpp` — simplification rules for new operators,
   if any.
-- Each affected backend — typically `bitwuzla/`, `boolector/`, and the
-  text backend `smtlib/smtlib_conv.cpp`.
+- `camada_conv.cpp` — the one backend, covering every solver camada
+  supports plus its SMT-LIB text mode.
 
 ## Real-arithmetic FP mode (`--ir-ieee`)
 
@@ -284,7 +194,7 @@ false `UNSAT`.
 
 When `--ir-ieee` is set, floating-point operations are encoded in real
 arithmetic rather than bit-precise FP.  `smt_convt::apply_ieee754_semantics`
-(in `smt/smt_conv.cpp`) wraps each real-valued FP result in a sound
+(in `smt_conv.cpp`) wraps each real-valued FP result in a sound
 symmetric error enclosure derived from the round-to-nearest model:
 
     |fl(r) - r| <= eps_rel * |r| + eps_abs
@@ -350,10 +260,10 @@ A few habits will save hours when bringing up a new backend or encoding:
 
 In-tree, in this directory:
 
-- File-level Doxygen comment in [`smt/smt_conv.h`](smt/smt_conv.h) —
+- File-level Doxygen comment in [`smt_conv.h`](smt_conv.h) —
   authoritative description of what `smt_convt` flattens and why.
-- [`bitwuzla/bitwuzla_conv.{h,cpp}`](bitwuzla/) — canonical small
-  backend, recommended starting point for new integrations.
+- [`camada_conv.cpp`](camada_conv.cpp) — the backend, and the reference for
+  how `smt_solver_baset` is implemented.
 - [`solve.cpp`](solve.cpp) — factory plumbing and default-solver
   priority list.
 

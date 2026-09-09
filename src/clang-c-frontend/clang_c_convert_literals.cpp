@@ -172,99 +172,37 @@ bool clang_c_convertert::convert_float_literal(
   BigInt exponent;
   std::string value_string;
 
-  // Fixed bvs
-  if (config.ansi_c.use_fixed_for_float)
+  ieee_floatt a;
+  a.spec = to_floatbv_type(type);
+
+  // If it's +oo or -oo, we can't parse it
+  if (val.isInfinity())
   {
-    // If it's +oo or -oo, we can't parse it
-    if (val.isInfinity())
+    if (val.isNegative())
     {
-      if (val.isNegative())
-      {
-        // saturate: use "smallest value"
-        value = -power(2, width - 1);
-      }
-      else
-      {
-        // saturate: use "biggest value"
-        value = power(2, width - 1) - 1;
-      }
-    }
-    else if (val.isNaN())
-    {
-      value = 0;
+      a = ieee_floatt::minus_infinity(a.spec);
     }
     else
     {
-      // Everything else is fine
-      parse_float(string, significand, exponent);
-
-      unsigned fraction_bits;
-      const std::string &integer_bits = type.integer_bits().as_string();
-
-      if (integer_bits == "")
-        fraction_bits = width / 2;
-      else
-        fraction_bits = width - atoi(integer_bits.c_str());
-
-      BigInt factor = BigInt(1) << fraction_bits;
-      value = significand * factor;
-
-      if (exponent < 0)
-        value /= power(10, -exponent);
-      else
-      {
-        value *= power(10, exponent);
-
-        if (value <= -power(2, width - 1) - 1)
-        {
-          // saturate: use "smallest value"
-          value = -power(2, width - 1);
-        }
-        else if (value >= power(2, width - 1))
-        {
-          // saturate: use "biggest value"
-          value = power(2, width - 1) - 1;
-        }
-      }
+      a = ieee_floatt::plus_infinity(a.spec);
     }
-
-    // Save value string format
-    value_string = integer2string(value);
+  }
+  else if (val.isNaN())
+  {
+    a = ieee_floatt::NaN(a.spec);
   }
   else
   {
-    ieee_floatt a;
-    a.spec = to_floatbv_type(type);
+    parse_float(string, significand, exponent);
 
-    // If it's +oo or -oo, we can't parse it
-    if (val.isInfinity())
-    {
-      if (val.isNegative())
-      {
-        a = ieee_floatt::minus_infinity(a.spec);
-      }
-      else
-      {
-        a = ieee_floatt::plus_infinity(a.spec);
-      }
-    }
-    else if (val.isNaN())
-    {
-      a = ieee_floatt::NaN(a.spec);
-    }
-    else
-    {
-      parse_float(string, significand, exponent);
-
-      a.from_base10(significand, exponent);
-    }
-
-    // Pack the value to generate the correct number, regardless of the case
-    value = a.pack();
-
-    // Save value string format
-    value_string = a.to_ansi_c_string();
+    a.from_base10(significand, exponent);
   }
+
+  // Pack the value to generate the correct number, regardless of the case
+  value = a.pack();
+
+  // Save value string format
+  value_string = a.to_ansi_c_string();
 
   dest =
     constant_exprt(integer2binary(value, bv_width(type)), value_string, type);

@@ -1,5 +1,5 @@
 CORE
 main.c
---floatbv --z3 --32
+--z3 --32
 REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

@@ -181,32 +181,19 @@ endfunction()
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
 endif()
-if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
-    # The backend is only built when smtlib is (see its CMakeLists.txt). The
-    # suite drives it through a z3-based sh stand-in for Mallob's mono mode
-    # (Mallob itself is Linux/MPI-only), so it needs a z3 binary and a POSIX
-    # shell. Also look next to a --DZ3_DIR passed for linking, so a build that
-    # bundled z3 but has no system z3 still runs the suite.
-    find_program(ESBMC_BITWUZLLOB_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
-    if(ESBMC_BITWUZLLOB_TEST_Z3)
+if(ENABLE_SMTLIB AND NOT WIN32)
+    # Both suites drive --smtlib-oneshot-prog through z3-based sh stand-ins for
+    # solvers that cannot be linked in (Mallob is Linux/MPI-only, NeuroSym
+    # needs a Python + PyTorch checkout), so they need a z3 binary and a POSIX
+    # shell. Also look next to a -DZ3_DIR passed for linking, so a build that
+    # bundled z3 but has no system z3 still runs them.
+    find_program(ESBMC_ONESHOT_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_ONESHOT_TEST_Z3)
         set(REGRESSIONS_BITWUZLLOB bitwuzllob)
-    else()
-        message(WARNING "bitwuzllob regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
-    endif()
-endif()
-if(ENABLE_NEUROSYM AND ENABLE_SMTLIB AND NOT WIN32)
-    # Like bitwuzllob: the suite drives the backend through a z3-based sh
-    # stand-in for NeuroSym's batch mode (NeuroSym itself needs a Python +
-    # PyTorch checkout), so it needs a z3 binary and a POSIX shell.
-    find_program(ESBMC_NEUROSYM_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
-    if(ESBMC_NEUROSYM_TEST_Z3)
         set(REGRESSIONS_NEUROSYM neurosym)
     else()
-        message(WARNING "neurosym regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+        message(WARNING "bitwuzllob and neurosym regression suites disabled: no z3 binary found on PATH or in Z3_DIR")
     endif()
-endif()
-if(ENABLE_CVC4)
-    set(REGRESSIONS_CVC cvc)
 endif()
 if(ENABLE_CVC5)
     set(REGRESSIONS_CVC cvc)
@@ -328,6 +315,7 @@ if(APPLE)
                     llvm
                     floats
                     floats-regression
+                    fixedbv
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
@@ -397,6 +385,7 @@ else()
                     llvm
                     floats
                     floats-regression
+                    fixedbv
                     k-induction
                     termination
                     csmith
@@ -702,11 +691,11 @@ set(_slow_regression_tests
     # against the 120s cap and timed out on the DebugOpt Linux runner in
     # #7073 CI -- a comment-only change that cannot reach its code path.
     "regression/esbmc/github_4634"
-    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
-    # over the 120s cap on aarch64, where the whole floats-regression suite runs
-    # ~3x slower while the rest of the suite matches x86 to within 5%. The
-    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
-    # armv8 leg green meanwhile.
+    # nn-tanh_5_unsafe is a single float query. It pinned --boolector, which
+    # camada does not carry, so it now runs on the default backend: ~400s
+    # locally, and over the 120s cap on aarch64, where the whole
+    # floats-regression suite runs ~3x slower while the rest matches x86 to
+    # within 5% (#7308). The 2x budget keeps the armv8 leg green.
     "regression/floats-regression/nn-tanh_5_unsafe"
 )
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_SLOW
@@ -745,6 +734,14 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # The github_1352 trio pinned --boolector, which camada does not carry, so
+    # they now run on the default backend and no longer fit the 1x budget:
+    # ~625s locally against the 1200s cap, and over it on the slower CI runner.
+    # The query itself is unchanged, only which solver answers it. --fp2bv does
+    # not help -- bit-blasting this one is slower still, timing out even at 3x.
+    "regression/esbmc/github_1352"
+    "regression/esbmc/github_1352-32bit"
+    "regression/esbmc/github_1352-fail-32bit"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

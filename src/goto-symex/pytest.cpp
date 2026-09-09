@@ -4,7 +4,7 @@
 #include <ac_config.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 #include <util/lang/c_types.h>
 #include <util/message/message.h>
 #include <util/config/config.h>

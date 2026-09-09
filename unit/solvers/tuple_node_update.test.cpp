@@ -1,22 +1,25 @@
-// Field-preservation contract for the tuple node flattener.
+// Field-preservation contract for a struct update: `with(s, a, 5)` must agree
+// with `s` on every field but `a`.
 //
-// update() copied the source tuple's `elements` before the source had been
-// made free, so an unpopulated source copied an empty vector and make_free()
-// then invented fresh unconstrained variables for every field: the result of
-// `with(s, a, 5)` agreed with `s` on nothing but `a`.
+// Written against ESBMC's own tuple node flattener, whose update() copied the
+// source's `elements` before the source had been made free -- an unpopulated
+// source copied an empty vector and make_free() then invented fresh
+// unconstrained variables for every field. That flattener is gone: camada
+// implements tuples itself (solve.cpp). The contract outlives it, so this
+// keeps checking it against whatever the backend does.
 //
-// Not reachable from C input, which is why it went unnoticed: the simplifier
-// folds member-over-with away, and a source tuple is normally populated by its
-// own defining assignment before any update reaches it. Only a query holding
-// both the updated and the original tuple at once -- as the simplifier
-// equivalence check does -- puts the two side by side.
+// Not reachable from C input, which is why the original bug went unnoticed:
+// the simplifier folds member-over-with away, and a source tuple is normally
+// populated by its own defining assignment before any update reaches it. Only
+// a query holding both the updated and the original tuple at once -- as the
+// simplifier equivalence check does -- puts the two side by side.
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
 #include <memory>
 #include <irep2/irep2_utils.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_result.h>
+#include <solvers/smt_conv.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <util/arith/arith_tools.h>
 #include <util/config/config.h>
@@ -32,9 +35,6 @@ SCENARIO(
   contextt ctx;
   namespacet ns(ctx);
   optionst options;
-  // Forces the node flattener whichever backend answers, so the contract is
-  // pinned even where the solver has native tuples (solve.cpp).
-  options.set_option("tuple-node-flattener", true);
 
   const type2tc int32 = get_int32_type();
   const type2tc s_type = struct_type2tc(
@@ -53,7 +53,7 @@ SCENARIO(
 
   GIVEN("a solver holding both the updated struct and the original")
   {
-    std::unique_ptr<smt_convt> solver{create_solver("", ns, options)};
+    std::unique_ptr<smt_convt> solver{create_solver(ns, options)};
     REQUIRE(solver != nullptr);
 
     THEN("the untouched field reads the same through either")

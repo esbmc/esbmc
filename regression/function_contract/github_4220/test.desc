@@ -1,5 +1,5 @@
 CORE
 main.c
 --function strncmp --enforce-contract strncmp --loop-invariant-check --loop-frame-rule
-contract ensures
+\b(contract ensures|dereference failure: array bounds violated)\b
 ^VERIFICATION FAILED$

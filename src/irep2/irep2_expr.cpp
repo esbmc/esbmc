@@ -329,6 +329,16 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     assert_type_compat_for_with(
       to_pointer_type(a).subtype, to_pointer_type(b).subtype);
   }
+  else if (is_fixedbv_type(a) && is_fixedbv_type(b))
+  {
+    /* Two fixed-point types are compatible here even when their formats
+     * differ. TR 18037 4.1.4 exempts fixed-point operands from the usual
+     * arithmetic conversions -- an operation is computed in the operands'
+     * common format rather than by casting both sides first, which would
+     * round twice. So a with2t can legitimately pair a source and an update
+     * value of different widths, and the solver aligns them (camada's
+     * alignPair) when encoding. */
+  }
   else
     assert(a == b);
 }
@@ -685,6 +695,17 @@ void assert_arith_2ops_consistency(
     assert(is_bv_type(t));
     assert(t->get_width() == config.ansi_c.address_width);
   }
+  else if (is_fixedbv_type(t))
+  {
+    /* Mixed-format fixed-point arithmetic keeps its operands as written.
+     * TR 18037 4.1.4 exempts fixed-point from the usual arithmetic
+     * conversions: `s0.7 + s16.15` is computed in the common format directly,
+     * because casting the narrow side up first would round twice. So the
+     * operand widths legitimately differ from the result's, and the width
+     * equality demanded below does not apply -- camada's alignPair aligns them
+     * at encoding time. Both operands must still be fixed-point. */
+    assert(is_fixedbv_type(v1->type) && is_fixedbv_type(v2->type));
+  }
   else if (!(is_vector_type(v1->type) || is_vector_type(v2->type)))
   {
     assert(
@@ -923,6 +944,10 @@ std::string isfinite2t::field_names[esbmct::num_type_fields] =
 std::string signbit2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string popcount2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+std::string fixedbv_sqrt2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+std::string fixedbv_exp2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string bswap2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};

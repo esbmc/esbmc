@@ -54,7 +54,6 @@ if(ESBMC_BUNDLE_LIBC)
   if(ENABLE_BUNDLE_LIBC_32BIT)
     set(archs --32 --64)
   endif()
-  set(floats "--fixedbv -D__ESBMC_FIXEDBV" --floatbv)
   # for some reason CMake does not differentiate between [""], "" and [] so we
   # have to 'represent' the empty string by a non-empty string in order to get
   # the non-cheri combinations, sigh...
@@ -68,49 +67,26 @@ if(ESBMC_BUNDLE_LIBC)
     endif()
   endif()
 
-  function(clib_join_argv idcs tuple)
-    #message(STATUS "test: idcs: ${idcs}, tuple: ${tuple}")
-    list(JOIN idcs "_" idcs)
-    list(PREPEND tuple clib_${idcs}.c)
-    list(JOIN tuple " " clib_config_${idcs})
-    list(APPEND clib_configs clib_config_${idcs})
-    message(STATUS "test: ${clib_config_${idcs}}")
-  endfunction()
-
-  foreach_in_cross_product(clib_join_argv cherimodes floats archs)
-
-  set(clib64_config clib64.c --64 --fixedbv -D__ESBMC_FIXEDBV)
-  set(clib64f_config clib64_fp.c --64 --floatbv)
-  set(inputs clib64_config clib64f_config)
+  set(clib64f_config clib64_fp.c --64)
+  set(inputs clib64f_config)
   if(ENABLE_BUNDLE_LIBC_32BIT)
-    set(clib32_config clib32.c --32 --fixedbv -D__ESBMC_FIXEDBV)
-    set(clib32f_config clib32_fp.c --32 --floatbv)
-    set(inputs clib32_config
-      clib64_config
-      clib32f_config
+    set(clib32f_config clib32_fp.c --32)
+    set(inputs clib32f_config
       clib64f_config)
   endif()
 
   if(ESBMC_CHERI_HYBRID_SYSROOT)
-    set(clib32_cherih_config clib32_cherih.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set(clib64_cherih_config clib64_cherih.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set(clib32f_cherih_config clib32_fp_cherih.c --32 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
-    set(clib64f_cherih_config clib64_fp_cherih.c --64 --floatbv --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib32f_cherih_config clib32_fp_cherih.c --32 --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
+    set(clib64f_cherih_config clib64_fp_cherih.c --64 --cheri hybrid --sysroot "${ESBMC_CHERI_HYBRID_SYSROOT}")
     list(APPEND inputs
-              #clib32_cherih_config
-              clib64_cherih_config
               #clib32f_cherih_config
               clib64f_cherih_config)
   endif()
 
   if(ESBMC_CHERI_PURECAP_SYSROOT)
-    set(clib32_cherip_config clib32_cherip.c --32 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set(clib64_cherip_config clib64_cherip.c --64 --fixedbv -D__ESBMC_FIXEDBV --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set(clib32f_cherip_config clib32_fp_cherip.c --32 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
-    set(clib64f_cherip_config clib64_fp_cherip.c --64 --floatbv --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib32f_cherip_config clib32_fp_cherip.c --32 --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
+    set(clib64f_cherip_config clib64_fp_cherip.c --64 --cheri purecap --sysroot "${ESBMC_CHERI_PURECAP_SYSROOT}")
     list(APPEND inputs
-              #clib32_cherip_config
-              clib64_cherip_config
               #clib32f_cherip_config
               clib64f_cherip_config)
   endif()
@@ -269,12 +245,12 @@ function(mangle_clib output)
            ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libpythonhdr.h)
 
     # Build the Python operational models as their own goto binaries, the way
-    # sol64 is built, so a C or C++ run does not deserialise them (#6831). Two
-    # float encodings, matching the clib64/clib64_fp pair the runtime selects
-    # between; the Python frontend is 64-bit only, so there is no 32-bit pair.
-    set(py64_configs py64 py64_fp)
-    set(py64_flags_py64 --fixedbv -D__ESBMC_FIXEDBV)
-    set(py64_flags_py64_fp --floatbv)
+    # sol64 is built, so a C or C++ run does not deserialise them (#6831). Only
+    # one float encoding: --fixedbv/--floatbv are gone, so there is no
+    # fixed-point pair to select between, exactly as for clib64 above. The
+    # Python frontend is 64-bit only, so there is no 32-bit pair either.
+    set(py64_configs py64_fp)
+    set(py64_flags_py64_fp "")
     foreach(py_cfg ${py64_configs})
       set(py_goto "${CMAKE_CURRENT_BINARY_DIR}/${py_cfg}.goto")
       set(py_c "${CMAKE_CURRENT_BINARY_DIR}/${py_cfg}.c")

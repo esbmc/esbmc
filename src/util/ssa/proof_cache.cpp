@@ -201,10 +201,9 @@ proof_cache_context(const optionst &options, const std::string &build_identity)
       << c.int_128_width << ' ' << c.address_width << ' ' << c.pointer_width()
       << ' ' << c.pointer_diff_width << ' ' << c.single_width << ' '
       << c.double_width << ' ' << c.long_double_width << ' ' << c.wchar_t_width
-      << ' ' << c.char_is_unsigned << ' ' << c.use_fixed_for_float << ' '
-      << static_cast<int>(c.cheri) << ' ' << c.cheri_concentrate << ' '
-      << static_cast<int>(c.endianess) << ' ' << static_cast<int>(c.lib) << ' '
-      << c.locale_name << '\n';
+      << ' ' << c.char_is_unsigned << ' ' << static_cast<int>(c.cheri) << ' '
+      << c.cheri_concentrate << ' ' << static_cast<int>(c.endianess) << ' '
+      << static_cast<int>(c.lib) << ' ' << c.locale_name << '\n';
 
   return ctx.str();
 }

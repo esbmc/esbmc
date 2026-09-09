@@ -797,25 +797,42 @@ one-shot batch mode:
 | Backend | Option |
 |---|---|
 | Bitwuzla | `--bitwuzla` (default) |
-| Boolector | `--boolector` |
 | Z3 | `--z3` |
 | MathSAT | `--mathsat` |
-| CVC4 | `--cvc` |
+| CVC5 | `--cvc5` (or `--cvc`) |
 | Yices | `--yices` |
-| SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
-| Bitwuzllob | `--bitwuzllob` |
-| NeuroSym | `--neurosym` |
+| SMT-LIB, interactive | `--smtlib --smtlib-solver-prog CMD` |
+| SMT-LIB, one-shot | `--smtlib --smtlib-oneshot-prog CMD` |
+| SMT-LIB, script only | `--smtlib --smt-formula-only --output FILE` |
 
-Bitwuzllob and NeuroSym are one-shot subprocess backends: ESBMC renders the
-formula to an SMT-LIB2 file and runs an external program on it in batch mode —
-`mallob` in mono mode (Bitwuzla on the massively parallel Mallob platform) for
-Bitwuzllob, and the NeuroSym neural-guided solver (GAN with Z3 fallback,
-QF_BV only) for NeuroSym. The external command is set with
-`--bitwuzllob-prog CMD` / `--neurosym-prog CMD` (every `%f` is replaced by the
-formula file), and counterexamples are reconstructed by a local interactive
-SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
-`--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
-implicitly, and NeuroSym rejects `--ir` and incremental strategies.
+The SMT-LIB backend covers any solver ESBMC does not link against, in three
+shapes. `--smtlib-solver-prog CMD` pipes the script to a solver that speaks
+SMT-LIB2 on stdin and stays alive to answer model queries (e.g. `"z3 -in"`);
+it is run directly, so quotes and shell metacharacters are not interpreted.
+
+`--smtlib-oneshot-prog CMD` instead writes the formula to a file and runs
+`CMD` on it once, reading the verdict from its output — for solvers that
+cannot be linked in or driven interactively, such as `mallob` in mono mode
+(Bitwuzla on the massively parallel Mallob platform) or a NeuroSym checkout:
+
+```sh
+esbmc file.c --smtlib --smtlib-oneshot-prog "mallob -mono=%f -mono-app=SMT"
+esbmc file.c --smtlib --smtlib-oneshot-prog "python main.py %f" --smtlib-logic QF_BV
+```
+
+Every `%f` is replaced by the formula file (appended when absent). This one
+runs through a shell, so do not build it from untrusted input. The one-shot
+process exits with its verdict and cannot answer `(get-value)`, so
+counterexamples need a local interactive solver via
+`--smtlib-oneshot-model-prog CMD` (e.g. `"z3 -in"`) — without one, satisfiable
+results require `--result-only`. Incremental strategies (`--k-induction`,
+`--incremental-bmc`, …) are rejected: the command solves once and exits.
+
+`--smtlib-logic LOGIC` overrides the `(set-logic ...)` ESBMC would derive from
+the encoding, for a solver that accepts only one fragment. A logic without the
+array or floating-point sorts (`QF_BV`, say) also makes ESBMC flatten both
+away before serializing, and is incompatible with `--ir`. The SMT-LIB backend
+is never picked implicitly.
 
 Floating-point arithmetic is encoded with the SMT floating-point theory
 (`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
