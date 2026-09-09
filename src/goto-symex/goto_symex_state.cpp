@@ -265,21 +265,47 @@ static bool update_may_propagate(
   return false;
 }
 
+/// The type an aggregate declares for the slot @p field names, or nil where
+/// the slot cannot be named. This is what with2t checks its update value
+/// against (irep2_expr.cpp assert_consistency).
+static type2tc slot_type(const type2tc &aggregate, const expr2tc &field)
+{
+  if (is_array_type(aggregate))
+    return to_array_type(aggregate).subtype;
+  if (!is_struct_type(aggregate) || !is_constant_string2t(field))
+    return type2tc();
+  const auto c = struct_union_get_component_number(
+    aggregate, to_constant_string2t(field).value);
+  return c.has_value() ? struct_union_members(aggregate)[*c] : type2tc();
+}
+
 /// A read of the location a write targets, out of @p l2_lhs -- the name the
 /// enclosing assignment has just defined. `member(l2_lhs, f)` after
 /// `l2_lhs = with(.., f, v)` denotes v exactly: a later write to the same
 /// location overwrites the read and the value alike. level2t::rename returns
 /// early on an L2 symbol, so the read neither re-expands nor grows across
 /// iterations, unlike a carried copy of v.
-static expr2tc
-read_of_field(const expr2tc &l2_lhs, const type2tc &type, const expr2tc &field)
+static expr2tc read_of_field(const expr2tc &l2_lhs, const expr2tc &field)
 {
-  // with2t admits a pointer-typed index (irep2_expr.cpp, assert_consistency),
-  // and only a constant one reads back to an immutable value anyway.
+  // At the slot's declared type, not the refused value's own: an implicit
+  // conversion at the write leaves them different, and with2t checks the
+  // update value against the declared one (irep2_expr.cpp assert_consistency).
+  // with2t admits a pointer-typed index, and only a constant one reads back to
+  // an immutable value anyway.
   if (is_array_type(l2_lhs))
-    return is_constant_int2t(field) ? index2tc(type, l2_lhs, field) : expr2tc();
+    return is_constant_int2t(field)
+             ? index2tc(to_array_type(l2_lhs->type).subtype, l2_lhs, field)
+             : expr2tc();
   if (is_struct_type(l2_lhs))
-    return member2tc(type, l2_lhs, to_constant_string2t(field).value);
+  {
+    if (!is_constant_string2t(field))
+      return expr2tc();
+    const irep_idt &name = to_constant_string2t(field).value;
+    const auto c = struct_union_get_component_number(l2_lhs->type, name);
+    if (!c.has_value())
+      return expr2tc();
+    return member2tc(struct_union_members(l2_lhs->type)[*c], l2_lhs, name);
+  }
   // Everything else stays unpropagated exactly as before #7597. A `_Complex`
   // updates like a struct but names no members to read its components back by.
   // A union is excluded on purpose rather than for want of a spelling: its
@@ -341,7 +367,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return true;
 
     // By propagation nondet symbols, we can achieve some speed up but the
-    // counterexample will be missing a lot of information, so not really worth it
+    // counterexample will be missing a lot of information, so not really worth
+    // it
     if (s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
       return false;
   }
@@ -378,9 +405,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     if (incremental_strategy_active())
       // When this option is enabled, the constant propagation
       // with feature will significantly impact performance.
-      // More importantly, the use of incremental-BMC / k-induction does not heavily
-      // rely on constants to determine the boundaries. Even if there is a known
-      // loop size, esbmc starts unwinding from min k
+      // More importantly, the use of incremental-BMC / k-induction does not
+      // heavily rely on constants to determine the boundaries. Even if there is
+      // a known loop size, esbmc starts unwinding from min k
       return false;
 
     // Handle WITH chains for structs where all updates are constants
@@ -409,7 +436,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // also carries a dynamic/infinite-sized member (e.g. a Solidity `bytes`
       // field) leaves that member in the propagated constant, and computing its
       // byte size downstream throws array_type2t::inf_sized_array_excp. Scalar
-      // updates stay unrestricted, matching pre-aggregate-propagation behaviour.
+      // updates stay unrestricted, matching pre-aggregate-propagation
+      // behaviour.
       const bool struct_is_fixed_size = type_has_constant_size(expr->type);
 
       while (is_with2t(current))
@@ -522,7 +550,7 @@ static bool pin_refused_elements(
     if (state.constant_propagation(elems[i]) || is_immutable_value(elems[i]))
       continue;
     pinned_any = true;
-    elems[i] = read_of(i, elems[i]->type);
+    elems[i] = read_of(i);
   }
   return pinned_any;
 }
@@ -548,8 +576,9 @@ static expr2tc pin_struct_literal(
   if (names.size() != elems.size())
     return expr2tc();
 
-  if (!pin_refused_elements(state, elems, [&](size_t i, const type2tc &type) {
-        return member2tc(type, l2_lhs, names[i]);
+  const std::vector<type2tc> slots = struct_union_members(l2_lhs->type);
+  if (!pin_refused_elements(state, elems, [&](size_t i) {
+        return member2tc(slots[i], l2_lhs, names[i]);
       }))
     return expr2tc();
 
@@ -568,8 +597,9 @@ static expr2tc pin_array_literal(
 
   std::vector<expr2tc> elems = to_constant_array2t(rhs).datatype_members;
 
-  if (!pin_refused_elements(state, elems, [&](size_t i, const type2tc &type) {
-        return index2tc(type, l2_lhs, gen_ulong(i));
+  const type2tc &slot = to_array_type(l2_lhs->type).subtype;
+  if (!pin_refused_elements(state, elems, [&](size_t i) {
+        return index2tc(slot, l2_lhs, gen_ulong(i));
       }))
     return expr2tc();
 
@@ -693,13 +723,27 @@ static expr2tc pin_chain_updates(
   {
     const with2t &w = **it;
     expr2tc value = w.update_value;
+    const type2tc slot = slot_type(rebuilt->type, w.update_field);
+    if (is_nil_type(slot))
+      return expr2tc();
     if (!state.constant_propagation(value) && !is_immutable_value(value))
     {
-      value = read_of_field(l2_lhs, value->type, w.update_field);
+      // The read is built from l2_lhs but the `with` names members of
+      // rebuilt's type; only equal types make the two agree.
+      if (rebuilt->type != l2_lhs->type)
+        return expr2tc();
+      value = read_of_field(l2_lhs, w.update_field);
       if (is_nil_expr(value))
         return expr2tc();
       pinned_any = true;
     }
+    // A kept value need not match the slot: symex renames a `with`'s operands
+    // in place, so one whose source was replaced by a propagated value of
+    // another type is never re-checked, and only rebuilding it here would run
+    // with2t's constructor assertion over the pair. Leave such an object
+    // unpropagated rather than reconstruct an expression the IR rejects.
+    else if (value->type != slot)
+      return expr2tc();
     rebuilt = with2tc(w.type, rebuilt, w.update_field, value);
   }
   if (!pinned_any)
