@@ -200,22 +200,25 @@ TEST_CASE("closure survives constant array indices", "[symex][slice]")
 {
   // scan_array_uses / index_reads: a store to one constant index may be elided
   // only if no retained read can observe it.
-  // The values are expressions, not bare nondet symbols: a chain of immutable
-  // updates propagates instead of reaching the slicer (#7597). One shared
-  // definition, so eliding the dead stores does not strand it -- an elided
-  // store's rhs still names its operands even though its encoding no longer
-  // does, and the audit below reads the rhs.
+  // The elements are pointers, so the stores reach the slicer at all: a refused
+  // numeric store is re-offered as a read of the array being assigned and the
+  // array keeps propagating (#7597), but a pointer is never carried, so a
+  // pointer element still ends propagation. That dependence is load-bearing --
+  // if is_immutable_value ever admitted pointers, these two cases would stop
+  // exercising the slicer rather than fail. One shared definition, so eliding
+  // the dead stores does not strand it -- an elided store's rhs still names its
+  // operands even though its encoding no longer does, and the audit reads it.
   symex_run::equation run(R"(
-int nondet_int(void);
+int *nondet_ptr(void);
 int main(void)
 {
-  int arr[4];
-  int x = nondet_int();
-  arr[0] = x + 1;
-  arr[1] = x + 2;
-  arr[2] = x + 3;
-  arr[3] = x + 4;
-  __ESBMC_assert(arr[1] != 424242, "read one index");
+  int *arr[4];
+  int *p = nondet_ptr();
+  arr[0] = p + 1;
+  arr[1] = p + 2;
+  arr[2] = p + 3;
+  arr[3] = p + 4;
+  __ESBMC_assert(arr[1] != 0, "read one index");
   return 0;
 }
 )");
@@ -239,18 +242,19 @@ TEST_CASE("a symbolic array index disqualifies the array", "[symex][slice]")
   // non-propagating stores as the case above, so the two differ only in the
   // index and `elided_stores == 0` cannot hold for want of a store.
   symex_run::equation run(R"(
+int *nondet_ptr(void);
 int nondet_int(void);
 int main(void)
 {
-  int arr[4];
-  int x = nondet_int();
-  arr[0] = x + 1;
-  arr[1] = x + 2;
-  arr[2] = x + 3;
-  arr[3] = x + 4;
+  int *arr[4];
+  int *p = nondet_ptr();
+  arr[0] = p + 1;
+  arr[1] = p + 2;
+  arr[2] = p + 3;
+  arr[3] = p + 4;
   int i = nondet_int();
   __ESBMC_assume(i >= 0 && i < 4);
-  __ESBMC_assert(arr[i] != 424242, "symbolic read");
+  __ESBMC_assert(arr[i] != 0, "symbolic read");
   return 0;
 }
 )");

@@ -317,6 +317,24 @@ public:
     renaming_levelt::get_original_name(expr, symbol_renaming_level::level1);
   }
 
+  /// Complete an assignment make_assignment has just made, whose value only its
+  /// caller can build: #7597 re-offers a refused member write as a read of the
+  /// L2 name make_assignment mints. Narrow on purpose -- an entry that is
+  /// absent or already carries a value means the caller keyed the wrong record,
+  /// which would otherwise be a silent no-op.
+  void set_constant(const name_record &rec, const expr2tc &value)
+  {
+    const valuet *entry = current_names.find(rec);
+    SYMEX_INVARIANT(
+      entry != nullptr && is_nil_expr(entry->constant),
+      "a propagated value may only complete the assignment that minted it");
+    // `entry` dangles once the map is written; do not read it below.
+    current_names.update(rec, [&value](valuet v) {
+      v.constant = value;
+      return v;
+    });
+  }
+
   unsigned current_number(const expr2tc &sym) const;
   unsigned current_number(const name_record &rec) const;
 
