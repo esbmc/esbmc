@@ -469,7 +469,9 @@ smt_astt smt_solver_baset::convert_ast(const expr2tc &expr)
       // matching the recursive foreach_operand order — fresh-symbol numbering
       // and cache-insertion order then stay identical to recursive conversion.
       // get_sub_expr() visits the same slots in the same order as
-      // foreach_operand (both fold over K::fields), so no operand is skipped.
+      // foreach_operand (both fold over K::fields), so the two traversals
+      // agree on every non-nil slot; nil slots are skipped here and placed
+      // as null entries there, neither of which is converted.
       const size_t n = node->get_num_sub_exprs();
       for (size_t i = n; i-- > 0;)
       {
@@ -642,8 +644,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     args.reserve(expr->get_num_sub_exprs());
-    expr->foreach_operand(
-      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
+    expr->foreach_operand([this, &args](const expr2tc &e) {
+      args.push_back(is_nil_expr(e) ? nullptr : convert_ast(e));
+    });
   }
   }
 
