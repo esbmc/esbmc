@@ -385,6 +385,42 @@ void collect_marker_dependencies(
   }
 }
 
+/// Callees of the body of a loop that carries a user-written invariant.
+///
+/// enclosed_by_user_invariant reaches the nesting shape; this reaches the same
+/// thing through a call. Cutting a loop inside such a callee leaves the
+/// marker's preservation obligation to be discharged across a body containing a
+/// havoc, so the callee is protected for the same reason its own nested loops
+/// are.
+void collect_annotated_loop_callees(
+  goto_functionst &goto_functions,
+  const irep_idt &name,
+  goto_functiont &goto_function,
+  invariant_dependenciest &deps)
+{
+  goto_loopst loops(name, goto_functions, goto_function);
+  const goto_programt::targett begin = goto_function.body.instructions.begin();
+
+  for (auto &loop : loops.get_loops())
+  {
+    const goto_programt::targett head = loop.get_original_loop_head();
+    if (!has_user_invariant(head, begin))
+      continue;
+
+    for (goto_programt::targett it = head; it != loop.get_original_loop_exit();
+         ++it)
+    {
+      if (!it->is_function_call())
+        continue;
+      const expr2tc callee = call_target(*it);
+      if (is_nil_expr(callee) || !is_symbol2t(callee))
+        deps.protect_all = true;
+      else
+        deps.functions.insert(to_symbol2t(callee).thename);
+    }
+  }
+}
+
 /// Close the marker dependencies over the call graph: abstracting a loop
 /// anywhere below the call changes the value the user's marker reads.
 invariant_dependenciest
@@ -394,7 +430,10 @@ collect_invariant_dependencies(goto_functionst &goto_functions)
 
   Forall_goto_functions (f, goto_functions)
     if (f->second.body_available)
+    {
       collect_marker_dependencies(f->second.body, deps);
+      collect_annotated_loop_callees(goto_functions, f->first, f->second, deps);
+    }
 
   std::vector<irep_idt> worklist(deps.functions.begin(), deps.functions.end());
   while (!worklist.empty() && !deps.protect_all)
