@@ -1,5 +1,4 @@
-/* The && arm of the same lowering: `A && f()` with the value discarded is the
- * statement `if (A) f();`, so the call is reached exactly when A holds. */
+/* The && arm: discarded `A && f()` is `if (A) f();`, so f runs iff A holds. */
 int calls;
 int bump(void)
 {

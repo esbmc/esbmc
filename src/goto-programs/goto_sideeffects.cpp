@@ -1404,25 +1404,19 @@ void goto_convertt::flatten_contract_clause(exprt &clause, goto_programt &dest)
   remove_sideeffects(clause, dest);
 }
 
-/// Lower a short-circuit `&&` / `||` whose value is discarded as the statement
-/// it stands for -- `A && B` is `if (A) B;`, `A || B` is `if (!A) B;` -- rather
-/// than as nested ternaries over `true`/`false`. Both encode the same control
-/// flow, but the ternary form materialises the discarded boolean, which leaves
-/// the branch carrying B alongside the instructions computing that value. The
-/// assert-folds in generate_ifthenelse then no longer recognise a branch whose
-/// body is a lone `assert(false)`, which is how MSVC's <assert.h> spells an
-/// assertion: `(void)((!!(e)) || (_wassert(...), 0))`. Unfolded, the claim
-/// stays an `ASSERT 0` guarded by `!e` instead of the `ASSERT e` the glibc and
-/// Darwin spellings fold to, and a claim that *is* the constant false is
-/// unsatisfiable on every path -- which silently defeats every consumer that
-/// asks whether the claim can hold, such as the loop-invariant probe of #7585.
+/// Lower a value-discarding `A && B` as `if (A) B;`, `A || B` as `if (!A) B;`.
+/// The ternary rebuild encodes the same control flow but materialises the
+/// discarded boolean, hiding the lone-`assert(false)` branch body that
+/// generate_ifthenelse folds. MSVC's <assert.h> spells an assertion that way --
+/// `(void)((!!(e)) || (_wassert(...), 0))` -- so unfolded it stays `ASSERT 0`
+/// under `!e` rather than the `ASSERT e` glibc and Darwin produce, and a
+/// constant-false claim holds on no path, defeating any consumer that asks
+/// whether it can (#7585).
 ///
-/// Returns false, leaving \p expr untouched, where the rewrite does not apply:
-/// the value is used, the tail carries no side effect (its evaluation may still
-/// raise a dereference claim the ternary form keeps), condition coverage is
-/// counting the operands of the original `&&` / `||`, or witness validation is
-/// steering paths through the conditional GOTOs the ternary form emits -- the
-/// last two are why generate_ifthenelse gates its own folds the same way.
+/// False, \p expr untouched, where the rewrite does not apply: value used, tail
+/// side-effect-free (its evaluation may still raise a claim the ternary keeps),
+/// or condition coverage / witness validation needs the original operands --
+/// the gates generate_ifthenelse applies to its own folds.
 bool goto_convertt::lower_discarded_short_circuit(
   exprt &expr,
   goto_programt &dest,
@@ -1469,6 +1463,63 @@ bool goto_convertt::lower_discarded_short_circuit(
   return true;
 }
 
+/// Rebuild `A && B` as `A ? B : false` and `A || B` as `A ? true : B`, right to
+/// left over the operands, so the generic lowering below handles it.
+void goto_convertt::rewrite_short_circuit_as_ternary(exprt &expr)
+{
+  exprt tmp;
+
+  if (expr.is_and())
+    tmp = true_exprt();
+  else
+    // ID_or
+    tmp = false_exprt();
+
+  // Make sure we do not lose the location in tmp
+  tmp.location() = expr.location();
+
+  exprt::operandst &ops = expr.operands();
+
+  // start with last one
+  for (exprt::operandst::reverse_iterator it = ops.rbegin(); it != ops.rend();
+       ++it)
+  {
+    exprt &op = *it;
+
+    // This is a hack for now. We need to solve this properly by
+    // correctly tracking all locations through all GOTO transformations
+    op.location() = expr.location();
+
+    if (!op.is_boolean())
+    {
+      log_error("{} takes boolean operands only", expr.id().as_string());
+      abort();
+    }
+
+    if (expr.is_and())
+    {
+      // We need to record the location of the newly generated expression
+      exprt false_expr = false_exprt();
+      false_expr.location() = op.location();
+      if_exprt if_e(op, tmp, false_expr);
+      if_e.location() = op.location();
+      tmp.swap(if_e);
+    }
+    else // ID_or
+    {
+      // We need to record the location of the newly generated expression
+      exprt true_expr = true_exprt();
+      true_expr.location() = op.location();
+      if_exprt if_e(op, true_expr, tmp);
+      if_e.location() = op.location();
+      tmp.swap(if_e);
+    }
+  }
+
+  expr.swap(tmp);
+  expr.location() = tmp.location();
+}
+
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
@@ -1503,58 +1554,7 @@ void goto_convertt::remove_sideeffects(
     if (lower_discarded_short_circuit(expr, dest, result_is_used))
       return;
 
-    exprt tmp;
-
-    if (expr.is_and())
-      tmp = true_exprt();
-    else
-      // ID_or
-      tmp = false_exprt();
-
-    // Make sure we do not lose the location in tmp
-    tmp.location() = expr.location();
-
-    exprt::operandst &ops = expr.operands();
-
-    // start with last one
-    for (exprt::operandst::reverse_iterator it = ops.rbegin(); it != ops.rend();
-         ++it)
-    {
-      exprt &op = *it;
-
-      // This is a hack for now. We need to solve this properly by
-      // correctly tracking all locations through all GOTO transformations
-      op.location() = expr.location();
-
-      if (!op.is_boolean())
-      {
-        log_error("{} takes boolean operands only", expr.id().as_string());
-        abort();
-      }
-
-      if (expr.is_and())
-      {
-        // We need to record the location of the newly generated expression
-        exprt false_expr = false_exprt();
-        false_expr.location() = op.location();
-        if_exprt if_e(op, tmp, false_expr);
-        if_e.location() = op.location();
-        tmp.swap(if_e);
-      }
-      else // ID_or
-      {
-        // We need to record the location of the newly generated expression
-        exprt true_expr = true_exprt();
-        true_expr.location() = op.location();
-        if_exprt if_e(op, true_expr, tmp);
-        if_e.location() = op.location();
-        tmp.swap(if_e);
-      }
-    }
-
-    expr.swap(tmp);
-    expr.location() = tmp.location();
-
+    rewrite_short_circuit_as_ternary(expr);
     remove_sideeffects(expr, dest, result_is_used);
     return;
   }
