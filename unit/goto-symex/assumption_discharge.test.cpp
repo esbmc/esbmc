@@ -94,17 +94,20 @@ bool store_elided(const symex_target_equationt::SSA_stept &step)
 // value, keeps the array live: a returned expression is itself sliced away, and
 // then the stores go with `ignore` rather than reaching the branch at all.
 // The values are expressions, not bare nondet symbols, for the reason
-// slice.test.cpp's "closure survives constant array indices" gives (#7597).
+// slice.test.cpp's "closure survives constant array indices" gives (#7597),
+// and multiplications rather than additions because is_immutable_computation
+// carries add/sub over an immutable leaf -- an addition would propagate and
+// the stores would never reach the slicer.
 const char *dead_array_store = R"(
 int nondet_int(void);
 int main(void)
 {
   int a[4];
   int x = nondet_int();
-  a[0] = x + 1;
-  a[1] = x + 2;
-  a[2] = x + 3;
-  a[3] = x + 4;
+  a[0] = x * 3;
+  a[1] = x * 5;
+  a[2] = x * 7;
+  a[3] = x * 11;
   __ESBMC_assert(a[1] != 424242, "read one index");
   return 0;
 }

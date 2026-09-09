@@ -54,14 +54,17 @@ struct slice_result
   size_t elided_stores;
 };
 
-/** True if the slicer rewrote this assignment's encoding away from its rhs. */
+/** True if the slicer encoded `lhs = with(src, idx, val)` as `lhs = src`.
+ *  The exact form matters: `cond != (lhs == rhs)` also holds for a retained
+ *  store with the wrong source, the case this audit exists to catch. */
 bool store_elided(const symex_target_equationt::SSA_stept &step)
 {
   if (!step.is_assignment() || is_nil_expr(step.rhs) || is_nil_expr(step.cond))
     return false;
   if (!is_with2t(step.rhs))
     return false;
-  return step.cond != expr2tc(equality2tc(step.lhs, step.rhs));
+  return step.cond ==
+         expr2tc(equality2tc(step.lhs, to_with2t(step.rhs).source_value));
 }
 
 /** Run the real slicer over `eq` and audit what it left behind. */
@@ -104,10 +107,17 @@ slice_result slice_and_audit(symex_run::equation &run)
 
     std::set<std::string> reads;
     collect_ssa_reads(step.guard, reads);
-    if (step.is_assignment())
-      collect_ssa_reads(step.rhs, reads);
-    else
+    if (!step.is_assignment())
       collect_ssa_reads(step.cond, reads);
+    else if (store_elided(step))
+      // An elided store keeps its rhs textually for trace construction,
+      // but only the encoded condition reaches the formula. Collect
+      // from that condition rather than reconstructing the expected
+      // identity `lhs == src`, so a wrongly-encoded elided store still
+      // surfaces as a closure violation instead of being assumed away.
+      collect_ssa_reads(step.cond, reads);
+    else
+      collect_ssa_reads(step.rhs, reads);
 
     // A name with no definition anywhere is a free symbol (nondet, argument,
     // uninitialised global) and always was; only a name whose definitions were
@@ -200,21 +210,20 @@ TEST_CASE("closure survives constant array indices", "[symex][slice]")
 {
   // scan_array_uses / index_reads: a store to one constant index may be elided
   // only if no retained read can observe it.
-  // The values are expressions, not bare nondet symbols: a chain of immutable
-  // updates propagates instead of reaching the slicer (#7597). One shared
-  // definition, so eliding the dead stores does not strand it -- an elided
-  // store's rhs still names its operands even though its encoding no longer
-  // does, and the audit below reads the rhs.
+  // Expressions, not bare nondets: an immutable chain propagates instead of
+  // reaching the slicer (#7597). One shared definition, so eliding the dead
+  // stores does not strand it. Multiplication, not addition, because
+  // is_immutable_computation carries add/sub over an immutable leaf.
   symex_run::equation run(R"(
 int nondet_int(void);
 int main(void)
 {
   int arr[4];
   int x = nondet_int();
-  arr[0] = x + 1;
-  arr[1] = x + 2;
-  arr[2] = x + 3;
-  arr[3] = x + 4;
+  arr[0] = x * 3;
+  arr[1] = x * 5;
+  arr[2] = x * 7;
+  arr[3] = x * 11;
   __ESBMC_assert(arr[1] != 424242, "read one index");
   return 0;
 }

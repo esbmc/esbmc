@@ -213,6 +213,56 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
+/// A pure bitvector computation over immutable leaves is itself immutable --
+/// the byte-assembly idiom `(hi & 255) << 8 | (lo & 255)`, which
+/// is_immutable_value refuses because the update is an expression over
+/// immutable reads rather than one of them. A bound so assembled otherwise
+/// leaves the loop it bounds unfoldable (#7597).
+static bool is_immutable_computation(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+
+  if (is_immutable_value(*b))
+    return true;
+
+  // Constant leaves stay scalar: an aggregate literal keeps routing through
+  // constant_propagation, so array_may_propagate still refuses the
+  // infinite-size arrays and caps nested ones at multidim_propagation_bound.
+  if (is_constant_expr(*b))
+    return !is_constant_struct2t(*b) && !is_constant_union2t(*b) &&
+           !is_constant_array2t(*b) && !is_constant_array_of2t(*b) &&
+           !is_constant_vector2t(*b) && !is_constant_string2t(*b);
+
+  // Bitvector operands only, as is_stable_value does (#7501): a pointer-typed
+  // add2t would otherwise be accepted here.
+  if (!is_bv_type((*b)->type))
+    return false;
+
+  switch ((*b)->expr_id)
+  {
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::shl_id:
+  case expr2t::lshr_id:
+  case expr2t::ashr_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  {
+    bool ok = true;
+    (*b)->foreach_operand([&ok](const expr2tc &e) {
+      if (ok && !is_immutable_computation(e))
+        ok = false;
+    });
+    return ok;
+  }
+  default:
+    return false;
+  }
+}
+
 /* Raising this buys termination: a loop counter held in the aggregate being
  * written (#7597) folds only while the writes stay under the bound. Above it
  * the chain is left symbolic and the next update starts a fresh one, so a loop
@@ -224,8 +274,8 @@ static bool is_immutable_value(const expr2tc &expr)
 static constexpr unsigned symbolic_chain_bound = 1024;
 
 /// Whether a `with` update value may be carried, counting in @p symbolic the
-/// ones only is_immutable_value accepts -- the class #7597 admits, and the one
-/// symbolic_chain_bound caps.
+/// ones only is_immutable_computation accepts -- the class #7597 admits, and
+/// the one symbolic_chain_bound caps.
 static bool update_may_propagate(
   const goto_symex_statet &state,
   const expr2tc &value,
@@ -233,7 +283,7 @@ static bool update_may_propagate(
 {
   if (state.constant_propagation(value))
     return true;
-  if (!is_immutable_value(value))
+  if (!is_immutable_computation(value))
     return false;
   if (++symbolic <= symbolic_chain_bound)
     return true;
@@ -260,7 +310,8 @@ static bool aggregate_literal_may_propagate(
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
-    if (noconst && !is_immutable_value(e) && !state.constant_propagation(e))
+    if (
+      noconst && !is_immutable_computation(e) && !state.constant_propagation(e))
       noconst = false;
   });
   return noconst;
@@ -293,7 +344,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return true;
 
     // By propagation nondet symbols, we can achieve some speed up but the
-    // counterexample will be missing a lot of information, so not really worth it
+    // counterexample will be missing a lot of information, so not really worth
+    // it
     if (s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
       return false;
   }
@@ -333,9 +385,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
        config.options.get_bool_option("k-induction")))
       // When this option is enabled, the constant propagation
       // with feature will significantly impact performance.
-      // More importantly, the use of incremental-BMC / k-induction does not heavily
-      // rely on constants to determine the boundaries. Even if there is a known
-      // loop size, esbmc starts unwinding from min k
+      // More importantly, the use of incremental-BMC / k-induction does not
+      // heavily rely on constants to determine the boundaries. Even if there is
+      // a known loop size, esbmc starts unwinding from min k
       return false;
 
     // Handle WITH chains for structs where all updates are constants
@@ -364,7 +416,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // also carries a dynamic/infinite-sized member (e.g. a Solidity `bytes`
       // field) leaves that member in the propagated constant, and computing its
       // byte size downstream throws array_type2t::inf_sized_array_excp. Scalar
-      // updates stay unrestricted, matching pre-aggregate-propagation behaviour.
+      // updates stay unrestricted, matching pre-aggregate-propagation
+      // behaviour.
       const bool struct_is_fixed_size = type_has_constant_size(expr->type);
 
       while (is_with2t(current))
@@ -432,7 +485,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
            current = &to_with2t(*current).source_value)
       {
         const expr2tc &update = to_with2t(*current).update_value;
-        if (!is_constant_expr(update) && !is_immutable_value(update))
+        if (!is_constant_expr(update) && !is_immutable_computation(update))
           return false;
       }
 
