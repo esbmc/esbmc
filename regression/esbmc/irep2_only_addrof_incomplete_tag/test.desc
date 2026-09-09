@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto-functions-only --clang-c-irep2-adjust-only
+take_struct\(\(void \*\)\(&JJ\)\)
+take_union\(\(void \*\)\(&UU\)\)

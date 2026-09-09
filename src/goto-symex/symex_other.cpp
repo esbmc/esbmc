@@ -76,8 +76,8 @@ void goto_symext::symex_decl(const expr2tc &code)
     unsigned &index = cur_state->variable_instance_nums[identifier];
     frame.level1.rename(l1_sym, ++index);
     to_symbol2t(l1_sym).level1_num = index;
-  } while (frame.declaration_history.find(renaming::level2t::name_record(
-             to_symbol2t(l1_sym))) != frame.declaration_history.end());
+  } while (frame.declaration_history.count(
+    renaming::level2t::name_record(to_symbol2t(l1_sym))));
 
   // Rename it to the new name
   cur_state->top().level1.get_ident_name(l1_sym);
