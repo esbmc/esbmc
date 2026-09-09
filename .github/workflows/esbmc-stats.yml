@@ -10,8 +10,7 @@ on:
 jobs:
   j1:
     name: repostats-for-robota-core
-    # github-repo-stats is a Docker container action, and ubuntu-slim is itself
-    # a container with no Docker daemon to build it against.
+    # ubuntu-slim is itself a container with no Docker daemon to build it against.
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -21,15 +20,21 @@ jobs:
       # Do not cancel&fail all remaining jobs upon first job failure.
       fail-fast: false
     steps:
+      # The traffic API needs a token with Administration(read), which
+      # GITHUB_TOKEN cannot be granted
+      - name: mint app token
+        id: tok
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          app-id: ${{ vars.GHRS_APP_ID }}
+          private-key: ${{ secrets.GHRS_APP_PRIVATE_KEY }}
+          owner: esbmc
+          repositories: esbmc
+
       - name: run-ghrs
-        uses: jgehrcke/github-repo-stats@d80572c9029636cd0e97e3a79e7a9c293bea3b02  # RELEASE
+        uses: jgehrcke/github-repo-stats@v1.4.2
         with:
           # Define the stats repository (the repo to fetch
           # stats for and to generate the report for).
-          # Remove the parameter when the stats repository
-          # and the data repository are the same.
           repository: ${{ matrix.statsRepo }}
-          # Requires a classic PAT (repo scope) stored as a secret.
-          # The GitHub Traffic API blocks integration/machine tokens
-          # (GITHUB_TOKEN), so a real user PAT is mandatory here.
-          ghtoken: ${{ secrets.ghrs_github_api_token }}
+          ghtoken: ${{ steps.tok.outputs.token }}

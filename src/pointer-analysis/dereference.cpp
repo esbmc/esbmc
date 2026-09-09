@@ -1165,7 +1165,12 @@ void dereferencet::build_reference_rec(
   // no-op, so return any value of the target type (issue #723).
   if (type_byte_size_bits(type) == 0)
   {
-    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
+    // Still not gen_zero for a member-less union: it now answers with a
+    // zero-member constant_union2t, and everything downstream of here assumes
+    // a union constant has exactly one initialiser (constant_union2t in
+    // irep2_expr.h, and the assert in build_reference_rec's constant_union2t
+    // arm). A nondet symbol of the target type is a zero-width value nothing
+    // reads, and keeps that invariant intact.
     value = (is_union_type(type) && to_union_type(type).members.empty())
               ? make_failed_symbol(type)
               : gen_zero(type);

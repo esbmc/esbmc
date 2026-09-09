@@ -1,0 +1,31 @@
+#ifndef ESBMC_VERSION
+#define ESBMC_VERSION
+
+// [version.syn]: this header defines feature-test macros only, no entities.
+//
+// A macro here is a promise that the bundled operational models really provide
+// the feature, because portable code branches on it: claiming one ESBMC cannot
+// honour sends a program down a path the models do not implement. So only
+// features exercised by regression/esbmc-cpp/cpp/cpp_version_macros are
+// claimed, and the many library features this tree does not model yet are
+// simply left undefined -- which is what a conforming program treats as
+// "unavailable", the conservative answer.
+
+#if __cplusplus >= 201703L
+#  define __cpp_lib_optional 201606L
+#  define __cpp_lib_variant 201606L
+#  define __cpp_lib_any 201606L
+#  define __cpp_lib_string_view 201803L
+#endif
+
+#if __cplusplus >= 202002L
+#  define __cpp_lib_span 202002L
+#  define __cpp_lib_bit_cast 201806L
+#  define __cpp_lib_source_location 201907L
+#endif
+
+#if __cplusplus >= 202302L
+#  define __cpp_lib_expected 202202L
+#endif
+
+#endif
