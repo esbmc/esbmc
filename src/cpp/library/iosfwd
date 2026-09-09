@@ -36,6 +36,19 @@ template <class CharT, class Traits>
 class basic_streambuf;
 typedef basic_streambuf<char, char_traits<char> > streambuf;
 
+/* libstdc++ declares basic_string from <iosfwd> (via <bits/stringfwd.h>), so
+ * `#include <iosfwd>` alone is enough to name std::basic_string<char> there.
+ * Rejecting that is a false PARSING ERROR on code the host toolchain accepts,
+ * so follow the implementation. Unlike basic_streambuf above, the default
+ * arguments live here rather than with the definition: naming
+ * basic_string<char> needs them, and clang rejects a second declaration that
+ * repeats them, so <string> declares its definition without. */
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_string;
+
 template <
   class CharT,
   class Traits = char_traits<CharT>,

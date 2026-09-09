@@ -17,6 +17,7 @@
 #include <util/arith/mp_arith.h>
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
+#include <algorithm>
 #include <regex>
 #include <optional>
 
@@ -84,10 +85,20 @@ unsigned int solidity_convertert::get_line_number(
                       : get_src_from_json(ast_node);
 
   std::string position = src.substr(0, src.find(":"));
-  unsigned int byte_position = std::stoul(position) + 1;
+  // size_t, not unsigned int: narrowing here would wrap an out-of-range offset
+  // back into the buffer and silently bypass the clamp below.
+  size_t byte_position = std::stoul(position) + 1;
 
   if (final_position)
     byte_position = add_offset(src, byte_position);
+
+  // A `src` range routinely points past the end of contract_contents -- most
+  // often because add_offset below mis-reads the range length, but also when
+  // the .solast was generated from another revision of the source or from a
+  // multi-source compilation. Walking there is an out-of-bounds read whose
+  // result varies per run (esbmc/esbmc#6760); clamping reports the line just
+  // past the last one instead.
+  byte_position = std::min(byte_position, contract_contents.size());
 
   // the line number can be calculated by counting the number of line breaks prior to the identifier.
   unsigned int loc = std::count(
@@ -98,14 +109,13 @@ unsigned int solidity_convertert::get_line_number(
   return loc;
 }
 
-unsigned int solidity_convertert::add_offset(
-  const std::string &src,
-  unsigned int start_position)
+size_t
+solidity_convertert::add_offset(const std::string &src, size_t start_position)
 {
   // extract the length from "start:length:index"
   std::string offset = src.substr(1, src.find(":"));
   // already added 1 in start_position
-  unsigned int end_position = start_position + std::stoul(offset);
+  size_t end_position = start_position + std::stoul(offset);
   return end_position;
 }
 

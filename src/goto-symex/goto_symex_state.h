@@ -14,7 +14,6 @@
 #include <set>
 #include <stack>
 #include <string>
-#include <unordered_set>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
@@ -79,7 +78,7 @@ public:
   typedef std::map<goto_programt::const_targett, merge_state_listt>
     merge_state_mapt;
   typedef std::vector<framet> call_stackt;
-  typedef std::unordered_set<
+  typedef persistent_set<
     renaming::level2t::name_record,
     renaming::level2t::name_rec_hash>
     variable_name_sett;

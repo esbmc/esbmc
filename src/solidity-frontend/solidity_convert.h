@@ -668,7 +668,7 @@ protected:
     locationt &location);
   unsigned int
   get_line_number(const nlohmann::json &ast_node, bool final_position = false);
-  unsigned int add_offset(const std::string &src, unsigned int start_position);
+  size_t add_offset(const std::string &src, size_t start_position);
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);

@@ -1738,7 +1738,8 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
     // default argument reach inference only through here.
     if (
       json_utils::is_class(rhs_var_name, ast_) ||
-      type_utils::is_type_identifier(rhs_var_name))
+      type_utils::is_type_identifier(rhs_var_name) ||
+      type_utils::is_python_exceptions(rhs_var_name))
       return "type";
 
     const auto &lineno = element["lineno"].template get<int>();
