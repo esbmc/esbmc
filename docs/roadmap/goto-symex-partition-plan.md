@@ -84,11 +84,12 @@ Header include graph over the 21 headers, Tarjan SCC:
 `"witnesses.h"` (quoted, resolved via the including file's own directory —
 which is precisely the include form that breaks silently when a file moves).
 
-Group-level edges **after** the §5 prep, computed from headers only:
+Group-level edges **after** the §5 prep (measured on `6103d9ea96`), computed
+from headers only:
 
 ```
 engine    -> state, equation          state     -> equation, witness, <top>
-scheduler -> engine, state, equation  testgen   -> equation, witness
+scheduler -> engine, state, equation  testgen   -> equation
 trace     -> equation                 witness   -> equation, trace
 ```
 
@@ -104,56 +105,57 @@ Two further inversions worth naming, neither introduced here:
   therefore drags in the witness emitter. `witnesses.h` is three headers in one
   — replay input types, GraphML/YAML output, and (until §5) the test
   generators. Splitting it is a follow-up, not part of this move.
-* **`src/util/ssa/` → `goto-symex/`.** `algorithms.h` and `goto_expr_factory.h`
-  include `symex_target_equation.h`; `util` depends upward on this component.
-  Named and left alone by #6381; still true, still out of scope.
+* **`src/util/` → `goto-symex/`, twice.** `util/ssa/algorithms.h` and
+  `util/ssa/goto_expr_factory.h` include `symex_target_equation.h`, and
+  `util/base/yaml_parser.h:3` includes `<goto-symex/witnesses.h>` — the base
+  layer depending upward on this component. #6381 named the `ssa/` half and
+  left it; the `yaml_parser.h` half is the reason `yaml_parser.cpp` sits in the
+  affected-TU set of any change to `witnesses.h`. Still out of scope.
 
-## 5. Step 0 — prerequisite include repair (separate, tiny PR)
+## 5. Step 0 — prerequisite include repair — **DONE**
 
-Three include edits, each removing a dependency that no symbol justifies. They
-break the one header cycle and one group cycle *before* any file moves, so the
-move itself is not entangled with a semantic change.
+Landed as `6103d9ea96`, `[symex] Break the witnesses/ctest header cycle in
+goto-symex`, on branch `fix/goto-symex-include-cycle`. Five files, +4/-5.
 
-```diff
---- a/src/goto-symex/witnesses.h
-+++ b/src/goto-symex/witnesses.h
-@@
- #include <goto-symex/goto_trace.h>
--#include <goto-symex/pytest.h>
--#include <goto-symex/ctest.h>
+Three header edges removed, each unjustified by any symbol at the site that
+declared it:
 
---- a/src/goto-symex/ctest.h
-+++ b/src/goto-symex/ctest.h
-@@
--#include "witnesses.h"
-+#include <goto-symex/witnesses.h>
+* `witnesses.h` included `pytest.h` and `ctest.h` and referenced no symbol from
+  either. Removed.
+* `ctest.h` included `"witnesses.h"` (quoted, unqualified) and referenced no
+  symbol from it. **Removed outright** rather than canonicalised — only
+  `ctest.cpp` uses `collect_nondet_values`, so the include moved down to the
+  `.cpp`. This is stronger than this plan originally proposed: it deletes the
+  `testgen` → `witness` group edge instead of merely respelling it.
+* `build_goto_trace.h` included `goto_symex_state.h` and referenced no symbol
+  from it. `build_goto_trace.cpp` uses `renaming::renaming_levelt::get_original_name`
+  and `symbol_renaming_level::level0`, so `renaming.h` was added there.
+  (Deleting the include outright fails to compile — two
+  `use of undeclared identifier 'renaming'` errors — so the include moved down,
+  it did not disappear.)
 
---- a/src/goto-symex/build_goto_trace.h
-+++ b/src/goto-symex/build_goto_trace.h
-@@
--#include <goto-symex/goto_symex_state.h>
- #include <goto-symex/goto_trace.h>
+Plus two hygiene edits in `witnesses.h`: a mid-file `#include` at global scope
+that had split a doc comment from the function it documents was hoisted to the
+top, and a missing `<vector>` was added (the header uses `std::vector` at six
+sites and had been reaching it only transitively — a margin this patch thins).
 
---- a/src/goto-symex/build_goto_trace.cpp
-+++ b/src/goto-symex/build_goto_trace.cpp
-@@
- #include <cassert>
-+#include <goto-symex/renaming.h>
- #include <goto-symex/build_goto_trace.h>
-```
+**Result, measured:** `src/` now has **no multi-node header include cycle at
+all** — the `ctest.h` ↔ `witnesses.h` pair was the only one in the whole tree,
+not just in `goto-symex/`. 44 translation units stop parsing `ctest.h` and
+`pytest.h`.
 
-Justification, measured:
+**Gates discharged.** Full `ninja` green; unit tests 835/836; regression
+`-L esbmc/ -j2` 2145/2146 (both failures — *"an exhausted stack still reports
+itself"* and `bundled_headers_from_vfs` — pre-existing on clean `master` on this
+host); `drift_check.py` exit 0; complexity gate +0; clang-format 11 clean vs
+`origin/master`. Independently reviewed: a per-TU preprocessed header-closure
+diff over all 719 compilable TUs found **46 TUs changed, 0 gaining any header, 0
+losing any system, boost, yaml-cpp or libc++ header**, and confirmed that
+neither `ctest.h` nor `pytest.h` declares a template, specialization, free
+operator, or anything in `namespace std` — so no silent ODR exposure hides
+behind the green build.
 
-* `witnesses.h` references **no** symbol from `ctest.h` or `pytest.h`
-  (`grep -c 'ctest_generator\|pytest_generator'` → 0). Every consumer that uses
-  them — `src/esbmc/bmc.h:11-12` — includes them directly.
-* `build_goto_trace.h` references no symbol from `goto_symex_state.h`; the
-  `.cpp` uses `renaming::`, so the include moves down to the `.cpp` rather than
-  disappearing. (Deleting it outright fails to compile — verified: two
-  `use of undeclared identifier 'renaming'` errors.)
-
-**Verified:** with all four edits applied, `ninja symex esbmc` builds clean on
-`ddc686db93`.
+No Mode C obligation arises: the change adds and removes zero branches.
 
 ## 6. Execution order
 
@@ -163,7 +165,7 @@ what made #6381 reviewable, and it is not optional here.
 
 | # | Commit | Rationale for the position |
 |---|---|---|
-| 0 | Prep: the §5 include repair | Must precede the moves. |
+| 0 | Prep: the §5 include repair | **Done** — `6103d9ea96`. |
 | 1 | `testgen/` | Leaf after step 0; nothing in `goto-symex` depends on it. |
 | 2 | `witness/` | Depends only on `trace`/`equation`, unmoved at this point. |
 | 3 | `trace/` | — |
@@ -288,9 +290,13 @@ the record. Same policy as #6381.
   baselines are re-established rather than regressed. Do not report the gate as
   passing on an unmeasured file.
 * **This conflicts aggressively with any in-flight PR touching
-  `src/goto-symex/`.** Land it at a quiet moment, and check
-  `gh pr list --repo esbmc/esbmc` for open work in this component first — a
-  concurrent session has repeatedly been found pushing to the same branches.
+  `src/goto-symex/`.** As of 2026-09-09 the open set is #7669, #7668 and #7665
+  (`goto_symex_state.{h,cpp}`, `renaming.h` — commit 5), #7505
+  (`goto_symex_state.cpp`, `unit/goto-symex/`) and #6687
+  (`builtin_functions/object_size.cpp` — commit 7); #7661-#7663 restructure
+  `src/esbmc/`, which is the largest external consumer of these headers.
+  Re-derive the list with `gh pr list --repo esbmc/esbmc` immediately before
+  starting, and check for a concurrent session on the same branches.
 * **`esbmc/esbmc` merges by squash**, so the seven-commit history documented in
   §6 survives on the branch and in review, but not on `master`. The staged
   commits are for reviewability and bisection during development; the PR
@@ -306,14 +312,16 @@ PR; each is a separate, small, testable change.
    depend on and which depends on nothing. Hoisting it removes the last group
    cycle. Mechanical but wide: every `goto_trace_stept::ASSERT`-style reference
    changes.
-2. **`witnesses.h` is three headers.** Splitting the replay types
-   (`waypoint`) from the GraphML/YAML emitters would remove `state/` →
-   `witness/` and stop the engine's state header from pulling in
-   `boost/property_tree` and `yaml-cpp`.
-3. **`src/util/ssa/` belongs in `goto-symex/`.** `algorithms`, `cache`,
-   `goto_expr_factory` are not utilities; #6381 named this and deferred it
-   because it changes CMake target topology. It is the natural sequel to this
-   PR, not part of it.
+2. **`witnesses.h` is two headers.** Splitting the violation-witness replay
+   types (`waypoint`) from the GraphML/YAML emitters would remove
+   `state/` → `witness/` and stop the engine's state header from pulling in
+   `boost/property_tree` and `yaml-cpp` into 44 translation units. Step 0
+   removed the third role (the test generators); this is the remainder.
+3. **`src/util/` depends upward on `goto-symex/`.** `util/ssa/{algorithms,
+   cache, goto_expr_factory}` are not utilities; #6381 named this and deferred
+   it because it changes CMake target topology. `util/base/yaml_parser.h`'s
+   include of `witnesses.h` is the same inversion in a second place. The
+   natural sequel to this PR, not part of it.
 4. **`goto_symex.h` is 66 KB in one file.** Splitting the `goto_symext`
    declaration is a real improvement and is emphatically *not* a move — it
    changes what each translation unit sees. Separate PR, separate risk.
