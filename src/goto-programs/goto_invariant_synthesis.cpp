@@ -107,9 +107,6 @@ bool mentions_modified_var(
   const expr2tc &expr,
   const loopst::loop_varst &modified)
 {
-  if (!expr)
-    return false;
-
   if (modified.find(expr) != modified.end())
     return true;
 
@@ -125,15 +122,13 @@ bool mentions_modified_var(
 /// loop is lowered to `IF !(cond) GOTO exit`, but a pass that simplifies the
 /// guard (--interval-analysis does) leaves the equivalent `IF i > n GOTO exit`
 /// with no not2t to strip. Negate and simplify, which covers both spellings.
-bool guard_condition(const goto_programt::targett &head_if, expr2tc &cond)
+void guard_condition(const goto_programt::targett &head_if, expr2tc &cond)
 {
+  // instructiont::guard is initialised to gen_true_expr() and no pass writes a
+  // nil one, so a GOTO always has a guard to negate.
   const expr2tc &g = head_if->guard;
-  if (is_nil_expr(g))
-    return false;
-
   cond = is_not2t(g) ? to_not2t(g).value : not2tc(g);
   simplify(cond);
-  return true;
 }
 
 /// True when the instruction cannot appear in a body this pass is willing to
@@ -276,8 +271,6 @@ struct invariant_dependenciest
 /// The callee of a FUNCTION_CALL, or nil when it is not named by a symbol.
 expr2tc call_target(const goto_programt::instructiont &i)
 {
-  if (is_nil_expr(i.code) || !is_code_function_call2t(i.code))
-    return expr2tc();
   return to_code_function_call2t(i.code).function;
 }
 
@@ -526,9 +519,7 @@ struct affine_loopt
   expr2tc bound;
   expr2tc counter_entry;
   /// The loop's entry condition, as computed by guard_condition. Carried out of
-  /// the recogniser rather than recomputed: a second call cannot fail once the
-  /// first succeeded on the same head, so recomputing it left an unreachable
-  /// error path and risked the two spellings drifting apart.
+  /// the recogniser rather than recomputed, so the two spellings cannot drift.
   expr2tc cond;
   bool inclusive = true;
   /// True when every accumulator's addend is a literal, so the closed form
@@ -677,12 +668,11 @@ static bool classify_accumulators(
   {
     if (var == out.counter)
       continue;
-    if (!is_symbol2t(var))
-      return false;
 
+    // Both lookups are total: get_modified_loop_vars() holds only symbols
+    // (goto_loops.cpp:370,455), and summarise_body has already recorded every
+    // assignment it accepted, having rejected the loop otherwise.
     const auto write = writes.find(write_key(var));
-    if (write == writes.end())
-      return false;
 
     accumulatort acc;
     acc.var = var;
@@ -721,8 +711,7 @@ bool match_counter_and_bound(
   if (!head->is_goto() || head == exit)
     return false;
 
-  if (!guard_condition(head, out.cond))
-    return false;
+  guard_condition(head, out.cond);
   if (!split_bound(out.cond, out.counter, out.bound, out.inclusive))
     return false;
 
