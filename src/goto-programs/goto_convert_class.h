@@ -541,6 +541,11 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest,
     const std::string &bs_name);
+  void do_operator_new(
+    const exprt &lhs,
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
   void do_mem(
     bool is_malloc,
     const exprt &lhs,
