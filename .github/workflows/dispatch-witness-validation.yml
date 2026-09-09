@@ -102,7 +102,7 @@ on:
 jobs:
   build-esbmc:
     if: ${{ inputs.validator == 'ESBMC' && inputs.esbmc_source == 'Rebuild' }}
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/aux-build.yml
     with:
       operating-system: ubuntu-24.04
       build-flags: '-b Release -e OFF -C'

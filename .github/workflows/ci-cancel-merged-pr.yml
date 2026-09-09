@@ -5,6 +5,8 @@ name: Cancel CI on merged PR
 # pointless (the code has already landed on master, which triggers its own
 # CI), so they only waste runner time. This workflow cancels them.
 
+#
+
 on:
   pull_request:
     types: [closed]

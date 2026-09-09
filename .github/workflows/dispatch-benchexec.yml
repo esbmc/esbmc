@@ -17,7 +17,7 @@ on:
       svbenchmarks:
         description: 'Git branch, tag, or commit of SV-Benchmarks to use'
         required: true
-        default: 'main'      	
+        default: 'main'
       mode:
         type: choice
         description: Benchexec run mode
@@ -115,7 +115,7 @@ on:
 
 jobs:
   build-unix:
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/aux-build.yml
     with:
       operating-system: ubuntu-24.04
       build-flags: '-b Release -e OFF -C'
@@ -182,13 +182,13 @@ jobs:
         if: ${{ inputs.output != '' }}
         run: cp $HOME/output.zip $HOME/${{ inputs.output }}
       - name: Move output
-        run: mv $HOME/output.zip ./output.zip      
+        run: mv $HOME/output.zip ./output.zip
       - name: Debug Info
         run: ls
       - uses: actions/upload-artifact@v7
         with:
           name: esbmc-result
-          path: output.zip  
+          path: output.zip
       - name: Checkout code for validation
         if: ${{ inputs.validate == true }}
         uses: actions/checkout@v6

@@ -82,7 +82,7 @@ jobs:
   build-unix:
     needs: validate-platform
     if: ${{ !startsWith(inputs.operating-system, 'windows-') }}
-    uses: ./.github/workflows/build-unix.yml
+    uses: ./.github/workflows/aux-build-unix.yml
     with:
       operating-system: ${{ inputs.architecture == 'armv8' && format('{0}-arm', inputs.operating-system) || inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
@@ -92,7 +92,7 @@ jobs:
   build-windows:
     needs: validate-platform
     if: ${{ startsWith(inputs.operating-system, 'windows-') }}
-    uses: ./.github/workflows/build-windows.yml
+    uses: ./.github/workflows/aux-build-windows.yml
     with:
       operating-system: ${{ inputs.operating-system }}
       build-flags: ${{ inputs.build-flags }}
