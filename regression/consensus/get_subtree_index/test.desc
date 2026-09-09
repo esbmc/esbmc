@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.py
 --unwind 513 --function get_subtree_index
 ^VERIFICATION FAILED$
