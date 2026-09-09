@@ -1,4 +1,7 @@
 name: Upload Release Asset
+
+#
+
 on:
   schedule:
     #      M H - - D => 06:00 of Monday
@@ -12,7 +15,6 @@ on:
   workflow_dispatch:
 
 jobs:
-
   build:
     strategy:
       matrix:
@@ -29,7 +31,7 @@ jobs:
           - os: macos-latest
             arch: x86_64
             flags: '-b RelWithDebInfo -e OFF -c 21'
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/aux-build.yml
     with:
       operating-system: ${{ matrix.os }}
       architecture: ${{ matrix.arch }}
@@ -58,7 +60,7 @@ jobs:
         run: ./scripts/build.sh -b RelWithDebInfo -S OFF -c 22 -e OFF
 
   build-info:
-    uses: ./.github/workflows/build-info.yml
+    uses: ./.github/workflows/aux-build-info.yml
 
   create-release:
     name: Upload Release Asset

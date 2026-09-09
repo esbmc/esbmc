@@ -241,7 +241,7 @@ reference and the wiki as background.
 - `src/esbmc/esbmc_parseoptions.cpp` — extend solver-selection.
 - Top-level [`README.md`](../../README.md) and `scripts/build.sh` —
   install/dependency notes for the new solver.
-- `.github/workflows/build.yml` and `.github/workflows/release.yml` —
+- `.github/workflows/aux-build.yml` and `.github/workflows/ci-release.yml` —
   add the new solver to the CI matrix.
 - `regression/esbmc/` — add at least one passing and one failing
   regression test exercising `--<solver>` (per the project's two-test

@@ -55,7 +55,7 @@ except ImportError:  # pragma: no cover - install guidance is the whole message
 ROOTS = ("src", "scripts")
 
 # Vendored or third-party trees. The first three mirror the clang-format job in
-# .github/workflows/pull_request.yml; ast2json is the vendored Python parser.
+# .github/workflows/ci-pull-request.yml; ast2json is the vendored Python parser.
 EXCLUDED = (
     "src/ansi-c/cpp/",
     "src/clang-c-frontend/headers/",

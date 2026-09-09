@@ -1,14 +1,12 @@
-name: esbmc-stats
+name: Nightly
 
 on:
   schedule:
-    # Run this once per day, towards the end of the day for keeping the most
-    # recent data point most meaningful (hours are interpreted in UTC).
-    - cron: "0 23 * * *"
-  workflow_dispatch: # Allow for running this manually.
+    - cron: '0 23 * * *'
+  workflow_dispatch:
 
 jobs:
-  j1:
+  repostats:
     name: repostats-for-robota-core
     # ubuntu-slim is itself a container with no Docker daemon to build it against.
     runs-on: ubuntu-latest
@@ -17,7 +15,6 @@ jobs:
         # The repositories to generate reports for.
         statsRepo:
           - esbmc/esbmc
-      # Do not cancel&fail all remaining jobs upon first job failure.
       fail-fast: false
     steps:
       # The traffic API needs a token with Administration(read), which

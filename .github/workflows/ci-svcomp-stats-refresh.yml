@@ -1,5 +1,7 @@
 name: sv-comp-stats-refresh
 
+#
+
 on:
   schedule:
     - cron: '0 4 1 */3 *'
@@ -16,7 +18,7 @@ concurrency:
 
 jobs:
   build:
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/aux-build.yml
     with:
       operating-system: ubuntu-24.04
       build-flags: '-b Release -e OFF -C'
