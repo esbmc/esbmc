@@ -12,3 +12,5 @@ target_link_libraries(test_goto_factory PUBLIC irep2 clangcfrontend clangcppfron
 target_include_directories(test_goto_factory
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
+
+new_unit_test(goto-factory-test "goto_factory.test.cpp" "test_goto_factory;clangcppfrontend;clibs;filesystem;langapi")
