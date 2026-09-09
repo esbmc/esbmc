@@ -1,0 +1,5 @@
+new_unit_test(property-report-test "property_report.test.cpp" "esbmc-driver;mode_table_obj")
+new_unit_test(report-result-test "report_result.test.cpp" "esbmc-driver;mode_table_obj;build_id_obj;$<LINK_LIBRARY:WHOLE_ARCHIVE,gotoalgorithms>")
+new_unit_test(report-coverage-test "report_coverage.test.cpp" "esbmc-driver;mode_table_obj;build_id_obj;$<LINK_LIBRARY:WHOLE_ARCHIVE,gotoalgorithms>")
+new_unit_test(report-multi-property-trace-test "report_multi_property_trace.test.cpp" "esbmc-driver;build_id_obj;$<LINK_LIBRARY:WHOLE_ARCHIVE,gotoalgorithms>")
+new_unit_test(report-coverage-completeness-test "report_coverage_completeness.test.cpp" "esbmc-driver;mode_table_obj;build_id_obj;$<LINK_LIBRARY:WHOLE_ARCHIVE,gotoalgorithms>")
