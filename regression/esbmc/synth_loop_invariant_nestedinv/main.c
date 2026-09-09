@@ -1,14 +1,6 @@
-/* A user invariant on the outer loop protects the inner one too.
- *
- * has_user_invariant only sees the ten instructions ahead of its own head, so
- * the outer marker is neither in range nor reachable from the inner loop's
- * head. Cutting the inner loop would leave the outer marker's preservation
- * obligation to be discharged across a body containing a havoc -- the same
- * mechanism collect_invariant_dependencies rules out for a callee.
- *
- * synth_loop_invariant_nestedinv_off is the same program without the outer
- * marker; there the inner loop is synthesised, so this test's silence is the
- * guard and not the recogniser declining for some other reason. */
+/* A user invariant on the outer loop protects the inner one too; see
+ * enclosed_by_user_invariant for why. synth_loop_invariant_nestedinv_off is the
+ * same program without the outer marker, where the inner loop is synthesised. */
 #include <assert.h>
 
 int main(void)

@@ -8,6 +8,7 @@
 #include <util/irep/std_expr.h>
 #include <algorithm>
 #include <list>
+#include <unordered_map>
 #include <map>
 #include <set>
 #include <vector>
@@ -189,13 +190,23 @@ bool has_user_invariant(
        ++steps)
   {
     --it;
-    if (it->is_loop_invariant())
+    // A marker this pass emitted is not a user's; enclosed_by_user_invariant
+    // runs after some have already been inserted.
+    if (
+      it->is_loop_invariant() &&
+      it->location.property().as_string() != kSynthesisedInvariantProperty)
       return true;
     if (breaks_straight_line(it))
       return false;
   }
   return false;
 }
+
+/// Position of every instruction in one function body, so two loops can be
+/// compared for containment. Absolute indices go stale once a marker is
+/// inserted; only their order is read, and std::list::insert preserves it.
+using instruction_indext =
+  std::unordered_map<const goto_programt::instructiont *, size_t>;
 
 /// Whether a user-written invariant governs a loop that encloses `loop`.
 ///
@@ -212,24 +223,22 @@ bool has_user_invariant(
 /// starts no later and ends no earlier, and is not the loop itself.
 bool enclosed_by_user_invariant(
   const goto_programt::targett &begin,
-  const std::map<const goto_programt::instructiont *, size_t> &index,
-  std::list<loopst> &loops,
+  const instruction_indext &index,
+  const std::list<loopst> &loops,
   const loopst &loop)
 {
-  const auto self_head = index.find(&*loop.get_original_loop_head());
-  const auto self_exit = index.find(&*loop.get_original_loop_exit());
-  if (self_head == index.end() || self_exit == index.end())
-    return false;
+  // at(), not find(): index covers every instruction of the body the loops were
+  // computed over, and create_function_loop takes both ends from that body.
+  const size_t self_head = index.at(&*loop.get_original_loop_head());
+  const size_t self_exit = index.at(&*loop.get_original_loop_exit());
 
-  for (auto &outer : loops)
+  for (const auto &outer : loops)
   {
-    const auto head = index.find(&*outer.get_original_loop_head());
-    const auto exit = index.find(&*outer.get_original_loop_exit());
-    if (head == index.end() || exit == index.end())
+    const size_t head = index.at(&*outer.get_original_loop_head());
+    const size_t exit = index.at(&*outer.get_original_loop_exit());
+    if (head == self_head && exit == self_exit)
       continue;
-    if (head->second == self_head->second && exit->second == self_exit->second)
-      continue;
-    if (head->second > self_head->second || exit->second < self_exit->second)
+    if (head > self_head || exit < self_exit)
       continue;
     if (has_user_invariant(outer.get_original_loop_head(), begin))
       return true;
@@ -296,23 +305,20 @@ void collect_taken_functions(
   });
 }
 
-/// Whether the program can create a thread. pthread_create lowers to the
-/// __ESBMC_spawn_thread intrinsic (src/c2goto/library/pthread_lib.c), which is
-/// also the primitive a body can call directly, so reaching it is the
-/// program's thread-creation point. Reachability and not mere presence:
-/// pthread_lib.c is linked into every program, so a scan of all bodies
-/// declines on programs that never touch pthreads.
+/// Whether the program can create a thread. Every route -- pthread_create,
+/// std::thread, a CUDA kernel launch, threading.Thread -- lowers to the
+/// __ESBMC_spawn_thread intrinsic, so reaching it is the creation point.
+/// Reachability and not presence: pthread_lib.c is linked into every program.
+/// An indirect call needs no special case: symex resolves one through the value
+/// set into a list of concrete symbols (get_function_list in
+/// symex_function.cpp), so it can only reach a function whose address is taken
+/// somewhere -- which is exactly what collect_taken_functions seeds the
+/// worklist with.
 ///
-/// Synthesis declines outright on a program that reaches it. Cutting a loop
-/// replaces its N visits with a havoc and one body execution, so a claim in
-/// another thread that is only violable across three or more distinct mid-loop
-/// observations is unreachable in the cut program -- and an unreachable
-/// violation is an UNSAT claim, which the #7491 classifier reports PASSED (it
-/// acts on the refutation side only: bmc.cpp record_satisfiable_claim,
-/// record_violated_properties, report_violation).
-/// regression/esbmc/synth_loop_invariant_thread_falseproof is the reproducer:
-/// VERIFICATION SUCCESSFUL under --no-vacuity-check on a program BMC reports
-/// FAILED.
+/// Synthesis declines outright on such a program: cutting a loop deletes the
+/// interleaving points its body carried, and
+/// regression/esbmc/synth_loop_invariant_thread_falseproof is the shape where
+/// that reads as a proof rather than a lost bug.
 bool spawns_threads(const goto_functionst &goto_functions)
 {
   const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
@@ -382,11 +388,11 @@ void collect_marker_dependencies(
 /// Close the marker dependencies over the call graph: abstracting a loop
 /// anywhere below the call changes the value the user's marker reads.
 invariant_dependenciest
-collect_invariant_dependencies(const goto_functionst &goto_functions)
+collect_invariant_dependencies(goto_functionst &goto_functions)
 {
   invariant_dependenciest deps;
 
-  forall_goto_functions (f, goto_functions)
+  Forall_goto_functions (f, goto_functions)
     if (f->second.body_available)
       collect_marker_dependencies(f->second.body, deps);
 
@@ -915,8 +921,10 @@ void goto_synthesise_loop_invariants(
       continue;
 
     goto_loopst loops(it->first, goto_functions, it->second);
+    if (loops.get_loops().empty())
+      continue;
 
-    std::map<const goto_programt::instructiont *, size_t> position;
+    instruction_indext position;
     forall_goto_program_instructions (i, it->second.body)
       position.emplace(&*i, position.size());
 
