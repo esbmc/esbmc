@@ -189,6 +189,14 @@ protected:
   void convert_block(const codet &code, goto_programt &dest);
   void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void convert_decl_initializer(
+    const exprt &var,
+    exprt &initializer,
+    const codet &new_code,
+    const symbolt &s,
+    goto_programt &dest);
+  void schedule_array_element_destructors(const exprt &base, const typet &type);
+
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
@@ -533,6 +541,11 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest,
     const std::string &bs_name);
+  void do_operator_new(
+    const exprt &lhs,
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
   void do_mem(
     bool is_malloc,
     const exprt &lhs,

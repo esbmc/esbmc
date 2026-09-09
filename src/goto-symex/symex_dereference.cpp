@@ -205,7 +205,7 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
     // Get the last l1 renamed symbol
     auto const &name = renaming::level2t::name_record(to_symbol2t(sym));
     auto const &local_vars = it->local_variables;
-    if (local_vars.find(name) != local_vars.end())
+    if (local_vars.count(name))
       return true;
   }
 

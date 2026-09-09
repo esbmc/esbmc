@@ -476,6 +476,12 @@ public:
  *  to the members described in the type. However, it seems the values pumped
  *  at us by CBMC only ever have one member (at position 0) representing the
  *  most recent value written to the union.
+ *
+ *  The one exception is a union type with no members, which occupies no
+ *  storage and so has no member to initialise: gen_zero answers with a
+ *  zero-member constant here. Such a constant is a zero-width value and must
+ *  not reach dereference, whose constant_union2t arm asserts the single
+ *  initialiser this comment describes.
  */
 class constant_union2t : public expr2t
 {
