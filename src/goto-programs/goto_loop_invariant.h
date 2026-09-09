@@ -19,12 +19,15 @@
 /// to whichever loop happens to be nearby.
 extern const char *const kSynthesisedInvariantProperty;
 
+namespace loop_invariant
+{
 /// Instructions with no effect a caller needs to account for: no write to a
 /// tracked variable, no control-flow or heap/external effect. Shared by two
 /// scans that both need exactly this and nothing more -- the window between a
 /// synthesised marker and the loop head it was emitted for, and
 /// goto_invariant_synthesis's reading of a loop body.
 bool is_inert_scan_instruction(goto_programt::const_targett t);
+} // namespace loop_invariant
 
 // Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
 class frame_enforcert;

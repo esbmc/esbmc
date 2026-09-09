@@ -47,6 +47,8 @@
 
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 
+namespace loop_invariant
+{
 bool is_inert_scan_instruction(goto_programt::const_targett t)
 {
   // OTHER also carries `free`, `delete`, `printf` and `asm`, whose effects a
@@ -59,6 +61,7 @@ bool is_inert_scan_instruction(goto_programt::const_targett t)
   return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
          t->is_assume();
 }
+} // namespace loop_invariant
 
 /// True for a name the frontend generated rather than the user: ESBMC spells
 /// those with a '$' (e.g. return_value$___ESBMC_forall$N).
@@ -139,7 +142,8 @@ static std::vector<expr2tc> extract_invariants_near(
 
     if (!it->is_loop_invariant())
     {
-      if (!is_inert_scan_instruction(it) && !is_compiler_temp(it))
+      if (
+        !loop_invariant::is_inert_scan_instruction(it) && !is_compiler_temp(it))
         crossed_real_instruction = true;
       continue;
     }
