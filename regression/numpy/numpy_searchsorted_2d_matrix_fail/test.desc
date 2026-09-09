@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^TypeError.*2d.*matrix
