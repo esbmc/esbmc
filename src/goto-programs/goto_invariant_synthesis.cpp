@@ -7,6 +7,7 @@
 #include <util/expr/expr_util.h>
 #include <util/irep/std_expr.h>
 #include <algorithm>
+#include <list>
 #include <map>
 #include <set>
 #include <vector>
@@ -192,6 +193,46 @@ bool has_user_invariant(
       return true;
     if (breaks_straight_line(it))
       return false;
+  }
+  return false;
+}
+
+/// Whether a user-written invariant governs a loop that encloses `loop`.
+///
+/// has_user_invariant scans back at most kMaxInvariantSearchBack instructions
+/// and stops at the first control flow, so for an inner loop the outer loop's
+/// marker is neither within range nor reachable. Cutting the inner loop would
+/// then leave the outer marker's preservation obligation to be discharged
+/// across a body containing a havoc -- the same mechanism as the callee case
+/// collect_invariant_dependencies rules out, and the same rule: a user-written
+/// invariant is authoritative over everything beneath it.
+///
+/// Position in the instruction list is the containment test. A loop's own head
+/// and exit come from the same body, so an enclosing loop is one whose span
+/// starts no later and ends no earlier, and is not the loop itself.
+bool enclosed_by_user_invariant(
+  const goto_programt::targett &begin,
+  const std::map<const goto_programt::instructiont *, size_t> &index,
+  std::list<loopst> &loops,
+  const loopst &loop)
+{
+  const auto self_head = index.find(&*loop.get_original_loop_head());
+  const auto self_exit = index.find(&*loop.get_original_loop_exit());
+  if (self_head == index.end() || self_exit == index.end())
+    return false;
+
+  for (auto &outer : loops)
+  {
+    const auto head = index.find(&*outer.get_original_loop_head());
+    const auto exit = index.find(&*outer.get_original_loop_exit());
+    if (head == index.end() || exit == index.end())
+      continue;
+    if (head->second == self_head->second && exit->second == self_exit->second)
+      continue;
+    if (head->second > self_head->second || exit->second < self_exit->second)
+      continue;
+    if (has_user_invariant(outer.get_original_loop_head(), begin))
+      return true;
   }
   return false;
 }
@@ -875,6 +916,10 @@ void goto_synthesise_loop_invariants(
 
     goto_loopst loops(it->first, goto_functions, it->second);
 
+    std::map<const goto_programt::instructiont *, size_t> position;
+    forall_goto_program_instructions (i, it->second.body)
+      position.emplace(&*i, position.size());
+
     for (auto &loop : loops.get_loops())
     {
       if (loop.get_modified_loop_vars().empty())
@@ -894,7 +939,13 @@ void goto_synthesise_loop_invariants(
       // A user-written invariant on this loop is authoritative; a synthesised
       // one would be a second LOOP_INVARIANT that the extractor folds into the
       // same conjunction, so a rejected guess would fail the user's proof.
-      if (has_user_invariant(anchor, it->second.body.instructions.begin()))
+      const goto_programt::targett begin = it->second.body.instructions.begin();
+      if (has_user_invariant(anchor, begin))
+        continue;
+
+      // ... and so is one on a loop that encloses this one; see
+      // enclosed_by_user_invariant.
+      if (enclosed_by_user_invariant(begin, position, loops.get_loops(), loop))
         continue;
 
       emit_invariant(it->second, anchor, head, shape, shape.cond);

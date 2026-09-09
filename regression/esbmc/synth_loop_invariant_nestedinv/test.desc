@@ -1,0 +1,7 @@
+CORE
+main.c
+--synthesise-loop-invariants --unwind 6
+\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
+^WARNING: --synthesise-loop-invariants added no invariant: no loop matched the affine counter/accumulator shape, or every match was declined; the run proceeds unchanged$
+^  PASSED       \[main\.assertion\.\d\]  line 20  loop invariant base case$
+^VERIFICATION SUCCESSFUL$
