@@ -1598,14 +1598,14 @@ class CoreVisitorsMixin:
 
     @staticmethod
     def _index_comprehension(idx, elt_parts, bound):
-        return ast.ListComp(
-            elt=ast.Tuple(elts=elt_parts, ctx=ast.Load()),
-            generators=[
-                ast.comprehension(target=CoreVisitorsMixin._load_name(idx, ast.Store()),
-                                  iter=CoreVisitorsMixin._builtin_call("range", [bound]),
-                                  ifs=[],
-                                  is_async=0)
-            ])
+        return ast.ListComp(elt=ast.Tuple(elts=elt_parts, ctx=ast.Load()),
+                            generators=[
+                                ast.comprehension(
+                                    target=CoreVisitorsMixin._load_name(idx, ast.Store()),
+                                    iter=CoreVisitorsMixin._builtin_call("range", [bound]),
+                                    ifs=[],
+                                    is_async=0)
+                            ])
 
     def _zip_to_list(self, call):
         literals = [self._sequence_literal_elts(s) for s in call.args]
@@ -1618,10 +1618,8 @@ class CoreVisitorsMixin:
                             ctx=ast.Load())
         if call.args and all(isinstance(s, ast.Name) for s in call.args):
             idx = self._index_name_for(call)
-            return self._index_comprehension(
-                idx,
-                [self._subscript(s.id, idx) for s in call.args],
-                self._shortest_len([s.id for s in call.args]))
+            return self._index_comprehension(idx, [self._subscript(s.id, idx) for s in call.args],
+                                             self._shortest_len([s.id for s in call.args]))
         return None
 
     def _enumerate_to_list(self, call):
@@ -1634,7 +1632,8 @@ class CoreVisitorsMixin:
         elts = self._sequence_literal_elts(seq)
         if elts is not None and constant_start:
             return ast.List(elts=[
-                ast.Tuple(elts=[ast.Constant(value=start.value + i), copy.deepcopy(e)],
+                ast.Tuple(elts=[ast.Constant(value=start.value + i),
+                                copy.deepcopy(e)],
                           ctx=ast.Load()) for i, e in enumerate(elts)
             ],
                             ctx=ast.Load())
@@ -1645,11 +1644,8 @@ class CoreVisitorsMixin:
             idx = self._index_name_for(call)
             position = self._load_name(idx) if start.value == 0 else ast.BinOp(
                 left=self._load_name(idx), op=ast.Add(), right=copy.deepcopy(start))
-            return self._index_comprehension(
-                idx,
-                [position,
-                 self._subscript(seq.id, idx)],
-                self._builtin_call("len", [self._load_name(seq.id)]))
+            return self._index_comprehension(idx, [position, self._subscript(seq.id, idx)],
+                                             self._builtin_call("len", [self._load_name(seq.id)]))
         return None
 
     def _maybe_rewrite_list_over_iterator(self, node):
@@ -1660,8 +1656,8 @@ class CoreVisitorsMixin:
         generic call builder and produce a list of the wrong length and
         elements — a false alarm on an assertion CPython holds (#7555).
         """
-        if not (isinstance(node.func, ast.Name) and node.func.id == "list"
-                and len(node.args) == 1 and not node.keywords):
+        if not (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                and not node.keywords):
             return None
         inner = node.args[0]
         if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
