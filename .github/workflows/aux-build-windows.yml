@@ -1,0 +1,87 @@
+on:
+  workflow_call:
+    inputs:
+      operating-system:
+        description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+        required: true
+        type: string
+      build-flags:
+        description: "Flags to be passed to build.sh script"
+        required: true
+        type: string
+      testing:
+        description: "Whether to run tests (regression) for this build"
+        required: true
+        type: boolean
+      canon-names:
+        description: "Upload the build as a canonical esbmc-windows.zip release asset"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    name: Build ESBMC (${{ inputs.operating-system }})
+    runs-on: ${{ inputs.operating-system }}
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: 3.9
+    - name: check python
+      run: python --version
+    - name: Update vcpkg
+      run: |
+        vcpkg.exe update
+        cd C:/vcpkg
+        # MSYS2 prunes old packages from every mirror, so a vcpkg release only
+        # stays usable while the msys2-runtime it names is still published.
+        # 2025.03.19 asked for msys2-runtime-3.5.4-2, which now 404s on all of
+        # them and fails every Windows configure; this release asks for 3.6.5-1.
+        git.exe checkout 2026.07.29
+        .\bootstrap-vcpkg.bat
+    - name: Make git use LF only
+      run: |
+        git config --system core.autocrlf false
+        git config --system core.eol lf
+    - uses: actions/checkout@v6
+    - name: Configure ESBMC
+      run: ./scripts/build.ps1
+    # Default: upload the raw build folder under the fixed name release.yml downloads.
+    - name: Upload build artifact
+      if: ${{ !inputs.canon-names }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: release-windows-latest
+        path: C:/deps/esbmc
+
+    # Release pipeline (canon-names): emit the canonical esbmc-windows.zip asset
+    # with a top-level release/ folder, matching the Linux and macOS archives.
+    - name: Package canonical release asset
+      if: ${{ inputs.canon-names }}
+      run: |
+        Rename-Item -Path C:/deps/esbmc -NewName release
+        Compress-Archive -Path C:/deps/release -DestinationPath esbmc-windows.zip
+      shell: pwsh
+    - name: Upload canonical release asset
+      if: ${{ inputs.canon-names }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: esbmc-windows
+        path: esbmc-windows.zip
+    - name: Run Tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        cd build
+        # Windows PR: only the platform-portable C core (regression/esbmc) and
+        # regression/floats, the floating-point semantics suite. Linux already
+        # exercises the full regression suite on every PR; running it again on
+        # Windows mostly costs runner time. Tests genuinely Windows-specific
+        # (path handling, line endings, Clang frontend) live inside esbmc/.
+        # On push events, run everything.
+        if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          ctest -j4 --output-on-failure --progress -L 'esbmc/|floats/' . -C RelWithDebInfo
+        else
+          ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+        fi
+      shell: bash

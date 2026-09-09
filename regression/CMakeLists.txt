@@ -454,6 +454,30 @@ else()
   endif()
 endif()
 
+# CORE is a budget, not just a verdict: no CORE test may exceed 30 seconds.
+# CORE is what every platform and every reduced configuration runs -- the
+# Windows and macOS legs below, and the CORE_REGRESSION_ONLY builds (coverage,
+# sanitizers) -- so a slow CORE test is paid for on every one of them, and it is
+# the set a contributor waits on before a PR can merge. A test that needs longer
+# belongs in THOROUGH, which runs on Linux only.
+#
+# Measure in the DebugOpt PR build, not in a coverage or sanitizer build. Those
+# instrument every basic block and run at -j4: the same tests measure a median
+# 4.0x slower there (p90 5.5x), so a 30s rule applied to their numbers demotes
+# tests that take 5s in the build that actually gates PRs.
+#
+# To re-check, take a green `Build ESBMC (ubuntu-24.04)` job and read the
+# durations ctest prints:
+#     gh api repos/esbmc/esbmc/actions/jobs/<job-id>/logs \
+#       | grep -oP 'Test\s+#\d+:\s+\S+\s+\.*\s+\S+\s+[\d.]+\s+sec'
+# then cross-reference each name against its test.desc first line; only CORE
+# rows count. 410 tests were moved CORE -> THOROUGH on this basis on 2026-09-09
+# (runs 34333868660 DebugOpt and 34322944627 coverage); nothing then exceeded
+# 30s in either configuration.
+#
+# The slow/very-slow lists further down are a different thing: they widen the
+# per-test *timeout* for tests that legitimately sit near the cap, and say
+# nothing about which mode a test belongs in.
 foreach(regression IN LISTS REGRESSIONS)
     if(WIN32 OR APPLE) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE)

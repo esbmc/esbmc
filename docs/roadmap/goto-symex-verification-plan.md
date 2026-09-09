@@ -134,7 +134,7 @@ The plan therefore splits targets into four honest tiers.
 | **A — ESBMC-verifiable kernels** | Self-contained algorithmic cores lifted out of the template/library layer: SSA counter algebra, guard-merge selection, merge-queue conservation, slicer dependency closure, unwind-bound selection, MPOR dependency relation, frame lifecycle, equation context stack | Standalone reduced C/C++ harnesses driven by `nondet_*()` and `__ESBMC_assume`, verified with the full property flag-set | Once lifted, these are ordinary imperative code. ESBMC excels here and returns a *deterministic witness* on failure. |
 | **B — Property / differential tests on the real classes** | Contracts that need the genuine engine: SSA well-formedness of produced equations, slicer equisatisfiability, renaming round-trip, phi-count laws, value-set merge monotonicity, run-to-run determinism | Catch2 in `unit/goto-symex/`, driving real symex via `unit/testing-utils/goto_factory.h` | The engine cannot be reduced without losing fidelity, but its *observable output* (the equation) is a first-class inspectable object. |
 | **C — Whole-tool metamorphic / differential oracles** | Properties of the composed pipeline: transformation parity, solver parity, unwind monotonicity, POR parity, multi-property parity | Scripted sweeps over the existing `regression/` corpora comparing verdicts under semantically-equivalent flag pairs | These catch *composition* bugs that no unit test sees, at zero modelling cost, over the 1400 `CORE` inputs already in `regression/esbmc`. |
-| **D — Not effectively verifiable here** | `immer` internals, `BigInt`/`fmt` internals, `std::atomic` ordering in irep2, the value-set/pointer-analysis fixpoint (`src/pointer-analysis`), the SMT backends | Sanitizers (existing `.github/workflows/sanitizers.yml`), hand proof, the sibling irep2 plan | Documented, **not** claimed as proven. See §14. |
+| **D — Not effectively verifiable here** | `immer` internals, `BigInt`/`fmt` internals, `std::atomic` ordering in irep2, the value-set/pointer-analysis fixpoint (`src/pointer-analysis`), the SMT backends | Sanitizers (the existing sanitizer job in `.github/workflows/ci-weekly.yml`), hand proof, the sibling irep2 plan | Documented, **not** claimed as proven. See §14. |
 
 ### 2.3 Prioritised component scope
 
@@ -846,7 +846,7 @@ per-oracle baseline of known divergences (each triaged to a filed issue or a
 justified waiver — **an untriaged divergence is a blocker, not a baseline**).
 **Closed, §15 M7.** H-C3 (1269/0), H-C5 (1360/0), H-C6 (0 violations, 44 of 163
 tests exercising the relation), H-B8 (1358/3 → **R19**) and H-C7 (326 compared,
-1 diverged) are run; `.github/workflows/symex-oracles.yml` wires all of them with
+1 diverged) are run; `.github/workflows/aux-symex-oracles.yml` wires all of them with
 per-leg baselines, all of which are now triaged and cited.
 
 **M8 — Previously-reported bugs and regression cases (0.5 wk, continuous).**
@@ -904,7 +904,7 @@ scripts/verification/symex/
     ├── oracle_common.py                      shared: args, run, verdict, baseline
     ├── baselines/<leg>.txt                   triaged divergences, one per leg
     └── drift_check.py                        transcription-drift guard
-.github/workflows/symex-oracles.yml           scheduled Tier-C job
+.github/workflows/aux-symex-oracles.yml       scheduled Tier-C job
 ```
 
 `<area>` ∈ `{ssa, merge, mergequeue, slice, unwind, mpor, frame, eqctx,
@@ -950,9 +950,9 @@ a reviewed re-transcription.
 |---|---|---|
 | Tier A (`regression/esbmc/symex_*`) | every PR, via the existing `ctest -L esbmc` path | each harness < 30 s; the suite's 120 s per-test harness cap is hard |
 | Tier B (`unit/goto-symex`) | every PR, `ctest -LE regression` | < 60 s total |
-| Tier C oracles | **scheduled**, `.github/workflows/symex-oracles.yml` — nightly `37 2 * * *` for C1/C2/C3, weekly `41 3 * * 0` for C4/C5/C6/B8 — plus `workflow_dispatch` | 120 min per leg, mirroring `sanitizers.yml`; `continue-on-error` during bring-up |
+| Tier C oracles | **scheduled**, `.github/workflows/aux-symex-oracles.yml`, called by `ci-nightly.yml` (`37 2 * * *`, C1/C2/C3) and `ci-weekly.yml` (`41 3 * * 0`, every leg) — plus `workflow_dispatch` on either | 120 min per leg, mirroring the sanitizer job; `continue-on-error` during bring-up |
 | Drift check | every PR touching `src/goto-symex/**` | seconds |
-| Sanitizers (Tier D) | existing `sanitizers.yml` (asan/ubsan/tsan) — add an **msan** leg for R10 | existing budget |
+| Sanitizers (Tier D) | the sanitizer job in `ci-weekly.yml` (asan/ubsan/tsan) — add an **msan** leg for R10 | existing budget |
 
 Per repo convention the local regression cap is **5 minutes**; a full-corpus
 Tier-C sweep is a CI-only activity and must never be run inside a PR loop.
@@ -1016,7 +1016,7 @@ for what is claimed; a claim may not outlive its harness.
 | **D5** | Risk assessment (harness-design + code-level) | §9.1 / §9.2 | M0 |
 | **D6** | Tier-A harnesses: 10 kernels × {ok, fail} | `regression/esbmc/symex_*/` | M1–M6 |
 | **D7** | Tier-B suites (8 files) + working `unit/goto-symex` CMake wiring + drift guard | `unit/goto-symex/`, `scripts/verification/symex/drift_check.py` | M0, M4 |
-| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/symex-oracles.yml` | M5, M7 — **delivered except H-C7**, §15 M7 |
+| **D8** | Tier-C oracle scripts + scheduled workflow | `scripts/verification/symex/`, `.github/workflows/aux-symex-oracles.yml` | M5, M7 — **delivered except H-C7**, §15 M7 |
 | **D9** | `SYMEX_INVARIANT` release-checked macro + promoted invariants + cost benchmark | `src/goto-symex/` | M3 |
 | **D10** | Fix PRs for confirmed findings (R2–R5, R7, R10 are tractable; R6/R8/R11 are investigations first) | code PRs, each with Mode-C proof where a branch changes | M1–M6 |
 | **D11** | Verdict log — per-harness result, ESBMC commit, solver versions, date — appended to this document | §15 | continuous |
@@ -2427,7 +2427,7 @@ the other 119 satisfy monotonicity vacuously. The script prints `exercised`
 alongside `violations` for exactly this reason — a monotonicity oracle over
 programs that never fail is a very fast way to prove nothing.
 
-**The scheduled job exists.** `.github/workflows/symex-oracles.yml` wires seven
+**The scheduled job exists.** `.github/workflows/aux-symex-oracles.yml` wires seven
 parity legs plus the unwind ladder, nightly for the cheap ones and weekly for the
 rest, `actionlint`-clean. Two implementation notes worth keeping: the default
 `scripts/build.sh` solver set has **no Z3**, so the solver-parity leg needs `-C`
@@ -2520,7 +2520,7 @@ Validated against a known answer rather than only on the corpus: the oracle flag
 flag its `_last` companion.
 
 **M7 closed.** D8 is delivered: `oracle_flag_parity.py`, `oracle_unwind_monotonic.py`
-and `oracle_claim_parity.py`, all wired in `.github/workflows/symex-oracles.yml`,
+and `oracle_claim_parity.py`, all wired in `.github/workflows/aux-symex-oracles.yml`,
 with every baseline entry citing a finding. Carried forward: the 433 tests over
 the claim cap, which is a real coverage gap rather than a tuning choice — a test
 with 38 claims costs 40 runs — and H-C7's unexercised advantage over the
