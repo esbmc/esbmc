@@ -1,15 +1,14 @@
-/* Cutting a loop removes the interleaving points its body carried, so the
- * reader can no longer observe g == 1 or g == 2. The claim is downstream of
- * the havoc, so it is reported UNKNOWN rather than passing silently -- pinned
- * here because the alternative would be a false proof. Under BMC this is
- * VERIFICATION FAILED.
+/* Synthesis declines outright on a program that creates threads: cutting a loop
+ * deletes the interleaving points its body carried, so the reader can no longer
+ * observe g == 1 or g == 2. Here that would only lose a bug -- the claim stays
+ * violable against the havoc, so the refutation path still reports it. The
+ * decline is for the shape that does not, which
+ * synth_loop_invariant_thread_falseproof pins. This test is the mirror: the
+ * verdict a threaded program keeps, and the mechanism line that says why.
  *
  * __ESBMC_assert, not assert: MSVC spells assert(e) as
  * `(!!(e)) || (_wassert(...), 0)`, whose lowering leaves an `ASSERT 0` guarded
- * by `!e` where glibc and Darwin fold an unguarded `ASSERT e`. #7585's probe
- * asks whether the abstraction still admits the claim holding, and a claim that
- * *is* the constant false answers no on every path, so that spelling would pin
- * the host's <assert.h> rather than the havoc. */
+ * by `!e` where glibc and Darwin fold an unguarded `ASSERT e`. */
 #include <pthread.h>
 
 unsigned int g;

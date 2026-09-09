@@ -231,6 +231,81 @@ expr2tc call_target(const goto_programt::instructiont &i)
   return to_code_function_call2t(i.code).function;
 }
 
+/// Every function whose address `e` takes, restricted to names that are
+/// functions. A thread's start routine is reached no other way.
+void collect_taken_functions(
+  const expr2tc &e,
+  const goto_functionst &goto_functions,
+  std::vector<irep_idt> &out)
+{
+  if (!e)
+    return;
+
+  if (is_address_of2t(e))
+  {
+    const expr2tc &obj = to_address_of2t(e).ptr_obj;
+    if (
+      is_symbol2t(obj) &&
+      goto_functions.function_map.count(to_symbol2t(obj).thename))
+      out.push_back(to_symbol2t(obj).thename);
+  }
+
+  e->foreach_operand([&goto_functions, &out](const expr2tc &sub) {
+    collect_taken_functions(sub, goto_functions, out);
+  });
+}
+
+/// Whether the program can create a thread. pthread_create lowers to the
+/// __ESBMC_spawn_thread intrinsic (src/c2goto/library/pthread_lib.c), which is
+/// also the primitive a body can call directly, so reaching it is the
+/// program's thread-creation point. Reachability and not mere presence:
+/// pthread_lib.c is linked into every program, so a scan of all bodies
+/// declines on programs that never touch pthreads.
+///
+/// Synthesis declines outright on a program that reaches it. Cutting a loop
+/// replaces its N visits with a havoc and one body execution, so a claim in
+/// another thread that is only violable across three or more distinct mid-loop
+/// observations is unreachable in the cut program -- and an unreachable
+/// violation is an UNSAT claim, which the #7491 classifier reports PASSED (it
+/// acts on the refutation side only: bmc.cpp record_satisfiable_claim,
+/// record_violated_properties, report_violation).
+/// regression/esbmc/synth_loop_invariant_thread_falseproof is the reproducer:
+/// VERIFICATION SUCCESSFUL under --no-vacuity-check on a program BMC reports
+/// FAILED.
+bool spawns_threads(const goto_functionst &goto_functions)
+{
+  const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
+
+  std::set<irep_idt> seen;
+  std::vector<irep_idt> work{goto_functions.main_id()};
+  while (!work.empty())
+  {
+    const irep_idt fn = work.back();
+    work.pop_back();
+    if (fn == spawn_intrinsic)
+      return true;
+    if (!seen.insert(fn).second)
+      continue;
+
+    const auto f = goto_functions.function_map.find(fn);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+
+    forall_goto_program_instructions (it, f->second.body)
+    {
+      if (it->is_function_call())
+      {
+        const expr2tc callee = call_target(*it);
+        if (!is_nil_expr(callee) && is_symbol2t(callee))
+          work.push_back(to_symbol2t(callee).thename);
+      }
+      collect_taken_functions(it->code, goto_functions, work);
+      collect_taken_functions(it->guard, goto_functions, work);
+    }
+  }
+  return false;
+}
+
 /// One forward pass: hold each call until a marker is reached, then record the
 /// held calls as that marker's dependencies. A call after the last marker in
 /// the function cannot feed one, so it is dropped.
@@ -476,7 +551,7 @@ static bool summarise_body(
       // get_modified_loop_vars() cannot express -- it names variables and
       // says nothing about heap validity. Cutting a loop over a `free` proved
       // a post-loop use-after-free safe.
-      if (!is_inert_scan_instruction(it))
+      if (!loop_invariant::is_inert_scan_instruction(it))
         return false;
       continue;
     }
@@ -769,6 +844,16 @@ void goto_synthesise_loop_invariants(
 {
   size_t synthesised = 0;
 
+  if (spawns_threads(goto_functions))
+  {
+    log_warning(
+      "--synthesise-loop-invariants: the program creates threads, and cutting "
+      "a loop deletes the interleaving points its body carried. Synthesising "
+      "nothing rather than report a claim only violable through one of them as "
+      "passed");
+    return;
+  }
+
   const invariant_dependenciest deps =
     collect_invariant_dependencies(goto_functions);
   if (deps.protect_all)
@@ -789,6 +874,7 @@ void goto_synthesise_loop_invariants(
       continue;
 
     goto_loopst loops(it->first, goto_functions, it->second);
+
     for (auto &loop : loops.get_loops())
     {
       if (loop.get_modified_loop_vars().empty())
