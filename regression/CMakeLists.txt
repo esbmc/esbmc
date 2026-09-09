@@ -615,11 +615,6 @@ set(_slow_regression_tests
     # the run (see shortest_path_lengths note below; #4927).
     "regression/quixbugs/knapsack"
     "regression/quixbugs/knapsack_fail"
-    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
-    # defaultdict-free list). It does not converge under --unwind 9, so it is
-    # marked FUTURE (BMC scalability); the larger inner timeout lets
-    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
-    "regression/python-intensive/problem1_fail"
     # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
     # supports simple names, not Subscript". With subscript-target unpacking
     # support (#4792) the swap converts and ESBMC reaches the real nested-loop
@@ -769,6 +764,12 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # problem1_fail was FUTURE for scalability (#4932); it converges now, at
+    # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
+    # above is ~70s locally against ~248s with assertions on, and that ratio
+    # puts this past the 2x tier's 240s (#7679). Its VmPeak is ~4.7GiB against
+    # the global 8GiB RLIMIT_AS, which has no per-test override.
+    "regression/python-intensive/problem1_fail"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)
