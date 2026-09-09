@@ -1,0 +1,7 @@
+CORE
+
+--unwind 1 main.py
+^WARNING: broken module-parse-failed: .*codec can't decode
+^\s*PASSED\s+\[global\.assertion\.1\]
+SEED_FILE broken.py # -*- coding: utf-16 -*-
+SEED_FILE main.py import broken; x: int = 5; assert x == 5
