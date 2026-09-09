@@ -31,6 +31,7 @@ goto_symext::goto_symext(
   : options(opts),
     guard_identifier_s("goto_symex::guard"),
     first_loop(0),
+    multiple_loops_seen(false),
     total_claims(0),
     remaining_claims(0),
     simplified_claims(0),
@@ -207,6 +208,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   no_unwinding_assertions = sym.no_unwinding_assertions;
   partial_loops = sym.partial_loops;
   k_induction = sym.k_induction;
+  multiple_loops_seen = sym.multiple_loops_seen;
   base_case = sym.base_case;
   forward_condition = sym.forward_condition;
   inductive_step = sym.inductive_step;

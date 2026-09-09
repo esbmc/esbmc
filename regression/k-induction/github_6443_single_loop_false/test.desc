@@ -1,0 +1,4 @@
+CORE
+main.c
+--inductive-step --unwind 5
+^The inductive step is unable to prove the property$
