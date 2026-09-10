@@ -1,4 +1,5 @@
 CORE
 main.py
---incremental-bmc
+--incremental-bmc --multi-property
 ^VERIFICATION SUCCESSFUL$
+PASSED\s+\[main\.assertion\.2\]\s+line\s+\d+\s+dereference failure: Incorrect alignment when accessing data object
