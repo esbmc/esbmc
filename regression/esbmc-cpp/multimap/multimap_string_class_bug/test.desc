@@ -1,4 +1,6 @@
-KNOWNBUG
+CORE
 main.cpp
 --unwind 3 --no-unwinding-assertions --timeout 900
+^\s*FAILED\s+\[main\.assertion\.2\]\s+line\s+\d+\s+assertion it->second == opposite\("d"\)$
+^\s*FAILED\s+\[main\.assertion\.3\]\s+line\s+\d+\s+assertion mapObject\.size\(\) == 2$
 ^VERIFICATION FAILED$

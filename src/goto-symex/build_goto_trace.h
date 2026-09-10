@@ -1,7 +1,6 @@
 #ifndef CPROVER_GOTO_SYMEX_BUILD_GOTO_TRACE_H
 #define CPROVER_GOTO_SYMEX_BUILD_GOTO_TRACE_H
 
-#include <goto-symex/goto_symex_state.h>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/symex_target_equation.h>
 
