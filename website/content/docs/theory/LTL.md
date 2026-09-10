@@ -220,7 +220,7 @@ Given the program and the generated monitor, ESBMC:
    before each of its `return` instructions (`property_monitors.cpp:97`).
    `ltl2ba_start_monitor` spawns the automaton as a pthread and registers it via
    the `__ESBMC_register_monitor` intrinsic
-   (`src/goto-symex/engine/symex_main.cpp:639`).
+   (`src/goto-symex/engine/symex_main.cpp:640`).
 4. **Explores the automaton symbolically.** The monitor keeps the current
    automaton state in a single nondeterministic-but-constrained integer, with
    each transition guarded by `__ESBMC_assume`. The automaton is never

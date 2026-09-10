@@ -400,8 +400,10 @@ Key directories under `src/`:
   into `engine/` (`goto_symext` and its statement handlers, including
   `engine/builtin_functions/`), `state/` (per-thread state and SSA naming),
   `scheduler/` (thread interleaving and the exploration tree), `equation/` (the
-  SSA formula and its passes), and — everything downstream of a verdict, none of
-  it reachable from `symex_step` — `trace/`, `witness/` and `testgen/`
+  SSA formula and its passes), and `trace/`, `witness/` and `testgen/` for what
+  is built once a verdict exists. Only `testgen/` is unreachable from
+  `symex_step`: `symex_printf` and the witness hooks call into `trace/` and
+  `witness/` from inside symex
 - `solvers/` — SMT solver backends (z3, bitwuzla, boolector, cvc4, cvc5, yices,
   mathsat, smtlib)
 - `langapi/` — Language API abstractions shared across frontends
