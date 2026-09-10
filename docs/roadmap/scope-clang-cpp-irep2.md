@@ -740,6 +740,56 @@ the four directories above supersede them.
 Until the three false proofs are closed, the flag is not merely incomplete; it is
 unsound on inheritance, and no verdict it produces there can be trusted.
 
+### 3.11 The false proofs are two unported arms, and they are C arms
+
+`inheritance/mi_base_subobject_layout_fail` is three lines:
+
+```cpp
+struct A { int a; A() : a(1) {} };
+struct P { virtual ~P() {} int p; P() : p(9) {} };
+struct AP : A, P {};
+int main() { AP ap; A &as = ap; assert(as.a == 9); }
+```
+
+`as.a` is 1, so the assertion is false and the test is a `_fail`. `main`'s goto
+body is **byte-identical** on both paths — both emit
+`as = &ap.@base@tag-A` and `ASSERT as->a == 9` — so the reference bind is not
+where it goes wrong. The symbol table is:
+
+```
+~AP(this == 0 ? 0 : (struct AP *)((signed char *)this - 8))   default
+~AP((struct AP *)this)                                        hop-off
+```
+
+The hop-off drops the base displacement, so `A`'s subobject aliases `P`'s and
+`a` reads 9.
+
+**The two arms that compute it are unported**:
+`clang_c_adjust::adjust_base_to_derived` and `adjust_derived_to_base`
+(`clang_c_adjust_expr.cpp:424,480`) — `grep -c` in
+`clang_c_adjust_irep2.cpp` is **0** for both.
+
+Three things follow:
+
+- **They are C arms, missing from the C pass.** `adjust_base_to_derived` runs
+  from `clang_c_adjust`'s default `else` branch (`clang_c_adjust_expr.cpp:205`),
+  i.e. on every expression the C path adjusts. The C hop-off has the same gap
+  and never shows it, because C has no base classes. §3.2's method — give the
+  C++ pass the inherited C arms and measure — cannot find a hole in the arms it
+  inherits.
+- **This is why the corpus, not the inventory, keeps being right.** §3's mapping
+  compared `clang_cpp_adjust`'s overrides against the IREP2 arms. These two are
+  not overrides; they are base-class arms the IREP2 pass never had, so no
+  comparison of the C++ subclass could have named them.
+- **It plausibly accounts for all three false proofs**, which are all
+  base-subobject layout. Stated as located, not proven: the fix has not been
+  written, and §3.9 is a recent reminder that the obvious cause can be refuted.
+
+Their displacement uses ESBMC's own layout rather than clang's
+(`clang_cpp_convert.cpp:1914`), which `scope-clang-c-irep2.md`'s #3894 note also
+warns about — the port must take the offset from the same oracle the legacy arm
+does, not recompute it.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -885,9 +935,10 @@ spellings (§33) — so W3's carriage problem lands here first.
    not yet ported.
 8. The three remaining false alarms (§3.8), which are three causes: a queue
    reference, a bitset alignment and a vector pointer.
-9. **Close the three false proofs (§3.10)** — base-subobject layout, and the
-   only class of defect that makes a verdict untrustworthy rather than noisy.
-   Then the 122 no-verdict cases.
+9. **Port `adjust_base_to_derived` and `adjust_derived_to_base` (§3.11)** — the
+   two unported C arms behind the base-subobject displacement, and so behind the
+   three false proofs. Take the offset from the legacy oracle, not a fresh
+   computation. Then the 122 no-verdict cases.
 10. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
     `finalize_exception_specification` is *not* on this list: §3.9 refutes it.
 
