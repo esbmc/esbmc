@@ -196,6 +196,67 @@ it wants an enum. That changes the field's type, not the mechanics.
 This is what §2.1's decision costs. It is a smaller change than the phase it
 unblocks, and it is the phase's critical path (§2.2: 199 of 283 sampled tests).
 
+### 2.5 The reference kind is in, and `fields` was the right side of the choice
+
+`pointer_type2t` now carries `pointer_ref_kindt { NONE, LVALUE, RVALUE }`,
+following §2.4's precedent: a third constructor parameter, defaulted, so all 41
+construction sites are untouched; `migrate_type` reads `#rvalue_reference` then
+`#reference`, and `migrate_type_back` sets them again.
+
+An enum rather than `carry_provenance`'s bool, because a pointer has three
+possible spellings, not two.
+
+**The one real decision was whether it belongs in the `fields` tuple**, and it
+was settled by measurement rather than by argument.
+
+| | in `fields` | excluded via `excluded_field_bytes` |
+|---|---|---|
+| value identity | a reference-derived pointer stops comparing equal to a plain one | preserved exactly |
+| risk | whatever consults type equality — `base_type_eq`, value-set, dereference, SMT sort caching | rebuilds silently drop the field, and no A/B can see it because it takes no part in `operator==` |
+| precedent | `carry_provenance` (§2.4) | `sideeffect2t::location` (§136) |
+
+The excluded-field route looks safer and is not: PRs #7266 and #7285 were both
+bugs of exactly that shape, and the second cost a corpus-wide wrong answer
+before anyone noticed, because the defeated guard was `if (value != before)`.
+
+So the question is whether the equality change actually costs anything. It does
+not:
+
+| suite | result |
+|---|---|
+| unit | 854 / 854 |
+| C (`-L esbmc`, stride 8) | 804, 0 failures |
+| python (stride 12) | 435, 0 failures |
+| C++ (stride 3) | 339, 2 failures, both pre-existing on master |
+
+A default-path goto A/B was **not** run and is not quoted: master moved to
+`698c6fe353` (`[interval] … dump line breaks`, #7666) after the control binary
+for the earlier ticks was built, and a commit that changes dump line breaks is
+exactly what such an A/B cannot tolerate. Rebuilding a control costs ~50 minutes
+at current machine load. The suites are the oracle here; say so rather than
+quote a stale comparison.
+
+**It is not consumer-free, and calling it that was wrong.** Restoring the
+attributes fixes a *lossy* round trip: `symbolt::get_type()` derives the legacy
+type through `migrate_type_back`, and `goto_convert.cpp:788` reads the predicate
+to decide whether a temporary's destructor fires at end-of-full-expression or is
+deferred to block scope ([class.temporary]/6). Measured against an independent
+older build, nothing observable moves today — counterexamples and `--show-vcc`
+are identical across lvalue-ref, rvalue-ref, base-ref and `const int &` programs
+— so the fix is real and currently latent. Both halves belong in the record.
+
+Two things the gates caught that are worth carrying forward:
+
+- **`fields_cover_class` does not protect this field.** Dropping `ref_kind` from
+  the tuple leaves a 7-byte shortfall against an 8-byte alignment tolerance, so
+  it compiles silently. The two `REQUIRE_FALSE` equality assertions in
+  `unit/util/migrate.test.cpp` are the only thing pinning that it participates in
+  `cmp`/`crc`/`hash`.
+- **`rebuild_with_type<address_of2t>` re-defaults it**, as it already does
+  `carry_provenance`, because the constructor takes the pointee and builds the
+  pointer itself. The item 1 arms must build the pointer type directly rather
+  than route an address-of through `with_type`. PR **#7703**.
+
 ## 3. The design question Phase 6 leaves open: the pass is not extensible
 
 The legacy frontends are one class specialising another:
@@ -275,10 +336,10 @@ spellings (§33) — so W3's carriage problem lands here first.
 
 ## 6. Next
 
-1. Add the reference kind to `pointer_type2t` (§2.1), following
-   `carry_provenance` (§2.4): a field in the `fields` tuple, carried both ways
-   by `migrate`. Nothing in item 1 can be written until it exists, and 70 % of
-   the corpus needs item 1.
+1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
+   Item 1 is now writable, and it is the next slice: 70 % of the corpus needs
+   it, and unlike §2.3's arms it will move verdicts, so it owes a
+   `SUCCESSFUL`/`FAILED` pair.
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
 3. Price option B in §3 against option A.
 4. Add the C++ hop-off flag, then run the census by verdict.
