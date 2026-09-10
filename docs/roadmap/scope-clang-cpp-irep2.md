@@ -790,6 +790,51 @@ Their displacement uses ESBMC's own layout rather than clang's
 warns about — the port must take the offset from the same oracle the legacy arm
 does, not recompute it.
 
+### 3.12 The soundness fix is blocked on carriage, and the precedent is §2.5
+
+Porting §3.11's two arms is not a port. Both are **marker-driven**:
+
+| arm | fires on | set by |
+|---|---|---|
+| `adjust_derived_to_base` | `#derived_to_base` (`clang_c_adjust_expr.cpp:92`) | the converter, for a conversion it could not route through a `@base@` component |
+| `adjust_base_to_derived` | `#base_to_derived` (`:482`) | the converter, for the downcast |
+
+Both markers are irept **attributes**, and:
+
+- `grep -c` for either in `migrate.cpp` is **0** — nothing carries them across
+  the seam;
+- `typecast2t` has two fields, `from` and `rounding_mode`. There is nowhere to
+  put one.
+
+So an IREP2 pass cannot see that a cast needs displacement. It is not that the
+arm is unwritten; the information it dispatches on does not survive migration.
+
+**The displacement cannot simply be applied earlier.** The converter's own
+comment says why: *"the displacement is only computable once the layout is
+padded, which is here"* (`clang_c_adjust_expr.cpp:90`, #7025). Computing it in
+`clang_cpp_convertert` is the option the legacy design already rejected.
+
+**This is a W3 instance that blocks a soundness fix**, which is a different
+weight class from the two this scope has recorded so far — §137's was a printer
+difference and §3.4's changes one exception id. Here the missing carriage is why
+three `_fail` tests are silently proved.
+
+**The fix has a precedent in this same document.** §2.4 and §2.5 added
+`pointer_ref_kindt` to `pointer_type2t`: a defaulted field, in the `fields`
+tuple, carried both ways by `migrate`, pinned by a round-trip unit test and
+costing no construction site. A base-conversion marker on `typecast2t` is the
+same shape — most of `pointer_ref_kindt`'s cost was discovering the pattern, and
+that is now paid. Two cautions from doing it once:
+
+- `fields_cover_class` will **not** catch the field being dropped from the tuple
+  if the shortfall sits under the alignment tolerance (§2.5). Pin equality
+  explicitly.
+- Whatever rebuilds a `typecast2t` must forward it, as
+  `rebuild_with_type<address_of2t>` had to (§2.6).
+
+Sequencing: the field first, on its own, with the round-trip test — then the two
+arms become an ordinary port against a marker they can read.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -935,10 +980,12 @@ spellings (§33) — so W3's carriage problem lands here first.
    not yet ported.
 8. The three remaining false alarms (§3.8), which are three causes: a queue
    reference, a bitset alignment and a vector pointer.
-9. **Port `adjust_base_to_derived` and `adjust_derived_to_base` (§3.11)** — the
-   two unported C arms behind the base-subobject displacement, and so behind the
-   three false proofs. Take the offset from the legacy oracle, not a fresh
-   computation. Then the 122 no-verdict cases.
+9. **Carry the base-conversion markers on `typecast2t` (§3.12)** — a defaulted
+   field in the `fields` tuple, following `pointer_ref_kindt`. Without it §3.11's
+   arms have nothing to dispatch on.
+10. Then port `adjust_base_to_derived` and `adjust_derived_to_base` (§3.11),
+    taking the offset from `base_displacement`, not a fresh computation.
+11. Then the 122 no-verdict cases.
 10. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
     `finalize_exception_specification` is *not* on this list: §3.9 refutes it.
 
