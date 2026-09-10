@@ -508,12 +508,14 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Return a pointer to a generic no-argument code type (function pointer),
   // built IREP2-internal and lowered at the seam (Phase 4.3, Part IV §5). Empty
   // argument/name vectors satisfy code_type2t's args.size()==argument_names
-  // .size() invariant (irep2_type.h).
+  // .size() invariant (irep2_type.h). An unsubscripted `Callable` is
+  // `Callable[..., Any]` (PEP 484), so the return type is Any, not void: a
+  // void return makes the call through it drop the callee's value (#7672).
   if (ast_type == "Callable")
   {
     const type2tc code_t = code_type2tc(
       std::vector<type2tc>{},
-      get_empty_type(),
+      pointer_type2tc(get_empty_type()),
       std::vector<irep_idt>{},
       /*ellipsis=*/false);
     return lower_to_seam(pointer_type2tc(code_t));

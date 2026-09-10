@@ -1152,9 +1152,8 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     // A spelled `Callable[[A], R]` keeps its signature, so a call through the
     // variable recovers R. A bare one -- what the annotation pass infers for a
     // variable bound to a function value -- resolves to a pointer whose code
-    // type returns void, leaving that call nondet: worse than no annotation at
-    // all, since an unannotated binding takes the callee's own return type. So
-    // defer to the RHS instead (#6640).
+    // type returns Any, so deferring to the RHS keeps the callee's own return
+    // type instead (#6640).
     if (var_type_str == "Callable")
       return {
         var_type_str,
