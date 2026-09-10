@@ -1,4 +1,5 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_adjust_guards.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
@@ -81,67 +82,13 @@ void clang_c_adjust_irep2::pad_type_symbol(symbolt &symbol)
   symbol.set_type(std::move(t));
 }
 
-/// The operators C admits over a complex operand: `mod` and the bitwise ones
-/// are not among them, and `clang_c_adjust` aborts rather than lowering those.
-static bool is_binary_arith(const expr2tc &expr)
-{
-  return is_add2t(expr) || is_sub2t(expr) || is_mul2t(expr) || is_div2t(expr);
-}
 
-/// `-z` and GNU `~z` (conjugation) are the only unary operators clang leaves
-/// carrying a complex type.
-static bool is_complex_unary(const expr2tc &expr)
-{
-  return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
-}
 
-/// The operators clang_c_adjust routes through adjust_expr_binary_arithmetic.
-static bool is_arith_or_bitwise(const expr2tc &expr)
-{
-  return is_binary_arith(expr) || is_modulus2t(expr) || is_bitand2t(expr) ||
-         is_bitor2t(expr) || is_bitxor2t(expr);
-}
 
-/// The shifts clang_c_adjust routes through adjust_expr_shifts. They are not
-/// in is_arith_or_bitwise: C11 6.5.7p3 promotes each operand on its own and
-/// takes the result type from the left, where the usual arithmetic conversions
-/// would bring the two to a common type.
-static bool is_shift(const expr2tc &expr)
-{
-  return is_shl2t(expr) || is_ashr2t(expr) || is_lshr2t(expr);
-}
 
-/// The statements whose controlling expression clang_c_adjust converts to bool
-/// (adjust_ifthenelse, adjust_while, adjust_for). `switch` is not among them:
-/// its selector is an integer.
-static bool is_statement_with_condition(const expr2tc &expr)
-{
-  return is_code_ifthenelse2t(expr) || is_code_while2t(expr) ||
-         is_code_dowhile2t(expr) || is_code_for2t(expr);
-}
 
-/// The comparisons clang_c_adjust routes through adjust_expr_rel. IREP2 already
-/// types these bool, so only the operand half of that arm ports.
-static bool is_relational(const expr2tc &expr)
-{
-  return is_equality2t(expr) || is_notequal2t(expr) || is_lessthan2t(expr) ||
-         is_lessthanequal2t(expr) || is_greaterthan2t(expr) ||
-         is_greaterthanequal2t(expr);
-}
 
-/// The short-circuit operators, whose operands goto_convert's lowering rejects
-/// unless they are boolean.
-static bool is_short_circuit(const expr2tc &expr)
-{
-  return is_and2t(expr) || is_or2t(expr) || is_not2t(expr);
-}
 
-/// Both spellings of a call: a bare `f(x);` statement is a sideeffect2t of kind
-/// function_call rather than a code_function_call2t.
-static bool is_call_site(const expr2tc &expr)
-{
-  return is_code_function_call2t(expr) || is_sideeffect2t(expr);
-}
 
 namespace
 {
@@ -211,16 +158,6 @@ std::optional<const_call_view> as_call(const expr2tc &expr)
 }
 } // namespace
 
-/// The unary operators promote_unary_bool_operand claims: the complement of
-/// is_complex_unary within the family. The chain spelled this exclusion as the
-/// `else` of is_complex_unary, which is a strict subset of the same family;
-/// stating it as a predicate holds in both the rewriting and the declining case
-/// for the same reason, rather than relying on the first arm having mutated the
-/// node out of the second's reach.
-static bool is_promotable_unary(const expr2tc &expr)
-{
-  return (is_neg2t(expr) || is_bitnot2t(expr)) && !is_complex_type(expr->type);
-}
 
 /// The source location of `expr` when it is a statement that can hold a call
 /// in a sub-expression, empty otherwise. sideeffect2t carries none of its own,
@@ -314,7 +251,9 @@ void clang_c_adjust_irep2::adjust_comma_type(expr2tc &expr)
 
 /// Name and member from one token, so the string the ordering test matches on
 /// and the member it names cannot drift apart.
-#define ARM(member) #member, &clang_c_adjust_irep2::member
+#define ARM(member)                                                            \
+#  member,                                                                     \
+    +[](clang_c_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
 
 /// The arms that run when this pass is the sole adjuster, in application order.
 ///
@@ -371,9 +310,7 @@ std::vector<clang_c_adjust_irep2::arm_info> clang_c_adjust_irep2::arm_order()
 
 void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
-  for (const arm &a : arms)
-    if (!a.when || a.when(expr))
-      (this->*a.run)(expr);
+  run_adjust_arms(*this, arms, expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:

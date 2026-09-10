@@ -9,6 +9,7 @@ CC_DIAGNOSTIC_POP()
 #include <c2goto/cprover_library.h>
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
 #include <util/lang/cpp_expr2string.h>
@@ -161,9 +162,23 @@ bool clang_cpp_languaget::typecheck(
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(new_context);
-  if (adjuster.adjust())
-    return true;
+  // Phase 7 hop-off, mirroring clang_c_language's: the IREP2 pass *replaces*
+  // the legacy one so the divergence count under the flag measures how much of
+  // it has moved. Its table lists only inherited C arms so far, so the
+  // divergences are the list of C++ arms still to write
+  // (docs/roadmap/scope-clang-cpp-irep2.md §3.1).
+  if (config.options.get_bool_option("clang-cpp-irep2-adjust-only"))
+  {
+    clang_cpp_adjust_irep2 irep2_adjuster(new_context, true, false);
+    if (irep2_adjuster.adjust())
+      return true;
+  }
+  else
+  {
+    clang_cpp_adjust adjuster(new_context);
+    if (adjuster.adjust())
+      return true;
+  }
 
   return c_link(context, new_context, module);
 }

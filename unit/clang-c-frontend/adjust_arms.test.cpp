@@ -11,6 +11,7 @@
 #include <catch2/catch.hpp>
 
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/config/config.h>
@@ -19,6 +20,7 @@
 
 #include <algorithm>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace
@@ -327,4 +329,67 @@ int main(int argc, char *argv[])
   // would race its constructor (unit/util/c_typecast.test.cpp does the same).
   config.ansi_c.set_data_model(configt::LP64);
   return Catch::Session().run(argc, argv);
+}
+
+// A second frontend has to be able to order the arms it inherits alongside its
+// own in one table. That rests on three language properties, and the table is
+// the only place they are relied on, so pin them here rather than in a comment
+// (docs/roadmap/scope-clang-cpp-irep2.md §3.1).
+namespace
+{
+struct base_pass
+{
+  int seen = 0;
+  void inherited(expr2tc &)
+  {
+    seen |= 1;
+  }
+};
+
+struct derived_pass : base_pass
+{
+  void own(expr2tc &)
+  {
+    seen |= 2;
+  }
+};
+
+// Constant-initialised: a dynamic initialiser here would cost start-up work on
+// every run, which is why the real table is declared the way it is.
+constexpr adjust_arm<derived_pass> mixed_table[] = {
+  {"inherited", +[](derived_pass &s, expr2tc &e) { s.inherited(e); }, nullptr},
+  {"own", +[](derived_pass &s, expr2tc &e) { s.own(e); }, nullptr},
+};
+} // namespace
+
+TEST_CASE(
+  "a derived pass's table holds inherited and own arms",
+  "[core][clang-c-frontend]")
+{
+  derived_pass pass;
+  expr2tc node = gen_zero(get_int_type(32));
+  run_adjust_arms(pass, mixed_table, node);
+
+  // Both arms ran, through one table typed on the derived pass.
+  REQUIRE(pass.seen == 3);
+}
+
+// The C++ pass substitutes its own table, so the two can drift. Until C++ adds
+// arms of its own, its table is the C order verbatim, and that is worth
+// pinning: a row added to one and not the other is exactly the divergence Phase
+// 7 is measuring, and it should be a decision rather than an accident.
+TEST_CASE(
+  "the C++ pass's arm table tracks the C order",
+  "[core][clang-c-frontend]")
+{
+  const std::vector<arm_info> c = clang_c_adjust_irep2::arm_order();
+  const std::vector<arm_info> cpp = clang_cpp_adjust_irep2::arm_order();
+
+  REQUIRE(cpp.size() == c.size());
+  for (std::size_t i = 0; i < c.size(); i++)
+  {
+    INFO("row " << i);
+    REQUIRE(std::string(cpp[i].name) == std::string(c[i].name));
+    REQUIRE(cpp[i].when == c[i].when);
+  }
 }
