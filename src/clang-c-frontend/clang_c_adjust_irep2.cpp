@@ -1108,6 +1108,12 @@ void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
       to_array_type(op_type).subtype,
       pointer,
       gen_zero(migrate_type(index_type())));
+  else if (is_pointer_type(op_type))
+    // The C++ converter leaves `*this` typed empty for the adjust pass to
+    // fill in. Kept empty, every member offset resolved below it is taken
+    // against the wrong struct and the base subobject reads the derived
+    // object's leading storage.
+    expr = dereference2tc(to_pointer_type(op_type).subtype, pointer);
 
   if (!is_code_type(expr->type))
     return;
