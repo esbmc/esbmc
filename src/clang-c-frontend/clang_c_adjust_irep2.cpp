@@ -49,6 +49,8 @@ bool clang_c_adjust_irep2::adjust()
 
     if (!s->is_type && s->get_value().is_not_nil())
     {
+      gen_symbol_code(*s);
+
       const expr2tc before = s->get_value2();
       expr2tc value = before;
       adjust_expr(value);

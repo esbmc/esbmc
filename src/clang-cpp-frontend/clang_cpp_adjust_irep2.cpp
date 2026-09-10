@@ -1,4 +1,5 @@
 #include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
 #include <clang-cpp-frontend/clang_cpp_exception_id.h>
 
 /// The guards live on the C pass's translation unit as file-local statics, so
@@ -132,4 +133,12 @@ void clang_cpp_adjust_irep2::adjust_cpp_throw(expr2tc &expr)
   convert_exception_id(ns, migrate_type_back(th.operand->type), "", ids);
 
   expr = code_cpp_throw2tc(th.operand, ids, th.location);
+}
+
+void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)
+{
+  // The legacy pass generates these *after* adjusting the body; here they are
+  // generated before, so the assignments go through the arms like any other
+  // statement rather than being migrated back out and in again.
+  gen_vptr_initializations(context, symbol);
 }

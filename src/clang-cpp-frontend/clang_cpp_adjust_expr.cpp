@@ -1,5 +1,6 @@
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
 #include <clang-cpp-frontend/clang_cpp_exception_id.h>
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_types.h>
@@ -84,7 +85,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    * add implicit code to set each virtual pointer of this
    * class to point to the corresponding virtual table.
    */
-  gen_vptr_initializations(symbol);
+  gen_vptr_initializations(context, symbol);
   gen_implicit_union_copy_move_constructor(symbol);
 }
 

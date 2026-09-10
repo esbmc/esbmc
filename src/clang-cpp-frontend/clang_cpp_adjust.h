@@ -92,7 +92,6 @@ public:
   /**
    * methods for implicit GOTO code generation
    */
-  void gen_vptr_initializations(symbolt &symbol);
   /*
    * generate vptr initialization code for constructor:
    *  this->BLAH@vtable_ptr = $vtable::BLAH
@@ -103,13 +102,6 @@ public:
    *  - ctor_type: type of the constructor symbol
    *  - new_code: the code expression for vptr initialization
    */
-  void gen_vptr_init_code(
-    const struct_union_typet::componentt &comp,
-    side_effect_exprt &new_code,
-    const code_typet &ctor_type);
-  exprt gen_vptr_init_lhs(
-    const struct_union_typet::componentt &comp,
-    const code_typet &ctor_type);
   exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
     const code_typet &ctor_type);

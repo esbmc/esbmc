@@ -24,6 +24,8 @@ public:
   static std::vector<arm_info> arm_order();
 
 protected:
+  void gen_symbol_code(symbolt &symbol) override;
+
   void adjust_sole_arms(expr2tc &expr) override;
 
   /// IREP2 form of clang_cpp_adjust::adjust_cpp_member. `OBJECT.setX()` reaches
