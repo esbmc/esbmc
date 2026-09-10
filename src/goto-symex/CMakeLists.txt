@@ -1,6 +1,13 @@
-add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp engine/symex_assign.cpp
-  engine/symex_main.cpp  engine/symex_stack.cpp trace/goto_trace.cpp trace/build_goto_trace.cpp
-  engine/symex_function.cpp state/goto_symex_state.cpp engine/symex_dereference.cpp engine/symex_goto.cpp
+add_library(symex
+  engine/symex_main.cpp
+  engine/symex_assign.cpp
+  engine/symex_goto.cpp
+  engine/symex_function.cpp
+  engine/symex_other.cpp
+  engine/symex_dereference.cpp
+  engine/symex_stack.cpp
+  engine/symex_valid_object.cpp
+  engine/dynamic_allocation.cpp
   engine/builtin_functions/memory_alloc.cpp
   engine/builtin_functions/io.cpp
   engine/builtin_functions/cpp_memory.cpp
@@ -12,12 +19,35 @@ add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp e
   engine/builtin_functions/python_builtins.cpp
   engine/builtin_functions/misc.cpp
   engine/builtin_functions/witness.cpp
-  equation/slice.cpp engine/symex_other.cpp equation/symex_symmetry.cpp trace/xml_goto_trace.cpp
-  engine/symex_valid_object.cpp engine/dynamic_allocation.cpp state/renaming.cpp
-  scheduler/execution_state.cpp scheduler/reachability_tree.cpp scheduler/reachability_tree_cin.cpp
-  symex_invariant.cpp
-  witness/witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp trace/printf_formatter.cpp equation/features.cpp trace/html.cpp trace/json.cpp
-  trace/sarif.cpp)
+
+  state/goto_symex_state.cpp
+  state/renaming.cpp
+
+  scheduler/execution_state.cpp
+  scheduler/reachability_tree.cpp
+  scheduler/reachability_tree_cin.cpp
+
+  equation/symex_target.cpp
+  equation/symex_target_equation.cpp
+  equation/slice.cpp
+  equation/symex_symmetry.cpp
+  equation/features.cpp
+
+  trace/goto_trace.cpp
+  trace/build_goto_trace.cpp
+  trace/printf_formatter.cpp
+  trace/xml_goto_trace.cpp
+  trace/html.cpp
+  trace/json.cpp
+  trace/sarif.cpp
+
+  witness/witnesses.cpp
+
+  testgen/pytest.cpp
+  testgen/ctest.cpp
+
+  symex_invariant.cpp)
+
 target_include_directories(symex
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${Boost_INCLUDE_DIRS}
