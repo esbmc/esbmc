@@ -314,7 +314,9 @@ void clang_c_adjust_irep2::adjust_comma_type(expr2tc &expr)
 
 /// Name and member from one token, so the string the ordering test matches on
 /// and the member it names cannot drift apart.
-#define ARM(member) #member, &clang_c_adjust_irep2::member
+#define ARM(member)                                                            \
+#  member,                                                                     \
+    +[](clang_c_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
 
 /// The arms that run when this pass is the sole adjuster, in application order.
 ///
@@ -371,9 +373,7 @@ std::vector<clang_c_adjust_irep2::arm_info> clang_c_adjust_irep2::arm_order()
 
 void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
-  for (const arm &a : arms)
-    if (!a.when || a.when(expr))
-      (this->*a.run)(expr);
+  run_adjust_arms(*this, arms, expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:
