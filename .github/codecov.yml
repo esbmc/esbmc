@@ -3,9 +3,7 @@ coverage:
   round: down
   range: "50...80"
 
-# Codecov-side exclusions. The coverage jobs (pull_request.yml, push.yml) strip
-# only '/usr/*' and '*/build/*' via lcov --remove, so everything else is
-# filtered here rather than in the uploaded report.
+# Codecov-side exclusions. 
 ignore:
   - "src/ansi-c/cpp/**"
   - "src/clang-c-frontend/headers/**"

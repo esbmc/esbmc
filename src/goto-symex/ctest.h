@@ -6,7 +6,6 @@
 #include <string>
 #include <vector>
 #include <mutex>
-#include "witnesses.h"
 
 class smt_convt;
 

@@ -6,10 +6,10 @@
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/goto_trace.h>
-#include <goto-symex/pytest.h>
-#include <goto-symex/ctest.h>
+#include <goto-symex/symex_target_equation.h>
 #include <string>
 #include <regex>
+#include <vector>
 #include <big-int/bigint.hh>
 #include <yaml-cpp/yaml.h>
 
@@ -288,7 +288,6 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 bool find_nondet_in_expr(const expr2tc &expr);
 
 /// This generates test-cases as described in: https://gitlab.com/sosy-lab/test-comp/test-format/-/tree/main/
-#include <goto-symex/symex_target_equation.h>
 void generate_testcase_metadata();
 void generate_testcase(
   const std::string &file_name,
