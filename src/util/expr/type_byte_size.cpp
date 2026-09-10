@@ -694,3 +694,59 @@ BigInt alignment(const typet &type, const namespacet &ns)
 
   return result;
 }
+
+/* Whether a type opts out of alignment entirely: `packed` and `#pragma
+ * pack(n)` both leave members at offsets their own types do not require, and
+ * the dereference check honours that (dereferencet::is_aligned_member). The
+ * recursion mirrors alignment()'s: ns.follow() resolves symbol types only, so
+ * an array of packed structs has to be reached through its subtype. */
+static bool declines_alignment(const typet &type, const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+
+  if (t.is_array())
+    return declines_alignment(t.subtype(), ns);
+
+  return t.get_bool("packed") || !t.get_string("max_field_alignment").empty();
+}
+
+/* The largest power-of-two alignment an access to an object of this size can
+ * demand, capped at the ABI's fundamental alignment. A symbolic size (VLA,
+ * dynamic object) admits any access the type allows, so assume the cap. */
+static BigInt base_alignment_bump(const expr2tc &size)
+{
+  const BigInt cap(config.ansi_c.max_alignment());
+
+  if (!is_constant_int2t(size))
+    return cap;
+
+  const BigInt &bytes = to_constant_int2t(size).value;
+  BigInt a = 1;
+  while (a * 2 <= bytes && a < cap)
+    a *= 2;
+  return a;
+}
+
+bool is_power_of_two(const BigInt &v)
+{
+  if (v <= 0)
+    return false;
+
+  BigInt p = 1;
+  while (p < v)
+    p *= 2;
+  return p == v;
+}
+
+BigInt object_base_alignment(
+  const typet &type,
+  const expr2tc &size,
+  const namespacet &ns)
+{
+  const BigInt a = alignment(type, ns);
+
+  if (declines_alignment(type, ns))
+    return a;
+
+  return std::max(a, base_alignment_bump(size));
+}
