@@ -5,6 +5,14 @@
 /// second definition of a one-line predicate is cheaper than exporting them.
 #include <clang-c-frontend/clang_c_adjust_guards.h>
 
+/// A member whose type is code: a method named through `.` or `->`. A data
+/// member is left alone, and so is a member with no component name.
+static bool is_cpp_member_call(const expr2tc &expr)
+{
+  return is_member2t(expr) && is_code_type(expr->type) &&
+         !to_member2t(expr).member.empty();
+}
+
 #define ARM(member)                                                            \
 #  member,                                                                     \
     +[](clang_cpp_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
@@ -12,6 +20,7 @@
 /// Inherited arms only, in the C pass's order. What C++ adds goes here as the
 /// divergence census names it (scope-clang-cpp-irep2.md §3.1).
 const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
+  {ARM(adjust_cpp_member), is_cpp_member_call},
   {ARM(adjust_function_designators), nullptr},
   {ARM(adjust_boolean_operands), is_short_circuit},
   {ARM(adjust_call_callee), is_call_site},
@@ -53,4 +62,25 @@ clang_cpp_adjust_irep2::arm_order()
 void clang_cpp_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
   run_adjust_arms(*this, arms, expr);
+}
+
+void clang_cpp_adjust_irep2::adjust_cpp_member(expr2tc &expr)
+{
+  const member2t &m = to_member2t(expr);
+  const symbolt *comp = ns.lookup(m.member);
+  if (!comp)
+  {
+    // The legacy arm aborts here. Declining instead would hand goto_convert a
+    // member callee it rejects, so the diagnostic is worth more than the
+    // fall-through -- but it names the member, which the legacy message does.
+    log_error(
+      "adjust_cpp_member: unresolved C++ member component `{}` (source type "
+      "id `{}`)",
+      m.member,
+      get_type_id(m.source_value->type));
+    abort();
+  }
+
+  assert(comp->get_type().is_code());
+  expr = symbol2tc(migrate_type(comp->get_type()), comp->id);
 }
