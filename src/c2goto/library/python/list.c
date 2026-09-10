@@ -394,7 +394,14 @@ bool __ESBMC_list_eq(
         continue;
       }
 
-      if (!__ESBMC_values_equal(a->value, b->value, a->size))
+      // Same static width as the primitive path below. A read of a->size is
+      // symbolic under a loop-carried index, which leaves memcmp's byte loop
+      // to unwind unboundedly even when this branch is only explored and never
+      // taken (#7691). elem_size is non-zero only when the frontend recorded
+      // one fixed width for every element of both lists, and the sizes were
+      // compared equal above, so the two lengths denote the same value.
+      if (!__ESBMC_values_equal(
+            a->value, b->value, (elem_size != 0) ? elem_size : a->size))
         return false;
       continue;
     }
