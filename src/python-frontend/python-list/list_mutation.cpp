@@ -512,8 +512,9 @@ void python_list::emit_list_copy(
   // Shallow per-element append: preserves element value pointers so nested
   // lists are shared (Python shallow-copy semantics) rather than corrupted by
   // a pointee byte-copy (esbmc/esbmc#5102).
-  const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
+  const shallow_push_call shallow_push =
+    select_shallow_push(src, from_integer(BigInt(0), size_type()));
+  const symbolt *push_obj_sym = shallow_push.func;
   assert(size_sym && at_sym && push_obj_sym);
 
   // list_size / list_at take `const List*`
@@ -580,7 +581,7 @@ void python_list::emit_list_copy(
     {build_symbol(dst),
      build_symbol(tmp_obj),
      list_type_id_arg,
-     from_integer(BigInt(0), size_type())});
+     shallow_push.last_arg});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -1024,6 +1025,32 @@ BigInt python_list::uniform_elem_size(const std::string &list_id) const
     seen = true;
   }
   return width;
+}
+
+bool python_list::has_tagged_elements(const exprt &list) const
+{
+  if (!list.is_symbol())
+    return false;
+  const element_type_registry::entries *entries =
+    elem_types().find(list.identifier().as_string());
+  if (!entries)
+    return false;
+  const type_handler &th = converter_.get_type_handler();
+  for (const auto &entry : *entries)
+    if (th.is_tagged_scalar_type(entry.second))
+      return true;
+  return false;
+}
+
+python_list::shallow_push_call python_list::select_shallow_push(
+  const exprt &src,
+  const exprt &untagged_last_arg) const
+{
+  const bool tagged = has_tagged_elements(src);
+  const symbolt *func = converter_.symbol_table().find_symbol(
+    tagged ? "c:@F@__ESBMC_list_push_shallow_tagged"
+           : "c:@F@__ESBMC_list_push_shallow");
+  return {func, tagged ? tagged_float_type_id(true) : untagged_last_arg};
 }
 
 BigInt python_list::uniform_elem_size(const exprt &list) const

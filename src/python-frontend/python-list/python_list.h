@@ -574,6 +574,23 @@ public:
    */
   BigInt uniform_elem_size(const exprt &list) const;
 
+  // True when the list's recorded element types include a tagged scalar, whose
+  // payload width is per-element and symbolic (#7716).
+  bool has_tagged_elements(const exprt &list) const;
+
+  struct shallow_push_call
+  {
+    const symbolt *func;
+    exprt last_arg;
+  };
+
+  /** Shallow-push entry point for a copy of `src`. A list of tagged scalars
+   *  needs the bounded-copy variant, which reads its trailing argument as a
+   *  float_type_id rather than as an element width (#7716).
+   */
+  shallow_push_call
+  select_shallow_push(const exprt &src, const exprt &untagged_last_arg) const;
+
   /**
    * @brief Unpack a list variable into multiple targets, supporting starred
    * expressions.

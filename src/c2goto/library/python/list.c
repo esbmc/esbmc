@@ -329,6 +329,28 @@ static bool __ESBMC_list_push_shallow_sz(
   return __ESBMC_list_push_object(l, o, float_type_id, 0);
 }
 
+// Shallow append for a list of tagged scalars. Their payload width is
+// per-element and symbolic after a branch join, and item->value points at the
+// payload rather than at the PyObject wrapper, so neither the wrapper's static
+// width nor an o->size memcpy is usable here (#7716). Reuses the bounded copy.
+bool __ESBMC_list_push_shallow_tagged(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  return __ESBMC_list_push_tagged(
+    l, o->value, o->type_id, o->size, float_type_id);
+}
+
 // elem_size is threaded straight to the size-aware core above: the slice
 // lowering knows the source list's element width, and passing it keeps the
 // per-element copy off memcpy's byte loop. 0 keeps the previous behaviour.

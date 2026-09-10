@@ -2817,8 +2817,13 @@ exprt python_list::handle_range_slice(
 
   // Shallow append: preserve element value pointers so nested lists survive the
   // slice copy uncorrupted (esbmc/esbmc#5102).
-  const symbolt *push_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
+  // The source list's element width, when every element shares one. Without it
+  // the per-element copy length is the symbolic o->size and each copy unwinds
+  // memcpy's byte loop to --unwind, which is what made slicing the most
+  // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
+  const shallow_push_call shallow_push = select_shallow_push(
+    array, from_integer(uniform_elem_size(array), size_type()));
+  const symbolt *push_func = shallow_push.func;
   if (!push_func)
     throw std::runtime_error("Push function symbol not found");
 
@@ -2829,19 +2834,13 @@ exprt python_list::handle_range_slice(
     std::hash<std::string>{}(converter_.get_type_handler().type_to_string(
       converter_.get_type_handler().get_list_type())),
     config.ansi_c.address_width));
-  // The source list's element width, when every element shares one. Without it
-  // the per-element copy length is the symbolic o->size and each copy unwinds
-  // memcpy's byte loop to --unwind, which is what made slicing the most
-  // expensive list operation (docs/roadmap/symex-dead-work-cost-plan.md W3).
-  BigInt slice_elem_size = uniform_elem_size(array);
-
   exprt push_call = build_call_expr(
     *push_func,
     bool_type(),
     {build_symbol(sliced_list),
      build_symbol(at_result),
      slice_list_type_id,
-     from_integer(slice_elem_size, size_type())});
+     shallow_push.last_arg});
   push_call.location() = location;
   loop_body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
