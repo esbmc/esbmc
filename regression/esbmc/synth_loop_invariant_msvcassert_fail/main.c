@@ -1,8 +1,9 @@
 /* The negative half of synth_loop_invariant_msvcassert: the same MSVC-shaped
  * assert expansion over a bound that is false at a == 0. The synthesised
- * invariant must not mask it. The named property is downstream of the
- * invariant havoc, but the abstraction refutes it outright, so #7585 leaves it
- * FAILED rather than downgrading it to unknown. */
+ * invariant must not mask it -- the named property is downstream of the
+ * invariant havoc and the abstraction still admits it holding (at a >= 1), so
+ * #7585 reports it unknown rather than failed, but it must still be reported
+ * and not pass. */
 #include <stddef.h>
 #include <stdint.h>
 void _wassert(const wchar_t *_Message, const wchar_t *_File, unsigned _Line);
