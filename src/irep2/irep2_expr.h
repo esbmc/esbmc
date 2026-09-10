@@ -1421,8 +1421,9 @@ public:
   address_of2t(
     const type2tc &subtype,
     const expr2tc &ptrobj,
-    bool is_implicit = false)
-    : expr2t(pointer_type2tc(subtype), address_of_id),
+    bool is_implicit = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : expr2t(pointer_type2tc(subtype, false, rk), address_of_id),
       ptr_obj(ptrobj),
       implicit(is_implicit)
   {

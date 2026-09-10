@@ -67,6 +67,19 @@ inline expr2tc invoke_intrinsic(
 // down.
 thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
+/// The reference spelling an irept pointer carries. Both the pointer type arm
+/// and the address-of expression arm need it: the latter builds its pointer
+/// from the pointee, so without this an `&x` typed `T&` migrates to a plain
+/// pointer even when the type arm is doing its job.
+static pointer_ref_kindt pointer_ref_kind_of(const typet &type)
+{
+  if (type.get_bool("#rvalue_reference"))
+    return pointer_ref_kindt::RVALUE;
+  if (type.reference())
+    return pointer_ref_kindt::LVALUE;
+  return pointer_ref_kindt::NONE;
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -202,7 +215,8 @@ static type2tc migrate_type0(const typet &type)
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
 
-    return pointer_type2tc(subtype, type.can_carry_provenance());
+    return pointer_type2tc(
+      subtype, type.can_carry_provenance(), pointer_ref_kind_of(type));
   }
 
   if (type.id() == typet::t_empty)
@@ -1687,7 +1701,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = address_of2tc(type, theval, expr.implicit());
+    new_expr_ref = address_of2tc(
+      type, theval, expr.implicit(), pointer_ref_kind_of(expr.type()));
     return;
   }
 
@@ -3116,6 +3131,10 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     pointer_typet thetype(subtype);
     if (ref2.carry_provenance)
       thetype.can_carry_provenance(true);
+    if (ref2.ref_kind == pointer_ref_kindt::RVALUE)
+      thetype.set("#rvalue_reference", true);
+    else if (ref2.ref_kind == pointer_ref_kindt::LVALUE)
+      thetype.set("#reference", true);
     return thetype;
   }
   case type2t::unsignedbv_id:

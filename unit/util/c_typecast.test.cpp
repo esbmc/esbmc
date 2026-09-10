@@ -714,3 +714,70 @@ TEST_CASE(
     require_overloads_agree(ns, symbol_exprt("f", float_type()), int_type());
   }
 }
+
+// The irept copy has these arms and the expr2tc one did not.
+TEST_CASE(
+  "both implicit_typecast_followed copies agree on the reference arms",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  pointer_typet int_ref(int_type());
+  int_ref.set("#reference", true);
+
+  SECTION("a non-reference source to a reference destination takes its address")
+  {
+    require_overloads_agree(ns, symbol_exprt("a", int_type()), int_ref);
+  }
+
+  SECTION("a reference source to a non-reference destination dereferences")
+  {
+    require_overloads_agree(ns, symbol_exprt("r", int_ref), int_type());
+  }
+
+  // The one shape the two copies cannot agree on, and irept is the wrong side.
+  // take_reference_address there spells every result `#reference`, which is
+  // invisible to it because operator== skips comment attributes; migrated, that
+  // is an lvalue reference even when the destination is `T&&`. ref_kind is a
+  // real field, so the IREP2 copy keeps the destination's own spelling. Both
+  // take the address and neither adds a cast -- only the spelling differs, so
+  // this pins the shape rather than byte equality.
+  SECTION("an rvalue reference destination keeps its own spelling")
+  {
+    migrate_lookupt lookup(ns);
+    pointer_typet int_rref(int_type());
+    int_rref.set("#rvalue_reference", true);
+
+    expr2tc native;
+    migrate_expr(symbol_exprt("a", int_type()), native);
+    REQUIRE_FALSE(c_implicit_typecast(native, migrate_type(int_rref), ns));
+    REQUIRE(is_address_of2t(native));
+    REQUIRE(
+      to_pointer_type(native->type).ref_kind == pointer_ref_kindt::RVALUE);
+  }
+
+  // [expr.cond]: a conditional over lvalues is an lvalue, so the address is
+  // taken per arm.
+  SECTION("a conditional takes the address of each arm")
+  {
+    exprt cond = symbol_exprt("c", bool_type());
+    if_exprt pick(
+      cond, symbol_exprt("a", int_type()), symbol_exprt("b", int_type()));
+    pick.type() = int_type();
+    require_overloads_agree(ns, pick, int_ref);
+  }
+
+  // The agreement assertion alone would pass if both copies regressed
+  // together; pin the shape the arm is for.
+  SECTION("the address-of carries the destination's reference spelling")
+  {
+    migrate_lookupt lookup(ns);
+    expr2tc native;
+    migrate_expr(symbol_exprt("a", int_type()), native);
+    REQUIRE_FALSE(c_implicit_typecast(native, migrate_type(int_ref), ns));
+    REQUIRE(is_address_of2t(native));
+    REQUIRE(
+      to_pointer_type(native->type).ref_kind == pointer_ref_kindt::LVALUE);
+  }
+}
