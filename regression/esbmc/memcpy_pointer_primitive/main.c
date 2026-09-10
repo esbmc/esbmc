@@ -1,5 +1,5 @@
 // Exercises gen_byte_memcpy's pointer-type early return in
-// src/goto-symex/builtin_functions/memory_ops.cpp (line 365-366):
+// src/goto-symex/engine/builtin_functions/memory_ops.cpp (line 365-366):
 // memcpy between two pointer variables of *different* pointer types
 // skips the short-circuit and falls into gen_byte_memcpy, which then
 // returns nil for pointer operands. intrinsic_memcpy handles this by

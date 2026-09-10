@@ -1,5 +1,5 @@
 #include <cassert>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>

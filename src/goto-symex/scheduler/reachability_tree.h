@@ -5,7 +5,7 @@
 #include <map>
 #include <goto-programs/goto_program.h>
 #include <goto-symex/scheduler/execution_state.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/equation/symex_target_equation.h>
 

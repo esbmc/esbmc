@@ -1,4 +1,4 @@
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 

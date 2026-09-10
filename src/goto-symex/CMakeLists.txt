@@ -1,19 +1,19 @@
-add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp symex_assign.cpp
-  symex_main.cpp  symex_stack.cpp trace/goto_trace.cpp trace/build_goto_trace.cpp
-  symex_function.cpp state/goto_symex_state.cpp symex_dereference.cpp symex_goto.cpp
-  builtin_functions/memory_alloc.cpp
-  builtin_functions/io.cpp
-  builtin_functions/cpp_memory.cpp
-  builtin_functions/threads.cpp
-  builtin_functions/va_arg.cpp
-  builtin_functions/memory_ops.cpp
-  builtin_functions/object_size.cpp
-  builtin_functions/run_builtin.cpp
-  builtin_functions/python_builtins.cpp
-  builtin_functions/misc.cpp
-  builtin_functions/witness.cpp
-  equation/slice.cpp symex_other.cpp equation/symex_symmetry.cpp trace/xml_goto_trace.cpp
-  symex_valid_object.cpp dynamic_allocation.cpp state/renaming.cpp
+add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp engine/symex_assign.cpp
+  engine/symex_main.cpp  engine/symex_stack.cpp trace/goto_trace.cpp trace/build_goto_trace.cpp
+  engine/symex_function.cpp state/goto_symex_state.cpp engine/symex_dereference.cpp engine/symex_goto.cpp
+  engine/builtin_functions/memory_alloc.cpp
+  engine/builtin_functions/io.cpp
+  engine/builtin_functions/cpp_memory.cpp
+  engine/builtin_functions/threads.cpp
+  engine/builtin_functions/va_arg.cpp
+  engine/builtin_functions/memory_ops.cpp
+  engine/builtin_functions/object_size.cpp
+  engine/builtin_functions/run_builtin.cpp
+  engine/builtin_functions/python_builtins.cpp
+  engine/builtin_functions/misc.cpp
+  engine/builtin_functions/witness.cpp
+  equation/slice.cpp engine/symex_other.cpp equation/symex_symmetry.cpp trace/xml_goto_trace.cpp
+  engine/symex_valid_object.cpp engine/dynamic_allocation.cpp state/renaming.cpp
   scheduler/execution_state.cpp scheduler/reachability_tree.cpp scheduler/reachability_tree_cin.cpp
   symex_invariant.cpp
   witness/witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp trace/printf_formatter.cpp equation/features.cpp trace/html.cpp trace/json.cpp

@@ -29,10 +29,10 @@ const char *alloc_fn_name(sideeffect2t::allockind kind)
 /// when it cannot be computed (an element type with no size at all, i.e. a
 /// flexible/incomplete array member).
 ///
-/// The allocation model (`goto_symext::symex_mem`, src/goto-symex/
-/// builtin_functions/memory_alloc.cpp) uniformly allocates `se.size` elements
-/// of `se.alloctype`, so the requested byte count is `size * sizeof(alloctype)`
-/// for every kind we check. This matters for typed requests: the frontend
+/// The allocation model (`goto_symext::symex_mem`, in
+/// src/goto-symex/engine/builtin_functions/memory_alloc.cpp) uniformly
+/// allocates `se.size` elements of `se.alloctype`, so the requested byte count
+/// is `size * sizeof(alloctype)` for every kind we check. This matters for typed requests: the frontend
 /// lowers a bare `malloc(sizeof(T))` to `size == 1, alloctype == T` (never a
 /// raw byte count), so without the scaling a large `T` would be checked as
 /// `1 <= K` and slip through. A byte-count request such as `malloc(n)` or

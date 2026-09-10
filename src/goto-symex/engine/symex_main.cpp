@@ -1,7 +1,7 @@
 #include <cassert>
 #include <optional>
 #include <goto-symex/scheduler/execution_state.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/equation/symex_target_equation.h>
@@ -2028,7 +2028,7 @@ void goto_symext::add_memory_leak_checks()
     // memory allocations. This is because we always create a dynamic object for
     // each dynamic allocation, and the allocation success status
     // is described by a separate "allocation_guard".
-    // (see "symex_mem" method in "goto-symex/builtin_functions.cpp").
+    // (see "symex_mem" method in "goto-symex/engine/builtin_functions.cpp").
     expr2tc cond = implies2tc(when, eq);
 
     replace_dynamic_allocation(cond);

@@ -1,6 +1,6 @@
 #include <cassert>
-#include <goto-symex/dynamic_allocation.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/dynamic_allocation.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/base_subobject.h>
 #include <util/symtab/cprover_prefix.h>

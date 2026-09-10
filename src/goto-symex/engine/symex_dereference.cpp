@@ -1,4 +1,4 @@
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>

@@ -1,5 +1,5 @@
 #include <cassert>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/equation/slice.h>
 #include <goto-symex/equation/symex_target_equation.h>
 

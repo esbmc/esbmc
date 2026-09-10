@@ -2,7 +2,7 @@
 #include <cassert>
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>

@@ -1,8 +1,8 @@
 #include <cassert>
 #include <climits>
-#include <goto-symex/dynamic_allocation.h>
+#include <goto-symex/engine/dynamic_allocation.h>
 #include <goto-symex/scheduler/execution_state.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>

@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <deque>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/state/renaming.h>
 #include <goto-symex/equation/symex_target.h>

@@ -18,7 +18,7 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
+#include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
