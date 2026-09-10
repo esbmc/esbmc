@@ -1036,6 +1036,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  // A derived->base conversion the frontend could not route through a
+  // "@base@" component marks whichever node is being converted, and that is
+  // almost never a cast: over regression/esbmc-cpp the marker lands on a
+  // symbol 32474 times and on a typecast 58. IREP2 has nowhere to hang a flag
+  // on an arbitrary node, so the marker becomes a same-type typecast2t around
+  // it -- semantically the identity -- which migrate_expr_back unwraps.
+  // Dropping it loses the displacement and silently proves false assertions
+  // (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+  if (const irep_idt base = expr.get("#derived_to_base");
+      !base.empty() && expr.id() != exprt::typecast)
+  {
+    exprt unmarked = expr;
+    unmarked.remove("#derived_to_base");
+    expr2tc inner;
+    migrate_expr(unmarked, inner);
+    new_expr_ref = typecast2tc(inner->type, inner, base);
+    return;
+  }
+
   if (expr.id() == irept::id_symbol)
   {
     type = migrate_type(expr.type());
@@ -4444,6 +4463,16 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   case expr2t::typecast_id:
   {
     const typecast2t &ref2 = to_typecast2t(ref);
+
+    // The wrapper migrate_expr builds around a marked non-cast node: give the
+    // marker back to the node itself rather than leaving an identity cast.
+    if (!ref2.derived_to_base.empty() && ref2.type == ref2.from->type)
+    {
+      exprt marked = migrate_expr_back(ref2.from);
+      marked.set("#derived_to_base", ref2.derived_to_base);
+      return marked;
+    }
+
     typet thetype = migrate_type_back(ref->type);
 
     typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
