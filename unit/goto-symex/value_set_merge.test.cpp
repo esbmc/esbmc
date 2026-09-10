@@ -41,7 +41,7 @@
 #include <string>
 #include <utility>
 
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <pointer-analysis/value_set.h>
 #include <util/symtab/namespace.h>
 

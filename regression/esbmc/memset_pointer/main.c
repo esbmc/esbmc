@@ -1,5 +1,5 @@
 // Exercises gen_byte_expression's pointer-type branch in
-// src/goto-symex/builtin_functions/memory_ops.cpp, which dispatches
+// src/goto-symex/engine/builtin_functions/memory_ops.cpp, which dispatches
 // to gen_byte_expression_byte_update for memset on a pointer variable.
 #include <assert.h>
 #include <stdint.h>

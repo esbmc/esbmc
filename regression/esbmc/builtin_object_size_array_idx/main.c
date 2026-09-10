@@ -1,5 +1,5 @@
 // Exercises intrinsic_builtin_object_size's index2t branch in
-// src/goto-symex/builtin_functions/object_size.cpp:
+// src/goto-symex/engine/builtin_functions/object_size.cpp:
 // when the argument is &arr[i], the address_of wraps an index2t whose
 // source_value is a symbol (the array) — the size is read from that
 // source's array type.

@@ -396,7 +396,14 @@ Key directories under `src/`:
 - `irep2/` — Internal representation (IRep2), the core data structure for
   expressions/types
 - `goto-programs/` — GOTO intermediate representation and transformations
-- `goto-symex/` — Symbolic execution engine (core verification logic)
+- `goto-symex/` — Symbolic execution engine (core verification logic), split
+  into `engine/` (`goto_symext` and its statement handlers, including
+  `engine/builtin_functions/`), `state/` (per-thread state and SSA naming),
+  `scheduler/` (thread interleaving and the exploration tree), `equation/` (the
+  SSA formula and its passes), and `trace/`, `witness/` and `testgen/` for what
+  is built once a verdict exists. Only `testgen/` is unreachable from
+  `symex_step`: `symex_printf` and the witness hooks call into `trace/` and
+  `witness/` from inside symex
 - `solvers/` — SMT solver backends (z3, bitwuzla, boolector, cvc4, cvc5, yices,
   mathsat, smtlib)
 - `langapi/` — Language API abstractions shared across frontends

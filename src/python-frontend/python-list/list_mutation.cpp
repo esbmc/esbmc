@@ -895,7 +895,7 @@ exprt python_list::list_repetition(
   return build_symbol(*list_symbol);
 }
 
-BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
+BigInt python_list::uniform_elem_size(const std::string &list_id) const
 {
   const element_type_registry::entries *entries = elem_types().find(list_id);
   if (!entries)
@@ -906,12 +906,24 @@ BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
   for (const auto &entry : *entries)
   {
     const typet &elem_type = converter_.ns.follow(entry.second);
+    // A tuple is stored inline, so its byte width is as static as a scalar's;
+    // a nested list or a dict is stored by pointer, where a byte width says
+    // nothing about the value and the models must keep their identity paths.
     if (!(elem_type.is_signedbv() || elem_type.is_unsignedbv() ||
-          elem_type.is_floatbv() || elem_type.is_bool()))
+          elem_type.is_floatbv() || elem_type.is_bool() ||
+          elem_type.is_struct()))
       return 0;
 
-    BigInt entry_width =
-      type_byte_size(migrate_type(elem_type), &converter_.name_space());
+    BigInt entry_width;
+    try
+    {
+      entry_width =
+        type_byte_size(migrate_type(elem_type), &converter_.name_space());
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return 0; // a member with no static size leaves the element unmeasured
+    }
     if (seen && entry_width != width)
       return 0;
     width = entry_width;
@@ -920,11 +932,11 @@ BigInt python_list::uniform_scalar_elem_size(const std::string &list_id) const
   return width;
 }
 
-BigInt python_list::uniform_scalar_elem_size(const exprt &list) const
+BigInt python_list::uniform_elem_size(const exprt &list) const
 {
   if (!list.is_symbol())
     return 0;
-  return uniform_scalar_elem_size(list.identifier().as_string());
+  return uniform_elem_size(list.identifier().as_string());
 }
 
 exprt python_list::build_extend_list_call(
@@ -1134,7 +1146,7 @@ exprt python_list::build_extend_list_call(
   // element to be the same scalar width: extend applies one length to all of
   // them, so a mixed-width list must keep the model's symbolic elem->size
   // fallback (0).
-  BigInt elem_size_bytes = uniform_scalar_elem_size(actual_list);
+  BigInt elem_size_bytes = uniform_elem_size(actual_list);
 
   code_function_callt extend_func_call;
   extend_func_call.function() = build_symbol(*extend_func_sym);
