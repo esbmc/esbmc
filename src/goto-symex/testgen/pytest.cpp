@@ -1,6 +1,6 @@
-#include <goto-symex/pytest.h>
+#include <goto-symex/testgen/pytest.h>
 #include <goto-symex/slice.h>
-#include <goto-symex/test_gen_guard.h>
+#include <goto-symex/testgen/test_gen_guard.h>
 #include <ac_config.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_expr.h>

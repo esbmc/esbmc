@@ -16,7 +16,7 @@ add_library(symex symex_target.cpp symex_target_equation.cpp symex_assign.cpp
   symex_valid_object.cpp dynamic_allocation.cpp renaming.cpp
   execution_state.cpp reachability_tree.cpp reachability_tree_cin.cpp
   symex_invariant.cpp
-  witnesses.cpp pytest.cpp ctest.cpp printf_formatter.cpp features.cpp html.cpp json.cpp
+  witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp printf_formatter.cpp features.cpp html.cpp json.cpp
   sarif.cpp)
 target_include_directories(symex
     PRIVATE ${CMAKE_BINARY_DIR}/src
