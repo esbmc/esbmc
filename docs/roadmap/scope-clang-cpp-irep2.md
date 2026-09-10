@@ -630,6 +630,41 @@ proof.
 is §3.4's builtin exception spelling (`throw 1` yields `signedbv` where legacy
 yields `signed_int`). The others are unexamined.
 
+### 3.8 The last three false alarms are three causes, not one (2026-09-10)
+
+Named, so the next tick does not re-derive them:
+
+| test | violated property |
+|---|---|
+| `bitset/bitset6` | `cpp/bitset:88` — incorrect alignment accessing a data object |
+| `cpp/ch21_31` | the test's own `assert`, via `std::queue` |
+| `cpp/github_2284_4` | `cpp/vector:325` — invalid pointer |
+
+Three different OMs and three different properties. Nothing links them yet, and
+after §3.3's single-cause cluster it would be easy to assume another; they are
+listed separately until measurement says otherwise.
+
+**`ch21_31` reduced**, with the controls that bound it:
+
+```cpp
+std::queue<int> q; q.push(12); q.push(75);
+q.back() -= q.front();          // default SUCCESSFUL, hop-off FAILED
+```
+
+- Reading only — `assert(q.back() == 75 && q.front() == 12)` — agrees on both
+  paths, so `back()`/`front()` themselves are fine.
+- The same shape on a hand-written struct returning `int &` agrees on both paths,
+  both for `b.back() = 63` and `b.back() -= b.front()`.
+
+So it is **not** compound assignment through a reference in general, which was
+the obvious guess and is wrong. It is specific to the reference `std::queue`'s
+`back()` returns, which reaches through the underlying container. The narrower
+`q.back() = 63` and single-push variants both exceed 90 s under the queue OM, so
+the next step wants a longer budget or a hand-rolled stand-in for the OM's
+indirection rather than a further reduction of the OM itself.
+
+`bitset6` and `github_2284_4` are unexamined.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -773,6 +808,9 @@ spellings (§33) — so W3's carriage problem lands here first.
 7. ~~Per-symbol code-generation hook and `gen_vptr_initializations`~~ — **done**,
    §3.7, PR #7724. `finalize_exception_specification` has the same shape and is
    not yet ported.
-8. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
+8. The three remaining false alarms (§3.8), which are three causes: a queue
+   reference, a bitset alignment and a vector pointer.
+9. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6),
+   and `finalize_exception_specification`, which the §3.7 hook can now take.
 
 Only then does a slice make sense.
