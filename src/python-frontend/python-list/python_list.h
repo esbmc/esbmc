@@ -21,6 +21,10 @@ struct list_elem_info
   symbolt *elem_symbol;
   exprt elem_size;
   locationt location;
+  // True when elem_symbol already holds the element's raw value pointer
+  // (its size may be symbolic post-join), so callers must use the
+  // bounded-copy push/insert path instead of the generic byte-copy one.
+  bool is_tagged_scalar = false;
 };
 
 class python_list

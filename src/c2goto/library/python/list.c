@@ -204,6 +204,38 @@ bool __ESBMC_list_push(
   return true;
 }
 
+// Push an already-tagged scalar's own value/type_id/size. `size` may be
+// symbolic across branches (e.g. int vs str), so this copies with a bounded
+// loop rather than __ESBMC_copy_value's memcpy fallback, which never
+// finishes unwinding over a symbolic n.
+bool __ESBMC_list_push_tagged(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t size)
+{
+  assert(l != NULL);
+  __ESBMC_assert(
+    size <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged list element exceeds the modelled bound");
+
+  void *copied = __ESBMC_alloca(size);
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= size)
+      break;
+    ((char *)copied)[i] = ((const char *)value)[i];
+  }
+
+  PyObject *item = &l->items[l->size];
+  item->value = copied;
+  item->float_idx = 0;
+  item->type_id = type_id;
+  item->size = size;
+  l->size++;
+  return true;
+}
+
 bool __ESBMC_list_push_object(
   PyListObject *l,
   PyObject *o,
@@ -593,6 +625,53 @@ bool __ESBMC_list_insert(
   l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
+  l->size++;
+  return true;
+}
+
+// Insert variant of __ESBMC_list_push_tagged: `size` may be symbolic, so this
+// copies with the same bounded loop rather than __ESBMC_copy_value's memcpy
+// fallback.
+bool __ESBMC_list_insert_tagged(
+  PyListObject *l,
+  int64_t index,
+  const void *value,
+  size_t type_id,
+  size_t size)
+{
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  if (index >= n)
+    return __ESBMC_list_push_tagged(l, value, type_id, size);
+
+  __ESBMC_assert(
+    size <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged list element exceeds the modelled bound");
+  void *copied = __ESBMC_alloca(size);
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= size)
+      break;
+    ((char *)copied)[i] = ((const char *)value)[i];
+  }
+
+  size_t i = l->size;
+  while (i > (size_t)index)
+  {
+    l->items[i] = l->items[i - 1];
+    i--;
+  }
+
+  l->items[index].value = copied;
+  l->items[index].float_idx = 0;
+  l->items[index].type_id = type_id;
+  l->items[index].size = size;
   l->size++;
   return true;
 }

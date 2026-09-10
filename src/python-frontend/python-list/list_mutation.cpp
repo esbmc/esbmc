@@ -10,6 +10,41 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
   locationt location = converter_.get_location_from_decl(op);
+
+  // A tagged (PyObject-shaped) element already carries its own runtime
+  // value/type_id/size -- hashing its wrapper struct's static C type here
+  // would bake in a single compile-time type_id, losing whichever branch
+  // actually ran. Forward its own fields instead, exactly like list
+  // elements already store their type_id alongside the value.
+  if (type_handler_.is_tagged_scalar_type(elem.type()))
+  {
+    symbolt &elem_type_sym = converter_.create_tmp_symbol(
+      op, "$list_elem_type$", size_type(), exprt());
+    code_assignt type_id_assign(
+      build_symbol(elem_type_sym), build_member(elem, "type_id", size_type()));
+    type_id_assign.location() = location;
+    converter_.add_instruction(type_id_assign);
+
+    const typet char_ptr_type = pointer_typet(char_type());
+    symbolt &elem_symbol = converter_.create_tmp_symbol(
+      op, "$list_elem_value$", char_ptr_type, exprt());
+    code_assignt value_assign(
+      build_symbol(elem_symbol),
+      build_typecast(
+        build_member(elem, "value", pointer_typet(empty_typet())),
+        char_ptr_type));
+    value_assign.location() = location;
+    converter_.add_instruction(value_assign);
+
+    list_elem_info tagged_info;
+    tagged_info.elem_type_sym = &elem_type_sym;
+    tagged_info.elem_symbol = &elem_symbol;
+    tagged_info.elem_size = build_member(elem, "size", size_type());
+    tagged_info.location = location;
+    tagged_info.is_tagged_scalar = true;
+    return tagged_info;
+  }
+
   const std::string elem_type_name = type_handler_.type_to_string(elem.type());
 
   // Create type name as null-terminated char array
@@ -266,6 +301,26 @@ exprt python_list::build_push_list_call(
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
 
+  if (elem_info.is_tagged_scalar)
+  {
+    const symbolt *push_tagged_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_tagged");
+    if (!push_tagged_sym)
+      throw std::runtime_error("Push (tagged) function symbol not found");
+
+    code_function_callt push_tagged_call;
+    push_tagged_call.function() = build_symbol(*push_tagged_sym);
+    push_tagged_call.arguments().push_back(build_symbol(list));
+    push_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_symbol));
+    push_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_type_sym));
+    push_tagged_call.arguments().push_back(elem_info.elem_size);
+    push_tagged_call.type() = bool_type();
+    push_tagged_call.location() = elem_info.location;
+    return push_tagged_call;
+  }
+
   const symbolt *push_func_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push");
 
@@ -369,6 +424,27 @@ exprt python_list::build_insert_list_call(
   const exprt &elem)
 {
   list_elem_info elem_info = get_list_element_info(op, elem);
+
+  if (elem_info.is_tagged_scalar)
+  {
+    const symbolt *insert_tagged_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert_tagged");
+    if (!insert_tagged_sym)
+      throw std::runtime_error("Insert (tagged) function symbol not found");
+
+    code_function_callt insert_tagged_call;
+    insert_tagged_call.function() = build_symbol(*insert_tagged_sym);
+    insert_tagged_call.arguments().push_back(build_symbol(list));
+    insert_tagged_call.arguments().push_back(index);
+    insert_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_symbol));
+    insert_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_type_sym));
+    insert_tagged_call.arguments().push_back(elem_info.elem_size);
+    insert_tagged_call.type() = bool_type();
+    insert_tagged_call.location() = elem_info.location;
+    return converter_.convert_expression_to_code(insert_tagged_call);
+  }
 
   const symbolt *insert_func_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert");
