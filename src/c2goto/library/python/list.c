@@ -4,6 +4,12 @@
 #include <string.h>
 #include "python_types.h"
 
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id,
+  size_t bool_type_id);
+
 // Allocate a Python object instance. The frontend emits a call to this for
 // `ClassName(...)` so class instances get CPython reference semantics (a
 // pointer to a non-expiring object) and survive escaping their defining
@@ -532,6 +538,31 @@ bool __ESBMC_list_eq(
         return false;
     }
   }
+  return true;
+}
+
+// Element-wise equality for two lists of tagged scalars (#7723). A tag only
+// ever holds a bool, int, float or str, so there is no nesting to walk and no
+// depth stack; and its payload width is symbolic after a branch join, so the
+// byte compare has to be the bounded one __python_scalar_eq_obj already
+// implements rather than __ESBMC_values_equal's memcmp fallback.
+bool __ESBMC_list_eq_tagged(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  size_t num_type_id,
+  size_t bool_type_id)
+{
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
+  if (l1->size != l2->size)
+    return false;
+
+  for (size_t i = 0; i < l1->size; ++i)
+    if (!__python_scalar_eq_obj(
+          &l1->items[i], &l2->items[i], num_type_id, bool_type_id))
+      return false;
   return true;
 }
 

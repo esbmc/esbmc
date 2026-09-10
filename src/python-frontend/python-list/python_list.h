@@ -591,6 +591,22 @@ public:
   shallow_push_call
   select_shallow_push(const exprt &src, const exprt &untagged_last_arg) const;
 
+  struct list_eq_target
+  {
+    const symbolt *func;
+    std::vector<exprt> trailing_args;
+  };
+
+  /** Equality entry point for `l1 == l2` and the arguments that follow the two
+   *  list operands. A tagged element has no single static width and cannot hold
+   *  a nested list, so neither elem_size nor the depth stack applies (#7723).
+   */
+  list_eq_target select_list_eq(
+    const exprt &l1,
+    const exprt &l2,
+    const symbolt &generic_func,
+    const std::vector<exprt> &generic_trailing_args) const;
+
   /**
    * @brief Unpack a list variable into multiple targets, supporting starred
    * expressions.
