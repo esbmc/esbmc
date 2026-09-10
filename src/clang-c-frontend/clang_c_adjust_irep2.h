@@ -3,6 +3,7 @@
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
+#include <cstddef>
 #include <vector>
 
 /// Phase 6 (C.3) IREP2-native adjuster for the C frontend.
@@ -32,6 +33,37 @@
 /// it does for Python after `clang_cpp_adjust`; for C it does not. 12 of the
 /// 1686 tests in regression/esbmc reach it. Left unguarded on purpose: this is
 /// the defect the walk exists to surface, and the flag is opt-in.
+/// One arm of an IREP2 adjust pass's dispatch: its name, the guard that decides
+/// whether it claims a node, and the rewrite it then applies. A null `when` is
+/// offered every node and guards itself.
+///
+/// Templated on the pass so a second frontend can order the arms it inherits
+/// alongside its own in one table: taking the address of an inherited member
+/// yields a pointer-to-member of the *declaring* class, which converts to the
+/// derived one, and a table of these stays constant-initialised
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.1).
+template <class Pass>
+struct adjust_arm
+{
+  const char *name;
+  void (Pass::*run)(expr2tc &);
+  bool (*when)(const expr2tc &);
+};
+
+/// Apply a pass's arms to one node in table order. Each guard is re-evaluated
+/// against the current node, so an arm that rewrites a node into another kind
+/// hands it to that kind's arm below.
+template <class Pass, std::size_t N>
+void run_adjust_arms(
+  Pass &self,
+  const adjust_arm<Pass> (&arms)[N],
+  expr2tc &expr)
+{
+  for (const adjust_arm<Pass> &a : arms)
+    if (!a.when || a.when(expr))
+      (self.*a.run)(expr);
+}
+
 class clang_c_adjust_irep2
 {
 public:
@@ -218,15 +250,7 @@ private:
   /// as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
   void adjust_comma_type(expr2tc &expr);
 
-  /// One arm of adjust_sole_arms' dispatch: its name, the guard that decides
-  /// whether it claims a node, and the rewrite it then applies. A null `when`
-  /// is offered every node and guards itself.
-  struct arm
-  {
-    const char *name;
-    void (clang_c_adjust_irep2::*run)(expr2tc &);
-    bool (*when)(const expr2tc &);
-  };
+  using arm = adjust_arm<clang_c_adjust_irep2>;
 
   /// The chain in application order. Defined in clang_c_adjust_irep2.cpp,
   /// beside the predicates it names. An unknown-bound declaration completed

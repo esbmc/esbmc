@@ -371,9 +371,7 @@ std::vector<clang_c_adjust_irep2::arm_info> clang_c_adjust_irep2::arm_order()
 
 void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
-  for (const arm &a : arms)
-    if (!a.when || a.when(expr))
-      (this->*a.run)(expr);
+  run_adjust_arms(*this, arms, expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:
