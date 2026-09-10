@@ -2888,11 +2888,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
        * > ...
        * > - Otherwise, the object is zero-initialized.
        * So we just zero-initialize the object.
-       * The rule is the type's, not the scalar types' alone; gen_zero answers
-       * nil for a type it cannot build a value of (an incomplete struct, as
-       * `std::hash<std::thread::id>` stays in #7643), which is reported below
-       * rather than propagated as a nil expression.
        */
+      /* The rule is the type's, not the scalar types' alone, but gen_zero
+       * answers nil for a type it cannot build a value of (an incomplete
+       * struct, as `std::hash<std::thread::id>` stays in #7643). */
       inits = gen_zero(t);
       if (inits.is_nil())
         return report_unsupported_init_list(init_stmt);
