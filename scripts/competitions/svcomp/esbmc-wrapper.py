@@ -309,7 +309,12 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     return command_line
 
   if prop == Property.overflow:
-    command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
+    # SV-COMP's no-overflow property is signed-integer arithmetic only: "Hence,
+    # conversions to signed-integer types do not violate this property." A
+    # float-to-int conversion out of range is real UB but a different property,
+    # and parse_result() below reports any violation in this run as
+    # FALSE_OVERFLOW, so the check has to be off here (esbmc #7572).
+    command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions --no-fp-conversion-check "
   elif prop == Property.memory:
     command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
     # It seems SV-COMP doesn't want to check for memleaks on abort()

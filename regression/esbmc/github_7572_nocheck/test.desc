@@ -1,0 +1,6 @@
+CORE
+main.c
+--overflow-check --no-fp-conversion-check
+\A(?![\s\S]*floating-point conversion out of range)[\s\S]*\Z
+^  FAILED       \[main\.arithmetic-overflow\.1\]\s+line 12  arithmetic overflow on add$
+^VERIFICATION FAILED$

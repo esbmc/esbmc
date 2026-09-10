@@ -179,6 +179,17 @@ private:
   bool saved;
 };
 
+/** `struct { int i; union { int a; int b; } u; }`, a counter beside a union. */
+type2tc counter_and_union_struct()
+{
+  std::vector<type2tc> umembers{int_type2(), int_type2()};
+  std::vector<irep_idt> unames{"a", "b"};
+  std::vector<type2tc> members{
+    int_type2(), union_type2tc(umembers, unames, unames, "mix")};
+  std::vector<irep_idt> names{"i", "u"};
+  return struct_type2tc(members, names, names, "held_union");
+}
+
 /** `struct { int i; int a[4]; }`, a counter beside an array member. */
 type2tc counter_and_array_struct()
 {
@@ -545,6 +556,33 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "a write into a union member is pinned to a read of the member",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const type2tc held = counter_and_union_struct();
+  const expr2tc var =
+    symbol_at(held, "c:test.c@F@main@VAR", symbol_renaming_level::level2);
+  const type2tc utype = to_struct_type(held).members[1];
+
+  // `VAR.u.a = x + 1` lowers to a `with` on VAR whose update value is a `with`
+  // over the union member. A read of a whole union is offered, unlike a carried
+  // union literal: it folds no cross-member access, so the aliasing that kept
+  // unions out does not arise.
+  const expr2tc member_read = member_of(var, "u", utype);
+  const expr2tc refused = with_field(
+    member_read, "a", add2tc(int_type2(), nondet_int_symbol(), int_const(1)));
+
+  const expr2tc pinned = e.state().pin_symbolic_updates(
+    with_field(with_field(var, "i", int_const(3)), "u", refused), var);
+
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+  REQUIRE(to_with2t(pinned).update_value == member_read);
+  REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
   "a pointer member read is still not carried",
   "[symex][constant-propagation]")
 {
@@ -598,6 +636,35 @@ TEST_CASE(
     to_constant_struct2t(pinned).datatype_members[1] == member_of(var, "r"));
   // ... and the counter both arms agree on folds again, which is the point.
   REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
+  "a merged array is pinned element by element",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc arr =
+    symbol_at(int_array(2), "c:test.c@F@main@A", symbol_renaming_level::level2);
+  const expr2tc cond = symbol_at(
+    get_bool_type(), "nondet$symex::g", symbol_renaming_level::level0);
+
+  // The same merge over a bare array: element 0 is the counter both arms agree
+  // on, element 1 is the one the branch wrote.
+  const expr2tc taken = constant_array2tc(
+    int_array(2), std::vector<expr2tc>{int_const(3), int_const(7)});
+  const expr2tc other = constant_array2tc(
+    int_array(2), std::vector<expr2tc>{int_const(3), int_const(9)});
+  const expr2tc phi = if2tc(int_array(2), cond, taken, other);
+
+  REQUIRE_FALSE(e.state().constant_propagation(phi));
+
+  const expr2tc pinned = e.state().pin_symbolic_updates(phi, arr);
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+  REQUIRE(
+    to_constant_array2t(pinned).datatype_members[1] ==
+    index_of(arr, gen_ulong(1)));
+  REQUIRE(index_of(pinned, gen_ulong(0))->simplify() == int_const(3));
 }
 
 TEST_CASE(

@@ -1,0 +1,4 @@
+CORE
+main.c
+--std c17 --interval-analysis
+^VERIFICATION SUCCESSFUL$
