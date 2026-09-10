@@ -332,6 +332,8 @@ jobs:
                '/usr/*' \
                '*/build/*' \
                --output-file coverage.info
+      - name: Report line total
+        run: lcov --summary coverage.info
       - name: Upload to Codecov
         uses: codecov/codecov-action@v6
         with:
