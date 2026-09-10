@@ -202,7 +202,13 @@ static type2tc migrate_type0(const typet &type)
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
 
-    return pointer_type2tc(subtype, type.can_carry_provenance());
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE;
+    if (type.get_bool("#rvalue_reference"))
+      rk = pointer_ref_kindt::RVALUE;
+    else if (type.reference())
+      rk = pointer_ref_kindt::LVALUE;
+
+    return pointer_type2tc(subtype, type.can_carry_provenance(), rk);
   }
 
   if (type.id() == typet::t_empty)
@@ -3116,6 +3122,10 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     pointer_typet thetype(subtype);
     if (ref2.carry_provenance)
       thetype.can_carry_provenance(true);
+    if (ref2.ref_kind == pointer_ref_kindt::RVALUE)
+      thetype.set("#rvalue_reference", true);
+    else if (ref2.ref_kind == pointer_ref_kindt::LVALUE)
+      thetype.set("#reference", true);
     return thetype;
   }
   case type2t::unsignedbv_id:
