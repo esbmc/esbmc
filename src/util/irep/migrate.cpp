@@ -120,6 +120,15 @@ static unsigned get_pragma_unroll(const exprt &expr)
   return p.empty() ? 0 : std::stoul(p.as_string());
 }
 
+static pointer_ref_kindt pointer_ref_kind(const typet &type)
+{
+  if (type.get_bool("#rvalue_reference"))
+    return pointer_ref_kindt::RVALUE;
+  if (type.reference())
+    return pointer_ref_kindt::LVALUE;
+  return pointer_ref_kindt::NONE;
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -202,13 +211,8 @@ static type2tc migrate_type0(const typet &type)
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
 
-    pointer_ref_kindt rk = pointer_ref_kindt::NONE;
-    if (type.get_bool("#rvalue_reference"))
-      rk = pointer_ref_kindt::RVALUE;
-    else if (type.reference())
-      rk = pointer_ref_kindt::LVALUE;
-
-    return pointer_type2tc(subtype, type.can_carry_provenance(), rk);
+    return pointer_type2tc(
+      subtype, type.can_carry_provenance(), pointer_ref_kind(type));
   }
 
   if (type.id() == typet::t_empty)
