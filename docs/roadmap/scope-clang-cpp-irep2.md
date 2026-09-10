@@ -132,6 +132,70 @@ where it is pinned. §20.3's lesson is the standing warning: a second
 independently-written copy of a conversion is not a translation of the first,
 and byte-identity on another frontend's corpus does not establish that it is.
 
+### 2.3 Items 6 and 7 ported
+
+The two representable arms are in, each pinned by a section of
+`unit/util/c_typecast.test.cpp`'s `require_overloads_agree` — which runs both
+overloads on the same input and requires the migrated results to be equal, so
+the mutation check is the harness itself: each section fails on the unported
+copy and passes on the ported one.
+
+- **Item 6, derived-to-base.** `address_of2t` takes the *pointee*, not the
+  pointer, so the arm passes `dest_ptr_type.subtype` where the irept copy
+  assigns `dest_type` whole. Passing `dest_type` would build a pointer to a
+  pointer, and the harness catches it.
+- **Item 7, string-constant to array.** `migrate_expr` maps a `string-constant`
+  to `constant_string2t` (`migrate.cpp:1195`), not to an array, so the arm was
+  genuinely missing rather than performed by migration on the way in.
+  `constant_string2t::to_array()` is the IREP2 counterpart of `string2array`,
+  and the constant is retyped to the destination first, as the irept copy does.
+
+Item 2 (pointer-to-member) stays declined on §2.2's zero. Items 3 and 4 are
+warnings and an `incomplete_array` source; neither changes a built expression,
+and both are left for the same census to price.
+
+Neither arm changes anything end to end today: a `--goto-functions-only` A/B of
+every `regression/esbmc/irep2_only_*` test against master is **95 same, 0
+differing**, because goto-convert already normalises the one shape the string
+arm touches. That is the expected result for a pre-flight port — it closes a
+latent divergence between two copies, and the differential harness is what pins
+it. **PR #7701.**
+
+Items 1 and 5 remain blocked on §2.1 and are the phase's critical path.
+
+### 2.4 §2.1 priced: `carry_provenance` is the precedent, and it cost no call sites
+
+The reference-kind field is not a novel change to a core type. `pointer_type2t`
+already carries a second, discriminating field of exactly this shape:
+
+| property | `carry_provenance` |
+|---|---|
+| origin | PR #2464 (CHERI capability bounds) |
+| in the `fields` tuple | **yes** — participates in equality, `crc`, `hash` |
+| forward migration | `migrate.cpp:205`, `type.can_carry_provenance()` |
+| back migration | `migrate.cpp:3117-3118`, `thetype.can_carry_provenance(true)` |
+
+So the mechanism a reference kind needs — a discriminator on the pointer type,
+reflected in value identity, carried both ways across the seam — is merged, in
+tree, and has been for some time.
+
+Cost, measured:
+
+- **Producer side: zero.** The constructor is
+  `pointer_type2t(const type2tc &st, const bool &p = false)`; the second
+  parameter is already defaulted, so a third defaulted parameter leaves all
+  **41** `pointer_type2tc(` construction sites across 22 files untouched.
+- **Consumer side: 20 call sites in 7 files** — 14 calls to
+  `is_lvalue_or_rvalue_reference` and 6 direct reads of `.reference()` /
+  `#rvalue_reference`.
+
+The one difference from the precedent is arity: `carry_provenance` is a bool,
+whereas a reference kind has three states (not a reference, lvalue, rvalue), so
+it wants an enum. That changes the field's type, not the mechanics.
+
+This is what §2.1's decision costs. It is a smaller change than the phase it
+unblocks, and it is the phase's critical path (§2.2: 199 of 283 sampled tests).
+
 ## 3. The design question Phase 6 leaves open: the pass is not extensible
 
 The legacy frontends are one class specialising another:
@@ -211,11 +275,11 @@ spellings (§33) — so W3's carriage problem lands here first.
 
 ## 6. Next
 
-1. Decide whether `pointer_type2t` carries the reference kind (§2.1). Nothing
-   in item 1 can be written until it does, and 70 % of the corpus needs item 1.
-2. Port items 6 and 7 into the `expr2tc` `implicit_typecast_followed` — both are
-   representable today — pinned by `unit/util/c_typecast.test.cpp`'s
-   differential harness. Leave item 2 declined and recorded (§2.2).
+1. Add the reference kind to `pointer_type2t` (§2.1), following
+   `carry_provenance` (§2.4): a field in the `fields` tuple, carried both ways
+   by `migrate`. Nothing in item 1 can be written until it exists, and 70 % of
+   the corpus needs item 1.
+2. ~~Port items 6 and 7~~ — **done**, see §2.3.
 3. Price option B in §3 against option A.
 4. Add the C++ hop-off flag, then run the census by verdict.
 
