@@ -2,7 +2,7 @@
 #include <cassert>
 #include <functional>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/symex_invariant.h>
 #include <goto-symex/equation/symex_target_equation.h>
 #include <langapi/language_util.h>

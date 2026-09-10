@@ -1,6 +1,6 @@
 add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp symex_assign.cpp
   symex_main.cpp  symex_stack.cpp trace/goto_trace.cpp trace/build_goto_trace.cpp
-  symex_function.cpp goto_symex_state.cpp symex_dereference.cpp symex_goto.cpp
+  symex_function.cpp state/goto_symex_state.cpp symex_dereference.cpp symex_goto.cpp
   builtin_functions/memory_alloc.cpp
   builtin_functions/io.cpp
   builtin_functions/cpp_memory.cpp
@@ -13,7 +13,7 @@ add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp s
   builtin_functions/misc.cpp
   builtin_functions/witness.cpp
   equation/slice.cpp symex_other.cpp equation/symex_symmetry.cpp trace/xml_goto_trace.cpp
-  symex_valid_object.cpp dynamic_allocation.cpp renaming.cpp
+  symex_valid_object.cpp dynamic_allocation.cpp state/renaming.cpp
   execution_state.cpp reachability_tree.cpp reachability_tree_cin.cpp
   symex_invariant.cpp
   witness/witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp trace/printf_formatter.cpp equation/features.cpp trace/html.cpp trace/json.cpp

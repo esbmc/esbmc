@@ -1,4 +1,4 @@
-#include <goto-symex/renaming.h>
+#include <goto-symex/state/renaming.h>
 #include <unordered_map>
 #include <utility>
 #include <langapi/language_util.h>

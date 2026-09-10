@@ -7,7 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
-#include <goto-symex/renaming.h>
+#include <goto-symex/state/renaming.h>
 #include <goto-symex/symex_invariant.h>
 #include <goto-symex/equation/symex_target.h>
 #include <pointer-analysis/value_set.h>

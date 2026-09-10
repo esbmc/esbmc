@@ -1,6 +1,6 @@
 #include <cassert>
 #include <goto-symex/trace/build_goto_trace.h>
-#include <goto-symex/renaming.h>
+#include <goto-symex/state/renaming.h>
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
 

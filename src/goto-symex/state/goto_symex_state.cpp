@@ -1,7 +1,7 @@
 #include <cassert>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <map>
 #include <optional>

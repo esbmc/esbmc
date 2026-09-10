@@ -4,7 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <util/base/threeval.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
-#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/equation/symex_target.h>
 #include <map>
 #include <optional>
