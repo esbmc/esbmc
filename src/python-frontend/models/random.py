@@ -71,6 +71,46 @@ def choice(seq: list[int]) -> int:
     return seq[i]
 
 
+# `choice` and `sample` accept any sequence, but the frontend is monomorphic:
+# one body carries one type, and an unannotated one mixing a str and an int list
+# fails to encode at all. So each sequence type gets its own body and
+# function_call_expr::random_sequence_suffix picks between them at the call
+# site, exactly as builtins.py spells min/min_float/min_str (issue #7673).
+# The bodies below are deliberate copies; only the annotations differ. A tuple
+# gets no variant: its arity and member types vary per call site, so
+# function_call_expr::fold_random_choice_over_tuple selects an element inline.
+
+
+def choice_float(seq: list[float]) -> float:
+    """`choice` over a list of floats."""
+    n: int = len(seq)
+    if n <= 0:
+        raise IndexError("Cannot choose from an empty sequence")
+    i: int = nondet_int()
+    __ESBMC_assume(i >= 0 and i < n)
+    return seq[i]
+
+
+def choice_str(seq: list[str]) -> str:
+    """`choice` over a list of strings."""
+    n: int = len(seq)
+    if n <= 0:
+        raise IndexError("Cannot choose from an empty sequence")
+    i: int = nondet_int()
+    __ESBMC_assume(i >= 0 and i < n)
+    return seq[i]
+
+
+def choice_chars(seq: str) -> str:
+    """`choice` over a string, which is a sequence of one-character strings."""
+    n: int = len(seq)
+    if n <= 0:
+        raise IndexError("Cannot choose from an empty sequence")
+    i: int = nondet_int()
+    __ESBMC_assume(i >= 0 and i < n)
+    return seq[i]
+
+
 def shuffle(lst: list[int]) -> None:
     """random.shuffle(lst) — permutes `lst` in place.
 
@@ -91,6 +131,45 @@ def sample(population: list[int], k: int) -> list[int]:
     if k < 0 or k > n:
         raise ValueError("Sample larger than population or is negative")
     result: list[int] = []
+    i: int = 0
+    while i < k:
+        result.append(population[i])
+        i = i + 1
+    return result
+
+
+def sample_float(population: list[float], k: int) -> list[float]:
+    """`sample` over a list of floats."""
+    n: int = len(population)
+    if k < 0 or k > n:
+        raise ValueError("Sample larger than population or is negative")
+    result: list[float] = []
+    i: int = 0
+    while i < k:
+        result.append(population[i])
+        i = i + 1
+    return result
+
+
+def sample_str(population: list[str], k: int) -> list[str]:
+    """`sample` over a list of strings."""
+    n: int = len(population)
+    if k < 0 or k > n:
+        raise ValueError("Sample larger than population or is negative")
+    result: list[str] = []
+    i: int = 0
+    while i < k:
+        result.append(population[i])
+        i = i + 1
+    return result
+
+
+def sample_chars(population: str, k: int) -> list[str]:
+    """`sample` over a string, yielding a list of one-character strings."""
+    n: int = len(population)
+    if k < 0 or k > n:
+        raise ValueError("Sample larger than population or is negative")
+    result: list[str] = []
     i: int = 0
     while i < k:
         result.append(population[i])

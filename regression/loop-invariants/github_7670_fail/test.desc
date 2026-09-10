@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line\s+27\s+assertion sn == \(uint64_t\)n \* a \+ 1$
+^VERIFICATION FAILED$

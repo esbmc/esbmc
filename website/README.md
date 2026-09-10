@@ -1,7 +1,7 @@
 # ESBMC Website
 
 This directory represents the files for ESBMC's website. They get built by the
-GitHub action /.github/workflows/pages.yml and published to GitHub pages when
+GitHub action /.github/workflows/ci-master.yml and published to GitHub pages when
 the master branch is updated.
 
 To run it locally, install [Hugo](https://gohugo.io/) and run:

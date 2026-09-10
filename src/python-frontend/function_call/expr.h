@@ -719,6 +719,53 @@ private:
    */
   std::optional<exprt> try_fold_identity_array_return();
 
+  /**
+   * Suffix selecting the models/random.py variant that matches a sequence
+   * argument's type: "_float" or "_str" for a list of those, "_chars" for a
+   * str, and "" for a list of ints and for any argument this cannot type,
+   * which keeps the base model it had before the dispatch existed.
+   *
+   * @param seq  the converted sequence argument.
+   * @param func_name  "choice" or "sample", used in the diagnostic.
+   * @return the suffix to append to the model function name.
+   * @throws std::runtime_error naming func_name for a tuple, which no model
+   *         parameter can take and on which the list model would raise a
+   *         spurious memory-safety claim; and from
+   *         element_type_registry::homogeneous_element_type for a list whose
+   *         elements mix incompatibly.
+   */
+  std::string
+  random_sequence_suffix(const exprt &seq, const std::string &func_name);
+
+  /**
+   * Selects an element of a tuple for random.choice(), inline.
+   *
+   * A model function cannot take a tuple, whose arity and member types vary
+   * per call site, so the choice is folded into a nested conditional over a
+   * nondet index instead.
+   *
+   * @param seq  the converted sequence argument.
+   * @return the selected element, or nullopt when @p seq is not a tuple.
+   * @throws std::runtime_error on an empty tuple, which has no element to
+   *         select, and on a tuple whose members differ in type, which one
+   *         conditional cannot carry.
+   */
+  std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
+
+  /**
+   * Folds sum() over a numeric tuple into a chain of additions.
+   *
+   * The sum/sum_float models iterate a list representation a tuple struct does
+   * not have, so they would return garbage.
+   *
+   * @param is_user_imported  whether a user import shadows the builtin.
+   * @param is_numpy_model_call  whether the call is inside models/numpy.py.
+   * @return the folded sum, or nullopt when the call is not sum() over a
+   *         numeric tuple.
+   */
+  std::optional<exprt>
+  fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
+
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
    * _float/_str/_default suffix to actual_func_name based on element type, and
