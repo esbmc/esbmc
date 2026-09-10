@@ -1,7 +1,7 @@
 #include <cassert>
-#include <goto-symex/execution_state.h>
+#include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <string>
 #include <vector>
 #include <util/arith/arith_tools.h>

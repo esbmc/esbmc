@@ -14,7 +14,7 @@ add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp s
   builtin_functions/witness.cpp
   equation/slice.cpp symex_other.cpp equation/symex_symmetry.cpp trace/xml_goto_trace.cpp
   symex_valid_object.cpp dynamic_allocation.cpp state/renaming.cpp
-  execution_state.cpp reachability_tree.cpp reachability_tree_cin.cpp
+  scheduler/execution_state.cpp scheduler/reachability_tree.cpp scheduler/reachability_tree_cin.cpp
   symex_invariant.cpp
   witness/witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp trace/printf_formatter.cpp equation/features.cpp trace/html.cpp trace/json.cpp
   trace/sarif.cpp)

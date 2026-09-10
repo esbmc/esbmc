@@ -1,5 +1,5 @@
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <langapi/language_util.h>
 #include <pointer-analysis/dereference.h>
 #include <irep2/irep2.h>

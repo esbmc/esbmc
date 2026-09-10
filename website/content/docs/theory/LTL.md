@@ -240,9 +240,9 @@ Given the program and the generated monitor, ESBMC:
    assertion was present to prove.
 
 Two smaller accommodations: the context-switch threshold is raised from 2 to 3
-under `--ltl` (`src/goto-symex/execution_state.cpp:106`), and the assertion
-cache is disabled (`src/esbmc/bmc.cpp:118`) because the LTL assertions are
-re-checked with different maskings.
+under `--ltl` (`src/goto-symex/scheduler/execution_state.cpp:109`), and the
+assertion cache is disabled (`src/esbmc/bmc.cpp:118`) because the LTL
+assertions are re-checked with different maskings.
 
 ## Limitations
 

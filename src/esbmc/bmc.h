@@ -5,7 +5,7 @@
 #include <goto-programs/goto_coverage.h>
 #include <goto-programs/property_verdict.h>
 #include <goto-symex/equation/slice.h>
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/equation/symex_target_equation.h>
 #include <goto-symex/witness/witnesses.h>
 #include <goto-symex/testgen/pytest.h>

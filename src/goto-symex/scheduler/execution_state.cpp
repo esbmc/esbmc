@@ -1,5 +1,5 @@
-#include <goto-symex/execution_state.h>
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/execution_state.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/symex_invariant.h>
 #include <langapi/language_ui.h>
 #include <langapi/languages.h>

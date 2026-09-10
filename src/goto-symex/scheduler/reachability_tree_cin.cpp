@@ -1,4 +1,4 @@
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <iostream>
 
 // TODO: This is the only place with istream. How to fix this?
