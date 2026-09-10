@@ -33,6 +33,7 @@
 #include <util/irep/std_code.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/symbolic_types.h>
+#include <util/expr/type_byte_size.h>
 
 #include <algorithm>
 #include <cctype>
@@ -815,12 +816,70 @@ void python_converter::convert()
     const code_typet::argumentst &arguments =
       to_code_type(symbol->get_type()).arguments();
 
-    // Function args are nondet values
+    // Function args are nondet values, except a bytes/list param: it decays
+    // to pointer-to-element, so a bare nondet pointer isn't backed by any
+    // object. Back it with a nondet-length static array instead, mirroring
+    // argv[i] in clang_c_main.cpp.
+    size_t harness_arg_index = 0;
     for (const code_typet::argumentt &arg : arguments)
     {
-      exprt arg_value = exprt("sideeffect", arg.type());
-      arg_value.statement("nondet");
-      call.arguments().push_back(arg_value);
+      const typet &arg_type = arg.type();
+      const bool is_scalar_pointee =
+        arg_type.is_pointer() &&
+        (arg_type.subtype().is_signedbv() ||
+         arg_type.subtype().is_unsignedbv() || arg_type.subtype().is_bool() ||
+         arg_type.subtype().is_floatbv());
+
+      if (is_scalar_pointee)
+      {
+        const std::string idx = std::to_string(harness_arg_index);
+
+        symbolt len_sym;
+        len_sym.id = "__ESBMC_harness_arg_len_" + idx;
+        len_sym.name = len_sym.id;
+        len_sym.set_type(size_type());
+        len_sym.static_lifetime = true;
+        len_sym.lvalue = true;
+        symbolt *len_ptr = symbol_table_.move_symbol_to_context(len_sym);
+        exprt len = symbol_expr(*len_ptr);
+
+        exprt le_max("<=", bool_type());
+        le_max.copy_to_operands(len, from_integer(4, size_type()));
+        block.copy_to_operands(code_assumet(le_max));
+
+        symbolt arr_sym;
+        arr_sym.id = "__ESBMC_harness_arg_data_" + idx;
+        arr_sym.name = arr_sym.id;
+        arr_sym.set_type(array_typet(arg_type.subtype(), len));
+        arr_sym.static_lifetime = true;
+        arr_sym.lvalue = true;
+        symbolt *arr_ptr = symbol_table_.move_symbol_to_context(arr_sym);
+
+        // DYNAMIC_SIZE is a byte count, not an element count -- argv's
+        // 1-byte char elements hid this; ours are wider.
+        type2tc elem_type2 = migrate_type(arg_type.subtype());
+        exprt elem_bytes =
+          from_integer(type_byte_size(elem_type2), size_type());
+        exprt len_bytes("*", size_type());
+        len_bytes.copy_to_operands(len, elem_bytes);
+
+        exprt dynamic_size("dynamic_size", size_type());
+        dynamic_size.copy_to_operands(gen_address_of(symbol_expr(*arr_ptr)));
+        block.copy_to_operands(code_assignt(dynamic_size, len_bytes));
+
+        // &arr[0], not &arr: address-of the whole array breaks
+        // __ESBMC_get_object_size's resolution back to this object.
+        index_exprt first_elem(
+          symbol_expr(*arr_ptr), gen_zero(index_type()), arg_type.subtype());
+        call.arguments().push_back(gen_address_of(first_elem));
+      }
+      else
+      {
+        exprt arg_value = exprt("sideeffect", arg_type);
+        arg_value.statement("nondet");
+        call.arguments().push_back(arg_value);
+      }
+      ++harness_arg_index;
     }
 
     convert_expression_to_code(call);
