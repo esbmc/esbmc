@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto-functions-only
+^\s+ASSERT g > 0 // assertion g > 0$
