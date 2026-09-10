@@ -612,8 +612,8 @@ void tuple_handler::handle_tuple_unpacking(
       member_type.is_array() && to_array_type(member_type).size().is_constant())
     {
       const array_typet &arr_t = to_array_type(member_type);
-      const BigInt n = binary2integer(
-        to_constant_expr(arr_t.size()).value().c_str(), false);
+      const BigInt n =
+        binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
       for (BigInt k = 0; k < n; k = k + 1)
       {
         const exprt idx = from_integer(k, index_type());
