@@ -1,4 +1,4 @@
-#include <goto-symex/sarif.h>
+#include <goto-symex/trace/sarif.h>
 
 #include <ac_config.h>
 #include <charconv>

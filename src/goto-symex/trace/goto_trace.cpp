@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstring>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/printf_formatter.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/printf_formatter.h>
 #include <goto-symex/witness/witnesses.h>
 
 #include <regex>

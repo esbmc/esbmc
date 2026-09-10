@@ -1,6 +1,6 @@
 #include <cassert>
-#include <goto-symex/printf_formatter.h>
-#include <goto-symex/xml_goto_trace.h>
+#include <goto-symex/trace/printf_formatter.h>
+#include <goto-symex/trace/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <util/base/i2string.h>
 #include <util/irep/xml_irep.h>

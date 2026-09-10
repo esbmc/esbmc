@@ -1,4 +1,4 @@
-#include <goto-symex/printf_formatter.h>
+#include <goto-symex/trace/printf_formatter.h>
 #include <sstream>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>

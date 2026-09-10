@@ -1,5 +1,5 @@
 #include <util/message/message.h>
-#include <goto-symex/goto_trace.h>
+#include <goto-symex/trace/goto_trace.h>
 #include <util/base/cwe_mapping.h>
 #include <util/lang/language.h>
 #include <langapi/language_util.h>

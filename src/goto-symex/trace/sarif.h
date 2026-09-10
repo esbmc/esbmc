@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_SARIF_H
 
 #include <goto-programs/dead_store_advisory.h>
-#include <goto-symex/goto_trace.h>
+#include <goto-symex/trace/goto_trace.h>
 #include <util/symtab/namespace.h>
 #include <util/config/options.h>
 #include <vector>

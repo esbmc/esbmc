@@ -28,13 +28,13 @@
 #include <esbmc/property_report.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
-#include <goto-symex/build_goto_trace.h>
+#include <goto-symex/trace/build_goto_trace.h>
 #include <goto-symex/symex_invariant.h>
-#include <goto-symex/goto_trace.h>
+#include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/features.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/trace/sarif.h>
 #include <goto-symex/symex_symmetry.h>
-#include <goto-symex/xml_goto_trace.h>
+#include <goto-symex/trace/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>

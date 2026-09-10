@@ -1,7 +1,7 @@
 #include <cassert>
 #include <climits>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/printf_formatter.h>
+#include <goto-symex/trace/printf_formatter.h>
 #include <string>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>

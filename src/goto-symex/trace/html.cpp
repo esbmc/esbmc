@@ -1,5 +1,5 @@
 #include <filesystem>
-#include <goto-symex/goto_trace.h>
+#include <goto-symex/trace/goto_trace.h>
 #include <langapi/language_util.h>
 #include <optional>
 #include <regex>
