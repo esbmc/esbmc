@@ -544,6 +544,30 @@ an open PR.
   as a test or as steps someone can follow; if it cannot be put there, leave
   it out rather than present it as verification. (This applies even when the
   claim is true — the point is reproducibility, not honesty.)
+- Fill `.github/pull_request_template.md`. Keep the description under 150
+  words: what was wrong, what changed, and how it is tested. For a change
+  under 20 lines, one or two sentences. Do not restate the diff, list touched
+  files, or add Summary / Impact / Scope / Validation headings, bold, or
+  tables.
+- If you fix a bug in the same change that finds it, open only the PR. Do not
+  create an issue first: the regression test is the reproducer and the PR
+  description is the report.
+- Before opening a PR, look for open issues it also fixes: search the error
+  text and the construct, and list the area label
+  (`gh issue list --repo esbmc/esbmc --label <area> --search "<terms>"`). Run
+  each candidate's reproducer on your build; for every one that now passes,
+  add `Fixes #N` and a `github_<N>` regression test.
+
+## Issue Conventions
+
+- Before opening an issue, search open and closed issues for the error text,
+  the construct, and the flags involved
+  (`gh search issues --repo esbmc/esbmc --include-prs "<terms>"`). If one
+  matches, add your reproducer there as a comment instead.
+- Give the fields the matching form in `.github/ISSUE_TEMPLATE/` asks for: a
+  reproducer (program, command, output, version) plus at most 150 words. Put
+  root-cause analysis in the PR that fixes it, once.
+- Questions about using ESBMC go to GitHub Discussions (Q&A), not issues.
 
 ## Issue and PR Labels
 
