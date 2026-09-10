@@ -38,15 +38,18 @@
 /// offered every node and guards itself.
 ///
 /// Templated on the pass so a second frontend can order the arms it inherits
-/// alongside its own in one table: taking the address of an inherited member
-/// yields a pointer-to-member of the *declaring* class, which converts to the
-/// derived one, and a table of these stays constant-initialised
-/// (docs/roadmap/scope-clang-cpp-irep2.md §3.1).
+/// alongside its own in one table. `run` is a trampoline rather than a
+/// pointer-to-member deliberately: a base member pointer stored in a
+/// derived-typed table is legal, but GCC 13's array-bounds analysis mis-reads
+/// the call once the runner inlines and rejects it at -O2
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.1). A captureless lambda converts
+/// to a function pointer and is an address constant, so the table stays
+/// constant-initialised.
 template <class Pass>
 struct adjust_arm
 {
   const char *name;
-  void (Pass::*run)(expr2tc &);
+  void (*run)(Pass &, expr2tc &);
   bool (*when)(const expr2tc &);
 };
 
@@ -61,7 +64,7 @@ void run_adjust_arms(
 {
   for (const adjust_arm<Pass> &a : arms)
     if (!a.when || a.when(expr))
-      (self.*a.run)(expr);
+      a.run(self, expr);
 }
 
 class clang_c_adjust_irep2
