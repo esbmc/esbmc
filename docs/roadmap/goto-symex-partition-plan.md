@@ -173,10 +173,38 @@ what made #6381 reviewable, and it is not optional here.
 | 5 | `state/` | — |
 | 6 | `scheduler/` | — |
 | 7 | `engine/` (incl. `builtin_functions/` → `engine/builtin_functions/`) | Largest; last, so a conflict here costs the least re-work. |
+| 8 | clang-format 11 reflow of the moved files | **Not foreseen when this plan was written** — see §6.1. |
 
 Each commit is `git mv` + include-path rewrite + `CMakeLists.txt` path update.
 No commit changes a declaration, a definition, a build flag, or a compiler
 option.
+
+**Executed** on branch `refactor/goto-symex-partition`: commits 1–7 as tabled,
+each building green before the next began, plus commit 8 below. The measured
+post-move group graph is exactly the one §4 predicts — `engine -> state,
+equation`; `scheduler -> engine, state, equation`; `state -> equation, witness,
+<top>`; `equation -> trace`; `trace -> equation`; `witness -> equation, trace`;
+`testgen -> equation` — so the two pre-existing inversions §11.1 and §11.2 name
+are the only edges that cross the §3 rule-5 boundary, and this PR adds neither.
+
+### 6.1 Commit 8, and why the plan needed it
+
+The plan asserted the change would be include-path edits alone. It is not,
+because of how the code-style gate measures a move.
+`.github/workflows/ci-pull-request.yml`'s `code-style` job runs
+`git-clang-format --diff origin/<base>` over the PR's changed files, and
+`git-clang-format` computes its changed-line ranges from a diff taken **without
+rename detection**. A moved file is therefore an added file, every line of it is
+in range, and clang-format 11 is asked to format the whole thing — surfacing
+formatting the file had drifted into under a *newer* clang-format and that no
+previous PR had touched a changed line of.
+
+27 of the 62 moved files are affected. Commit 8 applies exactly that reflow,
+kept separate so commits 1–7 remain reviewable as pure renames. G2 below is
+stated over tokens rather than lines for the same reason.
+
+#6381 did not hit this only because none of the 151 files it moved had drifted.
+Any future partition PR should expect the extra commit.
 
 ## 7. The mechanical rewrite, and its three traps
 
@@ -214,14 +242,21 @@ that make this a *proof* rather than a green build.
 
 * **G1 — include-resolution equality.** `ninja -t deps` exposes the fully
   resolved (translation unit → header) graph. Snapshot it before the first move
-  (841,455 pairs on this tree), apply the rename map to the snapshot, and diff
-  against the post-move graph. The required result is **0 lost, 0 gained**:
-  every include in the project resolves to the same header *content* as on
-  `master`. This is the only check that catches an include quietly resolving to
-  a different file.
-* **G2 — content proof.** A scripted assertion that, for every moved file, the
-  diff against its pre-move content contains **only** `#include` lines. Run per
-  commit; a single non-include hunk fails the gate.
+  (844,488 pairs over 769 TUs as measured on this branch), apply the rename map
+  — to the object paths as well as the header paths, since a moved source moves
+  its object — to the snapshot, and diff against the post-move graph. The
+  required result is **0 lost, 0 gained**, and it held at every one of the eight
+  commits: every include in the project resolves to the same header *content*
+  as on `master`. This is the only check that catches an include quietly
+  resolving to a different file.
+* **G2 — content proof.** A scripted assertion that, for every C/C++ file the
+  branch touches, the comment-free **token stream** — with the inserted
+  `goto-symex/<group>/` path segment undone — is identical to the same file on
+  the base revision. Run per commit; a single differing token fails the gate.
+  Tokens rather than lines because commit 8 (§6.1) reflows, and comment-free
+  because path citations inside comments move with the files. As run on this
+  branch: 96 files proved identical, and the gate was mutation-checked by
+  flipping one `==` to `!=` in `equation/slice.cpp` and confirming it fails.
 * **G3 — unit tests.** `ctest -LE regression --timeout 60`, all green. The 16
   `unit/goto-symex/*.test.cpp` plus `symex_run.h` and `ssa_validator.h` include
   these headers directly and are the closest thing to a compile-level contract
@@ -252,6 +287,15 @@ that make this a *proof* rather than a green build.
   `parse_result()` in `esbmc-wrapper.py` is unaffected and the PR does not carry
   `needs-svcomp-run`. State this explicitly in the PR rather than leaving it
   inferred.
+
+**As run on `refactor/goto-symex-partition`.** G1 0 lost / 0 gained at all eight
+commits; G2 96 files token-identical, mutation-checked; G3 849/850 (the failure
+is *"an exhausted stack still reports itself"*, red on clean `master` on this
+host); G4 2164 tests, one failure — `bundled_headers_from_vfs`, likewise red on
+clean `master` here; G5 exit 0 with the recorded sha256 untouched; G6 reports
+*"clang-format did not modify any files"* after commit 8; G7 delta `+0` in all three
+partitions; G8 not applicable. No Mode C obligation: the change adds and removes
+zero branches.
 
 ## 9. References to update outside `src/goto-symex/`
 
