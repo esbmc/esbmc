@@ -1,9 +1,11 @@
-/* MSVC spells assert(e) as `(!!(e)) || (_wassert(...), 0)`, so on Windows a
- * loop body that asserts holds a branch around the ASSERT rather than the
- * single one the glibc and Darwin spellings fold to -- glibc leaves an OTHER
- * beside it, which synth_loop_invariant_glibcassert pins. The expansion is
- * written out here so the shape is pinned on every host, not only on Windows,
- * where it made the synthesiser decline every loop whose body asserts. */
+/* MSVC spells assert(e) as `(!!(e)) || (_wassert(...), 0)`, which once left a
+ * branch around the ASSERT and so made the synthesiser decline every loop whose
+ * body asserts on Windows. Since #7671 lowers a discarded `||` as a statement
+ * the body folds to a single top-level ASSERT, as the glibc spelling does
+ * (glibc leaves an OTHER beside it, which synth_loop_invariant_glibcassert
+ * pins). What this pins now is that the fold keeps the loop recognisable on
+ * every host; synth_loop_invariant_condassert covers the branch shape that
+ * survives lowering. */
 #include <stddef.h>
 #include <stdint.h>
 void _wassert(const wchar_t *_Message, const wchar_t *_File, unsigned _Line);
