@@ -1,7 +1,7 @@
 #include <goto-symex/testgen/ctest.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/testgen/test_gen_guard.h>
-#include <goto-symex/witnesses.h>
+#include <goto-symex/witness/witnesses.h>
 #include <ac_config.h>
 #include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>

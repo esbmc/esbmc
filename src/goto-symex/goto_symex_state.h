@@ -19,7 +19,7 @@
 #include <irep2/irep2.h>
 #include <memory>
 #include <vector>
-#include <goto-symex/witnesses.h>
+#include <goto-symex/witness/witnesses.h>
 
 class execution_statet; // forward decl
 

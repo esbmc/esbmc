@@ -7,7 +7,7 @@
 #include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include <goto-symex/witnesses.h>
+#include <goto-symex/witness/witnesses.h>
 #include <goto-symex/testgen/pytest.h>
 #include <goto-symex/testgen/ctest.h>
 #include <langapi/language_ui.h>

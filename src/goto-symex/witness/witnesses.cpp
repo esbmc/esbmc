@@ -1,5 +1,5 @@
 #include "irep2/irep2_expr.h"
-#include <goto-symex/witnesses.h>
+#include <goto-symex/witness/witnesses.h>
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>

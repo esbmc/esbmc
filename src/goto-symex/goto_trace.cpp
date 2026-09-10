@@ -2,7 +2,7 @@
 #include <cstring>
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/printf_formatter.h>
-#include <goto-symex/witnesses.h>
+#include <goto-symex/witness/witnesses.h>
 
 #include <regex>
 #include <langapi/language_util.h>
