@@ -448,6 +448,46 @@ The nine table guards moved to a shared header (one definition, two tables), and
 `adjust_arms.test.cpp` pins that the two tables stay in the same order — a row
 added to one and not the other should be a decision, not an accident.
 
+### 3.3 The crashes are one cause, and it is not one §3 predicted (2026-09-10)
+
+§3.2 left 24 of 80 tests crashing under `--clang-cpp-irep2-adjust-only` once the
+member-call arm landed. Symbolised and clustered by top frame — SIGSEGV is not a
+cause, and this file has split symptom-named clusters before — **all 23 that
+produce a backtrace share one site**:
+
+```
+remove_exceptions(goto_functionst &, contextt &, namespacet const &)
+    src/goto-programs/remove_exceptions.cpp:1857
+```
+
+Reduced to two lines, with the control beside it:
+
+| program | default | hop-off |
+|---|---|---|
+| a method call, no exceptions | SUCCESSFUL | SUCCESSFUL |
+| `int main(){try{throw 1;}catch(int e){return e-1;}return 1;}` | SUCCESSFUL | **SIGSEGV** |
+
+**Cause.** `clang_cpp_adjust::adjust_catch`
+(`clang_cpp_adjust_code.cpp:319-336`) sets `exception_id` on each catch block,
+and the throw arm (`clang_cpp_adjust_expr.cpp:483`) does the same, both via
+`convert_exception_id`. The IREP2 pass *replaces* `clang_cpp_adjust`, so none of
+that runs, and `remove_exceptions` reaches catch/throw nodes with no catchable-type
+id.
+
+**It is not a representation gap.** `migrate_expr`'s cpp-catch arm carries
+`exception_id` across the seam in both directions, so §4.1's conclusion stands —
+what is missing is the arm that *computes* the ids, not a field to hold them.
+Worth stating because the migrate census could not have found this: the census
+runs after the legacy adjuster, so the attributes were already present when it
+looked.
+
+**What it says about §3's mapping.** Neither of the two arms the corpus has now
+demanded — member-call lowering and exception-id assignment — is among the five
+§3 predicted from name comparison (`adjust_code`, `adjust_decl_block`,
+`adjust_symbol`, `adjust_reference`, `adjust_side_effect`). Two for two, the
+corpus named a different arm than the names did. Treat §3's table as an inventory,
+not a work order.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -586,6 +626,9 @@ spellings (§33) — so W3's carriage problem lands here first.
 5. ~~Make the table generic and stand up `clang_cpp_adjust_irep2`~~ — **done**,
    §3.1 and §3.2 (PRs #7714, #7717). The corpus, not the name mapping, says what
    is missing: write the member-call arm first (54 of 57 real divergences).
-6. Then the replacement mode, and the census by verdict.
+6. Port `adjust_catch` / the throw arm's `exception_id` assignment (§3.3) — one
+   cause behind all 23 symbolised crashes.
+7. Then the remaining verdict divergences (15 of 80 report FAILED where the
+   default path succeeds).
 
 Only then does a slice make sense.
