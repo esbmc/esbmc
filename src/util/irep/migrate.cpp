@@ -2111,10 +2111,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       // "#size" (cmt_size). Under --irep2-bodies the body is migrated before
       // that mirroring runs, so "#size" is still empty — read "size" in that
       // case, otherwise the whole size operand is silently dropped.
-      const exprt &sz = expr.cmt_size().is_not_nil()
+      const auto carries_size = [](const irept &i) {
+        return !i.id().empty() && !i.is_nil();
+      };
+      const exprt &sz = carries_size(expr.cmt_size())
                           ? static_cast<const exprt &>(expr.cmt_size())
                           : static_cast<const exprt &>(expr.size_irep());
-      migrate_expr(sz, thesize);
+      if (carries_size(sz))
+        migrate_expr(sz, thesize);
 
       // The new-expression's initializer lives in the "initializer" sub, not
       // in the operands. Carry it through `arguments` so the round-trip back
@@ -3395,7 +3399,11 @@ static exprt back_sideeffect(const expr2tc &ref)
   typet thetype = migrate_type_back(ref->type);
   exprt theexpr("sideeffect", thetype);
   typet cmttype;
-  exprt size;
+  // Nil, not default-constructed: an empty irep is a third state that
+  // is_not_nil() reports as present, and cmt_size() below writes it
+  // unconditionally. A reader then picks the empty sub over a real size and
+  // migrating it aborts.
+  exprt size = nil_exprt();
 
   if (!is_nil_type(ref2.alloctype))
     cmttype = migrate_type_back(ref2.alloctype);
