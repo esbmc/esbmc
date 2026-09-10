@@ -93,16 +93,21 @@ bool store_elided(const symex_target_equationt::SSA_stept &step)
 // the elision branch has to fire. Reading through an assertion, not the return
 // value, keeps the array live: a returned expression is itself sliced away, and
 // then the stores go with `ignore` rather than reaching the branch at all.
+// The elements are pointers, for the reason slice.test.cpp's "closure survives
+// constant array indices" gives: a refused numeric store is re-offered as a
+// read of the array being assigned and the array keeps propagating, so only a
+// pointer element still ends propagation and reaches the slicer (#7597).
 const char *dead_array_store = R"(
-int nondet_int(void);
+int *nondet_ptr(void);
 int main(void)
 {
-  int a[4];
-  a[0] = nondet_int();
-  a[1] = nondet_int();
-  a[2] = nondet_int();
-  a[3] = nondet_int();
-  __ESBMC_assert(a[1] != 424242, "read one index");
+  int *a[4];
+  int *p = nondet_ptr();
+  a[0] = p + 1;
+  a[1] = p + 2;
+  a[2] = p + 3;
+  a[3] = p + 4;
+  __ESBMC_assert(a[1] != 0, "read one index");
   return 0;
 }
 )";

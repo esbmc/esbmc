@@ -77,6 +77,32 @@ void pre_register_addresses(
   }
 }
 
+/// PathReachable asks only whether the path is feasible, ignoring the claim:
+/// UNSAT over the kept claims means every discharge was vacuous. Satisfiable
+/// asks whether the claim can hold, in the same shape the violation query
+/// uses, so that negating the implication forces its antecedents -- conjoining
+/// `cond` instead would be satisfied by leaving the path untaken, which makes
+/// every claim look satisfiable (issue #7585).
+void encode_assertion(
+  equation_conversion_statet &state,
+  symex_target_equationt::SSA_stept &step,
+  symex_target_equationt::assertion_modet mode)
+{
+  using mode_t = symex_target_equationt::assertion_modet;
+
+  if (mode == mode_t::PathReachable)
+  {
+    step.cond_expr = state.assumpt_expr;
+    state.assertions.push_back(state.assumpt_expr);
+    return;
+  }
+
+  const expr2tc &claim =
+    mode == mode_t::Satisfiable ? step.cond_neg : step.cond;
+  step.cond_expr = implies2tc(state.assumpt_expr, claim);
+  state.assertions.push_back(not2tc(step.cond_expr));
+}
+
 void convert_internal_step(
   const namespacet &ns,
   bool ssa_trace,
@@ -85,7 +111,7 @@ void convert_internal_step(
   smt_convt &smt_conv,
   equation_conversion_statet &state,
   symex_target_equationt::SSA_stept &step,
-  bool vacuity_mode)
+  symex_target_equationt::assertion_modet mode)
 {
   if (step.ignore)
   {
@@ -144,19 +170,7 @@ void convert_internal_step(
 
   if (step.is_assert())
   {
-    if (vacuity_mode)
-    {
-      // Vacuity probe: ask whether the path to this claim is reachable at
-      // all, ignoring the claim itself. If the OR of all kept claims'
-      // path assumption is UNSAT, every discharge was vacuous.
-      step.cond_expr = state.assumpt_expr;
-      state.assertions.push_back(state.assumpt_expr);
-    }
-    else
-    {
-      step.cond_expr = implies2tc(state.assumpt_expr, step.cond);
-      state.assertions.push_back(not2tc(step.cond_expr));
-    }
+    encode_assertion(state, step, mode);
   }
   else if (step.is_assume())
   {
@@ -272,6 +286,7 @@ void symex_target_equationt::assumption(
 void symex_target_equationt::assertion(
   const expr2tc &guard,
   const expr2tc &cond,
+  const expr2tc &cond_neg,
   const std::string &msg,
   std::vector<stack_framet> stack_trace,
   const sourcet &source,
@@ -282,6 +297,7 @@ void symex_target_equationt::assertion(
 
   SSA_step.guard = guard;
   SSA_step.cond = cond;
+  SSA_step.cond_neg = cond_neg;
   SSA_step.type = goto_trace_stept::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
@@ -314,7 +330,7 @@ void symex_target_equationt::renumber(
     debug_print_step(SSA_step);
 }
 
-void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
+void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 {
   // Pre-register address-of'd string/array literals so int-to-ptr casts see
   // them regardless of source-level declaration order (see
@@ -343,7 +359,7 @@ void symex_target_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
       smt_conv,
       state,
       SSA_step,
-      vacuity_mode);
+      mode);
 
   if (!state.assertions.empty())
     smt_conv.assert_expr(disjunction(state.assertions));
@@ -594,7 +610,7 @@ void runtime_encoded_equationt::flush_latest_instructions()
       conv,
       solver_state->states.back(),
       *run_it,
-      /*vacuity_mode=*/false);
+      assertion_modet::Violated);
 
   --run_it;
   cvt_progress = run_it;
@@ -625,16 +641,18 @@ void runtime_encoded_equationt::pop_ctx()
   solver_state->states.pop_back();
 }
 
-void runtime_encoded_equationt::convert(smt_convt &smt_conv, bool vacuity_mode)
+void runtime_encoded_equationt::convert(
+  smt_convt &smt_conv,
+  assertion_modet mode)
 {
   // The incremental path doesn't re-walk SSA_steps, so the per-assertion
   // path-assumption rewrite that vacuity mode needs cannot be applied here.
   // Fail loudly rather than producing normal-mode results under a vacuity
   // probe.
-  (void)vacuity_mode;
+  (void)mode;
   assert(
-    !vacuity_mode &&
-    "runtime_encoded_equationt::convert does not support vacuity mode");
+    mode == assertion_modet::Violated &&
+    "runtime_encoded_equationt::convert supports only the default mode");
 
   // Don't actually convert. We've already done most of the conversion by now
   // (probably), instead flush all unconverted instructions. We don't push

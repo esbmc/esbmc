@@ -6,6 +6,7 @@
 #include <map>
 #include <optional>
 #include <sstream>
+#include <utility>
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/base/prefix.h>
@@ -170,25 +171,54 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
-/// A (possibly typecast) symbol whose value can never change under
-/// it: a level2 SSA generation (assigned once) or a nondet$ free
-/// variable (never assigned; no level2 generation is minted for it).
-/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the
-/// symbol here is a member value inside a recorded aggregate, so a
-/// member read folds to the free variable the trace shows anyway.
+/// The types a read may be carried at. Scalars, and fixed-size struct or array
+/// aggregates: a read of a whole member denotes it exactly and folds a sibling
+/// the same way, which is what a write into an array member needs (#7597). The
+/// aggregate gates are the ones constant_propagation applies to an aggregate
+/// value -- infinite-size modelling arrays and oversized nests stay out,
+/// because a read at a symbolic index inlines the whole constant. A union is
+/// out because its members alias, and a pointer because carrying one resolves a
+/// later dereference against the wrong object, a false "Incorrect alignment
+/// when accessing data object" on the iterator read in
+/// regression/esbmc-cpp/cpp/github_5868_list_iterator_adl.
+static bool immutable_read_type(const expr2tc &e)
+{
+  if (is_number_type(e->type) || is_bool_type(e->type))
+    return true;
+  if (!type_has_constant_size(e->type))
+    return false;
+  if (is_array_type(e->type))
+    return array_may_propagate(e);
+  return is_struct_type(e->type);
+}
+
+/// A value that can never change once recorded: a level2 SSA generation
+/// (assigned once), a nondet$ free variable (never assigned; no level2
+/// generation is minted for it), or a member / fixed-index read out of one.
+/// Unlike constant_propagation's bare-symbol nondet$ exclusion, the value
+/// here sits inside a recorded aggregate, so the read folds to the free
+/// variable the trace shows anyway.
 static bool is_immutable_value(const expr2tc &expr)
 {
   const expr2tc *b = &expr;
   while (is_typecast2t(*b))
     b = &to_typecast2t(*b).from;
-  if (!is_symbol2t(*b))
+
+  if (!immutable_read_type(*b))
     return false;
-  // Scalars only: an aggregate-typed symbol must keep going through
-  // constant_propagation, whose array_may_propagate refuses the
-  // infinite-size modelling arrays and oversized nests.
-  if (!(is_number_type((*b)->type) || is_bool_type((*b)->type) ||
-        is_pointer_type((*b)->type)))
-    return false;
+
+  // A member or fixed-index read is immutable exactly when the object read
+  // from is.
+  while (!is_symbol2t(*b))
+  {
+    if (is_member2t(*b))
+      b = &to_member2t(*b).source_value;
+    else if (is_index2t(*b) && is_constant_int2t(to_index2t(*b).index))
+      b = &to_index2t(*b).source_value;
+    else
+      return false;
+  }
+
   const symbol2t &sym = to_symbol2t(*b);
   if (
     sym.rlevel == symbol_renaming_level::level2 ||
@@ -197,24 +227,117 @@ static bool is_immutable_value(const expr2tc &expr)
   return has_prefix(sym.thename.as_string(), "nondet$");
 }
 
-/// Whether a constant aggregate literal may propagate: every element
-/// must itself propagate. A union literal may also carry a (typecast)
-/// symbol as its initializing member — constant_union's init_field
-/// keeps a later cross-member read visible as one.
+/* Raising this buys termination: a loop counter held in the aggregate being
+ * written (#7597) folds only while the writes stay under the bound. Above it
+ * the chain is left symbolic and the next update starts a fresh one, so a loop
+ * writing M elements of one aggregate walks O(M * symbolic_chain_bound) nodes,
+ * besides inlining the carried chain at every read. On
+ * `int a[M]; for (i = 0; i < M; i++) a[i] = nondet();` at M=8192: 0.7s at 128
+ * against 4.6s here. Chains whose updates all propagate are not counted, so
+ * pre-#7597 folding is unchanged. */
+static constexpr unsigned symbolic_chain_bound = 1024;
+
+/// Whether a `with` update value may be carried, counting in @p symbolic the
+/// ones only is_immutable_value accepts -- the class #7597 admits, and the one
+/// symbolic_chain_bound caps.
+static bool update_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &value,
+  unsigned &symbolic)
+{
+  if (state.constant_propagation(value))
+    return true;
+  if (!is_immutable_value(value))
+    return false;
+  if (++symbolic <= symbolic_chain_bound)
+    return true;
+
+  // Warn once per process: dropping the chain is otherwise silent, and a loop
+  // bounded by a value held in the same object then unwinds forever with
+  // nothing in the output to say why.
+  static bool warned = false;
+  if (!std::exchange(warned, true))
+    log_warning(
+      "constant propagation gave up on a `with` chain past {} symbolic "
+      "updates; a loop bounded by a value held in the same object may not be "
+      "unwound to completion",
+      symbolic_chain_bound);
+  return false;
+}
+
+/// The type an aggregate declares for the slot @p field names, or nil where
+/// the slot cannot be named. This is what with2t checks its update value
+/// against (irep2_expr.cpp assert_consistency).
+static type2tc slot_type(const type2tc &aggregate, const expr2tc &field)
+{
+  if (is_array_type(aggregate))
+    return to_array_type(aggregate).subtype;
+  if (!is_struct_type(aggregate) || !is_constant_string2t(field))
+    return type2tc();
+  const auto c = struct_union_get_component_number(
+    aggregate, to_constant_string2t(field).value);
+  return c.has_value() ? struct_union_members(aggregate)[*c] : type2tc();
+}
+
+/// A read of the location a write targets, out of @p l2_lhs -- the name the
+/// enclosing assignment has just defined. `member(l2_lhs, f)` after
+/// `l2_lhs = with(.., f, v)` denotes v exactly: a later write to the same
+/// location overwrites the read and the value alike. level2t::rename returns
+/// early on an L2 symbol, so the read neither re-expands nor grows across
+/// iterations, unlike a carried copy of v.
+static expr2tc read_of_field(const expr2tc &l2_lhs, const expr2tc &field)
+{
+  // At the slot's declared type, not the refused value's own: an implicit
+  // conversion at the write leaves them different, and with2t checks the
+  // update value against the declared one (irep2_expr.cpp assert_consistency).
+  // with2t admits a pointer-typed index, and only a constant one reads back to
+  // an immutable value anyway.
+  if (is_array_type(l2_lhs))
+    return is_constant_int2t(field)
+             ? index2tc(to_array_type(l2_lhs->type).subtype, l2_lhs, field)
+             : expr2tc();
+  if (is_struct_type(l2_lhs))
+  {
+    if (!is_constant_string2t(field))
+      return expr2tc();
+    const irep_idt &name = to_constant_string2t(field).value;
+    const auto c = struct_union_get_component_number(l2_lhs->type, name);
+    if (!c.has_value())
+      return expr2tc();
+    return member2tc(struct_union_members(l2_lhs->type)[*c], l2_lhs, name);
+  }
+  // Everything else stays unpropagated exactly as before #7597. A `_Complex`
+  // updates like a struct but names no members to read its components back by.
+  // A union is excluded on purpose rather than for want of a spelling: its
+  // members alias, so member2t::do_simplify will not step past a union `with`
+  // and a carried value folds no cross-member read -- pinning one would change
+  // what propagates while buying no fold that any test could observe.
+  return expr2tc();
+}
+
+/// Whether a constant aggregate literal may propagate: every element must
+/// itself propagate, or be immutable (#7597).
 static bool aggregate_literal_may_propagate(
   const goto_symex_statet &state,
   const expr2tc &expr)
 {
-  const bool is_union_literal = is_constant_union2t(expr);
   bool noconst = true;
 
   expr->foreach_operand([&](const expr2tc &e) {
-    if (
-      noconst && !(is_union_literal && is_immutable_value(e)) &&
-      !state.constant_propagation(e))
+    if (noconst && !is_immutable_value(e) && !state.constant_propagation(e))
       noconst = false;
   });
   return noconst;
+}
+
+/// Whether an incremental strategy is driving the unwind. Both re-bound it
+/// themselves rather than reading a folded guard, so carrying a `with` costs
+/// without paying (#7597, and constant_propagation's own opt-out).
+static bool incremental_strategy_active()
+{
+  return config.language.lid != language_idt::PYTHON &&
+         (config.options.get_bool_option("incremental-bmc") ||
+          config.options.get_bool_option("k-induction"));
 }
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
@@ -244,7 +367,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return true;
 
     // By propagation nondet symbols, we can achieve some speed up but the
-    // counterexample will be missing a lot of information, so not really worth it
+    // counterexample will be missing a lot of information, so not really worth
+    // it
     if (s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
       return false;
   }
@@ -278,15 +402,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_with2t(expr))
   {
-    if (
-      config.language.lid != language_idt::PYTHON &&
-      (config.options.get_bool_option("incremental-bmc") ||
-       config.options.get_bool_option("k-induction")))
+    if (incremental_strategy_active())
       // When this option is enabled, the constant propagation
       // with feature will significantly impact performance.
-      // More importantly, the use of incremental-BMC / k-induction does not heavily
-      // rely on constants to determine the boundaries. Even if there is a known
-      // loop size, esbmc starts unwinding from min k
+      // More importantly, the use of incremental-BMC / k-induction does not
+      // heavily rely on constants to determine the boundaries. Even if there is
+      // a known loop size, esbmc starts unwinding from min k
       return false;
 
     // Handle WITH chains for structs where all updates are constants
@@ -307,6 +428,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // node.next_idx) concrete so pool loops fold instead of unrolling to
       // capacity.
       bool all_constant_updates = true;
+      unsigned symbolic_updates = 0;
       expr2tc current = expr;
 
       // Inlining an aggregate value is only sound when the whole enclosing
@@ -314,7 +436,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // also carries a dynamic/infinite-sized member (e.g. a Solidity `bytes`
       // field) leaves that member in the propagated constant, and computing its
       // byte size downstream throws array_type2t::inf_sized_array_excp. Scalar
-      // updates stay unrestricted, matching pre-aggregate-propagation behaviour.
+      // updates stay unrestricted, matching pre-aggregate-propagation
+      // behaviour.
       const bool struct_is_fixed_size = type_has_constant_size(expr->type);
 
       while (is_with2t(current))
@@ -328,7 +451,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
           (is_struct_type(uv->type) || is_array_type(uv->type) ||
            is_union_type(uv->type)) &&
           type_has_constant_size(uv->type) && struct_is_fixed_size;
-        if (!(scalar_update || aggregate_update) || !constant_propagation(uv))
+        if (
+          !(scalar_update || aggregate_update) ||
+          !update_may_propagate(*this, uv, symbolic_updates))
         {
           all_constant_updates = false;
           break;
@@ -348,12 +473,13 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     {
       // Check if this is a chain of WITHs with all constant updates
       bool all_constant_updates = true;
+      unsigned symbolic_updates = 0;
       expr2tc current = expr;
 
       while (is_with2t(current))
       {
         const with2t &w = to_with2t(current);
-        if (!constant_propagation(w.update_value))
+        if (!update_may_propagate(*this, w.update_value, symbolic_updates))
         {
           all_constant_updates = false;
           break;
@@ -372,7 +498,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // A chain touching several fields is safe to carry: member2t::do_simplify
       // refuses to step past a `with` whose source is a union, so only a read
       // of the last-written field folds and every aliased read stays symbolic.
-      // #7446: an update may also be an immutable symbol, not just a literal.
+      // #7446: an update may also be an immutable symbol, not just a literal --
+      // a cross-member read folds through fold_union_member_read only at equal
+      // width, and correctly, because the carried value cannot change.
       for (const expr2tc *current = &expr; is_with2t(*current);
            current = &to_with2t(*current).source_value)
       {
@@ -396,6 +524,267 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     return true;
 
   return false;
+}
+
+/* Pinning keeps a handful of sibling locations foldable -- a loop counter, a
+ * flag -- which is a small-object phenomenon. Carrying a large array instead
+ * pays a rebuild and a re-walk per element write with nothing reading the
+ * siblings: on `int a[M]; for (i..) a[i] = x + i;` at M=8192, 0.7s left
+ * unpropagated against 46s carried. Above this many elements, leave it
+ * unpropagated exactly as before #7597. The aggregates #7597 is about are far
+ * smaller -- the reporter's PLC state is four scalars and two 6-element
+ * arrays. */
+static constexpr unsigned pinned_array_bound = 64;
+
+/// Replace every refused element of @p elems with the read `read_of(i, type)`
+/// names for it. False when nothing was refused, so nothing changed.
+template <typename read_oft>
+static bool pin_refused_elements(
+  const goto_symex_statet &state,
+  std::vector<expr2tc> &elems,
+  read_oft read_of)
+{
+  bool pinned_any = false;
+  for (size_t i = 0; i < elems.size(); i++)
+  {
+    if (state.constant_propagation(elems[i]) || is_immutable_value(elems[i]))
+      continue;
+    pinned_any = true;
+    elems[i] = read_of(i);
+  }
+  return pinned_any;
+}
+
+/// Pin a struct literal's refused members to reads out of @p l2_lhs.
+static expr2tc pin_struct_literal(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  // Guard on l2_lhs, the expression the reads are built from, as read_of_field
+  // does: a `_Complex` literal is a constant_struct2t over a type that names no
+  // members, and guarding on one expression's type while dereferencing
+  // another's is what made a `_Complex` throw here once already.
+  if (!is_struct_type(l2_lhs))
+    return expr2tc();
+
+  std::vector<expr2tc> elems = to_constant_struct2t(rhs).datatype_members;
+
+  // A literal whose element count disagrees with the object's names no member
+  // for some element; do not index past the names to find out.
+  const std::vector<irep_idt> names = struct_union_member_names(l2_lhs->type);
+  if (names.size() != elems.size())
+    return expr2tc();
+
+  const std::vector<type2tc> slots = struct_union_members(l2_lhs->type);
+  if (!pin_refused_elements(state, elems, [&](size_t i) {
+        return member2tc(slots[i], l2_lhs, names[i]);
+      }))
+    return expr2tc();
+
+  expr2tc rebuilt = constant_struct2tc(rhs->type, elems);
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
+/// Pin an array literal's refused elements to reads out of @p l2_lhs.
+static expr2tc pin_array_literal(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  if (!is_array_type(l2_lhs))
+    return expr2tc();
+
+  std::vector<expr2tc> elems = to_constant_array2t(rhs).datatype_members;
+
+  const type2tc &slot = to_array_type(l2_lhs->type).subtype;
+  if (!pin_refused_elements(state, elems, [&](size_t i) {
+        return index2tc(slot, l2_lhs, gen_ulong(i));
+      }))
+    return expr2tc();
+
+  expr2tc rebuilt = constant_array2tc(rhs->type, elems);
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
+/// Pin the literal's elements. do_simplify folds a `with` over a propagated
+/// literal back into a literal, so a refused write reaches assignment() in this
+/// shape whenever the object still carried one -- which is exactly the case
+/// #7597 turns on. Both shapes occur on the reporter's model.
+static expr2tc pin_literal_elements(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  return is_constant_struct2t(rhs) ? pin_struct_literal(state, rhs, l2_lhs)
+                                   : pin_array_literal(state, rhs, l2_lhs);
+}
+
+/// The value @p arm holds for member @p name, or nil when the shape does not
+/// say. Deliberately not member2tc(..)->simplify(): expr2t::simplify walks the
+/// operands before applying the projection, so asking a large carried value for
+/// one member would cost the size of the whole value, once per member.
+static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
+{
+  const expr2tc *cur = &arm;
+  while (is_with2t(*cur) && is_struct_type((*cur)->type))
+  {
+    const with2t &w = to_with2t(*cur);
+    if (!is_constant_string2t(w.update_field))
+      return expr2tc();
+    if (to_constant_string2t(w.update_field).value == name)
+      return w.update_value;
+    cur = &w.source_value;
+  }
+  if (!is_constant_struct2t(*cur))
+    return expr2tc();
+  const std::optional<unsigned> i =
+    struct_union_get_component_number((*cur)->type, name);
+  if (!i)
+    return expr2tc();
+  return to_constant_struct2t(*cur).datatype_members[*i];
+}
+
+/// Pin a merge. phi_function spells a branch that wrote one member as
+/// `VAR = if(g, then, else)` (symex_goto.cpp), a shape constant_propagation
+/// carries at no arm, so a conditional write drops the object -- and the
+/// counter beside the written member -- exactly as a refused write did before
+/// #7597. Rebuild it member by member: where the two arms agree the value is
+/// the branch's regardless of `g` and folds, and where they differ the member
+/// becomes a read of the name just defined, which denotes the merged value and
+/// cannot grow across iterations. Structs only: decomposing a phi over a bare
+/// array would rebuild a literal per element, the cost pinned_array_bound
+/// exists to avoid.
+static expr2tc pin_phi_members(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  if (!is_struct_type(l2_lhs) || !type_has_constant_size(l2_lhs->type))
+    return expr2tc();
+
+  const if2t &phi = to_if2t(rhs);
+  // The reads below are built from all three, so all three must name the same
+  // members; a phi whose arms are not the assigned object is not one of ours.
+  if (
+    phi.true_value->type != l2_lhs->type ||
+    phi.false_value->type != l2_lhs->type)
+    return expr2tc();
+
+  // Rebuilt as a literal, not as a `with` over one arm: the literal is a normal
+  // form, so the carried value stays one node per member however many merges
+  // the loop makes. A `with` chain accumulates one node per disagreeing member
+  // per merge instead, which measures superlinear as the unwind bound rises.
+  const struct_type2t &st = to_struct_type(l2_lhs->type);
+  std::vector<expr2tc> elems;
+  elems.reserve(st.members.size());
+  bool pinned_any = false;
+  bool agreed_any = false;
+  for (size_t i = 0; i < st.members.size(); i++)
+  {
+    const irep_idt &name = st.member_names[i];
+    const expr2tc taken = project_member(phi.true_value, name);
+    if (
+      !is_nil_expr(taken) && taken == project_member(phi.false_value, name) &&
+      state.constant_propagation(taken))
+    {
+      agreed_any = true;
+      elems.push_back(taken);
+      continue;
+    }
+    pinned_any = true;
+    elems.push_back(member2tc(st.members[i], l2_lhs, name));
+  }
+
+  // Nothing agreed: every member would read back out of l2_lhs, which folds
+  // nothing and is not worth carrying.
+  if (!pinned_any || !agreed_any)
+    return expr2tc();
+
+  expr2tc rebuilt = constant_struct2tc(l2_lhs->type, elems);
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
+/// Pin the chain's refused updates, rebuilding from the base up.
+static expr2tc pin_chain_updates(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  std::vector<const with2t *> chain;
+  for (const expr2tc *cur = &rhs; is_with2t(*cur);
+       cur = &to_with2t(*cur).source_value)
+    chain.push_back(&to_with2t(*cur));
+
+  assert(!chain.empty());
+  expr2tc rebuilt = chain.back()->source_value;
+  bool pinned_any = false;
+  for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+  {
+    const with2t &w = **it;
+    expr2tc value = w.update_value;
+    const type2tc slot = slot_type(rebuilt->type, w.update_field);
+    if (is_nil_type(slot))
+      return expr2tc();
+    if (!state.constant_propagation(value) && !is_immutable_value(value))
+    {
+      // The read is built from l2_lhs but the `with` names members of
+      // rebuilt's type; only equal types make the two agree.
+      if (rebuilt->type != l2_lhs->type)
+        return expr2tc();
+      value = read_of_field(l2_lhs, w.update_field);
+      if (is_nil_expr(value))
+        return expr2tc();
+      pinned_any = true;
+    }
+    // A kept value need not match the slot: symex renames a `with`'s operands
+    // in place, so one whose source was replaced by a propagated value of
+    // another type is never re-checked, and only rebuilding it here would run
+    // with2t's constructor assertion over the pair. Leave such an object
+    // unpropagated rather than reconstruct an expression the IR rejects.
+    else if (value->type != slot)
+      return expr2tc();
+    rebuilt = with2tc(w.type, rebuilt, w.update_field, value);
+  }
+  if (!pinned_any)
+    return expr2tc();
+  return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
+}
+
+expr2tc goto_symex_statet::pin_symbolic_updates(
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs) const
+{
+  // Shape first: every other assignment -- every scalar one -- leaves here
+  // without paying for the option lookups below.
+  const bool is_literal = is_constant_struct2t(rhs) || is_constant_array2t(rhs);
+  if (!is_literal && !is_with2t(rhs) && !is_if2t(rhs))
+    return expr2tc();
+
+  // Redundant -- every path below ends at a constant_propagation that already
+  // refuses under it -- but it keeps the walk off the hot path entirely.
+  if (no_propagation)
+    return expr2tc();
+
+  if (is_array_type(l2_lhs))
+  {
+    const std::optional<BigInt> elems = array_element_count(l2_lhs->type);
+    if (!elems || *elems > pinned_array_bound)
+      return expr2tc();
+  }
+
+  // The literal branch has no opt-out of its own to inherit, so take it here
+  // for both.
+  if (incremental_strategy_active())
+    return expr2tc();
+
+  // Whether a pinned read is accepted is left to constant_propagation alone: a
+  // read it still refuses -- an aggregate member, an array write at a symbolic
+  // index -- leaves the object unpropagated, exactly as before.
+  if (is_if2t(rhs))
+    return pin_phi_members(*this, rhs, l2_lhs);
+  return is_literal ? pin_literal_elements(*this, rhs, l2_lhs)
+                    : pin_chain_updates(*this, rhs, l2_lhs);
 }
 
 bool goto_symex_statet::constant_propagation_reference(
@@ -437,6 +826,19 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
 
   expr2tc const_value = constant_propagation(rhs) ? rhs : expr2tc();
   level2.make_assignment(lhs, const_value, rhs);
+
+  // #7597: propagation is a whole-object decision, so one member written a
+  // value it will not carry drops the object and with it a sibling loop
+  // counter, and the guard never folds. Re-offer that member as a read of the
+  // name just defined -- what the read renames to anyway, and terminal for
+  // level2t::rename, so it costs one node and cannot grow across iterations.
+  if (is_nil_expr(const_value))
+    if (expr2tc pinned = pin_symbolic_updates(rhs, lhs); !is_nil_expr(pinned))
+      // Keyed by the L1 name, which name_record distinguishes from the L2 one
+      // make_assignment left in `lhs`; as_const so reading it does not detach.
+      level2.set_constant(
+        renaming::level2t::name_record(to_symbol2t(std::as_const(l1_lhs))),
+        pinned);
 
   if (use_value_set)
   {

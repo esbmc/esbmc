@@ -18,6 +18,16 @@ class CoreVisitorsMixin:
         "sort",
     }
     _PURE_DICT_METHODS = {"__getitem__", "copy", "get", "items", "keys", "values"}
+    # Positional-or-keyword parameters of the builtins whose call paths read
+    # positional arguments only, in declaration order (CPython 3.12). A leading
+    # positional-only parameter is spelled None so no keyword can bind it:
+    # int(x="10") is a TypeError, only int(x, base=...) names its second one.
+    _BUILTIN_POSITIONAL_PARAMS = {
+        "int": (None, "base"),
+        "pow": ("base", "exp", "mod"),
+        "round": ("number", "ndigits"),
+        "str": ("object", ),
+    }
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -225,15 +235,6 @@ class CoreVisitorsMixin:
             return
         self._known_literal_values.pop(target_name, None)
 
-    def _maybe_expand_nondet_assign(self, node):
-        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
-            return None
-        if not (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)):
-            return None
-        if node.value.func.id not in ("nondet_list", "nondet_dict"):
-            return None
-        return self._expand_nondet_call(node.targets[0], node.value, node)
-
     @staticmethod
     def _build_stop_iteration_raise(source_node):
         raise_node = ast.Raise(
@@ -434,6 +435,45 @@ class CoreVisitorsMixin:
 
         return result
 
+    def _annotated_assign_for_value(self, target_id, node, was_defaultdict_call):
+        """The AnnAssign this assignment's value implies, or None for no annotation.
+
+        Two values imply one: a `defaultdict(...)` call, whose value type the
+        empty Dict literal replacing it no longer carries, and a rewritten
+        nondet builder, whose element types live in its name and which would
+        otherwise leave the converter no return type to infer from
+        (esbmc/esbmc#7575).
+
+        The two cannot both apply -- by the time this runs a defaultdict call
+        has become an `ast.Dict` -- but the nondet arm is still guarded on the
+        first yielding nothing, so the order matches the branches it replaced.
+        """
+        annotation = None
+        known_type = None
+
+        if was_defaultdict_call:
+            annotation = self._build_defaultdict_value_annotation(target_id, node)
+        if (annotation is None and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)):
+            annotation = self._nondet_builder_annotation(node.value.func.id)
+            known_type = self._infer_type_from_call(node.value)
+
+        if annotation is None:
+            return None
+
+        ann_assign = ast.AnnAssign(
+            target=ast.Name(id=target_id, ctx=ast.Store()),
+            annotation=annotation,
+            value=node.value,
+            simple=1,
+        )
+        self._copy_location_info(node, ann_assign)
+        ast.fix_missing_locations(ann_assign)
+        self.variable_annotations[target_id] = annotation
+        if known_type is not None:
+            self.known_variable_types[target_id] = known_type
+        return ann_assign
+
     def _handle_single_target_assign(self, node):
         target = node.targets[0]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -463,19 +503,9 @@ class CoreVisitorsMixin:
             was_defaultdict_call = (isinstance(node.value, ast.Call)
                                     and self._is_defaultdict_call(node.value))
             self._update_name_target_assignment_metadata(target.id, node)
-            if was_defaultdict_call:
-                annotation = self._build_defaultdict_value_annotation(target.id, node)
-                if annotation is not None:
-                    ann_assign = ast.AnnAssign(
-                        target=ast.Name(id=target.id, ctx=ast.Store()),
-                        annotation=annotation,
-                        value=node.value,
-                        simple=1,
-                    )
-                    self._copy_location_info(node, ann_assign)
-                    ast.fix_missing_locations(ann_assign)
-                    self.variable_annotations[target.id] = annotation
-                    return ann_assign
+            annotated = self._annotated_assign_for_value(target.id, node, was_defaultdict_call)
+            if annotated is not None:
+                return annotated
 
         if (isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name)
                 and node.value.value.id in self._defaultdict_factory):
@@ -652,6 +682,20 @@ class CoreVisitorsMixin:
             return node
         return None
 
+    def _record_staticmethod(self, node, qualified_name):
+        """Note a @staticmethod, whose call binds no receiver (#7546)."""
+        if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
+            self.static_methods.add(qualified_name)
+
+    def _params_without_implicit_self(self, key):
+        """A method's parameters minus its implicit first argument.
+
+        A @staticmethod has no implicit first argument, so stripping one would
+        eat a real parameter and make every call look over-supplied (#7546).
+        """
+        params = self.functionParams[key]
+        return params if key in self.static_methods else params[1:]
+
     def _resolve_function_signature(self, node):
         function_name = None
         expected_args = None
@@ -677,24 +721,82 @@ class CoreVisitorsMixin:
                     qualified_name = f"{var_type}.{method_name}"
             if qualified_name and qualified_name in self.functionParams:
                 function_name = qualified_name
-                expected_args = self.functionParams[qualified_name][1:]
+                expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
             elif method_name in self.functionParams:
                 function_name = method_name
-                expected_args = self.functionParams[method_name][1:]
+                expected_args = self._params_without_implicit_self(method_name)
                 kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"
             if init_name in self.functionParams:
                 function_name = init_name
-                expected_args = self.functionParams[init_name][1:]
+                expected_args = self._params_without_implicit_self(init_name)
                 kwonly_args = self.functionKwonlyParams.get(init_name, [])
             elif func_name in self.functionParams:
                 function_name = func_name
                 expected_args = self.functionParams[func_name]
                 kwonly_args = self.functionKwonlyParams.get(func_name, [])
         return function_name, expected_args, kwonly_args
+
+    def _scan_builtin_shadow_names(self, module_node):
+        """Builtin names from the table that this module binds anywhere.
+
+        Python resolves a name at call time, so a ``def pow(...)`` below the
+        call shadows the builtin exactly as one above it does. A syntactic pass
+        cannot answer that per scope, so over-approximate: any binding of the
+        name anywhere disables the rewrite for the whole module.
+        """
+        bound = set()
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+                bound.add(n.id)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(n.name)
+            elif isinstance(n, ast.arg):
+                bound.add(n.arg)
+            elif isinstance(n, ast.ExceptHandler) and n.name:
+                bound.add(n.name)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                bound.update(a.asname or a.name.split(".")[0] for a in n.names)
+        return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+
+    def _builtin_is_shadowed(self, name):
+        # None means the module was never scanned: assume shadowed, so an
+        # unscanned path keeps the pre-existing behaviour instead of rewriting.
+        return self._builtin_shadow_names is None or name in self._builtin_shadow_names
+
+    def _normalize_builtin_keyword_args(self, node):
+        """Move a builtin call's keywords into their positional slots (#7557).
+
+        The builtin call paths read node.args and never node.keywords, so a
+        keyword spelling silently falls back to the parameter default and
+        proves the wrong value. Rewrite only a run of keywords that fills the
+        slots directly after the positional arguments; anything else (a gap, an
+        unknown name, **kwargs) is left alone rather than guessed at.
+        """
+        if not isinstance(node.func, ast.Name) or not node.keywords:
+            return
+        params = self._BUILTIN_POSITIONAL_PARAMS.get(node.func.id)
+        if params is None or self._builtin_is_shadowed(node.func.id):
+            return
+        if any(kw.arg is None for kw in node.keywords):
+            return  # **kwargs splat: the names are not statically known
+        keywords = self._build_keyword_map(node)
+        bound = []
+        for param in params[len(node.args):]:
+            if param not in keywords:
+                break
+            bound.append(keywords.pop(param))
+        if keywords:
+            return
+        slots = params[len(node.args):len(node.args) + len(bound)]
+        if [kw.arg for kw in node.keywords] != list(slots) and not all(
+                isinstance(value, (ast.Constant, ast.Name)) for value in bound):
+            return  # Python evaluates arguments in source order (ref/expressions)
+        node.args = node.args + bound
+        node.keywords = []
 
     def _build_keyword_map(self, node):
         keywords = {}
@@ -918,9 +1020,11 @@ class CoreVisitorsMixin:
             raise TypeError(
                 f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
             )
+        consumed = set()
         for i in range(len(node.args), len(expected_args)):
             if expected_args[i] in keywords:
                 node.args.append(keywords[expected_args[i]])
+                consumed.add(expected_args[i])
                 continue
             default_val = self.functionDefaults[(function_name, expected_args[i])]
             if isinstance(default_val, ast.AST):
@@ -930,6 +1034,13 @@ class CoreVisitorsMixin:
                 node.args.append(default_expr)
             else:
                 node.args.append(ast.Constant(value=default_val))
+
+        # A keyword moved into a positional slot must leave node.keywords, or
+        # the node claims the same parameter twice. A range loop visits its body
+        # a second time, and the duplicate check then rejects the frontend's own
+        # output (#7542).
+        if consumed:
+            node.keywords = [kw for kw in node.keywords if kw.arg not in consumed]
 
     def _apply_call_signature_defaults(self, node):
         function_name, expected_args, kwonly_args = self._resolve_function_signature(node)
@@ -1347,10 +1458,6 @@ class CoreVisitorsMixin:
         if neutralized_target is not None:
             self._known_literal_values.pop(neutralized_target, None)
 
-        expanded = self._maybe_expand_nondet_assign(node)
-        if expanded is not None:
-            return expanded
-
         rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
         if rewritten_next_call is not None:
             return rewritten_next_call
@@ -1481,6 +1588,10 @@ class CoreVisitorsMixin:
 
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
         self._invalidate_list_literals_for_call(node)
+        rewritten_nondet = self._rewrite_nondet_collection_call(node)
+        if rewritten_nondet is not None:
+            self.generic_visit(rewritten_nondet)
+            return rewritten_nondet
         rewritten_dunder = self._maybe_rewrite_operator_dunder_call(node)
         if rewritten_dunder is not None:
             return rewritten_dunder
@@ -1507,6 +1618,7 @@ class CoreVisitorsMixin:
         if rewritten_ratio is not None:
             return rewritten_ratio
 
+        self._normalize_builtin_keyword_args(node)
         self._normalize_int_from_bytes_endianness(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
@@ -1600,6 +1712,7 @@ class CoreVisitorsMixin:
 
             self.functionParams[qualified_name] = [i.arg for i in node.args.args]
             self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            self._record_staticmethod(node, qualified_name)
             self._record_vararg_function(node, qualified_name)
 
             if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:

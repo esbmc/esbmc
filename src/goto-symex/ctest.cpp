@@ -1,6 +1,7 @@
 #include <goto-symex/ctest.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/test_gen_guard.h>
+#include <goto-symex/witnesses.h>
 #include <ac_config.h>
 #include <langapi/mode.h>
 #include <solvers/smt/smt_conv.h>

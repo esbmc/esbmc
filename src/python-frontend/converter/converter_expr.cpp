@@ -1663,13 +1663,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // A bare class name used as a value, e.g. `register(SomeClass)` or
           // `create_publisher(topic, Twist)` -- passing the class object itself
           // as an argument. Python classes are first-class objects, but ESBMC
-          // has no first-class type value, so model it as an opaque nondet
-          // placeholder. Inert uses (storing or forwarding the class) then
-          // convert instead of aborting; constructing through such a forwarded
-          // value is not modelled.
-          if (is_class(var_name, *ast_json))
+          // has no first-class type value, so model one the way a builtin type
+          // identifier is modelled: the class name as a string constant. A
+          // nondet placeholder made two reads of the same class unequal
+          // (#7549). Constructing through such a forwarded value is not
+          // modelled, and two same-named classes in different modules compare
+          // equal. This is reached only after symbol lookup fails, so a name
+          // rebound to a value still resolves to that value.
+          // A builtin exception is a class too, but it is declared by the
+          // exceptions model rather than by this AST, so is_class does not
+          // see it (esbmc/esbmc#7549).
+          if (
+            is_class(var_name, *ast_json) ||
+            type_utils::is_python_exceptions(var_name))
           {
-            expr = side_effect_expr_nondett(any_type());
+            typet str_type =
+              type_handler_.build_array(char_type(), var_name.size() + 1);
+            expr = constant_exprt(var_name, var_name, str_type);
             expr.location() = get_location_from_decl(element);
             break;
           }

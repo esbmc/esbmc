@@ -14,7 +14,6 @@
 #include <set>
 #include <stack>
 #include <string>
-#include <unordered_set>
 #include <irep2/irep2_guard.h>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
@@ -79,7 +78,7 @@ public:
   typedef std::map<goto_programt::const_targett, merge_state_listt>
     merge_state_mapt;
   typedef std::vector<framet> call_stackt;
-  typedef std::unordered_set<
+  typedef persistent_set<
     renaming::level2t::name_record,
     renaming::level2t::name_rec_hash>
     variable_name_sett;
@@ -402,6 +401,16 @@ public:
    *  @return True if constant propagation should be enabled.
    */
   bool constant_propagation(const expr2tc &expr) const;
+
+  /**
+   *  Re-offer the `with` updates of @p rhs that constant_propagation refuses
+   *  as reads of @p l2_lhs, the name the assignment has just defined, so a
+   *  symbolic member write no longer drops the sibling members with it
+   *  (#7597).
+   *  @return The propagatable rebuild, or nil when nothing was pinned or the
+   *          rebuild is still refused.
+   */
+  expr2tc pin_symbolic_updates(const expr2tc &rhs, const expr2tc &l2_lhs) const;
 
   /**
    *  Decide whether to constant_propagate an address_of

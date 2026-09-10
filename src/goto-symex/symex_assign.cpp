@@ -439,7 +439,7 @@ void goto_symext::symex_assign(
     {
       is_ptr_havoc_l1_name = to_symbol2t(l1_lhs).get_symbol_name();
       is_ptr_havoc_pre_object_map =
-        cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map;
+        cur_state->value_set.get_object_map(is_ptr_havoc_l1_name, "");
 
       // Rewrite the nondet RHS to the pre-havoc value of the pointer,
       // matching the behaviour these benchmarks relied on before this
@@ -635,8 +635,8 @@ void goto_symext::symex_assign(
       filtered.insert(entry);
     }
     if (!filtered.empty())
-      cur_state->value_set.get_entry(is_ptr_havoc_l1_name, "").object_map =
-        filtered;
+      cur_state->value_set.update_object_map(
+        value_sett::entryt(is_ptr_havoc_l1_name, ""), filtered, false);
   }
 
   // Note: an earlier prototype also emitted an explicit

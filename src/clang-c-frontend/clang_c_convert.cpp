@@ -4556,6 +4556,23 @@ bool clang_c_convertert::get_compound_assign_expr(
   return false;
 }
 
+// A load has nothing to write, and test_and_set/clear name the byte they write
+// (a nonzero "set" value, and 0) rather than taking it as an operand, so these
+// four carry only the pointer and the memory order.
+static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
+{
+  switch (op)
+  {
+  case clang::AtomicExpr::AO__c11_atomic_load:
+  case clang::AtomicExpr::AO__atomic_load_n:
+  case clang::AtomicExpr::AO__atomic_test_and_set:
+  case clang::AtomicExpr::AO__atomic_clear:
+    return false;
+  default:
+    return true;
+  }
+}
+
 bool clang_c_convertert::get_atomic_expr(
   const clang::AtomicExpr &atm,
   exprt &new_expr)
@@ -4697,6 +4714,14 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+  case clang::AtomicExpr::AO__atomic_test_and_set:
+    name = "__atomic_test_and_set";
+    break;
+
+  case clang::AtomicExpr::AO__atomic_clear:
+    name = "__atomic_clear";
+    break;
+
   default:
     log_error("Unknown Atomic expression");
     std::ostringstream oss;
@@ -4716,9 +4741,7 @@ bool clang_c_convertert::get_atomic_expr(
   fake_call.arguments().push_back(ptr);
 
   // Val1
-  if (
-    atm.getOp() != clang::AtomicExpr::AO__c11_atomic_load &&
-    atm.getOp() != clang::AtomicExpr::AO__atomic_load_n)
+  if (atomic_has_value_operand(atm.getOp()))
   {
     exprt val1;
     if (get_expr(*atm.getVal1(), val1))
@@ -4919,13 +4942,48 @@ void clang_c_convertert::get_decl_name(
        * symex assigns a nondet return and the verdict is silently wrong
        * (esbmc/esbmc#6969). Qualify with the enclosing specialisation, which
        * is what clang's own USRs for the closure's methods already carry. */
-      const auto *parent =
-        llvm::dyn_cast_or_null<clang::FunctionDecl>(rd.getDeclContext());
-      if (parent && parent->getTemplateSpecializationArgs())
+      /* The same collision arises one level out: a lambda in a member function
+       * of a *class* template is a distinct type per instantiation, but the
+       * member carries no specialisation args -- the class does (#7528). A
+       * nested lambda adds a third shape: its context is the enclosing
+       * lambda's operator(), which carries none either (#7529). So walk out
+       * until a specialised context is found rather than testing only the
+       * immediate parent. */
+      const clang::FunctionDecl *qualifier = nullptr;
+      for (const clang::DeclContext *dc = rd.getDeclContext(); dc;
+           dc = dc->getParent())
+      {
+        const auto *fn = llvm::dyn_cast<clang::FunctionDecl>(dc);
+        if (!fn)
+          continue;
+        const auto *method = llvm::dyn_cast<clang::CXXMethodDecl>(fn);
+        if (
+          fn->getTemplateSpecializationArgs() ||
+          (method && llvm::isa<clang::ClassTemplateSpecializationDecl>(
+                       method->getParent())))
+        {
+          qualifier = fn;
+          break;
+        }
+      }
+
+      if (qualifier)
       {
         std::string parent_name, parent_id;
-        get_decl_name(*parent, parent_name, parent_id);
+        get_decl_name(*qualifier, parent_name, parent_id);
         name += "_" + parent_id;
+      }
+
+      /* Everything a macro expands reports the expansion location, so two
+       * lambdas in one macro body share a file, line and column and the second
+       * reuses the first's record (esbmc/esbmc#7530). Their spelling locations
+       * inside the macro body differ, so add that offset. Clang's lambda
+       * mangling number does not help: it is 0 for both. */
+      const clang::SourceLocation dloc = rd.getLocation();
+      if (dloc.isMacroID() && sm)
+      {
+        const clang::SourceLocation spelling = sm->getSpellingLoc(dloc);
+        name += "_m" + std::to_string(sm->getFileOffset(spelling));
       }
 
       std::replace(name.begin(), name.end(), '.', '_');

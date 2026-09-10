@@ -545,7 +545,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Unsigned integers used in domains like Ethereum or system modeling
   if (
     ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
-    ast_type == "Slot")
+    ast_type == "Slot" || ast_type == "Gwei")
     return lower_to_seam(unsignedbv_type2tc(config.ansi_c.long_long_int_width));
 
   // bool — represents True/False

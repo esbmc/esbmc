@@ -454,6 +454,30 @@ else()
   endif()
 endif()
 
+# CORE is a budget, not just a verdict: no CORE test may exceed 30 seconds.
+# CORE is what every platform and every reduced configuration runs -- the
+# Windows and macOS legs below, and the CORE_REGRESSION_ONLY builds (coverage,
+# sanitizers) -- so a slow CORE test is paid for on every one of them, and it is
+# the set a contributor waits on before a PR can merge. A test that needs longer
+# belongs in THOROUGH, which runs on Linux only.
+#
+# Measure in the DebugOpt PR build, not in a coverage or sanitizer build. Those
+# instrument every basic block and run at -j4: the same tests measure a median
+# 4.0x slower there (p90 5.5x), so a 30s rule applied to their numbers demotes
+# tests that take 5s in the build that actually gates PRs.
+#
+# To re-check, take a green `Build ESBMC (ubuntu-24.04)` job and read the
+# durations ctest prints:
+#     gh api repos/esbmc/esbmc/actions/jobs/<job-id>/logs \
+#       | grep -oP 'Test\s+#\d+:\s+\S+\s+\.*\s+\S+\s+[\d.]+\s+sec'
+# then cross-reference each name against its test.desc first line; only CORE
+# rows count. 410 tests were moved CORE -> THOROUGH on this basis on 2026-09-09
+# (runs 34333868660 DebugOpt and 34322944627 coverage); nothing then exceeded
+# 30s in either configuration.
+#
+# The slow/very-slow lists further down are a different thing: they widen the
+# per-test *timeout* for tests that legitimately sit near the cap, and say
+# nothing about which mode a test belongs in.
 foreach(regression IN LISTS REGRESSIONS)
     if(WIN32 OR APPLE) # FUTURE: configure suites using an option
         set(MODES CORE KNOWNBUG FUTURE)
@@ -591,11 +615,6 @@ set(_slow_regression_tests
     # the run (see shortest_path_lengths note below; #4927).
     "regression/quixbugs/knapsack"
     "regression/quixbugs/knapsack_fail"
-    # problem1_fail runs the real DP body (nested loops + dp[-1] + max over a
-    # defaultdict-free list). It does not converge under --unwind 9, so it is
-    # marked FUTURE (BMC scalability); the larger inner timeout lets
-    # testing_tool record the FUTURE verdict instead of ctest hard-killing it.
-    "regression/python-intensive/problem1_fail"
     # next_permutation(_fail) used to fast-crash with "Tuple unpacking only
     # supports simple names, not Subscript". With subscript-target unpacking
     # support (#4792) the swap converts and ESBMC reaches the real nested-loop
@@ -745,6 +764,12 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # problem1_fail was FUTURE for scalability (#4932); it converges now, at
+    # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
+    # above is ~70s locally against ~248s with assertions on, and that ratio
+    # puts this past the 2x tier's 240s (#7679). Its VmPeak is ~4.7GiB against
+    # the global 8GiB RLIMIT_AS, which has no per-test override.
+    "regression/python-intensive/problem1_fail"
 )
 
 foreach(_t IN LISTS _slow_regression_tests)

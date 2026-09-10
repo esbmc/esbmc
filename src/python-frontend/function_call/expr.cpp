@@ -64,6 +64,54 @@ std::string node_type_of(const nlohmann::json &node)
   return node["_type"].get<std::string>();
 }
 
+/// Whether \p class_node declares \p method with a @staticmethod decorator.
+/// The decorator decides this, not the first parameter's name, which Python
+/// does not fix.
+bool declares_staticmethod(
+  const nlohmann::json &class_node,
+  const std::string &method)
+{
+  if (method.empty() || class_node.empty() || !class_node.contains("body"))
+    return false;
+
+  for (const auto &member : class_node["body"])
+  {
+    if (
+      node_type_of(member) != "FunctionDef" || member["name"] != method ||
+      !member.contains("decorator_list"))
+      continue;
+
+    for (const auto &d : member["decorator_list"])
+      if (
+        node_type_of(d) == "Name" && d.contains("id") &&
+        d["id"] == "staticmethod")
+        return true;
+  }
+  return false;
+}
+
+/// An explicit `Base.__init__(self, ...)` call invokes the named base class's
+/// constructor with self passed explicitly; it is not an object construction.
+/// Letting it fall through to the ClassMethod classification allocates no fresh
+/// self object -- the builder resolves it to the class's renamed constructor
+/// (@C@Base@F@Base) and the explicit self is the receiver. Classified as a
+/// Constructor it would instead write to a throwaway $ctor_self$ temp.
+bool is_explicit_class_init(
+  const nlohmann::json &func_node,
+  const nlohmann::json &ast)
+{
+  if (
+    !func_node.contains("_type") || func_node["_type"] != "Attribute" ||
+    !func_node.contains("attr") || func_node["attr"] != "__init__" ||
+    !func_node.contains("value") || !func_node["value"].is_object())
+    return false;
+
+  const nlohmann::json &value = func_node["value"];
+  return value.contains("_type") && value["_type"] == "Name" &&
+         value.contains("id") &&
+         json_utils::is_class(value["id"].get<std::string>(), ast);
+}
+
 /// True when the AST subtree rooted at \p node contains a call.
 bool contains_call(const nlohmann::json &node)
 {
@@ -217,28 +265,26 @@ exprt function_call_expr::build_temporary_receiver(
   return ctor_result;
 }
 
+nlohmann::json
+function_call_expr::find_class_node(const std::string &name) const
+{
+  nlohmann::json node = json_utils::find_class(converter_.ast()["body"], name);
+  if (!node.empty())
+    return node;
+
+  const auto [module_ast, module_path] =
+    converter_.find_imported_class_module(name);
+  return module_ast ? json_utils::find_class((*module_ast)["body"], name)
+                    : nlohmann::json();
+}
+
 void function_call_expr::get_function_type()
 {
   const auto &func_node = call_["func"];
 
-  // An explicit `Base.__init__(self, ...)` call invokes the named base class's
-  // constructor with self passed explicitly; it is not an object construction.
-  // Let it fall through to the ClassMethod classification (is_class(caller)
-  // below) so no fresh self object is allocated -- the builder resolves it to
-  // the class's renamed constructor (@C@Base@F@Base) and the explicit self is
-  // the receiver. Without this it would be classified Constructor and the
-  // constructor would write to a throwaway $ctor_self$ temp.
-  const bool is_explicit_class_init =
-    func_node.contains("_type") && func_node["_type"] == "Attribute" &&
-    func_node.contains("attr") && func_node["attr"] == "__init__" &&
-    func_node.contains("value") && func_node["value"].is_object() &&
-    func_node["value"].contains("_type") &&
-    func_node["value"]["_type"] == "Name" &&
-    func_node["value"].contains("id") &&
-    json_utils::is_class(
-      func_node["value"]["id"].get<std::string>(), converter_.ast());
-
-  if (!is_explicit_class_init && type_handler_.is_constructor_call(call_))
+  if (
+    !is_explicit_class_init(func_node, converter_.ast()) &&
+    type_handler_.is_constructor_call(call_))
   {
     function_type_ = FunctionType::Constructor;
     return;
@@ -310,7 +356,24 @@ void function_call_expr::get_function_type()
   }
   else if (!converter_.is_imported_module(caller))
   {
-    function_type_ = FunctionType::InstanceMethod;
+    // A @staticmethod takes no receiver, so an instance call binds its
+    // arguments exactly as a class-name call does. Classifying it as an
+    // instance method passes the receiver as the first parameter and shifts
+    // every real argument one slot (#7546).
+    //
+    // A malformed AST can spell attr as a non-string, and this runs from the
+    // constructor, so an unguarded read throws where the caller expects a
+    // classification (unit/python-frontend/function_call_expr_error_test.cpp).
+    // An empty name declares no method, which is the InstanceMethod default.
+    const std::string method =
+      func_node.contains("attr") && func_node["attr"].is_string()
+        ? func_node["attr"].template get<std::string>()
+        : std::string();
+    const nlohmann::json class_node =
+      find_class_node(type_handler_.get_var_type(caller));
+    function_type_ = declares_staticmethod(class_node, method)
+                       ? FunctionType::ClassMethod
+                       : FunctionType::InstanceMethod;
   }
 }
 
@@ -5060,6 +5123,175 @@ static void reject_unfoldable_key(
         "the key function cannot be applied and would be ignored");
 }
 
+// A Python tuple is lowered to a struct tagged "tag-tuple...".
+static bool is_tuple_struct(const typet &type)
+{
+  return type.is_struct() &&
+         to_struct_type(type).tag().as_string().starts_with("tag-tuple");
+}
+
+// Suffix naming the models/random.py variant for an element type, matching the
+// min/max/sorted convention in models/builtins.py: integers keep the base name.
+static std::string random_element_suffix(const typet &elem_type)
+{
+  if (elem_type.is_floatbv())
+    return "_float";
+  if (type_utils::is_string_type(elem_type))
+    return "_str";
+  return "";
+}
+
+std::optional<exprt>
+function_call_expr::fold_random_choice_over_tuple(const exprt &seq)
+{
+  const typet &seq_type = converter_.ns.follow(seq.type());
+  if (!is_tuple_struct(seq_type))
+    return std::nullopt;
+
+  tuple_handler &tuples = converter_.get_tuple_handler();
+
+  const struct_typet &tuple_type = to_struct_type(seq_type);
+  const struct_typet::componentst &members = tuple_type.components();
+  if (members.empty())
+    throw std::runtime_error("random.choice(): empty tuple");
+
+  // The conditional below carries one type, so members of differing types
+  // would be coerced to the first one's and every later comparison against the
+  // result would silently answer against the wrong type. Compare the types
+  // themselves: an int and a None both map to the same element-type suffix,
+  // and folding those together proved `c is not None` on a tuple holding None.
+  const typet &first = converter_.ns.follow(members.front().type());
+  for (const auto &member : members)
+    if (converter_.ns.follow(member.type()) != first)
+      throw std::runtime_error("random.choice(): unsupported mixed-type tuple");
+
+  exprt result = tuples.get_tuple_element(seq, tuple_type, members.size() - 1);
+  if (members.size() == 1)
+    return result;
+
+  // The index is only compared, never used to address memory, so it needs no
+  // range assumption: the final else arm makes every out-of-range value pick
+  // the last member, leaving the result's value set exactly the tuple's
+  // members -- which is what choice() promises.
+  locationt loc = converter_.get_location_from_decl(call_);
+  exprt idx = build_symbol(
+    converter_.create_tmp_symbol(call_, "$choice_idx$", int_type(), exprt()));
+  code_declt decl(idx);
+  decl.location() = loc;
+  converter_.add_instruction(decl);
+  code_assignt assign(idx, side_effect_expr_nondett(int_type()));
+  assign.location() = loc;
+  converter_.add_instruction(assign);
+
+  for (size_t i = members.size() - 1; i-- > 0;)
+    result = if_exprt(
+      equality_exprt(idx, from_integer(BigInt(i), idx.type())),
+      tuples.get_tuple_element(seq, tuple_type, i),
+      result);
+  return result;
+}
+
+std::string function_call_expr::random_sequence_suffix(
+  const exprt &seq,
+  const std::string &func_name)
+{
+  // A str is a sequence of one-character strings, not a list, so it has its
+  // own variant rather than an element-type suffix.
+  if (type_utils::is_string_type(seq.type()))
+    return "_chars";
+
+  // homogeneous_element_type throws, naming func_name, when the elements mix
+  // incompatibly -- which is the diagnostic an unmodelled list should get.
+  if (seq.is_symbol())
+    return random_element_suffix(
+      converter_.get_element_type_registry().homogeneous_element_type(
+        seq.identifier().as_string(), func_name));
+
+  // A tuple reaching here is a sample() call: no model parameter can name one
+  // arity and one member type, and the list model would raise a spurious
+  // memory-safety claim on it, so report it.
+  if (is_tuple_struct(converter_.ns.follow(seq.type())))
+    throw std::runtime_error(
+      "random." + func_name + "(): unsupported sequence type 'tuple'");
+
+  // Anything else -- a call result, say -- keeps the base model it had before
+  // this dispatch existed. Erroring here would turn a verdict into no verdict
+  // on programs that already verified.
+  return "";
+}
+
+// Whether every tuple member is numeric, setting @p any_float when at least
+// one is a float. Non-numeric members (nested tuples, strings -- a TypeError in
+// CPython anyway) leave the tuple unfoldable.
+static bool tuple_members_are_numeric(
+  const struct_typet::componentst &members,
+  const namespacet &ns,
+  bool &any_float)
+{
+  any_float = false;
+  for (const auto &member : members)
+  {
+    const typet &type = ns.follow(member.type());
+    if (type.is_floatbv() || type.is_fixedbv())
+      any_float = true;
+    else if (!type.is_signedbv() && !type.is_unsignedbv() && !type.is_bool())
+      return false;
+  }
+  return true;
+}
+
+// sum() over a tuple: the sum/sum_float models iterate a *list* representation
+// that a tuple struct does not have, so they return garbage
+// (e.g. sum((1, 2, 3)) != 6). Fold the tuple's members directly with '+',
+// promoting to double when any member is float so mixed int/float tuples keep
+// Python semantics (sum((1, 2.5, 3)) == 6.5).
+std::optional<exprt> function_call_expr::fold_sum_over_tuple(
+  bool is_user_imported,
+  bool is_numpy_model_call)
+{
+  const std::string &func_name = function_id_.get_function();
+  const size_t n_args = call_["args"].size();
+  if (
+    func_name != "sum" || is_user_imported || is_numpy_model_call ||
+    (n_args != 1 && n_args != 2) ||
+    !try_find_function(converter_.ast()["body"], func_name).empty())
+    return std::nullopt;
+
+  exprt arg = converter_.get_expr(call_["args"][0]);
+  const typet &arg_type = converter_.ns.follow(arg.type());
+  if (!is_tuple_struct(arg_type))
+    return std::nullopt;
+
+  const struct_typet::componentst &members =
+    to_struct_type(arg_type).components();
+  bool any_float = false;
+  if (!tuple_members_are_numeric(members, converter_.ns, any_float))
+    return std::nullopt;
+
+  const type2tc sum_type =
+    migrate_type(any_float ? double_type() : long_long_int_type());
+
+  expr2tc acc;
+  if (n_args == 2)
+  {
+    migrate_expr(converter_.get_expr(call_["args"][1]), acc);
+    if (acc->type != sum_type)
+      acc = typecast2tc(sum_type, acc);
+  }
+  else
+    acc = gen_zero(sum_type);
+
+  for (const auto &member : members)
+  {
+    expr2tc value;
+    migrate_expr(build_member(arg, member.get_name(), member.type()), value);
+    if (value->type != sum_type)
+      value = typecast2tc(sum_type, value);
+    acc = add2tc(sum_type, acc, value);
+  }
+  return migrate_expr_back(acc);
+}
+
 std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   std::string &actual_func_name,
   bool is_user_imported,
@@ -5071,61 +5303,24 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
   // consistently. The other builtins below remain 1-arg only.
   const size_t n_args = call_["args"].size();
 
-  // sum() over a tuple: the sum/sum_float models iterate a *list*
-  // representation that a tuple struct does not have, so they return
-  // garbage (e.g. sum((1, 2, 3)) != 6). Fold the tuple's members directly
-  // with '+', promoting to double when any element is float so mixed
-  // int/float tuples keep Python semantics (sum((1, 2.5, 3)) == 6.5).
   if (
-    func_name == "sum" && !is_user_imported && !is_numpy_model_call &&
-    (n_args == 1 || n_args == 2) &&
-    try_find_function(converter_.ast()["body"], func_name).empty())
+    std::optional<exprt> summed =
+      fold_sum_over_tuple(is_user_imported, is_numpy_model_call))
+    return *summed;
+
+  // random.choice / random.sample dispatch to the models/random.py variant
+  // matching the argument's sequence type; without it every non-int-list
+  // sequence runs the int-list model and raises a spurious memory-safety
+  // claim (issue #7673).
+  if (
+    (func_name == "choice" || func_name == "sample") && !is_user_imported &&
+    !is_numpy_model_call && n_args >= 1 && get_object_name() == "random")
   {
-    exprt arg = converter_.get_expr(call_["args"][0]);
-    const typet &at = converter_.ns.follow(arg.type());
-    if (
-      at.is_struct() &&
-      to_struct_type(at).tag().as_string().starts_with("tag-tuple"))
-    {
-      const struct_typet::componentst &comps = to_struct_type(at).components();
-      // Only fold numeric tuples; leave non-numeric ones (nested tuples,
-      // strings — a TypeError in CPython anyway) to the existing path so
-      // this change is scoped to the case it fixes.
-      bool any_float = false, all_numeric = true;
-      for (const auto &c : comps)
-      {
-        const typet &ct = converter_.ns.follow(c.type());
-        if (ct.is_floatbv() || ct.is_fixedbv())
-          any_float = true;
-        else if (!ct.is_signedbv() && !ct.is_unsignedbv() && !ct.is_bool())
-          all_numeric = false;
-      }
-      if (all_numeric)
-      {
-        const type2tc rt2 =
-          migrate_type(any_float ? double_type() : long_long_int_type());
-
-        expr2tc acc;
-        if (n_args == 2)
-        {
-          migrate_expr(converter_.get_expr(call_["args"][1]), acc);
-          if (acc->type != rt2)
-            acc = typecast2tc(rt2, acc);
-        }
-        else
-          acc = gen_zero(rt2);
-
-        for (const auto &c : comps)
-        {
-          expr2tc m2;
-          migrate_expr(build_member(arg, c.get_name(), c.type()), m2);
-          if (m2->type != rt2)
-            m2 = typecast2tc(rt2, m2);
-          acc = add2tc(rt2, acc, m2);
-        }
-        return migrate_expr_back(acc);
-      }
-    }
+    const exprt seq = converter_.get_expr(call_["args"][0]);
+    if (func_name == "choice")
+      if (std::optional<exprt> element = fold_random_choice_over_tuple(seq))
+        return element;
+    actual_func_name += random_sequence_suffix(seq, func_name);
   }
 
   const bool is_sorted_min_max = func_name == "min" || func_name == "max" ||
@@ -6138,9 +6333,16 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     const bool arg_is_complex_literal =
       arg_node["_type"] == "Constant" &&
       arg_node.value("esbmc_type_annotation", std::string()) == "complex";
+    // A bytes literal's JSON carries a string "value" too, but get_literal
+    // already built it as a raw byte array (elements are long_long_int).
+    // Rebuilding it as a NUL-terminated char array here left the callee
+    // reading 8-byte elements out of a 3-byte object -- "array bounds
+    // violated" on valid Python (#7550).
+    const bool arg_is_bytes_literal =
+      arg_node["_type"] == "Constant" && converter_.is_bytes_literal(arg_node);
     if (
-      !arg_is_complex_literal && arg_node["_type"] == "Constant" &&
-      arg_node["value"].is_string())
+      !arg_is_complex_literal && !arg_is_bytes_literal &&
+      arg_node["_type"] == "Constant" && arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
@@ -6309,7 +6511,9 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
             "parameters yet");
       }
 
-      if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+      if (
+        arg_node["_type"] == "Constant" && arg_node["value"].is_string() &&
+        !arg_is_bytes_literal)
       {
         arg = string_constantt(
           arg_node["value"].get<std::string>(),

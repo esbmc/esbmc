@@ -67,6 +67,7 @@ public:
   void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
+    const expr2tc &cond_neg,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
     const sourcet &source,
@@ -78,14 +79,26 @@ public:
     const expr2tc &size,
     const sourcet &source) override;
 
-  // When `vacuity_mode` is true, each non-ignored assertion is encoded as
-  // its path assumption alone instead of `not(assumpt -> cond)`. The final
-  // OR over the assertions vector is then UNSAT iff every kept claim's path
-  // is unreachable — i.e. the discharge is vacuous.
-  // Note: `runtime_encoded_equationt` overrides `convert` and does NOT
-  // support vacuity mode (it asserts `!vacuity_mode`); incremental BMC
-  // callers must run vacuity probes through the non-incremental path.
-  virtual void convert(smt_convt &smt_conv, bool vacuity_mode = false);
+  // `runtime_encoded_equationt` overrides `convert` and supports only the
+  // default mode; incremental BMC callers must run probes through the
+  // non-incremental path.
+  /// How an assertion is encoded.
+  ///   Violated       -- `not(assumpt -> cond)`: can the claim be violated?
+  ///   PathReachable  -- `assumpt`: is the path to it feasible at all?
+  ///   Satisfiable    -- `not(assumpt -> cond_neg)`: can the claim hold? UNSAT
+  ///                     means no feasible path satisfies it, so a violation
+  ///                     found against an over-approximation is one the
+  ///                     approximation's own constraints force (issue #7585).
+  enum class assertion_modet
+  {
+    Violated,
+    PathReachable,
+    Satisfiable
+  };
+
+  virtual void convert(
+    smt_convt &smt_conv,
+    assertion_modet mode = assertion_modet::Violated);
 
   void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
     const override;
@@ -139,6 +152,8 @@ public:
     // std::string) and dedups the payload across the many steps that share
     // a message.
     expr2tc cond;
+    /// `cond` with the claim negated under the same guards (issue #7585).
+    expr2tc cond_neg;
     irep_idt comment;
 
     // OUTPUT-step payload. OUTPUT steps are rare (only printf-family
@@ -194,6 +209,7 @@ public:
         original_lhs(o.original_lhs),
         original_rhs(o.original_rhs),
         cond(o.cond),
+        cond_neg(o.cond_neg),
         comment(o.comment),
         output_data(
           o.output_data ? std::make_unique<output_datat>(*o.output_data)
@@ -323,7 +339,9 @@ public:
 
   std::shared_ptr<symex_targett> clone() const override;
 
-  void convert(smt_convt &smt_conv, bool vacuity_mode = false) override;
+  void convert(
+    smt_convt &smt_conv,
+    assertion_modet mode = assertion_modet::Violated) override;
   void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
