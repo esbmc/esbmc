@@ -763,6 +763,34 @@ void c_typecastt::implicit_typecast_followed(
     do_typecast(expr, dest_type);
 }
 
+// The generous pointer rules, as one decision: the warning this conversion
+// earns, or nullptr when it earns none.
+static const char *incompatible_pointer_warning(
+  const namespacet &ns,
+  const type2tc &src_subtype,
+  const type2tc &dest_subtype)
+{
+  const type2tc &src_sub = ns.follow(src_subtype);
+  const type2tc &dest_sub = ns.follow(dest_subtype);
+
+  // from/to void is always good
+  if (is_empty_type(src_sub) || is_empty_type(dest_sub))
+    return nullptr;
+
+  if (base_type_eq(dest_subtype, src_subtype, ns))
+    return nullptr;
+
+  // very generous: between any two function pointers it's ok
+  if (is_code_type(src_sub) && is_code_type(dest_sub))
+    return nullptr;
+
+  // also generous: between any two scalar types it's ok
+  if (is_bv_type(src_sub) && is_bv_type(dest_sub))
+    return nullptr;
+
+  return "incompatible pointer types";
+}
+
 void c_typecastt::implicit_typecast_followed(
   expr2tc &expr,
   const type2tc &src_type,
@@ -790,27 +818,10 @@ void c_typecastt::implicit_typecast_followed(
       else
         src_subtype = to_array_type(src_type).subtype;
 
-      const type2tc &src_sub = ns.follow(src_subtype);
-      const type2tc &dest_sub = ns.follow(dest_ptr_type.subtype);
-
-      if (is_empty_type(src_sub) || is_empty_type(dest_sub))
-      {
-        // from/to void is always good
-      }
-      else if (base_type_eq(dest_ptr_type.subtype, src_subtype, ns))
-      {
-      }
-      else if (is_code_type(src_sub) && is_code_type(dest_sub))
-      {
-        // very generous:
-        // between any two function pointers it's ok
-      }
-      else if (is_bv_type(src_sub) && is_bv_type(dest_sub))
-      {
-        // also generous: between any to scalar types it's ok
-      }
-      else
-        warnings.push_back("incompatible pointer types");
+      const char *warning =
+        incompatible_pointer_warning(ns, src_subtype, dest_ptr_type.subtype);
+      if (warning)
+        warnings.push_back(warning);
 
       if (src_type == dest_type)
       {
