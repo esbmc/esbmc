@@ -2587,3 +2587,35 @@ should treat §20.1 as its own pre-flight list.
 Phase 6 is **clang-c** (971 mentions, 49 already IREP2). Its first action is the
 census §39.1 asks for, not a slice. Phase 3 (the Python flip) remains open and
 independent.
+
+## 40. Phase 7 (clang-cpp) opened (2026-09-10)
+
+`scope-clang-cpp-irep2.md` is the scope doc, following §6's instruction that
+each of Phases 5-9 opens its own. Re-censused at master `35db62c320`: clang-cpp
+is 643 legacy mentions, **0** IREP2, 7 559 LOC, over a 2 842-test corpus.
+
+Two findings decide its sequencing, and neither is a slice.
+
+**The typecast pre-flight §39.2 named is entirely open.** All seven §20.1 gaps
+are still present: the irept `implicit_typecast_followed` is 163 lines
+(`c_typecast.cpp:602-765`), the `expr2tc` copy 67 (`:766-832`), and *none* of
+the C++-shaped arms — references, pointer-to-member, derived-to-base,
+string-to-array, `#reference`, qualifier warnings, `incomplete_array` — is in
+the IREP2 copy. C++ models `T&` as a pointer, so item 1 alone sits on the path
+of every reference bind. Porting those, pinned by #6873's differential harness,
+comes before any adjuster work.
+
+**Phase 6's pass is not extensible, and does not decompose like the legacy
+one.** `clang_cpp_adjust` derives from `clang_c_adjust`, which declares 15
+virtual members, 13 of them overridden. `clang_c_adjust_irep2` declares **0**,
+and it deliberately unified `adjust_ifthenelse`/`adjust_while`/`adjust_for`
+into a single `adjust_statement_condition` — so `clang_cpp_adjust::adjust_while`
+has no seam to attach to. Retrofitting virtuals would re-import the seams that
+unification removed. The option that follows from merged work is a shared arm
+table, extending #7455's change that made the arm order data rather than
+control flow. Pricing that is Phase 7's first task; getting it wrong means
+re-doing Phase 6 inside Phase 7.
+
+There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
+whole instrument — one binary A/B'd against itself — does not exist here. A
+census by verdict waits on it.
