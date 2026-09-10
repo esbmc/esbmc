@@ -517,6 +517,49 @@ demanded — member-call lowering and exception-id assignment — is among the f
 corpus named a different arm than the names did. Treat §3's table as an inventory,
 not a work order.
 
+### 3.5 The residue is 23 false alarms with one cause, and no missed bugs (2026-09-10)
+
+With the crashes gone, the 29 remaining divergences over the 80-test sample split
+by *direction* first, because that is the question that matters for a verifier:
+
+| direction | count |
+|---|---:|
+| false alarm — default SUCCESSFUL, hop-off FAILED | **23** |
+| **missed bug — default FAILED, hop-off SUCCESSFUL** | **0** |
+| no verdict on one side (multi-file tests the sweep fed one source) | 6 |
+
+**Zero missed bugs.** Every divergence the C++ hop-off produces today is in the
+loud direction. That is worth stating explicitly: a pass under construction that
+over-reports is a nuisance, one that under-reports is a soundness hole, and this
+one has not produced a single instance of the latter across the sample.
+
+All 23 false alarms share one property:
+
+```
+file /esbmc-vfs/cpp/ostream line 138 column 3 function operator<<
+dereference failure: NULL pointer
+```
+
+which is `o._put_field(val, strlen(val))` in
+`operator<<(ostream &, const char *)`. Reduced:
+
+```cpp
+#include <iostream>
+int main() { const char *p = "hi"; std::cout << p; return 0; }
+```
+
+default SUCCESSFUL, hop-off FAILED. The literal form (`std::cout << "hi"`) fails
+identically, so it is not the array-to-pointer decay of a string literal — an
+already-decayed pointer argument reproduces it.
+
+What the trace says, and what it does not: the violated property is at **State 1**
+with no assignment before it, so the call is not being set up rather than an
+argument holding a wrong value. That points at parameter binding for this
+overload — its first parameter is `ostream &`, i.e. the reference machinery §2.6
+touched — but the counterexample does not name which binding, and guessing is how
+§3's mapping table got two arms wrong. The next step is to instrument the argument
+conversion for this call rather than infer it.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -657,7 +700,8 @@ spellings (§33) — so W3's carriage problem lands here first.
    is missing: write the member-call arm first (54 of 57 real divergences).
 6. ~~Port the `exception_id` assignment~~ — **done**, §3.4, PR #7719. Crashes are
    gone; the residue is the builtin spelling the seam drops.
-7. Then the remaining verdict divergences (15 of 80 report FAILED where the
-   default path succeeds).
+7. Fix the `ostream`/`const char *` overload's false alarm (§3.5) — one cause
+   behind all 23 remaining real divergences, reduced to two lines. Instrument the
+   argument conversion; do not infer the binding.
 
 Only then does a slice make sense.
