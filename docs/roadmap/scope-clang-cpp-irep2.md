@@ -552,13 +552,51 @@ default SUCCESSFUL, hop-off FAILED. The literal form (`std::cout << "hi"`) fails
 identically, so it is not the array-to-pointer decay of a string literal — an
 already-decayed pointer argument reproduces it.
 
-What the trace says, and what it does not: the violated property is at **State 1**
-with no assignment before it, so the call is not being set up rather than an
-argument holding a wrong value. That points at parameter binding for this
-overload — its first parameter is `ostream &`, i.e. the reference machinery §2.6
-touched — but the counterexample does not name which binding, and guessing is how
-§3's mapping table got two arms wrong. The next step is to instrument the argument
-conversion for this call rather than infer it.
+The trace puts the violated property at **State 1** with no assignment before it,
+so the call is not being set up rather than an argument holding a wrong value.
+§3.6 instruments it; the answer was not parameter binding.
+
+### 3.6 The ostream false alarm is a dropped code-generation step, not an arm
+
+Instrumented rather than inferred, and the inference in §3.5 would have been
+wrong. `adjust_call_arguments` converts `operator<<`'s arguments correctly; the
+reference parameter takes the `binds_by_reference` path and the pointer argument
+converts pointer→pointer. Carrying the parameter's `ref_kind` into that
+address-of changes nothing, which rules the reference machinery out.
+
+Diffing the whole canonicalised goto program for the two-line reproducer — 897
+differing lines — finds it:
+
+| | default | hop-off |
+|---|---:|---:|
+| `@vtable_pointer=&virtual_table…` assignments | **55** | **0** |
+| …for `ostream` alone | 7 | 0 |
+
+`clang_cpp_adjust::gen_vptr_initializations`
+(`clang_cpp_adjust_code_gen.cpp:5`) writes each class's vtable pointer at
+constructor entry. The IREP2 pass replaces `clang_cpp_adjust`, so none of it
+runs, every vptr stays uninitialised, and `ostream`'s `_discard()` — dispatched
+through `*o->std::ostream@vtable_pointer->…` — dereferences it. The NULL
+dereference at `ostream:138` is that, one call later.
+
+**It does not fit the arm table, and that is the finding.** `gen_vptr_initializations`
+takes a `symbolt &` and emits statements at the front of a constructor body: it is
+per-symbol code *generation*, not a per-node rewrite. §3.1 settled how a C++ pass
+dispatches arms; it said nothing about a pass that also has to synthesise code.
+`adjust()` walks values and applies the table, and has no hook for this.
+
+So the next step is not a fourth arm but a second kind of work in the pass, and
+the order matters — the vptr writes must precede the constructor's own body, as
+the legacy pass arranges. `clang_cpp_adjust` has one further step of this shape,
+`finalize_exception_specification`, so the hook wants to take both rather than be
+built for one.
+
+**A second divergence the same diff shows**, unrelated and smaller: a ternary over
+string literals decays per arm on the default path (`val ? &"1"[0] : &"0"[0]`) and
+as a whole on the hop-off (`&(val ? "1" : "0")[0]`). That is §134.4's ternary decay
+in `scope-clang-c-irep2.md`, recorded there as not reaching symex on C; on C++ it
+reaches the goto program. Worth its own row rather than being folded into the vptr
+work.
 
 ## 4. What does not exist yet
 
@@ -700,8 +738,10 @@ spellings (§33) — so W3's carriage problem lands here first.
    is missing: write the member-call arm first (54 of 57 real divergences).
 6. ~~Port the `exception_id` assignment~~ — **done**, §3.4, PR #7719. Crashes are
    gone; the residue is the builtin spelling the seam drops.
-7. Fix the `ostream`/`const char *` overload's false alarm (§3.5) — one cause
-   behind all 23 remaining real divergences, reduced to two lines. Instrument the
-   argument conversion; do not infer the binding.
+7. Give the pass a per-symbol code-generation hook and port
+   `gen_vptr_initializations` into it (§3.6) — 0 of 55 vptr writes happen today,
+   which is the cause behind all 23 remaining real divergences. Take
+   `finalize_exception_specification` at the same time.
+8. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
 
 Only then does a slice make sense.
