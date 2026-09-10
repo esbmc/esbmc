@@ -22,6 +22,7 @@
 #include <util/symtab/namespace.h>
 #include <util/irep/migrate.h>
 #include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
 #include <util/arith/arith_tools.h>
 #include <irep2/irep2_utils.h>
 
@@ -712,5 +713,47 @@ TEST_CASE(
   SECTION("fixedbv symbol converts to int")
   {
     require_overloads_agree(ns, symbol_exprt("f", float_type()), int_type());
+  }
+}
+
+// The C++-shaped arms of implicit_typecast_followed
+// (docs/roadmap/scope-clang-cpp-irep2.md §2). These are Phase 7 pre-flight:
+// the irept copy has them and the expr2tc copy does not, so each section here
+// fails until the corresponding arm is ported.
+TEST_CASE(
+  "both implicit_typecast_followed copies agree on the C++ arms",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  struct_typet base;
+  base.tag("Base");
+  struct_union_typet::componentt field;
+  field.set_name("x");
+  field.pretty_name("x");
+  field.type() = int_type();
+  base.components().push_back(field);
+
+  SECTION("a struct source to a pointer destination takes its address")
+  {
+    require_overloads_agree(ns, symbol_exprt("obj", base), pointer_typet(base));
+  }
+
+  SECTION("a union source to a pointer destination takes its address")
+  {
+    union_typet u;
+    u.tag("U");
+    u.components().push_back(field);
+    require_overloads_agree(ns, symbol_exprt("obj", u), pointer_typet(u));
+  }
+
+  SECTION("a string constant to an array destination becomes an array")
+  {
+    const typet char_array =
+      array_typet(char_type(), from_integer(3, size_type()));
+    string_constantt str("ab");
+    str.type() = char_array;
+    require_overloads_agree(ns, str, char_array);
   }
 }

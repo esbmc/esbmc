@@ -823,6 +823,23 @@ void c_typecastt::implicit_typecast_followed(
 
       return; // ok
     }
+
+    if (is_struct_type(src_type) || is_union_type(src_type))
+    {
+      // Derived object to base-class pointer: `derived_obj` becomes
+      // `&derived_obj` typed as the base pointer, reached when a base method
+      // is called on a derived object. address_of2t takes the *pointee*, so
+      // the destination's subtype is what reproduces dest_type.
+      expr = address_of2tc(dest_ptr_type.subtype, expr);
+    }
+  }
+  else if (is_array_type(dest_type) && is_constant_string2t(expr))
+  {
+    // string2array in the irept copy: the constant becomes the array of its
+    // characters, at the destination's type rather than its own.
+    const expr2tc retyped = expr->with_type(dest_type);
+    expr = to_constant_string2t(retyped).to_array();
+    return;
   }
 
   if (check_c_implicit_typecast(src_type, dest_type))
