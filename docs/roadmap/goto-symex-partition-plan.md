@@ -280,9 +280,12 @@ that make this a *proof* rather than a green build.
   `ra-pow-nan` and the two host-`libstdc++` C++ tests fail on clean `master`
   here.
 * **G5 — harness drift.** `python3 scripts/verification/symex/drift_check.py`
-  must exit 0. This is a **required CI job**
-  (`.github/workflows/pull_request.yml:225`) and it *will* fail on the `state/`
-  commit: `regression/esbmc/symex_ssa_00/symex_ssa_00.c:4,6` pin
+  must exit 0. **Run it by hand on the `state/` commit — CI will not catch this
+  one.** #7686 moved the job out of the pull-request workflow into
+  `.github/workflows/ci-weekly.yml:280`, gated on the Monday `17 4 * * 1` cron,
+  so a stale harness path now lands green and surfaces up to a week later on a
+  run nobody is watching. It *will* fail on the `state/` commit:
+  `regression/esbmc/symex_ssa_00/symex_ssa_00.c:4,6` pin
   `src/goto-symex/renaming.cpp::renaming::level2t::{make_assignment,coveredinbees}`
   by path, and `region_digest()` raises `cited file does not exist` when the
   path is stale. Fix by editing the two `SYMEX-HARNESS-TARGET:` lines. **Do not

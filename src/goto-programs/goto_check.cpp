@@ -37,7 +37,9 @@ public:
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check")),
       enable_is_instance_check(options.get_bool_option("is-instance-check")),
-      enable_clz_zero_check(options.get_bool_option("clz-zero-check"))
+      enable_clz_zero_check(options.get_bool_option("clz-zero-check")),
+      disable_fp_conversion_check(
+        options.get_bool_option("no-fp-conversion-check"))
   {
   }
 
@@ -81,6 +83,12 @@ protected:
     const locationt &loc);
 
   void cast_overflow_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const locationt &loc);
+
+  /** check a floating-point value converts into the destination integer type */
+  void fp_to_int_range_check(
     const expr2tc &expr,
     const guard2tc &guard,
     const locationt &loc);
@@ -150,6 +158,7 @@ protected:
   bool enable_nan_check;
   bool enable_is_instance_check;
   bool enable_clz_zero_check;
+  bool disable_fp_conversion_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -259,11 +268,75 @@ void goto_checkt::float_overflow_check(
   }
 }
 
+/// C11 6.3.1.4p1 and [conv.fpint]/1: converting a floating value whose integral
+/// part is not representable in the destination integer type is undefined.
+/// cast_overflow_check's bitvector check is gated on --int-encoding, so in the
+/// default mode this conversion went unchecked (#7572). A NaN operand fails
+/// both comparisons, which is right -- it is equally undefined.
+///
+/// --no-fp-conversion-check exists for SV-COMP: its no-overflow property is
+/// only about signed-integer arithmetic, and the rules say so explicitly --
+/// "Hence, conversions to signed-integer types do not violate this property."
+/// esbmc-wrapper.py reports any violated property under that run as
+/// FALSE_OVERFLOW, so leaving this on turns a real conversion UB into a wrong
+/// competition verdict.
+void goto_checkt::fp_to_int_range_check(
+  const expr2tc &expr,
+  const guard2tc &guard,
+  const locationt &loc)
+{
+  if (
+    !enable_overflow_check || disable_fp_conversion_check ||
+    !is_typecast2t(expr))
+    return;
+
+  const typecast2t &fp_cast = to_typecast2t(expr);
+  const type2tc &src_type = ns.follow(fp_cast.from->type);
+  const type2tc &dst_type = ns.follow(expr->type);
+  if (!is_floatbv_type(src_type))
+    return;
+
+  const bool is_signed = is_signedbv_type(dst_type);
+  if (!is_signed && !is_unsignedbv_type(dst_type))
+    return;
+
+  // 6.3.1.4p1 constrains the *integral part* after truncation toward zero, not
+  // the value, so the defined operands are the open interval (MIN - 1, MAX +
+  // 1): (unsigned)-0.5f is 0, and (int)-2147483648.5 is INT_MIN. Getting the
+  // lower bound closed reported both as undefined, which cost an SV-COMP
+  // incorrect-false on float-benchs/bary_diverge.
+  const unsigned int w = dst_type->get_width();
+  const BigInt lo = is_signed ? -power(2, w - 1) : BigInt(0);
+  const BigInt hi = is_signed ? power(2, w - 1) : power(2, w);
+
+  // MIN - 1 is representable only while the source significand can hold it.
+  // Where it cannot, from_integer would round it to MIN and the strict bound
+  // would then exclude MIN itself -- but no float lies between MIN - 1 and MIN
+  // there, so the closed bound already describes the same set of operands.
+  const expr2tc lo_open = from_integer(lo - 1, src_type);
+  const bool lo_open_exact =
+    to_constant_floatbv2t(lo_open).value.to_integer() == lo - 1;
+
+  add_guarded_claim(
+    and2tc(
+      lo_open_exact ? expr2tc(greaterthan2tc(fp_cast.from, lo_open))
+                    : expr2tc(greaterthanequal2tc(
+                        fp_cast.from, from_integer(lo, src_type))),
+      lessthan2tc(fp_cast.from, from_integer(hi, src_type))),
+    "floating-point conversion out of range of " + get_type_id(dst_type) +
+      " on " + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
+}
+
 void goto_checkt::cast_overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
   const locationt &loc)
 {
+  fp_to_int_range_check(expr, guard, loc);
+
   // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
   // even in bitvector mode. Only apply to user .sol code, not C library models.
   bool is_solidity = (config.language.lid == language_idt::SOLIDITY);

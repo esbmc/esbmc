@@ -516,11 +516,20 @@ public:
     return lhs.interval_left_shift(lhs, rhs);
   }
 
+  interval_templatet<T> interval_arithmetic_right_shift(
+    const interval_templatet<T> &,
+    const interval_templatet<T> &) const
+  {
+    log_debug("interval", "No support for ashr");
+    interval_templatet<T> result;
+    return result;
+  }
+
   static interval_templatet<T> arithmetic_right_shift(
     const interval_templatet<T> &lhs,
     const interval_templatet<T> &rhs)
   {
-    return lhs.interval_left_shift(lhs, rhs);
+    return lhs.interval_arithmetic_right_shift(lhs, rhs);
   }
 
   static interval_templatet<T>

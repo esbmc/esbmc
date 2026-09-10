@@ -651,47 +651,48 @@ static expr2tc project_member(const expr2tc &arm, const irep_idt &name)
   return to_constant_struct2t(*cur).datatype_members[*i];
 }
 
-/// Pin a merge. phi_function spells a branch that wrote one member as
-/// `VAR = if(g, then, else)` (symex_goto.cpp), a shape constant_propagation
-/// carries at no arm, so a conditional write drops the object -- and the
-/// counter beside the written member -- exactly as a refused write did before
-/// #7597. Rebuild it member by member: where the two arms agree the value is
-/// the branch's regardless of `g` and folds, and where they differ the member
-/// becomes a read of the name just defined, which denotes the merged value and
-/// cannot grow across iterations. Structs only: decomposing a phi over a bare
-/// array would rebuild a literal per element, the cost pinned_array_bound
-/// exists to avoid.
-static expr2tc pin_phi_members(
-  const goto_symex_statet &state,
-  const expr2tc &rhs,
-  const expr2tc &l2_lhs)
+/// The value @p arm holds at index @p i, or nil when the shape does not say --
+/// a symbolic index on the way down means the chain cannot be read off. Same
+/// reason as project_member for not going through the simplifier.
+static expr2tc project_index(const expr2tc &arm, size_t i)
 {
-  if (!is_struct_type(l2_lhs) || !type_has_constant_size(l2_lhs->type))
+  const expr2tc *cur = &arm;
+  while (is_with2t(*cur))
+  {
+    const with2t &w = to_with2t(*cur);
+    if (!is_constant_int2t(w.update_field))
+      return expr2tc();
+    if (to_constant_int2t(w.update_field).value == BigInt(i))
+      return w.update_value;
+    cur = &w.source_value;
+  }
+  if (!is_constant_array2t(*cur))
     return expr2tc();
+  const std::vector<expr2tc> &m = to_constant_array2t(*cur).datatype_members;
+  return i < m.size() ? m[i] : expr2tc();
+}
 
-  const if2t &phi = to_if2t(rhs);
-  // The reads below are built from all three, so all three must name the same
-  // members; a phi whose arms are not the assigned object is not one of ours.
-  if (
-    phi.true_value->type != l2_lhs->type ||
-    phi.false_value->type != l2_lhs->type)
-    return expr2tc();
-
-  // Rebuilt as a literal, not as a `with` over one arm: the literal is a normal
-  // form, so the carried value stays one node per member however many merges
-  // the loop makes. A `with` chain accumulates one node per disagreeing member
-  // per merge instead, which measures superlinear as the unwind bound rises.
-  const struct_type2t &st = to_struct_type(l2_lhs->type);
+/// Decompose a merge into per-position values, or nothing when no position
+/// agrees -- a rebuild that names every position folds nothing. @p project
+/// reads a position out of one arm, @p read_of names the read a disagreeing
+/// position is pinned to.
+template <typename project_t, typename read_oft>
+static std::optional<std::vector<expr2tc>> split_phi(
+  const goto_symex_statet &state,
+  const if2t &phi,
+  size_t count,
+  project_t project,
+  read_oft read_of)
+{
   std::vector<expr2tc> elems;
-  elems.reserve(st.members.size());
+  elems.reserve(count);
   bool pinned_any = false;
   bool agreed_any = false;
-  for (size_t i = 0; i < st.members.size(); i++)
+  for (size_t i = 0; i < count; i++)
   {
-    const irep_idt &name = st.member_names[i];
-    const expr2tc taken = project_member(phi.true_value, name);
+    const expr2tc taken = project(phi.true_value, i);
     if (
-      !is_nil_expr(taken) && taken == project_member(phi.false_value, name) &&
+      !is_nil_expr(taken) && taken == project(phi.false_value, i) &&
       state.constant_propagation(taken))
     {
       agreed_any = true;
@@ -699,15 +700,76 @@ static expr2tc pin_phi_members(
       continue;
     }
     pinned_any = true;
-    elems.push_back(member2tc(st.members[i], l2_lhs, name));
+    elems.push_back(read_of(i));
   }
-
-  // Nothing agreed: every member would read back out of l2_lhs, which folds
-  // nothing and is not worth carrying.
   if (!pinned_any || !agreed_any)
+    return {};
+  return elems;
+}
+
+/// Pin a merge. phi_function spells a branch that wrote one member as
+/// `VAR = if(g, then, else)` (symex_goto.cpp), a shape constant_propagation
+/// carries at no arm, so a conditional write drops the object -- and the
+/// counter beside the written member -- exactly as a refused write did before
+/// #7597. Rebuild it position by position: where the two arms agree the value
+/// is the branch's regardless of `g` and folds, and where they differ the
+/// position becomes a read of the name just defined, which denotes the merged
+/// value and cannot grow across iterations. An array decomposes the same way;
+/// pin_symbolic_updates has already capped its element count.
+static expr2tc pin_phi_members(
+  const goto_symex_statet &state,
+  const expr2tc &rhs,
+  const expr2tc &l2_lhs)
+{
+  if (!type_has_constant_size(l2_lhs->type))
     return expr2tc();
 
-  expr2tc rebuilt = constant_struct2tc(l2_lhs->type, elems);
+  const if2t &phi = to_if2t(rhs);
+  // The reads below are built from all three, so all three must name the same
+  // positions; a phi whose arms are not the assigned object is not one of ours.
+  if (
+    phi.true_value->type != l2_lhs->type ||
+    phi.false_value->type != l2_lhs->type)
+    return expr2tc();
+
+  // Rebuilt as a literal, not as a `with` over one arm: the literal is a normal
+  // form, so the carried value stays one node per position however many merges
+  // the loop makes. A `with` chain accumulates one node per disagreeing
+  // position per merge instead, which measures superlinear as the bound rises.
+  std::optional<std::vector<expr2tc>> elems;
+  if (is_struct_type(l2_lhs))
+  {
+    const struct_type2t &st = to_struct_type(l2_lhs->type);
+    elems = split_phi(
+      state,
+      phi,
+      st.members.size(),
+      [&](const expr2tc &arm, size_t i) {
+        return project_member(arm, st.member_names[i]);
+      },
+      [&](size_t i) {
+        return member2tc(st.members[i], l2_lhs, st.member_names[i]);
+      });
+  }
+  else if (is_array_type(l2_lhs))
+  {
+    const array_type2t &at = to_array_type(l2_lhs->type);
+    const std::optional<BigInt> count = array_element_count(l2_lhs->type);
+    if (!count)
+      return expr2tc();
+    elems = split_phi(
+      state,
+      phi,
+      count->to_uint64(),
+      [](const expr2tc &arm, size_t i) { return project_index(arm, i); },
+      [&](size_t i) { return index2tc(at.subtype, l2_lhs, gen_ulong(i)); });
+  }
+  if (!elems)
+    return expr2tc();
+
+  expr2tc rebuilt = is_struct_type(l2_lhs)
+                      ? constant_struct2tc(l2_lhs->type, *elems)
+                      : constant_array2tc(l2_lhs->type, *elems);
   return state.constant_propagation(rebuilt) ? rebuilt : expr2tc();
 }
 
