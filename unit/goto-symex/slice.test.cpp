@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#include <goto-symex/slice.h>
+#include <goto-symex/equation/slice.h>
 
 #include "ssa_validator.h"
 #include "symex_run.h"
