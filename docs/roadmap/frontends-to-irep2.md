@@ -2601,9 +2601,24 @@ are still present: the irept `implicit_typecast_followed` is 163 lines
 (`c_typecast.cpp:602-765`), the `expr2tc` copy 67 (`:766-832`), and *none* of
 the C++-shaped arms — references, pointer-to-member, derived-to-base,
 string-to-array, `#reference`, qualifier warnings, `incomplete_array` — is in
-the IREP2 copy. C++ models `T&` as a pointer, so item 1 alone sits on the path
-of every reference bind. Porting those, pinned by #6873's differential harness,
-comes before any adjuster work.
+the IREP2 copy.
+
+Two of them cannot be ported at all as things stand.
+`is_lvalue_or_rvalue_reference` tests two irept *attributes*, and
+`pointer_type2t` has only `subtype` and `carry_provenance`, so a C++ reference
+and a plain pointer are the same IREP2 node (`migrate.cpp:205`). Unlike
+§113.3's attributed integer, this one is not cosmetic: the arm decides whether
+`T& F(T& a) { return a; }` returns `&a` or a typecast. Item 1 needs
+`pointer_type2t` to carry the reference kind first — a W2-class representation
+change on the phase's critical path.
+
+Instrumenting the arms over a stride-10 `regression/esbmc-cpp` sample (283
+runnable tests) prices it: the reference arm fires in **199** tests,
+derived-to-base in **198**, the source-reference dereference in 87,
+string-to-array in 6, and pointer-to-member in **0**. Every test in the sample
+fires at least one, so no first slice can be verified while they are missing.
+The zero is §39.1's census rule paying for itself — do not port item 2 on the
+strength of its being listed.
 
 **Phase 6's pass is not extensible, and does not decompose like the legacy
 one.** `clang_cpp_adjust` derives from `clang_c_adjust`, which declares 15

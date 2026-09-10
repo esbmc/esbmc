@@ -68,6 +68,63 @@ and Python. They are **live for every assignment clang-cpp converts**, which is
 most of them: C++ models `T&` as a pointer, so item 1 alone is on the path of
 every reference bind.
 
+### 2.1 Two of the arms are not portable — `pointer_type2t` cannot say "reference"
+
+Items 1 and 5 are not "not yet ported". They are **not representable**.
+
+`is_lvalue_or_rvalue_reference` (`std_types.cpp`) is
+
+```cpp
+type.id() == "pointer" && (type.reference() || type.get_bool("#rvalue_reference"))
+```
+
+— two irept *attributes*. `pointer_type2t` has exactly two fields, `subtype` and
+`carry_provenance`, and `migrate_type`'s pointer arm builds
+`pointer_type2tc(subtype, type.can_carry_provenance())` (`migrate.cpp:205`).
+**A C++ reference and a plain pointer are the same IREP2 node by
+construction.**
+
+This is §113.3's shape — the attributed and plain types being one node — but
+the conclusion is the opposite. There the attribute changed only what a printer
+emitted, so "do not mirror" was right. Here the arm changes the *expression
+built*: `T& F(T& a) { return a; }` must return `&a`, not `(int *)a`. An IREP2
+pass cannot decide that, because by the time it sees the type the distinction is
+gone.
+
+So item 1 needs `pointer_type2t` to carry the reference kind before any of it
+can be written. That is a W2-class representation change and it gates the
+phase, exactly as W3's carriage gated Part V.
+
+### 2.2 How much of the corpus this touches — measured
+
+Instrumented each arm with an `fprintf` and ran a stride-10 sample of
+`regression/esbmc-cpp` (285 descriptors, 283 runnable) under
+`--goto-functions-only`:
+
+| arm | firings | tests (of 283) |
+|---|---:|---:|
+| `take_reference_address` (item 1) | 20 338 | **199** (70 %) |
+| derived-to-base (item 6) | 13 952 | **198** (70 %) |
+| source-reference dereference (item 1) | 495 | 87 (31 %) |
+| string-constant to array (item 7) | 11 | 6 (2 %) |
+| pointer-to-member (item 2) | 0 | **0** |
+
+**Every test in the sample fires at least one of these arms.** There is no
+subset of the C++ corpus that avoids them, so there is no first slice that can
+be verified while they are missing — which settles the sequencing question §2
+raised.
+
+Two readings worth keeping:
+
+- The reference arms are the hot path, not a corner: 70 % of tests, and the
+  most-fired arm in the file. The representation gap in §2.1 is therefore the
+  phase's critical path, not a detail to schedule late.
+- **Pointer-to-member fires zero times.** That is §39.1's "census before
+  writing" earning its place: jimple migrated `nondet` before learning it never
+  executed, and the byte-identity claim held for nine PRs because nothing ran
+  it. Do not port item 2 on the strength of it being in §20.1's list; price it
+  against a corpus that contains it first, or leave it declined and recorded.
+
 **Consequence for sequencing.** Phase 7 cannot begin with an adjuster slice.
 Porting the four C++ arms into the `expr2tc` overload is the first work item,
 and `unit/util/c_typecast.test.cpp` — the differential harness #6873 added — is
@@ -154,9 +211,12 @@ spellings (§33) — so W3's carriage problem lands here first.
 
 ## 6. Next
 
-1. Port §20.1 items 1, 2, 6, 7 into the `expr2tc` `implicit_typecast_followed`,
-   pinned by `unit/util/c_typecast.test.cpp`'s differential harness.
-2. Price option B in §3 against option A.
-3. Add the C++ hop-off flag, then run the census by verdict.
+1. Decide whether `pointer_type2t` carries the reference kind (§2.1). Nothing
+   in item 1 can be written until it does, and 70 % of the corpus needs item 1.
+2. Port items 6 and 7 into the `expr2tc` `implicit_typecast_followed` — both are
+   representable today — pinned by `unit/util/c_typecast.test.cpp`'s
+   differential harness. Leave item 2 declined and recorded (§2.2).
+3. Price option B in §3 against option A.
+4. Add the C++ hop-off flag, then run the census by verdict.
 
 Only then does a slice make sense.
