@@ -481,6 +481,35 @@ Worth stating because the migrate census could not have found this: the census
 runs after the legacy adjuster, so the attributes were already present when it
 looked.
 
+### 3.4 The ids are computed, and the residue is a spelling the seam drops
+
+PR #7719 ports both arms: `convert_exception_id` becomes a free function taking a
+namespace (it read no other instance state), and the IREP2 arms populate
+`code_cpp_catch2t`'s and `code_cpp_throw2t`'s `exception_list` fields.
+
+| over 80 tests | before | after |
+|---|---:|---:|
+| agree | 31 | **51** |
+| diverge | 49 | 29 |
+| crash | 23 | **0** |
+
+**The residue on the reproducer is a W3 instance that reaches a verdict, not a
+printer.** `throw 1` yields the id `signedbv` on the hop-off where the legacy path
+yields `signed_int`: the id is computed from `migrate_type_back(...)`, and the C
+spelling does not survive `migrate_type`. The throw and the handler then disagree
+and the exception escapes, so the two-line reproducer still reports FAILED where
+the default path succeeds.
+
+Class-typed exceptions are unaffected — their id comes from the tag name, which
+does survive — which is why the corpus improves from 31 to 51 regardless.
+
+This is worth separating from §5's R6 as stated. R6 anticipated a dropped
+attribute surfacing as a *printer* difference; here it changes a verdict. The
+spelling has to be carried, or the ids computed before migration. Reconstructing
+`signed_int` from a 32-bit `signedbv` is available and is the wrong answer, for
+§137's reason: do not rebuild what the representation dropped, either carry it or
+do not claim it.
+
 **What it says about §3's mapping.** Neither of the two arms the corpus has now
 demanded — member-call lowering and exception-id assignment — is among the five
 §3 predicted from name comparison (`adjust_code`, `adjust_decl_block`,
@@ -626,8 +655,8 @@ spellings (§33) — so W3's carriage problem lands here first.
 5. ~~Make the table generic and stand up `clang_cpp_adjust_irep2`~~ — **done**,
    §3.1 and §3.2 (PRs #7714, #7717). The corpus, not the name mapping, says what
    is missing: write the member-call arm first (54 of 57 real divergences).
-6. Port `adjust_catch` / the throw arm's `exception_id` assignment (§3.3) — one
-   cause behind all 23 symbolised crashes.
+6. ~~Port the `exception_id` assignment~~ — **done**, §3.4, PR #7719. Crashes are
+   gone; the residue is the builtin spelling the seam drops.
 7. Then the remaining verdict divergences (15 of 80 report FAILED where the
    default path succeeds).
 
