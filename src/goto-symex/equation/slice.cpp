@@ -1,4 +1,4 @@
-#include <goto-symex/slice.h>
+#include <goto-symex/equation/slice.h>
 
 #include <util/base/prefix.h>
 static bool no_slice(const symbol2t &sym)

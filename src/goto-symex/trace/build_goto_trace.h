@@ -2,7 +2,7 @@
 #define CPROVER_GOTO_SYMEX_BUILD_GOTO_TRACE_H
 
 #include <goto-symex/trace/goto_trace.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 
 void build_goto_trace(
   const symex_target_equationt &target,

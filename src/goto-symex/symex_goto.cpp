@@ -1,7 +1,7 @@
 #include <cassert>
 #include <goto-symex/goto_symex.h>
-#include <goto-symex/slice.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/slice.h>
+#include <goto-symex/equation/symex_target_equation.h>
 
 #include <langapi/language_ui.h>
 #include <solvers/smtlib/smtlib_conv.h>

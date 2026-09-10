@@ -3,7 +3,7 @@
 
 #include <fstream>
 #include <goto-programs/goto_program.h>
-#include <goto-symex/symex_target.h>
+#include <goto-symex/equation/symex_target.h>
 
 #include <map>
 #include <irep2/irep2.h>

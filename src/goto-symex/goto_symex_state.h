@@ -9,7 +9,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_invariant.h>
-#include <goto-symex/symex_target.h>
+#include <goto-symex/equation/symex_target.h>
 #include <pointer-analysis/value_set.h>
 #include <set>
 #include <stack>

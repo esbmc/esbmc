@@ -1,5 +1,5 @@
 #include <goto-symex/testgen/pytest.h>
-#include <goto-symex/slice.h>
+#include <goto-symex/equation/slice.h>
 #include <goto-symex/testgen/test_gen_guard.h>
 #include <ac_config.h>
 #include <irep2/irep2.h>

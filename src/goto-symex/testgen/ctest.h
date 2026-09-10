@@ -1,7 +1,7 @@
 #ifndef CPROVER_GOTO_SYMEX_CTEST_H
 #define CPROVER_GOTO_SYMEX_CTEST_H
 
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <util/symtab/namespace.h>
 #include <string>
 #include <vector>

@@ -38,7 +38,7 @@
 #include <utility>
 
 #include <goto-symex/reachability_tree.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/solve.h>
 #include <util/symtab/namespace.h>

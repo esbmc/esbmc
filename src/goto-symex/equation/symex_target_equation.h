@@ -6,7 +6,7 @@
 #include <cstring>
 #include <goto-programs/goto_program.h>
 #include <goto-symex/trace/goto_trace.h>
-#include <goto-symex/symex_target.h>
+#include <goto-symex/equation/symex_target.h>
 #include <list>
 #include <map>
 #include <memory>

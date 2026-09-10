@@ -6,7 +6,7 @@
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/renaming.h>
-#include <goto-symex/symex_target.h>
+#include <goto-symex/equation/symex_target.h>
 
 #include <list>
 #include <map>

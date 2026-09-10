@@ -1,5 +1,5 @@
 #include "irep2/irep2_type.h"
-#include <goto-symex/features.h>
+#include <goto-symex/equation/features.h>
 
 bool ssa_features::run(symex_target_equationt::SSA_stepst &steps)
 {

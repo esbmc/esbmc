@@ -1,4 +1,4 @@
-#include <goto-symex/symex_symmetry.h>
+#include <goto-symex/equation/symex_symmetry.h>
 #include <util/message/message.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>

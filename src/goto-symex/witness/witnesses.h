@@ -6,7 +6,7 @@
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
 #include <goto-symex/trace/goto_trace.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <string>
 #include <regex>
 #include <vector>

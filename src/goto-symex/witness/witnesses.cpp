@@ -1159,7 +1159,7 @@ bool find_nondet_in_expr(const expr2tc &expr)
 #include <util/lang/c_types.h>
 #include <boost/property_tree/detail/xml_parser_writer_settings.hpp>
 #include <cassert>
-#include <goto-symex/slice.h>
+#include <goto-symex/equation/slice.h>
 #include <irep2/irep2_utils.h>
 
 // Replace nil and missing aggregate components with zero (and

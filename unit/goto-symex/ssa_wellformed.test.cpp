@@ -20,7 +20,7 @@
 #include <string>
 
 #include <goto-symex/reachability_tree.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <util/symtab/namespace.h>
 
 #include "ssa_validator.h"

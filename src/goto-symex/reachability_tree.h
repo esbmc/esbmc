@@ -7,7 +7,7 @@
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/renaming.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 
 #include <unordered_map>
 #include <unordered_set>

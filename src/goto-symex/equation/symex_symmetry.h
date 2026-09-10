@@ -1,7 +1,7 @@
 #ifndef CPROVER_GOTO_SYMEX_SYMEX_SYMMETRY_H
 #define CPROVER_GOTO_SYMEX_SYMEX_SYMMETRY_H
 
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <util/ssa/algorithms.h>
 
 /// SSA transformation pass that recognises `lhs = ite(cond, t, e)` max/min

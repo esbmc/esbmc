@@ -1,4 +1,4 @@
-add_library(symex symex_target.cpp symex_target_equation.cpp symex_assign.cpp
+add_library(symex equation/symex_target.cpp equation/symex_target_equation.cpp symex_assign.cpp
   symex_main.cpp  symex_stack.cpp trace/goto_trace.cpp trace/build_goto_trace.cpp
   symex_function.cpp goto_symex_state.cpp symex_dereference.cpp symex_goto.cpp
   builtin_functions/memory_alloc.cpp
@@ -12,11 +12,11 @@ add_library(symex symex_target.cpp symex_target_equation.cpp symex_assign.cpp
   builtin_functions/python_builtins.cpp
   builtin_functions/misc.cpp
   builtin_functions/witness.cpp
-  slice.cpp symex_other.cpp symex_symmetry.cpp trace/xml_goto_trace.cpp
+  equation/slice.cpp symex_other.cpp equation/symex_symmetry.cpp trace/xml_goto_trace.cpp
   symex_valid_object.cpp dynamic_allocation.cpp renaming.cpp
   execution_state.cpp reachability_tree.cpp reachability_tree_cin.cpp
   symex_invariant.cpp
-  witness/witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp trace/printf_formatter.cpp features.cpp trace/html.cpp trace/json.cpp
+  witness/witnesses.cpp testgen/pytest.cpp testgen/ctest.cpp trace/printf_formatter.cpp equation/features.cpp trace/html.cpp trace/json.cpp
   trace/sarif.cpp)
 target_include_directories(symex
     PRIVATE ${CMAKE_BINARY_DIR}/src

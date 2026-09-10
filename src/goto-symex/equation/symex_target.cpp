@@ -1,4 +1,4 @@
-#include <goto-symex/symex_target.h>
+#include <goto-symex/equation/symex_target.h>
 
 bool operator<(const symex_targett::sourcet &a, const symex_targett::sourcet &b)
 {
