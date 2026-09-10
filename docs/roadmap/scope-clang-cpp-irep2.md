@@ -415,6 +415,39 @@ IREP2 arm, and `adjust_code`, `adjust_decl_block`, `adjust_symbol`,
 `adjust_reference` and `adjust_side_effect` have no counterpart at all. Those are
 the real Phase 7 work, and §4.1 says representation will not obstruct them.
 
+### 3.2 The pass stands up, and one arm is 95 % of the gap (2026-09-10)
+
+`clang_cpp_adjust_irep2` derives from the C pass and substitutes its own table
+(PR #7717). One virtual selects the table; the C arms become `protected`. Its
+table lists only the inherited C arms, so running it as the sole adjuster under
+`--clang-cpp-irep2-adjust-only` *measures* what C++ needs.
+
+Over 80 `regression/esbmc-cpp` tests, verdict against the default path:
+
+| | count |
+|---|---:|
+| agree | 17 |
+| diverge | 63 |
+| …of which one signature | **54** |
+
+```
+ERROR: do_function_call: unexpected callee expression (id: member)
+```
+
+A C++ method call. Six of the other nine are multi-file tests the sweep fed only
+their first source, one expects a parse error. **So one arm — member-function
+call lowering — accounts for essentially the whole gap**, and it is the next
+slice. §3's mapping table guessed five missing arms from names; the corpus says
+start with the one the legacy `adjust_side_effect_function_call` override covers.
+
+Worth noting what already works with inherited arms alone: a reference bind
+through a method-free struct verifies identically on both paths. The C arms are
+not merely inert on C++ input.
+
+The nine table guards moved to a shared header (one definition, two tables), and
+`adjust_arms.test.cpp` pins that the two tables stay in the same order — a row
+added to one and not the other should be a decision, not an accident.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -550,9 +583,9 @@ spellings (§33) — so W3's carriage problem lands here first.
    representation is not the blocker, so §3 is now the critical path.
 4. ~~Price option B against option A~~ — **done**, §3.1: neither, but B′
    (per-frontend typed table, template runner) is measured cheap.
-5. Make `arm` and `adjust_sole_arms` generic over the pass type (§3.1), then
-   stand up `clang_cpp_adjust_irep2` with the arms §3's mapping table shows are
-   missing.
+5. ~~Make the table generic and stand up `clang_cpp_adjust_irep2`~~ — **done**,
+   §3.1 and §3.2 (PRs #7714, #7717). The corpus, not the name mapping, says what
+   is missing: write the member-call arm first (54 of 57 real divergences).
 6. Then the replacement mode, and the census by verdict.
 
 Only then does a slice make sense.
