@@ -343,6 +343,56 @@ options, none yet costed:
 Option B is the one that follows from work already merged, and it should be
 priced first. Deciding this wrong means re-doing Phase 6 inside Phase 7.
 
+### 3.1 §3 answered: neither recorded option, and the working one is cheap (2026-09-10)
+
+Measured against the table #7455 actually built, not against §3's sketch.
+
+```cpp
+struct arm
+{
+  const char *name;
+  void (clang_c_adjust_irep2::*run)(expr2tc &);
+  bool (*when)(const expr2tc &);
+};
+static const arm arms[];          // 24 rows, constant-initialised
+```
+
+**Option B as §3 states it does not compile.** "A second frontend supplying its
+own table entries" cannot work while `run` is a pointer-to-member of
+`clang_c_adjust_irep2`: a derived arm's type does not convert to the base's, and
+the table is `static const` on the base, so a C++ row has nowhere to go.
+
+**Option A is still the wrong shape**, for §3's original reason: retrofitting
+virtuals re-imports the per-statement seams the unified
+`adjust_statement_condition` removed, and only where C++ needs them.
+
+**What does work — B′: each frontend owns a table typed on its own class, and
+the runner becomes a template.** Four properties, each compiled rather than
+recalled:
+
+| property | result |
+|---|---|
+| `decltype(&Derived::shared)` | `void (Base::*)(…)` — the *naming* class decides, so the C rows keep their type |
+| a table of `void (Derived::*)(…)` | holds **both** `&Derived::own` and `&Base::shared`, via the implicit base→derived member-pointer conversion |
+| that table declared `constexpr` | **0 dynamic initialisers** — constant-initialisation survives, which is the property the table's own comment protects |
+| `template <class T, size_t N> run_all(T &, const Row (&)[N], …)` | drives either frontend's table |
+
+So a `clang_cpp_adjust_irep2` table can list the 24 inherited C arms **by name**
+alongside its own, in one ordered table, with no virtual dispatch, no
+`std::function`, and no start-up cost. The C table does not change.
+
+The cost is confined to making `arm` and `adjust_sole_arms` generic over the
+concrete pass type — the only two places in the dispatch machinery that name
+`clang_c_adjust_irep2` — plus `arm_order()`, which
+`unit/clang-c-frontend/adjust_arms.test.cpp` reads and which stays per-class.
+
+**What this does not answer.** B′ settles how a C++ pass *dispatches*; it says
+nothing about which arms C++ needs. §3's mapping table stands: only
+`adjust_member` and `adjust_function_call_arguments` line up by name with an
+IREP2 arm, and `adjust_code`, `adjust_decl_block`, `adjust_symbol`,
+`adjust_reference` and `adjust_side_effect` have no counterpart at all. Those are
+the real Phase 7 work, and §4.1 says representation will not obstruct them.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -476,7 +526,11 @@ spellings (§33) — so W3's carriage problem lands here first.
    ~~Port item 1~~ — **done**, §2.6, PR #7705.
 3. ~~Wire a census instrument on the C++ path~~ — **done**, §4.1. It says
    representation is not the blocker, so §3 is now the critical path.
-4. Price option B in §3 against option A.
-5. Then the replacement mode, and the census by verdict.
+4. ~~Price option B against option A~~ — **done**, §3.1: neither, but B′
+   (per-frontend typed table, template runner) is measured cheap.
+5. Make `arm` and `adjust_sole_arms` generic over the pass type (§3.1), then
+   stand up `clang_cpp_adjust_irep2` with the arms §3's mapping table shows are
+   missing.
+6. Then the replacement mode, and the census by verdict.
 
 Only then does a slice make sense.
