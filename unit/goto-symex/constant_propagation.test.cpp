@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
