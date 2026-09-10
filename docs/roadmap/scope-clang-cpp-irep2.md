@@ -699,6 +699,47 @@ Two things the attempt did establish, both worth keeping:
   merged: a change that cannot be pinned is the dead instrumentation the gates
   exist to catch, however plausible its motivation.
 
+### 3.10 The hop-off DOES produce false proofs — the sample hid them (2026-09-10)
+
+§3.9 said the stride-10 sample under-covers the exception paths. Censusing four
+directories in full says something worse, and it corrects a claim §3.5, §3.7 and
+§3.8 all repeated:
+
+| suite | agree | false alarm | **missed bug** | no verdict |
+|---|---:|---:|---:|---:|
+| `try_catch` | 68 | 52 | 0 | 52 |
+| `destructors` | 2 | 0 | **1** | 11 |
+| `inheritance` | 56 | 25 | **2** | 23 |
+| `polymorphism_bringup` | 9 | 1 | 0 | 36 |
+| **total** | 135 | 78 | **3** | 122 |
+
+**"Zero missed bugs" was false.** It held on the 80-test stride sample and I
+restated it four times as though it were a property of the pass. It is a property
+of the sample. Three tests verify SUCCESSFUL under the hop-off where the default
+path finds the bug:
+
+- `destructors/github_6263_nonvirtual_base_delete`
+- `inheritance/github_7025_vbase_nonfirst_member_fail`
+- `inheritance/mi_base_subobject_layout_fail`
+
+All three are base-subobject layout — the area `scope-clang-c-irep2.md` §3894 and
+#7025 already record as having two competing layout oracles. A pass that silently
+proves those is unsound in exactly the way that matters, and the `_fail` suffix on
+two of them means the corpus was built to catch this.
+
+**And 122 tests produce no verdict at all**, against 4 on the sample. The crash
+class §3.3 closed was not the only one.
+
+**What this says about the method.** Sampling by stride over a directory listing
+weights by directory size, so the suites that concentrate a *semantic* area —
+inheritance, destructors, exceptions — are the ones a stride under-samples, and
+they are exactly where a frontend migration breaks. Every number in §3.2 through
+§3.8 is a stride-sample number and should be read as such. Full-suite figures for
+the four directories above supersede them.
+
+Until the three false proofs are closed, the flag is not merely incomplete; it is
+unsound on inheritance, and no verdict it produces there can be trusted.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -844,8 +885,9 @@ spellings (§33) — so W3's carriage problem lands here first.
    not yet ported.
 8. The three remaining false alarms (§3.8), which are three causes: a queue
    reference, a bitset alignment and a vector pointer.
-9. Census the exception directories properly (§3.9) — the stride-10 sample
-   under-covers them, and one of their divergences produces no verdict at all.
+9. **Close the three false proofs (§3.10)** — base-subobject layout, and the
+   only class of defect that makes a verdict untrustworthy rather than noisy.
+   Then the 122 no-verdict cases.
 10. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
     `finalize_exception_specification` is *not* on this list: §3.9 refutes it.
 
