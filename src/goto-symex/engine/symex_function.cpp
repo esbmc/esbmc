@@ -251,8 +251,9 @@ unsigned goto_symext::argument_assignments(
         }
         // Special handling for Python object semantics:
         // Allow pointer types to match struct parameter types since Python
-        // objects are always passed by reference (pointer), but type annotations
-        // declare parameters with struct types (e.g., def __init__(self, f: Foo))
+        // objects are always passed by reference (pointer), but type
+        // annotations declare parameters with struct types (e.g., def
+        // __init__(self, f: Foo))
         else if (is_pointer_type(f_rhs_type) && is_struct_type(f_arg_type))
         {
           // Check if the pointer points to the expected struct type
@@ -282,7 +283,8 @@ unsigned goto_symext::argument_assignments(
             abort();
           }
 
-          // Type is compatible (pointer to struct), dereference pointer for assignment
+          // Type is compatible (pointer to struct), dereference pointer for
+          // assignment
           rhs = dereference2tc(f_arg_type, rhs);
         }
         else
@@ -436,12 +438,12 @@ bool goto_symext::symex_uninterpreted_function(
     !has_prefix(name, "__CPROVER_uninterpreted_"))
     return false;
 
-  // On a dead branch the call is still "handled" (its body stays uninterpreted),
-  // but it must contribute no fresh result or congruence history: those would be
-  // vacuous here yet pollute every later live call to the same function. This
-  // matters because the native prefix reaches us via run_intrinsic, which runs
-  // even under a false guard, and a function-pointer call can reach the CPROVER
-  // path the same way.
+  // On a dead branch the call is still "handled" (its body stays
+  // uninterpreted), but it must contribute no fresh result or congruence
+  // history: those would be vacuous here yet pollute every later live call to
+  // the same function. This matters because the native prefix reaches us via
+  // run_intrinsic, which runs even under a false guard, and a function-pointer
+  // call can reach the CPROVER path the same way.
   if (cur_state->guard.is_false())
     return true;
 
@@ -578,7 +580,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
      * Improve the behavior logic of ESBMC to make it more realistic：
      * 1. All pointers are invalid after calling unknown function -- too strict.
      * 2. Only pointers given by (or reachable via) arguments are invalid.
-     * 3. CHERI guarantee: only memory within the capability permission may be modified.
+     * 3. CHERI guarantee: only memory within the capability permission may be
+     * modified.
      */
     if (options.get_bool_option("unknown-method-args-check"))
     {
@@ -590,8 +593,9 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
           type2tc ptr_type = pointer_type2tc(get_empty_type());
           expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
 
-          // There should be a difference here, we assign all pointer type arguments as
-          // invalid pointers, and CHERI's capabilities should prevent that here.
+          // There should be a difference here, we assign all pointer type
+          // arguments as invalid pointers, and CHERI's capabilities should
+          // prevent that here.
           symex_assign(code_assign2tc(argument, invalid_object));
         }
       }

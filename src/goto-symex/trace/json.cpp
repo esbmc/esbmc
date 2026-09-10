@@ -12,7 +12,8 @@ using json = nlohmann::json;
 
 namespace
 {
-// Helper function to check if string starts with prefix, as CI system prefers starts_with
+// Helper function to check if string starts with prefix, as CI system prefers
+// starts_with
 bool starts_with(const std::string &str, const std::string &prefix)
 {
   return str.size() >= prefix.size() &&

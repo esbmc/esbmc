@@ -160,8 +160,9 @@ public:
   std::unordered_set<std::string> array_disqualified;
 
   /// BLACK set for the #scan_array_uses two-color DFS — independent of
-  /// #collected_cache. Sound for the same reason: index_reads/array_disqualified
-  /// are insert-only, so re-skipping an already-scanned subtree adds nothing.
+  /// #collected_cache. Sound for the same reason:
+  /// index_reads/array_disqualified are insert-only, so re-skipping an
+  /// already-scanned subtree adds nothing.
   std::unordered_set<const expr2t *> scanned_cache;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);

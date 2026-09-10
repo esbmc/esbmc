@@ -504,7 +504,8 @@ void reachability_treet::update_hash_collision_set()
   std::size_t hash = ex_state.generate_hash();
   int cswitch = ex_state.get_context_switch();
   auto res = hit_hashes.emplace(hash, cswitch);
-  // Keep the smallest cswitch per hash: most remaining budget subsumes the rest.
+  // Keep the smallest cswitch per hash: most remaining budget subsumes the
+  // rest.
   if (!res.second && cswitch < res.first->second)
     res.first->second = cswitch;
 }

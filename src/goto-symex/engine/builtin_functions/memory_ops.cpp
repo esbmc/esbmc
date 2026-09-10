@@ -16,7 +16,8 @@
 #include <util/irep/std_types.h>
 #include <algorithm>
 
-// Computes the equivalent object value when considering a memset operation on it
+// Computes the equivalent object value when considering a memset operation on
+// it
 static inline expr2tc gen_byte_expression_byte_update(
   const type2tc &type,
   const expr2tc &src,
@@ -65,7 +66,8 @@ static inline expr2tc gen_byte_expression_byte_update(
   return result;
 }
 
-// Computes the equivalent object value when considering a memset operation on it
+// Computes the equivalent object value when considering a memset operation on
+// it
 static inline expr2tc gen_byte_expression(
   const type2tc &type,
   const expr2tc &src,
@@ -86,27 +88,32 @@ static inline expr2tc gen_byte_expression(
    *    and then, until the num_of_bytes is reached it will do a full byte
    *    left-shift followed by an bitor operation with the byte value:
    *
-   *    For example, for a integer(4 bytes) with memset using 3 bytes and value 0xF1
+   *    For example, for a integer(4 bytes) with memset using 3 bytes and value
+   * 0xF1
    *
    *    step 1: 0x00000000 -- left-shift 8 -- 0x00000000 -- bitor -- 0x000000F1
    *    step 2: 0x000000F1 -- left-shift 8 -- 0x0000F100 -- bitor -- 0x0000F1F1
    *    step 3: 0x0000F1F1 -- left-shift 8 -- 0x00F1F100 -- bitor -- 0x00F1F1F1
    *
-   *    Since we only want 3 bytes, the initialized object value would be 0x00F1F1F1
+   *    Since we only want 3 bytes, the initialized object value would be
+   * 0x00F1F1F1
    *
-   * B. Generate a mask of the bits that were not set, this is done because skipped bits
-   *    need to be returned back. The computation of this is simple, we initialize every
-   *    bit that was changed by the byte-representation computation with a 1, which is then
-   *    negated to be applied with an bitand in the original value:
+   * B. Generate a mask of the bits that were not set, this is done because
+   * skipped bits need to be returned back. The computation of this is simple,
+   * we initialize every bit that was changed by the byte-representation
+   * computation with a 1, which is then negated to be applied with an bitand in
+   * the original value:
    *
-   *    Back to the example in A, we had the byte-representation of  0x00F1F1F1. If the
-   *    original value was 0xA2A2A2A2, then we would have the following mask:
+   *    Back to the example in A, we had the byte-representation of  0x00F1F1F1.
+   * If the original value was 0xA2A2A2A2, then we would have the following
+   * mask:
    *
    *    step 1: 0x00000000 -- set-bits -- 0x000000FF
    *    step 2: 0x000000FF -- set-bits -- 0x0000FFFF
    *    step 3: 0x0000FFFF -- set-bits -- 0x00FFFFFF
    *
-   *   So, 0x00FFFFFF is the mask for all bits changed. We can negate it to: 0xFF000000
+   *   So, 0x00FFFFFF is the mask for all bits changed. We can negate it to:
+   * 0xFF000000
    *
    *   Then, we can apply it to the original source value with bitand
    *
@@ -116,8 +123,9 @@ static inline expr2tc gen_byte_expression(
    *
    *  0xA2000000 OR 0x00F1F1F1 --> 0xA2F1F1F1
    *
-   * Note about offsets: To handle them, we apply left shifts to the remaining offset after
-   * the computation of the object-value and initial mask representation
+   * Note about offsets: To handle them, we apply left shifts to the remaining
+   * offset after the computation of the object-value and initial mask
+   * representation
    *
    */
 
@@ -174,12 +182,12 @@ static inline expr2tc gen_value_by_byte(
    *
    * There are a few corner cases here:
    *
-   * 1 - Primitives: these are simple: just generate the byte_expression directly
-   * 2 - Arrays: these are ok: just keep generating byte_expression for each member
-   *        until a limit has arrived. Dynamic memory is dealt here.
-   * 3 - Structs/Union: these are the hardest as we have to take the alignment into
-   *        account when dealing with it. Hopefully the clang-frontend already give it
-   *        to us.
+   * 1 - Primitives: these are simple: just generate the byte_expression
+   * directly 2 - Arrays: these are ok: just keep generating byte_expression for
+   * each member until a limit has arrived. Dynamic memory is dealt here. 3 -
+   * Structs/Union: these are the hardest as we have to take the alignment into
+   *        account when dealing with it. Hopefully the clang-frontend already
+   * give it to us.
    *
    */
 
@@ -197,8 +205,8 @@ static inline expr2tc gen_value_by_byte(
   if (is_array_type(type))
   {
     /*
-     * Very straighforward, get the total number_of_bytes and keep subtracting until
-     * the end
+     * Very straighforward, get the total number_of_bytes and keep subtracting
+     * until the end
      */
 
     expr2tc result = gen_zero(type);
@@ -1436,8 +1444,8 @@ void goto_symext::intrinsic_memchr(
  *    with, as the dereference will actually return a big array of char to us.
  *    For this case, we can just overwrite the members directly with the value
  *
- * B. Stack objects, which are typed. It will be hard, this will require operations
- *    which depends on the base type and also on padding.
+ * B. Stack objects, which are typed. It will be hard, this will require
+ * operations which depends on the base type and also on padding.
  */
 void goto_symext::intrinsic_memset(
   reachability_treet &art,
@@ -1475,7 +1483,7 @@ void goto_symext::intrinsic_memset(
     options.get_bool_option("no-simplify"))
   {
     /* Not sure what to do here, let's rely
-       * on the default implementation then */
+     * on the default implementation then */
     log_debug("memset", "Couldn't optimize memset due to precondition");
     bump_call(func_call, "c:@F@__memset_impl");
     return;
@@ -1491,9 +1499,10 @@ void goto_symext::intrinsic_memset(
 
   unsigned long number_of_bytes = to_constant_int2t(arg2).as_ulong();
 
-  // If any potential target is read-only (string literal or const global/static),
-  // fall back to __memset_impl, which uses WRITE-mode dereferences and reports
-  // the proper violation via valid_check() in dereference.cpp.
+  // If any potential target is read-only (string literal or const
+  // global/static), fall back to __memset_impl, which uses WRITE-mode
+  // dereferences and reports the proper violation via valid_check() in
+  // dereference.cpp.
   for (const auto &item : internal_deref_items)
   {
     const expr2tc *base = &item.object;
@@ -1531,8 +1540,8 @@ void goto_symext::intrinsic_memset(
     cur_state->rename(item_offset);
 
     /* Pre-requisites locally:
-       * item_object must be something!
-       * item_offset must be something! */
+     * item_object must be something!
+     * item_offset must be something! */
     if (!item_object || !item_offset)
     {
       log_debug("memset", "Couldn't get item_object/item_offset");

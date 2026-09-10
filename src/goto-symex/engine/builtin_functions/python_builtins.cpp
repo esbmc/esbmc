@@ -108,7 +108,8 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       // __ESBMC_float_buf[idx] used by float list elements.
       t = to_index2t(value).source_value->type;
       // When the source is an array, also accept a match against the element
-      // type (e.g. double[4096] element type == double for isinstance(x, float)).
+      // type (e.g. double[4096] element type == double for isinstance(x,
+      // float)).
       if (
         is_array_type(t) &&
         base_type_eq(to_array_type(t).subtype, expect_type->type, ns))
@@ -127,11 +128,11 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
 
     if (!is_nil_expr(expect_type) && is_array_type(expect_type->type))
     {
-      // In the memory model, an array of size 1 is simplified to a single element
-      // Therefore, here we specifically check whether the subtypes of the arrays are the same
-      // s:str = "" ----> 0 with char type
-      // This should be safe because int, bool and char have different widths,
-      // so there will be no confusion
+      // In the memory model, an array of size 1 is simplified to a single
+      // element Therefore, here we specifically check whether the subtypes of
+      // the arrays are the same s:str = "" ----> 0 with char type This should
+      // be safe because int, bool and char have different widths, so there will
+      // be no confusion
       if (to_array_type(expect_type->type).subtype == value->type)
         expr = gen_true_expr();
     }

@@ -140,8 +140,9 @@ std::string pytest_generator::clean_variable_name(const std::string &name) const
     size_t first_dollar = var_name.find('$');
     if (first_dollar != dollar_pos)
     {
-      // Multiple $ signs - this is likely an internal symbol, extract the meaningful part
-      // For "python_converter::test.py:9$nondet_str$15", extract "nondet_str"
+      // Multiple $ signs - this is likely an internal symbol, extract the
+      // meaningful part For "python_converter::test.py:9$nondet_str$15",
+      // extract "nondet_str"
       size_t start = first_dollar + 1;
       size_t end = var_name.rfind('$');
       if (end > start)
@@ -734,7 +735,7 @@ void pytest_generator::collect(
   // Track nondet_list/nondet_dict components for building composite values
   // We collect size values and element values separately, then combine them
   std::vector<std::pair<std::string, BigInt>>
-    list_sizes; // (nondet_symbol, size_value)
+    list_sizes;                   // (nondet_symbol, size_value)
   std::vector<BigInt> dict_sizes; // entry counts from a dict builder
   std::vector<std::pair<std::string, std::string>>
     list_elems; // (nondet_symbol, elem_value_str)
@@ -773,8 +774,9 @@ void pytest_generator::collect(
         var_name = clean_variable_name(lhs_sym.get_symbol_name());
       }
 
-      // Track nondet_list/nondet_dict internal variables to build composite values
-      // We need to collect size, elem_type, key_type, value_type to reconstruct lists/dicts
+      // Track nondet_list/nondet_dict internal variables to build composite
+      // values We need to collect size, elem_type, key_type, value_type to
+      // reconstruct lists/dicts
       bool is_list_size = false;
       bool is_list_elem = false;
       bool is_dict_key = false;
@@ -819,7 +821,8 @@ void pytest_generator::collect(
       // Also check variable names outside internal functions
       // This handles cases where user passes nondet_int() as argument:
       // e.g., nondet_dict(2, key_type=nondet_int(), value_type=nondet_int())
-      // In this case, the nondet assignment happens in user code, not in nondet_dict
+      // In this case, the nondet assignment happens in user code, not in
+      // nondet_dict
       if (!is_list_size && !is_list_elem && !is_dict_key && !is_dict_value)
       {
         if (var_name == "key_type")
@@ -840,7 +843,8 @@ void pytest_generator::collect(
         continue;
 
       // For dict/list components, allow duplicate nondet symbols
-      // (key_type and value_type may share the same nondet symbol due to solver optimization)
+      // (key_type and value_type may share the same nondet symbol due to solver
+      // optimization)
       bool is_component =
         is_list_size || is_list_elem || is_dict_key || is_dict_value;
 
@@ -967,7 +971,8 @@ void pytest_generator::collect(
     !dict_keys.empty() || !dict_values.empty() || !dict_sizes.empty();
 
   // Build composite list values from collected size and element values
-  // Skip if we have dict components - the sizes are for the dict, not a separate list
+  // Skip if we have dict components - the sizes are for the dict, not a
+  // separate list
   if (!has_dict_components)
   {
     if (list_elems.size() > list_sizes.size())
@@ -1104,7 +1109,8 @@ void pytest_generator::collect(
       }
     }
 
-    // If we found new parameters, update existing test cases with default values
+    // If we found new parameters, update existing test cases with default
+    // values
     if (!new_param_names.empty())
     {
       for (const auto &new_name : new_param_names)
@@ -1138,7 +1144,8 @@ void pytest_generator::collect(
       else
       {
         // Parameter not found in this counterexample - use default value
-        // This can happen in condition-coverage when a parameter isn't used in a branch
+        // This can happen in condition-coverage when a parameter isn't used in
+        // a branch
         matched_params[i] = "0";
       }
     }
@@ -1278,7 +1285,8 @@ void pytest_generator::generate_single(
         var_name = clean_variable_name(lhs_sym.get_symbol_name());
       }
 
-      // Track nondet_list/nondet_dict internal variables to build composite values
+      // Track nondet_list/nondet_dict internal variables to build composite
+      // values
       bool is_list_size = false;
       bool is_list_elem = false;
       bool is_dict_key = false;
@@ -1343,7 +1351,8 @@ void pytest_generator::generate_single(
         continue;
 
       // For dict/list components, allow duplicate nondet symbols
-      // (key_type and value_type may share the same nondet symbol due to solver optimization)
+      // (key_type and value_type may share the same nondet symbol due to solver
+      // optimization)
       bool is_component =
         is_list_size || is_list_elem || is_dict_key || is_dict_value;
 
@@ -1467,7 +1476,8 @@ void pytest_generator::generate_single(
     !dict_keys.empty() || !dict_values.empty() || !dict_sizes.empty();
 
   // Build composite list values from collected size and element values
-  // Skip if we have dict components - the sizes are for the dict, not a separate list
+  // Skip if we have dict components - the sizes are for the dict, not a
+  // separate list
   if (!has_dict_components)
   {
     if (list_elems.size() > list_sizes.size())

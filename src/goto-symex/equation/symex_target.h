@@ -88,8 +88,8 @@ public:
   /**
    * @brief Replaces trace symbols from expression with their values
    *
-   * For example, for a trace `a0 = nondet_symbol(0); a1 = a0 + 1; guard = a1 > 5)`
-   * calling this function with "guard" will result in:
+   * For example, for a trace `a0 = nondet_symbol(0); a1 = a0 + 1; guard = a1 >
+   * 5)` calling this function with "guard" will result in:
    *
    * - keep_local_variables(true): a1 > 5
    * - keep_local_variables(false): nondet_symbol(0) + 1 > 5

@@ -237,8 +237,8 @@ void symex_slicet::run_on_assignment(
     // per-version read-set and the version is not disqualified), the store is
     // dead. Rewrite the encoded condition to the identity `lhs == src`,
     // dropping the store AND its update value v from dependency collection. If
-    // lhs[const_i] is never observed then the reads inside v are dead too, so we
-    // deliberately do NOT scan v in that case. Keep SSA_step.rhs unchanged:
+    // lhs[const_i] is never observed then the reads inside v are dead too, so
+    // we deliberately do NOT scan v in that case. Keep SSA_step.rhs unchanged:
     // trace construction may use it to recover the source-level assigned value.
     //
     // The read-set propagation mirrors the original per-index slicer: src
@@ -379,9 +379,8 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
     // just find the next assertion
     if (it->is_assert())
     {
-      if (
-        counter++ ==
-        claim_to_keep) // this is the assertion that we should not skip!
+      if (counter++ == claim_to_keep) // this is the assertion that we should
+                                      // not skip!
       {
         it->ignore = false;
         if (!is_goto_cov)

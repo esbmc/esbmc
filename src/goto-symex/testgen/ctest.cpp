@@ -493,8 +493,8 @@ static void write_cpp_test_file(
 // When the generated CTest cases are compiled
 // thecompiler requires explicit declarations to resolve the calls in the
 // original source file.
-// This header is force-included by CMake via target_compile_options(-include ...)
-// so no modification to the original source file is required.
+// This header is force-included by CMake via target_compile_options(-include
+// ...) so no modification to the original source file is required.
 
 // Write esbmc_verifier.h with forward declarations for all __VERIFIER_*
 // functions used by the SV-COMP / ESBMC verification interface.

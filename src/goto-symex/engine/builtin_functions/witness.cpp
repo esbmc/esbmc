@@ -65,7 +65,8 @@ void goto_symext::symex_witness_function_return(
 // Returns true if the path was killed (avoid matched); false otherwise.
 // For avoid: kills the path with assume(false).
 // For follow: advances the witness position.
-// In both cases the caller should NOT enter the function body when true is returned.
+// In both cases the caller should NOT enter the function body when true is
+// returned.
 bool goto_symext::symex_witness_function_enter(const irep_idt &call_line)
 {
   if (cur_state->cur_seg >= cur_state->witness_segs.size())
@@ -90,7 +91,8 @@ bool goto_symext::symex_witness_function_enter(const irep_idt &call_line)
       return false;
     }
 
-    // No match: FOLLOW is ordered (stop scanning); AVOID is persistent (continue).
+    // No match: FOLLOW is ordered (stop scanning); AVOID is persistent
+    // (continue).
     if (wp.action != waypoint::avoid)
       return false;
   }

@@ -650,7 +650,8 @@ void show_goto_trace(
 
   for (const auto &step : goto_trace.steps)
   {
-    // we only care about the counter example, which is only triggered by assert steps. Ignore all other steps.
+    // we only care about the counter example, which is only triggered by assert
+    // steps. Ignore all other steps.
     if (cex_only && step.type != goto_trace_stept::ASSERT)
       continue;
     switch (step.type)
@@ -718,7 +719,8 @@ void show_goto_trace(
       {
         if (simplify_trace)
         {
-          // if the file is empty then it's probably internally created and should not print out
+          // if the file is empty then it's probably internally created and
+          // should not print out
           if (!input_file_check(step.pc->location))
             break;
         }

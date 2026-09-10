@@ -130,7 +130,8 @@ goto_symext::goto_symext(
         loop_index++;
 
         // Handle #pragma unroll annotations
-        // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else = specific count
+        // pragma_unroll_count: 0 = not specified, UINT_MAX = unlimited, else =
+        // specific count
         if (instruction.pragma_unroll_count > 0)
         {
           unwind_set[instruction.loop_number] =
@@ -281,11 +282,13 @@ void goto_symext::handle_sideeffect(
   case sideeffect2t::allockind::old_snapshot:
     // __ESBMC_old() snapshots are handled during contract processing.
     // If we encounter one here, it means we're in the original function body
-    // (contracts_original_xxx) where the ensures/requires clause is still present.
-    // Store the ADDRESS of the inner expression in lhs (void*), so that
+    // (contracts_original_xxx) where the ensures/requires clause is still
+    // present. Store the ADDRESS of the inner expression in lhs (void*), so
+    // that
     // *(T*)lhs correctly reads the value via pointer dereference.
-    // The ensures/requires in contracts_original evaluate BEFORE the function body
-    // modifies anything, so address_of(inner) gives the correct pre-state value.
+    // The ensures/requires in contracts_original evaluate BEFORE the function
+    // body modifies anything, so address_of(inner) gives the correct pre-state
+    // value.
     {
       expr2tc inner = effect.operand;
 

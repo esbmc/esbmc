@@ -249,7 +249,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     idx = fmt_idx;
   }
 
-  // Check format specifiers against original operands before renaming/conversion
+  // Check format specifiers against original operands before
+  // renaming/conversion
   if (options.get_bool_option("printf-check"))
   {
     const code_printf2t &original_rhs = to_code_printf2t(rhs);
@@ -682,7 +683,8 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
                 spec == 'a' || spec == 'A' || spec == 'c' || spec == 's' ||
                 spec == 'p' || spec == 'n')
               {
-                // %n still needs a parameter even though it doesn't consume input
+                // %n still needs a parameter even though it doesn't consume
+                // input
                 actual_format_count++;
               }
             }

@@ -29,7 +29,8 @@ void goto_symext::bump_call(
   return;
 }
 
-// Copied from https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+// Copied from
+// https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
 static inline bool
 ends_with(std::string const &value, std::string const &ending)
 {

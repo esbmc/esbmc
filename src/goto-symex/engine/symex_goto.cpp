@@ -268,12 +268,13 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
 
-  // Interval-based guard check (default, disabled by --no-interval-symex-guard).
-  // Only prune when the guard is provably TRUE (loop can be unwound no further).
-  // Never force-enter a loop (new_guard_false) via the interval domain: doing so
-  // omits the loop-entry guard from the path condition, which lets the SMT solver
-  // pick values outside the loop's feasible range and produce false positives.
-  // The flag check lets --interval-symex-assert keep the domain without pruning.
+  // Interval-based guard check (default, disabled by
+  // --no-interval-symex-guard). Only prune when the guard is provably TRUE
+  // (loop can be unwound no further). Never force-enter a loop
+  // (new_guard_false) via the interval domain: doing so omits the loop-entry
+  // guard from the path condition, which lets the SMT solver pick values
+  // outside the loop's feasible range and produce false positives. The flag
+  // check lets --interval-symex-assert keep the domain without pruning.
   //
   // Restrict to loop GOTOs (loop_number != 0): the interval domain is a single
   // shared instance, so ASSIGN instructions inside branches contaminate it.
@@ -436,7 +437,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   record_parked_path(new_state_pc, std::prev(merge_state_list.end()));
 
   // Capture the interval domain at the if-branch end so phi_function can JOIN
-  // both branches.  Deep-copy so subsequent else-branch writes don't corrupt it.
+  // both branches.  Deep-copy so subsequent else-branch writes don't corrupt
+  // it.
   if (interval_domain_state)
     merge_state_list.back().interval_snapshot =
       std::make_shared<interval_domaint::interval_map>(

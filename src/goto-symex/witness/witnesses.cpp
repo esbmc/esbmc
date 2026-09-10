@@ -1109,7 +1109,8 @@ void generate_testcase_metadata()
     std::to_string(config.ansi_c.word_size) + "bit");
 
   // Conversion to string using the ISO 8601.
-  // Source: https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
+  // Source:
+  // https://www.boost.org/doc/libs/1_49_0/doc/html/date_time/posix_time.html
   boost::posix_time::ptime creation_time =
     boost::posix_time::microsec_clock::universal_time();
 
@@ -1136,8 +1137,9 @@ bool find_nondet_in_expr(const expr2tc &expr)
 {
   // Returns true if any sub-expression of expr is a nondet symbol.
   // Recurses through all operands via get_sub_expr so compound expressions
-  // (arithmetic, bitwise, casts, etc.) are handled without enumerating expr_ids.
-  // Unlike get_nondet_symbol, non-nondet symbols do not cause early return.
+  // (arithmetic, bitwise, casts, etc.) are handled without enumerating
+  // expr_ids. Unlike get_nondet_symbol, non-nondet symbols do not cause early
+  // return.
   if (!expr)
     return false;
 

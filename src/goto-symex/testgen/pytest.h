@@ -94,7 +94,8 @@ public:
   /// with --pytest-output-dir (github #6220).
   static constexpr const char *default_output_dir = "esbmc-pytest";
 
-  /// Extract module name from input file path and removes .py extension and directory
+  /// Extract module name from input file path and removes .py extension and
+  /// directory
   static std::string extract_module_name(const std::string &input_file);
 
   /// Generate pytest filename from module name
@@ -103,7 +104,8 @@ public:
   /// Clear collected data (called at start of coverage run)
   void clear();
 
-  /// Collect test data from a counterexample (called for each CEX in coverage mode)
+  /// Collect test data from a counterexample (called for each CEX in coverage
+  /// mode)
   void collect(const symex_target_equationt &target, smt_convt &smt_conv);
 
   /// Generate pytest file from collected data (called at end of coverage

@@ -152,7 +152,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   else if (is_dynamic_size2t(expr))
   {
     // replace with __ESBMC_alloc_size[POINTER_OBJECT(...)]
-    //nec: ex37.c
+    // nec: ex37.c
     const dynamic_size2t &size = to_dynamic_size2t(expr);
 
     expr2tc obj_expr = pointer_object2tc(pointer_type2(), size.value);

@@ -35,10 +35,10 @@ struct dead_code_finding_t
 
 // Writes the dead-code advisory `findings`, plus any dead-store advisories
 // (CWE-563), to the SARIF 2.1.0 document at `options["sarif-output"]` (stdout
-// when "-"). Findings are emitted with `result.level = "note"` (advisory, not an
-// error) and taxa referencing CWE-561 in the same "CWE" taxonomy used by
-// sarif_goto_trace. Does nothing when no SARIF output path is configured; when a
-// path is set but `findings` is empty it still writes a well-formed document
+// when "-"). Findings are emitted with `result.level = "note"` (advisory, not
+// an error) and taxa referencing CWE-561 in the same "CWE" taxonomy used by
+// sarif_goto_trace. Does nothing when no SARIF output path is configured; when
+// a path is set but `findings` is empty it still writes a well-formed document
 // with an empty `results` array, so a clean run yields a valid report rather
 // than a missing file.
 //

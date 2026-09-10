@@ -15,10 +15,10 @@ class ctest_generator
 private:
   struct test_variable
   {
-    std::string
-      verifier_type; // "int", "uint", "char", "uchar", "float", etc. for __VERIFIER_nondet_TYPE
-    std::string c_type; // C type: "int", "unsigned int", "float", etc.
-    std::string value;  // The concrete value
+    std::string verifier_type; // "int", "uint", "char", "uchar", "float", etc.
+                               // for __VERIFIER_nondet_TYPE
+    std::string c_type;        // C type: "int", "unsigned int", "float", etc.
+    std::string value;         // The concrete value
   };
 
   std::vector<std::vector<test_variable>> test_cases;
@@ -56,7 +56,8 @@ public:
   /// Clear collected data (called at start of coverage run)
   void clear();
 
-  /// Collect test data from a counterexample (called for each CEX in coverage mode)
+  /// Collect test data from a counterexample (called for each CEX in coverage
+  /// mode)
   void collect(
     const symex_target_equationt &target,
     smt_convt &smt_conv,

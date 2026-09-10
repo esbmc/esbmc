@@ -287,7 +287,8 @@ get_invariant(std::string verified_file, BigInt line_number, optionst &options);
 /// every operand via the generic get_sub_expr interface.
 bool find_nondet_in_expr(const expr2tc &expr);
 
-/// This generates test-cases as described in: https://gitlab.com/sosy-lab/test-comp/test-format/-/tree/main/
+/// This generates test-cases as described in:
+/// https://gitlab.com/sosy-lab/test-comp/test-format/-/tree/main/
 void generate_testcase_metadata();
 void generate_testcase(
   const std::string &file_name,

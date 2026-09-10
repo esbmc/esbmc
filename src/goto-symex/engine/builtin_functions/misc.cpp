@@ -31,22 +31,22 @@ void goto_symext::replace_races_check(expr2tc &expr)
     migrate_expr(symbol_expr(*ns.lookup("c:@F@__ESBMC_races_flag")), flag);
 
     // Index __ESBMC_races_flag by a word-sized key that packs the access's
-    // pointer object into the high half of the word and its (masked) byte offset
-    // into the low half: (object << word_size/2) | (offset & (2^(word_size/2)-1)).
-    // The races_flag array domain is the machine word, so the key must stay
-    // word-sized; placing the object in the high half and masking the offset to
-    // the low half guarantees an offset can never reach another object's bits.
-    // Distinct objects therefore never alias as long as the object number and
-    // the in-object offset each fit in word_size/2 bits -- which they do for the
-    // accesses these checks instrument. The previous encoding flattened the two
-    // into `object * 1000 + offset`, where any offset of 1000 or more (e.g. a
-    // write to arr[i] with a large i) spilled into the next object's band and
-    // fabricated a data race. See issue #5137.
+    // pointer object into the high half of the word and its (masked) byte
+    // offset into the low half: (object << word_size/2) | (offset &
+    // (2^(word_size/2)-1)). The races_flag array domain is the machine word, so
+    // the key must stay word-sized; placing the object in the high half and
+    // masking the offset to the low half guarantees an offset can never reach
+    // another object's bits. Distinct objects therefore never alias as long as
+    // the object number and the in-object offset each fit in word_size/2 bits
+    // -- which they do for the accesses these checks instrument. The previous
+    // encoding flattened the two into `object * 1000 + offset`, where any
+    // offset of 1000 or more (e.g. a write to arr[i] with a large i) spilled
+    // into the next object's band and fabricated a data race. See issue #5137.
     //
     // pointer_object/pointer_offset lower to projections of the pointer tuple,
     // whose fields are address_width wide regardless of the type carried here;
-    // cast both to key_type so the bitwise ops below see matching widths even on
-    // data models where address_width != word_size (e.g. LP32).
+    // cast both to key_type so the bitwise ops below see matching widths even
+    // on data models where address_width != word_size (e.g. LP32).
     //
     // pointer_offset2t models a signed byte difference and asserts a signed
     // address-width type, so build it with get_int_type, not the unsigned

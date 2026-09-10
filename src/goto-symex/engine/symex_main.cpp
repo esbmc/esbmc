@@ -128,8 +128,9 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   assertion(new_expr, msg);
 
   // Convert asserts in assumes, if it's not the last loop iteration
-  // This is a common technique in k-induction to strengthen the induction hypothesis.
-  // also, don't convert assertions added by the bidirectional search
+  // This is a common technique in k-induction to strengthen the induction
+  // hypothesis. also, don't convert assertions added by the bidirectional
+  // search
   if (
     inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
   {
@@ -821,18 +822,20 @@ void goto_symext::run_intrinsic(
     // __ESBMC_is_fresh runtime handler
     //
     // Design rationale:
-    // When contract enforcement is enabled, memory allocation for is_fresh calls
-    // happens in the contract wrapper (see contracts.cpp generate_checking_wrapper).
-    // The wrapper allocates memory BEFORE calling the original function, avoiding
-    // the C call-by-value problem where parameter modifications don't affect the caller.
+    // When contract enforcement is enabled, memory allocation for is_fresh
+    // calls happens in the contract wrapper (see contracts.cpp
+    // generate_checking_wrapper). The wrapper allocates memory BEFORE calling
+    // the original function, avoiding the C call-by-value problem where
+    // parameter modifications don't affect the caller.
     //
-    // In the original function body, we simply return true to satisfy the requires
-    // clause check. The actual memory has already been allocated in the wrapper,
-    // so no allocation is performed here.
+    // In the original function body, we simply return true to satisfy the
+    // requires clause check. The actual memory has already been allocated in
+    // the wrapper, so no allocation is performed here.
     //
-    // When contract enforcement is NOT enabled (e.g., in normal execution or when
-    // verifying callers), this intrinsic would typically not be called, as is_fresh
-    // should only appear in requires clauses of functions with enforced contracts.
+    // When contract enforcement is NOT enabled (e.g., in normal execution or
+    // when verifying callers), this intrinsic would typically not be called, as
+    // is_fresh should only appear in requires clauses of functions with
+    // enforced contracts.
 
     // Return true to indicate the memory allocation succeeded
     if (!is_nil_expr(func_call.ret))
@@ -896,8 +899,8 @@ void goto_symext::run_intrinsic(
         is_symbol2t(item.object) &&
         "__ESBMC_init_object only works for variables");
 
-      // Get the length of the type. This will propagate an exception for dynamic/infinite
-      // sized arrays (as expected)
+      // Get the length of the type. This will propagate an exception for
+      // dynamic/infinite sized arrays (as expected)
       try
       {
         type_byte_size(item.object->type).to_int64();
@@ -1062,10 +1065,10 @@ void goto_symext::run_intrinsic(
     expr2tc cap_top = capability_top2tc(ptr);
     /*
      * Compiler flag: -cheri-bounds=subobject-safe
-     * For sub objects, CHERI clang should generate 
+     * For sub objects, CHERI clang should generate
      * independent capabilities for it instead of sharing.
-     * 
-     * cheri_base = address 
+     *
+     * cheri_base = address
      * cheri_top = address + size
      */
     symex_assign(code_assign2tc(cap_base, addr), true);
@@ -1974,7 +1977,8 @@ void goto_symext::add_memory_leak_checks()
          * the address of an object found reachable from a global, and 'g' is
          * the condition under which 'e' is actually reachable. The object is
          * globally reachable here iff some reachable 'e' is the same object as
-         * 'obj', i.e. the contribution of this target is g ∧ same_object(obj,e).
+         * 'obj', i.e. the contribution of this target is g ∧
+         * same_object(obj,e).
          *
          * The guard 'g' must ALWAYS be conjoined. Dropping it (as was done for
          * guards that are neither an and2t nor a bare same_object2t, e.g. the
