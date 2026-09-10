@@ -249,8 +249,7 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   // A simple `Alias = bytes`-style annotation names the alias, not the
   // builtin; dispatch decisions elsewhere (e.g. len()'s strlen-vs-
   // get_object_size choice, builder.cpp) key off the builtin name.
-  auto resolve = [this](const std::string &name) -> std::string
-  {
+  auto resolve = [this](const std::string &name) -> std::string {
     const std::string resolved = resolve_builtin_alias(name);
     return resolved.empty() ? name : resolved;
   };
