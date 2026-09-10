@@ -366,9 +366,9 @@ the table is `static const` on the base, so a C++ row has nowhere to go.
 virtuals re-imports the per-statement seams the unified
 `adjust_statement_condition` removed, and only where C++ needs them.
 
-**What does work — B′: each frontend owns a table typed on its own class, and
-the runner becomes a template.** Four properties, each compiled rather than
-recalled:
+**What works: each frontend owns a table typed on its own class, and the runner
+becomes a template.** Five properties, each compiled rather than recalled — and
+the fifth changed the design:
 
 | property | result |
 |---|---|
@@ -376,6 +376,28 @@ recalled:
 | a table of `void (Derived::*)(…)` | holds **both** `&Derived::own` and `&Base::shared`, via the implicit base→derived member-pointer conversion |
 | that table declared `constexpr` | **0 dynamic initialisers** — constant-initialisation survives, which is the property the table's own comment protects |
 | `template <class T, size_t N> run_all(T &, const Row (&)[N], …)` | drives either frontend's table |
+| the same table compiled with `-Werror` | clang 18 clean at `-O0` and `-O2`; **GCC 13.3 fails at `-O2`** |
+
+**And that last row is why the member pointer is the wrong carrier.** Legal is
+not enough: once the runner inlines, GCC's array-bounds analysis reads the
+member-pointer discriminator as a vtable index and rejects the call —
+
+```
+error: array subscript 'int (**)(...)[0]' is partly outside array bounds
+       of 'Derived [1]' [-Werror=array-bounds=]
+```
+
+clean at `-O0`, failing at `-O2`, and clang accepts both. ESBMC builds locally
+with GCC and has an `ENABLE_WERROR` option, so B′ as first written would break a
+developer build while passing CI — the worst way round.
+
+**B″, which is what landed (PR #7714).** Each row carries a trampoline —
+`void (*)(Pass &, expr2tc &)`, a captureless lambda the `ARM` macro generates —
+instead of a pointer-to-member. There is then no base→derived conversion for the
+analysis to mis-read, the row is still an address constant (0 dynamic
+initialisers, re-measured), and both compilers accept it at both levels. The 24
+C rows keep their order and the goto program is byte-identical on all 95
+`irep2_only` tests.
 
 So a `clang_cpp_adjust_irep2` table can list the 24 inherited C arms **by name**
 alongside its own, in one ordered table, with no virtual dispatch, no
