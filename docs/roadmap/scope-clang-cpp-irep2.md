@@ -598,6 +598,38 @@ in `scope-clang-c-irep2.md`, recorded there as not reaching symex on C; on C++ i
 reaches the goto program. Worth its own row rather than being folded into the vptr
 work.
 
+### 3.7 The hook exists, and the corpus is at 91 % (2026-09-10)
+
+PR #7724 gives the pass a `gen_symbol_code` hook beside the node walk and ports
+`gen_vptr_initializations` into it. The C pass generates nothing, so the hook is
+a no-op there.
+
+| over 80 tests | §3.4 | after |
+|---|---:|---:|
+| agree | 51 | **73** |
+| false alarms | 23 | **3** |
+| **missed bugs** | 0 | **0** |
+| no verdict one side | 6 | 4 |
+
+Vtable-pointer writes go 0 → **55**, matching the default path exactly.
+
+**Generation runs before the walk, not after.** The legacy pass generates after
+adjusting the body; doing that here would mean migrating the value back to legacy
+form, mutating it and migrating forward again — the round trip §137 shows is
+lossy. Generating first lets the emitted assignments go through the arms like any
+other statement. Worth knowing the two passes differ in that order.
+
+**Freeing a member exposes dead code that private status hid.** Making
+`gen_vptr_initializations` a free function left `gen_vptr_init_code` and
+`gen_vptr_init_lhs` with no callers — `-Werror=unused-function` says so, and
+nothing in `src/` or `unit/` referenced either. Both were already dead on master;
+as private members nothing could observe that. Removed with the compiler as the
+proof.
+
+**What is left.** Three false alarms and four harness artefacts. One of the three
+is §3.4's builtin exception spelling (`throw 1` yields `signedbv` where legacy
+yields `signed_int`). The others are unexamined.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -738,10 +770,9 @@ spellings (§33) — so W3's carriage problem lands here first.
    is missing: write the member-call arm first (54 of 57 real divergences).
 6. ~~Port the `exception_id` assignment~~ — **done**, §3.4, PR #7719. Crashes are
    gone; the residue is the builtin spelling the seam drops.
-7. Give the pass a per-symbol code-generation hook and port
-   `gen_vptr_initializations` into it (§3.6) — 0 of 55 vptr writes happen today,
-   which is the cause behind all 23 remaining real divergences. Take
-   `finalize_exception_specification` at the same time.
+7. ~~Per-symbol code-generation hook and `gen_vptr_initializations`~~ — **done**,
+   §3.7, PR #7724. `finalize_exception_specification` has the same shape and is
+   not yet ported.
 8. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
 
 Only then does a slice make sense.
