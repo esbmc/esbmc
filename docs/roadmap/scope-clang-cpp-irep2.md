@@ -257,6 +257,42 @@ Two things the gates caught that are worth carrying forward:
   pointer itself. The item 1 arms must build the pointer type directly rather
   than route an address-of through `with_type`. PR **#7703**.
 
+### 2.6 Item 1 ported, and what it took (PR #7705)
+
+Both reference arms are in. Three things worth carrying forward, none of which
+was visible before the differential harness rejected a first attempt.
+
+**The address-of must carry the destination's own kind.** irept hardcodes
+`#reference` in `take_reference_address` and gets away with it because
+`operator==` skips comment attributes (`irep.cpp`, literally "comments are NOT
+checked") — so `T&` and `T&&` are the same type there. `ref_kind` is a real
+field, so a hardcoded kind leaves `do_typecast`'s `dest_type != type` guard true
+and appends a cast irept never produces. Two further carriage sites had to
+follow: `migrate_expr`'s address-of arm built its pointer from the pointee and
+dropped the spelling, and `rebuild_with_type<address_of2t>` re-defaulted it —
+that one silently affected every `with_type` caller, not just this one.
+
+**One shape the two copies cannot agree on, and irept is the wrong side.** For a
+`T&&` destination irept produces an address-of spelled `#reference`, i.e. an
+lvalue reference. Measured, neither side adds a cast and only the spelling
+differs:
+
+```
+legacy_migrated:  address_of  ref_kind : lvalue_reference
+native:           address_of  ref_kind : rvalue_reference
+```
+
+The IREP2 side is the faithful one, so that section pins the shape rather than
+byte equality. A port is not obliged to reproduce a defect it can see.
+
+**The complexity gate was already failing before any of this.**
+`implicit_typecast_followed` sits at 19 against a `core` threshold of 15 on
+master, so *any* edit to it fails the gate — which is what #7701 and #7703 were
+failing on, not their own additions. Split into `convert_reference` and
+`convert_to_pointer`, with the pointer-compatibility disjunction factored out;
+the gate then reports no function over threshold. Anything else touching this
+function inherits the same obligation.
+
 ## 3. The design question Phase 6 leaves open: the pass is not extensible
 
 The legacy frontends are one class specialising another:
@@ -309,11 +345,26 @@ priced first. Deciding this wrong means re-doing Phase 6 inside Phase 7.
 
 ## 4. What does not exist yet
 
-- **No hop-off flag.** `--clang-c-irep2-adjust-only` has no C++ counterpart
-  (`grep -n 'cpp-irep2' src/esbmc/options.cpp` is empty). Phase 6's entire
-  instrument — A/B one binary against itself with and without the flag — is
-  unavailable until one is added. That is the second work item, and it is a
-  prerequisite for any census by verdict.
+- **No hop-off flag, and now the exact reason.**
+  `clang_cpp_languaget::typecheck` (`clang_cpp_language.cpp:148-169`) runs
+  `clang_cpp_adjust` unconditionally: no option is read, and no IREP2 pass is
+  constructed. Compare `clang_c_languaget` (`clang_c_language.cpp:460-490`),
+  which reads `clang-c-irep2-adjust-only` and either replaces or shadows the
+  legacy pass.
+
+  Measured consequence: instrumenting the IREP2 `implicit_typecast_followed` at
+  entry, a C source under `--clang-c-irep2-adjust-only` reaches it (2 entries)
+  and a C++ source reaches it **zero** times. So every arm Phase 7 ports is
+  dormant until this is wired — §2.3 and §2.6 both had to say "no regression
+  pair is possible", and this is why.
+
+  **The cheap first move is the shadow mode, not the replacement.** Phase 6's
+  `--clang-c-irep2-adjust` runs the IREP2 walk *in addition* to the legacy pass:
+  read-only, byte-identical by construction, and what it buys is migrating every
+  value in the corpus through `get_value2()`, which aborts on any construct
+  `migrate_expr` cannot represent. Wiring that on the C++ path needs no
+  `clang_cpp_adjust_irep2` and no answer to §3 — it is a census instrument, and
+  it would price the whole C++ corpus in one run. That is the next work item.
 - **No scope-doc census by construct.** §39.1's "census before writing" prices
   every construct once, at the start. For clang-cpp that census cannot be run
   until the flag exists, so §1's counts are the static census only.
@@ -340,8 +391,11 @@ spellings (§33) — so W3's carriage problem lands here first.
    Item 1 is now writable, and it is the next slice: 70 % of the corpus needs
    it, and unlike §2.3's arms it will move verdicts, so it owes a
    `SUCCESSFUL`/`FAILED` pair.
-2. ~~Port items 6 and 7~~ — **done**, see §2.3.
-3. Price option B in §3 against option A.
-4. Add the C++ hop-off flag, then run the census by verdict.
+2. ~~Port items 6 and 7~~ — **done**, §2.3, PR #7701.
+   ~~Port item 1~~ — **done**, §2.6, PR #7705.
+3. **Wire the shadow mode on the C++ path** (§4) — the census instrument, and
+   the prerequisite for every remaining measurement. No answer to §3 needed.
+4. Price option B in §3 against option A.
+5. Then the replacement mode, and the census by verdict.
 
 Only then does a slice make sense.
