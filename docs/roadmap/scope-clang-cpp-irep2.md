@@ -665,6 +665,40 @@ indirection rather than a further reduction of the OM itself.
 
 `bitset6` and `github_2284_4` are unexamined.
 
+### 3.9 The stride-10 sample under-covers try/catch, and one port was refuted
+
+**The sample is not representative of the exception paths.** Over
+`regression/esbmc-cpp/try_catch` (first 14 directories) the hop-off agrees on 8
+and diverges on 6 — 43 % — against 7 of 80 on the stride-10 sample the earlier
+sections use. A stride over a directory listing weights by directory size, and
+`try_catch` is small next to `algorithm` and `cpp`. Quote the sample when quoting
+the 73/80, and census the exception directories separately.
+
+One of the six produces no verdict at all
+(`exception_spec_dynamic_violation_fail`, default FAILED), so a crash survives
+somewhere the sample never looked.
+
+**`finalize_exception_specification` is not the cause, and porting it was
+refuted.** It was the obvious candidate: `clang_cpp_adjust` calls it per code
+symbol, the IREP2 pass replaces that adjuster, and 30 tests in the corpus use a
+dynamic exception specification. Ported into the §3.7 hook it changes **nothing**
+— `try_catch` stays at 8 agree / 6 diverge, and neither
+`exception_spec_dynamic_allowed` nor the violation test moves.
+
+Two things the attempt did establish, both worth keeping:
+
+- **The hook must be offered bodyless symbols.** As first written,
+  `gen_symbol_code` sat inside `adjust()`'s `get_value().is_not_nil()` guard, so
+  a function *declaration* — which is where an exception specification lives —
+  never reached it. Instrumenting showed the resolution firing once under the
+  hop-off against four times on the default path. Whoever ports this next needs
+  the hook moved, not just the function.
+- **The port is unpinnable today.** With no verdict moving and the attribute
+  invisible in `--symbol-table-only`, no test in this repo can distinguish the
+  ported pass from the unported one. It was therefore reverted rather than
+  merged: a change that cannot be pinned is the dead instrumentation the gates
+  exist to catch, however plausible its motivation.
+
 ## 4. What does not exist yet
 
 - **No hop-off flag** — though a census instrument now exists, §4.1.
@@ -810,7 +844,9 @@ spellings (§33) — so W3's carriage problem lands here first.
    not yet ported.
 8. The three remaining false alarms (§3.8), which are three causes: a queue
    reference, a bitset alignment and a vector pointer.
-9. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6),
-   and `finalize_exception_specification`, which the §3.7 hook can now take.
+9. Census the exception directories properly (§3.9) — the stride-10 sample
+   under-covers them, and one of their divergences produces no verdict at all.
+10. Then §134.4's ternary decay, which reaches the goto program on C++ (§3.6).
+    `finalize_exception_specification` is *not* on this list: §3.9 refutes it.
 
 Only then does a slice make sense.
