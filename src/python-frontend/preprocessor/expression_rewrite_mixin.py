@@ -482,6 +482,15 @@ class ExpressionRewriteMixin:
         tuple_eq_prefix, rewritten = self._apply_assert_eq_rewrites(node)
         if rewritten is not None:
             node.test = rewritten
+            # The rewrite deep-copies part of the test into its prefix, and only
+            # node.test is lowered below, so a comprehension carried into the
+            # prefix would reach the converter raw (#7692).
+            hoisted = []
+            for stmt in tuple_eq_prefix:
+                comp_prefix, stmt.value, _ = self._lower_listcomp_in_expr(stmt.value)
+                hoisted.extend(comp_prefix)
+                hoisted.append(stmt)
+            tuple_eq_prefix = hoisted
         eq_prefix, maybe_eq_test = self._lower_assert_eq_literal(node.test, node)
         node.test = maybe_eq_test
         node.test = self._simplify_isinstance(node.test)
