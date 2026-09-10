@@ -182,6 +182,17 @@ protected:
   /// own definition and no shadows_user_definition query is needed (§90).
   void adjust_special_functions(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_derived_to_base: displace a
+  /// derived->base conversion onto the base subobject under the flattened
+  /// layout. The offset comes from base_displacement, ESBMC's own layout
+  /// oracle -- recomputing it from clang's record layout is the mistake #3894
+  /// records.
+  void adjust_derived_to_base(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_base_to_derived: re-base a downcast
+  /// off the base subobject onto the start of the derived object.
+  void adjust_base_to_derived(expr2tc &expr);
+
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 

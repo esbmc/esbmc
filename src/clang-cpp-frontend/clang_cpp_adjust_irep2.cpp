@@ -64,6 +64,8 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_shift_operands), is_shift},
   {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
   {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
+  {ARM(adjust_derived_to_base), is_derived_to_base_cast},
+  {ARM(adjust_base_to_derived), is_base_to_derived_cast},
   {ARM(adjust_address_of), is_address_of2t},
 };
 
