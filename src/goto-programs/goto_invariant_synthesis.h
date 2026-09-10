@@ -97,12 +97,11 @@ bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive);
 ///
 /// Concurrency. Cutting a loop deletes its interleaving points, so a claim
 /// another thread could only violate through one of them is no longer reachable
-/// in the cut program. What keeps that from being a false proof is not the
-/// abstraction: it is #7491's classifier, which reports every claim downstream
-/// of a havoc as UNKNOWN rather than SUCCESSFUL
-/// (regression/esbmc/synth_loop_invariant_thread pins this). Were that
-/// classifier ever wrong for a cross-thread claim, this shape becomes unsound.
-/// It is a dependency of the design, not a property of it.
+/// in the cut program and is reported passed -- #7491's classifier acts on the
+/// refutation side only and does not catch it. Synthesis therefore declines
+/// outright on a program that can reach __ESBMC_spawn_thread; see
+/// spawns_threads, and regression/esbmc/synth_loop_invariant_thread_falseproof
+/// for the shape the decline exists to keep out.
 ///
 /// A user-written invariant is authoritative. A synthesised marker on the same
 /// loop is declined (has_user_invariant), and so is synthesis inside any
