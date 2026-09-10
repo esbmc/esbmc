@@ -11,6 +11,7 @@
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/base/prefix.h>
+#include <util/irep/pad_names.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
 #include <unordered_map>
@@ -66,6 +67,18 @@ inline expr2tc invoke_intrinsic(
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
 thread_local const namespacet *migrate_namespace_lookup = nullptr;
+
+/* struct_type2t/union_type2t have no per-member padding flag, so is_padding is
+ * lost on the way back and a pad reads as a declared member. Re-derive it from
+ * the name: every name add_padding reserves contains '#', which no C or C++
+ * identifier may (pad_names.h). Partial by construction -- the #bitfield and
+ * #extint type attributes are dropped with it and no name carries them, so a
+ * round-tripped bit-field pad still reaches the wrong add_padding arm. */
+static void restore_padding_flag(struct_union_typet::componentt &component)
+{
+  if (is_padding_name(component.get_name().as_string()))
+    component.set_is_padding(true);
+}
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
@@ -3032,6 +3045,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      restore_padding_flag(component);
       comps.push_back(component);
       idx++;
     }
@@ -3057,6 +3071,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      restore_padding_flag(component);
       comps.push_back(component);
       idx++;
     }

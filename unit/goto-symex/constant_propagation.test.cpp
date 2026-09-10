@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_type.h>
 #include <irep2/irep2_utils.h>
@@ -636,6 +636,35 @@ TEST_CASE(
     to_constant_struct2t(pinned).datatype_members[1] == member_of(var, "r"));
   // ... and the counter both arms agree on folds again, which is the point.
   REQUIRE(member_of(pinned, "i")->simplify() == int_const(3));
+}
+
+TEST_CASE(
+  "a merged array is pinned element by element",
+  "[symex][constant-propagation]")
+{
+  engine e;
+  const expr2tc arr =
+    symbol_at(int_array(2), "c:test.c@F@main@A", symbol_renaming_level::level2);
+  const expr2tc cond = symbol_at(
+    get_bool_type(), "nondet$symex::g", symbol_renaming_level::level0);
+
+  // The same merge over a bare array: element 0 is the counter both arms agree
+  // on, element 1 is the one the branch wrote.
+  const expr2tc taken = constant_array2tc(
+    int_array(2), std::vector<expr2tc>{int_const(3), int_const(7)});
+  const expr2tc other = constant_array2tc(
+    int_array(2), std::vector<expr2tc>{int_const(3), int_const(9)});
+  const expr2tc phi = if2tc(int_array(2), cond, taken, other);
+
+  REQUIRE_FALSE(e.state().constant_propagation(phi));
+
+  const expr2tc pinned = e.state().pin_symbolic_updates(phi, arr);
+  REQUIRE_FALSE(is_nil_expr(pinned));
+  REQUIRE(e.state().constant_propagation(pinned));
+  REQUIRE(
+    to_constant_array2t(pinned).datatype_members[1] ==
+    index_of(arr, gen_ulong(1)));
+  REQUIRE(index_of(pinned, gen_ulong(0))->simplify() == int_const(3));
 }
 
 TEST_CASE(

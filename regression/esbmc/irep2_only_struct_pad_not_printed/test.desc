@@ -1,0 +1,6 @@
+CORE
+main.c
+--goto-functions-only --clang-c-irep2-adjust-only
+REQUIRES signed_char_host
+struct s \{ signed char a; unsigned _ExtInt\(24\) anon_pad#1; signed int c; \}
+ASSIGN v=\{ \.a=1, \.c=2 \};

@@ -40,13 +40,20 @@ class ExpressionRewriteMixin:
             self.statements.extend(prefix)
             return result_expr
 
-        def visit_SetComp(self, node):
+        def _lower_as_listcomp(self, node):
+            """Build a ListComp over node's elt/generators and lower it,
+            extending self.statements. Shared by SetComp and GeneratorExp,
+            which differ only in what they do with the resulting list."""
             # pylint: disable=protected-access
             listcomp = ast.ListComp(elt=node.elt, generators=node.generators)
             ast.copy_location(listcomp, node)
             ast.fix_missing_locations(listcomp)
-            prefix, list_name = self.preprocessor._lower_listcomp(listcomp)
+            prefix, result_expr = self.preprocessor._lower_listcomp(listcomp)
             self.statements.extend(prefix)
+            return result_expr
+
+        def visit_SetComp(self, node):
+            list_name = self._lower_as_listcomp(node)
             set_call = ast.Call(
                 func=ast.Name(id="set", ctx=ast.Load()),
                 args=[list_name],
@@ -55,6 +62,10 @@ class ExpressionRewriteMixin:
             ast.copy_location(set_call, node)
             ast.fix_missing_locations(set_call)
             return set_call
+
+        def visit_GeneratorExp(self, node):
+            """Lower a genexp not already handled above (any/all/join/...)."""
+            return self._lower_as_listcomp(node)
 
         def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"
@@ -482,6 +493,15 @@ class ExpressionRewriteMixin:
         tuple_eq_prefix, rewritten = self._apply_assert_eq_rewrites(node)
         if rewritten is not None:
             node.test = rewritten
+            # The rewrite deep-copies part of the test into its prefix, and only
+            # node.test is lowered below, so a comprehension carried into the
+            # prefix would reach the converter raw (#7692).
+            hoisted = []
+            for stmt in tuple_eq_prefix:
+                comp_prefix, stmt.value, _ = self._lower_listcomp_in_expr(stmt.value)
+                hoisted.extend(comp_prefix)
+                hoisted.append(stmt)
+            tuple_eq_prefix = hoisted
         eq_prefix, maybe_eq_test = self._lower_assert_eq_literal(node.test, node)
         node.test = maybe_eq_test
         node.test = self._simplify_isinstance(node.test)

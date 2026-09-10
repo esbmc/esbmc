@@ -1,4 +1,5 @@
 CORE
 main.c
 --overflow-check
-^VERIFICATION SUCCESSFUL$
+^.*floating-point conversion out of range.*$
+^VERIFICATION FAILED$

@@ -9,7 +9,7 @@ harness silently stops proving anything about the shipped engine.
 Each harness therefore records the symbol it transcribes and a checksum of that
 symbol's current definition:
 
-    SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::make_assignment
+    SYMEX-HARNESS-TARGET: src/goto-symex/state/renaming.cpp::renaming::level2t::make_assignment
     SYMEX-HARNESS-SHA256: <64 hex digits>
 
 This script re-extracts every cited definition, re-hashes it, and fails when a

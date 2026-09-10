@@ -23,7 +23,7 @@
 #include <set>
 #include <string>
 
-#include <goto-symex/reachability_tree.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <irep2/irep2_expr.h>
 #include <util/symtab/namespace.h>
 
