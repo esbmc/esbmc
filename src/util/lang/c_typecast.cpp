@@ -876,8 +876,7 @@ bool c_typecastt::convert_to_pointer(
                                   ? to_pointer_type(src_type).subtype
                                   : to_array_type(src_type).subtype;
 
-    if (!pointer_subtypes_compatible(
-          src_subtype, dest_ptr_type.subtype, ns))
+    if (!pointer_subtypes_compatible(src_subtype, dest_ptr_type.subtype, ns))
       warnings.push_back("incompatible pointer types");
 
     if (src_type == dest_type)
