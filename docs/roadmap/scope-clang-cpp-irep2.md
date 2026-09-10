@@ -257,6 +257,42 @@ Two things the gates caught that are worth carrying forward:
   pointer itself. The item 1 arms must build the pointer type directly rather
   than route an address-of through `with_type`. PR **#7703**.
 
+### 2.6 Item 1 ported, and what it took (PR #7705)
+
+Both reference arms are in. Three things worth carrying forward, none of which
+was visible before the differential harness rejected a first attempt.
+
+**The address-of must carry the destination's own kind.** irept hardcodes
+`#reference` in `take_reference_address` and gets away with it because
+`operator==` skips comment attributes (`irep.cpp`, literally "comments are NOT
+checked") — so `T&` and `T&&` are the same type there. `ref_kind` is a real
+field, so a hardcoded kind leaves `do_typecast`'s `dest_type != type` guard true
+and appends a cast irept never produces. Two further carriage sites had to
+follow: `migrate_expr`'s address-of arm built its pointer from the pointee and
+dropped the spelling, and `rebuild_with_type<address_of2t>` re-defaulted it —
+that one silently affected every `with_type` caller, not just this one.
+
+**One shape the two copies cannot agree on, and irept is the wrong side.** For a
+`T&&` destination irept produces an address-of spelled `#reference`, i.e. an
+lvalue reference. Measured, neither side adds a cast and only the spelling
+differs:
+
+```
+legacy_migrated:  address_of  ref_kind : lvalue_reference
+native:           address_of  ref_kind : rvalue_reference
+```
+
+The IREP2 side is the faithful one, so that section pins the shape rather than
+byte equality. A port is not obliged to reproduce a defect it can see.
+
+**The complexity gate was already failing before any of this.**
+`implicit_typecast_followed` sits at 19 against a `core` threshold of 15 on
+master, so *any* edit to it fails the gate — which is what #7701 and #7703 were
+failing on, not their own additions. Split into `convert_reference` and
+`convert_to_pointer`, with the pointer-compatibility disjunction factored out;
+the gate then reports no function over threshold. Anything else touching this
+function inherits the same obligation.
+
 ## 3. The design question Phase 6 leaves open: the pass is not extensible
 
 The legacy frontends are one class specialising another:
@@ -309,14 +345,110 @@ priced first. Deciding this wrong means re-doing Phase 6 inside Phase 7.
 
 ## 4. What does not exist yet
 
-- **No hop-off flag.** `--clang-c-irep2-adjust-only` has no C++ counterpart
-  (`grep -n 'cpp-irep2' src/esbmc/options.cpp` is empty). Phase 6's entire
-  instrument — A/B one binary against itself with and without the flag — is
-  unavailable until one is added. That is the second work item, and it is a
-  prerequisite for any census by verdict.
+- **No hop-off flag** — though a census instrument now exists, §4.1.
+  The reason there is no hop-off:
+  `clang_cpp_languaget::typecheck` (`clang_cpp_language.cpp`'s `typecheck`) runs
+  `clang_cpp_adjust` unconditionally: no option is read, and no IREP2 pass is
+  constructed. Compare `clang_c_languaget` (`clang_c_language.cpp:460-490`),
+  which reads `clang-c-irep2-adjust-only` and either replaces or shadows the
+  legacy pass.
+
+  Measured consequence: instrumenting the IREP2 `implicit_typecast_followed` at
+  entry, a C source under `--clang-c-irep2-adjust-only` reaches it (2 entries)
+  and a C++ source reaches it **zero** times. So every arm Phase 7 ports is
+  dormant until this is wired — §2.3 and §2.6 both had to say "no regression
+  pair is possible", and this is why.
+
+  **The cheap first move is the shadow mode, not the replacement.** Phase 6's
+  `--clang-c-irep2-adjust` runs the IREP2 walk *in addition* to the legacy pass:
+  read-only, byte-identical by construction, and what it buys is migrating every
+  value in the corpus through `get_value2()`, which aborts on any construct
+  `migrate_expr` cannot represent. Wiring that on the C++ path needs no
+  `clang_cpp_adjust_irep2` and no answer to §3 — it is a census instrument, and
+  it would price the whole C++ corpus in one run. That is the next work item.
 - **No scope-doc census by construct.** §39.1's "census before writing" prices
   every construct once, at the start. For clang-cpp that census cannot be run
   until the flag exists, so §1's counts are the static census only.
+
+### 4.1 The census exists, and it inverts the expected risk (2026-09-10)
+
+`--clang-cpp-irep2-migrate-census` migrates every adjusted symbol's type and
+value through IREP2 and discards the result. It is not a shadow of
+`clang_c_adjust_irep2`: that pass writes back whatever it changes and its arms
+are C-shaped, so on C++ it would re-adjust bodies `clang_cpp_adjust` has already
+handled. A census has to leave the program alone.
+
+Read-only, measured with `irep2_canon` over a stride-10 `regression/esbmc-cpp`
+sample: **282 of 282** canonicalised goto programs identical, the one flagged
+difference being an extra `migrate_expr` diagnostic rather than a program change.
+
+Result over 273 tests:
+
+| migrated | count |
+|---|---:|
+| symbol types | **367 738** |
+| symbol values | **86 917** |
+| `migrate_*` diagnostics | **1** |
+| aborts | **0** |
+
+**IREP2 represents everything this corpus's C++ frontend output contains.** That
+was the open question §4 existed to price, and it reframes the phase: the blocker
+is not representation, it is adjuster coverage — §3's arm-table question. W1 was
+already dissolved for structured control flow (`frontends-to-irep2.md` §3); this
+says the same for C++ *values*, over this corpus.
+
+**Where the census runs is load-bearing, and the first version had it wrong.**
+Placed before `c_link` it produced the same counts and looked equally clean — but
+`migrate_namespace_lookup` is the *global* context, so pre-link every symbol of
+the TU under census is absent from it. `sym_name_to_symbol` does not fail on a
+miss: it falls through to building `symbol2tc` from the expression's own type
+instead of `migrate_symbol_type`'s, which `migrate.cpp:670-679` warns "screws up
+future hash tables". So the pre-link census established only that migration ran
+*with every symbol reference on the fallback path*, and any defect reachable only
+through `migrate_symbol_type` — incomplete struct, prototype-versus-definition
+mismatch — was invisible to it.
+
+Nor was the single pre-link diagnostic a measure of the problem: that message is
+`log_debug("migrate", ...)`, so it needs module-level verbosity to appear at all,
+and misses whose names carry `?`/`!` or the k-induction `cs$`/`s$` prefixes
+return silently. Counting one warning said nothing about how many symbols took
+the fallback.
+
+Moved to run after `c_link`, the same test emits **zero** namespace misses under
+`--verbosity migrate:9`, where pre-link it emitted one. The counts are unchanged
+and the failure count is still zero, so the conclusion survives — but it now
+rests on resolved symbol types rather than on substituted ones.
+
+Two consequences worth keeping:
+
+- **The read-only property was true for a reason I had not identified.**
+  `c_link`'s `fix_symbol` (`fix_symbol.cpp:9-14`) round-trips every symbol
+  through `set_type`/`set_value` unconditionally, clearing both IREP2 valid
+  flags — so a pre-link census's migrated values were discarded at the link
+  boundary. That, not the cache-flag argument, is why the goto A/B came out
+  282/282. Post-link that leg is gone, and the 282/282 sweep becomes the actual
+  evidence rather than a construction.
+- **Migration signals failure by throwing a `std::string` on some arms**
+  (`migrate.cpp:395`) and by aborting on others (`:795`, `:837`, `:859`), and
+  the diagnostic names the expression, never the symbol. Each symbol is wrapped,
+  so a *throwing* construct names itself and the walk continues — the difference
+  between a census and a bisection. An aborting arm still stops the run; the
+  wrap does not and cannot cover those.
+- **The counts alone cannot show the census ran.** A symbol or value count is
+  identical on either representation, so replacing `get_type2()` with
+  `get_type()` migrates nothing and prints the same line — a mutant the first
+  version of the test survived, and the natural drift path once the C++
+  frontend starts writing the IREP2 side directly. The line therefore also
+  reports the number of distinct IREP2 `type_id`s, which only the migrated form
+  can produce, and the tests pin it at two or more.
+
+**A measurement trap this cost, recorded because it invalidated a first answer.**
+The C++ goto dump carries `GOTO program creation time:`, which varies run to run.
+A first A/B of this change filtered `time:` and not that prefix, and reported 270
+of 282 tests "differing"; the control — same binary, same flags, twice — reported
+54 of 60. Nothing was diverging. Use `scripts/irep2-migration/lib.sh`'s
+`irep2_canon`, which strips timings, addresses and temp paths, and run the
+same-flags control before believing any A/B on this corpus.
 
 ## 5. Risks, carried forward from Phases 5 and 6
 
@@ -340,8 +472,11 @@ spellings (§33) — so W3's carriage problem lands here first.
    Item 1 is now writable, and it is the next slice: 70 % of the corpus needs
    it, and unlike §2.3's arms it will move verdicts, so it owes a
    `SUCCESSFUL`/`FAILED` pair.
-2. ~~Port items 6 and 7~~ — **done**, see §2.3.
-3. Price option B in §3 against option A.
-4. Add the C++ hop-off flag, then run the census by verdict.
+2. ~~Port items 6 and 7~~ — **done**, §2.3, PR #7701.
+   ~~Port item 1~~ — **done**, §2.6, PR #7705.
+3. ~~Wire a census instrument on the C++ path~~ — **done**, §4.1. It says
+   representation is not the blocker, so §3 is now the critical path.
+4. Price option B in §3 against option A.
+5. Then the replacement mode, and the census by verdict.
 
 Only then does a slice make sense.
