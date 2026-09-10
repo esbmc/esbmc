@@ -171,15 +171,16 @@ static bool is_const_foldable_arith(const expr2tc &e)
          is_modulus2t(e);
 }
 
-/// The types a read may be carried at. Scalars, and fixed-size struct or array
-/// aggregates: a read of a whole member denotes it exactly and folds a sibling
-/// the same way, which is what a write into an array member needs (#7597). The
-/// aggregate gates are the ones constant_propagation applies to an aggregate
-/// value -- infinite-size modelling arrays and oversized nests stay out,
-/// because a read at a symbolic index inlines the whole constant. A union is
-/// out because its members alias, and a pointer because carrying one resolves a
-/// later dereference against the wrong object, a false "Incorrect alignment
-/// when accessing data object" on the iterator read in
+/// The types a read may be carried at. Scalars, and fixed-size struct, union or
+/// array aggregates: a read of a whole member denotes it exactly and folds a
+/// sibling the same way, which is what a write into an array member needs
+/// (#7597). The aggregate gates are the ones constant_propagation applies to an
+/// aggregate value -- infinite-size modelling arrays and oversized nests stay
+/// out, because a read at a symbolic index inlines the whole constant. A union
+/// is admitted as a read only, for the reason given at the return below. A
+/// pointer stays out because carrying one resolves a later dereference against
+/// the wrong object, a false "Incorrect alignment when accessing data object"
+/// on the iterator read in
 /// regression/esbmc-cpp/cpp/github_5868_list_iterator_adl.
 static bool immutable_read_type(const expr2tc &e)
 {
@@ -189,7 +190,12 @@ static bool immutable_read_type(const expr2tc &e)
     return false;
   if (is_array_type(e->type))
     return array_may_propagate(e);
-  return is_struct_type(e->type);
+  // A union too, but only as a *read*: member2t::do_simplify steps past a
+  // `with` whose source is a union at no member, and fold_union_member_read
+  // projects out of a constant_union2t only, so a read folds no cross-member
+  // access and the aliasing a carried union literal would expose does not
+  // arise. It is the enclosing object's other members this keeps foldable.
+  return is_struct_type(e->type) || is_union_type(e->type);
 }
 
 /// A value that can never change once recorded: a level2 SSA generation
