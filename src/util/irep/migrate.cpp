@@ -1142,7 +1142,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     const expr2tc rounding_mode = migrate_rounding_mode(expr);
 
-    new_expr_ref = typecast2tc(type, old_expr, rounding_mode);
+    // The base-conversion markers the adjust passes dispatch on. They are set
+    // by the converter and consumed by clang_c_adjust; an IREP2 pass reading
+    // the cast has no other way to know a displacement is owed
+    // (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+    new_expr_ref = typecast2tc(
+      type,
+      old_expr,
+      rounding_mode,
+      expr.get("#derived_to_base"),
+      expr.get_bool("#base_to_derived"));
     return;
   }
 
@@ -4431,6 +4440,10 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
 
     typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
     new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    if (!ref2.derived_to_base.empty())
+      new_expr.set("#derived_to_base", ref2.derived_to_base);
+    if (ref2.base_to_derived)
+      new_expr.set("#base_to_derived", true);
     return new_expr;
   }
   case expr2t::nearbyint_id:

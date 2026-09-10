@@ -938,3 +938,43 @@ TEST_CASE("migrate carries the pointer reference kind", "[migrate]")
   REQUIRE(
     migrate_type_back(migrate_type(rvalue)).get_bool("#rvalue_reference"));
 }
+
+// The base-conversion markers the adjust passes dispatch on. They are irept
+// attributes, so before this they were erased by the round trip and an IREP2
+// pass could not tell that a cast owed a base displacement -- which silently
+// proves false assertions over multiple inheritance.
+TEST_CASE("migrate carries the base-conversion markers", "[migrate]")
+{
+  // migrate_expr resolves a symbol operand through the thread-local namespace.
+  use_test_ns();
+
+  const typet i32 = int_type();
+  exprt operand = symbol_exprt("x", i32);
+
+  typecast_exprt plain(operand, i32);
+  typecast_exprt to_base(operand, i32);
+  to_base.set("#derived_to_base", "tag-A");
+  typecast_exprt to_derived(operand, i32);
+  to_derived.set("#base_to_derived", true);
+
+  expr2tc m_plain, m_base, m_derived;
+  migrate_expr(plain, m_plain);
+  migrate_expr(to_base, m_base);
+  migrate_expr(to_derived, m_derived);
+
+  REQUIRE(to_typecast2t(m_plain).derived_to_base.empty());
+  REQUIRE_FALSE(to_typecast2t(m_plain).base_to_derived);
+  REQUIRE(to_typecast2t(m_base).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m_derived).base_to_derived);
+
+  // Both are in the fields tuple, so a marked cast is a different node from an
+  // unmarked one. fields_cover_class does not catch a field dropped from the
+  // tuple when the shortfall fits the alignment slack, so pin it here.
+  REQUIRE_FALSE(m_plain == m_base);
+  REQUIRE_FALSE(m_plain == m_derived);
+
+  // And they survive the way back, which is what clang_c_adjust reads.
+  REQUIRE(migrate_expr_back(m_base).get("#derived_to_base") == "tag-A");
+  REQUIRE(migrate_expr_back(m_derived).get_bool("#base_to_derived"));
+  REQUIRE(migrate_expr_back(m_plain).get("#derived_to_base").empty());
+}
