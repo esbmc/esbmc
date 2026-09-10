@@ -1,0 +1,8 @@
+CORE
+
+--unwind 1 main.py
+^VERIFICATION SUCCESSFUL$
+^WARNING: helper module-parse-failed: invalid syntax
+^\s*PASSED\s+\[global\.assertion\.1\]
+SEED_FILE helper.py def broken(:
+SEED_FILE main.py import helper; x: int = 5; assert x == 5
