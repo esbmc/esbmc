@@ -173,10 +173,50 @@ what made #6381 reviewable, and it is not optional here.
 | 5 | `state/` | — |
 | 6 | `scheduler/` | — |
 | 7 | `engine/` (incl. `builtin_functions/` → `engine/builtin_functions/`) | Largest; last, so a conflict here costs the least re-work. |
+| 8 | clang-format 11 reflow of the moved files | **Not foreseen when this plan was written** — see §6.1. |
+| 9 | Regroup the `CMakeLists.txt` source list | The list was in arbitrary order, so prefixing each entry left the groups interleaved. |
+| 10 | This document | — |
 
 Each commit is `git mv` + include-path rewrite + `CMakeLists.txt` path update.
 No commit changes a declaration, a definition, a build flag, or a compiler
 option.
+
+**Executed** on branch `refactor/goto-symex-partition`: commits 1–7 as tabled,
+each building green before the next began, plus commits 8–10. The measured
+post-move group graph is exactly the one §4 predicts — `engine -> state,
+equation`; `scheduler -> engine, state, equation`; `state -> equation, witness,
+<top>`; `equation -> trace`; `trace -> equation`; `witness -> equation, trace`;
+`testgen -> equation`.
+
+That graph is **header-level**, which is the scope §4 measured and not the scope
+§3 rule 5 states. Measured over `.cpp` edges as well, rule 5 does not hold
+today: only `testgen/` satisfies it. `engine/builtin_functions/io.cpp` includes
+`trace/printf_formatter.h` for `goto_symext::symex_printf`, reached from
+`symex_step` via `symex_assign.cpp:561` and `symex_other.cpp:36`; and
+`engine/builtin_functions/witness.cpp` includes `witness/witnesses.h` for the
+witness hooks, reached via `symex_main.cpp:432`, `symex_assign.cpp:608` and
+`symex_goto.cpp:324`. Both crossings are pre-existing — this PR adds no group
+edge and removes none — but rule 5 is a rule for what the partition should
+become, not a description of what it is. §11.5 records the gap.
+
+### 6.1 Commit 8, and why the plan needed it
+
+The plan asserted the change would be include-path edits alone. It is not,
+because of how the code-style gate measures a move.
+`.github/workflows/ci-pull-request.yml`'s `code-style` job runs
+`git-clang-format --diff origin/<base>` over the PR's changed files, and
+`git-clang-format` computes its changed-line ranges from a diff taken **without
+rename detection**. A moved file is therefore an added file, every line of it is
+in range, and clang-format 11 is asked to format the whole thing — surfacing
+formatting the file had drifted into under a *newer* clang-format and that no
+previous PR had touched a changed line of.
+
+27 of the 60 moved files are affected. Commit 8 applies exactly that reflow,
+kept separate so commits 1–7 remain reviewable as pure renames. G2 below is
+stated over tokens rather than lines for the same reason.
+
+#6381 did not hit this only because none of the 151 files it moved had drifted.
+Any future partition PR should expect the extra commit.
 
 ## 7. The mechanical rewrite, and its three traps
 
@@ -214,14 +254,21 @@ that make this a *proof* rather than a green build.
 
 * **G1 — include-resolution equality.** `ninja -t deps` exposes the fully
   resolved (translation unit → header) graph. Snapshot it before the first move
-  (841,455 pairs on this tree), apply the rename map to the snapshot, and diff
-  against the post-move graph. The required result is **0 lost, 0 gained**:
-  every include in the project resolves to the same header *content* as on
-  `master`. This is the only check that catches an include quietly resolving to
-  a different file.
-* **G2 — content proof.** A scripted assertion that, for every moved file, the
-  diff against its pre-move content contains **only** `#include` lines. Run per
-  commit; a single non-include hunk fails the gate.
+  (844,488 pairs over 769 TUs as measured on this branch), apply the rename map
+  — to the object paths as well as the header paths, since a moved source moves
+  its object — to the snapshot, and diff against the post-move graph. The
+  required result is **0 lost, 0 gained**, and it held at every one of the eight
+  commits: every include in the project resolves to the same header *content*
+  as on `master`. This is the only check that catches an include quietly
+  resolving to a different file.
+* **G2 — content proof.** A scripted assertion that, for every C/C++ file the
+  branch touches, the comment-free **token stream** — with the inserted
+  `goto-symex/<group>/` path segment undone — is identical to the same file on
+  the base revision. Run per commit; a single differing token fails the gate.
+  Tokens rather than lines because commit 8 (§6.1) reflows, and comment-free
+  because path citations inside comments move with the files. As run on this
+  branch: 96 files proved identical, and the gate was mutation-checked by
+  flipping one `==` to `!=` in `equation/slice.cpp` and confirming it fails.
 * **G3 — unit tests.** `ctest -LE regression --timeout 60`, all green. The 16
   `unit/goto-symex/*.test.cpp` plus `symex_run.h` and `ssa_validator.h` include
   these headers directly and are the closest thing to a compile-level contract
@@ -233,9 +280,12 @@ that make this a *proof* rather than a green build.
   `ra-pow-nan` and the two host-`libstdc++` C++ tests fail on clean `master`
   here.
 * **G5 — harness drift.** `python3 scripts/verification/symex/drift_check.py`
-  must exit 0. This is a **required CI job**
-  (`.github/workflows/pull_request.yml:225`) and it *will* fail on the `state/`
-  commit: `regression/esbmc/symex_ssa_00/symex_ssa_00.c:4,6` pin
+  must exit 0. **Run it by hand on the `state/` commit — CI will not catch this
+  one.** #7686 moved the job out of the pull-request workflow into
+  `.github/workflows/ci-weekly.yml:280`, gated on the Monday `17 4 * * 1` cron,
+  so a stale harness path now lands green and surfaces up to a week later on a
+  run nobody is watching. It *will* fail on the `state/` commit:
+  `regression/esbmc/symex_ssa_00/symex_ssa_00.c:4,6` pin
   `src/goto-symex/renaming.cpp::renaming::level2t::{make_assignment,coveredinbees}`
   by path, and `region_digest()` raises `cited file does not exist` when the
   path is stale. Fix by editing the two `SYMEX-HARNESS-TARGET:` lines. **Do not
@@ -253,6 +303,15 @@ that make this a *proof* rather than a green build.
   `needs-svcomp-run`. State this explicitly in the PR rather than leaving it
   inferred.
 
+**As run on `refactor/goto-symex-partition`.** G1 0 lost / 0 gained at all eight
+commits; G2 96 files token-identical, mutation-checked; G3 849/850 (the failure
+is *"an exhausted stack still reports itself"*, red on clean `master` on this
+host); G4 2164 tests, one failure — `bundled_headers_from_vfs`, likewise red on
+clean `master` here; G5 exit 0 with the recorded sha256 untouched; G6 reports
+*"clang-format did not modify any files"* after commit 8; G7 delta `+0` in all three
+partitions; G8 not applicable. No Mode C obligation: the change adds and removes
+zero branches.
+
 ## 9. References to update outside `src/goto-symex/`
 
 **Includes (must change, or the build breaks):** `src/esbmc/bmc.{h,cpp}`,
@@ -266,10 +325,19 @@ that make this a *proof* rather than a green build.
 
 **Prose citations (should change):** `website/content/docs/theory/LTL.md:222,243`
 — these cite `file:line`, so the line numbers are stale regardless; update the
-paths and re-derive the lines. `src/goto-programs/goto_check_excessive_alloc.cpp:32`,
+paths and re-derive the lines **after** the commit-8 reflow, not before it, or
+they drift again. `src/goto-programs/goto_check_excessive_alloc.cpp:32`,
 `src/goto-programs/contracts/contracts.cpp:2646`,
 `src/pointer-analysis/dereference.cpp:2503`, `src/irep2/irep2_expr.h:52`,
-`src/irep2/README.md`, `src/solvers/README.md`, `CLAUDE.md`/`AGENTS.md`.
+`CLAUDE.md`/`AGENTS.md`, `scripts/complexity/test_ccn_report.py`,
+`scripts/verification/symex/drift_check.py`, and the five
+`regression/esbmc/*/main.c` comment citations
+(`builtin_constant_p`, `builtin_object_size_array_idx`,
+`memcpy_pointer_primitive`, `memset_pointer`, `memset_string_literal`).
+
+`src/irep2/README.md` and `src/solvers/README.md` cite only the *directory*
+`src/goto-symex/`, which the move leaves valid; an earlier revision of this list
+named them in error.
 
 **Deliberately left stale:** `docs/roadmap/*.md` other than this file. Those
 records describe the tree as it was when written; rewriting them would falsify
@@ -284,11 +352,14 @@ the record. Same policy as #6381.
   therefore **not** byte-identical and this plan does not claim it is.
 * **Codecov per-file history resets for moved files.** Codecov keys coverage by
   path. The `esbmc-coverage-pr` Mode B bar "no touched file's coverage falling
-  below its pre-PR value" has no pre-PR value to compare against for 62 renamed
-  paths. Handle it explicitly: quote the *repo total* before and after (it must
-  not move — no executable line changes), and say in the PR that per-file
-  baselines are re-established rather than regressed. Do not report the gate as
-  passing on an unmeasured file.
+  below its pre-PR value" has no pre-PR value to compare against for the 60
+  renamed paths. Handle it explicitly: quote the *repo total* before and after,
+  and say in the PR that per-file baselines are re-established rather than
+  regressed. Do not report the gate as passing on an unmeasured file. Note that
+  "no executable line changes" is true of statements but not of *line numbers*:
+  commit 8's reflow redistributes existing statements across lines in 20 files
+  (net +48 lines, mostly comments), so a per-line coverage map shifts even where
+  nothing executable changed.
 * **This conflicts aggressively with any in-flight PR touching
   `src/goto-symex/`.** As of 2026-09-09 the open set is #7669, #7668 and #7665
   (`goto_symex_state.{h,cpp}`, `renaming.h` — commit 5), #7505
@@ -325,3 +396,20 @@ PR; each is a separate, small, testable change.
 4. **`goto_symex.h` is 66 KB in one file.** Splitting the `goto_symext`
    declaration is a real improvement and is emphatically *not* a move — it
    changes what each translation unit sees. Separate PR, separate risk.
+5. **`trace/` and `witness/` are reachable from `symex_step`, so §3 rule 5 does
+   not hold yet.** `symex_printf` (`engine/builtin_functions/io.cpp`) formats
+   with `printf_formattert`, and the two witness hooks
+   (`engine/builtin_functions/witness.cpp`) build `waypoint`s, all three called
+   directly from the statement handlers. Making rule 5 true means moving the
+   `printf_formattert` dependency out of `symex_printf` and the `waypoint`
+   types out of the emitter (which is item 2 above). Until then, rule 5 is
+   enforceable for `testgen/` only, and a reviewer should read it as the
+   direction of travel rather than as an invariant to check a new include
+   against. Naming this is the point: the header-only graph in §4 does not see
+   these edges, so an unqualified "unreachable from `symex_step`" claim
+   measured that way is wrong.
+6. **The dead citation in `engine/symex_main.cpp`.** It named
+   `goto-symex/builtin_functions.cpp`, a file that has not existed since
+   `builtin_functions` became a directory. Repointed at
+   `engine/builtin_functions/memory_alloc.cpp`, where `symex_mem` actually
+   lives, rather than carried forward broken.

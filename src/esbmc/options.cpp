@@ -750,6 +750,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
     {"no-align-check", NULL, "Do not check pointer alignment"},
+    {"no-fp-conversion-check",
+     NULL,
+     "Do not check that a floating-point to integer conversion is in range "
+     "(C11 6.3.1.4p1); the rest of --overflow-check is unaffected"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "

@@ -1,9 +1,9 @@
 /*
  * Tier-A harness template — docs/roadmap/goto-symex-verification-plan.md, M0.
  *
- * SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::make_assignment
+ * SYMEX-HARNESS-TARGET: src/goto-symex/state/renaming.cpp::renaming::level2t::make_assignment
  * SYMEX-HARNESS-SHA256: bf987842a68533483a84eaa637e4e83aaff0bfe6145d76a8a957cfcdaa4c4b16
- * SYMEX-HARNESS-TARGET: src/goto-symex/renaming.cpp::renaming::level2t::coveredinbees
+ * SYMEX-HARNESS-TARGET: src/goto-symex/state/renaming.cpp::renaming::level2t::coveredinbees
  * SYMEX-HARNESS-SHA256: 3260da5cd68baf63855fed44e7db14f5772ba5c8141ff64a69f2a22260082247
  *
  * Discharges (partially, at the smoke level): I1 / P4 / P8 / P12 — the L2
@@ -12,11 +12,11 @@
  *
  * Assumptions (§6.1 rule 2 — each cites the symbol that establishes it):
  *   key < MAP_CAP
- *     src/goto-symex/renaming.h::renaming::level2t::name_record — the L2 key is
+ *     src/goto-symex/state/renaming.h::renaming::level2t::name_record — the L2 key is
  *     a value type over (base_name, rlevel, l1_num, t_num); the harness
  *     enumerates a bounded key space, per §6.1 rule 4 (bound the shape).
  *   before < UINT_MAX
- *     src/goto-symex/renaming.cpp::renaming::level2t::coveredinbees — its
+ *     src/goto-symex/state/renaming.cpp::renaming::level2t::coveredinbees — its
  *     SYMEX_INVARIANT(entry.count <= count) is the engine-side statement that
  *     counts only ever grow, checked in release builds since M3. Discharged by
  *     Tier B (H-B1) rather than assumed there.
