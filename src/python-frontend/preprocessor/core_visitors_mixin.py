@@ -1557,6 +1557,124 @@ class CoreVisitorsMixin:
         self.generic_visit(node)
         return node
 
+    @staticmethod
+    def _index_name_for(call):
+        """A comprehension index name unique to one call site, so nesting is safe."""
+        return f"__esbmc_iter_idx_{call.lineno}_{call.col_offset}"
+
+    @staticmethod
+    def _load_name(ident, ctx=None):
+        return ast.Name(id=ident, ctx=ctx or ast.Load())
+
+    @staticmethod
+    def _builtin_call(func, args):
+        return ast.Call(func=CoreVisitorsMixin._load_name(func), args=args, keywords=[])
+
+    def _subscript(self, ident, idx):
+        return ast.Subscript(value=self._load_name(ident),
+                             slice=self._load_name(idx),
+                             ctx=ast.Load())
+
+    @staticmethod
+    def _sequence_literal_elts(seq):
+        """The element nodes of a list/tuple literal, else None.
+
+        A Starred element stands for an unknown number of elements, so the
+        literal's length is not known here and folding it would be wrong.
+        """
+        if not isinstance(seq, (ast.List, ast.Tuple)):
+            return None
+        if any(isinstance(e, ast.Starred) for e in seq.elts):
+            return None
+        return seq.elts
+
+    def _shortest_len(self, names):
+        """len(a) for one name, else min(len(a), len(b)) folded left."""
+        bound = self._builtin_call("len", [self._load_name(names[0])])
+        for other in names[1:]:
+            other_len = self._builtin_call("len", [self._load_name(other)])
+            bound = self._builtin_call("min", [bound, other_len])
+        return bound
+
+    @staticmethod
+    def _index_comprehension(idx, elt_parts, bound):
+        return ast.ListComp(elt=ast.Tuple(elts=elt_parts, ctx=ast.Load()),
+                            generators=[
+                                ast.comprehension(
+                                    target=CoreVisitorsMixin._load_name(idx, ast.Store()),
+                                    iter=CoreVisitorsMixin._builtin_call("range", [bound]),
+                                    ifs=[],
+                                    is_async=0)
+                            ])
+
+    def _zip_to_list(self, call):
+        literals = [self._sequence_literal_elts(s) for s in call.args]
+        if all(elts is not None for elts in literals):
+            width = min((len(elts) for elts in literals), default=0)
+            return ast.List(elts=[
+                ast.Tuple(elts=[copy.deepcopy(elts[i]) for elts in literals], ctx=ast.Load())
+                for i in range(width)
+            ],
+                            ctx=ast.Load())
+        if call.args and all(isinstance(s, ast.Name) for s in call.args):
+            idx = self._index_name_for(call)
+            return self._index_comprehension(idx, [self._subscript(s.id, idx) for s in call.args],
+                                             self._shortest_len([s.id for s in call.args]))
+        return None
+
+    def _enumerate_to_list(self, call):
+        if not 1 <= len(call.args) <= 2:
+            return None
+        seq = call.args[0]
+        start = call.args[1] if len(call.args) == 2 else ast.Constant(value=0)
+        constant_start = isinstance(start, ast.Constant) and isinstance(start.value, int)
+
+        elts = self._sequence_literal_elts(seq)
+        if elts is not None and constant_start:
+            return ast.List(elts=[
+                ast.Tuple(elts=[ast.Constant(value=start.value + i),
+                                copy.deepcopy(e)],
+                          ctx=ast.Load()) for i, e in enumerate(elts)
+            ],
+                            ctx=ast.Load())
+        # A non-constant start would land inside the comprehension body and be
+        # re-evaluated per element; CPython evaluates it once, before iterating.
+        # Hoisting it needs statement context this hook does not have.
+        if isinstance(seq, ast.Name) and constant_start:
+            idx = self._index_name_for(call)
+            position = self._load_name(idx) if start.value == 0 else ast.BinOp(
+                left=self._load_name(idx), op=ast.Add(), right=copy.deepcopy(start))
+            return self._index_comprehension(idx, [position, self._subscript(seq.id, idx)],
+                                             self._builtin_call("len", [self._load_name(seq.id)]))
+        return None
+
+    def _maybe_rewrite_list_over_iterator(self, node):
+        """list(zip(...)) / list(enumerate(...)) -> the equivalent literal or comprehension.
+
+        zip and enumerate are modelled only as a for-loop rewrite
+        (loop_mixin._transform_zip_for), so as a standalone value they reach the
+        generic call builder and produce a list of the wrong length and
+        elements — a false alarm on an assertion CPython holds (#7555).
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                and not node.keywords):
+            return None
+        inner = node.args[0]
+        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                and not inner.keywords):
+            return None
+        if inner.func.id == "zip":
+            rewritten = self._zip_to_list(inner)
+        elif inner.func.id == "enumerate":
+            rewritten = self._enumerate_to_list(inner)
+        else:
+            return None
+        if rewritten is None:
+            return None
+        ast.copy_location(rewritten, node)
+        ast.fix_missing_locations(rewritten)
+        return self.visit(rewritten)
+
     _OPERATOR_DUNDERS = {"__getitem__": 1, "__len__": 0, "__contains__": 1}
 
     def _maybe_rewrite_operator_dunder_call(self, node):
@@ -1598,6 +1716,9 @@ class CoreVisitorsMixin:
         rewritten_dict_list = self._maybe_rewrite_dict_to_list_call(node)
         if rewritten_dict_list is not None:
             return rewritten_dict_list
+        rewritten_iter_list = self._maybe_rewrite_list_over_iterator(node)
+        if rewritten_iter_list is not None:
+            return rewritten_iter_list
         rewritten_newtype = self._maybe_rewrite_newtype_call(node)
         if rewritten_newtype is not None:
             return rewritten_newtype
