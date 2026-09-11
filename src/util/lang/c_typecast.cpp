@@ -764,9 +764,8 @@ void c_typecastt::implicit_typecast_followed(
 }
 
 // special case: 0 == NULL
-static bool is_null_pointer_constant(
-  const expr2tc &expr,
-  const type2tc &src_type)
+static bool
+is_null_pointer_constant(const expr2tc &expr, const type2tc &src_type)
 {
   return is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
          (is_unsignedbv_type(src_type) || is_signedbv_type(src_type));
