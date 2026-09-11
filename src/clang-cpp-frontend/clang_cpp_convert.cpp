@@ -692,7 +692,12 @@ static void set_handler_exception_id(const namespacet &ns, exprt &handler)
 /// it covers every call spelling, as clang_cpp_adjust's arm did.
 static void reduce_pseudo_destructor_call(exprt &expr)
 {
-  if (expr.operands().size() != 2 || expr.op0().id() != "cpp-pseudo-destructor")
+  // The legacy arm only ever saw a side_effect_expr_function_callt. Say so,
+  // rather than leaning on "two operands whose first carries this id" -- true
+  // of nothing else today, but it states no precondition.
+  if (
+    expr.id() != "sideeffect" || expr.operands().size() != 2 ||
+    expr.op0().id() != "cpp-pseudo-destructor")
     return;
 
   assert(expr.op0().operands().size() == 1);
