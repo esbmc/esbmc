@@ -170,7 +170,7 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-S.2, then the cause §7.2 names. Neither ports an arm.
+The experiment §7.4 names, then S.2. Neither ports an arm.
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -239,3 +239,61 @@ row that today crashes, pinned for *producing a verdict at all*, is a real gate
 — `^VERIFICATION SUCCESSFUL$` cannot match a SIGSEGV. That test belongs to the
 change that fixes the crash, not to this one. #7717 shipped the C++ pass the
 same way, with its census as the evidence.
+
+### 7.4 The crash localised: the generated harness, and it is not a missing arm
+
+`gdb -batch -ex run -ex bt` on the reduced input gives the frame `addr2line`
+could not:
+
+```
+#0  make_not (expr=...)                        src/irep2/irep2_utils.cpp:8
+#1  goto_convertt::optimize_guarded_gotos      goto_convert.cpp:101
+#2  goto_convert_functionst::try_convert_body_native
+#3  goto_convert_functionst::convert_function
+```
+
+So it is `make_not(it->guard)` at line 101, not the `is_true` on the line before
+it, and `it` is a **conditional GOTO whose guard is nil**.
+
+**It reduces to four lines.** `solc` is available at `/tmp/extest/solc`, so new
+contracts can be generated rather than picked from the corpus:
+
+```solidity
+pragma solidity >=0.8.0;
+contract C {
+    uint x;
+}
+```
+
+`--goto-functions-only` plus the flag crashes on that; without the flag it dumps
+the program. No function, no statement, no expression of the user's is needed —
+which places the guard in code the converter *generates*, and the legacy dump
+names it: `_ESBMC_Main_C (sol:@C@C@F@_ESBMC_Main_C#)`, the per-contract harness,
+whose first branch is `IF !return_value$_nondet_bool$1 THEN GOTO 2`. That is
+exactly the `if(x) goto z; goto y; z:` shape `optimize_guarded_gotos` rewrites.
+
+Two things this rules out.
+
+**It is not the native body converter.** Frame #2 is `try_convert_body_native`,
+but `--no-irep2-native-body` does not avoid the crash: the legacy
+`goto_convert_rec` path runs `optimize_guarded_gotos` over the same sequence
+and dies identically. So the malformed guard is in the adjusted body, not in
+either converter.
+
+**It is probably not a missing arm.** An A/B of `--symbol-table-only` over
+`string_concat_1`, flag off against flag on, differs in ten lines, of which
+eight are a temp-directory path and blank lines in one printed body. The one
+structural difference is a dropped `#location` that was **present and empty**
+on a constructor call — the irept tri-state where `find()` cannot distinguish
+absent from nil, and a mutable `location()` creates a third state. An arm that
+failed to run would not produce a symbol table this close.
+
+So the next experiment is the seam, not the table: restore the
+present-but-empty `#location` across `migrate_expr_back` and re-run the reduced
+input. Phase 6 §136.3 already owns that restore and measured it moving 126 of
+131 default-path goto programs, so it is the first thing to try and the reduced
+contract above is a two-second test of it.
+
+Stated as a hypothesis, not a finding: the symbol-table closeness makes a seam
+loss the better explanation, but nothing here has yet shown that *this* loss is
+what empties the guard.
