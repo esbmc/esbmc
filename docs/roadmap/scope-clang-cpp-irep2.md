@@ -758,12 +758,33 @@ github_5868_reverse_iterator_base     /esbmc-vfs/cpp/list    line  29  invalid p
 ```
 
 "Incorrect alignment when accessing data object" is the signature §3.16 met when
-a `dereference2t` was built over a bare `symbol_type2t`: no width, so symex
-reports alignment rather than the unresolved type. That makes a type-resolution
-gap in how the OM headers are adjusted the first hypothesis -- but it *is* a
-hypothesis. §3.16 cost four ticks to a cluster that looked like one cause and was
-not, so the next step is to diagnose two or three of these individually, by
-goto-diff against the legacy pass, before assuming the 18 move together.
+a `dereference2t` was built over a bare `symbol_type2t`, so a type-resolution gap
+looked like the first hypothesis. **Diagnosing one refuted it.**
+
+A goto-diff of `github_5868_is_scalar_const_lookup` shows `std::pair`'s
+constructor byte-identical between the passes apart from instruction numbering
+(+4 under the flag), so the failure inside it comes from different state, not
+different code. Normalising the numbering and diffing the whole program gives 179
+hunks, and the first is unambiguous:
+
+```
+legacy  RETURN: ieee_fma(a, b, c)
+flag    RETURN: return_value$_fmal$1      # an actual call to fmal() instead
+```
+
+Likewise `nearbyint`. The IREP2 pass folds only the **`__builtin_`-prefixed**
+half of `clang_c_adjust::do_special_functions`; the **name-matched** family
+(`fma`, `nearbyint`, …) is unported, so those calls reach the operational model
+rather than becoming IREP2 nodes. `adjust_special_functions`'s own doc comment
+says as much and names the reason it was deferred: unlike a reserved
+`__builtin_` spelling, a program may define `fma` itself, so the fold needs a
+`shadows_user_definition` query first. That helper is already shared
+(`builtin_names.h`'s `builtin_shadows_user_definition`), so no hoist is needed.
+
+That divergence is confirmed. Whether it *causes* the 18 failures is not: they
+are reported inside `<set>`, `<utility>` and `<list>`, not in cmath. Port the
+name-matched half, re-measure, and see how many of the 18 move -- rather than
+assuming, which is the §3.16 mistake.
 
 `github_6291_*` is already known to be something else: `bump((c < 1) ? a : b)`
 binds a reference *parameter* to a conditional lvalue, which needs an address-of
