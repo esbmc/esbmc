@@ -978,3 +978,51 @@ TEST_CASE("migrate carries the base-conversion markers", "[migrate]")
   REQUIRE(migrate_expr_back(m_derived).get_bool("#base_to_derived"));
   REQUIRE(migrate_expr_back(m_plain).get("#derived_to_base").empty());
 }
+
+// struct_type2t and union_type2t have no per-member padding flag, so
+// #is_padding is re-derived from the member name on the way back
+// (migrate.cpp restore_padding_flag). Without it a pad member reads as a
+// declared field: c_expr2string prints it, and add_padding aligns around it as
+// if the user had written it.
+TEST_CASE("migrate_type_back re-flags struct padding members", "[migrate]")
+{
+  std::vector<type2tc> members{get_int_type(8), get_uint_type(24)};
+  std::vector<irep_idt> names{"a", "anon_pad#1"};
+  const typet back =
+    migrate_type_back(struct_type2tc(members, names, names, "s"));
+
+  const struct_union_typet::componentst &comps =
+    to_struct_union_type(back).components();
+  REQUIRE(comps.size() == 2);
+  REQUIRE_FALSE(comps[0].get_is_padding());
+  REQUIRE(comps[1].get_is_padding());
+}
+
+TEST_CASE("migrate_type_back re-flags union padding members", "[migrate]")
+{
+  std::vector<type2tc> members{get_int_type(8), get_uint_type(48)};
+  std::vector<irep_idt> names{"a", "union_pad#"};
+  const typet back =
+    migrate_type_back(union_type2tc(members, names, names, "u"));
+
+  const struct_union_typet::componentst &comps =
+    to_struct_union_type(back).components();
+  REQUIRE(comps.size() == 2);
+  REQUIRE_FALSE(comps[0].get_is_padding());
+  REQUIRE(comps[1].get_is_padding());
+}
+
+// A declared member cannot be mistaken for padding: every reserved pad name
+// contains '#', which no C or C++ identifier may (util/irep/pad_names.h).
+TEST_CASE("migrate_type_back leaves a look-alike member unflagged", "[migrate]")
+{
+  std::vector<type2tc> members{get_int_type(32), get_int_type(32)};
+  std::vector<irep_idt> names{"anon_pad", "union_pad"};
+  const typet back =
+    migrate_type_back(struct_type2tc(members, names, names, "s"));
+
+  const struct_union_typet::componentst &comps =
+    to_struct_union_type(back).components();
+  REQUIRE_FALSE(comps[0].get_is_padding());
+  REQUIRE_FALSE(comps[1].get_is_padding());
+}
