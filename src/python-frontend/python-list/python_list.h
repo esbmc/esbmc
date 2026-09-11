@@ -598,6 +598,10 @@ public:
   shallow_push_call
   select_shallow_push(const exprt &src, const exprt &untagged_last_arg) const;
 
+  /// A constructed class instance arrives as a value struct; the element read
+  /// expects a reference. Box it so the two agree (#7685).
+  exprt as_object_reference(const nlohmann::json &op, const exprt &elem);
+
   shallow_push_call
   select_list_extend(const exprt &src, const exprt &untagged_elem_size) const;
 
