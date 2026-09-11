@@ -26,6 +26,20 @@ bool compare_unscore_builtin(
 /// std::abs(complex) is why <complex> ships without it -- keeps its call.
 bool is_abs_builtin_name(const irep_idt &identifier);
 
+/// The float library calls that have an IEEE node of their own. Both passes
+/// lower these, so the spelling set is shared; the arity each node takes is
+/// not, because legacy splices whatever arguments the call has into a
+/// fixed-arity node (see clang_c_adjust_irep2.cpp).
+enum class ieee_float_builtin
+{
+  none,
+  nearbyint,
+  remainder,
+  fma
+};
+
+ieee_float_builtin ieee_float_builtin_of(const irep_idt &identifier);
+
 /// The lowerings that match a callee's *base* name, so a program that defines
 /// one of these names itself would have its body discarded and the builtin
 /// verified in its place (#6904). These are all spellings a program is free to
