@@ -10,11 +10,15 @@
 #include <python-frontend/type/type_handler.h>
 #include <nlohmann/json.hpp>
 #include <python-frontend/math/convert_float_literal.h>
+#include <python-frontend/python_converter.h>
 #include <util/irep/expr.h>
 #include <util/irep/std_expr.h>
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 struct numeric_value
@@ -169,4 +173,147 @@ inline long long normalize_reducer_axis(long long axis, std::size_t rank)
       "AxisError: axis " + std::to_string(axis) +
       " is out of bounds for array of dimension " + std::to_string(rank));
   return normalized;
+}
+
+// Cap on descriptor-materialized elements a conversion-time sort/argsort
+// bubble-sort network will unroll -- shared between numpy.sort()/argsort()
+// and ndarray.sort()/argsort() so both dispatch paths agree on the same
+// blow-up bound (ADR-NP-003 principle 3).
+constexpr std::size_t max_numpy_sort_elements = 64;
+
+// A conversion-time-unrolled bubble sort over already-converted elements,
+// swapping via if_exprt on `keys` rather than extracting a C++ comparison
+// key -- the same style reduce_numpy_descriptor_values's own min/max
+// branches use, so this works uniformly across every element type get_expr
+// can produce (int/float/bool), concrete or symbolic alike. When `payload`
+// is non-null, every swap decided by `keys` is mirrored onto it (e.g.
+// tracking each element's original index for argsort).
+inline void
+bubble_sort_numpy_paired(std::vector<exprt> &keys, std::vector<exprt> *payload)
+{
+  for (std::size_t pass = 0; pass + 1 < keys.size(); ++pass)
+  {
+    for (std::size_t j = 0; j + pass + 1 < keys.size(); ++j)
+    {
+      binary_relation_exprt out_of_order(keys[j], ">", keys[j + 1]);
+      exprt lo = if_exprt(out_of_order, keys[j + 1], keys[j]);
+      exprt hi = if_exprt(out_of_order, keys[j], keys[j + 1]);
+      keys[j] = lo;
+      keys[j + 1] = hi;
+
+      if (payload != nullptr)
+      {
+        exprt lo_p = if_exprt(out_of_order, (*payload)[j + 1], (*payload)[j]);
+        exprt hi_p = if_exprt(out_of_order, (*payload)[j], (*payload)[j + 1]);
+        (*payload)[j] = lo_p;
+        (*payload)[j + 1] = hi_p;
+      }
+    }
+  }
+}
+
+// Assembles a rank 1 or 2 array_typet value from already-converted,
+// row-major flat elements -- the sort/argsort counterpart of
+// build_1d_numpy_array_value above, extended to rank 2 so an axis-aware
+// result can be reassembled into its original shape.
+inline exprt build_numpy_shape_array_value(
+  const std::vector<std::size_t> &shape,
+  const std::vector<exprt> &elems,
+  const type_handler &th)
+{
+  if (shape.size() == 1)
+    return build_1d_numpy_array_value(elems, th);
+
+  const std::size_t cols = shape[1];
+  typet row_type = th.build_array(elems.front().type(), cols);
+  typet result_type = th.build_array(row_type, shape[0]);
+  exprt value = gen_zero(result_type);
+  for (std::size_t row = 0; row < shape[0]; ++row)
+    for (std::size_t col = 0; col < cols; ++col)
+      value.operands().at(row).operands().at(col) = elems[(row * cols) + col];
+  return value;
+}
+
+// Sorts (or argsorts) already-converted, row-major flat elements from
+// build_numpy_descriptor_materialized_elements -- shared by
+// numpy.sort()/numpy.argsort() (numpy_call_expr.cpp) and
+// ndarray.sort()/argsort() (function_call/expr.cpp), the two dispatch paths
+// that both need the exact same axis-aware sort over that descriptor
+// materialization. `flatten` wins over `axis` (axis=None); otherwise axis is
+// normalized against shape's rank and, for a 2-D shape, each row (axis=1) or
+// column (axis=0) is sorted independently, restarting the local index at 0
+// per slice -- matching argmin_argmax_axis_best_index's own per-slice
+// convention. want_indices selects argsort's index-permutation result over
+// sort's value-permutation one.
+inline exprt build_numpy_sort_or_argsort_result(
+  python_converter &converter,
+  const type_handler &th,
+  const std::vector<std::size_t> &shape,
+  std::vector<exprt> elems,
+  bool flatten,
+  long long axis,
+  bool want_indices)
+{
+  auto make_index = [&](std::size_t i) {
+    nlohmann::json node{
+      {"_type", "Constant"},
+      {"value", static_cast<int64_t>(i)},
+      {"kind", nullptr}};
+    return converter.get_expr(node);
+  };
+
+  auto sort_slice = [&](std::vector<exprt> values) -> std::vector<exprt> {
+    if (!want_indices)
+    {
+      bubble_sort_numpy_paired(values, nullptr);
+      return values;
+    }
+    std::vector<exprt> indices;
+    indices.reserve(values.size());
+    for (std::size_t i = 0; i < values.size(); ++i)
+      indices.push_back(make_index(i));
+    bubble_sort_numpy_paired(values, &indices);
+    return indices;
+  };
+
+  if (flatten)
+    return build_1d_numpy_array_value(sort_slice(std::move(elems)), th);
+
+  const long long normalized = normalize_reducer_axis(axis, shape.size());
+  if (shape.size() == 1)
+    return build_1d_numpy_array_value(sort_slice(std::move(elems)), th);
+
+  const std::size_t rows = shape[0];
+  const std::size_t cols = shape[1];
+  std::vector<exprt> out(elems.size());
+
+  if (normalized == 1)
+  {
+    for (std::size_t r = 0; r < rows; ++r)
+    {
+      std::vector<exprt> row(
+        elems.begin() + static_cast<std::ptrdiff_t>(r * cols),
+        elems.begin() + static_cast<std::ptrdiff_t>((r + 1) * cols));
+      std::vector<exprt> sorted_row = sort_slice(std::move(row));
+      std::copy(
+        sorted_row.begin(),
+        sorted_row.end(),
+        out.begin() + static_cast<std::ptrdiff_t>(r * cols));
+    }
+  }
+  else
+  {
+    for (std::size_t c = 0; c < cols; ++c)
+    {
+      std::vector<exprt> col;
+      col.reserve(rows);
+      for (std::size_t r = 0; r < rows; ++r)
+        col.push_back(elems[(r * cols) + c]);
+      std::vector<exprt> sorted_col = sort_slice(std::move(col));
+      for (std::size_t r = 0; r < rows; ++r)
+        out[(r * cols) + c] = sorted_col[r];
+    }
+  }
+
+  return build_numpy_shape_array_value(shape, out, th);
 }
