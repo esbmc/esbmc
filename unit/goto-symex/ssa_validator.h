@@ -27,7 +27,7 @@
 #include <tuple>
 #include <vector>
 
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <irep2/irep2_expr.h>
 
 namespace symex_ssa

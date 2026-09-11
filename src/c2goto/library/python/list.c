@@ -297,6 +297,16 @@ bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)
   return true;
 }
 
+/* The length to compare one element over: the width the frontend recorded for
+ * every element of both lists when it had one, else the element's own size.
+ * A read of o->size is symbolic under a loop-carried index, which leaves
+ * memcmp's byte loop to unwind unboundedly -- even on a branch that is only
+ * explored and never taken (#7691). */
+static inline size_t __ESBMC_elem_cmp_size(const PyObject *o, size_t elem_size)
+{
+  return (elem_size != 0) ? elem_size : o->size;
+}
+
 bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
@@ -394,7 +404,10 @@ bool __ESBMC_list_eq(
         continue;
       }
 
-      if (!__ESBMC_values_equal(a->value, b->value, a->size))
+      // The sizes were compared equal above, so this is the same length the
+      // primitive path below uses.
+      if (!__ESBMC_values_equal(
+            a->value, b->value, __ESBMC_elem_cmp_size(a, elem_size)))
         return false;
       continue;
     }
@@ -435,12 +448,8 @@ bool __ESBMC_list_eq(
     else
     {
       // Primitive comparison - use optimized version (no memcmp loop).
-      // Prefer the statically-known element size from the frontend so
-      // __ESBMC_values_equal takes its branch-free fast path instead of the
-      // symbolic-index field read a->size (which forces memcmp's per-byte loop
-      // to unwind per element). Falls back to a->size when elem_size == 0.
-      size_t cmp_size = (elem_size != 0) ? elem_size : a->size;
-      if (!__ESBMC_values_equal(a->value, b->value, cmp_size))
+      if (!__ESBMC_values_equal(
+            a->value, b->value, __ESBMC_elem_cmp_size(a, elem_size)))
         return false;
     }
   }

@@ -11,6 +11,7 @@
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/base/prefix.h>
+#include <util/irep/pad_names.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
 #include <unordered_map>
@@ -67,17 +68,16 @@ inline expr2tc invoke_intrinsic(
 // down.
 thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
-/// The reference spelling an irept pointer carries. Both the pointer type arm
-/// and the address-of expression arm need it: the latter builds its pointer
-/// from the pointee, so without this an `&x` typed `T&` migrates to a plain
-/// pointer even when the type arm is doing its job.
-static pointer_ref_kindt pointer_ref_kind_of(const typet &type)
+/* struct_type2t/union_type2t have no per-member padding flag, so is_padding is
+ * lost on the way back and a pad reads as a declared member. Re-derive it from
+ * the name: every name add_padding reserves contains '#', which no C or C++
+ * identifier may (pad_names.h). Partial by construction -- the #bitfield and
+ * #extint type attributes are dropped with it and no name carries them, so a
+ * round-tripped bit-field pad still reaches the wrong add_padding arm. */
+static void restore_padding_flag(struct_union_typet::componentt &component)
 {
-  if (type.get_bool("#rvalue_reference"))
-    return pointer_ref_kindt::RVALUE;
-  if (type.reference())
-    return pointer_ref_kindt::LVALUE;
-  return pointer_ref_kindt::NONE;
+  if (is_padding_name(component.get_name().as_string()))
+    component.set_is_padding(true);
 }
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
@@ -131,6 +131,15 @@ static unsigned get_pragma_unroll(const exprt &expr)
 {
   const irep_idt &p = expr.get("#pragma_unroll");
   return p.empty() ? 0 : std::stoul(p.as_string());
+}
+
+static pointer_ref_kindt pointer_ref_kind(const typet &type)
+{
+  if (type.get_bool("#rvalue_reference"))
+    return pointer_ref_kindt::RVALUE;
+  if (type.reference())
+    return pointer_ref_kindt::LVALUE;
+  return pointer_ref_kindt::NONE;
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -216,7 +225,7 @@ static type2tc migrate_type0(const typet &type)
     type2tc subtype = migrate_type(type.subtype());
 
     return pointer_type2tc(
-      subtype, type.can_carry_provenance(), pointer_ref_kind_of(type));
+      subtype, type.can_carry_provenance(), pointer_ref_kind(type));
   }
 
   if (type.id() == typet::t_empty)
@@ -1701,8 +1710,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
+    /* The pointer is built from the pointee, so without carrying the spelling
+     * across an `&x` typed `T&` migrates to a plain pointer even when
+     * migrate_type0()'s pointer arm is doing its job. */
     new_expr_ref = address_of2tc(
-      type, theval, expr.implicit(), pointer_ref_kind_of(expr.type()));
+      type, theval, expr.implicit(), pointer_ref_kind(expr.type()));
     return;
   }
 
@@ -3037,6 +3049,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      restore_padding_flag(component);
       comps.push_back(component);
       idx++;
     }
@@ -3062,6 +3075,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      restore_padding_flag(component);
       comps.push_back(component);
       idx++;
     }

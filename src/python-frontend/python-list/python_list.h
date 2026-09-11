@@ -561,17 +561,18 @@ public:
    *        or 0 when there is no single answer.
    *
    * The list models apply one copy length to every element, so a width is only
-   * usable when all of them agree. Non-scalar elements (nested lists, dicts)
-   * and mixed widths both yield 0, which keeps the model on its symbolic
-   * o->size path. Distinct from build_shallow_copy_call, which reads only the
-   * last type-map entry.
+   * usable when all of them agree. Scalars and tuples have one, both being
+   * stored inline; a pointer-stored element (a nested list, a dict) and mixed
+   * widths yield 0, which keeps the model on its symbolic o->size path.
+   * Distinct from build_shallow_copy_call, which reads only the last type-map
+   * entry.
    */
-  BigInt uniform_scalar_elem_size(const std::string &list_id) const;
+  BigInt uniform_elem_size(const std::string &list_id) const;
 
   /** Same, for a list reached as an expression: a non-symbol operand names no
    *  list to look up, so it has no single width and yields 0.
    */
-  BigInt uniform_scalar_elem_size(const exprt &list) const;
+  BigInt uniform_elem_size(const exprt &list) const;
 
   /**
    * @brief Unpack a list variable into multiple targets, supporting starred

@@ -1,0 +1,54 @@
+name: Wrong result or crash
+description: ESBMC gives a wrong verdict, crashes, hangs, or rejects valid input
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fixing it yourself? Skip this form and open a pull request instead. The reproducer goes in as its regression test.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - False alarm (VERIFICATION FAILED on a correct program)
+        - Missed bug (VERIFICATION SUCCESSFUL on an incorrect program)
+        - Crash, abort, internal assertion, or hang
+        - Valid input rejected (PARSING / CONVERSION ERROR, unsupported construct)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ESBMC version
+      description: Output of `esbmc --version`, or the commit you built.
+    validations:
+      required: true
+  - type: textarea
+    id: program
+    attributes:
+      label: Program
+      description: "Reduce it first: the smallest program that still shows the problem."
+      render: c
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      placeholder: esbmc main.c --unwind 8 --overflow-check
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The last lines that show the verdict or the error.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: Expected
+      description: One sentence. Say why, if it is not obvious from the program.

@@ -49,7 +49,7 @@ enum class constant_string_kindt
  *                       across functions).
  *   - level2_global   — like level2, but for a globally-scoped symbol.
  *
- * See src/goto-symex/renaming.cpp for the exact transitions. */
+ * See src/goto-symex/state/renaming.cpp for the exact transitions. */
 enum class symbol_renaming_level
 {
   level0,
