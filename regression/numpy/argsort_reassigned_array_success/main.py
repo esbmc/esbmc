@@ -5,3 +5,4 @@ a = np.array([0, 1])
 idx = np.argsort(a)
 
 assert idx[0] == 0
+assert idx[1] == 1
