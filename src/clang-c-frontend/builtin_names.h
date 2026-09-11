@@ -48,8 +48,10 @@ ieee_float_builtin ieee_float_builtin_of(const irep_idt &identifier);
 bool is_name_matched_builtin(const irep_idt &identifier);
 
 /// True when lowering this call would throw away a definition the program
-/// supplies. Libc's own declarations are bodiless and the <cmath> overloads
-/// forward to their `__builtin_` spelling, so both still lower.
+/// supplies. Libc's own declarations are bodiless, and the <cmath> overloads
+/// forward to a spelling that lowers in their place -- the `__builtin_` one for
+/// most, the `f`/`l` suffixes for fma (src/cpp/library/cmath) -- so a std::
+/// call still reaches a node, one frame further in.
 /// @param base_name the spelling the lowerings match on
 /// @param symbol_id the callee's linkage identifier, which is what the symbol
 ///        table is keyed by

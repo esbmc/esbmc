@@ -7777,8 +7777,23 @@ names closes it on **both** paths:
 | 2-arg `double fma(double, double) { … }` | **SIGSEGV** | SUCCESSFUL |
 | 3-arg `double remainder(double, double, double) { … }` | **FAILED** | SUCCESSFUL |
 
-No program in `regression/` defines any of the three names, so no existing test
-moves. `building-c-library` already exempts the model build, so the models keep
+Two existing programs do define one of these names, and both keep their verdict:
+
+- `regression/function_contract/basic21` defines `int remainder(int, int)`. The
+  legacy shape test already declined it for not being `floatbv`; now the shadow
+  check short-circuits first. Nothing else in `do_special_functions` applies to
+  it, and the `expr.location()` restore it skips is a no-op when nothing was
+  swapped. `function_contract` is 432/432.
+- `regression/esbmc-cpp/cpp/github_5868_cmath_std_overloads` calls `std::fma`,
+  which resolves to `src/cpp/library/cmath`'s `inline float fma(float, float,
+  float)` -- an overload *with a body*. That call is no longer lowered at the
+  call site; the body runs and forwards to `::fmaf`, which is bodiless and
+  lowers. Same semantics, one frame further in, still SUCCESSFUL. The comment on
+  `builtin_shadows_user_definition` said these overloads forward to their
+  `__builtin_` spelling; for this family they forward to the `f`/`l` suffixes,
+  and the comment is corrected.
+
+`building-c-library` already exempts the model build, so the models keep
 lowering their own calls.
 
 The spelling set now lives in `builtin_names.h` as `ieee_float_builtin_of`,
@@ -7824,16 +7839,27 @@ The other ten pin the three guards of §138.2, one mutant each, and all ten flip
 
 | pair | mutant | base | mutant |
 |---|---|---|---|
-| `irep2_only_fma_bodiless_arity{,_fail}` | drop the arity conjuncts | verdict | SIGSEGV |
+| `irep2_only_ieee_arity_decline{,_fail}` | drop the `nearbyint` arity conjunct | verdict | SIGSEGV |
+| same | drop the `remainder` conjunct | verdict | SIGSEGV |
+| same | drop the `fma` conjunct | verdict | SIGSEGV |
 | `irep2_only_remainder_user_int{,_fail}` | drop the floatbv test | verdict | `irep2_cast_error` |
 | `irep2_only_fma_mixed_widths{,_fail}` | drop the width test | verdict | solver sort mismatch |
-| `irep2_only_fma_shadowed{,_fail}` | drop the three names from `is_name_matched_builtin` | SUCCESSFUL / FAILED | FAILED / SUCCESSFUL |
-| `fma_shadowed_user_definition{,_fail}` | same | SUCCESSFUL / FAILED | FAILED / SUCCESSFUL |
+| `irep2_only_ieee_shadowed{,_fail}` | drop the three names from `is_name_matched_builtin` | SUCCESSFUL / FAILED | FAILED / SUCCESSFUL |
+| `ieee_shadowed_user_definition{,_fail}` | same | SUCCESSFUL / FAILED | FAILED / SUCCESSFUL |
+
+Each conjunct gets its own mutant because each is a separate out-of-range index:
+a 0-argument `nearbyint()` and a 1-argument `remainder(x)` are as reachable from
+a bodiless declaration as the 2-argument `fma`, and a test that pins only one of
+the three leaves the other two able to crash while every test stays green. The
+shadowing pairs define all three names for the same reason -- the defect is per
+name, and `fma` alone would have left two able to regress.
 
 The last pair carries no flag: `is_name_matched_builtin` is shared, so the
 default path needs its own test. The `_mixed_widths` SUCCESSFUL half needs
 `if (r == 10.0L) assert(r == 10.0L)` rather than a bare tautology -- with a
 tautology the ill-sorted node never reaches the solver and the mutant passes.
+The tautologies in the other two declining tests are load-bearing for the same
+reason: they keep the declined call from being sliced away.
 
 Four corpus rows the arm reaches now agree under the flag --
 `floats-regression/{fma,nearbyint,nearbyint2,remainder}`. `nearbyint` is the
