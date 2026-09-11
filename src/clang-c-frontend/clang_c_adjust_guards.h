@@ -63,6 +63,27 @@ inline bool is_short_circuit(const expr2tc &expr)
   return is_and2t(expr) || is_or2t(expr) || is_not2t(expr);
 }
 
+/// An allocation side effect: `new`, `new[]`, `delete`, `delete[]`. Its
+/// `arguments` are carriage -- the destructor call, a replaced operator
+/// new/delete -- rather than program operands, because the legacy pass keeps
+/// them in named subs where no walk reaches them.
+inline bool is_alloc_sideeffect(const expr2tc &expr)
+{
+  if (!is_sideeffect2t(expr))
+    return false;
+
+  switch (to_sideeffect2t(expr).kind)
+  {
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
+  case sideeffect2t::allockind::cpp_delete:
+  case sideeffect2t::allockind::cpp_delete_array:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /// Both spellings of a call: a bare `f(x);` statement is a sideeffect2t of kind
 /// function_call rather than a code_function_call2t.
 inline bool is_call_site(const expr2tc &expr)

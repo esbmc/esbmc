@@ -1050,6 +1050,13 @@ void clang_c_adjust_irep2::adjust_function_designators(expr2tc &expr)
   if (is_address_of2t(expr))
     return;
 
+  // Not into an allocation side effect's carriage: wrapping a replaced
+  // operator delete in the `&f` sugar leaves goto_convert's convert_cpp_delete
+  // reading a pointer where it wants a code type, and it then indexes an empty
+  // argument list (github #6494).
+  if (is_alloc_sideeffect(expr))
+    return;
+
   expr->Foreach_operand([](expr2tc &op) {
     if (!is_nil_expr(op) && is_symbol2t(op) && is_code_type(op->type))
       op = address_of2tc(op->type, op, true);
