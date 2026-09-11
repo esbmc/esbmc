@@ -268,6 +268,10 @@ protected:
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
 
+  /// Report an initializer list none of get_expr's arms models, with its type
+  /// and source location. Always returns true (conversion failed).
+  bool report_unsupported_init_list(const clang::InitListExpr &init_stmt);
+
   void
   get_final_location_from_stmt(const clang::Stmt &stmt, locationt &location);
 
