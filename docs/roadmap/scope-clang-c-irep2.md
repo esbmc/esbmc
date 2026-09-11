@@ -7679,3 +7679,173 @@ C-Dead proof rather than a quiet removal:
   equivalent and the comment is false.
 - `#bitfield` / `#extint` (§137.4) need a carrier that is not a member name,
   and no pad kind but `anon_pad#` has any regression coverage.
+
+## 138. The name-matched builtin family had an arity wall, not a missing half
+## (2026-09-11)
+
+§94 ported the name-matched builtins behind `builtin_shadows_user_definition`,
+and §117/§125 closed two spellings it had missed. What was left is not a missing
+family but a shape: `adjust_float_builtin` opens with
+
+```cpp
+  if (args.size() != 1)
+    return false;
+```
+
+so every lowering in it is a one-argument one, and its name chain never mentions
+the three spellings legacy lowers through a name table (`float_lowering_id`,
+`clang_c_adjust_expr.cpp`): `nearbyint`, `fma`, `remainder`. Two of the three
+are not one-argument calls, so no addition to the chain could have reached
+them.
+
+### 138.1 The divergence, measured
+
+Three probes, each the whole program, run with and without the flag on the same
+binary:
+
+| probe | legacy | `--clang-c-irep2-adjust-only` |
+|---|---|---|
+| `assert(nearbyint(2.5) == 2.0)` | SUCCESSFUL | **FAILED** |
+| `assert(fma(2.0, 3.0, 4.0) == 10.0)` | SUCCESSFUL | **FAILED** |
+| `assert(remainder(5.0, 3.0) == -1.0)` | SUCCESSFUL | SUCCESSFUL |
+
+The first two are false alarms: neither name has a model body, so an unlowered
+call is a bodiless declaration and its result is nondet.
+
+**The blast radius is one call, not a family.** It is tempting to add that
+`libm/rint.c`, `libm/modf.c` and `libm/pow.c` all implement themselves by
+calling `nearbyint`, so the whole `rint`/`modf`/`pow` family goes nondet with
+it. That is false, and `--goto-functions-only` says so: c2goto compiles the
+models under the *legacy* pass, so every one of the 13 `nearbyint` sites in the
+linked library is already a lowered node before a user TU is ever adjusted --
+
+```
+rint:  RETURN: nearbyint(f)
+modf:  ASSIGN *iptr=nearbyint(value);
+pow:   ASSIGN is_int=(signed int)(nearbyint(y) == y);
+```
+
+-- and `rint(2.5) == 2.0` together with the `modf(2.5, &ip)` pair are SUCCESSFUL
+under the flag with the arm absent. Only a program's own direct call was
+affected. A frontend pass cannot reach into a precompiled model.
+
+`remainder` does have a model body (`libm/remainder.c`), which is why the third
+probe agrees. It diverges anyway, one step further out: the body computes
+`x - y * llrint(x / y)`, and that is not IEEE 754 remainder.
+
+| probe | legacy | flag |
+|---|---|---|
+| `remainder(1e300, 3.0)` within `[-1.5, 1.5]` | SUCCESSFUL | **FAILED** |
+| `signbit(remainder(-1.0, 1.0))` (C17 F.10.7.2) | SUCCESSFUL | **FAILED** |
+
+`llrint(3.3e299)` is out of `long long` range, and `x - y*n` returns `+0.0`
+where IEEE requires a zero with the sign of `x`. The model is the fallback its
+own comment says it is; the lowering is the normal path.
+
+### 138.2 Two guards legacy does not have, and one it needed
+
+`lower_float_library_call` runs before the arity check and matches on
+(arity, name), building `nearbyint2t`, `ieee_rem2t` or `ieee_fma2t`. Legacy
+instead matches the name alone and splices whatever arguments the call has into
+a fixed-arity irep, and it tests only that the types are `floatbv` rather than
+that they agree. Both are latent defects on the default path, and both are
+reachable from a bodiless declaration -- which is all a program has to write:
+
+| program | legacy | flag |
+|---|---|---|
+| `double fma(double, double);` called with 2 args | **SIGSEGV** | verdict |
+| `long double fmal(double, double, double);` | **solver sort mismatch** | verdict |
+
+The crash is `migrate.cpp` reading `expr.op2()` off a two-operand `ieee_fma`;
+the sort mismatch is `ieee_fma2t` built with operands of three different widths.
+The IREP2 arms decline both, so the call stays a call. Every C17 spelling of
+these functions is homogeneous, so nothing legitimate is lost --
+`fma(2, 3, 4)`, `fmaf`, `nearbyintf` and `remainderf` all still lower.
+
+The third guard is one this change *had* to add. `is_name_matched_builtin`
+(`builtin_names.cpp`) is the set `builtin_shadows_user_definition` consults, and
+it listed abs/isnan/isinf/isnormal/signbit/isfinite/finite/inf/huge_val -- not
+these three. A program's own `double fma(double, double, double)` was therefore
+discarded and the builtin verified in its place, which is #6904's defect with
+three more names. Before this change the flag path had no lowering for
+`nearbyint` or `fma`, so it honoured such a body by accident; adding the arm
+without the shadowing entry would have introduced the false alarm. Adding the
+names closes it on **both** paths:
+
+| program | legacy before | legacy after |
+|---|---|---|
+| 2-arg `double fma(double, double) { … }` | **SIGSEGV** | SUCCESSFUL |
+| 3-arg `double remainder(double, double, double) { … }` | **FAILED** | SUCCESSFUL |
+
+No program in `regression/` defines any of the three names, so no existing test
+moves. `building-c-library` already exempts the model build, so the models keep
+lowering their own calls.
+
+The spelling set now lives in `builtin_names.h` as `ieee_float_builtin_of`,
+which both passes match on -- the header's own opening comment asks for exactly
+that. The *arity* is not shared, because legacy's behaviour is the thing being
+preserved, not fixed, in this change.
+
+Legacy's remaining divergence is its model-build exemption from the shape test,
+where its own `remainder()` calls are what put `ieee_rem` into the model. That
+is not ported: `clang-c-irep2-adjust-only` is not one of c2goto's options, so
+this pass never runs under `building-c-library` and the branch would be dead
+instrumentation -- the §90.4 trap, the same reason `adjust_address_of` leaves
+legacy's conditional distribution out.
+
+### 138.3 What pins it
+
+Sixteen tests, eight pairs. Six pin the lowerings; reverting the arm flips four
+of them:
+
+| test | fix | arm reverted |
+|---|---|---|
+| `irep2_only_nearbyint_lowering` | SUCCESSFUL | FAILED |
+| `irep2_only_nearbyint_lowering_fail` | FAILED | FAILED |
+| `irep2_only_fma_lowering` | SUCCESSFUL | FAILED |
+| `irep2_only_fma_lowering_fail` | FAILED | FAILED |
+| `irep2_only_remainder_exact` | SUCCESSFUL | FAILED |
+| `irep2_only_remainder_exact_fail` | FAILED | **SUCCESSFUL** |
+
+The two that do not flip cannot: before the arm, `nearbyint` and `fma` are
+unconstrained nondet, which refutes every non-tautology, so no FAILED test over
+their result can become SUCCESSFUL by removing the arm. They pin the *shape*
+instead, and each has its own mutant:
+
+- hardcoding the rounding mode to `FE_UPWARD` instead of the
+  `c:@__ESBMC_rounding_mode` symbol turns `nearbyint_lowering_fail`
+  SUCCESSFUL and `nearbyint_lowering` FAILED -- the pair brackets the operand
+  from both sides;
+- lowering `fma` to `ieee_add(ieee_mul(a, b), c)` turns `fma_lowering_fail`
+  SUCCESSFUL, and leaves `fma_lowering` SUCCESSFUL, which is exactly why the
+  `_fail` half is needed: `fma(2, 3, 4) == 10` cannot tell fused from unfused.
+
+The other ten pin the three guards of §138.2, one mutant each, and all ten flip:
+
+| pair | mutant | base | mutant |
+|---|---|---|---|
+| `irep2_only_fma_bodiless_arity{,_fail}` | drop the arity conjuncts | verdict | SIGSEGV |
+| `irep2_only_remainder_user_int{,_fail}` | drop the floatbv test | verdict | `irep2_cast_error` |
+| `irep2_only_fma_mixed_widths{,_fail}` | drop the width test | verdict | solver sort mismatch |
+| `irep2_only_fma_shadowed{,_fail}` | drop the three names from `is_name_matched_builtin` | SUCCESSFUL / FAILED | FAILED / SUCCESSFUL |
+| `fma_shadowed_user_definition{,_fail}` | same | SUCCESSFUL / FAILED | FAILED / SUCCESSFUL |
+
+The last pair carries no flag: `is_name_matched_builtin` is shared, so the
+default path needs its own test. The `_mixed_widths` SUCCESSFUL half needs
+`if (r == 10.0L) assert(r == 10.0L)` rather than a bare tautology -- with a
+tautology the ill-sorted node never reaches the solver and the mutant passes.
+
+Four corpus rows the arm reaches now agree under the flag --
+`floats-regression/{fma,nearbyint,nearbyint2,remainder}`. `nearbyint` is the
+interesting one: it asserts values under all four `fesetround` modes, so it
+passes only because the node takes the rounding-mode *symbol*. A constant would
+fail it.
+
+### 138.4 What this does not explain
+
+The 18 divergent `github_5868_*` rows on the Phase 7 (clang-cpp) list are not
+this. The six rows among that family's 112 that are about C library headers --
+`cmath_c99`, `cmath_std_overloads`, `c_headers_std` and their `_fail` siblings
+-- agree between legacy and `--clang-cpp-irep2-adjust-only` on both sides of
+this change. The builtin gap was confirmed; its link to those failures was never
+measured, and for the cmath rows it is now refuted.
