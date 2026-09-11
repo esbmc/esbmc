@@ -906,6 +906,33 @@ void __ESBMC_list_extend(
   }
 }
 
+// Extend variant for a source list of tagged scalars: their payload width is
+// per-element and symbolic, so the elem_size above and __ESBMC_copy_value's
+// o->size fallback both overrun (#7716). Reuses the bounded copy.
+void __ESBMC_list_extend_tagged(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t float_type_id)
+{
+  if (!l || !other)
+    return;
+
+  size_t i = 0;
+  while (i < other->size)
+  {
+    const PyObject *elem = &other->items[i];
+    if (elem->size == 0)
+    {
+      l->items[l->size] = *elem;
+      l->size++;
+    }
+    else
+      __ESBMC_list_push_tagged(
+        l, elem->value, elem->type_id, elem->size, float_type_id);
+    ++i;
+  }
+}
+
 void __ESBMC_list_clear(PyListObject *l)
 {
   if (!l)
