@@ -732,6 +732,43 @@ passes with the arm on or off and pins nothing.
 and that selection quietly became the measurement. A number is scoped by what
 was swept, and the scope has to be stated with it.
 
+### 3.17 What is left, bucketed
+
+The 80 divergences `regression/esbmc-cpp/cpp` reports after §3.16 are not one
+cause. Grouped by test family:
+
+| family | rows | shape |
+|---|---|---|
+| `github_5868_*` | 18 | all `SUCCESSFUL -> FAILED`, all STL surface |
+| `github_2284_*` | 4 | |
+| `ptr_to_member_*` | 4 | pointer-to-member |
+| `github_6291_*` | 3 | a reference *parameter* bound to a conditional lvalue |
+| `switch_declaration*` | 3 | a declaration in a switch |
+| `member_array_*`, `static_array_ctor` | 3 | array member construction |
+| ~20 singletons | | map / list / tuple / stream |
+
+`github_5868_*` is the largest and the most likely to share a cause: all 18 are
+`SUCCESSFUL -> FAILED`, and the three sampled so far fail *inside the operational
+models* rather than in the test --
+
+```
+github_5868_container_relational      /esbmc-vfs/cpp/set     line 858  Incorrect alignment
+github_5868_is_scalar_const_lookup    /esbmc-vfs/cpp/utility line 131  invalid pointer
+github_5868_reverse_iterator_base     /esbmc-vfs/cpp/list    line  29  invalid pointer
+```
+
+"Incorrect alignment when accessing data object" is the signature §3.16 met when
+a `dereference2t` was built over a bare `symbol_type2t`: no width, so symex
+reports alignment rather than the unresolved type. That makes a type-resolution
+gap in how the OM headers are adjusted the first hypothesis -- but it *is* a
+hypothesis. §3.16 cost four ticks to a cluster that looked like one cause and was
+not, so the next step is to diagnose two or three of these individually, by
+goto-diff against the legacy pass, before assuming the 18 move together.
+
+`github_6291_*` is already known to be something else: `bump((c < 1) ? a : b)`
+binds a reference *parameter* to a conditional lvalue, which needs an address-of
+of a ternary rather than a dereference of a reference.
+
 ## 6. Next
 
 1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
