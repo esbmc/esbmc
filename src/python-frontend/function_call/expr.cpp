@@ -4453,35 +4453,6 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
   return result;
 }
 
-// bubble_sort_numpy_elems() below unrolls an O(n^2) network of if_exprt
-// swaps at conversion time -- fine for the small concrete arrays this
-// recut targets, but a large n would blow up both frontend time and the
-// resulting SMT formula. Reject explicitly past this bound rather than
-// letting it silently degrade (ADR-NP-003 principle 3), the same way
-// numpy.arange()'s own max_materialized_arange_elements does for its
-// unrelated blow-up risk.
-static constexpr std::size_t max_inplace_sort_elements = 64;
-
-// A conversion-time-unrolled bubble sort over already-converted elements,
-// swapping via if_exprt rather than extracting a C++ comparison key -- the
-// same style reduce_numpy_descriptor_values's own min/max branches use
-// (binary_relation_exprt directly on the elems), so this works uniformly
-// across every element type get_expr can produce here (int/float/bool),
-// concrete or symbolic alike, rather than only a literal-foldable one.
-static void bubble_sort_numpy_elems(std::vector<exprt> &elems)
-{
-  for (std::size_t pass = 0; pass + 1 < elems.size(); ++pass)
-  {
-    for (std::size_t j = 0; j + pass + 1 < elems.size(); ++j)
-    {
-      binary_relation_exprt out_of_order(elems[j], ">", elems[j + 1]);
-      exprt lo = if_exprt(out_of_order, elems[j + 1], elems[j]);
-      exprt hi = if_exprt(out_of_order, elems[j], elems[j + 1]);
-      elems[j] = lo;
-      elems[j + 1] = hi;
-    }
-  }
-}
 
 void function_call_expr::reject_numpy_sort_write_through_view(
   const nlohmann::json &receiver_node) const
@@ -4507,7 +4478,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
   const nlohmann::json &receiver_node = call_["func"]["value"];
   auto materialized = converter_.build_numpy_descriptor_materialized_elements(
     receiver_node,
-    "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
+    "TypeError: numpy.ndarray.sort() currently supports rank 1 or 2 arrays");
   if (!materialized)
     return std::nullopt;
 
@@ -4520,31 +4491,54 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
 
   reject_numpy_sort_write_through_view(receiver_node);
 
-  // Keywords/positional args are rejected ahead of the shape check so a 2-D
-  // receiver called with an unsupported argument reports the argument
-  // error, matching argsort()/searchsorted()'s own validation order in
-  // this file.
+  long long axis = -1;
+  if (call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (
+        kw["_type"] != "keyword" || kw["arg"].is_null() ||
+        kw["arg"] != "axis")
+        continue;
+
+      numeric_value axis_value;
+      if (
+        !try_extract_numeric_constant(kw["value"], axis_value) ||
+        !axis_value.is_int)
+        throw std::runtime_error(
+          "TypeError: numpy.ndarray.sort() axis must be a literal integer");
+      axis = axis_value.int_value;
+    }
+  }
+
+  // Positional args and keywords besides axis= are rejected ahead of the
+  // shape check so a 2-D receiver called with an unsupported argument
+  // reports the argument error, matching argsort()/searchsorted()'s own
+  // validation order in this file.
   if (
     !call_["args"].empty() ||
-    (call_.contains("keywords") && !call_["keywords"].empty()))
+    numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
-      "TypeError: numpy.ndarray.sort() does not support axis, kind or order "
+      "TypeError: numpy.ndarray.sort() does not support kind or order "
       "arguments yet");
-
-  if (materialized->first.size() != 1)
-    throw std::runtime_error(
-      "TypeError: numpy.ndarray.sort() currently supports 1-D arrays only");
 
   std::vector<exprt> elems = materialized->second;
   if (elems.empty())
     return gen_zero(none_type()); // sorting an empty array is a no-op
 
-  if (elems.size() > max_inplace_sort_elements)
+  if (elems.size() > max_numpy_sort_elements)
     throw std::runtime_error(
       "TypeError: numpy.ndarray.sort() currently supports arrays up to " +
-      std::to_string(max_inplace_sort_elements) + " elements");
+      std::to_string(max_numpy_sort_elements) + " elements");
 
-  bubble_sort_numpy_elems(elems);
+  exprt sorted_value = build_numpy_sort_or_argsort_result(
+    converter_,
+    type_handler_,
+    materialized->first,
+    std::move(elems),
+    /*flatten=*/false,
+    axis,
+    /*want_indices=*/false);
 
   exprt receiver = converter_.get_expr(receiver_node);
   if (
@@ -4552,8 +4546,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
     throw std::runtime_error(
       "TypeError: numpy.ndarray.sort() requires a named array variable");
 
-  code_assignt assign(
-    receiver, build_1d_numpy_array_value(elems, type_handler_));
+  code_assignt assign(receiver, sorted_value);
   assign.location() = converter_.get_location_from_decl(call_);
   converter_.add_instruction(assign);
 

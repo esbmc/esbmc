@@ -7477,10 +7477,59 @@ exprt numpy_call_expr::get()
       throw std::runtime_error(
         "TypeError: numpy.argsort() expects 1 positional argument");
 
-    if (call_.contains("keywords") && !call_["keywords"].empty())
+    bool argsort_flatten = false;
+    long long argsort_axis = -1;
+    if (const nlohmann::json *axis_kw = find_keyword_arg("axis"))
+    {
+      if (is_json_none_literal(*axis_kw))
+        argsort_flatten = true;
+      else
+      {
+        numeric_value axis_value;
+        if (
+          !try_extract_numeric_constant(*axis_kw, axis_value) ||
+          !axis_value.is_int)
+          throw std::runtime_error(
+            "TypeError: numpy.argsort() axis must be a literal integer or "
+            "None");
+        argsort_axis = axis_value.int_value;
+      }
+    }
+
+    if (numpy_reducer_has_unsupported_keywords_besides_axis(call_))
       throw std::runtime_error(
-        "TypeError: numpy.argsort() does not support axis, kind or order "
+        "TypeError: numpy.argsort() does not support kind or order "
         "arguments yet");
+
+    if (
+      auto materialized =
+        converter_.build_numpy_descriptor_materialized_elements(
+          call_["args"][0],
+          "TypeError: numpy.argsort() currently supports rank 1 or 2 "
+          "arrays"))
+    {
+      std::vector<exprt> elems = materialized->second;
+      if (elems.empty())
+        throw std::runtime_error(
+          "TypeError: numpy.argsort() currently supports 1-D arrays only");
+      if (elems.size() > max_numpy_sort_elements)
+        throw std::runtime_error(
+          "TypeError: numpy.argsort() currently supports arrays up to " +
+          std::to_string(max_numpy_sort_elements) + " elements");
+
+      return build_numpy_sort_or_argsort_result(
+        converter_,
+        type_handler_,
+        materialized->first,
+        std::move(elems),
+        argsort_flatten,
+        argsort_axis,
+        /*want_indices=*/true);
+    }
+
+    if (argsort_flatten || (argsort_axis != 0 && argsort_axis != -1))
+      throw std::runtime_error(
+        "TypeError: numpy.argsort() currently supports 1-D arrays only");
 
     nlohmann::json arr_arg =
       resolve_literal_numpy_array_input(call_["args"][0], function, false);
@@ -7553,8 +7602,14 @@ exprt numpy_call_expr::get()
       }
     }
 
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, false);
+    nlohmann::json arr_arg;
+    if (
+      std::optional<nlohmann::json> row_view =
+        resolve_literal_numpy_row_view(call_["args"][0], converter_))
+      arr_arg = std::move(*row_view);
+    else
+      arr_arg =
+        resolve_literal_numpy_array_input(call_["args"][0], function, false);
 
     std::vector<std::size_t> shape;
     if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
@@ -7628,6 +7683,31 @@ exprt numpy_call_expr::get()
         throw std::runtime_error(
           "TypeError: numpy.sort() keyword '" + arg + "' is not supported");
       }
+    }
+
+    if (
+      auto materialized =
+        converter_.build_numpy_descriptor_materialized_elements(
+          call_["args"][0],
+          "TypeError: numpy.sort() currently supports rank 1 or 2 arrays"))
+    {
+      std::vector<exprt> elems = materialized->second;
+      if (elems.empty())
+        throw std::runtime_error(
+          "TypeError: numpy.sort() currently supports only constant arrays");
+      if (elems.size() > max_numpy_sort_elements)
+        throw std::runtime_error(
+          "TypeError: numpy.sort() currently supports arrays up to " +
+          std::to_string(max_numpy_sort_elements) + " elements");
+
+      return build_numpy_sort_or_argsort_result(
+        converter_,
+        type_handler_,
+        materialized->first,
+        std::move(elems),
+        flatten,
+        axis,
+        /*want_indices=*/false);
     }
 
     nlohmann::json arr_arg =
