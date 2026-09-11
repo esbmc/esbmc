@@ -623,12 +623,28 @@ further, on the same test:
   `sideeffect_assign2tc`, and the hook's guard is the latter. So the `__m` node
   genuinely is a side-effect assign in both representations.
 
-Which leaves one explanation: the legacy pass does not **visit** that node,
-while the IREP2 walk does. The difference is in walk coverage, not in the
-predicate, the ordering, the referent type, or the node kind -- all four of
-which have been measured and ruled out. That is where the next attempt starts;
-inventing a condition to suppress the rewrite without knowing why legacy skips
-the node is how an unsoundness ships wearing a fix's clothes.
+Walk coverage is ruled out too. Tracing the symbol being adjusted at the moment
+of each rewrite puts both of them inside
+`std::lock_guard<std::mutex>::lock_guard(mutex &)` -- the constructor binding
+its reference member -- and instrumenting the legacy pass's own symbol loop
+shows it adjusts that same constructor. Both passes visit it.
+
+What differs is what is *in* it. Across the whole program legacy's
+`adjust_reference` is called four times and never once from that constructor,
+so in the legacy tree the member-initialiser binding is not a side-effect
+assign; in the IREP2 tree it is, which is why the hook's
+`is_sideeffect_assign2t` guard claims it. Since `migrate_expr` keeps
+`code`/`assign` and `sideeffect`/`assign` apart, the node is not being
+reclassified at the seam -- an **earlier IREP2 arm is producing a
+sideeffect_assign where the legacy pass has something else**, and the reference
+hook is merely the first arm to notice.
+
+That is the next step: dump that constructor's body in both forms and find the
+arm that rewrites it. Five candidate causes have now been measured and
+eliminated -- ordering, predicate, referent type, node kind, and visitation --
+so the remaining question is narrow. Inventing a condition to suppress the
+rewrite without answering it is how an unsoundness ships wearing a fix's
+clothes.
 
 Note also that a test for this must use a **function returning a reference**
 (`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
