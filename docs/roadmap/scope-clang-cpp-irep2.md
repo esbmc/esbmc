@@ -583,8 +583,44 @@ returns nothing. Every reference-typed operand in those positions is therefore
 left as a bare pointer.
 
 This is the next arm, and it should come before the `exception_spec_*` cluster:
-it is the only known live soundness defect, and it plausibly accounts for a
-large share of this suite's `SUCCESSFUL -> FAILED` rows too.
+it is the only known live soundness defect.
+
+**Written, measured, and not yet shippable.** Ported as a virtual hook (empty
+for C, as the legacy one is), it closes all three false proofs and takes 10 rows
+overall, 89 to 81. But it **introduces two**, `github_6319_mutex` and
+`github_6319_mutex_api`, both `SUCCESSFUL -> FAILED`. Causation is established,
+not assumed: gating the hook behind an environment switch gives the legacy
+verdict with it off and the regression with it on.
+
+Three things are already ruled out:
+
+- *Ordering.* `clang_c_adjust` calls `adjust_reference` **after** the conversion
+  for relational and arithmetic, and **before** it for assignment -- which it
+  documents, because otherwise the source is cast to the reference type.
+  Matching that ordering exactly does not fix the mutex rows.
+- *The predicate.* `pointer_type2t::ref_kind` and legacy's
+  `is_lvalue_or_rvalue_reference` agree on both rewrites the mutex test takes.
+- *The referent type.* Both rewrites produce a pointee that is a bare
+  `symbol_type2t`, which has no width, and symex reports that as a spurious
+  alignment failure. Resolving it through `ns.follow` is right on its own terms
+  and does not fix the mutex rows either.
+
+What the reproducer actually says: on `github_6319_mutex_api`, instrumenting
+both passes shows **legacy dereferences nothing at all** while the IREP2 hook
+dereferences two operands -- and both belong to *one* `sideeffect_assign` whose
+LHS and RHS are **both** references. That is reference *binding*, not a write
+through a reference; dereferencing both copies the mutex instead of binding the
+pointer.
+
+So the arm fires where the legacy pass provably does not, and the open question
+is why legacy never reaches that node -- not what extra condition to invent. A
+discriminator guessed without that answer is how an unsoundness gets introduced
+under cover of a fix.
+
+Note also that a test for this must use a **function returning a reference**
+(`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
+binding is lowered without going through this path, so a pair built on one
+passes with the arm on or off and pins nothing.
 
 **Lesson for the census.** "Zero false proofs" held only over the six suites
 §3.14 sweeps. The suites were chosen because early divergences clustered there,

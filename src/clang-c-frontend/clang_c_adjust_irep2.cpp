@@ -1008,7 +1008,6 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
 
 void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
 {
-  adjust_reference(expr);
   expr2tc op0 = *expr->get_sub_expr(0);
   expr2tc op1 = *expr->get_sub_expr(1);
   if (is_nil_expr(op0) || is_nil_expr(op1))
@@ -1023,6 +1022,11 @@ void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
   // migrate_expr_back (docs/roadmap/frontends-to-irep2.md §38.3).
   unsigned i = 0;
   expr->Foreach_operand([&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+
+  // After the conversion, as clang_c_adjust orders it here -- unlike the
+  // assignment arm, which must dereference first or it casts the source to the
+  // reference type.
+  adjust_reference(expr);
 }
 
 void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)

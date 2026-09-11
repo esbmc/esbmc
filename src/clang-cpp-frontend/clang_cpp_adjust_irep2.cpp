@@ -203,7 +203,15 @@ namespace
 {
 /// `r` used as a value is `*r`. A cast of one is handled first, so `(int)r`
 /// becomes `(int)*r` rather than a cast of the pointer.
-void convert_reference(expr2tc &expr)
+/// The referent's type, resolved. A dereference2t left with a by-name tag has
+/// no width or alignment, and symex reports that as a spurious alignment
+/// failure rather than as the unresolved type it is.
+type2tc referent_type(const namespacet &ns, const type2tc &ref)
+{
+  return ns.follow(to_pointer_type(ref).subtype);
+}
+
+void convert_reference(const namespacet &ns, expr2tc &expr)
 {
   if (is_typecast2t(expr))
   {
@@ -211,22 +219,22 @@ void convert_reference(expr2tc &expr)
     if (is_symbol2t(cast.from) && is_reference_type(cast.from->type))
       expr = typecast2tc(
         cast.type,
-        dereference2tc(to_pointer_type(cast.from->type).subtype, cast.from),
+        dereference2tc(referent_type(ns, cast.from->type), cast.from),
         cast.rounding_mode,
         cast.derived_to_base,
         cast.base_to_derived);
   }
 
   if (is_reference_type(expr->type))
-    expr = dereference2tc(to_pointer_type(expr->type).subtype, expr);
+    expr = dereference2tc(referent_type(ns, expr->type), expr);
 }
 } // namespace
 
 void clang_cpp_adjust_irep2::adjust_reference(expr2tc &expr)
 {
-  expr->Foreach_operand([](expr2tc &op) {
+  expr->Foreach_operand([this](expr2tc &op) {
     if (!is_nil_expr(op))
-      convert_reference(op);
+      convert_reference(ns, op);
   });
 }
 
