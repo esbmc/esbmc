@@ -30,4 +30,7 @@ int main()
 
   b.at()--;
   assert(b.v == 1);
+
+  --b.at();
+  assert(b.v == 0);
 }
