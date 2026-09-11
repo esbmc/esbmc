@@ -639,12 +639,32 @@ reclassified at the seam -- an **earlier IREP2 arm is producing a
 sideeffect_assign where the legacy pass has something else**, and the reference
 hook is merely the first arm to notice.
 
-That is the next step: dump that constructor's body in both forms and find the
-arm that rewrites it. Five candidate causes have now been measured and
-eliminated -- ordering, predicate, referent type, node kind, and visitation --
-so the remaining question is narrow. Inventing a condition to suppress the
-rewrite without answering it is how an unsoundness ships wearing a fix's
-clothes.
+Dumping that constructor shows the damage exactly:
+
+```
+legacy  ASSIGN this->__m  =  m::0;          FUNCTION_CALL: lock(this->__m)
+flag    ASSIGN *this->__m = *m::0;          FUNCTION_CALL: lock((std::mutex *)this->__m)
+```
+
+The hook dereferenced **both sides of a reference binding**, so the constructor
+copies the mutex instead of binding a pointer to it. That is the whole
+regression, and it says what the missing distinction is: a reference *used as a
+value* must be read through, a reference *being bound* must not.
+
+Six causes are now measured and eliminated -- ordering, predicate, referent
+type, node kind, visitation, and now the damage itself is understood. The one
+open question left is narrow: legacy never routes this binding through
+`adjust_side_effect` (its `adjust_reference` is called four times program-wide
+and never from this constructor), while in IREP2 the node is a
+`sideeffect_assign2t`. Since `migrate_expr` maps `code`/`assign` to
+`code_assign2tc`, the binding is not arriving from the seam in that shape --
+`adjust_decl_init` is the first arm to check, since a member-initialiser can
+reach it as a `code_decl` with an initialiser.
+
+Inventing a condition to suppress the rewrite without answering that is how an
+unsoundness ships wearing a fix's clothes: the same suppression that silences
+these two tests would also stop the hook firing on a genuine write through a
+reference member.
 
 Note also that a test for this must use a **function returning a reference**
 (`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
