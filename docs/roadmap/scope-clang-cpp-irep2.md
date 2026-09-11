@@ -685,12 +685,42 @@ reads it in three, including `should_dereference`), and `grep member_init
 src/util/irep/migrate.cpp` returns **nothing**. It is dropped at the seam, the
 same class as §3.12's `#derived_to_base` and with the same shape of fix.
 
-So the ordering is: carry `#member_init` across the seam, then port
-`adjust_side_effect_assign` whole, with the reference handling as one of its
-branches rather than as a free-standing hook. The hook as written must not ship
-on its own -- the suppression that would silence these two tests would also stop
-it firing on a genuine write through a reference member, which is the case it
-exists for.
+**What shipped, and in what shape.** `#member_init` is carried as a field on
+`sideeffect_assign2t` (declared next to `op`; after `location` the compiler packs
+it into the location's padding and `fields_cover_class` underflows). The
+reference handling is a virtual hook -- empty for C, as the legacy one is --
+reached from the plain-assignment arm, the relational arm, and the
+increment/decrement family, with the member-initialiser case as a branch inside
+it. That is *not* the "port `adjust_side_effect_assign` whole" this section
+originally called for: only one of that arm's five branches is addressed, and
+the constructor-call fold and call-returning-reference branches remain unported.
+
+Measured over `regression/esbmc-cpp/cpp` with the §3.14 command: 89 divergences
+before, 80 after, no regressions and no false proofs.
+
+**What testing this taught, three times over.** A reference *variable* is
+dereferenced at conversion time by `get_decl_ref`'s `should_dereference`, so
+`int &r; r++;` and `r == w` and `(long)r` are already correct and pin nothing --
+a pair built on one passes with the hook in or out. Every test here has to go
+through a reference-**returning call** (`b.at()`). Three pairs were written on
+local references and had to be rewritten after mutation-checking showed they bit
+nothing.
+
+**Still open on this row:**
+
+- Increment/decrement of a reference-returning expression was unhooked entirely
+  until review caught it: `b.at()++` emitted
+  `ASSIGN return_value$_at$1 = return_value$_at$1 + 1`, arithmetic on the
+  reference with the referent untouched. Now hooked, with a pair that bites.
+- The relational hook and `convert_reference`'s typecast branch are not pinned by
+  any test that bites, and may be unreachable -- both were added while chasing
+  the mutex regression. Their reachability is being measured; whichever does not
+  fire over the corpus should come out rather than ship unpinned.
+- The binding case's correctness is not self-contained: after this hook
+  dereferences the rhs, `c_typecastt::convert_reference` (a same-named function
+  in `util/lang/c_typecast.cpp`) re-wraps it in an `address_of2tc` because the
+  lhs is reference-typed. The round trip is a genuine no-op -- `this->__m =
+  &(*m)` -- but it spans two translation units.
 
 Note also that a test for this must use a **function returning a reference**
 (`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
