@@ -1036,6 +1036,54 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
     lessthanequal2tc(last, coerce_to_type(extent, offs_type)));
 }
 
+/// cpp_new[] hides the array size in a size field. The frontend stores it under
+/// "size" (size_irep); the pipeline later mirrors it into "#size" (cmt_size).
+/// Under --irep2-bodies the body is migrated before that mirroring runs, so
+/// "#size" is still empty -- read "size" then, or the size is silently dropped.
+/// A present-but-empty irep is a third state is_not_nil() reports as present,
+/// so the choice is made on the id.
+static const exprt &cpp_new_size(const exprt &expr)
+{
+  static const exprt none = nil_exprt();
+  const auto carries_size = [](const irept &i) {
+    return !i.id().empty() && !i.is_nil();
+  };
+  if (carries_size(expr.cmt_size()))
+    return static_cast<const exprt &>(expr.cmt_size());
+  if (carries_size(expr.size_irep()))
+    return static_cast<const exprt &>(expr.size_irep());
+  return none;
+}
+
+/// The two forms recognised before the id dispatch below: a nil expression,
+/// and a node carrying a #derived_to_base marker.
+///
+/// That marker names whichever node is being converted, and that is almost
+/// never a cast: over regression/esbmc-cpp it lands on a symbol 32474 times and
+/// on a typecast 58. IREP2 has nowhere to hang a flag on an arbitrary node, so
+/// it becomes a same-type typecast2t around it -- the identity -- which
+/// back_typecast unwraps. Dropping it loses the base displacement and silently
+/// proves false assertions (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
+{
+  if (expr.id() == "nil")
+  {
+    new_expr_ref = expr2tc();
+    return true;
+  }
+
+  const irep_idt base = expr.get("#derived_to_base");
+  if (base.empty() || expr.id() == exprt::typecast)
+    return false;
+
+  exprt unmarked = expr;
+  unmarked.remove("#derived_to_base");
+  expr2tc inner;
+  migrate_expr(unmarked, inner);
+  new_expr_ref = typecast2tc(inner->type, inner, base);
+  return true;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1043,30 +1091,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   type2tc type;
 
-  if (expr.id() == "nil")
-  {
-    new_expr_ref = expr2tc();
+  if (migrate_before_dispatch(expr, new_expr_ref))
     return;
-  }
-
-  // A derived->base conversion the frontend could not route through a
-  // "@base@" component marks whichever node is being converted, and that is
-  // almost never a cast: over regression/esbmc-cpp the marker lands on a
-  // symbol 32474 times and on a typecast 58. IREP2 has nowhere to hang a flag
-  // on an arbitrary node, so the marker becomes a same-type typecast2t around
-  // it -- semantically the identity -- which migrate_expr_back unwraps.
-  // Dropping it loses the displacement and silently proves false assertions
-  // (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
-  if (const irep_idt base = expr.get("#derived_to_base");
-      !base.empty() && expr.id() != exprt::typecast)
-  {
-    exprt unmarked = expr;
-    unmarked.remove("#derived_to_base");
-    expr2tc inner;
-    migrate_expr(unmarked, inner);
-    new_expr_ref = typecast2tc(inner->type, inner, base);
-    return;
-  }
 
   if (expr.id() == irept::id_symbol)
   {
@@ -2138,18 +2164,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
     {
-      // cpp_new[] hides the array size in a size field. The frontend stores it
-      // under "size" (size_irep); the conversion pipeline later mirrors it into
-      // "#size" (cmt_size). Under --irep2-bodies the body is migrated before
-      // that mirroring runs, so "#size" is still empty — read "size" in that
-      // case, otherwise the whole size operand is silently dropped.
-      const auto carries_size = [](const irept &i) {
-        return !i.id().empty() && !i.is_nil();
-      };
-      const exprt &sz = carries_size(expr.cmt_size())
-                          ? static_cast<const exprt &>(expr.cmt_size())
-                          : static_cast<const exprt &>(expr.size_irep());
-      if (carries_size(sz))
+      if (const exprt &sz = cpp_new_size(expr); sz.is_not_nil())
         migrate_expr(sz, thesize);
 
       // The new-expression's initializer lives in the "initializer" sub, not
@@ -3489,6 +3504,29 @@ exprt migrate_expr_back(const expr2tc &ref)
   return expr_back_cache.emplace(key, std::move(result)).first->second;
 }
 
+/// A cast's legacy form, with the base-conversion markers the adjust passes
+/// dispatch on. A same-type cast carrying #derived_to_base is the wrapper
+/// migrate_expr builds for a marker on a node that is not a cast, so the marker
+/// goes back on the node itself rather than leaving an identity cast behind.
+static exprt back_typecast(const typecast2t &ref2)
+{
+  if (!ref2.derived_to_base.empty() && ref2.type == ref2.from->type)
+  {
+    exprt marked = migrate_expr_back(ref2.from);
+    marked.set("#derived_to_base", ref2.derived_to_base);
+    return marked;
+  }
+
+  typecast_exprt new_expr(
+    migrate_expr_back(ref2.from), migrate_type_back(ref2.type));
+  new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+  if (!ref2.derived_to_base.empty())
+    new_expr.set("#derived_to_base", ref2.derived_to_base);
+  if (ref2.base_to_derived)
+    new_expr.set("#base_to_derived", true);
+  return new_expr;
+}
+
 /* The dispatch is a 122-arm jump table whose arms carry the decision points;
  * it is chained through `default:` into these continuations so each link
  * stays inside the complexity gate. Splitting by `default:` rather than by a
@@ -4476,28 +4514,7 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
     }
   }
   case expr2t::typecast_id:
-  {
-    const typecast2t &ref2 = to_typecast2t(ref);
-
-    // The wrapper migrate_expr builds around a marked non-cast node: give the
-    // marker back to the node itself rather than leaving an identity cast.
-    if (!ref2.derived_to_base.empty() && ref2.type == ref2.from->type)
-    {
-      exprt marked = migrate_expr_back(ref2.from);
-      marked.set("#derived_to_base", ref2.derived_to_base);
-      return marked;
-    }
-
-    typet thetype = migrate_type_back(ref->type);
-
-    typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
-    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
-    if (!ref2.derived_to_base.empty())
-      new_expr.set("#derived_to_base", ref2.derived_to_base);
-    if (ref2.base_to_derived)
-      new_expr.set("#base_to_derived", true);
-    return new_expr;
-  }
+    return back_typecast(to_typecast2t(ref));
   case expr2t::nearbyint_id:
   {
     const nearbyint2t &ref2 = to_nearbyint2t(ref);
