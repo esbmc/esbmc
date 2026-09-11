@@ -3390,6 +3390,25 @@ exprt python_list::handle_index_access(
     {
       // Nothing to do: runtime normalization handles a[-i].
     }
+    // A 2-D+ numpy array parameter's row-pointer decay
+    // (register_function_argument) means array.type() is a pointer whose
+    // subtype only carries the row shape -- the outer (row) dimension
+    // needed to normalize a negative index here isn't in the type at all.
+    // Look it up from the pre-decay shape recorded in numpy_param_shapes_
+    // instead, the same source .shape/.ndim/.size and numpy.transpose()
+    // already consult for this parameter.
+    else if (
+      array.type().is_pointer() && array.is_symbol() &&
+      converter_.numpy_param_shapes_.count(array.identifier().as_string()) != 0)
+    {
+      BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
+      v *= -1;
+
+      const std::vector<std::size_t> &shape =
+        converter_.numpy_param_shapes_.at(array.identifier().as_string());
+      v += BigInt(shape[0]);
+      pos_expr = from_integer(v, pos_expr.type());
+    }
     // For char* (string parameters), skip compile-time normalization: the size
     // is not known statically, so normalization happens at runtime in the
     // char* indexing block below.
