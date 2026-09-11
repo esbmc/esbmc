@@ -1,0 +1,18 @@
+- entry_type: "invariant_set"
+  metadata:
+    format_version: "2.0"
+    uuid: "a334356a-e2fd-47b3-91d2-3f16164d7293"
+    creation_time: "2026-09-03T18:22:23+01:00"
+    producer:
+      name: "ESBMC"
+      version: "8.5.0"
+    task:
+      input_files:
+        - "main.c"
+      input_file_hashes:
+        "main.c": "49cc0aae3820e03dafd78b3eacc9704e9e413b52a034670a45a9fdb38024f594"
+      specification: "G valid-free|valid-deref|valid-memtrack"
+      data_model: "ILP32"
+      language: "C"
+  content:
+    []
