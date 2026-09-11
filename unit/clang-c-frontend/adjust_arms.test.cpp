@@ -11,6 +11,7 @@
 #include <catch2/catch.hpp>
 
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
+#include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
 #include <util/config/config.h>
@@ -371,4 +372,35 @@ TEST_CASE(
 
   // Both arms ran, through one table typed on the derived pass.
   REQUIRE(pass.seen == 3);
+}
+
+// The C++ pass substitutes its own table, so the two can drift. Until C++ adds
+// arms of its own, its table is the C order verbatim, and that is worth
+// pinning: a row added to one and not the other is exactly the divergence Phase
+// 7 is measuring, and it should be a decision rather than an accident.
+TEST_CASE(
+  "the C++ pass's arm table tracks the C order",
+  "[core][clang-c-frontend]")
+{
+  const std::vector<arm_info> c = clang_c_adjust_irep2::arm_order();
+  const std::vector<arm_info> cpp = clang_cpp_adjust_irep2::arm_order();
+
+  // The C++ table adds arms of its own, so it is not the C order verbatim --
+  // but every inherited row must still be present, in the same relative order,
+  // because that order is load-bearing (see the rows in
+  // clang_c_adjust_irep2.cpp). A C row dropped or reordered is drift; a C++ row
+  // added is a decision.
+  std::size_t ci = 0;
+  for (const arm_info &row : cpp)
+  {
+    if (ci < c.size() && std::string(row.name) == std::string(c[ci].name))
+    {
+      INFO("inherited row " << ci << " (" << c[ci].name << ")");
+      REQUIRE(row.when == c[ci].when);
+      ++ci;
+    }
+  }
+
+  INFO("matched " << ci << " of " << c.size() << " C rows, in order");
+  REQUIRE(ci == c.size());
 }

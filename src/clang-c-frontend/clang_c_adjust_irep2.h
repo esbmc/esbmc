@@ -93,6 +93,8 @@ public:
   {
   }
 
+  virtual ~clang_c_adjust_irep2() = default;
+
   /// Walk every code symbol's IREP2 value. Returns false; there is no failure
   /// mode yet, and the signature matches `clang_c_adjust::adjust()` so the
   /// driver can call either.
@@ -118,7 +120,11 @@ public:
   /// read. unit/clang-c-frontend/adjust_arms.test.cpp reads this.
   static std::vector<arm_info> arm_order();
 
-private:
+  // Everything below is reachable by a sibling frontend's pass, which orders
+  // these arms alongside its own in its own table
+  // (docs/roadmap/scope-clang-cpp-irep2.md §3.1). Not public: nothing outside
+  // an adjust pass has any business calling a single arm.
+protected:
   /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
   /// the operand recursion and returns before this point when the flag is on
   /// (scope-clang-c-irep2.md §19.2).
@@ -243,8 +249,10 @@ private:
   void adjust_function_designators(expr2tc &expr);
 
   /// Arms that run only when this pass is the sole adjuster, applied in the
-  /// order `arms` lists them.
-  void adjust_sole_arms(expr2tc &expr);
+  /// order `arms` lists them. Virtual so a derived pass substitutes its own
+  /// table: one virtual for the whole dispatch, rather than the per-arm
+  /// virtuals §3 of the C++ scope rejected.
+  virtual void adjust_sole_arms(expr2tc &expr);
 
   /// A comma expression takes its right operand's type (C11 6.5.17p2). Clang
   /// hands it the *decayed* type when the right operand is an array, so leaving
