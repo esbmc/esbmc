@@ -7784,14 +7784,16 @@ Two existing programs do define one of these names, and both keep their verdict:
   check short-circuits first. Nothing else in `do_special_functions` applies to
   it, and the `expr.location()` restore it skips is a no-op when nothing was
   swapped. `function_contract` is 432/432.
-- `regression/esbmc-cpp/cpp/github_5868_cmath_std_overloads` calls `std::fma`,
-  which resolves to `src/cpp/library/cmath`'s `inline float fma(float, float,
-  float)` -- an overload *with a body*. That call is no longer lowered at the
-  call site; the body runs and forwards to `::fmaf`, which is bodiless and
-  lowers. Same semantics, one frame further in, still SUCCESSFUL. The comment on
-  `builtin_shadows_user_definition` said these overloads forward to their
-  `__builtin_` spelling; for this family they forward to the `f`/`l` suffixes,
-  and the comment is corrected.
+- `regression/esbmc-cpp/cpp/github_5868_cmath_std_overloads` calls `std::fma`
+  twice, and only one of them changes. The `double` call resolves through
+  `using ::fma` to the bodiless libc declaration and lowers at the call site as
+  before. The `float` call resolves to `src/cpp/library/cmath`'s
+  `inline float fma(float, float, float)` -- an overload *with a body* -- so it
+  is no longer lowered there; the body runs and forwards to `::fmaf`, which is
+  bodiless and lowers. Same semantics, one frame further in, still SUCCESSFUL.
+  The comment on `builtin_shadows_user_definition` said these overloads forward
+  to their `__builtin_` spelling; for this family they forward to the `f`/`l`
+  suffixes, and the comment is corrected.
 
 `building-c-library` already exempts the model build, so the models keep
 lowering their own calls.
