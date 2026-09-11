@@ -578,6 +578,13 @@ public:
   // payload width is per-element and symbolic (#7716).
   bool has_tagged_elements(const exprt &list) const;
 
+  /// The recorded element type when it is a tagged scalar and the index is not
+  /// constant; otherwise the fallback (#7716 family).
+  typet tagged_elem_type_or(
+    const exprt &array,
+    bool constant_index,
+    const typet &fallback) const;
+
   struct shallow_push_call
   {
     const symbolt *func;
