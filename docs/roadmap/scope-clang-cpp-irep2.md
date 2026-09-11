@@ -548,6 +548,49 @@ instrumented, it fires 0 times across all five tests that exercise the construct
 proof this slice has not run; it is a cleanup candidate, not a loose end in the
 migration.
 
+### 3.16 The reference arm, and why the six-suite number was not the whole story
+
+`regression/esbmc-cpp/cpp` had never been swept under the flag. Doing so found
+more divergences than the six tracked suites together, and -- unlike them -- it
+contains **false proofs**:
+
+| test | legacy | flag |
+|---|---|---|
+| `github_4183_fail` | FAILED | **SUCCESSFUL** |
+| `github_4243_mem_init_fail` | FAILED | **SUCCESSFUL** |
+| `github_4243_mem_init` | SUCCESSFUL | FAILED |
+
+The pair inverts, which is the tell: the value is consistently wrong rather than
+the analysis being imprecise. `--goto-functions-only` on `github_4183_fail`
+differs in one instruction:
+
+```
+legacy  ASSIGN *return_value$_operator[]$1 = 7;
+flag    ASSIGN  return_value$_operator[]$1 = &7;
+```
+
+`std::array::operator[]` returns a reference, so the assignment must go
+*through* it. Under the flag the dereference on the left becomes an address-of
+on the right: the write lands on the reference variable, the element keeps its
+zero-initialised value, and `assert(a[0] == 0)` proves.
+
+The cause is a missing arm, not a subtle one. `clang_cpp_adjust::adjust_reference`
+dereferences a reference-typed operand, and `clang_c_adjust` calls it from five
+sites -- the relational arm, binary arithmetic, complex unary, and twice in
+`adjust_side_effect_assignment`. The IREP2 pass has no counterpart: `grep
+adjust_reference` over `clang_c_adjust_irep2.*` and `clang_cpp_adjust_irep2.*`
+returns nothing. Every reference-typed operand in those positions is therefore
+left as a bare pointer.
+
+This is the next arm, and it should come before the `exception_spec_*` cluster:
+it is the only known live soundness defect, and it plausibly accounts for a
+large share of this suite's `SUCCESSFUL -> FAILED` rows too.
+
+**Lesson for the census.** "Zero false proofs" held only over the six suites
+§3.14 sweeps. The suites were chosen because early divergences clustered there,
+and that selection quietly became the measurement. A number is scoped by what
+was swept, and the scope has to be stated with it.
+
 ## 6. Next
 
 1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
@@ -562,6 +605,5 @@ migration.
    its territory. It is the last cluster in these six suites.
 7. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
    reaches the goto program on C++.
-8. `regression/esbmc-cpp/cpp` has never been swept under the flag; the
-   `github_6494_*` crashes §3.14 closed were found by hand. Sweeping it would
-   price what is left outside the six suites.
+8. ~~`regression/esbmc-cpp/cpp` has never been swept~~ -- swept, and it is the
+   larger half: see §3.16. Take it before item 6.
