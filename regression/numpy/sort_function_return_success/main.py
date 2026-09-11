@@ -8,4 +8,6 @@ def make(values):
 a = make([3, 1, 2])
 b = np.sort(a)
 
-assert b[0] == 1
+assert b[0] == 7
+assert b[1] == 8
+assert b[2] == 9
