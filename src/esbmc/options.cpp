@@ -201,6 +201,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "legacy value, not only the ones it changed. Without it a body the pass "
      "did not touch still prints its converter tree under "
      "--symbol-table-only, which is not what the pass produced"},
+    {"clang-cpp-irep2-adjust-only",
+     NULL,
+     "Use the IREP2-native C++ adjuster instead of the legacy adjust pass "
+     "(Phase 7 hop-off; experimental, default off)"},
     {"clang-cpp-irep2-migrate-census",
      NULL,
      "Diagnostic: migrate every adjusted C++ symbol through IREP2 and report "

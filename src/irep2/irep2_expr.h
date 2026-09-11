@@ -713,6 +713,18 @@ public:
   expr2tc from;
   expr2tc rounding_mode;
 
+  /// The base class this cast converts to, when the frontend could not route
+  /// the conversion through a `@base@` component and the displacement has to
+  /// be applied once the layout is padded (clang_c_adjust_expr.cpp, #7025).
+  /// Empty on every other cast. Carried because an IREP2 adjust pass cannot
+  /// otherwise tell such a cast apart, and reading the base subobject without
+  /// the displacement silently proves false assertions
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+  irep_idt derived_to_base;
+
+  /// The mirror: a downcast whose operand points at a base subobject.
+  bool base_to_derived;
+
   /** Primary constructor.
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
@@ -721,8 +733,14 @@ public:
   typecast2t(
     const type2tc &type,
     const expr2tc &from_,
-    const expr2tc &rounding_mode_)
-    : expr2t(type, typecast_id), from(from_), rounding_mode(rounding_mode_)
+    const expr2tc &rounding_mode_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
+    : expr2t(type, typecast_id),
+      from(from_),
+      rounding_mode(rounding_mode_),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -731,10 +749,16 @@ public:
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
    */
-  typecast2t(const type2tc &type, const expr2tc &from_)
+  typecast2t(
+    const type2tc &type,
+    const expr2tc &from_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
     : expr2t(type, typecast_id),
       from(from_),
-      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
+      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode")),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -744,7 +768,9 @@ public:
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
     &typecast2t::from,
-    &typecast2t::rounding_mode);
+    &typecast2t::rounding_mode,
+    &typecast2t::derived_to_base,
+    &typecast2t::base_to_derived);
   static std::string field_names[esbmct::num_type_fields];
 };
 

@@ -3,6 +3,7 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
+#include <clang-c-frontend/clang_c_base_layout.h>
 #include <util/irep/migrate.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -49,6 +50,8 @@ bool clang_c_adjust_irep2::adjust()
 
     if (!s->is_type && s->get_value().is_not_nil())
     {
+      gen_symbol_code(*s);
+
       const expr2tc before = s->get_value2();
       expr2tc value = before;
       adjust_expr(value);
@@ -292,6 +295,8 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   {ARM(adjust_shift_operands), is_shift},
   {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
   {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
+  {ARM(adjust_derived_to_base), is_derived_to_base_cast},
+  {ARM(adjust_base_to_derived), is_base_to_derived_cast},
   // Ran after the chain returned; as the last row it runs at the same point,
   // and under !sole_adjuster the table is never entered either way.
   {ARM(adjust_address_of), is_address_of2t},
@@ -553,6 +558,154 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 /// `c ? &a : &b`, which #6291 needs for the pointer analysis to resolve either
 /// arm -- is not ported: no corpus input reaches it under this flag, and an arm
 /// no test executes is the trap §90.4 records.
+namespace
+{
+bool has_side_effect(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (is_sideeffect2t(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  return found;
+}
+
+/// The marker is consumed whether or not a displacement is owed, exactly as
+/// clang_c_adjust removes it before dispatching. A wrapper -- the identity cast
+/// migrate_expr builds for a marker on a non-cast node -- disappears with it.
+void drop_derived_to_base(expr2tc &expr)
+{
+  const typecast2t cast = to_typecast2t(expr);
+  // One cast can carry both markers (clang_cpp_convert_vft.cpp builds exactly
+  // that for a dynamic_cast), so the surviving one has to be forwarded onto
+  // the rebuilt node.
+  expr = cast.type == cast.from->type && !cast.base_to_derived
+           ? cast.from
+           : typecast2tc(
+               cast.type,
+               cast.from,
+               cast.rounding_mode,
+               irep_idt(),
+               cast.base_to_derived);
+}
+} // namespace
+
+void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
+{
+  const irep_idt base_id = to_typecast2t(expr).derived_to_base;
+  drop_derived_to_base(expr);
+
+  // clang_c_adjust reaches this arm by re-entering adjust_expr on the
+  // marker-stripped node, so a cast carrying both markers is re-based off its
+  // own base subobject first and displaced onto base_id afterwards -- and the
+  // displacement applies to what that left behind, not to the cast's operand.
+  if (is_base_to_derived_cast(expr))
+    adjust_base_to_derived(expr);
+
+  // Pointer form: (Base *)derived_ptr. Value form: the derived lvalue itself,
+  // which clang leaves in place for an implicit object argument.
+  const bool ptr_mode = is_pointer_type(expr->type);
+  const type2tc derived =
+    ptr_mode ? to_pointer_type(expr->type).subtype : expr->type;
+
+  BigInt offset = 0;
+  if (
+    !base_displacement(ns, migrate_type_back(derived), base_id, offset) ||
+    offset == 0)
+    return;
+
+  // The null guard below names the operand twice, and side effects are not
+  // lifted out until remove_sideeffects; displacing `f()` would call f twice.
+  if (has_side_effect(expr))
+  {
+    log_debug(
+      "c++",
+      "derived-to-base displacement onto {} skipped: side-effecting operand",
+      base_id);
+    return;
+  }
+
+  const type2tc base_ptr = migrate_type(pointer_typet(symbol_typet(base_id)));
+  const type2tc char_ptr = migrate_type(pointer_typet(char_type()));
+
+  const expr2tc src = ptr_mode ? expr : expr2tc(address_of2tc(derived, expr));
+  expr2tc adjusted = typecast2tc(char_ptr, src);
+  adjusted = add2tc(
+    char_ptr, adjusted, constant_int2tc(migrate_type(index_type()), offset));
+  adjusted = typecast2tc(base_ptr, adjusted);
+
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. A value-form operand is an lvalue
+  // and can never be null, so only the pointer form needs the guard.
+  if (ptr_mode)
+  {
+    expr = if2tc(
+      base_ptr,
+      equality2tc(src, gen_zero(src->type)),
+      gen_zero(base_ptr),
+      adjusted);
+    return;
+  }
+
+  expr = dereference2tc(to_pointer_type(base_ptr).subtype, adjusted);
+}
+
+void clang_c_adjust_irep2::adjust_base_to_derived(expr2tc &expr)
+{
+  const typecast2t cast = to_typecast2t(expr);
+  expr = typecast2tc(
+    cast.type, cast.from, cast.rounding_mode, cast.derived_to_base, false);
+
+  const expr2tc &src = cast.from;
+  if (!is_pointer_type(src->type) || !is_pointer_type(cast.type))
+    return;
+
+  // By-name, as the legacy arm requires: a resolved struct never reaches here
+  // (14672 of 14672 over regression/esbmc-cpp are symbol-typed), and accepting
+  // one would displace where the legacy pass declines.
+  const type2tc &base_t = to_pointer_type(src->type).subtype;
+  if (!is_symbol_type(base_t))
+    return;
+
+  const irep_idt base_id = to_symbol_type(base_t).symbol_name;
+  const type2tc derived = to_pointer_type(cast.type).subtype;
+
+  BigInt offset = 0;
+  if (!base_displacement(ns, migrate_type_back(derived), base_id, offset))
+  {
+    // Neither layout places the base at a single fixed displacement -- a
+    // virtual base shared by two sibling bases has none. Left as a plain
+    // typecast the result keeps pointing at the base subobject, which is only
+    // exact when the two coincide.
+    log_debug(
+      "c++",
+      "base-to-derived cast left unadjusted: no fixed displacement for {} in "
+      "ESBMC's layout",
+      base_id);
+    return;
+  }
+  if (offset == 0)
+    return;
+
+  const type2tc char_ptr = migrate_type(pointer_typet(char_type()));
+  expr2tc adjusted = typecast2tc(char_ptr, src);
+  adjusted = sub2tc(
+    char_ptr, adjusted, constant_int2tc(migrate_type(index_type()), offset));
+  adjusted = typecast2tc(cast.type, adjusted);
+
+  // [expr.static.cast]/11: a null pointer operand yields a null pointer, so
+  // the displacement must not be applied to it. Without the guard the
+  // check-then-downcast idiom dereferences a non-null (char *)0 - offset.
+  expr = if2tc(
+    cast.type,
+    equality2tc(src, gen_zero(src->type)),
+    gen_zero(cast.type),
+    adjusted);
+}
+
 void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
 {
   const address_of2t &a = to_address_of2t(expr);
@@ -1106,6 +1259,12 @@ void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
       to_array_type(op_type).subtype,
       pointer,
       gen_zero(migrate_type(index_type())));
+  else if (is_pointer_type(op_type))
+    // The C++ converter leaves `*this` typed empty for the adjust pass to
+    // fill in. Kept empty, every member offset resolved below it is taken
+    // against the wrong struct and the base subobject reads the derived
+    // object's leading storage.
+    expr = dereference2tc(to_pointer_type(op_type).subtype, pointer);
 
   if (!is_code_type(expr->type))
     return;
