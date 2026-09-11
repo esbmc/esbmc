@@ -569,6 +569,36 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   return std::nullopt;
 }
 
+std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  const auto it = numpy_param_shapes_.find(symbol.id.as_string());
+  if (it == numpy_param_shapes_.end())
+    return std::nullopt;
+
+  const std::vector<std::size_t> &shape = it->second;
+
+  if (attr_name == "shape")
+  {
+    std::vector<exprt> dim_exprs;
+    dim_exprs.reserve(shape.size());
+    for (std::size_t dim : shape)
+      dim_exprs.push_back(from_integer(dim, int_type()));
+    return build_shape_tuple_expr(*this, dim_exprs);
+  }
+  if (attr_name == "ndim")
+    return from_integer(shape.size(), int_type());
+  if (attr_name == "size")
+  {
+    std::size_t total = 1;
+    for (std::size_t dim : shape)
+      total *= dim;
+    return from_integer(total, int_type());
+  }
+  return std::nullopt;
+}
+
 std::optional<exprt> python_converter::resolve_subscript_base(
   const nlohmann::json &element,
   exprt &array)
@@ -1744,6 +1774,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           try_get_numpy_pointer_view_shape_attr(*symbol, attr_name))
       {
         expr = *view_attr;
+        break;
+      }
+
+      if (
+        std::optional<exprt> param_attr =
+          try_get_numpy_param_shape_attr(*symbol, attr_name))
+      {
+        expr = *param_attr;
         break;
       }
 
