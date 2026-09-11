@@ -1,0 +1,5 @@
+KNOWNBUG
+main.c
+
+^VERIFICATION FAILED$
+^.*dereference failure: Incorrect alignment when accessing data object.*$
