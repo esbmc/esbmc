@@ -26,6 +26,13 @@ public:
 protected:
   void adjust_sole_arms(expr2tc &expr) override;
 
+  /// IREP2 form of clang_cpp_adjust::adjust_cpp_member. `OBJECT.setX()` reaches
+  /// the pass with a code-typed member as its callee; goto_convert accepts only
+  /// a symbol or a dereference there, so the member is replaced by the symbol
+  /// naming the method. The object is already the call's first argument, put
+  /// there by the converter, so only the callee changes.
+  void adjust_cpp_member(expr2tc &expr);
+
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
 
