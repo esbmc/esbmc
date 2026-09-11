@@ -432,15 +432,53 @@ before/after census is what caught it, not the suite, because the three
 displacements cancelled in the goto dump and the symbol table — both were
 byte-identical while the verdicts differed.
 
+### 3.13 The catch handler's type does not cross the seam
+
+36 of the 172 `try_catch` tests fail under the flag with `exception lowering:
+cannot lower an unsupported handler shape` (`remove_exceptions.cpp:928`). The
+cause is one carriage loss, measured rather than guessed:
+
+`clang_cpp_adjust::adjust_catch` reads each handler's catch type off the
+**handler block's own type**, computes the id from it, writes it to
+`exception_id`, and only then resets the block to `code_typet()`. So the catch
+type lives on the block's type between conversion and adjust, and nowhere else.
+
+`code_block2t`'s constructor hardcodes `get_empty_type()`
+(`irep2_expr.h`), so `migrate_expr` drops it. Instrumented on
+`try_catch/lower-exceptions_empty_catchall`, the legacy arm sees
+`ty=code ellipsis=1` and produces the id `ellipsis`; the IREP2 arm sees
+`tyid=empty ellipsis=0` and falls through `convert_exception_id`'s last-resort
+branch to the id `empty`, which matches no throw.
+
+A second, separate defect hides behind it: `is_unresolved_cpp_catch` tests
+`exception_list.empty()`, but migrate's source-form arm pushes each handler's
+`exception_id` attribute into that list whether or not it is set, so an
+unadjusted catch arrives with one **empty id per handler**, never an empty list.
+The arm is therefore dead. Fixing the guard alone changes no verdict — the ids
+it then computes are `empty` for want of the type — so the two have to be fixed
+together.
+
+Three options for the carriage, none yet costed:
+
+- **A — give `code_block2t` a type.** Smallest conceptually, largest blast
+  radius: the type participates in `cmp`/`crc`/`hash` for every block in every
+  frontend.
+- **B — put the handler types in `code_cpp_catch2t`,** parallel to
+  `exception_list`. Contained, but stores what the block already knew.
+- **C — compute the ids in the converter,** so `exception_id` is set before
+  either pass runs and no type needs to cross the seam. Architecturally the
+  cleanest, and it deletes work from the legacy pass rather than adding a field
+  — but it moves `convert_exception_id` to a point where the class's type symbol
+  must already be complete, which is the assumption to check first.
+
 ## 6. Next
 
 1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
 3. ~~Price option B in §3 against option A~~ — **done**, §3.1: option B.
 4. ~~Add the C++ hop-off flag, then run the census by verdict~~ — **done**, §3.2.
-5. The **109 remaining divergences** in §3.12's census. They are no longer a
-   single cause: `try_catch` contributes the most rows, and the `NONE` rows
-   (no verdict at all) should be split from the disagreeing ones first, since a
-   crash and a wrong answer are different work.
+5. The **109 remaining divergences** in §3.12's census, of which 98 are
+   `try_catch`. None is a false proof: 60 are false alarms and 49 produce no
+   verdict. The largest identified cause is §3.13.
 6. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
    reaches the goto program on C++.
