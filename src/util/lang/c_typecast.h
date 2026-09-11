@@ -125,6 +125,20 @@ protected:
     const type2tc &src_type,
     const type2tc &dest_type);
 
+  // Arms of the IREP2 implicit_typecast_followed, split out to keep it under
+  // the complexity gate. convert_reference returns true when a reference arm
+  // applied (the caller still runs the tail); convert_to_pointer returns true
+  // when the conversion is complete.
+  bool convert_reference(
+    expr2tc &expr,
+    const type2tc &src_type,
+    const type2tc &dest_type);
+
+  bool convert_to_pointer(
+    expr2tc &expr,
+    const type2tc &src_type,
+    const type2tc &dest_type);
+
   void do_typecast(exprt &dest, const typet &type);
 
   void do_typecast(expr2tc &dest, const type2tc &type);

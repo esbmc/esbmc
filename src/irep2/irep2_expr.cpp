@@ -547,15 +547,21 @@ expr2tc rebuild_with_type(const K &k, const type2tc &new_type)
 
 // address_of2t passes both gates but means the *pointee* type by the type2tc
 // its primary constructor takes, building the pointer itself; the generic
-// rebuild would wrap new_type a second time. pointer_type2t::carry_provenance
-// is re-defaulted to false, as it is at every other address_of2t construction
-// (migrate.cpp), and no with_type caller derives a provenance-carrying type.
+// rebuild would wrap new_type a second time. ref_kind is forwarded, since a
+// reference destination's address-of has to keep the spelling or do_typecast
+// sees a type mismatch and adds a cast the irept copy does not.
+// pointer_type2t::carry_provenance is still re-defaulted to false, as it is at
+// every other address_of2t construction (migrate.cpp), and no with_type caller
+// derives a provenance-carrying type.
 template <>
 expr2tc
 rebuild_with_type<address_of2t>(const address_of2t &k, const type2tc &new_type)
 {
   return address_of2tc(
-    to_pointer_type(new_type).subtype, k.ptr_obj, k.implicit);
+    to_pointer_type(new_type).subtype,
+    k.ptr_obj,
+    k.implicit,
+    to_pointer_type(new_type).ref_kind);
 }
 
 [[noreturn]] void with_type_unsupported(const expr2t &e)
