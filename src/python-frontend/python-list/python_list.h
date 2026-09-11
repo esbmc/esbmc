@@ -591,6 +591,9 @@ public:
   shallow_push_call
   select_shallow_push(const exprt &src, const exprt &untagged_last_arg) const;
 
+  shallow_push_call
+  select_list_extend(const exprt &src, const exprt &untagged_elem_size) const;
+
   struct list_eq_target
   {
     const symbolt *func;
