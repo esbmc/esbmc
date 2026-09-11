@@ -905,7 +905,7 @@ std::string code_assert2t::field_names[esbmct::num_type_fields] =
 std::string code_assume2t::field_names[esbmct::num_type_fields] =
   {"guard", "", "", "", ""};
 std::string sideeffect_assign2t::field_names[esbmct::num_type_fields] =
-  {"op", "lhs", "rhs", "", ""};
+  {"op", "lhs", "rhs", "member_init", ""};
 std::string code_comma2t::field_names[esbmct::num_type_fields] =
   {"side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names[esbmct::num_type_fields] =

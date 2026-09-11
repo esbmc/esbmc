@@ -925,7 +925,8 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
   c_implicit_typecast(rhs, target, ns);
 
   if (rhs != a.rhs || expr->type != target)
-    expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
+    expr =
+      sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location, a.member_init);
 }
 
 /// The shift spellings clang_c_adjust returns early on: it promotes only the
@@ -955,7 +956,8 @@ void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
   c_implicit_typecast_arithmetic(lhs, rhs, ns);
 
   if (lhs != a.lhs || rhs != a.rhs || expr->type != target)
-    expr = sideeffect_assign2tc(target, a.op, lhs, rhs, a.location);
+    expr =
+      sideeffect_assign2tc(target, a.op, lhs, rhs, a.location, a.member_init);
 }
 
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
@@ -1329,7 +1331,8 @@ void clang_c_adjust_irep2::lower_complex_compound_assignment(expr2tc &expr)
   if (binop == before)
     return;
 
-  expr = sideeffect_assign2tc(ct, "assign", a.lhs, binop, a.location);
+  expr =
+    sideeffect_assign2tc(ct, "assign", a.lhs, binop, a.location, a.member_init);
 }
 
 /// clang emits `ieee_*` for scalar float arithmetic itself, but hands over a

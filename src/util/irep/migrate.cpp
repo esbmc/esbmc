@@ -2150,7 +2150,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), lhs);
       migrate_expr(expr.op1(), rhs);
       new_expr_ref = sideeffect_assign2tc(
-        migrate_type(expr.type()), stmt, lhs, rhs, expr.location());
+        migrate_type(expr.type()),
+        stmt,
+        lhs,
+        rhs,
+        expr.location(),
+        expr.op0().get_bool("#member_init"));
       return;
     }
 
@@ -3578,8 +3583,10 @@ static exprt migrate_expr_back_rest6(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt theexpr("sideeffect", thetype);
     theexpr.statement(ref2.op);
-    theexpr.copy_to_operands(
-      migrate_expr_back(ref2.lhs), migrate_expr_back(ref2.rhs));
+    exprt back_lhs = migrate_expr_back(ref2.lhs);
+    if (ref2.member_init)
+      back_lhs.set("#member_init", 1);
+    theexpr.copy_to_operands(back_lhs, migrate_expr_back(ref2.rhs));
     if (ref2.location.is_not_nil())
       theexpr.location() = ref2.location;
     return theexpr;

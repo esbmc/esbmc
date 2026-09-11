@@ -2468,6 +2468,19 @@ class sideeffect_assign2t : public expr2t
 {
 public:
   irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
+
+  /// This assignment is a constructor's member initialiser. The C++ adjust
+  /// pass leaves such an lhs alone: a reference member is being *bound* here,
+  /// and reading it through would copy the referent instead
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.16). The converter marks the lhs
+  /// with `#member_init`, which has nowhere else to live in IREP2.
+  ///
+  /// Declared next to `op` deliberately: it packs into that field's padding, so
+  /// the class does not grow and fields_cover_class's slack is unaffected.
+  /// Placed after `location` the compiler packs it into the location's padding
+  /// and the invariant underflows instead.
+  bool member_init;
+
   expr2tc lhs;
   expr2tc rhs;
   locationt location; // not reflected: source loc travels with the stmt
@@ -2478,8 +2491,14 @@ public:
     const irep_idt &o,
     const expr2tc &l,
     const expr2tc &r,
-    const locationt &loc = locationt())
-    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r), location(loc)
+    const locationt &loc = locationt(),
+    bool member_init_ = false)
+    : expr2t(t, sideeffect_assign_id),
+      op(o),
+      member_init(member_init_),
+      lhs(l),
+      rhs(r),
+      location(loc)
   {
   }
   sideeffect_assign2t(const sideeffect_assign2t &ref) = default;
@@ -2488,7 +2507,8 @@ public:
     &expr2t::type,
     &sideeffect_assign2t::op,
     &sideeffect_assign2t::lhs,
-    &sideeffect_assign2t::rhs);
+    &sideeffect_assign2t::rhs,
+    &sideeffect_assign2t::member_init);
   static std::string field_names[esbmct::num_type_fields];
 };
 

@@ -232,6 +232,24 @@ void convert_reference(const namespacet &ns, expr2tc &expr)
 
 void clang_cpp_adjust_irep2::adjust_reference(expr2tc &expr)
 {
+  // A constructor's member initialiser binds its left side; reading that
+  // through would copy the referent instead of pointing at it. Only the right
+  // side is a use. clang_cpp_adjust::adjust_side_effect_assign's `#member_init`
+  // branch says the same (scope-clang-cpp-irep2.md §3.16).
+  if (is_sideeffect_assign2t(expr) && to_sideeffect_assign2t(expr).member_init)
+  {
+    const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+    expr2tc rhs = a.rhs;
+    if (is_nil_expr(rhs))
+      return;
+
+    convert_reference(ns, rhs);
+    if (rhs != a.rhs)
+      expr = sideeffect_assign2tc(
+        a.type, a.op, a.lhs, rhs, a.location, a.member_init);
+    return;
+  }
+
   expr->Foreach_operand([this](expr2tc &op) {
     if (!is_nil_expr(op))
       convert_reference(ns, op);
