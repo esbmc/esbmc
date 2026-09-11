@@ -763,88 +763,32 @@ void c_typecastt::implicit_typecast_followed(
     do_typecast(expr, dest_type);
 }
 
-// special case: 0 == NULL
-static bool
-is_null_pointer_constant(const expr2tc &expr, const type2tc &src_type)
-{
-  return is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
-         (is_unsignedbv_type(src_type) || is_signedbv_type(src_type));
-}
-
-void c_typecastt::pointer_from_pointer_or_array(
-  expr2tc &expr,
-  const type2tc &src_type,
+// The generous pointer rules, as one decision: the warning this conversion
+// earns, or nullptr when it earns none.
+static const char *incompatible_pointer_warning(
+  const namespacet &ns,
+  const type2tc &src_subtype,
   const type2tc &dest_subtype)
 {
-  // we are quite generous about pointers
-  type2tc src_subtype;
-  if (is_pointer_type(src_type))
-    src_subtype = to_pointer_type(src_type).subtype;
-  else
-    src_subtype = to_array_type(src_type).subtype;
-
   const type2tc &src_sub = ns.follow(src_subtype);
   const type2tc &dest_sub = ns.follow(dest_subtype);
 
+  // from/to void is always good
   if (is_empty_type(src_sub) || is_empty_type(dest_sub))
-  {
-    // from/to void is always good
-  }
-  else if (base_type_eq(dest_subtype, src_subtype, ns))
-  {
-  }
-  else if (is_code_type(src_sub) && is_code_type(dest_sub))
-  {
-    // very generous:
-    // between any two function pointers it's ok
-  }
-  else if (is_bv_type(src_sub) && is_bv_type(dest_sub))
-  {
-    // also generous: between any to scalar types it's ok
-  }
-  else
-    warnings.push_back("incompatible pointer types");
-}
+    return nullptr;
 
-bool c_typecastt::implicit_typecast_to_pointer(
-  expr2tc &expr,
-  const type2tc &src_type,
-  const type2tc &dest_type)
-{
-  const type2tc &dest_subtype = to_pointer_type(dest_type).subtype;
+  if (base_type_eq(dest_subtype, src_subtype, ns))
+    return nullptr;
 
-  if (is_null_pointer_constant(expr, src_type))
-  {
-    expr = symbol2tc(dest_type, "NULL");
-    return true;
-  }
+  // very generous: between any two function pointers it's ok
+  if (is_code_type(src_sub) && is_code_type(dest_sub))
+    return nullptr;
 
-  if (is_pointer_type(src_type) || is_array_type(src_type))
-  {
-    pointer_from_pointer_or_array(expr, src_type, dest_subtype);
+  // also generous: between any two scalar types it's ok
+  if (is_bv_type(src_sub) && is_bv_type(dest_sub))
+    return nullptr;
 
-    if (src_type == dest_type)
-    {
-      // Re-attach the source type so any qualifier differences are
-      // discarded (the types compare equal but may not be identical).
-      expr = expr->with_type(src_type);
-    }
-    else
-      do_typecast(expr, dest_type);
-
-    return true;
-  }
-
-  if (is_struct_type(src_type) || is_union_type(src_type))
-  {
-    // Derived object to base-class pointer: `derived_obj` becomes
-    // `&derived_obj` typed as the base pointer, reached when a base method
-    // is called on a derived object. address_of2t takes the *pointee*, so
-    // the destination's subtype is what reproduces dest_type.
-    expr = address_of2tc(dest_subtype, expr);
-  }
-
-  return false;
+  return "incompatible pointer types";
 }
 
 void c_typecastt::implicit_typecast_followed(
@@ -854,8 +798,51 @@ void c_typecastt::implicit_typecast_followed(
 {
   if (is_pointer_type(dest_type))
   {
-    if (implicit_typecast_to_pointer(expr, src_type, dest_type))
-      return;
+    const pointer_type2t &dest_ptr_type = to_pointer_type(dest_type);
+    // special case: 0 == NULL
+
+    if (
+      is_constant_int2t(expr) && to_constant_int2t(expr).value == 0 &&
+      (is_unsignedbv_type(src_type) || is_signedbv_type(src_type)))
+    {
+      expr = symbol2tc(dest_type, "NULL");
+      return; // ok
+    }
+
+    if (is_pointer_type(src_type) || is_array_type(src_type))
+    {
+      // we are quite generous about pointers
+      type2tc src_subtype;
+      if (is_pointer_type(src_type))
+        src_subtype = to_pointer_type(src_type).subtype;
+      else
+        src_subtype = to_array_type(src_type).subtype;
+
+      const char *warning =
+        incompatible_pointer_warning(ns, src_subtype, dest_ptr_type.subtype);
+      if (warning)
+        warnings.push_back(warning);
+
+      if (src_type == dest_type)
+      {
+        // Re-attach the source type so any qualifier differences are
+        // discarded (the types compare equal but may not be identical).
+        expr = expr->with_type(src_type);
+      }
+      else
+        do_typecast(expr, dest_type);
+
+      return; // ok
+    }
+
+    if (is_struct_type(src_type) || is_union_type(src_type))
+    {
+      // Derived object to base-class pointer: `derived_obj` becomes
+      // `&derived_obj` typed as the base pointer, reached when a base method
+      // is called on a derived object. address_of2t takes the *pointee*, so
+      // the destination's subtype is what reproduces dest_type.
+      expr = address_of2tc(dest_ptr_type.subtype, expr);
+    }
   }
   else if (is_array_type(dest_type) && is_constant_string2t(expr))
   {

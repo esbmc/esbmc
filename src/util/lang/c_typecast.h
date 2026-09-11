@@ -125,19 +125,6 @@ protected:
     const type2tc &src_type,
     const type2tc &dest_type);
 
-  /** Conversion to a pointer destination. Returns true when the conversion is
-   *  complete, false when the caller still has to run the generic tail check.
-   */
-  bool implicit_typecast_to_pointer(
-    expr2tc &expr,
-    const type2tc &src_type,
-    const type2tc &dest_type);
-
-  void pointer_from_pointer_or_array(
-    expr2tc &expr,
-    const type2tc &src_type,
-    const type2tc &dest_subtype);
-
   void do_typecast(exprt &dest, const typet &type);
 
   void do_typecast(expr2tc &dest, const type2tc &type);

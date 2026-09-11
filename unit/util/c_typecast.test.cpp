@@ -96,12 +96,11 @@ static void require_arith_result(
 // get_c_type ranks an operand against config.ansi_c, which is zero-initialised
 // bar int_128_width. Pin a model in main() rather than at namespace scope:
 // `config` lives in another translation unit, so a static initialiser here
-// would race its constructor.
+// would race its constructor. set_data_model leaves the byte order alone, and
+// constant_string2t::to_array asserts on NO_ENDIANESS.
 int main(int argc, char *argv[])
 {
   config.ansi_c.set_data_model(configt::LP64);
-  // set_data_model leaves endianess at NO_ENDIANESS, which constant_string2t's
-  // to_array() asserts against; the assertion is live in the DebugOpt build.
   config.ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
   return Catch::Session().run(argc, argv);
 }

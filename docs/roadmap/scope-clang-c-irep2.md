@@ -7525,3 +7525,157 @@ that evidence; it would have been equally easy to keep the wrong "it is live"
 conclusion. Neither is a measurement. **Removing it is not done here** — a
 branch deletion wants its own PR and a Mode C (C-Dead) proof per the
 dead-code rule, not a corpus that happens to be quiet.
+
+## 137. The last unclassified row is a seam loss, and it is not the pass's
+## (2026-09-10)
+
+§134.3 left six unclassified symbol-table causes; §135.3 re-scored them and
+§136 closed `github_6966`. `union-ptr-arith-bug` was the one row still marked
+**real** rather than printer — an `anon_pad#N` member appearing in an
+initialiser the default path does not show. It is a printer difference too, and
+the mechanism is a seam loss rather than an unported arm.
+
+### 137.1 Legacy pads identically — measured, not read off the dump
+
+`clang_c_adjust::adjust_struct` instrumented over the test's own source:
+
+| literal | ops in | components | ops out |
+|---|---:|---:|---:|
+| `struct heap` | 10 | 12 | 12 |
+| `struct saved_frame` | 5 | 6 | 6 |
+| `struct frame` | 1 | 1 | 1 |
+
+So both paths build a padded literal and the divergence is entirely in what is
+printed. `c_expr2string.cpp:1268` skips a component carrying `is_padding`;
+`struct_type2t` and `union_type2t` have no per-member flag, so
+`migrate_type_back` rebuilds the components without it and the printer stops
+skipping them. The key is `is_padding`, not `#is_padding`: it carries no `#`,
+so `irept::is_comment` routes it to `named_sub` rather than `comments`, and it
+therefore participates in `typet` equality and `irept::hash()`. Restoring it is
+an identity change, not only a display one -- a round-tripped type now compares
+equal to the frontend-built one, which is the direction wanted, since every
+producer goes through the same seam. §135.3's "real" score was right that the row survives
+`--clang-c-irep2-adjust-writeback-all` and wrong about what that implied: a
+type-level loss is invariant under the write-back gate, so surviving it does
+not make a row the pass's own output.
+
+### 137.2 The default path loses it as well
+
+The reduction is three lines, and the literal must be non-zero —
+`is_recursively_zero` (`c_expr2string.cpp:1251`) returns before the member walk
+reaches the padding test:
+
+```c
+struct s { char a; int c; };
+int main(void) { struct s v = {1, 2}; return v.c; }
+```
+
+| instrument | path | before | after |
+|---|---|---|---|
+| `--symbol-table-only` | default | `{ .a=1, .c=2 }` | unchanged |
+| `--symbol-table-only` | hop-off | `{ .a=1, .anon_pad#1=0, .c=2 }` | `{ .a=1, .c=2 }` |
+| `--goto-functions-only` | **default** | `{ .a=1, .anon_pad#1=0, .c=2 }` | `{ .a=1, .c=2 }` |
+| `--goto-functions-only` | hop-off | `{ .a=1, .anon_pad#1=0, .c=2 }` | `{ .a=1, .c=2 }` |
+
+The symbol table diverges only under the hop-off because a legacy symbol value
+never makes the round trip; the goto program is printed from
+`migrate_expr_back` on **both** paths, so both have been showing a synthetic
+member no user declared. The hop-off A/B is where it became visible, not where
+it lives.
+
+### 137.3 The fix, and why a name test is the sound one here
+
+`migrate_type_back` re-derives `#is_padding` from the member name.
+`pad_names.h` is explicit that add_padding's four reserved names all contain
+`#`, which no C or C++ identifier may, so nothing a user declared can match —
+this is the case a name test is *for*, against the general rule that a lowered
+member must not be classified by its component name. `python_adjust.cpp:165`
+already does exactly this for its own seam, with the same argument; putting it
+in `migrate_type_back` serves every frontend and makes that helper redundant
+(not removed here — Python's own re-padding path wants its own measurement).
+
+### 137.4 It is a layout correction, not a printing one
+
+Restoring the flag also makes `add_padding` idempotent on a round-tripped type,
+which it was not, and that is the larger half. Worked through for
+`struct s { char a; unsignedbv(24) anon_pad#1; int c; }` re-entering
+`add_padding` **without** the flag: `alignment(unsignedbv(24))` is 3, the offset
+after `a` is 1, so `1 % 3` inserts two bytes; `c` then needs `a = 4` and takes
+two more. The struct grows from 8 bytes to 12. `python_adjust.cpp:1202`
+documents exactly this — it is why that frontend already restores the flag.
+
+The path is latent in clang-c today: `pad_type_symbol`
+(`clang_c_adjust_irep2.cpp:74`) runs on a symbol type that has not been
+round-tripped. Nothing in this PR pins the layout, only the printer.
+
+`clang_c_adjust::adjust_struct` (`clang_c_adjust_expr.cpp:225`) moves the same
+way. Before, a round-tripped type short of its pads inserted nothing and then
+indexed `ops[i]` past the end — an assert in a debug build, an out-of-bounds
+read in a release one. The insertion now happens.
+
+**The restoration is partial, by construction.** `#bitfield` and `#extint` are
+type attributes, and `migrate_type_back` rebuilds an `unsignedbv_type2t` as a
+bare `unsignedbv_typet`, so both are dropped and no member name carries them.
+`add_padding` dispatches `#bitfield` (`padding.cpp:193`) → `is_padding &&
+#extint` (`:218`) → `is_padding` (`:225`), so a round-tripped
+`anon_bit_field_pad#N` moves from the fall-through to the `:225` arm — still not
+the arm it belongs in. Neither pad kind has any regression coverage
+(`grep -rl 'anon_bit_field_pad\|ext_int_pad' regression/` is empty). This
+narrows the damage; it does not remove it.
+
+### 137.5 What it costs on the default path
+
+Over a pinned stride-16 list of `regression/esbmc` (136 programs), base against
+patched:
+
+| instrument | SAME | DIFF |
+|---|---:|---:|
+| symbol table, default path | 136 | 0 |
+| goto program, default path | 133 | **3** |
+
+The three are `github_4715_irep2_bodies_cpp_exc_03_fail`, `github_5701-nondet`
+and `read_spec_verify_1`, all the same shape — `exception_slots`, whose element
+struct is padded — and all in the direction of dropping the pad. Verdicts are
+unchanged on all three and on `union-ptr-arith-bug`;
+`test_esbmc_wrapper.py` passes, and no verdict line, property comment or
+summary block changes. It is still a default-path output change, so the PR
+carries `needs-svcomp-run`.
+
+`struct_pad_not_printed` and `irep2_only_struct_pad_not_printed` pin the two
+paths on the §137.2 reduction. Both fail on the pre-patch binary and pass on the
+patched one — the pad is printed or it is not, so the mutant is the unpatched
+`migrate_type_back` itself. `gcc_aligned_attr_padding` and
+`irep2_only_struct_padding` keep passing, and both new tests pin the same type
+line themselves: a *type* declaration is printed by `convert_rec`
+(`c_expr2string.cpp:130`), which applies no padding test at all and so prints
+every component, pads included. Only the *value* printer skips them. That is
+what makes the pair non-vacuous -- the pad must be in the type and absent from
+the value, so a target that stopped padding would fail the test rather than
+pass it silently.
+
+### 137.6 Next
+
+The symbol-table residue has no unclassified rows left. What remains on the
+clang-c list is recorded and argued: §134.2's `atexit` cast, which needs
+`code_type2t` to carry the prototyped/unprototyped distinction and is the only
+goto-level cause on the sample; §133.3's qualifier rows; §113.4's printer set;
+and the two follow-ups §136 opened — the `migrate_expr_back` location restore
+(§136.3), which moves 126 of 131 default-path goto programs and wants its own
+SV-COMP run, and the `adjust_expr` pre-recursion branch (§136.5), which wants a
+Mode C (C-Dead) proof.
+
+Three follow-ups this section opens, all branch deletions and so all wanting a
+C-Dead proof rather than a quiet removal:
+
+- `restore_padding_flags` (`python_adjust.cpp:165`) is now redundant.
+  Leaving it is safe — it is idempotent and a strict subset of the seam's own
+  recursion — but it re-establishes the frontend-local ownership this change
+  removed, and it is the wrong shape for a bisect: narrow the seam again and
+  Python stays silently correct while every other frontend double-pads.
+- `goto2c/expr2c.cpp:1136` tests `get_is_padding()` and then tests the name
+  anyway, under a comment saying the flag "seems to be never working …
+  perhaps the information gets lost after migrating from irep to irep2 and
+  back". That comment predicted this defect. The two checks are now
+  equivalent and the comment is false.
+- `#bitfield` / `#extint` (§137.4) need a carrier that is not a member name,
+  and no pad kind but `anon_pad#` has any regression coverage.
