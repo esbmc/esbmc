@@ -663,16 +663,14 @@ void clang_c_adjust_irep2::adjust_base_to_derived(expr2tc &expr)
   if (!is_pointer_type(src->type) || !is_pointer_type(cast.type))
     return;
 
-  // The legacy arm reads the identifier off a symbol_typet; by the time a type
-  // reaches here migrate_type may have resolved it to the struct, so take the
-  // tag from either spelling.
+  // By-name, as the legacy arm requires: a resolved struct never reaches here
+  // (14672 of 14672 over regression/esbmc-cpp are symbol-typed), and accepting
+  // one would displace where the legacy pass declines.
   const type2tc &base_t = to_pointer_type(src->type).subtype;
-  const irep_idt base_id =
-    is_symbol_type(base_t)   ? to_symbol_type(base_t).symbol_name
-    : is_struct_type(base_t) ? to_struct_type(base_t).name
-                             : irep_idt();
-  if (base_id.empty())
+  if (!is_symbol_type(base_t))
     return;
+
+  const irep_idt base_id = to_symbol_type(base_t).symbol_name;
   const type2tc derived = to_pointer_type(cast.type).subtype;
 
   BigInt offset = 0;
