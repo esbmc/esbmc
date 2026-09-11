@@ -480,14 +480,42 @@ One trap the probe surfaced: `is_catch` is what suppresses the `tag-` strip, and
 neither legacy call site sets it. Whatever computes a handler id must leave it
 `false`, or the id matches no throw.
 
+**Taken, and measured.** The id is now read at the `CXXTryStmtClass` site and
+written to `exception_id`, so nothing crosses the seam and `adjust_catch` keeps
+only the block-type reset. Handler-shape rejections went 36 to 0, `try_catch`
+tests producing a verdict 118 to 162, and agreement over the 402-test census
+293 to 361 -- no test changing away from the legacy verdict, and the default
+path unchanged at `try_catch` 172/172.
+
+### 3.14 What the census names next
+
+41 divergences remain, none of them a false proof. Two clusters account for 11
+of them and each is one arm:
+
+- **`cpp_delete` (7 rows)** -- `destructors/github_6198*` (5) and
+  `3_SI_virtual_ntvalDtor` (2). `clang_cpp_adjust::adjust_cpp_delete` attaches a
+  `destructor` call to the side effect, which goto_convert emits as
+  `~T(&(*p))`; the IREP2 table has no such arm, so `delete p` through a virtual
+  destructor runs no destructor and `assert(n == 3)` fails. No seam work: the
+  call already travels in `sideeffect2t::arguments[0]` and back
+  (`migrate.cpp`, `back_sideeffect_cpp_delete`), so this is a plain arm port.
+- **`cpp-pseudo-destructor` (4 rows)** -- `destructors/pseudo-destructor*`
+  abort with `migrate expr failed: cpp-pseudo-destructor`. The node has no
+  migration arm at all, because the legacy pass deletes it before anything
+  migrates: `adjust_cpp_pseudo_destructor_call` replaces it with its base
+  expression. It therefore cannot be an IREP2 arm -- the elimination has to move
+  to conversion time, as §3.13's did.
+
+The remaining 29 `try_catch` rows are false alarms clustered on
+`exception_spec_*`, which is `finalize_exception_specification`'s territory.
+
 ## 6. Next
 
 1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
 3. ~~Price option B in §3 against option A~~ — **done**, §3.1: option B.
 4. ~~Add the C++ hop-off flag, then run the census by verdict~~ — **done**, §3.2.
-5. The **109 remaining divergences** in §3.12's census, of which 98 are
-   `try_catch`. None is a false proof: 60 are false alarms and 49 produce no
-   verdict. The largest identified cause is §3.13.
+5. ~~The 109 remaining divergences in §3.12's census~~ -- §3.13 closed 68 of
+   them. The 41 left are bucketed in §3.14; `cpp_delete` is the next arm.
 6. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
    reaches the goto program on C++.
