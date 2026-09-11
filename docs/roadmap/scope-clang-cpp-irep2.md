@@ -661,10 +661,36 @@ and never from this constructor), while in IREP2 the node is a
 `adjust_decl_init` is the first arm to check, since a member-initialiser can
 reach it as a `code_decl` with an initialiser.
 
-Inventing a condition to suppress the rewrite without answering that is how an
-unsoundness ships wearing a fix's clothes: the same suppression that silences
-these two tests would also stop the hook firing on a genuine write through a
-reference member.
+**Answered: `adjust_reference` was the wrong arm.** Legacy does not reach this
+binding through `adjust_side_effect` because `clang_cpp_adjust` overrides that
+and routes an `assign` to its own `adjust_side_effect_assign` -- a C++-only arm
+with a five-way branch on the assignment's shape:
+
+| the assignment | what legacy does |
+|---|---|
+| rhs is a constructor call | fold `x = T()` into `T(&x)` |
+| lhs is a reference symbol | `r = 1` becomes `*r = 1` |
+| lhs is a call returning a reference | `X(a) = 5` becomes `*X(a) = 5` |
+| **lhs carries `#member_init`** | **adjust the rhs only -- leave the lhs alone** |
+| otherwise | fall through to the C arm |
+
+The fourth row is the mutex case, and it is why legacy never dereferences a
+member-initialiser's left side. **None of these five branches is ported**, so
+the reference hook was a fragment of this arm applied without the branch that
+excludes a binding -- which is exactly why it broke a binding.
+
+And the branch that matters cannot be written yet: `#member_init` is a
+converter-set irept flag (`clang_cpp_convert.cpp` sets it in three places and
+reads it in three, including `should_dereference`), and `grep member_init
+src/util/irep/migrate.cpp` returns **nothing**. It is dropped at the seam, the
+same class as §3.12's `#derived_to_base` and with the same shape of fix.
+
+So the ordering is: carry `#member_init` across the seam, then port
+`adjust_side_effect_assign` whole, with the reference handling as one of its
+branches rather than as a free-standing hook. The hook as written must not ship
+on its own -- the suppression that would silence these two tests would also stop
+it firing on a genuine write through a reference member, which is the case it
+exists for.
 
 Note also that a test for this must use a **function returning a reference**
 (`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
