@@ -279,10 +279,10 @@ void clang_c_languaget::build_compiler_args(
   compiler_args.emplace_back("-Wno-incompatible-pointer-types");
 
   // Likewise int-conversion, which clang 15+ promotes to a hard error while GCC
-  // still accepts it: preprocessed kernel/CIL sources write sentinel pointers as
-  // integer constants (0xffffffffffffffffUL), so erroring out rejects input a
-  // mainstream toolchain compiles. ESBMC models the conversion in its typecast
-  // logic, so downgrading the diagnostic does not affect semantics.
+  // still accepts it: preprocessed kernel/CIL sources write sentinel pointers
+  // as integer constants (0xffffffffffffffffUL), so erroring out rejects input
+  // a mainstream toolchain compiles. ESBMC models the conversion in its
+  // typecast logic, so downgrading the diagnostic does not affect semantics.
   compiler_args.emplace_back("-Wno-int-conversion");
 
   /* put custom options at the end of the cmdline such that they can override
