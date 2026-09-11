@@ -1025,6 +1025,36 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
 }
 
+// `np.array(...)` returned directly (and only) by a user function:
+// recognizes `def make(): return np.array([...])` at a call site like
+// `process(make())`, the same shape try_infer_numpy_param_type already
+// resolves for a literal or forwarded-parameter argument. Limited to a
+// single, unconditional, top-level Return (matching a function with one
+// fixed array shape); a branching or absent return is declined rather than
+// guessing between possibly different shapes.
+static bool numpy_array_literal_return(
+  const nlohmann::json &func_def,
+  nlohmann::json &out_literal_call)
+{
+  const nlohmann::json *found = nullptr;
+  for (const auto &stmt : func_def["body"])
+  {
+    if (stmt.value("_type", "") != "Return")
+      continue;
+    if (found != nullptr)
+      return false; // more than one top-level return: declined
+    found = &stmt;
+  }
+
+  if (
+    found == nullptr || !found->contains("value") ||
+    !is_numpy_array_literal_call((*found)["value"]))
+    return false;
+
+  out_literal_call = (*found)["value"];
+  return true;
+}
+
 // One `Call` node together with the name of the function whose body it
 // textually appears in (empty for a module-level call).
 struct numpy_param_call_site
@@ -1330,6 +1360,23 @@ bool python_converter::try_infer_numpy_param_type(
     if (is_numpy_array_literal_call(arg))
     {
       record(type_handler_.get_typet(arg["args"][0]));
+      continue;
+    }
+
+    if (arg.value("_type", "") == "Call")
+    {
+      const nlohmann::json &callee_func =
+        arg.value("func", nlohmann::json::object());
+      if (callee_func.value("_type", "") == "Name")
+      {
+        const nlohmann::json *callee_def =
+          find_function_def(module_body, callee_func.value("id", ""));
+        nlohmann::json literal_call;
+        if (
+          callee_def != nullptr &&
+          numpy_array_literal_return(*callee_def, literal_call))
+          record(type_handler_.get_typet(literal_call["args"][0]));
+      }
       continue;
     }
 
