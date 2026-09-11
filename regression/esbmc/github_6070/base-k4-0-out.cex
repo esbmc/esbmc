@@ -1,7 +1,0 @@
-
-State 1 file main.c line 7 column 5 function main thread 0
-----------------------------------------------------
-Violated property:
-  file main.c line 7 column 5 function main
-  fail_when_i_is_3
-  i != 3
