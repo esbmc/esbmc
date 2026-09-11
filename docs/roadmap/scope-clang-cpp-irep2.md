@@ -518,14 +518,35 @@ four in `destructors` and the arm that closed seven more:
   call already travels in `sideeffect2t::arguments[0]` and back
   (`migrate.cpp`, `back_sideeffect_cpp_delete`), so this is a plain arm port.
 - **`cpp-pseudo-destructor` (4 rows)** -- `destructors/pseudo-destructor*`
-  abort with `migrate expr failed: cpp-pseudo-destructor`. The node has no
+  aborted with `migrate expr failed: cpp-pseudo-destructor`. The node has no
   migration arm at all, because the legacy pass deletes it before anything
   migrates: `adjust_cpp_pseudo_destructor_call` replaces it with its base
   expression. It therefore cannot be an IREP2 arm -- the elimination has to move
-  to conversion time, as §3.13's did.
+  to conversion time, as §3.13's did. **Done**, §3.15: `destructors` now sweeps
+  0 divergences.
 
 The remaining 29 `try_catch` rows are false alarms clustered on
 `exception_spec_*`, which is `finalize_exception_specification`'s territory.
+
+### 3.15 The pseudo-destructor call, reduced where it is built
+
+`b.~a()` on a scalar has no run-time semantics beyond evaluating the base
+([expr.pseudo]/1). The converter built a `cpp-pseudo-destructor` node for it and
+`clang_cpp_adjust` replaced the whole call with that base; IREP2 has no kind for
+the node, so under the flag it reached `migrate_expr` and aborted.
+
+Reducing it at `clang_cpp_convertert::get_expr`'s exit -- not in one call case
+-- keeps it out of the goto program and covers every call spelling, which is the
+coverage the legacy arm had. Note the shape is a plain `CallExpr`, not a
+`CXXMemberCallExpr`: a pseudo-destructor applies to scalars, so clang never
+builds a member call for it. Reducing it in the member-call case, which is where
+it looks like it belongs, fires never.
+
+`clang_cpp_adjust::adjust_cpp_pseudo_destructor_call` is now unreachable --
+instrumented, it fires 0 times across all five tests that exercise the construct
+-- and is left in place. Deleting it is a branch removal, which owes a C-Dead
+proof this slice has not run; it is a cleanup candidate, not a loose end in the
+migration.
 
 ## 6. Next
 
@@ -533,9 +554,14 @@ The remaining 29 `try_catch` rows are false alarms clustered on
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
 3. ~~Price option B in §3 against option A~~ — **done**, §3.1: option B.
 4. ~~Add the C++ hop-off flag, then run the census by verdict~~ — **done**, §3.2.
-5. ~~The 109 remaining divergences in §3.12's census~~ -- §3.13 and the
-   `cpp_delete` arm closed 75 of them. §3.14 has the command that reproduces
-   what is left and buckets it: 4 `pseudo-destructor` rows, which cannot be an
-   arm, and 29 `try_catch` rows on `exception_spec_*`.
-6. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
+5. ~~The 109 remaining divergences in §3.12's census~~ -- §3.13, the
+   `cpp_delete` arm and §3.15 closed 79 of them. §3.14 has the command that
+   reproduces what is left: 29 `try_catch` rows, all on `exception_spec_*`,
+   and nothing anywhere else.
+6. `finalize_exception_specification` is legacy-only, and those 29 rows are
+   its territory. It is the last cluster in these six suites.
+7. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
    reaches the goto program on C++.
+8. `regression/esbmc-cpp/cpp` has never been swept under the flag; the
+   `github_6494_*` crashes §3.14 closed were found by hand. Sweeping it would
+   price what is left outside the six suites.
