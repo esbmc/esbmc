@@ -2500,7 +2500,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 // allocation "symex_dynamic::...". Heap allocations (malloc/calloc/realloc) use
 // that bare prefix; alloca, which lives on the stack, carries the extra
 // "alloca::" infix (see symex_mem() in
-// goto-symex/builtin_functions/memory_alloc.cpp).
+// goto-symex/engine/builtin_functions/memory_alloc.cpp).
 static bool is_symex_dynamic_object(const std::string &id)
 {
   return has_prefix(id, "symex_dynamic::");

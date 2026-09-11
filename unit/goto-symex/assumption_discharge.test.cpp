@@ -29,7 +29,7 @@
 
 #include <string>
 
-#include <goto-symex/slice.h>
+#include <goto-symex/equation/slice.h>
 
 #include "symex_run.h"
 

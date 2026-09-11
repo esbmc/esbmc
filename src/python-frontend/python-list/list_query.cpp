@@ -153,6 +153,13 @@ exprt python_list::compare(
       return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv();
     };
     auto is_bool = [](const typet &t) { return t == bool_type(); };
+    // A tuple is stored inline and compares by content, so it can be read out
+    // and compared here like a scalar. Without this the comparison falls to
+    // __ESBMC_list_eq, whose worklist loop reads its bound through a
+    // loop-carried index and so never converges without --unwind (#7691).
+    auto is_tuple = [&](const typet &t) {
+      return converter_.get_tuple_handler().is_tuple_type(t);
+    };
 
     auto is_concrete_map = [&](const std::string &list_id) -> bool {
       const auto *recorded = elem_types().find(list_id);
@@ -168,7 +175,7 @@ exprt python_list::compare(
         if (!elem_sym)
           return false;
         if (!(is_numeric(elem_sym->get_type()) ||
-              is_bool(elem_sym->get_type())))
+              is_bool(elem_sym->get_type()) || is_tuple(elem_sym->get_type())))
           return false;
       }
       return true;
@@ -261,8 +268,10 @@ exprt python_list::compare(
         else
         {
           if (
-            !(is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)) ||
-            !(is_numeric(rhs_elem_type) || is_bool(rhs_elem_type)))
+            !(is_numeric(lhs_elem_type) || is_bool(lhs_elem_type) ||
+              is_tuple(lhs_elem_type)) ||
+            !(is_numeric(rhs_elem_type) || is_bool(rhs_elem_type) ||
+              is_tuple(rhs_elem_type)))
             return false;
 
           const exprt index = from_integer(BigInt(i), size_type());
@@ -350,9 +359,13 @@ exprt python_list::compare(
 
             // Same-type numeric/bool compares directly; mixed numeric promotes
             // both sides to double first. (V.3: built in IREP2.)
+            // A tuple compares directly only against the identical tuple type:
+            // two tuples whose string members were padded to different widths
+            // are different struct sorts, which an equality would not relate.
             if (
               lhs_elem_type == rhs_elem_type &&
-              (is_numeric(lhs_elem_type) || is_bool(lhs_elem_type)))
+              (is_numeric(lhs_elem_type) || is_bool(lhs_elem_type) ||
+               is_tuple(lhs_elem_type)))
             {
               // direct compare
             }
@@ -528,29 +541,17 @@ exprt python_list::compare(
 
   // Statically-known element byte size for the primitive comparison, so the
   // model's __ESBMC_values_equal takes its branch-free fast path instead of
-  // memcmp's symbolic-size byte loop (the dominant cost when comparing large
-  // lists, e.g. `assert l == [...]`). Emitted only when both operands' first
-  // element is the same fixed-width scalar; 0 otherwise, which makes the model
-  // fall back to the per-element a->size read (exact prior behaviour).
-  size_t eq_elem_size_bytes = 0;
-  {
-    auto scalar_width = [](const typet &t) -> size_t {
-      if (
-        (t.id() == "signedbv" || t.id() == "unsignedbv" ||
-         t.id() == "floatbv" || t.id() == "fixedbv") &&
-        !t.width().empty())
-        return std::stoull(t.width().as_string(), nullptr, 10) / 8;
-      return 0;
-    };
-    const typet lt =
-      elem_types().element_type(converted_l1.identifier().as_string(), 0);
-    const typet rt =
-      elem_types().element_type(converted_l2.identifier().as_string(), 0);
-    size_t lw = lt.is_nil() ? 0 : scalar_width(lt);
-    size_t rw = rt.is_nil() ? 0 : scalar_width(rt);
-    if (lw != 0 && lw == rw)
-      eq_elem_size_bytes = lw;
-  }
+  // memcmp's symbolic-size byte loop, which does not converge without --unwind
+  // (#7691). The model applies this one length to every element, so every
+  // recorded element on both sides has to agree on it: reading only the first
+  // element's width compared 8 bytes of an 11-byte string in
+  // `[1, "abcdefghij"] == [1, "abcdefghix"]` and proved two different lists
+  // equal (#7699). 0 keeps the model on its per-element a->size read.
+  const BigInt lhs_elem_size = uniform_elem_size(converted_l1);
+  const BigInt rhs_elem_size = uniform_elem_size(converted_l2);
+  const BigInt eq_elem_size_bytes =
+    (lhs_elem_size != 0 && lhs_elem_size == rhs_elem_size) ? lhs_elem_size
+                                                           : BigInt(0);
 
   code_function_callt list_eq_func_call;
   list_eq_func_call.function() = build_symbol(*list_eq_func_sym);

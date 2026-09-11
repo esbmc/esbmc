@@ -28,7 +28,7 @@ def check(condition, message):
 def test_partitioning():
     """Every path lands in the partition its gate depends on."""
     cases = {
-        "src/goto-symex/symex_main.cpp": "core",
+        "src/goto-symex/engine/symex_main.cpp": "core",
         "src/util/irep/migrate.h": "core",
         "src/c2goto/library/string.c": "om",
         "src/cpp/library/vector": None,

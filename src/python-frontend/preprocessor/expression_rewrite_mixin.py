@@ -40,13 +40,20 @@ class ExpressionRewriteMixin:
             self.statements.extend(prefix)
             return result_expr
 
-        def visit_SetComp(self, node):
+        def _lower_as_listcomp(self, node):
+            """Build a ListComp over node's elt/generators and lower it,
+            extending self.statements. Shared by SetComp and GeneratorExp,
+            which differ only in what they do with the resulting list."""
             # pylint: disable=protected-access
             listcomp = ast.ListComp(elt=node.elt, generators=node.generators)
             ast.copy_location(listcomp, node)
             ast.fix_missing_locations(listcomp)
-            prefix, list_name = self.preprocessor._lower_listcomp(listcomp)
+            prefix, result_expr = self.preprocessor._lower_listcomp(listcomp)
             self.statements.extend(prefix)
+            return result_expr
+
+        def visit_SetComp(self, node):
+            list_name = self._lower_as_listcomp(node)
             set_call = ast.Call(
                 func=ast.Name(id="set", ctx=ast.Load()),
                 args=[list_name],
@@ -55,6 +62,10 @@ class ExpressionRewriteMixin:
             ast.copy_location(set_call, node)
             ast.fix_missing_locations(set_call)
             return set_call
+
+        def visit_GeneratorExp(self, node):
+            """Lower a genexp not already handled above (any/all/join/...)."""
+            return self._lower_as_listcomp(node)
 
         def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"

@@ -200,7 +200,12 @@ const struct group_opt_templ all_cmd_options[] = {
      "Diagnostic: make the IREP2-native C adjuster refresh every symbol's "
      "legacy value, not only the ones it changed. Without it a body the pass "
      "did not touch still prints its converter tree under "
-     "--symbol-table-only, which is not what the pass produced"}}},
+     "--symbol-table-only, which is not what the pass produced"},
+    {"clang-cpp-irep2-migrate-census",
+     NULL,
+     "Diagnostic: migrate every adjusted C++ symbol through IREP2 and report "
+     "the count, to find what the C++ frontend emits that IREP2 cannot "
+     "represent (Phase 7; read-only, default off)"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
