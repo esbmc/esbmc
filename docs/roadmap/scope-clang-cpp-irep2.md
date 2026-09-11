@@ -334,14 +334,113 @@ R6 is the newest and the least obvious: §137 found `is_padding` dropped by
 attributes than any other frontend — `#cpp_type`, `#member_name`, catch-match
 spellings (§33) — so W3's carriage problem lands here first.
 
+### 3.1 Option B taken: one arm table, shared
+
+Priced and chosen. `clang_c_adjust_irep2`'s private section became `protected`,
+`adjust_sole_arms` became virtual, and the arm row became a template over the
+pass (`adjust_arm<Pass>` in `clang_c_adjust_irep2.h`), so `clang_cpp_adjust_irep2`
+orders the arms it inherits alongside its own in one table. No per-statement-kind
+virtual was reintroduced, which is what option A would have cost.
+
+One compiler constraint shaped the row. A pointer to a base member stored in a
+derived-typed table is legal, but GCC 13.3 mis-reads the call once the runner
+inlines it and rejects it under `-Werror=array-bounds` at `-O2`; clang 18 accepts
+it. The row therefore holds a function pointer produced by a captureless lambda
+trampoline, which is an address constant, so the table stays
+constant-initialised.
+
+`unit/clang-c-frontend/adjust_arms.test.cpp` reads `arm_order()` as a drift
+guard. It checks a **subsequence**, not equality: a sibling frontend adding rows
+must not fail the C pass's guard.
+
+### 3.2 The hop-off flag, and the census by verdict
+
+`--clang-cpp-irep2-adjust-only` mirrors `--clang-c-irep2-adjust-only`: the IREP2
+pass *replaces* the legacy one, so a divergence under the flag is a missing arm
+rather than a shadow-mode artefact. With the table carrying only the inherited C
+arms, the C++ corpus named the missing work rather than guesswork doing it.
+
+Everything from §3.3 on is one row of that census.
+
+### 3.3–3.11 The arms the census named
+
+Landed, in order: the reference arms of `implicit_typecast_followed`
+(`c_typecast.cpp`), the C++ member-call arm, exception ids
+(`clang_cpp_exception_id.{h,cpp}`, freed from `clang_cpp_adjust` so both passes
+compute them from one place), and vtable-pointer generation
+(`clang_cpp_code_gen.h`, reached through a `gen_symbol_code` hook so a bodyless
+symbol still gets its vptr writes).
+
+### 3.12 Base-conversion displacement: the soundness row
+
+The row that mattered. Three tests proved `SUCCESSFUL` under the flag against
+the legacy pass's `FAILED` — silently false proofs, not crashes:
+`destructors/github_6263_nonvirtual_base_delete`,
+`inheritance/github_7025_vbase_nonfirst_member_fail`,
+`inheritance/mi_base_subobject_layout_fail`.
+
+Four separate defects, each found by fixing the one before it:
+
+1. **The marker reaches IREP2 on the wrong node kind.** A `#derived_to_base`
+   marker names whichever expression is being converted. Counted over
+   `regression/esbmc-cpp`: **symbol 32474, dereference 4502, sideeffect 30,
+   address_of 19, typecast 58**. Carrying it on `typecast2t` alone therefore
+   reached 0.2 % of them. IREP2 has nowhere to hang a flag on an arbitrary node,
+   so `migrate_before_dispatch` wraps a marked non-cast node in a same-type
+   `typecast2t` — the identity — and `back_typecast` unwraps it, leaving the
+   legacy tree unchanged. `#base_to_derived`, by contrast, is on a typecast
+   **14991 times out of 14991**, so the field carries it outright.
+2. **The displacement must come from ESBMC's own layout.** `base_displacement`
+   and its three helpers moved out of `clang_c_adjust_expr.cpp` into
+   `clang_c_base_layout.{h,cpp}` so both passes ask one oracle. Recomputing it
+   from clang's `ASTRecordLayout` is the mistake #3894 records.
+3. **A dereference the converter leaves typed `empty`.**
+   `clang_c_adjust::adjust_dereference` takes the node's type from the pointer's
+   subtype; the IREP2 port had only the array and function-pointer cases. The
+   C++ converter builds `*this` typed `empty` and relies on that assignment, so
+   without it every member offset resolved below the dereference is taken
+   against the wrong struct.
+4. **One cast can carry both markers.** `clang_cpp_convert_vft.cpp` marks a
+   `dynamic_cast`'s typecast `#base_to_derived` and `#derived_to_base` at once.
+   `clang_c_adjust` resolves them by *re-entering* `adjust_expr` on the
+   marker-stripped node, so base-to-derived runs first and the derived-to-base
+   displacement applies to its result — the whole node, not the cast's operand.
+   An arm that rebuilds a `typecast2t` must forward the marker it is not
+   consuming, or the `-16` re-base is dropped while the `+16` is applied.
+
+A fifth defect surfaced only because the pass now rewrites more symbols:
+`back_sideeffect` default-constructed the size `exprt` and wrote it into
+`#size` unconditionally. An empty irep is a third state — `is_not_nil()` reports
+it as *present* — so the forward arm preferred it over the real `size` field and
+threw `migrate expr failed`. See `irept-find-location-nil-ambiguity`: absent,
+present-nil and present-empty are three states, and `is_nil()` separates only
+two of them.
+
+**Measured.** Over the 402 tests in `regression/esbmc-cpp/{inheritance,
+destructors,polymorphism_bringup,polymorphism_bringup_overload,try_catch,
+inheritance_bringup}`, verdict agreement between the legacy pass and
+`--clang-cpp-irep2-adjust-only`:
+
+| | agree | false proofs |
+|---|---|---|
+| before | 160 / 402 | 3 |
+| after | **293 / 402** | **0** |
+
+No test moved away from the legacy verdict. The first attempt did regress one
+(`inheritance/mi_dynamic_cast_fail`), which is how defect 4 was found; the
+before/after census is what caught it, not the suite, because the three
+displacements cancelled in the goto dump and the symbol table — both were
+byte-identical while the verdicts differed.
+
 ## 6. Next
 
 1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
-   Item 1 is now writable, and it is the next slice: 70 % of the corpus needs
-   it, and unlike §2.3's arms it will move verdicts, so it owes a
-   `SUCCESSFUL`/`FAILED` pair.
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
-3. Price option B in §3 against option A.
-4. Add the C++ hop-off flag, then run the census by verdict.
-
-Only then does a slice make sense.
+3. ~~Price option B in §3 against option A~~ — **done**, §3.1: option B.
+4. ~~Add the C++ hop-off flag, then run the census by verdict~~ — **done**, §3.2.
+5. The **109 remaining divergences** in §3.12's census. They are no longer a
+   single cause: `try_catch` contributes the most rows, and the `NONE` rows
+   (no verdict at all) should be split from the disagreeing ones first, since a
+   crash and a wrong answer are different work.
+6. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
+   reaches the goto program on C++.
