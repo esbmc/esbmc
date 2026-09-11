@@ -2445,6 +2445,14 @@ std::optional<std::vector<std::size_t>>
 python_converter::get_numpy_nditer_logical_shape(
   const std::string &root_id) const
 {
+  // A 2-D+ numpy array parameter: its own symbol type lost the outer
+  // dimension to the C-ABI row-pointer decay (register_function_argument),
+  // so the full shape must come from here rather than the fallback below,
+  // which would otherwise read the decayed (1-D) type instead.
+  if (auto param_it = numpy_param_shapes_.find(root_id);
+      param_it != numpy_param_shapes_.end())
+    return param_it->second;
+
   if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
       pointer_it != numpy_pointer_view_info_.end())
     return std::vector<std::size_t>{pointer_it->second.length};

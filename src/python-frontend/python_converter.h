@@ -613,6 +613,16 @@ private:
     const symbolt &symbol,
     const std::string &attr_name);
 
+  // v.shape / v.ndim / v.size where v is a 2-D+ numpy array parameter: its
+  // full logical shape is tracked in numpy_param_shapes_ (populated by
+  // register_function_argument before the C-ABI row-pointer decay erases the
+  // outer dimension). Mirrors try_get_numpy_pointer_view_shape_attr's split
+  // reasoning. Returns std::nullopt for any other attribute or an untracked
+  // symbol, so the caller falls through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_param_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -1918,6 +1928,15 @@ private:
   };
   std::unordered_map<std::string, numpy_reshape_view_infot>
     numpy_reshape_view_info_;
+  // A 2-D+ numpy array parameter's full logical shape, keyed by the
+  // parameter's own symbol id. register_function_argument decays such a
+  // parameter to a pointer to its row type for the C ABI (gen_pointer_type
+  // over arg_type.subtype()), which is what the backend needs but erases the
+  // outer dimension from the parameter's own type -- unwrapping the pointer
+  // recovers only the row shape, not the row count. `.shape`/`.ndim`/`.size`
+  // and the array-consuming numpy calls (transpose, sort/argsort/
+  // searchsorted, reducers) read the pre-decay shape from here instead.
+  std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
