@@ -919,7 +919,6 @@ void c_typecastt::implicit_typecast_followed(
       expr = to_constant_string2t(retyped).to_array();
       return;
     }
-
   }
 
   if (check_c_implicit_typecast(src_type, dest_type))

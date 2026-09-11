@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --multi-property
+^VERIFICATION SUCCESSFUL$
+^  PASSED +\[main\.assertion\.\d+\] +line +12 +assertion signbit\(s\)$

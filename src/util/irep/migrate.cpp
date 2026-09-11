@@ -1768,6 +1768,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
+    /* The pointer is built from the pointee, so without carrying the spelling
+     * across an `&x` typed `T&` migrates to a plain pointer even when
+     * migrate_type0()'s pointer arm is doing its job. */
     new_expr_ref = address_of2tc(
       type, theval, expr.implicit(), pointer_ref_kind(expr.type()));
     return;
