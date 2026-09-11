@@ -467,9 +467,18 @@ Three options for the carriage, none yet costed:
   `exception_list`. Contained, but stores what the block already knew.
 - **C — compute the ids in the converter,** so `exception_id` is set before
   either pass runs and no type needs to cross the seam. Architecturally the
-  cleanest, and it deletes work from the legacy pass rather than adding a field
-  — but it moves `convert_exception_id` to a point where the class's type symbol
-  must already be complete, which is the assumption to check first.
+  cleanest, and it deletes work from the legacy pass rather than adding a field.
+
+**C's one assumption holds, measured.** The doubt was whether the class's type
+symbol is complete early enough for `convert_exception_id` at the
+`CXXTryStmtClass` site. A probe calling it there over the whole `try_catch`
+suite saw **266 handlers and 0 fall through to the last-resort id** — every one
+resolved to a real name (`ellipsis` 51, `signed_int` 41, a class tag 31, …).
+The converter already knows everything the adjust pass reads off the block type.
+
+One trap the probe surfaced: `is_catch` is what suppresses the `tag-` strip, and
+neither legacy call site sets it. Whatever computes a handler id must leave it
+`false`, or the id matches no throw.
 
 ## 6. Next
 
