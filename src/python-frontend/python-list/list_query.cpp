@@ -3,6 +3,37 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+/// `dict.items()` is modelled by a placeholder holding the dict's *keys*, not
+/// (key, value) tuples. Against a set of bare keys the fold below still answers
+/// correctly -- an items view never equals one, which github_7553_items_fail
+/// pins. Against a set of *tuples* it answered from contents that are not the
+/// view's, which proved `d.items() != {(k, v)}`, a property CPython makes false
+/// (#7553). Refuse only that shape, as set ordering already does.
+void python_list::reject_items_view_vs_tuple_set(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &converted_lhs,
+  const exprt &converted_rhs)
+{
+  const bool lhs_items = lhs.get_bool(PYTHON_ITEMS_VIEW_ATTR);
+  const bool rhs_items = rhs.get_bool(PYTHON_ITEMS_VIEW_ATTR);
+  if (!lhs_items && !rhs_items)
+    return;
+
+  const exprt &other = lhs_items ? converted_rhs : converted_lhs;
+  if (!other.is_symbol())
+    return;
+
+  const typet elem =
+    elem_types().uniform_element_type(other.identifier().as_string());
+  if (!elem.is_struct() && elem.id() != "symbol")
+    return;
+
+  throw std::runtime_error(
+    "comparing dict.items() with a set of tuples is not yet supported: the "
+    "view's (key, value) pairs are not modelled");
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -52,6 +83,7 @@ exprt python_list::compare(
   const bool rhs_is_set = rhs_symbol->is_set || is_keys_view(l2);
   if (lhs_is_set || rhs_is_set)
   {
+    reject_items_view_vs_tuple_set(l1, l2, converted_l1, converted_l2);
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
 

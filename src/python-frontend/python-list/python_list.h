@@ -619,6 +619,14 @@ private:
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
 
+  /// Refuses `dict.items()` against a set of tuples, whose pairs the
+  /// placeholder view does not model (#7553).
+  void reject_items_view_vs_tuple_set(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &converted_lhs,
+    const exprt &converted_rhs);
+
   symbolt &create_list();
 
   exprt
