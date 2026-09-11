@@ -434,6 +434,59 @@ fold_float_constant(expr2tc &expr, const irep_idt &name, bool &handled)
   return true;
 }
 
+/// C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's fp.rem.
+/// Lower only when the call is shaped like the C library function.
+///
+/// Legacy exempts the model build from the shape test, where its own
+/// remainder() calls are what put ieee_rem into the model. That is not ported:
+/// `clang-c-irep2-adjust-only` is not one of c2goto's options
+/// (src/c2goto/c2goto.cpp), so this pass never runs under `building-c-library`.
+static bool lower_float_library_call(
+  expr2tc &expr,
+  const irep_idt &name,
+  const std::vector<expr2tc> &args)
+{
+  if (!is_floatbv_type(expr->type))
+    return false;
+
+  // Each node is homogeneous in its own type, which every C17 spelling of these
+  // functions is. Legacy tests floatbv-ness alone and builds a width-mismatched
+  // node for a declaration that mixes widths, which the solver rejects.
+  for (const expr2tc &arg : args)
+    if (arg->type != expr->type)
+      return false;
+
+  const expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+
+  // The arity is part of the match: these kinds are fixed-arity, where legacy
+  // splices whatever arguments the call has into the node's operands.
+  switch (ieee_float_builtin_of(name))
+  {
+  case ieee_float_builtin::nearbyint:
+    if (args.size() != 1)
+      return false;
+    expr = nearbyint2tc(expr->type, args[0], rm);
+    return true;
+
+  case ieee_float_builtin::remainder:
+    if (args.size() != 2)
+      return false;
+    expr = ieee_rem2tc(expr->type, args[0], args[1], rm);
+    return true;
+
+  case ieee_float_builtin::fma:
+    if (args.size() != 3)
+      return false;
+    expr = ieee_fma2tc(expr->type, args[0], args[1], args[2], rm);
+    return true;
+
+  case ieee_float_builtin::none:
+    return false;
+  }
+
+  return false;
+}
+
 /// `sqrt`'s legacy arm additionally skips a `py:`-prefixed callee; this pass is
 /// constructed only from `clang_c_languaget::typecheck`, so no Python symbol
 /// can reach it and the guard has nothing to test.
@@ -445,6 +498,9 @@ bool clang_c_adjust_irep2::adjust_float_builtin(
   bool handled = false;
   if (const bool folded = fold_float_constant(expr, name, handled); handled)
     return folded;
+
+  if (lower_float_library_call(expr, name, args))
+    return true;
 
   if (args.size() != 1)
     return false;
