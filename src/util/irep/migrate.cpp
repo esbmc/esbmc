@@ -68,6 +68,10 @@ inline expr2tc invoke_intrinsic(
 // down.
 thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
+/// The reference spelling an irept pointer carries. Both the pointer type arm
+/// and the address-of expression arm need it: the latter builds its pointer
+/// from the pointee, so without this an `&x` typed `T&` migrates to a plain
+/// pointer even when the type arm is doing its job.
 /* struct_type2t/union_type2t have no per-member padding flag, so is_padding is
  * lost on the way back and a pad reads as a declared member. Re-derive it from
  * the name: every name add_padding reserves contains '#', which no C or C++

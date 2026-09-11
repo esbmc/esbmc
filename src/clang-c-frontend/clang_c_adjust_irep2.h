@@ -248,6 +248,14 @@ protected:
   /// (§100).
   void adjust_function_designators(expr2tc &expr);
 
+  /// Per-symbol code the pass synthesises rather than rewrites, run before the
+  /// value walk so what it emits is adjusted like the rest. Distinct from an
+  /// arm: an arm rewrites one node, this takes the whole symbol. C generates
+  /// nothing (docs/roadmap/scope-clang-cpp-irep2.md §3.6).
+  virtual void gen_symbol_code(symbolt &)
+  {
+  }
+
   /// Arms that run only when this pass is the sole adjuster, applied in the
   /// order `arms` lists them. Virtual so a derived pass substitutes its own
   /// table: one virtual for the whole dispatch, rather than the per-arm
