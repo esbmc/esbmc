@@ -1,4 +1,5 @@
 #include <python-frontend/python_language.h>
+#include <python-frontend/python_library.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/module/global_scope.h>
@@ -105,6 +106,9 @@ bool python_languaget::parse(const std::string &path)
   // (clang-c-frontend/c_preprocess.cpp).
   if (config.options.get_bool_option("deadlock-check"))
     args.push_back("--deadlock-check");
+
+  if (config.options.get_bool_option("python-typecheck"))
+    args.push_back("--typecheck");
 
   // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
@@ -279,6 +283,12 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // The lowering's inline re-raise fallback (remove_exceptions) covers Python's
   // bare `raise` without that OM.
   add_cprover_library(context, this);
+
+  if (
+    !config.options.get_bool_option("building-python-library") &&
+    !config.options.get_bool_option("no-library") &&
+    !config.options.get_bool_option("int-encoding"))
+    add_cpython_library(context);
 
   try
   {

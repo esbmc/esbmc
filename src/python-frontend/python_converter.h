@@ -1914,6 +1914,8 @@ private:
   };
   std::unordered_map<std::string, numpy_reshape_view_infot>
     numpy_reshape_view_info_;
+  /// Namespace of each operational model loaded this run, in load order.
+  std::vector<std::string> model_namespaces_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

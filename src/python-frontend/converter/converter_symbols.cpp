@@ -519,6 +519,18 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
 
   if (symbolt *symbol = find_symbol_in_global_scope(sym_id))
     return symbol;
+
+  const std::size_t at = sym_id.find('@');
+  if (
+    !is_loading_models && sym_id.rfind("py:", 0) == 0 &&
+    at != std::string::npos && at > 3)
+  {
+    const std::string suffix = sym_id.substr(at);
+    for (const std::string &ns : model_namespaces_)
+      if (symbolt *symbol = symbol_table_.find_symbol("py:" + ns + suffix))
+        return symbol;
+  }
+
   return find_imported_symbol(sym_id);
 }
 

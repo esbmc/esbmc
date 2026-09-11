@@ -67,7 +67,7 @@ target_include_directories(esbmc
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
-                            clangcfrontend clangcppfrontend symex langapi
+                            clangcfrontend clangcppfrontend symex langapi pysrclib
                             solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 if(MSVC)
