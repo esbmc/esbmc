@@ -338,4 +338,48 @@ short run once a build is available.
 
 What is settled: the guard is nil in a converter-generated body, in one of four
 named functions, and neither body converter, nor the loop shape, nor — on
-present evidence — the location seam explains it.
+present evidence — the location seam explains it. §7.6 closes it, and overturns
+the "probably not a missing arm" reading above.
+
+### 7.6 The cause: an unported arm, and the A/B that hid it
+
+A temporary `fprintf` in `convert_function` names the function in one run:
+`sol:@C@C@F@_ESBMC_Main_C#`, the 207th of 207 conversions, with the SIGSEGV
+immediately after it. A second `fprintf` dumping `symbol.get_value().pretty()`
+for that symbol gives the two trees the printed C form could not. The `while`
+condition is a `sideeffect` function call, and legacy against flag-on reads:
+
+| | legacy | `--clang-cpp-irep2-adjust-only` |
+|---|---|---|
+| the call's type | `bool` (`#cpp_type: bool`) | **empty**, keeping `#sol_type: BOOL` |
+| the callee symbol's type | `code`, with `arguments` and `return_type: bool` | **empty** |
+
+An expression with no type is what `goto_convert` turns into a nil guard, and
+`make_not` then dereferences it.
+
+Both losses have one cause, in
+`clang_c_adjust::adjust_side_effect_function_call` (`clang_c_adjust_expr.cpp`):
+when the callee resolves to a context symbol it replaces `f_op` with
+`symbol_expr(symbol)` — restoring the callee's `code` type from the symbol
+table — and then calls `align_se_function_call_return_type(f_op, expr)`, which
+sets the call's type to the callee's `return_type`. `clang_cpp_adjust`
+overrides that helper to skip constructors. Neither the callee replacement nor
+the alignment is ported: `grep -n 'align_se\|return_type'` over both IREP2
+adjust passes returns nothing.
+
+So the Solidity converter emits the call with an incomplete type carrying only
+`#sol_type: BOOL`, legacy repairs it, and the IREP2 pass leaves it as it found
+it. It is a missing arm after all, and a **C** one — so porting it serves the
+C++ frontend too.
+
+**The instrument was the mistake, not the reasoning.** §7.5 concluded "probably
+not a missing arm" from a `--symbol-table-only` A/B that differed in one line.
+That dump renders values as C source, and `expr2c` prints a call with an empty
+type exactly as it prints a typed one: `nondet_bool()`. The tree differed all
+along; the printer flattened it. Any future A/B over adjusted bodies wants
+`pretty()`, not the C rendering — the same shape of error as measuring a decline
+census from a goto dump instead of a verdict.
+
+Ported next, with the four-line contract as the test: it cannot reach a verdict
+at all today, so pinning `^VERIFICATION SUCCESSFUL$` on it under the flag is a
+gate no SIGSEGV can satisfy.
