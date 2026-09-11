@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^AxisError.*axis.*out of bounds
+^ERROR: AxisError: axis 2 is out of bounds for array of dimension 2$

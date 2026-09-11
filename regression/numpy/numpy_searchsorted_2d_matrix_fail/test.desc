@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^TypeError.*2d.*matrix
+^ERROR: TypeError: numpy\.searchsorted\(\) currently supports 1-D arrays only$
