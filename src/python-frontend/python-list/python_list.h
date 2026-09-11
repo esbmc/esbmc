@@ -619,6 +619,10 @@ private:
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
 
+  /// A constructed class instance arrives as a value struct; the element read
+  /// expects a reference. Box it so the two agree (#7685).
+  exprt as_object_reference(const nlohmann::json &op, const exprt &elem);
+
   symbolt &create_list();
 
   exprt
