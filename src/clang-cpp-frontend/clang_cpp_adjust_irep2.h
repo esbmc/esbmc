@@ -47,6 +47,11 @@ protected:
   /// object's destructors never run (scope-clang-cpp-irep2.md §3.14). The call
   /// travels in sideeffect2t::arguments[0], which the seam already carries.
   void adjust_cpp_delete(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_reference: read each operand that
+  /// is a reference through, so it is used as the value it names rather than as
+  /// the pointer IREP2 spells it with (scope-clang-cpp-irep2.md §3.16).
+  void adjust_reference(expr2tc &expr) override;
   void adjust_cpp_throw(expr2tc &expr);
 
 private:

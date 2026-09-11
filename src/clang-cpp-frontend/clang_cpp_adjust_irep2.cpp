@@ -199,6 +199,37 @@ void clang_cpp_adjust_irep2::adjust_cpp_delete(expr2tc &expr)
     se.type, se.operand, se.size, args, se.alloctype, se.kind, se.location);
 }
 
+namespace
+{
+/// `r` used as a value is `*r`. A cast of one is handled first, so `(int)r`
+/// becomes `(int)*r` rather than a cast of the pointer.
+void convert_reference(expr2tc &expr)
+{
+  if (is_typecast2t(expr))
+  {
+    const typecast2t cast = to_typecast2t(expr);
+    if (is_symbol2t(cast.from) && is_reference_type(cast.from->type))
+      expr = typecast2tc(
+        cast.type,
+        dereference2tc(to_pointer_type(cast.from->type).subtype, cast.from),
+        cast.rounding_mode,
+        cast.derived_to_base,
+        cast.base_to_derived);
+  }
+
+  if (is_reference_type(expr->type))
+    expr = dereference2tc(to_pointer_type(expr->type).subtype, expr);
+}
+} // namespace
+
+void clang_cpp_adjust_irep2::adjust_reference(expr2tc &expr)
+{
+  expr->Foreach_operand([](expr2tc &op) {
+    if (!is_nil_expr(op))
+      convert_reference(op);
+  });
+}
+
 void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)
 {
   // The legacy pass generates these *after* adjusting the body; here they are

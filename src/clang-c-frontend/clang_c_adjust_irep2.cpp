@@ -915,6 +915,7 @@ void clang_c_adjust_irep2::adjust_shift_operands(expr2tc &expr)
 /// their own, and are left where this mode already had them.
 void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
 {
+  adjust_reference(expr);
   const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
   if (a.op != "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
     return;
@@ -1007,6 +1008,7 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
 
 void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
 {
+  adjust_reference(expr);
   expr2tc op0 = *expr->get_sub_expr(0);
   expr2tc op1 = *expr->get_sub_expr(1);
   if (is_nil_expr(op0) || is_nil_expr(op1))

@@ -125,6 +125,14 @@ public:
   // (docs/roadmap/scope-clang-cpp-irep2.md §3.1). Not public: nothing outside
   // an adjust pass has any business calling a single arm.
 protected:
+  /// Read a reference-typed operand through, where the operand is used as a
+  /// value: `r` becomes `*r`. Empty for C, which has no references, and
+  /// overridden by the C++ pass -- exactly as clang_c_adjust::adjust_reference
+  /// is (scope-clang-cpp-irep2.md §3.16).
+  virtual void adjust_reference(expr2tc &)
+  {
+  }
+
   /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
   /// the operand recursion and returns before this point when the flag is on
   /// (scope-clang-c-irep2.md §19.2).

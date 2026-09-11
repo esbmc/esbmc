@@ -63,6 +63,15 @@ inline bool is_short_circuit(const expr2tc &expr)
   return is_and2t(expr) || is_or2t(expr) || is_not2t(expr);
 }
 
+/// A C++ reference: IREP2 spells one as a pointer carrying a reference kind
+/// (scope-clang-cpp-irep2.md §2.5), so a value of this type has to be read
+/// through before it is used as one.
+inline bool is_reference_type(const type2tc &type)
+{
+  return is_pointer_type(type) &&
+         to_pointer_type(type).ref_kind != pointer_ref_kindt::NONE;
+}
+
 /// An allocation side effect: `new`, `new[]`, `delete`, `delete[]`. Its
 /// `arguments` are carriage -- the destructor call, a replaced operator
 /// new/delete -- rather than program operands, because the legacy pass keeps
