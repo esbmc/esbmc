@@ -579,23 +579,37 @@ bool has_side_effect(const expr2tc &expr)
 void drop_derived_to_base(expr2tc &expr)
 {
   const typecast2t cast = to_typecast2t(expr);
-  expr = cast.type == cast.from->type
+  // One cast can carry both markers (clang_cpp_convert_vft.cpp builds exactly
+  // that for a dynamic_cast), so the surviving one has to be forwarded onto
+  // the rebuilt node.
+  expr = cast.type == cast.from->type && !cast.base_to_derived
            ? cast.from
-           : typecast2tc(cast.type, cast.from, cast.rounding_mode);
+           : typecast2tc(
+               cast.type,
+               cast.from,
+               cast.rounding_mode,
+               irep_idt(),
+               cast.base_to_derived);
 }
 } // namespace
 
 void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
 {
-  const typecast2t cast = to_typecast2t(expr);
-  const irep_idt base_id = cast.derived_to_base;
+  const irep_idt base_id = to_typecast2t(expr).derived_to_base;
   drop_derived_to_base(expr);
+
+  // clang_c_adjust reaches this arm by re-entering adjust_expr on the
+  // marker-stripped node, so a cast carrying both markers is re-based off its
+  // own base subobject first and displaced onto base_id afterwards -- and the
+  // displacement applies to what that left behind, not to the cast's operand.
+  if (is_base_to_derived_cast(expr))
+    adjust_base_to_derived(expr);
 
   // Pointer form: (Base *)derived_ptr. Value form: the derived lvalue itself,
   // which clang leaves in place for an implicit object argument.
-  const bool ptr_mode = is_pointer_type(cast.type);
+  const bool ptr_mode = is_pointer_type(expr->type);
   const type2tc derived =
-    ptr_mode ? to_pointer_type(cast.type).subtype : cast.type;
+    ptr_mode ? to_pointer_type(expr->type).subtype : expr->type;
 
   BigInt offset = 0;
   if (
@@ -605,7 +619,7 @@ void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
 
   // The null guard below names the operand twice, and side effects are not
   // lifted out until remove_sideeffects; displacing `f()` would call f twice.
-  if (has_side_effect(cast.from))
+  if (has_side_effect(expr))
   {
     log_debug(
       "c++",
@@ -617,8 +631,7 @@ void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
   const type2tc base_ptr = migrate_type(pointer_typet(symbol_typet(base_id)));
   const type2tc char_ptr = migrate_type(pointer_typet(char_type()));
 
-  const expr2tc src =
-    ptr_mode ? cast.from : expr2tc(address_of2tc(derived, cast.from));
+  const expr2tc src = ptr_mode ? expr : expr2tc(address_of2tc(derived, expr));
   expr2tc adjusted = typecast2tc(char_ptr, src);
   adjusted = add2tc(
     char_ptr, adjusted, constant_int2tc(migrate_type(index_type()), offset));
@@ -643,17 +656,23 @@ void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
 void clang_c_adjust_irep2::adjust_base_to_derived(expr2tc &expr)
 {
   const typecast2t cast = to_typecast2t(expr);
-  expr = typecast2tc(cast.type, cast.from, cast.rounding_mode);
+  expr = typecast2tc(
+    cast.type, cast.from, cast.rounding_mode, cast.derived_to_base, false);
 
   const expr2tc &src = cast.from;
   if (!is_pointer_type(src->type) || !is_pointer_type(cast.type))
     return;
 
+  // The legacy arm reads the identifier off a symbol_typet; by the time a type
+  // reaches here migrate_type may have resolved it to the struct, so take the
+  // tag from either spelling.
   const type2tc &base_t = to_pointer_type(src->type).subtype;
-  if (!is_symbol_type(base_t))
+  const irep_idt base_id =
+    is_symbol_type(base_t)   ? to_symbol_type(base_t).symbol_name
+    : is_struct_type(base_t) ? to_struct_type(base_t).name
+                             : irep_idt();
+  if (base_id.empty())
     return;
-
-  const irep_idt base_id = to_symbol_type(base_t).symbol_name;
   const type2tc derived = to_pointer_type(cast.type).subtype;
 
   BigInt offset = 0;
