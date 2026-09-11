@@ -1813,6 +1813,17 @@ bool python_converter::is_basic_numpy_view_subscript(
     !node.contains("value") || !node.contains("slice"))
     return false;
 
+  // `.shape[i]` indexes the plain int tuple `.shape` returns, never the
+  // array's own data -- it must never be tracked as a numpy view/alias
+  // (root_name_from_subscript drills through any Attribute to its base
+  // Name, so without this guard `shape_0 = a.shape[0]` registers shape_0
+  // as a view copy of `a` itself).
+  if (
+    node["value"].is_object() &&
+    node["value"].value("_type", "") == "Attribute" &&
+    node["value"].value("attr", "") == "shape")
+    return false;
+
   auto is_boolean_mask_index = [&](const nlohmann::json &idx) {
     nlohmann::json value = idx;
     if (idx.value("_type", "") == "Name" && idx.contains("id"))
