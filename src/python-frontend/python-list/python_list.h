@@ -21,10 +21,6 @@ struct list_elem_info
   symbolt *elem_symbol;
   exprt elem_size;
   locationt location;
-  // True when elem_symbol already holds the element's raw value pointer
-  // (its size may be symbolic post-join), so callers must use the
-  // bounded-copy push/insert path instead of the generic byte-copy one.
-  bool is_tagged_scalar = false;
 };
 
 class python_list
@@ -622,6 +618,13 @@ private:
 
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
+
+  list_elem_info
+  get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
+
+  // The type_id a tagged scalar carries when it holds a float, or 0 when the
+  // caller opts out of the float path (dict values compare via void*).
+  exprt tagged_float_type_id(bool enable_float_path) const;
 
   symbolt &create_list();
 

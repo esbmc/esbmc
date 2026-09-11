@@ -4,4 +4,4 @@ if cond:
 else:
     x = "a"
 lst = [x]
-assert lst[0] == 1 and lst[0] == "a"
+assert lst[0] == 1
