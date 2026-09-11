@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std c++23
+^ERROR: exception lowering: cannot lower a thread with an unresolved start routine$

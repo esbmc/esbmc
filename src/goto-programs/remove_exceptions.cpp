@@ -212,7 +212,12 @@ public:
           const code_function_call2t &c = to_code_function_call2t(it->code);
           if (is_symbol2t(c.function))
             direct_call_targets.insert(to_symbol2t(c.function).thename);
-          collect_thread_entry(c);
+          // Only a call the entry can reach starts a thread. std::thread's
+          // operational model hands pthread_create its own `f` parameter, so
+          // scanning unreachable bodies reported an unresolved routine for any
+          // program that merely includes <thread> and uses exceptions (#7644).
+          if (entry_reachable_.count(fn.first))
+            collect_thread_entry(c);
         }
       }
     }
