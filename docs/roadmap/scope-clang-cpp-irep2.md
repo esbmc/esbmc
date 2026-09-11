@@ -489,8 +489,26 @@ path unchanged at `try_catch` 172/172.
 
 ### 3.14 What the census names next
 
-41 divergences remain, none of them a false proof. Two clusters account for 11
-of them and each is one arm:
+**Reproducing the census.** `scripts/irep2-migration/parity_sweep.sh` is the
+harness; `PARITY_FLAG` selects what it sweeps:
+
+```sh
+for d in inheritance destructors polymorphism_bringup \
+         polymorphism_bringup_overload try_catch inheritance_bringup; do
+  PARITY_FLAG=--clang-cpp-irep2-adjust-only PARITY_TIMEOUT=40 \
+    scripts/irep2-migration/parity_sweep.sh build/src/esbmc/esbmc \
+    regression/esbmc-cpp/$d
+done
+```
+
+Pass the binary by a path, not a bare name, and read the per-suite totals: a
+run that measured nothing still prints `0 divergence(s)`.
+
+At this point in the series that reports **33 divergences over 394 tests** --
+`destructors` 4 of 14, `try_catch` 29 of 168, and **zero** in `inheritance`
+(102), `polymorphism_bringup` (46), `polymorphism_bringup_overload` (49) and
+`inheritance_bringup` (15). None is a false proof. Two clusters account for the
+four in `destructors` and the arm that closed seven more:
 
 - **`cpp_delete` (7 rows)** -- `destructors/github_6198*` (5) and
   `3_SI_virtual_ntvalDtor` (2). `clang_cpp_adjust::adjust_cpp_delete` attaches a
@@ -515,7 +533,9 @@ The remaining 29 `try_catch` rows are false alarms clustered on
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
 3. ~~Price option B in §3 against option A~~ — **done**, §3.1: option B.
 4. ~~Add the C++ hop-off flag, then run the census by verdict~~ — **done**, §3.2.
-5. ~~The 109 remaining divergences in §3.12's census~~ -- §3.13 closed 68 of
-   them. The 41 left are bucketed in §3.14; `cpp_delete` is the next arm.
+5. ~~The 109 remaining divergences in §3.12's census~~ -- §3.13 and the
+   `cpp_delete` arm closed 75 of them. §3.14 has the command that reproduces
+   what is left and buckets it: 4 `pseudo-destructor` rows, which cannot be an
+   arm, and 29 `try_catch` rows on `exception_spec_*`.
 6. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
    reaches the goto program on C++.
