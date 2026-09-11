@@ -72,9 +72,9 @@ constructs no IR at all — the analogue of `clang_c_lexer.cpp` in Phase 6's
 
 ### 1.3 Corpus
 
-| Suite | Tests |
-|---|---|
-| `esbmc-solidity` | 525 |
+| Suite | Tests | CORE | THOROUGH | KNOWNBUG |
+|---|---:|---:|---:|---:|
+| `esbmc-solidity` | 525 | 324 | 193 | 8 |
 
 Tests ship a pre-generated `contract.solast` beside `contract.sol`, and the
 flags line names both (`--sol contract.sol --contract <Name>`), so `solc` is
@@ -128,8 +128,8 @@ measurement before the flag is wired, not after.
 ## 3. Proposed decomposition (not yet executed)
 
 1. **S.1** Wire `clang-cpp-irep2-adjust-only` into
-   `solidity_languaget::typecheck` and report the divergence count over the 525
-   tests. Measured baseline, no porting. Gated on §2.1's measurement.
+   `solidity_languaget::typecheck` and report the divergence count over the
+   corpus. Measured baseline, no porting. **Done — §7.**
 2. **S.2** A read-only `migrate` census for the Solidity converter's output, as
    `--clang-cpp-irep2-migrate-census` is for C++: run every value through
    `get_value2()` and report what `migrate_expr` cannot represent. This is the
@@ -170,4 +170,72 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-S.1 and S.2, in that order, each as its own change. Neither ports anything.
+S.2, then the cause §7.2 names. Neither ports an arm.
+
+## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
+
+The wiring mirrors `clang_cpp_language.cpp` — there is no C++ shadow mode, only
+`clang-cpp-irep2-adjust-only`, so the gate is a single `if`/`else`. Default path
+unchanged.
+
+Before the wiring the flag was inert here: `abi_decode_1` run with it was
+byte-identical to the same run without. After it, that test SIGSEGVs, which is
+how the wiring is observed at all — see §7.3.
+
+### 7.1 The measurement
+
+Stride-8 sample of the corpus, each row run twice on one binary, flag off
+against flag on:
+
+| | rows |
+|---|---:|
+| measured | 65 |
+| verdicts agree | **5** |
+| verdicts diverge | 9 |
+| crash under the flag | **51** |
+
+A sample, not the whole corpus, and labelled as one: the machine this ran on
+was under memory pressure heavy enough to have an earlier build OOM-killed, and
+a 517-row sweep is 1 034 runs. The conclusion does not turn on the precision —
+78 % of a stride sample crashing is not a figure a fuller run reverses into
+health.
+
+This is R1 arriving as a number rather than a prediction. Wiring the flag
+exposes Solidity to every open Phase 7 divergence at once, which is exactly why
+S.1 was specified as a measurement and not a flip.
+
+### 7.2 The crashes are one site
+
+Seven crashing rows sampled across the corpus — `abi_decode_1`, `bitwise_ops_2`,
+`array_2`, `clearing_mapping_1`, `error_3`, `mapping_12`, `super_3` — symbolised
+with `--segfault-handler` and `addr2line`. All seven share one top frame:
+
+```
+is_constant_bool2t(irep_container<expr2t> const&)   src/irep2/expr_kinds.inc:23
+goto_convertt::optimize_guarded_gotos(goto_programt&)
+                                     src/goto-programs/goto_convert.cpp:102
+```
+
+`optimize_guarded_gotos` tests `is_true(it_goto_y->guard)`, which is inlined,
+and `is_constant_bool2t` dereferences the container. A GOTO instruction is
+therefore reaching that pass with a **nil guard** where the legacy path leaves
+a `true` one — so the defect is upstream of `goto_convert`, in what the IREP2
+pass fails to fill in, not in the optimisation.
+
+Naming the site is not naming the cause. Which expression is left nil, and by
+which missing arm, is the next investigation; Phase 7's §3.3 found the same
+shape (23 crashes, one site) and the cause was an unpopulated list the
+converter leaves empty. That is a hypothesis here, not a finding.
+
+### 7.3 What pins this, and what cannot
+
+Nothing end-to-end. A flag-pinned Solidity test over one of the 5 agreeing rows
+passes with the wiring in or out, so it pins nothing; a test pinning a diverging
+or crashing row would be pinning the defect. The evidence for S.1 is the
+measurement above, reproducible with the two commands in §1.1 plus the flag.
+
+The instrument becomes available the moment §7.2's cause is fixed: a Solidity
+row that today crashes, pinned for *producing a verdict at all*, is a real gate
+— `^VERIFICATION SUCCESSFUL$` cannot match a SIGSEGV. That test belongs to the
+change that fixes the crash, not to this one. #7717 shipped the C++ pass the
+same way, with its census as the evidence.
