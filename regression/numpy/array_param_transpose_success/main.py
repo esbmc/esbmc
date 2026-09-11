@@ -14,7 +14,7 @@ a = np.array([[1, 2], [3, 4]])
 v1, v2, v3 = transpose_param(a)
 
 # a is [[1, 2], [3, 4]], so a.T is [[1, 3], [2, 4]]
-# a.T[0, 1] = 3, a.T[1, 0] = 2, a.T[0, 1] = 3
+# b[0, 1] = 3, c[1, 0] = 2, d[0, 1] = 3
 assert v1 == 3
 assert v2 == 2
 assert v3 == 3
