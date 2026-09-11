@@ -100,6 +100,9 @@ static void require_arith_result(
 int main(int argc, char *argv[])
 {
   config.ansi_c.set_data_model(configt::LP64);
+  // set_data_model leaves endianess at NO_ENDIANESS, which constant_string2t's
+  // to_array() asserts against; the assertion is live in the DebugOpt build.
+  config.ansi_c.endianess = configt::ansi_ct::IS_LITTLE_ENDIAN;
   return Catch::Session().run(argc, argv);
 }
 
