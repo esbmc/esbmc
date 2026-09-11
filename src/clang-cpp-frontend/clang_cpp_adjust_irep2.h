@@ -33,6 +33,14 @@ protected:
   /// there by the converter, so only the callee changes.
   void adjust_cpp_member(expr2tc &expr);
 
+  /// IREP2 form of clang_cpp_adjust::adjust_catch's id assignment and of the
+  /// throw arm's. Both nodes hold their catchable-type ids in an
+  /// `exception_list` field, which the converter leaves empty;
+  /// remove_exceptions dereferences it, so an unpopulated list is a crash
+  /// rather than a lost property (docs/roadmap/scope-clang-cpp-irep2.md §3.3).
+  void adjust_cpp_catch(expr2tc &expr);
+  void adjust_cpp_throw(expr2tc &expr);
+
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
 
