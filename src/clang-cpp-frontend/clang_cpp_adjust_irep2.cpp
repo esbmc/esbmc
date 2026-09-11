@@ -116,9 +116,11 @@ void clang_cpp_adjust_irep2::adjust_cpp_catch(expr2tc &expr)
   std::vector<irep_idt> ids;
   for (std::size_t i = 1; i < c.operands.size(); i++)
   {
+    // is_catch stays false, as both legacy call sites leave it: it is what
+    // strips the `tag-` prefix, and a throw's ids are stripped too, so a
+    // handler id of `tag-E` would match no throw.
     std::vector<irep_idt> one;
-    convert_exception_id(
-      ns, migrate_type_back(c.operands[i]->type), "", one, true);
+    convert_exception_id(ns, migrate_type_back(c.operands[i]->type), "", one);
     ids.push_back(one.empty() ? irep_idt() : one.front());
   }
 
