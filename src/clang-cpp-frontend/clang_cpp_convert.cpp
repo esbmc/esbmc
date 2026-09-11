@@ -671,6 +671,19 @@ static bool zero_initialises(const clang::Expr &init)
   return false;
 }
 
+/// The id a catch handler matches a throw on. The catch type rides on the
+/// handler block's own type and is read off it exactly once -- here.
+/// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
+/// code_block2t has no type to carry it across the seam
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
+static void set_handler_exception_id(const namespacet &ns, exprt &handler)
+{
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, handler.type(), "", ids);
+  if (!ids.empty())
+    handler.set("exception_id", ids.front());
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -1343,15 +1356,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*cxxtry.getHandler(i), handler))
         return true;
 
-      // The catch type rides on the handler block's own type and is read off it
-      // exactly once -- here. clang_cpp_adjust used to do it, which is too late
-      // for an IREP2 adjust pass: code_block2t has no type to carry it across
-      // the seam (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
-      std::vector<irep_idt> ids;
-      convert_exception_id(namespacet(context), handler.type(), "", ids);
-      if (!ids.empty())
-        handler.set("exception_id", ids.front());
-
+      set_handler_exception_id(namespacet(context), handler);
       new_expr.move_to_operands(handler);
     }
 
