@@ -1,5 +1,8 @@
 #include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
 #include <clang-cpp-frontend/clang_cpp_code_gen.h>
+#include <clang-cpp-frontend/clang_cpp_destructor_call.h>
+#include <goto-programs/destructor.h>
+#include <util/irep/std_code.h>
 #include <clang-cpp-frontend/clang_cpp_exception_id.h>
 
 /// The guards live on the C pass's translation unit as file-local statics, so
@@ -24,6 +27,18 @@ static bool is_unresolved_cpp_catch(const expr2tc &expr)
          to_code_cpp_catch2t(expr).exception_list.empty();
 }
 
+/// A `delete` whose destructor call has not been attached yet.
+static bool is_unresolved_cpp_delete(const expr2tc &expr)
+{
+  if (!is_sideeffect2t(expr))
+    return false;
+
+  const sideeffect2t &se = to_sideeffect2t(expr);
+  return (se.kind == sideeffect2t::allockind::cpp_delete ||
+          se.kind == sideeffect2t::allockind::cpp_delete_array) &&
+         se.arguments.empty();
+}
+
 static bool is_unresolved_cpp_throw(const expr2tc &expr)
 {
   return is_code_cpp_throw2t(expr) &&
@@ -40,6 +55,7 @@ static bool is_unresolved_cpp_throw(const expr2tc &expr)
 const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_cpp_catch), is_unresolved_cpp_catch},
   {ARM(adjust_cpp_throw), is_unresolved_cpp_throw},
+  {ARM(adjust_cpp_delete), is_unresolved_cpp_delete},
   {ARM(adjust_cpp_member), is_cpp_member_call},
   {ARM(adjust_function_designators), nullptr},
   {ARM(adjust_boolean_operands), is_short_circuit},
@@ -137,6 +153,40 @@ void clang_cpp_adjust_irep2::adjust_cpp_throw(expr2tc &expr)
   convert_exception_id(ns, migrate_type_back(th.operand->type), "", ids);
 
   expr = code_cpp_throw2tc(th.operand, ids, th.location);
+}
+
+void clang_cpp_adjust_irep2::adjust_cpp_delete(expr2tc &expr)
+{
+  const sideeffect2t &se = to_sideeffect2t(expr);
+
+  const typet deleted = migrate_type_back(se.type);
+  const struct_typet *class_type = resolve_class_type(ns, deleted);
+  if (!class_type)
+    return;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, *class_type);
+  if (!dtor)
+    return;
+
+  // The legacy arm builds this in the old representation and the seam carries
+  // it; building it the same way keeps one definition of what `delete` calls.
+  const exprt new_object("new_object", deleted);
+  code_function_callt destructor;
+  destructor.function() =
+    destructor_binding(ns, *class_type, *dtor, new_object);
+  destructor.arguments().push_back(address_of_exprt(new_object));
+
+  expr2tc call;
+  migrate_expr(destructor, call);
+  expr = sideeffect2tc(
+    se.type,
+    se.operand,
+    se.size,
+    std::vector<expr2tc>{call},
+    se.alloctype,
+    se.kind,
+    se.location);
 }
 
 void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)

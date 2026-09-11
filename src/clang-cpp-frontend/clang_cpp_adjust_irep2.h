@@ -41,6 +41,12 @@ protected:
   /// remove_exceptions dereferences it, so an unpopulated list is a crash
   /// rather than a lost property (docs/roadmap/scope-clang-cpp-irep2.md §3.3).
   void adjust_cpp_catch(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_cpp_delete: attach the destructor
+  /// call `delete p` makes, so goto_convert emits `~T(&(*p))`. Without it the
+  /// object's destructors never run (scope-clang-cpp-irep2.md §3.14). The call
+  /// travels in sideeffect2t::arguments[0], which the seam already carries.
+  void adjust_cpp_delete(expr2tc &expr);
   void adjust_cpp_throw(expr2tc &expr);
 
 private:
