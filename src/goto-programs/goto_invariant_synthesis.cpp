@@ -573,8 +573,10 @@ bool assertion_only_region(
 
     // Anything that can write a variable or call out of the region would make
     // the per-iteration effect conditional, which is what the region has to
-    // rule out to be skippable.
-    if (!it->is_skip() && !it->is_location())
+    // rule out to be skippable. The same inert set the straight-line scan
+    // accepts: glibc spells assert(e) with a leading
+    // `(void) sizeof ((e) ? 1 : 0)`, which lands in the region as an OTHER.
+    if (!loop_invariant::is_inert_scan_instruction(it))
       return false;
   }
   return true;
