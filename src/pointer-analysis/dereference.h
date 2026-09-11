@@ -377,10 +377,14 @@ private:
    *         under which the dereference occurs; violations are only triggered
    *         when the guard holds.
    */
+  /// Whether the object's base is unconstrained by the address-space model.
+  bool base_declines_alignment(const expr2tc &object) const;
+
   void check_pointer_alignment(
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
+    const expr2tc &object,
     const guard2tc &guard);
 
   /** Construct an expression representing the pointer's offset, in bits, from
@@ -394,6 +398,10 @@ private:
    *          bits, suitable for use in alignment checks.
    */
   expr2tc create_pointer_offset_bits(const expr2tc &deref_expr);
+
+  /// The pointer's address in bits, including the object's base, so the
+  /// alignment check does not assume an aligned base (#7707).
+  expr2tc create_pointer_address_bits(const expr2tc &deref_expr);
 
   /** Check whether an (aggregate) type is compatible with the desired
    *  dereference type. This looks at various things, such as whether the given

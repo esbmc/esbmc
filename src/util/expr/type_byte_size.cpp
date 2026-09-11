@@ -622,6 +622,19 @@ std::size_t ext_int_representation_bytes(const typet &type)
   return result;
 }
 
+bool declines_alignment(const typet &type, const namespacet &ns)
+{
+  const typet &t = ns.follow(type);
+
+  /* The recursion mirrors alignment()'s: ns.follow() resolves symbol types
+   * only, so an array of packed structs has to be reached through its
+   * subtype. */
+  if (t.is_array())
+    return declines_alignment(t.subtype(), ns);
+
+  return t.get_bool("packed") || !t.get_string("max_field_alignment").empty();
+}
+
 BigInt alignment(const typet &type, const namespacet &ns)
 {
   // we need to consider a number of different cases:

@@ -373,21 +373,6 @@ smt_astt smt_solver_baset::convert_identifier_pointer(
   return a;
 }
 
-/* Whether a type opts out of alignment entirely: `packed` and `#pragma
- * pack(n)` both leave members at offsets their own types do not require, and
- * the dereference check honours that (dereferencet::is_aligned_member). The
- * recursion mirrors alignment()'s: ns.follow() resolves symbol types only, so
- * an array of packed structs has to be reached through its subtype. */
-static bool declines_alignment(const typet &type, const namespacet &ns)
-{
-  const typet &t = ns.follow(type);
-
-  if (t.is_array())
-    return declines_alignment(t.subtype(), ns);
-
-  return t.get_bool("packed") || !t.get_string("max_field_alignment").empty();
-}
-
 /* The largest power-of-two alignment an access to an object of this size can
  * demand, capped at the ABI's fundamental alignment. A symbolic size (VLA,
  * dynamic object) admits any access the type allows, so assume the cap. */

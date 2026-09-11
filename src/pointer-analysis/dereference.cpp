@@ -813,10 +813,20 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
+/// Whether the object's base is left unconstrained by the address-space model,
+/// so an offset-only alignment claim does not hold for it (#7707).
+bool dereferencet::base_declines_alignment(const expr2tc &object) const
+{
+  if (is_nil_expr(object) || is_nil_type(object->type))
+    return false;
+  return declines_alignment(migrate_type_back(object->type), ns);
+}
+
 void dereferencet::check_pointer_alignment(
   modet mode,
   const type2tc &type,
   const expr2tc &deref_expr,
+  const expr2tc &object,
   const guard2tc &guard)
 {
   // Caller has already declared the access is known-unaligned (e.g.
@@ -842,9 +852,35 @@ void dereferencet::check_pointer_alignment(
   if (access_size_bits % 8 != 0)
     return;
 
-  expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
-  simplify(ptr_offset_bits);
-  check_alignment(access_size_bits, ptr_offset_bits, guard);
+  // The offset within the object is only half the address; the other half is
+  // the object's base. For every object whose base the address-space model
+  // constrains, the offset alone decides alignment and the claim folds away on
+  // a constant offset. declines_alignment() exempts `packed` and `#pragma
+  // pack(n)` bases, though, and such an object really can sit at an odd
+  // address: a pointer laundered out of a packed member passed this check on a
+  // program where `(uintptr_t)p % 8 == 0` was refutable (#7707). Only there is
+  // the pointer's own value needed, so the ordinary case keeps its foldable
+  // offset claim rather than gaining a live VCC per dereference.
+  expr2tc align_operand = base_declines_alignment(object)
+                            ? create_pointer_address_bits(deref_expr)
+                            : create_pointer_offset_bits(deref_expr);
+  simplify(align_operand);
+  check_alignment(access_size_bits, align_operand, guard);
+}
+
+/// The pointer's own address, in bits, for the alignment check. Unlike
+/// create_pointer_offset_bits this includes the object's base, so the check
+/// does not assume the base is aligned (#7707).
+expr2tc dereferencet::create_pointer_address_bits(const expr2tc &deref_expr)
+{
+  expr2tc addr =
+    typecast2tc(get_uint_type(config.ansi_c.address_width), deref_expr);
+  simplify(addr);
+
+  return mul2tc(
+    bitsize_type2(),
+    typecast2tc(bitsize_type2(), addr),
+    gen_long(bitsize_type2(), 8));
 }
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
@@ -875,7 +911,7 @@ expr2tc dereferencet::build_reference_to(
   pointer_guard = gen_false_expr();
 
   // Perform alignment checking for applicable access patterns
-  check_pointer_alignment(mode, type, deref_expr, guard);
+  check_pointer_alignment(mode, type, deref_expr, what, guard);
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {

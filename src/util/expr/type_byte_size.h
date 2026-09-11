@@ -73,4 +73,10 @@ std::size_t ext_int_representation_bytes(const typet &type);
  * type's layout. */
 BigInt alignment(const typet &type, const namespacet &ns);
 
+/// Whether a type opts out of alignment entirely: `packed` and `#pragma
+/// pack(n)` both leave members at offsets their own types do not require. The
+/// address-space model leaves such an object's base unconstrained, so an
+/// alignment check on the offset alone does not hold for it (#7707).
+bool declines_alignment(const typet &type, const namespacet &ns);
+
 #endif
