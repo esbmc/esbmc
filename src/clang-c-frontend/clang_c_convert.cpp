@@ -980,8 +980,54 @@ bool clang_c_convertert::get_type(
   return false;
 }
 
+bool clang_c_convertert::get_function_proto_type(
+  const clang::FunctionProtoType &func,
+  typet &new_type)
+{
+  code_typet type;
+
+  typet return_type;
+  if (get_type(func.getReturnType(), return_type))
+    return true;
+
+  type.return_type() = return_type;
+
+  for (auto const &ptype : func.getParamTypes())
+  {
+    typet param_type;
+    if (get_type(ptype, param_type))
+      return true;
+
+    type.arguments().emplace_back(param_type);
+  }
+
+  if (func.isVariadic())
+    type.make_ellipsis();
+
+  new_type = type;
+  return false;
+}
+
+bool clang_c_convertert::type_recursion_limit_reached()
+{
+  if (type_recursion_depth > max_type_recursion_depth)
+  {
+    log_error(
+      "type nesting exceeds the supported depth ({}); refusing to convert a "
+      "pathologically deep type",
+      max_type_recursion_depth);
+    return true;
+  }
+  return false;
+}
+
 bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 {
+  // A pathologically deep type would otherwise overflow the stack (#5048).
+  type_recursion_guardt type_guard(type_recursion_depth);
+  if (type_recursion_limit_reached())
+    return true;
+
   switch (the_type.getTypeClass())
   {
   // Builtin types like integer
@@ -1135,30 +1181,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     const clang::FunctionProtoType &func =
       static_cast<const clang::FunctionProtoType &>(the_type);
 
-    code_typet type;
-
-    // Return type
-    const clang::QualType ret_type = func.getReturnType();
-
-    typet return_type;
-    if (get_type(ret_type, return_type))
+    if (get_function_proto_type(func, new_type))
       return true;
 
-    type.return_type() = return_type;
-
-    for (auto const &ptype : func.getParamTypes())
-    {
-      typet param_type;
-      if (get_type(ptype, param_type))
-        return true;
-
-      type.arguments().emplace_back(param_type);
-    }
-
-    if (func.isVariadic())
-      type.make_ellipsis();
-
-    new_type = type;
     break;
   }
 
