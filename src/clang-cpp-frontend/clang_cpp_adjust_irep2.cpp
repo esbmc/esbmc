@@ -34,9 +34,16 @@ static bool is_unresolved_cpp_delete(const expr2tc &expr)
     return false;
 
   const sideeffect2t &se = to_sideeffect2t(expr);
-  return (se.kind == sideeffect2t::allockind::cpp_delete ||
-          se.kind == sideeffect2t::allockind::cpp_delete_array) &&
-         se.arguments.empty();
+  if (
+    se.kind != sideeffect2t::allockind::cpp_delete &&
+    se.kind != sideeffect2t::allockind::cpp_delete_array)
+    return false;
+
+  // arguments[0] is the destructor call, [1] a replaced operator delete. A
+  // delete that has only the latter still arrives with a nil in [0]
+  // (migrate.cpp pads), so "no arguments" is not the same question as "no
+  // destructor yet" (github #6494).
+  return se.arguments.empty() || is_nil_expr(se.arguments[0]);
 }
 
 static bool is_unresolved_cpp_throw(const expr2tc &expr)
@@ -179,14 +186,17 @@ void clang_cpp_adjust_irep2::adjust_cpp_delete(expr2tc &expr)
 
   expr2tc call;
   migrate_expr(destructor, call);
+
+  // Fill the destructor slot without disturbing a replaced operator delete
+  // sitting behind it.
+  std::vector<expr2tc> args = se.arguments;
+  if (args.empty())
+    args.push_back(call);
+  else
+    args[0] = call;
+
   expr = sideeffect2tc(
-    se.type,
-    se.operand,
-    se.size,
-    std::vector<expr2tc>{call},
-    se.alloctype,
-    se.kind,
-    se.location);
+    se.type, se.operand, se.size, args, se.alloctype, se.kind, se.location);
 }
 
 void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)
