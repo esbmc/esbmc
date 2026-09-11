@@ -68,19 +68,6 @@ inline expr2tc invoke_intrinsic(
 // down.
 thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
-/// The reference spelling an irept pointer carries. Both the pointer type arm
-/// and the address-of expression arm need it: the latter builds its pointer
-/// from the pointee, so without this an `&x` typed `T&` migrates to a plain
-/// pointer even when the type arm is doing its job.
-static pointer_ref_kindt pointer_ref_kind_of(const typet &type)
-{
-  if (type.get_bool("#rvalue_reference"))
-    return pointer_ref_kindt::RVALUE;
-  if (type.reference())
-    return pointer_ref_kindt::LVALUE;
-  return pointer_ref_kindt::NONE;
-}
-
 /* struct_type2t/union_type2t have no per-member padding flag, so is_padding is
  * lost on the way back and a pad reads as a declared member. Re-derive it from
  * the name: every name add_padding reserves contains '#', which no C or C++
@@ -144,6 +131,15 @@ static unsigned get_pragma_unroll(const exprt &expr)
 {
   const irep_idt &p = expr.get("#pragma_unroll");
   return p.empty() ? 0 : std::stoul(p.as_string());
+}
+
+static pointer_ref_kindt pointer_ref_kind(const typet &type)
+{
+  if (type.get_bool("#rvalue_reference"))
+    return pointer_ref_kindt::RVALUE;
+  if (type.reference())
+    return pointer_ref_kindt::LVALUE;
+  return pointer_ref_kindt::NONE;
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -229,7 +225,7 @@ static type2tc migrate_type0(const typet &type)
     type2tc subtype = migrate_type(type.subtype());
 
     return pointer_type2tc(
-      subtype, type.can_carry_provenance(), pointer_ref_kind_of(type));
+      subtype, type.can_carry_provenance(), pointer_ref_kind(type));
   }
 
   if (type.id() == typet::t_empty)
@@ -1714,8 +1710,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
+    /* The pointer is built from the pointee, so without carrying the spelling
+     * across an `&x` typed `T&` migrates to a plain pointer even when
+     * migrate_type0()'s pointer arm is doing its job. */
     new_expr_ref = address_of2tc(
-      type, theval, expr.implicit(), pointer_ref_kind_of(expr.type()));
+      type, theval, expr.implicit(), pointer_ref_kind(expr.type()));
     return;
   }
 
