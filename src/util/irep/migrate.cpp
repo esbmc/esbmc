@@ -3514,6 +3514,10 @@ static exprt back_typecast(const typecast2t &ref2)
   {
     exprt marked = migrate_expr_back(ref2.from);
     marked.set("#derived_to_base", ref2.derived_to_base);
+    // A dynamic_cast's typecast carries both markers at once
+    // (clang_cpp_convert_vft.cpp), so the other one travels with it.
+    if (ref2.base_to_derived)
+      marked.set("#base_to_derived", true);
     return marked;
   }
 
