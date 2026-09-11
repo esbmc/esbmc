@@ -612,10 +612,23 @@ LHS and RHS are **both** references. That is reference *binding*, not a write
 through a reference; dereferencing both copies the mutex instead of binding the
 pointer.
 
-So the arm fires where the legacy pass provably does not, and the open question
-is why legacy never reaches that node -- not what extra condition to invent. A
-discriminator guessed without that answer is how an unsoundness gets introduced
-under cover of a fix.
+So the arm fires where the legacy pass provably does not. Narrowing that
+further, on the same test:
+
+- Legacy's `adjust_reference` *is* called, four times, but only on assigns to
+  `__owns` -- a `bool`, no reference in sight. It is **never** called on the
+  `__m` assignment, which is the one the IREP2 hook rewrites.
+- The seam is not conflating anything: `migrate_expr` maps a legacy
+  `code`/`assign` to `code_assign2tc` and a `sideeffect`/`assign` to
+  `sideeffect_assign2tc`, and the hook's guard is the latter. So the `__m` node
+  genuinely is a side-effect assign in both representations.
+
+Which leaves one explanation: the legacy pass does not **visit** that node,
+while the IREP2 walk does. The difference is in walk coverage, not in the
+predicate, the ordering, the referent type, or the node kind -- all four of
+which have been measured and ruled out. That is where the next attempt starts;
+inventing a condition to suppress the rewrite without knowing why legacy skips
+the node is how an unsoundness ships wearing a fix's clothes.
 
 Note also that a test for this must use a **function returning a reference**
 (`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
