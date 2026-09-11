@@ -288,12 +288,54 @@ on a constructor call — the irept tri-state where `find()` cannot distinguish
 absent from nil, and a mutable `location()` creates a third state. An arm that
 failed to run would not produce a symbol table this close.
 
-So the next experiment is the seam, not the table: restore the
-present-but-empty `#location` across `migrate_expr_back` and re-run the reduced
-input. Phase 6 §136.3 already owns that restore and measured it moving 126 of
-131 default-path goto programs, so it is the first thing to try and the reduced
-contract above is a two-second test of it.
+That pointed at the seam rather than the arm table. §7.5 tests it, and the lead
+does not survive.
 
 Stated as a hypothesis, not a finding: the symbol-table closeness makes a seam
 loss the better explanation, but nothing here has yet shown that *this* loss is
 what empties the guard.
+
+### 7.5 The location lead is weaker than §7.4 read it, and gdb cannot close it
+
+Run on the four-line contract instead of `string_concat_1`, the
+`--symbol-table-only` A/B is tighter still: **one** structural line, a dropped
+`* #location:` that was present and empty. But it sits on the *callee symbol of
+a constructor call inside* `sol:@_ESBMC_Object_C#` — not on any function that
+holds a conditional goto. Four generated functions do hold one:
+
+| generated function | conditional gotos |
+|---|---:|
+| `sol:@C@C@F@$transfer#0` | 2 |
+| `sol:@C@C@F@$send#0` | 2 |
+| `_sol_init_` | 1 |
+| `sol:@C@C@F@_ESBMC_Main_C#` | 1 |
+
+So §7.4's "try the location restore first" was too strong a reading. The loss is
+real and worth fixing on its own account, but it is in a different symbol from
+the crash and nothing connects the two.
+
+The harness shape is not the cause either. `_ESBMC_Main_C` is
+`while (nondet_bool()) { _ESBMC_Nondet_Extcall_C(); }` after a `__ESBMC_HIDE:`
+label, and the direct C analogue —
+
+```c
+_Bool nondet_bool(); void body();
+int main(void) { HIDE:; while (nondet_bool()) { body(); } return 0; }
+```
+
+— converts cleanly under `--clang-c-irep2-adjust-only`, under
+`--clang-cpp-irep2-adjust-only`, and on the default path. A side-effect loop
+condition reached through a `__ESBMC_HIDE` label is handled.
+
+**Why this stops here.** Naming the function needs the symbol at frame 3, and
+`gdb` reports `symbol = <optimized out>`; `dest.instructions` cannot be walked
+either, because every accessor is inlined (`Cannot evaluate function -- may be
+inlined`). A `-O2 -DNDEBUG` build will not give up that name. The next step is
+the technique the earlier phases used for exactly this: a temporary `fprintf`
+in `convert_function` printing `symbol.id` before `optimize_guarded_gotos`,
+which needs a rebuild. Four candidates and a two-second reproducer make that a
+short run once a build is available.
+
+What is settled: the guard is nil in a converter-generated body, in one of four
+named functions, and neither body converter, nor the loop shape, nor — on
+present evidence — the location seam explains it.
