@@ -620,6 +620,18 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
   return std::nullopt;
 }
 
+// Relabeling (not casting) a floatbv expr keeps its ieee_* expr id while
+// its type says non-float, so a later simplify_floatbv_2ops assert aborts.
+// Hits `%` over a symbolic `**` exponent (kept double via libm) reaching
+// bool()/a consensus-type cast.
+static std::optional<exprt>
+typecast_if_floatbv_mismatch(const exprt &expr, const typet &target)
+{
+  if (expr.type().is_floatbv() && !target.is_floatbv())
+    return build_typecast(expr, target);
+  return std::nullopt;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1122,7 +1134,11 @@ exprt function_call_expr::build_constant_from_arg() const
     if (is_complex_type(value_expr.type()))
       return complex_to_bool_expr(value_expr);
 
-    value_expr.type() = type_handler_.get_typet(func_name, arg_size);
+    const typet bool_t = type_handler_.get_typet(func_name, arg_size);
+    if (auto cast = typecast_if_floatbv_mismatch(value_expr, bool_t))
+      return *cast;
+
+    value_expr.type() = bool_t;
     return value_expr;
   }
 
@@ -1196,6 +1212,9 @@ exprt function_call_expr::build_constant_from_arg() const
   // causing sort mismatches in the SMT encoder.
   if (func_name == "float" && !expr.type().is_floatbv())
     return build_typecast(expr, t);
+
+  if (auto cast = typecast_if_floatbv_mismatch(expr, t))
+    return *cast;
 
   if (func_name != "str")
     expr.type() = t;
