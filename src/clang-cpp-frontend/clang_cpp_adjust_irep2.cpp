@@ -82,6 +82,7 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},
   {ARM(adjust_relational), is_relational},
+  {ARM(adjust_increment_reference), is_increment_sideeffect},
   {ARM(adjust_special_functions), is_sideeffect2t},
   {ARM(adjust_binary_arith_operands), is_arith_or_bitwise},
   {ARM(adjust_shift_operands), is_shift},
@@ -213,6 +214,11 @@ type2tc referent_type(const namespacet &ns, const type2tc &ref)
 
 void convert_reference(const namespacet &ns, expr2tc &expr)
 {
+  // Unexercised over the whole C++ corpus (0 hits in 1353 tests): a reference
+  // *symbol* under a cast does not occur, because get_decl_ref dereferences a
+  // reference variable at conversion time. Kept because clang_cpp_adjust's
+  // convert_reference carries the identical guard, and a port that prunes a
+  // branch the original has is harder to compare against it later.
   if (is_typecast2t(expr))
   {
     const typecast2t cast = to_typecast2t(expr);
@@ -243,6 +249,11 @@ void clang_cpp_adjust_irep2::adjust_reference(expr2tc &expr)
     if (is_nil_expr(rhs))
       return;
 
+    // Dereferencing the rhs here is only half the story: because the lhs is
+    // itself reference-typed, adjust_plain_assignment's c_implicit_typecast
+    // then re-wraps this in an address_of via c_typecastt::convert_reference --
+    // a same-named function in util/lang/c_typecast.cpp. The round trip is a
+    // no-op (`this->__m = &(*m)`), but it spans two translation units.
     convert_reference(ns, rhs);
     if (rhs != a.rhs)
       expr = sideeffect_assign2tc(

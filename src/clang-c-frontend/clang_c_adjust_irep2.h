@@ -133,6 +133,12 @@ protected:
   {
   }
 
+  /// clang_c_adjust adjusts references on an increment or decrement, whose
+  /// operand it updates in place. Without it `f()++`, where `f` returns a
+  /// reference, does arithmetic on the reference instead of on the referent
+  /// (scope-clang-cpp-irep2.md §3.16).
+  void adjust_increment_reference(expr2tc &expr);
+
   /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
   /// the operand recursion and returns before this point when the flag is on
   /// (scope-clang-c-irep2.md §19.2).

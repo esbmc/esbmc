@@ -290,6 +290,7 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},
   {ARM(adjust_relational), is_relational},
+  {ARM(adjust_increment_reference), is_increment_sideeffect},
   {ARM(adjust_special_functions), is_sideeffect2t},
   {ARM(adjust_binary_arith_operands), is_arith_or_bitwise},
   {ARM(adjust_shift_operands), is_shift},
@@ -1008,6 +1009,11 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
   }
 }
 
+void clang_c_adjust_irep2::adjust_increment_reference(expr2tc &expr)
+{
+  adjust_reference(expr);
+}
+
 void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
 {
   expr2tc op0 = *expr->get_sub_expr(0);
@@ -1017,17 +1023,21 @@ void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
 
   const expr2tc before0 = op0, before1 = op1;
   c_implicit_typecast_arithmetic(op0, op1, ns);
-  if (op0 == before0 && op1 == before1)
-    return;
 
-  // In-place operand surgery: never round-trip a resolved subtree through
-  // migrate_expr_back (docs/roadmap/frontends-to-irep2.md §38.3).
-  unsigned i = 0;
-  expr->Foreach_operand([&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  if (op0 != before0 || op1 != before1)
+  {
+    // In-place operand surgery: never round-trip a resolved subtree through
+    // migrate_expr_back (docs/roadmap/frontends-to-irep2.md §38.3).
+    unsigned i = 0;
+    expr->Foreach_operand(
+      [&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  }
 
-  // After the conversion, as clang_c_adjust orders it here -- unlike the
-  // assignment arm, which must dereference first or it casts the source to the
-  // reference type.
+  // Unconditionally, and after the conversion -- the order clang_c_adjust uses
+  // here, unlike the assignment arm, which dereferences first or it casts the
+  // source to the reference type. Behind the early return above it never ran:
+  // a comparison whose operands already agree returns before reaching it, which
+  // is most of them (scope-clang-cpp-irep2.md §3.16).
   adjust_reference(expr);
 }
 

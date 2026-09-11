@@ -72,6 +72,26 @@ inline bool is_reference_type(const type2tc &type)
          to_pointer_type(type).ref_kind != pointer_ref_kindt::NONE;
 }
 
+/// `x++`, `++x`, `x--`, `--x`. Its operand is updated in place, so a
+/// reference-typed one has to be read through first -- clang_c_adjust adjusts
+/// references here for the same reason (scope-clang-cpp-irep2.md §3.16).
+inline bool is_increment_sideeffect(const expr2tc &expr)
+{
+  if (!is_sideeffect2t(expr))
+    return false;
+
+  switch (to_sideeffect2t(expr).kind)
+  {
+  case sideeffect2t::allockind::preincrement:
+  case sideeffect2t::allockind::postincrement:
+  case sideeffect2t::allockind::predecrement:
+  case sideeffect2t::allockind::postdecrement:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /// An allocation side effect: `new`, `new[]`, `delete`, `delete[]`. Its
 /// `arguments` are carriage -- the destructor call, a replaced operator
 /// new/delete -- rather than program operands, because the legacy pass keeps
