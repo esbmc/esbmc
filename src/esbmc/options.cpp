@@ -204,7 +204,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"clang-cpp-irep2-adjust-only",
      NULL,
      "Use the IREP2-native C++ adjuster instead of the legacy adjust pass "
-     "(Phase 7 hop-off; experimental, default off)"}}},
+     "(Phase 7 hop-off; experimental, default off)"},
+    {"clang-cpp-irep2-migrate-census",
+     NULL,
+     "Diagnostic: migrate every adjusted C++ symbol through IREP2 and report "
+     "the count, to find what the C++ frontend emits that IREP2 cannot "
+     "represent (Phase 7; read-only, default off)"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
