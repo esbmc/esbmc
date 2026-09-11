@@ -3,6 +3,6 @@ if cond:
     x = 1
 else:
     x = "a"
-lst = []
-lst.append(x)
+lst = [x]
+lst.insert(0, x)
 assert lst[0] == 1
