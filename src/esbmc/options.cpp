@@ -580,7 +580,15 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Verify using loop invariant havoc abstraction (standalone mode). Cuts "
      "the loop, so cost is independent of the bound; the only mode that "
-     "reasons about the loop exit condition"},
+     "reasons about the loop exit condition. Implies --check-vacuity"},
+    {"synthesise-loop-invariants",
+     NULL,
+     "Synthesise invariants for affine counter/accumulator loops and discharge "
+     "them with the loop-invariant havoc schema; implies "
+     "--loop-invariant-check, --check-vacuity, and --multi-property unless a "
+     "k-induction phase is selected. --check-vacuity applies to the whole run, "
+     "so a program with no loop at all can still report UNKNOWN where it "
+     "reported SUCCESSFUL; --no-vacuity-check turns it back off"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
@@ -589,7 +597,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "After UNSAT discharge, re-solve path assumptions alone; if also UNSAT, "
      "report VERIFICATION UNKNOWN (vacuous discharge) instead of SUCCESSFUL. "
-     "Default on when --loop-invariant or --loop-invariant-check is set."},
+     "Applies to every claim in the run, not only the ones a loop invariant "
+     "reaches. Default on under --loop-invariant-check and "
+     "--synthesise-loop-invariants; opt-in elsewhere."},
     {"no-vacuity-check",
      NULL,
      "Disable the vacuity probe (overrides default-on behavior)."}}},

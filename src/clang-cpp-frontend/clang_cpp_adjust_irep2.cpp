@@ -1,4 +1,9 @@
 #include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
+#include <clang-cpp-frontend/clang_cpp_destructor_call.h>
+#include <goto-programs/destructor.h>
+#include <util/irep/std_code.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
 
 /// The guards live on the C pass's translation unit as file-local statics, so
 /// they are re-declared here rather than shared: they read only the node, and a
@@ -13,6 +18,41 @@ static bool is_cpp_member_call(const expr2tc &expr)
          !to_member2t(expr).member.empty();
 }
 
+/// A source-level try/catch whose handler ids have not been computed yet. The
+/// post-goto-convert CATCH marker carries no operands and is left alone.
+static bool is_unresolved_cpp_catch(const expr2tc &expr)
+{
+  return is_code_cpp_catch2t(expr) &&
+         to_code_cpp_catch2t(expr).operands.size() > 1 &&
+         to_code_cpp_catch2t(expr).exception_list.empty();
+}
+
+/// A `delete` whose destructor call has not been attached yet.
+static bool is_unresolved_cpp_delete(const expr2tc &expr)
+{
+  if (!is_sideeffect2t(expr))
+    return false;
+
+  const sideeffect2t &se = to_sideeffect2t(expr);
+  if (
+    se.kind != sideeffect2t::allockind::cpp_delete &&
+    se.kind != sideeffect2t::allockind::cpp_delete_array)
+    return false;
+
+  // arguments[0] is the destructor call, [1] a replaced operator delete. A
+  // delete that has only the latter still arrives with a nil in [0]
+  // (migrate.cpp pads), so "no arguments" is not the same question as "no
+  // destructor yet" (github #6494).
+  return se.arguments.empty() || is_nil_expr(se.arguments[0]);
+}
+
+static bool is_unresolved_cpp_throw(const expr2tc &expr)
+{
+  return is_code_cpp_throw2t(expr) &&
+         to_code_cpp_throw2t(expr).exception_list.empty() &&
+         !is_nil_expr(to_code_cpp_throw2t(expr).operand);
+}
+
 #define ARM(member)                                                            \
 #  member,                                                                     \
     +[](clang_cpp_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
@@ -20,6 +60,9 @@ static bool is_cpp_member_call(const expr2tc &expr)
 /// Inherited arms only, in the C pass's order. What C++ adds goes here as the
 /// divergence census names it (scope-clang-cpp-irep2.md §3.1).
 const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
+  {ARM(adjust_cpp_catch), is_unresolved_cpp_catch},
+  {ARM(adjust_cpp_throw), is_unresolved_cpp_throw},
+  {ARM(adjust_cpp_delete), is_unresolved_cpp_delete},
   {ARM(adjust_cpp_member), is_cpp_member_call},
   {ARM(adjust_function_designators), nullptr},
   {ARM(adjust_boolean_operands), is_short_circuit},
@@ -40,11 +83,14 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},
   {ARM(adjust_relational), is_relational},
+  {ARM(adjust_increment_reference), is_increment_sideeffect},
   {ARM(adjust_special_functions), is_sideeffect2t},
   {ARM(adjust_binary_arith_operands), is_arith_or_bitwise},
   {ARM(adjust_shift_operands), is_shift},
   {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
   {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
+  {ARM(adjust_derived_to_base), is_derived_to_base_cast},
+  {ARM(adjust_base_to_derived), is_base_to_derived_cast},
   {ARM(adjust_address_of), is_address_of2t},
 };
 
@@ -112,4 +158,148 @@ void clang_cpp_adjust_irep2::adjust_cpp_member(expr2tc &expr)
 
   assert(comp->get_type().is_code());
   expr = symbol2tc(migrate_type(comp->get_type()), comp->id);
+}
+
+void clang_cpp_adjust_irep2::adjust_cpp_catch(expr2tc &expr)
+{
+  const code_cpp_catch2t &c = to_code_cpp_catch2t(expr);
+
+  // One id per handler, parallel to operands[1..N]; the legacy arm keeps only
+  // the leading id per handler and expands base classes at the throw site.
+  std::vector<irep_idt> ids;
+  for (std::size_t i = 1; i < c.operands.size(); i++)
+  {
+    // is_catch stays false, as both legacy call sites leave it: it is what
+    // strips the `tag-` prefix, and a throw's ids are stripped too, so a
+    // handler id of `tag-E` would match no throw.
+    std::vector<irep_idt> one;
+    convert_exception_id(ns, migrate_type_back(c.operands[i]->type), "", one);
+    ids.push_back(one.empty() ? irep_idt() : one.front());
+  }
+
+  expr = code_cpp_catch2tc(ids, c.operands, c.location);
+}
+
+void clang_cpp_adjust_irep2::adjust_cpp_throw(expr2tc &expr)
+{
+  const code_cpp_throw2t &th = to_code_cpp_throw2t(expr);
+
+  // Every id the thrown type resolves to, most derived first, so a handler for
+  // a base catches it.
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, migrate_type_back(th.operand->type), "", ids);
+
+  expr = code_cpp_throw2tc(th.operand, ids, th.location);
+}
+
+void clang_cpp_adjust_irep2::adjust_cpp_delete(expr2tc &expr)
+{
+  const sideeffect2t &se = to_sideeffect2t(expr);
+
+  const typet deleted = migrate_type_back(se.type);
+  const struct_typet *class_type = resolve_class_type(ns, deleted);
+  if (!class_type)
+    return;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, *class_type);
+  if (!dtor)
+    return;
+
+  // The legacy arm builds this in the old representation and the seam carries
+  // it; building it the same way keeps one definition of what `delete` calls.
+  const exprt new_object("new_object", deleted);
+  code_function_callt destructor;
+  destructor.function() =
+    destructor_binding(ns, *class_type, *dtor, new_object);
+  destructor.arguments().push_back(address_of_exprt(new_object));
+
+  expr2tc call;
+  migrate_expr(destructor, call);
+
+  // Fill the destructor slot without disturbing a replaced operator delete
+  // sitting behind it.
+  std::vector<expr2tc> args = se.arguments;
+  if (args.empty())
+    args.push_back(call);
+  else
+    args[0] = call;
+
+  expr = sideeffect2tc(
+    se.type, se.operand, se.size, args, se.alloctype, se.kind, se.location);
+}
+
+namespace
+{
+/// `r` used as a value is `*r`. A cast of one is handled first, so `(int)r`
+/// becomes `(int)*r` rather than a cast of the pointer.
+/// The referent's type, resolved. A dereference2t left with a by-name tag has
+/// no width or alignment, and symex reports that as a spurious alignment
+/// failure rather than as the unresolved type it is.
+type2tc referent_type(const namespacet &ns, const type2tc &ref)
+{
+  return ns.follow(to_pointer_type(ref).subtype);
+}
+
+void convert_reference(const namespacet &ns, expr2tc &expr)
+{
+  // Unexercised over the whole C++ corpus (0 hits in 1353 tests): a reference
+  // *symbol* under a cast does not occur, because get_decl_ref dereferences a
+  // reference variable at conversion time. Kept because clang_cpp_adjust's
+  // convert_reference carries the identical guard, and a port that prunes a
+  // branch the original has is harder to compare against it later.
+  if (is_typecast2t(expr))
+  {
+    const typecast2t cast = to_typecast2t(expr);
+    if (is_symbol2t(cast.from) && is_reference_type(cast.from->type))
+      expr = typecast2tc(
+        cast.type,
+        dereference2tc(referent_type(ns, cast.from->type), cast.from),
+        cast.rounding_mode,
+        cast.derived_to_base,
+        cast.base_to_derived);
+  }
+
+  if (is_reference_type(expr->type))
+    expr = dereference2tc(referent_type(ns, expr->type), expr);
+}
+} // namespace
+
+void clang_cpp_adjust_irep2::adjust_reference(expr2tc &expr)
+{
+  // A constructor's member initialiser binds its left side; reading that
+  // through would copy the referent instead of pointing at it. Only the right
+  // side is a use. clang_cpp_adjust::adjust_side_effect_assign's `#member_init`
+  // branch says the same (scope-clang-cpp-irep2.md §3.16).
+  if (is_sideeffect_assign2t(expr) && to_sideeffect_assign2t(expr).member_init)
+  {
+    const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+    expr2tc rhs = a.rhs;
+    if (is_nil_expr(rhs))
+      return;
+
+    // Dereferencing the rhs here is only half the story: because the lhs is
+    // itself reference-typed, adjust_plain_assignment's c_implicit_typecast
+    // then re-wraps this in an address_of via c_typecastt::convert_reference --
+    // a same-named function in util/lang/c_typecast.cpp. The round trip is a
+    // no-op (`this->__m = &(*m)`), but it spans two translation units.
+    convert_reference(ns, rhs);
+    if (rhs != a.rhs)
+      expr = sideeffect_assign2tc(
+        a.type, a.op, a.lhs, rhs, a.location, a.member_init);
+    return;
+  }
+
+  expr->Foreach_operand([this](expr2tc &op) {
+    if (!is_nil_expr(op))
+      convert_reference(ns, op);
+  });
+}
+
+void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)
+{
+  // The legacy pass generates these *after* adjusting the body; here they are
+  // generated before, so the assignments go through the arms like any other
+  // statement rather than being migrated back out and in again.
+  gen_vptr_initializations(context, symbol);
 }
