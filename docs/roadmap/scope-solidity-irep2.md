@@ -380,6 +380,51 @@ along; the printer flattened it. Any future A/B over adjusted bodies wants
 `pretty()`, not the C rendering — the same shape of error as measuring a decline
 census from a goto dump instead of a verdict.
 
-Ported next, with the four-line contract as the test: it cannot reach a verdict
-at all today, so pinning `^VERIFICATION SUCCESSFUL$` on it under the flag is a
-gate no SIGSEGV can satisfy.
+Ported in §7.7, which measures what it moves.
+
+### 7.7 One arm, and it moves 50 of the 51 crashes (2026-09-12)
+
+`adjust_call_signature` rebuilds the callee from the symbol table when the
+converter left its type incomplete, and then calls a new
+`align_call_return_type` hook — empty in `clang_c_adjust_irep2`, as
+`clang_c_adjust::align_se_function_call_return_type` is empty for C, and
+overridden in `clang_cpp_adjust_irep2` to take the callee's `return_type` and
+skip constructors. The row goes before `adjust_call_arguments`, whose parameter
+types come from the callee type this repairs.
+
+Same stride-8 sample, same binary discipline, flag off against flag on:
+
+| | before | after |
+|---|---:|---:|
+| verdicts agree | 5 | **55** |
+| crash | 51 | **1** |
+| neither | 9 | 9 |
+
+**The row has to be in two tables.** `clang_cpp_adjust_irep2` substitutes its
+own arm table rather than adding to the C one (§3.1 of the clang-cpp scope
+doc). With the row in the C table alone the arm compiles, links, and never
+dispatches: all four reduced contracts still crashed. That A/B is the row's
+mutation evidence, and it is worth stating because a null result there invites
+discarding a correct diagnosis.
+
+**The residue is one cause, not nine.** Every non-agreeing row now ends in
+`ERROR: migrate expr failed` — `constructor_4`, `enum_2`,
+`function_overload_2_fail`, `import_2`, `inheritance_1`, `inheritance_8`,
+`return_6`, `send_ether_via_creation_1`, `try_catch_1`. They looked like
+timeouts in the sweep (`on=[]`), and they are not: one re-run with a 300 s
+budget exits in 0.6 s with that error. The single remaining crash is
+`github_6759_02`, the row that pins `--no-irep2-native-body`.
+
+`regression/esbmc-solidity/irep2_only_call_return_type{,_fail}` pin it,
+generated with `solc --ast-compact-json` so the checked-in `.solast` matches
+the corpus convention, and bounded with `--unwind 1 --no-unwinding-assertions`
+because the harness runs past 200 s unbounded. Both halves flip to a SIGSEGV
+when the arm is disabled, so neither verdict regex is satisfiable without it.
+Default path unchanged: `esbmc-solidity` is 525 of 527 with the same two
+`KNOWNBUG` rows that already passed, and `irep2_only` is 99 of 99.
+
+What this does not claim: any gain for the C frontend. The callee refresh is in
+the C pass because that is where legacy has it, but clang's converter does not
+leave an incomplete callee type, and the alignment hook is empty for C by
+design. The 97 pre-existing C rows passing is consistent with the arm being
+inert there, not evidence of a C-side improvement.
