@@ -681,3 +681,39 @@ Also worth separating out, as §7.13 noted for a different reason: `project`
 taking an index it cannot bounds-check, from a lookup whose only guard is an
 assert compiled out of release builds, turns any such disagreement into
 undefined behaviour rather than a diagnosable failure.
+### 7.16 Both counts measured: one struct type, padded in one place and not another
+
+The inference in §7.15 was indirect — a found index on one side, a bad pointer
+on the other — so the probe was extended to print both counts outright, firing
+only when the index is out of range for the AST:
+
+```
+XCNT OOR idx=3 type_members=4 ast_members=3
+```
+
+The expression's struct type has **four** members: `Book`'s three declared
+(`title`, `author`, `book_id`) plus a synthetic pad. The AST's tuple sort has
+**three**. So the projection is out of range, and the type is padded while the
+AST is not — as inferred, now read directly.
+
+The locating detail is *which* AST. The inner projection returned a valid
+struct AST with three fields, and that AST is the outer member's source. Its
+sort was not built from the outer member's `source_value->type`, which has
+four; a projected field's sort comes from its **parent tuple's** declared field
+sorts. So the enclosing struct declares its `Book` field with an *unpadded*
+`Book`, while the member expression reading that field carries the *padded*
+one. Two `Book` types coexist, and they disagree.
+
+That is the defect, stated as narrowly as the evidence allows: the pass pads
+some occurrences of a struct type and not others, so a field's declared type
+inside an enclosing struct disagrees with the type on expressions that read it.
+`pad_type_symbol` pads *type symbols* under `sole_adjuster` and `adjust_struct`
+pads struct *literals*; a `Book` inlined into another struct's member list is
+reached by neither. Which of those two should also cover it is a
+padding-ownership question larger than this branch, and it is not answered
+here.
+
+Three probes were needed and two of them refuted their own hypothesis, which is
+the shape to want: each printed something whose *absence* was also informative.
+The one that finally landed differs from its predecessors only in printing both
+sides of the comparison rather than one.
