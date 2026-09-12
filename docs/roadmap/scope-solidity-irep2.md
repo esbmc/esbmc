@@ -953,3 +953,38 @@ rather than assumed, and the Solidity default path unchanged.
 One thing to hand forward: `adjust_compound_assignment` now sits at CCN **15**,
 exactly the `core` gate line, so the next branch added there fails the gate.
 Extract before adding.
+### 7.22 Why the padding row is not a one-arm port (2026-09-12)
+
+§7.18 ruled out nested type symbols. The reading is sharper than that, and it
+explains why the obvious repair cannot work. Both numbers come from the **same**
+expression:
+
+- `get_member_name_field(member.source_value->type, …)` finds **4** names, so that
+  expression's type is the padded `Book`;
+- `convert_ast(member.source_value)` yields a tuple of **3**, so the AST was built
+  from a different version of that type.
+
+The AST cannot come from the expression's own `->type`. The inner member's AST
+is `src->project(idx)`, and a projected field's sort comes from the **parent
+tuple's** declared field sorts — so the grandparent's struct type carries an
+*unpadded* `Book` component while the child member's own type is the *padded*
+one. The disagreement is within a single expression tree, between a
+grandparent's component type and a child's type.
+
+That kills the repair §7.18 proposed. Retyping the member, or its source, does
+not touch the AST: the sort is already fixed by the grandparent. Nor does
+padding type symbols harder, which §7.18 measured. The fix has to retype the
+**base** of the member chain so the whole tuple chain is built from padded
+types — a recursive type-normalisation over expressions, not an arm.
+
+That is a design question about which types on expressions are inline snapshots
+and which resolve through the table — §2.1's seam question, reached from the
+other end — and it is not worth a speculative broad change for 3 rows of 509.
+It is recorded here as the remaining Phase 8 defect, with the two dead ends
+marked so the next attempt does not repeat them:
+
+| attempt | outcome |
+|---|---|
+| pad nested type symbols recursively (`pad_type_tree`) | no change; the stale type is on an expression |
+| resolve the member's own source type through the table | cannot work; the AST's sort predates it |
+| retype the base of the member chain | untried, and the only one that reaches the sort |
