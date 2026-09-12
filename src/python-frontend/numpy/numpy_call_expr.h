@@ -88,6 +88,21 @@ private:
   std::optional<exprt>
   try_transpose_name_arg(const nlohmann::json &arg, const exprt &arg_expr);
 
+  // np.argsort()/np.searchsorted()/np.sort()'s full dispatch bodies (axis/
+  // keyword parsing, the axis-aware/view-aware descriptor path, and the
+  // literal-only fallback). Each always returns or throws, never falls
+  // through, so get() calling it is a one-for-one replacement of its own
+  // former `if (function == "...")` body -- moving that body's decision
+  // count out of get() to keep that function's own count from growing.
+  exprt handle_argsort_call();
+  exprt handle_searchsorted_call();
+  exprt handle_sort_call();
+
+  // numpy.sort()'s axis argument: positional (2nd arg) or axis= keyword,
+  // never both; None flattens, otherwise a literal integer, or throws.
+  // Split out of handle_sort_call to keep that function's own decision
+  // count down.
+  void parse_sort_axis_and_keywords(bool &flatten, long long &axis);
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);
