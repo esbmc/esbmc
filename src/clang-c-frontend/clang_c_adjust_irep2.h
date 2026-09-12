@@ -3,6 +3,7 @@
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
 #include <irep2/irep2.h>
+#include <cstddef>
 #include <vector>
 
 /// Phase 6 (C.3) IREP2-native adjuster for the C frontend.
@@ -32,6 +33,40 @@
 /// it does for Python after `clang_cpp_adjust`; for C it does not. 12 of the
 /// 1686 tests in regression/esbmc reach it. Left unguarded on purpose: this is
 /// the defect the walk exists to surface, and the flag is opt-in.
+/// One arm of an IREP2 adjust pass's dispatch: its name, the guard that decides
+/// whether it claims a node, and the rewrite it then applies. A null `when` is
+/// offered every node and guards itself.
+///
+/// Templated on the pass so a second frontend can order the arms it inherits
+/// alongside its own in one table. `run` is a trampoline rather than a
+/// pointer-to-member deliberately: a base member pointer stored in a
+/// derived-typed table is legal, but GCC 13's array-bounds analysis mis-reads
+/// the call once the runner inlines and rejects it at -O2
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.1). A captureless lambda converts
+/// to a function pointer and is an address constant, so the table stays
+/// constant-initialised.
+template <class Pass>
+struct adjust_arm
+{
+  const char *name;
+  void (*run)(Pass &, expr2tc &);
+  bool (*when)(const expr2tc &);
+};
+
+/// Apply a pass's arms to one node in table order. Each guard is re-evaluated
+/// against the current node, so an arm that rewrites a node into another kind
+/// hands it to that kind's arm below.
+template <class Pass, std::size_t N>
+void run_adjust_arms(
+  Pass &self,
+  const adjust_arm<Pass> (&arms)[N],
+  expr2tc &expr)
+{
+  for (const adjust_arm<Pass> &a : arms)
+    if (!a.when || a.when(expr))
+      a.run(self, expr);
+}
+
 class clang_c_adjust_irep2
 {
 public:
@@ -58,6 +93,8 @@ public:
   {
   }
 
+  virtual ~clang_c_adjust_irep2() = default;
+
   /// Walk every code symbol's IREP2 value. Returns false; there is no failure
   /// mode yet, and the signature matches `clang_c_adjust::adjust()` so the
   /// driver can call either.
@@ -83,7 +120,11 @@ public:
   /// read. unit/clang-c-frontend/adjust_arms.test.cpp reads this.
   static std::vector<arm_info> arm_order();
 
-private:
+  // Everything below is reachable by a sibling frontend's pass, which orders
+  // these arms alongside its own in its own table
+  // (docs/roadmap/scope-clang-cpp-irep2.md §3.1). Not public: nothing outside
+  // an adjust pass has any business calling a single arm.
+protected:
   /// IREP2 form of clang_c_adjust::adjust_index's rewrite. The legacy arm keeps
   /// the operand recursion and returns before this point when the flag is on
   /// (scope-clang-c-irep2.md §19.2).
@@ -208,8 +249,10 @@ private:
   void adjust_function_designators(expr2tc &expr);
 
   /// Arms that run only when this pass is the sole adjuster, applied in the
-  /// order `arms` lists them.
-  void adjust_sole_arms(expr2tc &expr);
+  /// order `arms` lists them. Virtual so a derived pass substitutes its own
+  /// table: one virtual for the whole dispatch, rather than the per-arm
+  /// virtuals §3 of the C++ scope rejected.
+  virtual void adjust_sole_arms(expr2tc &expr);
 
   /// A comma expression takes its right operand's type (C11 6.5.17p2). Clang
   /// hands it the *decayed* type when the right operand is an array, so leaving
@@ -218,15 +261,7 @@ private:
   /// as adjust_comma_at_dispatch, which the --clang-c-irep2-adjust probe uses.
   void adjust_comma_type(expr2tc &expr);
 
-  /// One arm of adjust_sole_arms' dispatch: its name, the guard that decides
-  /// whether it claims a node, and the rewrite it then applies. A null `when`
-  /// is offered every node and guards itself.
-  struct arm
-  {
-    const char *name;
-    void (clang_c_adjust_irep2::*run)(expr2tc &);
-    bool (*when)(const expr2tc &);
-  };
+  using arm = adjust_arm<clang_c_adjust_irep2>;
 
   /// The chain in application order. Defined in clang_c_adjust_irep2.cpp,
   /// beside the predicates it names. An unknown-bound declaration completed

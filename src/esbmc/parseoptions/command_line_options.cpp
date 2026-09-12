@@ -335,6 +335,50 @@ static std::string format_target()
   return oss.str();
 }
 
+/// Option defaults the loop-invariant modes imply.
+///
+/// --synthesise-loop-invariants: the schema emits establishment, preservation
+/// and the post-loop use as three independent obligations. Bundling them into
+/// one query makes the solver carry every multiplier term at once -- on
+/// regression/esbmc/synth_loop_invariant_sum each discharges in about a second
+/// alone while the bundle does not finish in 120s -- so solve them separately.
+/// base-case is set alongside multi-property because multi_property_check only
+/// runs when both are on.
+///
+/// Vacuity: default-enable the probe under --loop-invariant-check (the
+/// standalone Hoare-rewrite mode). A loop invariant that implies the guard
+/// makes the post-loop continuation unreachable; without this probe every
+/// downstream claim discharges as vacuously true. Deliberately NOT
+/// default-enabled for combined mode --loop-invariant: that runs k-induction
+/// phases whose UNSAT-on-internal-claims is the success signal, not vacuity.
+/// Users can opt in explicitly with --check-vacuity there.
+static void
+set_loop_invariant_options(const cmdlinet &cmdline, optionst &options)
+{
+  // Only when no phase has been selected explicitly. --base-case,
+  // --forward-condition and --inductive-step each drive one k-induction phase
+  // themselves, and process_goto_program treats --inductive-step as
+  // k-induction, so it stamps inductive_step_instruction on the havoc. Forcing
+  // base-case on top of that reaches the (base_case || forward_condition) &&
+  // inductive_step_instruction arm with k_induction false, which symex asserts
+  // against (execution_state.cpp) -- ESBMC aborts.
+  if (
+    cmdline.isset("synthesise-loop-invariants") && !options.is_kind() &&
+    !cmdline.isset("base-case") && !cmdline.isset("forward-condition") &&
+    !cmdline.isset("inductive-step"))
+  {
+    options.set_option("multi-property", true);
+    options.set_option("base-case", true);
+  }
+
+  if (cmdline.isset("no-vacuity-check"))
+    options.set_option("check-vacuity", false);
+  else if (
+    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check") ||
+    cmdline.isset("synthesise-loop-invariants"))
+    options.set_option("check-vacuity", true);
+}
+
 // This method creates a set of options based on the CMD arguments passed to
 // ESBMC. Also, it sets some options that are used across various
 // ESBMC stages but which are not available via CMD.
@@ -579,20 +623,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("inductive-step"))
     options.set_option("add-symex-value-sets", true);
 
-  // Default-enable the vacuity probe under --loop-invariant-check (the
-  // standalone Hoare-rewrite mode). A loop invariant that implies the guard
-  // makes the post-loop continuation unreachable; without this probe every
-  // downstream claim discharges as vacuously true.
-  //
-  // We deliberately do NOT default-enable for combined mode --loop-invariant:
-  // that runs k-induction phases (base case, forward condition, inductive
-  // step) whose UNSAT-on-internal-claims is the success signal, not vacuity.
-  // Users can opt in explicitly with --check-vacuity in those modes.
-  if (cmdline.isset("no-vacuity-check"))
-    options.set_option("check-vacuity", false);
-  else if (
-    cmdline.isset("check-vacuity") || cmdline.isset("loop-invariant-check"))
-    options.set_option("check-vacuity", true);
+  set_loop_invariant_options(cmdline, options);
 
   // Conflicting strategies: --termination checks a different property and
   // takes priority over k-induction. Disable both k-induction variants so
