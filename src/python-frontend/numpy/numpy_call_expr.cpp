@@ -4031,6 +4031,163 @@ T get_constant_value(const nlohmann::json &node)
   }
 }
 
+std::optional<exprt> numpy_call_expr::try_transpose_decayed_2d_param(
+  const nlohmann::json &arg,
+  typet t)
+{
+  // Not a fully nested 2-D array type -- most commonly a 2-D parameter,
+  // whose C-ABI row-pointer decay (register_function_argument) loses the
+  // outer dimension the caller's single pointer-unwrap can recover. Nothing
+  // to do for an already fully-nested (e.g. local-array) type.
+  if (t.is_array() && t.subtype().is_array())
+    return std::nullopt;
+
+  // Rebuild a genuine nested array from the parameter's tracked full shape
+  // (numpy_param_shapes_) and materialize the transposed value directly
+  // (rather than falling into the caller's own fully-nested-array branch,
+  // whose current_lhs-set path re-derives its C-call argument from
+  // call_["args"][0] itself -- the original decayed-pointer expression, not
+  // this rebuilt one -- and crashes dereferencing it as the row-typed
+  // pointer transpose()/transpose_double() expect). nullopt for anything
+  // the descriptor materialization declines (rank 1, non-2-D, or not a
+  // tracked array at all).
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    arg, "TypeError: numpy.transpose currently supports up to 2D arrays");
+  if (!materialized || materialized->first.size() != 2)
+    return std::nullopt;
+
+  exprt full_array = build_numpy_shape_array_value(
+    materialized->first, materialized->second, type_handler_);
+
+  // build_numpy_axis_swapped_2d_expr indexes its source_expr once per
+  // output element (np_index(source_expr, r, ...) then np_index(..., c,
+  // ...)); done straight against full_array (an un-symbol'd literal, unlike
+  // this same call's other callers, which always pass an already-
+  // materialized Name lookup) that reaches BMC as an index into an
+  // anonymous compound literal and trips a dereference assertion. Route it
+  // through a named temporary first, the same fix the temp-symbol path
+  // below already applies to its own (post-swap) result.
+  symbolt &full_tmp = converter_.create_tmp_symbol(
+    call_, "$compound-literal$", full_array.type(), full_array);
+  exprt full_tmp_expr = symbol_expr(full_tmp);
+  code_declt full_decl(full_tmp_expr);
+  full_decl.operands().push_back(full_array);
+  converter_.add_instruction(full_decl);
+
+  std::vector<int> shape(
+    materialized->first.begin(), materialized->first.end());
+  exprt transposed =
+    build_numpy_axis_swapped_2d_expr(type_handler_, full_tmp_expr, shape);
+
+  // With an assignment target, retype it and return the value directly --
+  // the same "folded literal" shape create_expr_from_call's own
+  // constant-fold branch uses.
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = transposed.type();
+    converter_.update_symbol(*converter_.current_lhs);
+    return transposed;
+  }
+
+  symbolt &tmp = converter_.create_tmp_symbol(
+    call_, "$compound-literal$", transposed.type(), transposed);
+  exprt tmp_expr = symbol_expr(tmp);
+  code_declt decl(tmp_expr);
+  decl.operands().push_back(transposed);
+  converter_.add_instruction(decl);
+  return tmp_expr;
+}
+
+std::optional<exprt> numpy_call_expr::try_transpose_name_arg(
+  const nlohmann::json &arg,
+  const exprt &arg_expr)
+{
+  typet t = arg_expr.type();
+  if (t.is_pointer() && t.subtype().is_array())
+    t = t.subtype();
+
+  if (std::optional<exprt> from_param =
+        try_transpose_decayed_2d_param(arg, t))
+    return from_param;
+
+  if (t.is_array() && t.subtype().is_array())
+  {
+    std::vector<int> shape = type_handler_.get_array_type_shape(t);
+    if (shape.size() != 2)
+    {
+      throw std::runtime_error(
+        "TypeError: numpy.transpose currently supports up to 2D arrays");
+    }
+
+    typet base_type = t.subtype().subtype();
+
+    // The C-call path below writes its result through *current_lhs (built
+    // as an output-buffer pointer, not a return value), so it requires a
+    // real assignment target to already exist. A type-only probe of this
+    // same call (e.g. resolve_call_argument_array_type, run before the
+    // target symbol is even created) has none yet; build the transposed
+    // value directly instead, the same current_lhs-free way
+    // handle_axis_permutation_view_call's own general axis swap already
+    // does (regression: array_return_descriptor_success crashed
+    // dereferencing a null current_lhs here).
+    if (!converter_.current_lhs)
+    {
+      // Materialize into a named temporary rather than returning the raw
+      // nested-literal value directly: an un-symbol'd 2-D literal read
+      // straight back through a subscript (any_subscript_array_needs_copy_'s
+      // row-by-row copy, triggered by a non-symbol RHS) tripped a bitwuzla
+      // array-store width assertion downstream.
+      exprt transposed =
+        build_numpy_axis_swapped_2d_expr(type_handler_, arg_expr, shape);
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$compound-literal$", transposed.type(), transposed);
+      exprt tmp_expr = symbol_expr(tmp);
+      code_declt decl(tmp_expr);
+      decl.operands().push_back(transposed);
+      converter_.add_instruction(decl);
+      return tmp_expr;
+    }
+
+    const bool is_float = base_type.is_floatbv();
+    function_id_.set_function(is_float ? "transpose_double" : "transpose");
+
+    code_function_callt call =
+      to_code_function_call(to_code(function_call_expr::get()));
+
+    typet result_row_type = type_handler_.build_array(base_type, shape[0]);
+    typet result_type = type_handler_.build_array(result_row_type, shape[1]);
+    converter_.current_lhs->type() = result_type;
+    converter_.update_symbol(*converter_.current_lhs);
+
+    auto &args = call.arguments();
+    typet flat_ptr_type =
+      pointer_typet(is_float ? base_type : long_long_int_type());
+    if (!args.empty())
+      args[0] = np_typecast(args[0], flat_ptr_type);
+
+    exprt row0 = np_index(
+      *converter_.current_lhs, from_integer(0, size_type()),
+      result_type.subtype());
+    exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+    args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
+    args.push_back(from_integer(shape[0], int_type()));
+    args.push_back(from_integer(shape[1], int_type()));
+    return call;
+  }
+
+  if (t.is_array())
+  {
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = t;
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return arg_expr;
+  }
+
+  return std::nullopt;
+}
+
 exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
@@ -5090,157 +5247,9 @@ exprt numpy_call_expr::create_expr_from_call()
       if (function == "transpose")
       {
         exprt arg_expr = converter_.get_expr(arg);
-        typet t = arg_expr.type();
-        if (t.is_pointer() && t.subtype().is_array())
-          t = t.subtype();
-
-        // Not a fully nested 2-D array type -- most commonly a 2-D
-        // parameter, whose C-ABI row-pointer decay (register_function_
-        // argument) loses the outer dimension the single unwrap above can
-        // recover. Rebuild a genuine nested array from the parameter's
-        // tracked full shape (numpy_param_shapes_) and materialize the
-        // transposed value directly here (rather than falling into the
-        // unchanged branch below, whose current_lhs-set path re-derives its
-        // C-call argument from call_["args"][0] itself -- the original
-        // decayed-pointer expression, not this rebuilt one -- and crashes
-        // dereferencing it as the row-typed pointer transpose()/
-        // transpose_double() expect). A no-op for anything the descriptor
-        // materialization declines (rank 1, non-2-D, or not a tracked array
-        // at all), which keeps this branch from changing any existing
-        // (already fully-nested, e.g. local-array) case.
-        if (!(t.is_array() && t.subtype().is_array()))
-        {
-          if (auto materialized =
-                converter_.build_numpy_descriptor_materialized_elements(
-                  arg,
-                  "TypeError: numpy.transpose currently supports up to 2D "
-                  "arrays");
-              materialized && materialized->first.size() == 2)
-          {
-            exprt full_array = build_numpy_shape_array_value(
-              materialized->first, materialized->second, type_handler_);
-
-            // build_numpy_axis_swapped_2d_expr indexes its source_expr once
-            // per output element (np_index(source_expr, r, ...) then
-            // np_index(..., c, ...)); done straight against full_array (an
-            // un-symbol'd literal, unlike this same call's other callers,
-            // which always pass an already-materialized Name lookup) that
-            // reaches BMC as an index into an anonymous compound literal
-            // and trips a dereference assertion. Route it through a named
-            // temporary first, the same fix the "!current_lhs" materialize
-            // path below already applies to its own (post-swap) result.
-            symbolt &full_tmp = converter_.create_tmp_symbol(
-              call_, "$compound-literal$", full_array.type(), full_array);
-            exprt full_tmp_expr = symbol_expr(full_tmp);
-            code_declt full_decl(full_tmp_expr);
-            full_decl.operands().push_back(full_array);
-            converter_.add_instruction(full_decl);
-
-            std::vector<int> shape(
-              materialized->first.begin(), materialized->first.end());
-            exprt transposed = build_numpy_axis_swapped_2d_expr(
-              type_handler_, full_tmp_expr, shape);
-
-            // With an assignment target, retype it and return the value
-            // directly -- the same "folded literal" shape this function's
-            // constant-fold branch above uses.
-            if (converter_.current_lhs)
-            {
-              converter_.current_lhs->type() = transposed.type();
-              converter_.update_symbol(*converter_.current_lhs);
-              return transposed;
-            }
-
-            symbolt &tmp = converter_.create_tmp_symbol(
-              call_, "$compound-literal$", transposed.type(), transposed);
-            exprt tmp_expr = symbol_expr(tmp);
-            code_declt decl(tmp_expr);
-            decl.operands().push_back(transposed);
-            converter_.add_instruction(decl);
-            return tmp_expr;
-          }
-        }
-
-        if (t.is_array() && t.subtype().is_array())
-        {
-          std::vector<int> shape = type_handler_.get_array_type_shape(t);
-          if (shape.size() != 2)
-          {
-            throw std::runtime_error(
-              "TypeError: numpy.transpose currently supports up to 2D arrays");
-          }
-
-          typet base_type = t.subtype().subtype();
-
-          // The C-call path below writes its result through *current_lhs
-          // (built as an output-buffer pointer, not a return value), so it
-          // requires a real assignment target to already exist. A type-only
-          // probe of this same call (e.g. resolve_call_argument_array_type,
-          // run before the target symbol is even created) has none yet;
-          // build the transposed value directly instead, the same
-          // current_lhs-free way handle_axis_permutation_view_call's own
-          // general axis swap already does (regression:
-          // array_return_descriptor_success crashed dereferencing a null
-          // current_lhs here).
-          if (!converter_.current_lhs)
-          {
-            // Materialize into a named temporary rather than returning the
-            // raw nested-literal value directly: an un-symbol'd 2-D literal
-            // read straight back through a subscript (any_subscript_array_
-            // needs_copy_'s row-by-row copy, triggered by a non-symbol RHS)
-            // tripped a bitwuzla array-store width assertion downstream.
-            exprt transposed =
-              build_numpy_axis_swapped_2d_expr(type_handler_, arg_expr, shape);
-            symbolt &tmp = converter_.create_tmp_symbol(
-              call_, "$compound-literal$", transposed.type(), transposed);
-            exprt tmp_expr = symbol_expr(tmp);
-            code_declt decl(tmp_expr);
-            decl.operands().push_back(transposed);
-            converter_.add_instruction(decl);
-            return tmp_expr;
-          }
-
-          const bool is_float = base_type.is_floatbv();
-          function_id_.set_function(
-            is_float ? "transpose_double" : "transpose");
-
-          code_function_callt call =
-            to_code_function_call(to_code(function_call_expr::get()));
-
-          typet result_row_type =
-            type_handler_.build_array(base_type, shape[0]);
-          typet result_type =
-            type_handler_.build_array(result_row_type, shape[1]);
-          converter_.current_lhs->type() = result_type;
-          converter_.update_symbol(*converter_.current_lhs);
-
-          auto &args = call.arguments();
-          typet flat_ptr_type =
-            pointer_typet(is_float ? base_type : long_long_int_type());
-          if (!args.empty())
-            args[0] = np_typecast(args[0], flat_ptr_type);
-
-          exprt row0 = np_index(
-            *converter_.current_lhs,
-            from_integer(0, size_type()),
-            result_type.subtype());
-          exprt elem00 =
-            np_index(row0, from_integer(0, size_type()), base_type);
-          args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
-          args.push_back(from_integer(shape[0], int_type()));
-          args.push_back(from_integer(shape[1], int_type()));
-          return call;
-        }
-
-        if (t.is_array())
-        {
-          if (converter_.current_lhs)
-          {
-            converter_.current_lhs->type() = t;
-            converter_.update_symbol(*converter_.current_lhs);
-          }
-          return arg_expr;
-        }
+        if (std::optional<exprt> transposed =
+              try_transpose_name_arg(arg, arg_expr))
+          return *transposed;
       }
 
       nlohmann::json list_arg = unwrap_list_like_node(arg);
