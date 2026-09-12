@@ -3339,40 +3339,20 @@ std::optional<exprt> python_list::resolve_nested_list_element(
   return std::nullopt;
 }
 
-exprt python_list::handle_index_access(
-  const exprt &array,
-  const nlohmann::json &slice_node)
+bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
 {
-  const namespacet ns(converter_.symbol_table());
-  const typet resolved_array_type = ns.follow(array.type());
+  return array.type().is_pointer() && array.is_symbol() &&
+         converter_.numpy_param_shapes_.count(array.identifier().as_string()) !=
+           0;
+}
 
-  // Find list node for type information
-  nlohmann::json list_node;
-  if (
-    list_value_.contains("value") && list_value_["value"].is_object() &&
-    list_value_["value"].contains("id"))
-  {
-    list_node = json_utils::find_var_decl(
-      list_value_["value"]["id"],
-      converter_.current_function_name(),
-      converter_.ast());
-  }
-
-  exprt pos_expr = converter_.get_expr(slice_node);
-  pos_expr = converter_.unwrap_optional_if_needed(pos_expr);
-  size_t index = 0;
-
-  // Validate index type
-  if (pos_expr.type().is_array())
-  {
-    locationt l = converter_.get_location_from_decl(list_value_);
-    throw std::runtime_error(
-      "TypeError at " + l.get_file().as_string() + " " +
-      l.get_line().as_string() +
-      ": list indices must be integers or slices, not str");
-  }
-
-  // Handle negative indices
+void python_list::normalize_index_access_position(
+  const exprt &array,
+  const nlohmann::json &slice_node,
+  const nlohmann::json &list_node,
+  exprt &pos_expr,
+  size_t &index) const
+{
   if (slice_node.contains("op") && slice_node["op"]["_type"] == "USub")
   {
     // Both compile-time branches below assume the negated operand is a
@@ -3397,9 +3377,7 @@ exprt python_list::handle_index_access(
     // Look it up from the pre-decay shape recorded in numpy_param_shapes_
     // instead, the same source .shape/.ndim/.size and numpy.transpose()
     // already consult for this parameter.
-    else if (
-      array.type().is_pointer() && array.is_symbol() &&
-      converter_.numpy_param_shapes_.count(array.identifier().as_string()) != 0)
+    else if (is_numpy_param_negative_index_target(array))
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;
@@ -3443,6 +3421,43 @@ exprt python_list::handle_index_access(
   {
     index = slice_node["value"].get<size_t>();
   }
+}
+
+exprt python_list::handle_index_access(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  const namespacet ns(converter_.symbol_table());
+  const typet resolved_array_type = ns.follow(array.type());
+
+  // Find list node for type information
+  nlohmann::json list_node;
+  if (
+    list_value_.contains("value") && list_value_["value"].is_object() &&
+    list_value_["value"].contains("id"))
+  {
+    list_node = json_utils::find_var_decl(
+      list_value_["value"]["id"],
+      converter_.current_function_name(),
+      converter_.ast());
+  }
+
+  exprt pos_expr = converter_.get_expr(slice_node);
+  pos_expr = converter_.unwrap_optional_if_needed(pos_expr);
+  size_t index = 0;
+
+  // Validate index type
+  if (pos_expr.type().is_array())
+  {
+    locationt l = converter_.get_location_from_decl(list_value_);
+    throw std::runtime_error(
+      "TypeError at " + l.get_file().as_string() + " " +
+      l.get_line().as_string() +
+      ": list indices must be integers or slices, not str");
+  }
+
+  normalize_index_access_position(
+    array, slice_node, list_node, pos_expr, index);
 
   // Handle different array types
   const bool is_char_array = resolved_array_type.is_array() &&

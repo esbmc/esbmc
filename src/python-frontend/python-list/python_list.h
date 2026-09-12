@@ -705,6 +705,28 @@ private:
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
+  // True when `array` is a 2-D+ numpy array parameter's decayed pointer
+  // symbol (register_function_argument's row-pointer decay), i.e. one whose
+  // pre-decay shape handle_index_access's own negative-index normalization
+  // needs to consult in numpy_param_shapes_. Split out to keep that
+  // function's own decision count down.
+  bool is_numpy_param_negative_index_target(const exprt &array) const;
+
+  // handle_index_access's own index/negative-index resolution: normalizes
+  // pos_expr in place for a literal negative index (a[-1]) against the
+  // right size source for `array`'s shape (a numpy parameter's pre-decay
+  // shape, an array_typet's own size, or -- when neither applies -- deferred
+  // to build_list_at_call's runtime normalization), or sets `index` alone
+  // for a compile-time-only type lookup. A no-op for anything but a
+  // UnaryOp(USub)/Constant slice. Split out of handle_index_access to keep
+  // that function's own decision count down.
+  void normalize_index_access_position(
+    const exprt &array,
+    const nlohmann::json &slice_node,
+    const nlohmann::json &list_node,
+    exprt &pos_expr,
+    size_t &index) const;
+
   /**
    * @brief Resolve @c array[pos_expr] when the element is itself a list.
    *
