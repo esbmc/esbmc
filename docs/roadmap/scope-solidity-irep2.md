@@ -589,8 +589,11 @@ p ((member2t*)eq.side_2.ptr_)->source_value.ptr_->expr_id
 p …->source_value.ptr_->type.ptr_->type_id      type2t::struct_id
 ```
 
-`side2` is `0x51` — not a pointer. So `convert_ast` returned garbage for the
-RHS, and the crash is the virtual call on it, not the assignment itself.
+`side2` printed as `0x51`, and the crash is the virtual call on it rather than
+the assignment itself. Treat the *value* with suspicion: these are `-O2`
+locals, where `info locals` can show a stale register. What the frame supports
+is that the RHS AST is unusable at the call, not that it is specifically `0x51`
+— §7.14.
 
 The RHS is a **nested member read**: `member(member(…, struct), unsignedbv)`,
 which in `struct_1` is `this->book.book_id`. The outer component's name is an
@@ -605,3 +608,31 @@ has two places that could do it — `adjust_struct` pads struct *literals*,
 the other would behave exactly like this. Comparing the two struct types at
 that site is the next instrument; it is not established yet, and the earlier
 `--symbol-table-only` A/B cannot settle it, for the reason §7.6 records.
+### 7.14 Both probes refute their hypothesis, and one earlier reading was over-read
+
+The `fprintf` at `get_member_name_field`'s fall-off — printing the wanted name
+and the names present whenever the scan runs off the end — **never fires** on
+any of the three rows. So the name is always found, `idx` is in range, and
+§7.13's out-of-range projection, though real as a mechanism, is not what these
+rows hit.
+
+That is two probes in a row that refuted the hypothesis they were built for,
+which is the intended use: each was placed so that silence was an answer rather
+than an absence of one. Where it leaves the bucket:
+
+| claim | status |
+|---|---|
+| three rows, one frame — `side2->assign(this, side1)` | measured |
+| crash needs symex — `--goto-functions-only` is clean, legacy is clean | measured |
+| the assignment's two sides have equal types | measured (silent probe) |
+| RHS is `member(member(…, struct), unsignedbv)` | measured |
+| an ill-sorted assignment | **refuted** |
+| a member name missing from its struct type | **refuted** |
+| `convert_ast` returned the value `0x51` | **over-read** — an `-O2` local |
+
+The retraction matters for the next step: with the lookup exonerated, the RHS
+AST may be null rather than a stray non-pointer, and those two suggest
+different culprits. So the next instrument prints `src` and its AST kind
+*inside* `convert_member`, which separates "`project` misbehaves on a valid AST
+and a valid index" from "the inner member conversion already failed and the
+outer call inherited it".
