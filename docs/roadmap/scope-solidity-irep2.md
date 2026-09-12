@@ -1323,3 +1323,49 @@ So the question is no longer "is there a stale sort" but "which expression
 carries the unpadded type, and why does the projection prefer it". The probe
 for that prints the expression kind and struct name at each `convert_ast` of a
 struct-typed node, not the sorts alone.
+### 7.31 The proximate cause: the index and the container come from different types
+
+`tuple_sym_smt_ast::project` reads its member list from the **sort's** type:
+
+```cpp
+const std::vector<type2tc> &members =
+  struct_union_members(sort->get_tuple_type());
+assert(idx < members.size() && "Out-of-bounds tuple element accessed");
+const type2tc &restype = members[idx];
+smt_sortt s = ctx->convert_sort(restype);
+```
+
+while `convert_member` computes that index from the **expression's** type:
+
+```cpp
+unsigned int idx = get_member_name_field(member.source_value->type, member.member);
+smt_astt src = convert_ast(member.source_value);
+return src->project(this, idx);
+```
+
+Two different types, one index. When they agree the code is correct; when they
+do not, `members[idx]` is an out-of-bounds `std::vector` read, `restype` is
+garbage, `convert_sort` is handed it, and the resulting pointer is the `0x51`
+of §7.12. The `assert` that would have caught it is compiled out of
+`RelWithDebInfo` — §7.13's observation, now with the exact index and container
+named.
+
+That is the *proximate* cause, and it is independent of which expression
+carries the unpadded type: any disagreement between an expression's struct type
+and the type its AST's sort was built from becomes undefined behaviour here
+rather than a diagnosable failure. §7.16's measurement — `idx=3`,
+`type_members=4`, `ast_members=3` — is exactly this shape.
+
+Two repairs, and they are not alternatives:
+
+1. **Make the mismatch loud.** Derive the index from the same type `project` indexes,
+   or check the bound in release too. This is a solver change, it fixes a class of
+   undefined behaviour rather than one Solidity row, and it would have turned five
+   ticks of probing into one error message.
+2. **Remove the mismatch.** Ensure no expression carries a struct type that disagrees
+   with its AST's sort — §2.1's seam question, still open, and still the migration's
+   own work.
+
+The first is worth doing on its own account and belongs to whoever owns the
+solver's tuple layer; the second is what closes these three rows. Recording
+both, because the first is the reason this defect cost what it did to find.
