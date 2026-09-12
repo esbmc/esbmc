@@ -4021,7 +4021,9 @@ bool clang_c_convertert::get_cast_expr(
       }
       if (ptr_mode)
       {
-        dereference_exprt deref(cur, cur.type().subtype());
+        // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+        // pointer, not the pointee.
+        dereference_exprt deref(cur, cur.type());
         member_exprt m(deref, comp, base_t);
         cur = address_of_exprt(m);
       }

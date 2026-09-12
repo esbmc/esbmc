@@ -81,4 +81,18 @@ inline bool is_promotable_unary(const expr2tc &expr)
   return (is_neg2t(expr) || is_bitnot2t(expr)) && !is_complex_type(expr->type);
 }
 
+/// A cast the frontend marked as a derived->base conversion it could not route
+/// through a "@base@" component, or the wrapper migrate_expr builds when the
+/// marker sat on a node that is not a cast (#7025).
+inline bool is_derived_to_base_cast(const expr2tc &expr)
+{
+  return is_typecast2t(expr) && !to_typecast2t(expr).derived_to_base.empty();
+}
+
+/// The mirror: a downcast whose operand points at a base subobject (#1866).
+inline bool is_base_to_derived_cast(const expr2tc &expr)
+{
+  return is_typecast2t(expr) && to_typecast2t(expr).base_to_derived;
+}
+
 #endif

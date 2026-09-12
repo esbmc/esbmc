@@ -182,6 +182,17 @@ protected:
   /// own definition and no shadows_user_definition query is needed (§90).
   void adjust_special_functions(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_derived_to_base: displace a
+  /// derived->base conversion onto the base subobject under the flattened
+  /// layout. The offset comes from base_displacement, ESBMC's own layout
+  /// oracle -- recomputing it from clang's record layout is the mistake #3894
+  /// records.
+  void adjust_derived_to_base(expr2tc &expr);
+
+  /// IREP2 form of clang_c_adjust::adjust_base_to_derived: re-base a downcast
+  /// off the base subobject onto the start of the derived object.
+  void adjust_base_to_derived(expr2tc &expr);
+
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
@@ -247,6 +258,14 @@ protected:
   /// IREP2 form of clang_c_adjust::adjust_symbol's function-designator sugar
   /// (§100).
   void adjust_function_designators(expr2tc &expr);
+
+  /// Per-symbol code the pass synthesises rather than rewrites, run before the
+  /// value walk so what it emits is adjusted like the rest. Distinct from an
+  /// arm: an arm rewrites one node, this takes the whole symbol. C generates
+  /// nothing (docs/roadmap/scope-clang-cpp-irep2.md §3.6).
+  virtual void gen_symbol_code(symbolt &)
+  {
+  }
 
   /// Arms that run only when this pass is the sole adjuster, applied in the
   /// order `arms` lists them. Virtual so a derived pass substitutes its own
