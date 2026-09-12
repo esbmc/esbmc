@@ -3960,19 +3960,9 @@ exprt python_list::handle_index_access(
     // struct, read it back as the pointer it actually is so
     // extract_pyobject_value dereferences a single `Class*` instead of copying
     // sizeof(struct) bytes off an 8-byte pointer slot, which overruns it
-    // (#4805). ESBMC-internal model helper classes (reserved `__ESBMC_` prefix,
-    // e.g. the dataclasses `__ESBMC_DataclassField`) are stored by value by
-    // their hand-written models and must be left as structs.
-    if (converter_.is_user_class_struct_type(elem_type))
-    {
-      const std::string tag =
-        elem_type.id() == "symbol"
-          ? to_symbol_type(elem_type).get_identifier().as_string()
-          : to_struct_type(elem_type).tag().as_string();
-      const std::string cls = converter_.extract_class_name_from_tag(tag);
-      if (cls.rfind("__ESBMC", 0) != 0)
-        elem_type = gen_pointer_type(elem_type);
-    }
+    // (#4805).
+    if (converter_.is_heap_migrated_class_type(elem_type))
+      elem_type = gen_pointer_type(elem_type);
 
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);

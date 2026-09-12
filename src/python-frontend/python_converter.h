@@ -507,6 +507,13 @@ private:
   // structs.
   bool is_user_class_struct_type(const typet &t);
 
+  // True iff `t` is a user class that the object model migrates to the heap and
+  // stores in a container as a `Class*`. ESBMC's own model classes (reserved
+  // `__ESBMC_` prefix, e.g. the dataclasses `__ESBMC_DataclassField`) are built
+  // by hand-written models that keep the struct inline, so the push and read
+  // paths must both leave them by value.
+  bool is_heap_migrated_class_type(const typet &t);
+
   // True iff `t` is a pointer to a user-defined class struct (a migrated
   // `Class*` instance). Used to gate the object-model migration's
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real
