@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/irep/std_code.h>
@@ -668,6 +669,19 @@ static bool zero_initialises(const clang::Expr &init)
     return ce->requiresZeroInitialization();
 
   return false;
+}
+
+/// The id a catch handler matches a throw on. The catch type rides on the
+/// handler block's own type and is read off it exactly once -- here.
+/// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
+/// code_block2t has no type to carry it across the seam
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
+static void set_handler_exception_id(const namespacet &ns, exprt &handler)
+{
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, handler.type(), "", ids);
+  if (!ids.empty())
+    handler.set("exception_id", ids.front());
 }
 
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -1342,6 +1356,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*cxxtry.getHandler(i), handler))
         return true;
 
+      set_handler_exception_id(namespacet(context), handler);
       new_expr.move_to_operands(handler);
     }
 
@@ -3273,8 +3288,9 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
       derived_struct.is_struct() &&
       to_struct_type(derived_struct).has_component(base_comp))
     {
-      dereference_exprt deref(
-        implicit_this_symb, implicit_this_symb.type().subtype());
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(implicit_this_symb, implicit_this_symb.type());
       member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
       implicit_this_symb = address_of_exprt(m);
       routed = true;
