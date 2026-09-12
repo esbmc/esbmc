@@ -272,6 +272,9 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   {ARM(adjust_function_designators), nullptr},
   {ARM(adjust_boolean_operands), is_short_circuit},
   {ARM(adjust_call_callee), is_call_site},
+  // Before adjust_call_arguments: the parameter types it converts against come
+  // from the callee's type, which this row is what repairs.
+  {ARM(adjust_call_signature), is_call_site},
   {ARM(adjust_call_arguments), is_call_site},
   {ARM(adjust_if_expr), is_if2t},
   {ARM(adjust_complex_arith), is_binary_arith},
@@ -997,6 +1000,23 @@ static bool is_shift_assignment(const irep_idt &op)
 void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
 {
   const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+
+  // `>>=` arrives kind-less from the Solidity converter, and remove_sideeffects
+  // handles only the resolved spellings (goto_sideeffects.cpp) -- it aborts
+  // with "cannot remove side effect (assign_shr)" otherwise. clang_c_adjust
+  // keeps the same rewrite for the same reason; the C converter picks the kind
+  // itself.
+  if (a.op == "assign_shr" && is_number_type(a.rhs->type))
+  {
+    if (is_unsignedbv_type(a.lhs->type) || is_signedbv_type(a.lhs->type))
+    {
+      const irep_idt kind =
+        is_unsignedbv_type(a.lhs->type) ? "assign_lshr" : "assign_ashr";
+      expr = sideeffect_assign2tc(expr->type, kind, a.lhs, a.rhs, a.location);
+      return;
+    }
+  }
+
   if (a.op == "assign" || is_shift_assignment(a.op))
     return;
   if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
@@ -1210,6 +1230,47 @@ static bool binds_by_reference(
 
   const code_typet::argumentst &decl = to_code_type(s->get_type()).arguments();
   return i < decl.size() && is_lvalue_or_rvalue_reference(decl[i].type());
+}
+
+/// IREP2 form of the callee refresh in
+/// clang_c_adjust::adjust_side_effect_function_call: a converter can leave the
+/// callee's type incomplete -- the Solidity frontend emits a call whose callee
+/// has no `code` type at all -- and legacy repairs it by rebuilding the symbol
+/// expression from the table. Aligning the call's *own* type to the callee's
+/// return type is C++'s, not C's (align_se_function_call_return_type is empty
+/// in clang_c_adjust), so that half is a hook.
+void clang_c_adjust_irep2::adjust_call_signature(expr2tc &expr)
+{
+  const symbolt *callee_symbol = nullptr;
+
+  {
+    const std::optional<call_view> call = as_call(expr);
+    if (!call)
+      return;
+
+    const expr2tc &callee = *call->callee;
+    if (is_nil_expr(callee) || !is_symbol2t(callee))
+      return;
+
+    const symbol2t &sym = to_symbol2t(callee);
+    callee_symbol = context.find_symbol(sym.thename);
+    if (callee_symbol == nullptr || !callee_symbol->get_type().is_code())
+      return;
+
+    const type2tc table_type = migrate_type(callee_symbol->get_type());
+    if (callee->type != table_type)
+      *call->callee = symbol2tc(
+        table_type,
+        sym.thename,
+        sym.rlevel,
+        sym.level1_num,
+        sym.level2_num,
+        sym.thread_num,
+        sym.node_num);
+  }
+
+  // The view is dead here on purpose: the hook may rebind `expr`.
+  align_call_return_type(expr, *callee_symbol);
 }
 
 void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)

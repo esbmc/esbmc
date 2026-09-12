@@ -10,6 +10,7 @@
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
+#include <set>
 #include <util/base/prefix.h>
 #include <util/irep/pad_names.h>
 #include <util/expr/string_constant.h>
@@ -1080,6 +1081,37 @@ static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+/// The right-shift family. `lshr` and `ashr` name their kind; the Solidity
+/// converter also emits a kind-less `shr` for `>>`, and IREP2 has no node for
+/// it. clang_c_adjust resolves that one by the left operand's signedness before
+/// anything migrates, but --clang-cpp-irep2-adjust-only replaces that pass, so
+/// the resolution belongs here (docs/roadmap/scope-solidity-irep2.md §7.21).
+/// The three are extracted together because migrate_expr is over the complexity
+/// gate: an arm added inline fails it.
+static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (id != "shr" && id != exprt::i_lshr && id != exprt::i_ashr)
+    return false;
+
+  if (expr.operands().size() > 2)
+  {
+    splice_expr(expr, new_expr_ref);
+    return true;
+  }
+
+  const type2tc type = migrate_type(expr.type());
+  expr2tc side1, side2;
+  convert_operand_pair(expr, side1, side2);
+
+  const bool logical =
+    id == exprt::i_lshr || (id == "shr" && is_unsignedbv_type(side1->type));
+
+  new_expr_ref = logical ? expr2tc(lshr2tc(type, side1, side2))
+                         : expr2tc(ashr2tc(type, side1, side2));
+  return true;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1549,23 +1581,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == exprt::i_lshr)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = lshr2tc(type, side1, side2);
-    return;
-  }
-
   if (expr.id() == "unary-")
   {
     type = migrate_type(expr.type());
@@ -1700,6 +1715,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (migrate_right_shift(expr, new_expr_ref))
+    return;
+
   if (expr.id() == exprt::i_shl)
   {
     type = migrate_type(expr.type());
@@ -1710,19 +1728,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, side1, side2);
 
     new_expr_ref = shl2tc(type, side1, side2);
-    return;
-  }
-
-  if (expr.id() == exprt::i_ashr)
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = ashr2tc(type, side1, side2);
     return;
   }
 
@@ -4908,4 +4913,36 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   default:
     return migrate_expr_back_rest2(ref);
   }
+}
+
+void migrate_census(const contextt &context)
+{
+  unsigned long symbols = 0, values = 0, failures = 0;
+  // The kind tally is what stops the census being vacuous: a count of symbols
+  // or values is identical on either representation, so swapping get_type2()
+  // for get_type() would migrate nothing and print the same line. A type_id
+  // exists only on the IREP2 side.
+  std::set<unsigned> kinds;
+  context.foreach_operand_in_order(
+    [&symbols, &values, &failures, &kinds](const symbolt &s) {
+      ++symbols;
+      try
+      {
+        kinds.insert(static_cast<unsigned>(s.get_type2()->type_id));
+        if (!is_nil_expr(s.get_value2()))
+          ++values;
+      }
+      catch (const std::string &e)
+      {
+        ++failures;
+        log_error("IREP2 migrate census: {} on symbol {}", e, s.id);
+      }
+    });
+  log_status(
+    "IREP2 migrate census: {} symbols, {} values migrated, {} type kinds, {} "
+    "failures",
+    symbols,
+    values,
+    kinds.size(),
+    failures);
 }

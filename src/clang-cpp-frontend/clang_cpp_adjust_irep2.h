@@ -54,6 +54,11 @@ protected:
   void adjust_reference(expr2tc &expr) override;
   void adjust_cpp_throw(expr2tc &expr);
 
+  /// IREP2 form of clang_cpp_adjust::align_se_function_call_return_type: a call
+  /// evaluates to its callee's return type. Constructors are excluded — their
+  /// "return type" names the class, not the call's value.
+  void align_call_return_type(expr2tc &expr, const symbolt &callee) override;
+
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
 

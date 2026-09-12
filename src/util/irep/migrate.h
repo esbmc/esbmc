@@ -9,6 +9,8 @@
 #include <util/irep/std_expr.h>
 #include <util/irep/std_types.h>
 
+class contextt;
+
 // Don't ask
 class namespacet;
 class symbolt;
@@ -71,5 +73,17 @@ expr2tc side_effect_function_call2tc(
   const type2tc &return_type,
   const expr2tc &function,
   const std::vector<expr2tc> &arguments);
+
+/// Migrate every symbol's type, and its value where it has one, and report what
+/// could not be represented. Migration signals failure by throwing a
+/// `std::string`, so each symbol is wrapped: one unrepresentable construct
+/// names itself and the walk continues, which is what makes this a census
+/// rather than a bisection. Walks the whole linked context, operational models
+/// included, which is the set goto_convert migrates anyway.
+///
+/// Frontend-agnostic on purpose: clang-cpp and solidity share one definition,
+/// so a census taken on either is the same measurement
+/// (docs/roadmap/scope-solidity-irep2.md §3, step S.2).
+void migrate_census(const contextt &context);
 
 #endif /* _ESBMC_UTIL_MIGRATE_H_ */
