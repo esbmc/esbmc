@@ -1335,6 +1335,32 @@ bool python_converter::infer_list_elem_type_from_call_sites(
   return found;
 }
 
+std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body) const
+{
+  if (is_numpy_array_literal_call(arg))
+    return type_handler_.get_typet(arg["args"][0]);
+
+  if (arg.value("_type", "") != "Call")
+    return std::nullopt;
+
+  const nlohmann::json &callee_func =
+    arg.value("func", nlohmann::json::object());
+  if (callee_func.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const nlohmann::json *callee_def =
+    find_function_def(module_body, callee_func.value("id", ""));
+  nlohmann::json literal_call;
+  if (
+    callee_def == nullptr ||
+    !numpy_array_literal_return(*callee_def, literal_call))
+    return std::nullopt;
+
+  return type_handler_.get_typet(literal_call["args"][0]);
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -1378,26 +1404,11 @@ bool python_converter::try_infer_numpy_param_type(
 
     const nlohmann::json &arg = call["args"][param_index];
 
-    if (is_numpy_array_literal_call(arg))
+    if (
+      std::optional<typet> inferred_from_call =
+        try_infer_numpy_array_arg_type(arg, module_body))
     {
-      record(type_handler_.get_typet(arg["args"][0]));
-      continue;
-    }
-
-    if (arg.value("_type", "") == "Call")
-    {
-      const nlohmann::json &callee_func =
-        arg.value("func", nlohmann::json::object());
-      if (callee_func.value("_type", "") == "Name")
-      {
-        const nlohmann::json *callee_def =
-          find_function_def(module_body, callee_func.value("id", ""));
-        nlohmann::json literal_call;
-        if (
-          callee_def != nullptr &&
-          numpy_array_literal_return(*callee_def, literal_call))
-          record(type_handler_.get_typet(literal_call["args"][0]));
-      }
+      record(*inferred_from_call);
       continue;
     }
 

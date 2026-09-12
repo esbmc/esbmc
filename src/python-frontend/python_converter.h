@@ -764,6 +764,18 @@ private:
     typet &out,
     std::set<std::string> &visiting) const;
 
+  // A call-site argument that resolves to a numpy array's element type: a
+  // literal `np.array([...])` call (is_numpy_array_literal_call), or a
+  // `Call` to a user function whose body unconditionally returns one
+  // (numpy_array_literal_return in converter_funcdef.cpp). nullopt for
+  // anything else. Replaces try_infer_numpy_param_type's own former
+  // is_numpy_array_literal_call() check one-for-one (same call count there)
+  // instead of adding a second, separate dispatch branch for the `Call`
+  // case, to keep that function's own decision count down.
+  std::optional<typet> try_infer_numpy_array_arg_type(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body) const;
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,
