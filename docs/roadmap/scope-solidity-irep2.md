@@ -636,3 +636,48 @@ different culprits. So the next instrument prints `src` and its AST kind
 *inside* `convert_member`, which separates "`project` misbehaves on a valid AST
 and a valid index" from "the inner member conversion already failed and the
 outer call inherited it".
+### 7.15 Root cause: a padded struct type against an unpadded tuple (2026-09-12)
+
+Printing `project`'s *result* as well as its input settles it. Both member
+projections on the crashing path, with the source AST pointer, its sort kind,
+the index, and what came back:
+
+```
+XPROJ src=0x2dad4d50 sort=6 idx=1 srckind=5    -> res=0x2dc28e10
+XPROJ src=0x2dc28e10 sort=6 idx=3 srckind=58   -> res=0x51
+```
+
+The inner projection is fine. The outer one takes that AST and asks for field
+**index 3**, and gets `0x51` back.
+
+Read against §7.14, which established that `get_member_name_field` *finds* the
+name: `idx = 3` is a valid position in the member-name list of
+`member.source_value->type`, so that type has **at least four** members. `Book`
+in `struct_1` declares three — `title`, `author`, `book_id` — so the type
+carries a synthetic pad. And `project(3)` returning garbage means the AST's
+tuple has **at most three** fields.
+
+So the expression's struct type and the AST's tuple sort disagree on member
+count: **the type is padded, the AST was built unpadded.** That is §7.11's
+padding hypothesis with both halves measured instead of assumed, and it
+explains why the two probes before it were silent — neither the assignment's
+types nor the name lookup is wrong. The disagreement is between a type and an
+AST built from a different version of the same type.
+
+It also reverses §7.14's retraction of `0x51`. That value is real: it is
+`project`'s return, printed by the probe, not an `-O2` local. The caution was
+right in kind and unnecessary in fact, and what resolved it was printing the
+*result* beside the input — a probe that reports only its inputs cannot tell
+"went in bad" from "came out bad".
+
+Two candidates for which side is stale, and this does not yet choose between
+them: `pad_type_symbol`, which pads type symbols under `sole_adjuster`, and
+whatever built the tuple sort — a sort cached from the symbol's type before
+padding would behave exactly like this. Choosing needs the member counts of
+`member.source_value->type` and of `src->sort` printed side by side, which is
+one more line in the same probe.
+
+Also worth separating out, as §7.13 noted for a different reason: `project`
+taking an index it cannot bounds-check, from a lookup whose only guard is an
+assert compiled out of release builds, turns any such disagreement into
+undefined behaviour rather than a diagnosable failure.
