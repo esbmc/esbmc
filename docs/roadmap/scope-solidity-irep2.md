@@ -759,3 +759,38 @@ with the same two `KNOWNBUG` rows that already passed.
 Phase 8's residue is now 64 rows owned by #7726 and 3 by §7.16's padding
 disagreement, with nothing unexplained, against 442 of 509 agreeing and no row
 anywhere answering differently.
+### 7.18 The padding fix that did not work, and what it rules out (2026-09-12)
+
+§7.16 offered two candidates for the stale side. The first was tried and is
+wrong.
+
+`pad_type_symbol` pads only the top-level type of each type symbol, while
+`clang_c_adjust::adjust_type` recurses — it walks each component before padding
+the enclosing type, so a struct inlined into another's member list is padded
+too. That looked like the whole story, so the IREP2 side was made to recurse
+the same way (array subtypes, then components, then the enclosing type, leaning
+on `add_padding`'s idempotence, which `adjust_type` asserts). All three rows
+still SIGSEGV, so the change was reverted rather than parked: a change that
+fixes nothing measurable should not ship.
+
+What that rules out is useful. The short type is **not** a nested type symbol
+the pass failed to reach, and the tree says where it does come from —
+`adjust_struct`'s own comment:
+
+> The literal's own type is an inline copy the converter recorded before
+> `add_padding` ran, so `ns.follow` leaves it short the synthetic members.
+
+So the 3-member `Book` is an inline copy carried **on an expression**, while
+the 4-member one is the same struct resolved through the padded symbol table.
+Two versions of one type in one tree, which is what §7.16 measured, but the
+stale copy is on an expression and no amount of padding type *symbols* reaches
+it.
+
+That reframes the row: it is not a padding-ownership question but the seam
+question §2.1 raised from the other end — which types on expressions are inline
+snapshots and which resolve through the table. `adjust_struct` repairs that for
+struct *literals* by padding their operands; nothing repairs it for a struct
+type reached through a member read. The candidate fix is therefore to resolve
+such a type through the table at the point the member is adjusted, in the way
+`adjust_call_signature` already does for a callee's `code` type (§7.7) — the
+precedent is on this branch, and it is the same class of repair.
