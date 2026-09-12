@@ -4468,6 +4468,28 @@ void function_call_expr::reject_numpy_sort_write_through_view(
       "numpy view yet");
 }
 
+long long function_call_expr::extract_numpy_inplace_sort_axis() const
+{
+  long long axis = -1;
+  if (!call_.contains("keywords"))
+    return axis;
+
+  for (const auto &kw : call_["keywords"])
+  {
+    if (kw["_type"] != "keyword" || kw["arg"].is_null() || kw["arg"] != "axis")
+      continue;
+
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(kw["value"], axis_value) ||
+      !axis_value.is_int)
+      throw std::runtime_error(
+        "TypeError: numpy.ndarray.sort() axis must be a literal integer");
+    axis = axis_value.int_value;
+  }
+  return axis;
+}
+
 std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
 {
   if (
@@ -4491,24 +4513,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
 
   reject_numpy_sort_write_through_view(receiver_node);
 
-  long long axis = -1;
-  if (call_.contains("keywords"))
-  {
-    for (const auto &kw : call_["keywords"])
-    {
-      if (
-        kw["_type"] != "keyword" || kw["arg"].is_null() || kw["arg"] != "axis")
-        continue;
-
-      numeric_value axis_value;
-      if (
-        !try_extract_numeric_constant(kw["value"], axis_value) ||
-        !axis_value.is_int)
-        throw std::runtime_error(
-          "TypeError: numpy.ndarray.sort() axis must be a literal integer");
-      axis = axis_value.int_value;
-    }
-  }
+  const long long axis = extract_numpy_inplace_sort_axis();
 
   // Positional args and keywords besides axis= are rejected ahead of the
   // shape check so a 2-D receiver called with an unsupported argument

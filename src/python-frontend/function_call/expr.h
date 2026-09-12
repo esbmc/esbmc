@@ -614,6 +614,11 @@ private:
   // unchanged.
   std::optional<exprt> try_numpy_inplace_sort();
 
+  // a.sort()'s own axis= keyword scan: a literal integer or throws. Split
+  // out of try_numpy_inplace_sort to keep that function's own decision
+  // count down.
+  long long extract_numpy_inplace_sort_axis() const;
+
   // reject_numpy_view_mutating_method_call (called from
   // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
   // reshape view is not a copy (writes to it are meaningful) but sort() has
