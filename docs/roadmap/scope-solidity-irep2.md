@@ -902,3 +902,54 @@ if left out: `enum_2` cannot answer at all without `--goto-functions-only` —
 the full run exceeds 200 s — so the census and the verdict sweep measure that
 row at different depths. Fine for counting migrate failures, which precede
 symex; not fine to quote side by side unremarked.
+### 7.21 A fourth bucket, and why this one had to be fixed at the seam
+
+The two rows S.2 could not census at all (§7.19) name themselves, unlike the
+empty-irept bucket:
+
+```
+ERROR: migrate expr failed: shr
+```
+
+An id, not a blank. `migrate_expr` has no handler for a plain `shr`, and cannot
+have one usefully: **IREP2 has no kind-less shift node** — `is_shift` covers
+`shl2t`, `ashr2t`, `lshr2t`. `clang_c_adjust` resolves it before anything
+migrates, by the left operand's signedness (`unsignedbv` -> `lshr`, `signedbv`
+-> `ashr`).
+
+This is the *expression* twin of §7.17's `assign_shr`: the Solidity converter
+emits both `>>` and `>>=` without picking the kind, the C converter picks both,
+and the
+IREP2 side assumed resolution because the C corpus always had it. Three of Phase
+8's four fixes are now that same defect class.
+
+**The asymmetry is where each has to be repaired.** `assign_shr` survives
+migration, so an adjust arm can rewrite it. `shr` cannot be migrated at all, so
+no arm ever sees it and the seam is the only code on the flag path that runs
+early enough. That is a more invasive place for a semantic decision, so the
+helper says why rather than leaving a bare special case.
+
+| row | before | after |
+|---|---|---|
+| `bitwise_ops_1` | `migrate expr failed: shr` | **agrees** |
+| `op_binary_1` | `migrate expr failed: shr` | `migrate expr failed:` (§7.8's bucket) |
+
+One row closes; one advances past `shr` onto the `cpp_new` size blocker that
+§7.20 showed #7726 closes.
+
+**The complexity gate rejected the first attempt, correctly.** Three branches
+added inline took `migrate_expr` from 291 to 294, and the gate blocks any
+increase on a function already over threshold. #7726's own commit message
+describes the remedy — move arms out into named helpers — so the existing
+`lshr` and `ashr` arms were extracted alongside the new `shr`: two branches
+removed, one added, net decrease, gate clear. Pleading the case was not an
+option, and should not have been the first instinct.
+
+Because the extraction moved arms every frontend uses on the **default** path,
+the regression net is wider than for a flag-gated arm: 864 of 864 unit tests,
+103 of 103 `irep2_only`, both shift pairs re-run against the refactored build
+rather than assumed, and the Solidity default path unchanged.
+
+One thing to hand forward: `adjust_compound_assignment` now sits at CCN **15**,
+exactly the `core` gate line, so the next branch added there fails the gate.
+Extract before adding.
