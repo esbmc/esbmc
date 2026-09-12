@@ -4497,8 +4497,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
     for (const auto &kw : call_["keywords"])
     {
       if (
-        kw["_type"] != "keyword" || kw["arg"].is_null() ||
-        kw["arg"] != "axis")
+        kw["_type"] != "keyword" || kw["arg"].is_null() || kw["arg"] != "axis")
         continue;
 
       numeric_value axis_value;
