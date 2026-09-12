@@ -794,3 +794,63 @@ type reached through a member read. The candidate fix is therefore to resolve
 such a type through the table at the point the member is adjusted, in the way
 `adjust_call_signature` already does for a callee's `code` type (§7.7) — the
 precedent is on this branch, and it is the same class of repair.
+### 7.19 S.2 done: the census names the symbol, and the bucket is not uniform
+
+`migrate_census` was a `static` in `clang_cpp_language.cpp`. It walks a
+`contextt` and is frontend-agnostic, so it moves into
+`src/util/irep/migrate.{h,cpp}` beside the migration it measures, the C++
+frontend's copy is deleted, and both frontends call one definition. Two copies
+that can drift is the arm-table hazard (§7.7) applied to a helper.
+
+**It answers a different question depending on the other flag, and that is easy
+to misreport.** On `enum_2`, census alone:
+
+```
+IREP2 migrate census: 807 symbols, 357 values migrated, 8 type kinds, 0 failures
+```
+
+and census with `--clang-cpp-irep2-adjust-only`:
+
+```
+ERROR: IREP2 migrate census: migrate expr failed:  on symbol
+       sol:@C@FreshJuiceSize@F@FreshJuiceSize#
+IREP2 migrate census: 807 symbols, 356 values migrated, 8 type kinds, 1 failures
+```
+
+The first prices the **converter's** output, which is clean. The second prices
+the **round trip** through the IREP2 pass. Quoting the first as "migration is
+clean" would be wrong in the way §7.9 and §7.10 were wrong: a measurement that
+runs, produces a plausible number, and answers a different question than the
+one asked.
+
+**What it says about the residue.** Over the 65 diverging rows it can run (two
+pin the flag themselves):
+
+| failures reported | rows |
+|---|---:|
+| 1 | 58 |
+| 2 | 3 |
+| 3 | 1 |
+| 0 | 1 (`compound_assign_1`, closed by §7.17) |
+| no census line | 2 (`bitwise_ops_1`, `op_binary_1`) |
+
+and the failing symbols are **29 constructors and 33 methods** — so the bucket
+is not constructor-shaped, as the one reduced row suggested, and some rows
+carry more than one failure.
+
+What this does *not* establish: that all 62 share §7.8's `cpp_new` size cause.
+The error text is identical everywhere — `migrate expr failed:` with an empty
+id, which is what an empty irept prints — and the one row traced by backtrace
+was that cause, but identical text is not identical cause. #7726 merging is the
+cheap test: re-run this census on that branch and the bucket either empties or
+splits.
+
+**Two flaws in the census harness, found before its numbers were used.** The
+first run reported "46 rows: 1 failure, 15 rows: 0" and both figures were junk:
+the symbol grep assumed no spaces between "census:" and "on symbol", where the
+text is `migrate expr failed: `, so every symbol read as absent; and the script
+passed each row's source file but dropped its **flags line**, losing
+`--contract` and converting a different contract than the row verifies. That is
+the fourth harness error in this section, against a comparable number of real
+defects. The standing correction: do not quote a sweep figure without
+re-reading what the sweep passed and what it grepped.
