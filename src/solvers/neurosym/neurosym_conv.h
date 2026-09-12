@@ -4,16 +4,17 @@
 #include <solvers/smtlib/smtlib_conv.h>
 
 #include <map>
+#include <optional>
 
 /** Backend for NeuroSym, a neural-guided SMT solver (a GAN proposes candidate
- *  models, with a Z3 fallback preserving soundness and completeness). NeuroSym
- *  natively parses the QF_BV, QF_ABV, and QF_LIA fragments of SMT-LIB2
- *  (arrays via a read-over-write bit-blaster encoding, not a full decision
- *  procedure), and this backend drives it as a QF_ABV solver. NeuroSym is a
- *  Python program that cannot be linked into another application, so this
- *  backend reuses the smtlib backend's SMT-LIB2 serializer to render the
- *  formula into a file and runs NeuroSym on it in one-shot batch mode
- *  (--neurosym-prog, "%f" is replaced by the file path).
+ *  models, with a Z3/Bitwuzla fallback preserving soundness and
+ *  completeness). NeuroSym natively parses the QF_BV, QF_ABV, and QF_LIA
+ *  fragments of SMT-LIB2 (arrays via a read-over-write bit-blaster encoding,
+ *  not a full decision procedure), and this backend drives it as a QF_ABV
+ *  solver. NeuroSym is a Python program that cannot be linked into another
+ *  application, so this backend reuses the smtlib backend's SMT-LIB2
+ *  serializer to render the formula into a file and runs NeuroSym on it in
+ *  one-shot batch mode (--neurosym-prog, "%f" is replaced by the file path).
  *
  *  Arrays are enabled (array_api set in the factory): neurosym_convt
  *  inherits array_iface from smtlib_convt, which already serializes native
@@ -33,13 +34,17 @@
  *  "(model (define-fun NAME () SORT VALUE) ...)" block on a sat verdict, so
  *  dec_solve() parses it directly into local_model instead of always paying
  *  for a second, independent solve through --neurosym-model-prog just to
- *  answer (get-value) queries -- on a real captured formula (24M CNF
- *  variables) that second solve, through a plain interactive SMT-LIB2 pipe,
- *  measured slower than NeuroSym's own batch solve of the same formula.
- *  --neurosym-model-prog remains supported as a fallback for any variable
- *  local parsing did not cover (e.g. an unrecognized sort). Without either a
- *  usable local model or a model solver, satisfiable results require
- *  --result-only. */
+ *  answer (get-value) queries. local_model only maps plain declared symbols
+ *  to values though -- a query for a *composite* expression (an array
+ *  select/store chain, pointer-offset arithmetic built from bit-vector ops)
+ *  has no single symbol to look up. get_bv()/l_get() handle that case with
+ *  local_eval(): a small recursive evaluator that walks the smtlib_smt_ast
+ *  tree ESBMC handed back for the query, using local_model as the leaf
+ *  values, and computes the composite result directly -- covering the
+ *  common bit-vector-arithmetic and array-theory node kinds a real
+ *  counterexample trace asks for. Anything local_eval() does not recognize
+ *  (floating-point, uninterpreted functions/tuples) falls through to
+ *  --neurosym-model-prog exactly as before it existed. */
 class neurosym_convt : public smtlib_convt
 {
 public:
@@ -79,6 +84,44 @@ private:
    *  real solver's (get-value) response, via the same interp_numeric()
    *  helper. Bool is stored as "true"/"false". */
   std::map<std::string, std::string> local_model;
+
+  /** Look up a plain declared symbol's raw value text in local_model,
+   *  interpreted as an unsigned bit pattern (sign handling happens where
+   *  the caller needs it -- BigInt here is just the bits). Returns nullopt
+   *  on a miss or a value form numeric_value() cannot parse (e.g. the
+   *  SMT-LIB2 "(- N)" form). */
+  std::optional<BigInt> local_lookup(const std::string &symname) const;
+
+  /** Recursively evaluate a bit-vector-sorted expression using local_model
+   *  for its leaf symbols. Handles literals, bit-vector arithmetic
+   *  (BVADD/SUB/MUL/UDIV/SDIV/UMOD/SMOD/SHL/LSHR/ASHR/NEG/NOT/AND/OR/XOR),
+   *  EXTRACT/CONCAT, ITE, and SELECT (via local_eval_array). Returns
+   *  nullopt the moment any subterm is a leaf symbol not in local_model, or
+   *  a node kind not handled (floating-point, uninterpreted functions) --
+   *  the caller falls back to --neurosym-model-prog in that case, exactly
+   *  as if this evaluator did not exist. Result is always masked to the
+   *  expression's own bit width, as an unsigned bit pattern; callers apply
+   *  sign interpretation themselves (matching get_bv()'s is_signed
+   *  parameter). */
+  std::optional<BigInt> local_eval_bv(smt_astt a) const;
+
+  /** Same as local_eval_bv(), for boolean-sorted expressions: comparisons
+   *  (LT/GT/LTE/GTE and their BV-prefixed signed/unsigned variants),
+   *  EQ/NOTEQ (bit-vector or boolean operands), boolean connectives
+   *  (AND/OR/NOT/IMPLIES/XOR), and ITE. */
+  std::optional<bool> local_eval_bool(smt_astt a) const;
+
+  /** Evaluate an array-sorted term at one concrete index: walks a
+   *  STORE-chain looking for a write at `index`, recursing into the base
+   *  array on a miss; an ITE picks a branch by its (evaluated) condition
+   *  and recurses into it with the same index. A bare array SYMBOL leaf has
+   *  no representation in local_model (NeuroSym's model output only
+   *  contains scalar define-funs) and returns nullopt -- an array whose
+   *  full contents were never constrained by a store the trace actually
+   *  reads through is a real gap, not a bug, and degrades to the
+   *  --neurosym-model-prog fallback like any other unhandled case. */
+  std::optional<BigInt>
+  local_eval_array_at(smt_astt array_term, const BigInt &index) const;
 
   /** Lazily reads the model solver's initial check-sat response (the
    *  handshake (get-value) queries need) the *first* time a variable is not
