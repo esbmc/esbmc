@@ -1682,6 +1682,100 @@ resolve_literal_numpy_row_view(nlohmann::json arg, python_converter &converter)
   return std::nullopt;
 }
 
+// `a[:, j]` over a literal 2-D numpy array: the column-view counterpart of
+// resolve_literal_numpy_row_view, sharing its literal-index parsing and
+// base-array resolution. Recognizes only a bare `:` (no lower/upper/step)
+// on the row axis with a literal integer column index; anything else
+// (a genuine bounded slice, a non-literal index) declines.
+static std::optional<nlohmann::json>
+resolve_literal_numpy_col_view(nlohmann::json arg, python_converter &converter)
+{
+  if (arg.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      arg["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      arg = decl["value"];
+  }
+
+  if (
+    !arg.is_object() || arg.value("_type", std::string()) != "Subscript" ||
+    !arg.contains("value") || !arg.contains("slice"))
+    return std::nullopt;
+
+  const nlohmann::json &slice = arg["slice"];
+  if (
+    slice.value("_type", std::string()) != "Tuple" || !slice.contains("elts") ||
+    !slice["elts"].is_array() || slice["elts"].size() != 2)
+    return std::nullopt;
+
+  const nlohmann::json &row_axis = slice["elts"][0];
+  if (
+    row_axis.value("_type", std::string()) != "Slice" ||
+    (row_axis.contains("lower") && !row_axis["lower"].is_null()) ||
+    (row_axis.contains("upper") && !row_axis["upper"].is_null()) ||
+    (row_axis.contains("step") && !row_axis["step"].is_null()))
+    return std::nullopt;
+
+  auto parse_index = [](const nlohmann::json &node) -> std::optional<int64_t> {
+    if (
+      node.is_object() && node.value("_type", std::string()) == "Constant" &&
+      node.contains("value") && node["value"].is_number_integer())
+      return node["value"].get<int64_t>();
+
+    if (
+      node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
+      node.contains("op") &&
+      node["op"].value("_type", std::string()) == "USub" &&
+      node.contains("operand") &&
+      node["operand"].value("_type", std::string()) == "Constant" &&
+      node["operand"].contains("value") &&
+      node["operand"]["value"].is_number_integer())
+      return -node["operand"]["value"].get<int64_t>();
+
+    return std::nullopt;
+  };
+
+  std::optional<int64_t> col_index = parse_index(slice["elts"][1]);
+  if (!col_index)
+    return std::nullopt;
+
+  nlohmann::json base = arg["value"];
+  if (base.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      base["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      base = decl["value"];
+  }
+
+  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
+  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+    return std::nullopt;
+
+  const auto &rows = (*literal)["elts"];
+  nlohmann::json column;
+  column["_type"] = "List";
+  column["elts"] = nlohmann::json::array();
+  for (const nlohmann::json &row : rows)
+  {
+    if (
+      row.value("_type", std::string()) != "List" || !row.contains("elts") ||
+      !row["elts"].is_array())
+      return std::nullopt;
+
+    const auto &cells = row["elts"];
+    int64_t resolved_col = *col_index;
+    if (resolved_col < 0)
+      resolved_col += static_cast<int64_t>(cells.size());
+    if (resolved_col < 0 || resolved_col >= static_cast<int64_t>(cells.size()))
+      return std::nullopt;
+
+    column["elts"].push_back(cells[static_cast<std::size_t>(resolved_col)]);
+  }
+  return column;
+}
+
 static bool is_sorted_numeric_list(
   const nlohmann::json &list,
   const std::string &diagnostic)
@@ -4031,6 +4125,182 @@ T get_constant_value(const nlohmann::json &node)
   }
 }
 
+std::optional<exprt> numpy_call_expr::try_transpose_decayed_2d_param(
+  const nlohmann::json &arg,
+  typet t)
+{
+  // Not a fully nested 2-D array type -- most commonly a 2-D parameter,
+  // whose C-ABI row-pointer decay (register_function_argument) loses the
+  // outer dimension the caller's single pointer-unwrap can recover. Nothing
+  // to do for an already fully-nested (e.g. local-array) type.
+  if (t.is_array() && t.subtype().is_array())
+    return std::nullopt;
+
+  // Rebuild a genuine nested array from the parameter's tracked full shape
+  // (numpy_param_shapes_) and materialize the transposed value directly
+  // (rather than falling into the caller's own fully-nested-array branch,
+  // whose current_lhs-set path re-derives its C-call argument from
+  // call_["args"][0] itself -- the original decayed-pointer expression, not
+  // this rebuilt one -- and crashes dereferencing it as the row-typed
+  // pointer transpose()/transpose_double() expect). nullopt for anything
+  // the descriptor materialization declines (rank 1, non-2-D, or not a
+  // tracked array at all).
+  auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+    arg, "TypeError: numpy.transpose currently supports up to 2D arrays");
+  if (!materialized || materialized->first.size() != 2)
+    return std::nullopt;
+
+  // materialized->second can be empty (a (2, 0)/(0, 2)-shaped parameter),
+  // which build_numpy_shape_array_value's own elems.front() would crash on;
+  // resolve the element type from the tracked array's own descriptor type
+  // instead, the same fallback build_numpy_descriptor_materialized_array
+  // uses for the same reason.
+  typet elem_type;
+  if (materialized->second.empty())
+  {
+    const std::string root_id =
+      converter_.resolve_name_symbol_id(arg["id"].get<std::string>());
+    std::optional<typet> empty_elem_type =
+      converter_.get_numpy_descriptor_element_type(root_id);
+    if (!empty_elem_type)
+      return std::nullopt;
+    elem_type = *empty_elem_type;
+  }
+  else
+    elem_type = materialized->second.front().type();
+
+  exprt full_array = build_numpy_shape_array_value(
+    materialized->first, materialized->second, elem_type, type_handler_);
+
+  // build_numpy_axis_swapped_2d_expr indexes its source_expr once per
+  // output element (np_index(source_expr, r, ...) then np_index(..., c,
+  // ...)); done straight against full_array (an un-symbol'd literal, unlike
+  // this same call's other callers, which always pass an already-
+  // materialized Name lookup) that reaches BMC as an index into an
+  // anonymous compound literal and trips a dereference assertion. Route it
+  // through a named temporary first, the same fix the temp-symbol path
+  // below already applies to its own (post-swap) result.
+  symbolt &full_tmp = converter_.create_tmp_symbol(
+    call_, "$compound-literal$", full_array.type(), full_array);
+  exprt full_tmp_expr = symbol_expr(full_tmp);
+  code_declt full_decl(full_tmp_expr);
+  full_decl.operands().push_back(full_array);
+  converter_.add_instruction(full_decl);
+
+  std::vector<int> shape(
+    materialized->first.begin(), materialized->first.end());
+  exprt transposed =
+    build_numpy_axis_swapped_2d_expr(type_handler_, full_tmp_expr, shape);
+
+  // With an assignment target, retype it and return the value directly --
+  // the same "folded literal" shape create_expr_from_call's own
+  // constant-fold branch uses.
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = transposed.type();
+    converter_.update_symbol(*converter_.current_lhs);
+    return transposed;
+  }
+
+  symbolt &tmp = converter_.create_tmp_symbol(
+    call_, "$compound-literal$", transposed.type(), transposed);
+  exprt tmp_expr = symbol_expr(tmp);
+  code_declt decl(tmp_expr);
+  decl.operands().push_back(transposed);
+  converter_.add_instruction(decl);
+  return tmp_expr;
+}
+
+std::optional<exprt> numpy_call_expr::try_transpose_name_arg(
+  const nlohmann::json &arg,
+  const exprt &arg_expr)
+{
+  typet t = arg_expr.type();
+  if (t.is_pointer() && t.subtype().is_array())
+    t = t.subtype();
+
+  if (std::optional<exprt> from_param =
+        try_transpose_decayed_2d_param(arg, t))
+    return from_param;
+
+  if (t.is_array() && t.subtype().is_array())
+  {
+    std::vector<int> shape = type_handler_.get_array_type_shape(t);
+    if (shape.size() != 2)
+    {
+      throw std::runtime_error(
+        "TypeError: numpy.transpose currently supports up to 2D arrays");
+    }
+
+    typet base_type = t.subtype().subtype();
+
+    // The C-call path below writes its result through *current_lhs (built
+    // as an output-buffer pointer, not a return value), so it requires a
+    // real assignment target to already exist. A type-only probe of this
+    // same call (e.g. resolve_call_argument_array_type, run before the
+    // target symbol is even created) has none yet; build the transposed
+    // value directly instead, the same current_lhs-free way
+    // handle_axis_permutation_view_call's own general axis swap already
+    // does (regression: array_return_descriptor_success crashed
+    // dereferencing a null current_lhs here).
+    if (!converter_.current_lhs)
+    {
+      // Materialize into a named temporary rather than returning the raw
+      // nested-literal value directly: an un-symbol'd 2-D literal read
+      // straight back through a subscript (any_subscript_array_needs_copy_'s
+      // row-by-row copy, triggered by a non-symbol RHS) tripped a bitwuzla
+      // array-store width assertion downstream.
+      exprt transposed =
+        build_numpy_axis_swapped_2d_expr(type_handler_, arg_expr, shape);
+      symbolt &tmp = converter_.create_tmp_symbol(
+        call_, "$compound-literal$", transposed.type(), transposed);
+      exprt tmp_expr = symbol_expr(tmp);
+      code_declt decl(tmp_expr);
+      decl.operands().push_back(transposed);
+      converter_.add_instruction(decl);
+      return tmp_expr;
+    }
+
+    const bool is_float = base_type.is_floatbv();
+    function_id_.set_function(is_float ? "transpose_double" : "transpose");
+
+    code_function_callt call =
+      to_code_function_call(to_code(function_call_expr::get()));
+
+    typet result_row_type = type_handler_.build_array(base_type, shape[0]);
+    typet result_type = type_handler_.build_array(result_row_type, shape[1]);
+    converter_.current_lhs->type() = result_type;
+    converter_.update_symbol(*converter_.current_lhs);
+
+    auto &args = call.arguments();
+    typet flat_ptr_type =
+      pointer_typet(is_float ? base_type : long_long_int_type());
+    if (!args.empty())
+      args[0] = np_typecast(args[0], flat_ptr_type);
+
+    exprt row0 = np_index(
+      *converter_.current_lhs, from_integer(0, size_type()),
+      result_type.subtype());
+    exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
+    args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
+    args.push_back(from_integer(shape[0], int_type()));
+    args.push_back(from_integer(shape[1], int_type()));
+    return call;
+  }
+
+  if (t.is_array())
+  {
+    if (converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = t;
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return arg_expr;
+  }
+
+  return std::nullopt;
+}
+
 exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
@@ -5090,90 +5360,9 @@ exprt numpy_call_expr::create_expr_from_call()
       if (function == "transpose")
       {
         exprt arg_expr = converter_.get_expr(arg);
-        typet t = arg_expr.type();
-        if (t.is_pointer() && t.subtype().is_array())
-          t = t.subtype();
-
-        if (t.is_array() && t.subtype().is_array())
-        {
-          std::vector<int> shape = type_handler_.get_array_type_shape(t);
-          if (shape.size() != 2)
-          {
-            throw std::runtime_error(
-              "TypeError: numpy.transpose currently supports up to 2D arrays");
-          }
-
-          typet base_type = t.subtype().subtype();
-
-          // The C-call path below writes its result through *current_lhs
-          // (built as an output-buffer pointer, not a return value), so it
-          // requires a real assignment target to already exist. A type-only
-          // probe of this same call (e.g. resolve_call_argument_array_type,
-          // run before the target symbol is even created) has none yet;
-          // build the transposed value directly instead, the same
-          // current_lhs-free way handle_axis_permutation_view_call's own
-          // general axis swap already does (regression:
-          // array_return_descriptor_success crashed dereferencing a null
-          // current_lhs here).
-          if (!converter_.current_lhs)
-          {
-            // Materialize into a named temporary rather than returning the
-            // raw nested-literal value directly: an un-symbol'd 2-D literal
-            // read straight back through a subscript (any_subscript_array_
-            // needs_copy_'s row-by-row copy, triggered by a non-symbol RHS)
-            // tripped a bitwuzla array-store width assertion downstream.
-            exprt transposed =
-              build_numpy_axis_swapped_2d_expr(type_handler_, arg_expr, shape);
-            symbolt &tmp = converter_.create_tmp_symbol(
-              call_, "$compound-literal$", transposed.type(), transposed);
-            exprt tmp_expr = symbol_expr(tmp);
-            code_declt decl(tmp_expr);
-            decl.operands().push_back(transposed);
-            converter_.add_instruction(decl);
-            return tmp_expr;
-          }
-
-          const bool is_float = base_type.is_floatbv();
-          function_id_.set_function(
-            is_float ? "transpose_double" : "transpose");
-
-          code_function_callt call =
-            to_code_function_call(to_code(function_call_expr::get()));
-
-          typet result_row_type =
-            type_handler_.build_array(base_type, shape[0]);
-          typet result_type =
-            type_handler_.build_array(result_row_type, shape[1]);
-          converter_.current_lhs->type() = result_type;
-          converter_.update_symbol(*converter_.current_lhs);
-
-          auto &args = call.arguments();
-          typet flat_ptr_type =
-            pointer_typet(is_float ? base_type : long_long_int_type());
-          if (!args.empty())
-            args[0] = np_typecast(args[0], flat_ptr_type);
-
-          exprt row0 = np_index(
-            *converter_.current_lhs,
-            from_integer(0, size_type()),
-            result_type.subtype());
-          exprt elem00 =
-            np_index(row0, from_integer(0, size_type()), base_type);
-          args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
-          args.push_back(from_integer(shape[0], int_type()));
-          args.push_back(from_integer(shape[1], int_type()));
-          return call;
-        }
-
-        if (t.is_array())
-        {
-          if (converter_.current_lhs)
-          {
-            converter_.current_lhs->type() = t;
-            converter_.update_symbol(*converter_.current_lhs);
-          }
-          return arg_expr;
-        }
+        if (std::optional<exprt> transposed =
+              try_transpose_name_arg(arg, arg_expr))
+          return *transposed;
       }
 
       nlohmann::json list_arg = unwrap_list_like_node(arg);
@@ -6366,6 +6555,305 @@ numpy_call_expr::try_inline_pure_call_arg(nlohmann::json arg) const
   return converter_.substitute_call_arguments(*ret_val, arg);
 }
 
+// numpy.argsort()'s axis= keyword: absent leaves both outputs at their
+// default (flatten=false, axis=-1); None sets flatten; otherwise a literal
+// integer axis, or throws. Split out of handle_argsort_call to keep that
+// function's own decision count down.
+static void parse_argsort_axis_keyword(
+  const nlohmann::json *axis_kw,
+  bool &flatten,
+  long long &axis)
+{
+  if (axis_kw == nullptr)
+    return;
+
+  if (is_json_none_literal(*axis_kw))
+  {
+    flatten = true;
+    return;
+  }
+
+  numeric_value axis_value;
+  if (!try_extract_numeric_constant(*axis_kw, axis_value) || !axis_value.is_int)
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() axis must be a literal integer or None");
+  axis = axis_value.int_value;
+}
+
+exprt numpy_call_expr::handle_argsort_call()
+{
+  const std::string &function = function_id_.get_function();
+  // axis is positional-or-keyword in numpy.argsort(), and the method-call
+  // rewrite prepends the receiver for a.argsort(0), producing the same
+  // 2-positional-arg shape as np.argsort(a, 0); accept both.
+  if (call_["args"].empty() || call_["args"].size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() expects 1 or 2 positional arguments");
+
+  const nlohmann::json *axis_kw = find_keyword_arg("axis");
+  if (call_["args"].size() == 2 && axis_kw != nullptr)
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() got multiple values for argument 'axis'");
+
+  bool argsort_flatten = false;
+  long long argsort_axis = -1;
+  const nlohmann::json *axis_node =
+    call_["args"].size() == 2 ? &call_["args"][1] : axis_kw;
+  parse_argsort_axis_keyword(axis_node, argsort_flatten, argsort_axis);
+
+  if (numpy_reducer_has_unsupported_keywords_besides_axis(call_))
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() does not support kind or order "
+      "arguments yet");
+
+  if (
+    auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+      call_["args"][0],
+      "TypeError: numpy.argsort() currently supports rank 1 or 2 "
+      "arrays"))
+  {
+    std::vector<exprt> elems = materialized->second;
+    if (elems.empty())
+      throw std::runtime_error(
+        "TypeError: numpy.argsort() currently supports 1-D arrays only");
+    if (elems.size() > max_numpy_sort_elements)
+      throw std::runtime_error(
+        "TypeError: numpy.argsort() currently supports arrays up to " +
+        std::to_string(max_numpy_sort_elements) + " elements");
+
+    return build_numpy_sort_or_argsort_result(
+      converter_,
+      type_handler_,
+      materialized->first,
+      std::move(elems),
+      argsort_flatten,
+      argsort_axis,
+      /*want_indices=*/true);
+  }
+
+  if (argsort_flatten || (argsort_axis != 0 && argsort_axis != -1))
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() currently supports 1-D arrays only");
+
+  nlohmann::json arr_arg =
+    resolve_literal_numpy_array_input(call_["args"][0], function, false);
+
+  std::vector<std::size_t> shape;
+  if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() currently supports 1-D arrays only");
+
+  const auto &elements = arr_arg["elts"];
+  std::vector<std::size_t> indices(elements.size());
+  for (std::size_t i = 0; i < indices.size(); ++i)
+    indices[i] = i;
+
+  std::stable_sort(
+    indices.begin(), indices.end(), [&](std::size_t lhs, std::size_t rhs) {
+      return numeric_to_key(
+               elements[lhs],
+               "TypeError: numpy.argsort() array must contain finite numeric "
+               "values") <
+             numeric_to_key(
+               elements[rhs],
+               "TypeError: numpy.argsort() array must contain finite numeric "
+               "values");
+    });
+
+  return converter_.get_expr(make_integer_list(indices));
+}
+
+// numpy.searchsorted()'s side= keyword ('left'/'right', default 'left');
+// throws on any other keyword or an unrecognized side value. Split out of
+// handle_searchsorted_call to keep that function's own decision count down.
+static bool parse_searchsorted_side_keyword(const nlohmann::json &call)
+{
+  bool right = false;
+  if (!call.contains("keywords"))
+    return right;
+
+  for (const auto &kw : call["keywords"])
+  {
+    if (kw["_type"] != "keyword" || kw["arg"].is_null())
+      continue;
+
+    const std::string arg = kw["arg"].get<std::string>();
+    if (arg != "side")
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() keyword '" + arg +
+        "' is not supported");
+
+    const auto &value = kw["value"];
+    if (
+      !value.is_object() || value.value("_type", std::string()) != "Constant" ||
+      !value.contains("value") || !value["value"].is_string())
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
+
+    const std::string side = value["value"].get<std::string>();
+    if (side == "left")
+      right = false;
+    else if (side == "right")
+      right = true;
+    else
+      throw std::runtime_error(
+        "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
+  }
+  return right;
+}
+
+exprt numpy_call_expr::handle_searchsorted_call()
+{
+  const std::string &function = function_id_.get_function();
+  if (call_["args"].size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() expects array and value arguments");
+
+  const bool right = parse_searchsorted_side_keyword(call_);
+
+  nlohmann::json arr_arg;
+  if (
+    std::optional<nlohmann::json> row_view =
+      resolve_literal_numpy_row_view(call_["args"][0], converter_))
+    arr_arg = std::move(*row_view);
+  else if (
+    std::optional<nlohmann::json> col_view =
+      resolve_literal_numpy_col_view(call_["args"][0], converter_))
+    arr_arg = std::move(*col_view);
+  else
+    arr_arg =
+      resolve_literal_numpy_array_input(call_["args"][0], function, false);
+
+  std::vector<std::size_t> shape;
+  if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
+    throw std::runtime_error(
+      "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
+
+  if (!is_sorted_numeric_list(
+        arr_arg,
+        "TypeError: numpy.searchsorted() array must contain finite numeric "
+        "values"))
+    throw std::runtime_error(
+      "ValueError: numpy.searchsorted() requires the input array to be "
+      "sorted");
+
+  nlohmann::json position;
+  position["_type"] = "Constant";
+  nlohmann::json value_arg = call_["args"][1];
+  numeric_to_key(
+    value_arg, "TypeError: numpy.searchsorted() requires a literal value");
+  position["value"] =
+    static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
+  return converter_.get_expr(position);
+}
+
+void numpy_call_expr::parse_sort_axis_and_keywords(
+  bool &flatten,
+  long long &axis)
+{
+  auto parse_axis = [&](const nlohmann::json &axis_node) {
+    if (is_json_none_literal(axis_node))
+    {
+      flatten = true;
+      return;
+    }
+
+    numeric_value axis_value;
+    if (
+      !try_extract_numeric_constant(axis_node, axis_value) ||
+      !axis_value.is_int)
+    {
+      throw std::runtime_error(
+        "TypeError: numpy.sort() axis must be a literal integer or None");
+    }
+    axis = axis_value.int_value;
+  };
+
+  if (call_["args"].size() == 2)
+    parse_axis(call_["args"][1]);
+
+  if (!call_.contains("keywords"))
+    return;
+
+  for (const auto &kw : call_["keywords"])
+  {
+    if (kw["_type"] != "keyword" || kw["arg"].is_null())
+      continue;
+
+    const std::string arg = kw["arg"].get<std::string>();
+    if (arg != "axis")
+      throw std::runtime_error(
+        "TypeError: numpy.sort() keyword '" + arg + "' is not supported");
+
+    if (call_["args"].size() == 2)
+      throw std::runtime_error(
+        "TypeError: numpy.sort() got multiple values for axis");
+    parse_axis(kw["value"]);
+  }
+}
+
+exprt numpy_call_expr::handle_sort_call()
+{
+  const std::string &function = function_id_.get_function();
+  if (call_["args"].empty() || call_["args"].size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.sort() expects 1 or 2 positional arguments");
+
+  bool flatten = false;
+  long long axis = -1;
+  parse_sort_axis_and_keywords(flatten, axis);
+
+  if (
+    auto materialized = converter_.build_numpy_descriptor_materialized_elements(
+      call_["args"][0],
+      "TypeError: numpy.sort() currently supports rank 1 or 2 arrays"))
+  {
+    std::vector<exprt> elems = materialized->second;
+    if (elems.empty())
+      throw std::runtime_error(
+        "TypeError: numpy.sort() currently supports only constant arrays");
+    if (elems.size() > max_numpy_sort_elements)
+      throw std::runtime_error(
+        "TypeError: numpy.sort() currently supports arrays up to " +
+        std::to_string(max_numpy_sort_elements) + " elements");
+
+    return build_numpy_sort_or_argsort_result(
+      converter_,
+      type_handler_,
+      materialized->first,
+      std::move(elems),
+      flatten,
+      axis,
+      /*want_indices=*/false);
+  }
+
+  nlohmann::json arr_arg =
+    resolve_literal_numpy_array_input(call_["args"][0], function, false);
+
+  std::vector<std::size_t> shape;
+  if (!get_literal_shape(arr_arg, shape) || shape.empty())
+    throw std::runtime_error(
+      "TypeError: numpy.sort() currently supports only constant arrays");
+
+  std::vector<nlohmann::json> elements;
+  if (flatten)
+  {
+    flatten_json_list(arr_arg, elements);
+  }
+  else
+  {
+    if (shape.size() != 1 || (axis != 0 && axis != -1))
+    {
+      throw std::runtime_error(
+        "TypeError: numpy.sort() axis " + std::to_string(axis) +
+        " is not supported");
+    }
+    elements = arr_arg["elts"].get<std::vector<nlohmann::json>>();
+  }
+
+  return converter_.get_expr(make_sorted_numeric_list(std::move(elements)));
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
@@ -7472,190 +7960,13 @@ exprt numpy_call_expr::get()
   }
 
   if (function == "argsort")
-  {
-    if (call_["args"].size() != 1)
-      throw std::runtime_error(
-        "TypeError: numpy.argsort() expects 1 positional argument");
-
-    if (call_.contains("keywords") && !call_["keywords"].empty())
-      throw std::runtime_error(
-        "TypeError: numpy.argsort() does not support axis, kind or order "
-        "arguments yet");
-
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, false);
-
-    std::vector<std::size_t> shape;
-    if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
-      throw std::runtime_error(
-        "TypeError: numpy.argsort() currently supports 1-D arrays only");
-
-    const auto &elements = arr_arg["elts"];
-    std::vector<std::size_t> indices(elements.size());
-    for (std::size_t i = 0; i < indices.size(); ++i)
-      indices[i] = i;
-
-    std::stable_sort(
-      indices.begin(), indices.end(), [&](std::size_t lhs, std::size_t rhs) {
-        return numeric_to_key(
-                 elements[lhs],
-                 "TypeError: numpy.argsort() array must contain finite numeric "
-                 "values") <
-               numeric_to_key(
-                 elements[rhs],
-                 "TypeError: numpy.argsort() array must contain finite numeric "
-                 "values");
-      });
-
-    return converter_.get_expr(make_integer_list(indices));
-  }
+    return handle_argsort_call();
 
   if (function == "searchsorted")
-  {
-    if (call_["args"].size() != 2)
-      throw std::runtime_error(
-        "TypeError: numpy.searchsorted() expects array and value arguments");
-
-    bool right = false;
-    if (call_.contains("keywords"))
-    {
-      for (const auto &kw : call_["keywords"])
-      {
-        if (kw["_type"] != "keyword" || kw["arg"].is_null())
-          continue;
-
-        const std::string arg = kw["arg"].get<std::string>();
-        if (arg == "side")
-        {
-          const auto &value = kw["value"];
-          if (
-            !value.is_object() ||
-            value.value("_type", std::string()) != "Constant" ||
-            !value.contains("value") || !value["value"].is_string())
-          {
-            throw std::runtime_error(
-              "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
-          }
-          const std::string side = value["value"].get<std::string>();
-          if (side == "left")
-            right = false;
-          else if (side == "right")
-            right = true;
-          else
-            throw std::runtime_error(
-              "TypeError: numpy.searchsorted() side must be 'left' or 'right'");
-          continue;
-        }
-
-        throw std::runtime_error(
-          "TypeError: numpy.searchsorted() keyword '" + arg +
-          "' is not supported");
-      }
-    }
-
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, false);
-
-    std::vector<std::size_t> shape;
-    if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
-      throw std::runtime_error(
-        "TypeError: numpy.searchsorted() currently supports 1-D arrays only");
-
-    if (!is_sorted_numeric_list(
-          arr_arg,
-          "TypeError: numpy.searchsorted() array must contain finite numeric "
-          "values"))
-      throw std::runtime_error(
-        "ValueError: numpy.searchsorted() requires the input array to be "
-        "sorted");
-
-    nlohmann::json position;
-    position["_type"] = "Constant";
-    nlohmann::json value_arg = call_["args"][1];
-    numeric_to_key(
-      value_arg, "TypeError: numpy.searchsorted() requires a literal value");
-    position["value"] =
-      static_cast<int64_t>(searchsorted_position(arr_arg, value_arg, right));
-    return converter_.get_expr(position);
-  }
+    return handle_searchsorted_call();
 
   if (function == "sort")
-  {
-    if (call_["args"].empty() || call_["args"].size() > 2)
-      throw std::runtime_error(
-        "TypeError: numpy.sort() expects 1 or 2 positional arguments");
-
-    bool flatten = false;
-    long long axis = -1;
-    auto parse_axis = [&](const nlohmann::json &axis_node) {
-      if (is_json_none_literal(axis_node))
-      {
-        flatten = true;
-        return;
-      }
-
-      numeric_value axis_value;
-      if (
-        !try_extract_numeric_constant(axis_node, axis_value) ||
-        !axis_value.is_int)
-      {
-        throw std::runtime_error(
-          "TypeError: numpy.sort() axis must be a literal integer or None");
-      }
-      axis = axis_value.int_value;
-    };
-
-    if (call_["args"].size() == 2)
-      parse_axis(call_["args"][1]);
-
-    if (call_.contains("keywords"))
-    {
-      for (const auto &kw : call_["keywords"])
-      {
-        if (kw["_type"] != "keyword" || kw["arg"].is_null())
-          continue;
-
-        const std::string arg = kw["arg"].get<std::string>();
-        if (arg == "axis")
-        {
-          if (call_["args"].size() == 2)
-            throw std::runtime_error(
-              "TypeError: numpy.sort() got multiple values for axis");
-          parse_axis(kw["value"]);
-          continue;
-        }
-
-        throw std::runtime_error(
-          "TypeError: numpy.sort() keyword '" + arg + "' is not supported");
-      }
-    }
-
-    nlohmann::json arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, false);
-
-    std::vector<std::size_t> shape;
-    if (!get_literal_shape(arr_arg, shape) || shape.empty())
-      throw std::runtime_error(
-        "TypeError: numpy.sort() currently supports only constant arrays");
-
-    std::vector<nlohmann::json> elements;
-    if (flatten)
-    {
-      flatten_json_list(arr_arg, elements);
-    }
-    else
-    {
-      if (shape.size() != 1 || (axis != 0 && axis != -1))
-      {
-        throw std::runtime_error(
-          "TypeError: numpy.sort() axis " + std::to_string(axis) +
-          " is not supported");
-      }
-      elements = arr_arg["elts"].get<std::vector<nlohmann::json>>();
-    }
-
-    return converter_.get_expr(make_sorted_numeric_list(std::move(elements)));
-  }
+    return handle_sort_call();
 
   if (function == "reshape")
   {

@@ -64,6 +64,45 @@ private:
   exprt handle_fill_diagonal_call();
   std::optional<exprt> handle_ravel_pointer_view_attempt();
   exprt handle_axis_permutation_view_call(const std::string &function);
+
+  // numpy.transpose()'s parameter-shaped fast path: when `t` (the single-
+  // pointer-unwrapped type of `arg`) isn't a fully nested 2-D array -- most
+  // commonly a 2-D parameter, whose C-ABI row-pointer decay
+  // (register_function_argument) loses the outer dimension -- rebuilds a
+  // genuine nested array from the parameter's tracked full shape
+  // (numpy_param_shapes_) and returns the transposed value directly.
+  // nullopt for anything the descriptor materialization declines (rank 1,
+  // non-2-D, or not a tracked array at all), leaving the caller's own
+  // fully-nested-array handling (e.g. a local array) unchanged. Split out of
+  // create_expr_from_call to keep that function's own decision count down.
+  std::optional<exprt>
+  try_transpose_decayed_2d_param(const nlohmann::json &arg, typet t);
+
+  // The full body of create_expr_from_call's `function == "transpose"`
+  // dispatch over a resolved Name argument: the parameter-shaped fast path
+  // above, the fully-nested 2-D case (materializing via a C-call or a
+  // direct value depending on whether current_lhs exists yet), and the
+  // already-1-D passthrough. nullopt when none apply, so the caller falls
+  // through to the shared list_arg handling below unchanged. Split out of
+  // create_expr_from_call to keep that function's own decision count down.
+  std::optional<exprt>
+  try_transpose_name_arg(const nlohmann::json &arg, const exprt &arg_expr);
+
+  // np.argsort()/np.searchsorted()/np.sort()'s full dispatch bodies (axis/
+  // keyword parsing, the axis-aware/view-aware descriptor path, and the
+  // literal-only fallback). Each always returns or throws, never falls
+  // through, so get() calling it is a one-for-one replacement of its own
+  // former `if (function == "...")` body -- moving that body's decision
+  // count out of get() to keep that function's own count from growing.
+  exprt handle_argsort_call();
+  exprt handle_searchsorted_call();
+  exprt handle_sort_call();
+
+  // numpy.sort()'s axis argument: positional (2nd arg) or axis= keyword,
+  // never both; None flattens, otherwise a literal integer, or throws.
+  // Split out of handle_sort_call to keep that function's own decision
+  // count down.
+  void parse_sort_axis_and_keywords(bool &flatten, long long &axis);
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);

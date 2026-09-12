@@ -613,6 +613,23 @@ private:
     const symbolt &symbol,
     const std::string &attr_name);
 
+  // v.shape / v.ndim / v.size where v is a 2-D+ numpy array parameter: its
+  // full logical shape is tracked in numpy_param_shapes_ (populated by
+  // register_function_argument before the C-ABI row-pointer decay erases the
+  // outer dimension). Mirrors try_get_numpy_pointer_view_shape_attr's split
+  // reasoning. Returns std::nullopt for any other attribute or an untracked
+  // symbol, so the caller falls through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_param_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  // Tries try_get_numpy_pointer_view_shape_attr then
+  // try_get_numpy_param_shape_attr, so get_expr's own Attribute dispatch
+  // needs a single `if` for both tracked-shape sources instead of growing
+  // its own decision count by one per source.
+  std::optional<exprt>
+  try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
@@ -683,6 +700,15 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  // Records a numpy array parameter's pre-decay shape (when 2-D+) and its
+  // tracked-array-symbol status once its arg_id is known. Split out of
+  // register_function_argument to keep that function's own decision count
+  // down -- both conditions live in here instead of as two more `if`s there.
+  void track_numpy_param(
+    const std::string &arg_id,
+    const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+    bool numpy_array_param);
+
   size_t register_function_argument(
     const nlohmann::json &element,
     code_typet &type,
@@ -737,6 +763,18 @@ private:
     size_t param_index,
     typet &out,
     std::set<std::string> &visiting) const;
+
+  // A call-site argument that resolves to a numpy array's element type: a
+  // literal `np.array([...])` call (is_numpy_array_literal_call), or a
+  // `Call` to a user function whose body unconditionally returns one
+  // (numpy_array_literal_return in converter_funcdef.cpp). nullopt for
+  // anything else. Replaces try_infer_numpy_param_type's own former
+  // is_numpy_array_literal_call() check one-for-one (same call count there)
+  // instead of adding a second, separate dispatch branch for the `Call`
+  // case, to keep that function's own decision count down.
+  std::optional<typet> try_infer_numpy_array_arg_type(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body) const;
 
   void validate_return_paths(
     const nlohmann::json &function_node,
@@ -1105,6 +1143,15 @@ private:
   std::string root_name_from_subscript(const nlohmann::json &node) const;
 
   bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
+
+  // is_basic_numpy_view_subscript(), excluding `.shape[i]`: that indexes the
+  // plain int tuple `.shape` returns, never the array's own data, so it must
+  // never be tracked as a numpy view/alias (root_name_from_subscript drills
+  // through any Attribute to its base Name, so without this exclusion
+  // `shape_0 = a.shape[0]` would register shape_0 as a view copy of `a`
+  // itself). A wrapper, not a change to is_basic_numpy_view_subscript
+  // itself, to keep that already-large function's own decision count as-is.
+  bool is_tracked_numpy_view_subscript(const nlohmann::json &node) const;
 
   // True for a transpose()/reshape()/ravel()/diagonal() Attribute-call node
   // (module or method form), independent of whether its root array name can
@@ -1918,6 +1965,15 @@ private:
   };
   std::unordered_map<std::string, numpy_reshape_view_infot>
     numpy_reshape_view_info_;
+  // A 2-D+ numpy array parameter's full logical shape, keyed by the
+  // parameter's own symbol id. register_function_argument decays such a
+  // parameter to a pointer to its row type for the C ABI (gen_pointer_type
+  // over arg_type.subtype()), which is what the backend needs but erases the
+  // outer dimension from the parameter's own type -- unwrapping the pointer
+  // recovers only the row shape, not the row count. `.shape`/`.ndim`/`.size`
+  // and the array-consuming numpy calls (transpose, sort/argsort/
+  // searchsorted, reducers) read the pre-decay shape from here instead.
+  std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

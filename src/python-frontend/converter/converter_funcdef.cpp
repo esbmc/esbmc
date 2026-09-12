@@ -1007,6 +1007,27 @@ static bool param_is_list_like_in_body(
   return false;
 }
 
+// The pre-decay shape of a 2-D+ numpy array parameter, or nullopt for a
+// non-numpy or rank <2 one. register_function_argument's own row-pointer
+// decay (further down) keeps only the row shape, so this is captured ahead
+// of that decay and recorded into numpy_param_shapes_ once the parameter's
+// id is known. Split out to keep register_function_argument's own decision
+// count down.
+static std::optional<std::vector<std::size_t>> numpy_param_full_shape_of(
+  bool numpy_array_param,
+  const typet &arg_type,
+  const type_handler &type_handler)
+{
+  if (!numpy_array_param || !arg_type.is_array())
+    return std::nullopt;
+
+  std::vector<int> dims = type_handler.get_array_type_shape(arg_type);
+  if (dims.size() < 2)
+    return std::nullopt;
+
+  return std::vector<std::size_t>(dims.begin(), dims.end());
+}
+
 // True for a `np.array([...])` call node with a literal list argument whose
 // shape `type_handler::get_typet` can already resolve.
 static bool is_numpy_array_literal_call(const nlohmann::json &node)
@@ -1023,6 +1044,83 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
 
   return node.contains("args") && node["args"].is_array() &&
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
+}
+
+// Recursively collects every `Return` statement reachable in `body` without
+// crossing into a nested function scope (FunctionDef/AsyncFunctionDef/
+// Lambda) -- a return inside an if/try/for still belongs to the enclosing
+// function, but one inside a nested def does not.
+static void collect_reachable_returns(
+  const nlohmann::json &body,
+  std::vector<const nlohmann::json *> &out)
+{
+  if (!body.is_array())
+    return;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string type = stmt.value("_type", "");
+    if (type == "Return")
+    {
+      out.push_back(&stmt);
+      continue;
+    }
+    if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda")
+      continue;
+
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key))
+        collect_reachable_returns(stmt[key], out);
+
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        if (handler.contains("body"))
+          collect_reachable_returns(handler["body"], out);
+  }
+}
+
+// `np.array(...)` returned by a user function on every reachable path:
+// recognizes `def make(): return np.array([...])` at a call site like
+// `process(make())`, the same shape try_infer_numpy_param_type already
+// resolves for a literal or forwarded-parameter argument. Every Return
+// reachable without crossing a nested function scope must return a supported
+// array literal of the *same* shape; a branching function with divergent or
+// unsupported shapes, or no return at all, is declined rather than guessing.
+static bool numpy_array_literal_return(
+  const nlohmann::json &func_def,
+  nlohmann::json &out_literal_call,
+  const type_handler &type_handler)
+{
+  std::vector<const nlohmann::json *> returns;
+  collect_reachable_returns(func_def["body"], returns);
+  if (returns.empty())
+    return false;
+
+  std::optional<typet> shape_type;
+  const nlohmann::json *first_call = nullptr;
+  for (const nlohmann::json *ret : returns)
+  {
+    if (
+      !ret->contains("value") || !is_numpy_array_literal_call((*ret)["value"]))
+      return false; // a reachable return without a fixed-shape literal:
+                    // declined
+
+    const nlohmann::json &call = (*ret)["value"];
+    typet this_type = type_handler.get_typet(call["args"][0]);
+    if (!shape_type)
+    {
+      shape_type = this_type;
+      first_call = &call;
+    }
+    else if (*shape_type != this_type)
+      return false; // divergent shapes across returns: declined
+  }
+
+  out_literal_call = *first_call;
+  return true;
 }
 
 // One `Call` node together with the name of the function whose body it
@@ -1284,6 +1382,32 @@ bool python_converter::infer_list_elem_type_from_call_sites(
   return found;
 }
 
+std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body) const
+{
+  if (is_numpy_array_literal_call(arg))
+    return type_handler_.get_typet(arg["args"][0]);
+
+  if (arg.value("_type", "") != "Call")
+    return std::nullopt;
+
+  const nlohmann::json &callee_func =
+    arg.value("func", nlohmann::json::object());
+  if (callee_func.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const nlohmann::json *callee_def =
+    find_function_def(module_body, callee_func.value("id", ""));
+  nlohmann::json literal_call;
+  if (
+    callee_def == nullptr ||
+    !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
+    return std::nullopt;
+
+  return type_handler_.get_typet(literal_call["args"][0]);
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -1327,9 +1451,11 @@ bool python_converter::try_infer_numpy_param_type(
 
     const nlohmann::json &arg = call["args"][param_index];
 
-    if (is_numpy_array_literal_call(arg))
+    if (
+      std::optional<typet> inferred_from_call =
+        try_infer_numpy_array_arg_type(arg, module_body))
     {
-      record(type_handler_.get_typet(arg["args"][0]));
+      record(*inferred_from_call);
       continue;
     }
 
@@ -1394,6 +1520,27 @@ bool python_converter::try_infer_numpy_param_type(
     return true;
   }
   return false;
+}
+
+void python_converter::track_numpy_param(
+  const std::string &arg_id,
+  const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+  bool numpy_array_param)
+{
+  if (numpy_param_full_shape)
+    numpy_param_shapes_[arg_id] = *numpy_param_full_shape;
+
+  // classify_numpy_method_call()'s dispatch_rewrite_methods (sort/transpose/
+  // sum/.../.T, .../) only rewrites `a.<method>(...)` into the free-function
+  // np.<method>(a, ...) shape for a receiver method_base_is_tracked_numpy_array
+  // already recognises -- populated elsewhere for a local `np.array(...)`
+  // variable's own symbol id, never for a parameter. Without this, a numpy
+  // array parameter's method call falls through to the generic function-call
+  // dispatch instead, which resolves "transpose" (etc.) as an unrelated
+  // same-named symbol and raises a spurious "missing required positional
+  // argument" TypeError.
+  if (numpy_array_param)
+    numpy_array_symbols_.insert(arg_id);
 }
 
 size_t python_converter::register_function_argument(
@@ -1463,6 +1610,9 @@ size_t python_converter::register_function_argument(
   // since a bare-variable subscript of it (e.g. `s[i]` in a loop) is a
   // completely unrelated, extremely common pattern that must not be
   // mistaken for numpy mask indexing.
+  std::optional<std::vector<std::size_t>> numpy_param_full_shape =
+    numpy_param_full_shape_of(numpy_array_param, arg_type, type_handler_);
+
   if (arg_type.is_array())
   {
     bool used_in_variable_index_subscript = false;
@@ -1501,6 +1651,8 @@ size_t python_converter::register_function_argument(
   arg.cmt_identifier(arg_id);
   arg.identifier(arg_id);
   arg.location() = get_location_from_decl(element);
+
+  track_numpy_param(arg_id, numpy_param_full_shape, numpy_array_param);
 
   type.arguments().push_back(arg);
   size_t inserted_index = type.arguments().size() - 1;
