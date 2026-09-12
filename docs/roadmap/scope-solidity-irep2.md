@@ -566,6 +566,42 @@ equation is built. Naming the mismatched assignment needs the two sides printed
 at that frame, which `-O2` will not give up — the same wall as §7.5 — so it
 wants the `fprintf` treatment next, not another A/B.
 
-Not yet done, and stated rather than guessed: which assignment, and whether the
-inconsistency is the same one §7.6 repaired for calls, applied to a node the arm
-does not reach.
+§7.12 answers which assignment, and refutes the sort-mismatch reading.
+
+### 7.12 Not a sort mismatch: a nested member read the solver cannot project
+
+The mismatch reading was wrong, and the probe that refuted it was written to be
+able to. A `fprintf` at `smt_solver.cpp`'s assign site, firing only when
+`eq.side_1->type != eq.side_2->type`, prints **nothing** before the crash: the
+two sides' types are equal, so the assignment is not ill-sorted at the top
+level.
+
+What `gdb` does give up, once the fields are read directly rather than through
+accessors it refuses to call:
+
+```
+info locals            side1 = 0xa54c2f0        side2 = 0x51
+p eq.side_1.ptr_->expr_id                       expr2t::symbol_id
+p eq.side_2.ptr_->expr_id                       expr2t::member_id
+p eq.side_2.ptr_->type.ptr_->type_id            type2t::unsignedbv_id
+p ((member2t*)eq.side_2.ptr_)->source_value.ptr_->expr_id
+                                                expr2t::member_id
+p …->source_value.ptr_->type.ptr_->type_id      type2t::struct_id
+```
+
+`side2` is `0x51` — not a pointer. So `convert_ast` returned garbage for the
+RHS, and the crash is the virtual call on it, not the assignment itself.
+
+The RHS is a **nested member read**: `member(member(…, struct), unsignedbv)`,
+which in `struct_1` is `this->book.book_id`. The outer component's name is an
+`irep_idt` the debugger can only show as a pool index, so it is not resolved
+here.
+
+That makes the hypothesis worth testing next: the struct type reached through
+the inner member differs between the two paths, so projecting the outer
+component by name finds nothing and the flattener returns a bad AST. The pass
+has two places that could do it — `adjust_struct` pads struct *literals*,
+`pad_type_symbol` pads type *symbols* — and a type padded on one path and not
+the other would behave exactly like this. Comparing the two struct types at
+that site is the next instrument; it is not established yet, and the earlier
+`--symbol-table-only` A/B cannot settle it, for the reason §7.6 records.
