@@ -82,6 +82,20 @@ languaget *new_python_language()
   return new python_languaget;
 }
 
+// Options the forked parser needs to know about. ``--deadlock-check`` makes it
+// load the deadlock-aware threading model (models/threading_deadlock.py); the
+// C frontend handles the analogous swap via preprocessor #defines
+// (clang-c-frontend/c_preprocess.cpp).
+static void append_parser_flags(std::vector<std::string> &args)
+{
+  static const std::pair<const char *, const char *> flags[] = {
+    {"deadlock-check", "--deadlock-check"}, {"python-typecheck", "--typecheck"}};
+
+  for (const auto &[option, flag] : flags)
+    if (config.options.get_bool_option(option))
+      args.push_back(flag);
+}
+
 bool python_languaget::parse(const std::string &path)
 {
   log_debug("python", "Parsing: {}", path);
@@ -99,16 +113,7 @@ bool python_languaget::parse(const std::string &path)
 
   // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
-
-  // Propagate ``--deadlock-check`` to the parser so it loads the
-  // deadlock-aware threading model (models/threading_deadlock.py). The
-  // C frontend handles the analogous swap via preprocessor #defines
-  // (clang-c-frontend/c_preprocess.cpp).
-  if (config.options.get_bool_option("deadlock-check"))
-    args.push_back("--deadlock-check");
-
-  if (config.options.get_bool_option("python-typecheck"))
-    args.push_back("--typecheck");
+  append_parser_flags(args);
 
   // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
