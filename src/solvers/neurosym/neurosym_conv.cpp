@@ -496,6 +496,19 @@ std::optional<bool> neurosym_convt::local_eval_bool(smt_astt a) const
 
   case SMT_FUNC_SYMBOL:
   {
+    // local_lookup() only understands numeric text; a genuinely Bool-sorted
+    // model entry is textual ("true"/"false"), as NeuroSym's own
+    // define-fun output and parse_model_block() emit it -- handle that form
+    // directly here rather than failing through local_lookup()'s numeric
+    // parse and forcing every boolean-guarded trace out to the external
+    // fallback solver.
+    auto it = local_model.find(ast->symname);
+    if (it == local_model.end())
+      return std::nullopt;
+    if (it->second == "true")
+      return true;
+    if (it->second == "false")
+      return false;
     auto v = local_lookup(ast->symname);
     if (!v)
       return std::nullopt;
