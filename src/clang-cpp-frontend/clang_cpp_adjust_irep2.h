@@ -1,0 +1,65 @@
+#ifndef ESBMC_CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_IREP2_H
+#define ESBMC_CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_IREP2_H
+
+#include <clang-c-frontend/clang_c_adjust_irep2.h>
+
+/// IREP2-native adjust pass for the C++ frontend (Phase 7). Mirrors the legacy
+/// hierarchy, where clang_cpp_adjust derives from clang_c_adjust and overrides
+/// the arms whose C++ behaviour differs.
+///
+/// It substitutes its own arm table rather than adding rows to the C one: the
+/// table is typed on the pass, so this one can order the arms it inherits
+/// alongside its own (docs/roadmap/scope-clang-cpp-irep2.md §3.1).
+///
+/// The table currently lists only inherited arms. That is deliberate and
+/// measurable: running it as the sole adjuster over regression/esbmc-cpp
+/// enumerates what C++ needs that C does not, which is a measured list where
+/// §3's name-mapping was a guess.
+class clang_cpp_adjust_irep2 : public clang_c_adjust_irep2
+{
+public:
+  using clang_c_adjust_irep2::clang_c_adjust_irep2;
+
+  /// The arms in application order, as `arm_order()` is for the C pass.
+  static std::vector<arm_info> arm_order();
+
+protected:
+  void gen_symbol_code(symbolt &symbol) override;
+
+  void adjust_sole_arms(expr2tc &expr) override;
+
+  /// IREP2 form of clang_cpp_adjust::adjust_cpp_member. `OBJECT.setX()` reaches
+  /// the pass with a code-typed member as its callee; goto_convert accepts only
+  /// a symbol or a dereference there, so the member is replaced by the symbol
+  /// naming the method. The object is already the call's first argument, put
+  /// there by the converter, so only the callee changes.
+  void adjust_cpp_member(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_catch's id assignment and of the
+  /// throw arm's. Both nodes hold their catchable-type ids in an
+  /// `exception_list` field, which the converter leaves empty;
+  /// remove_exceptions dereferences it, so an unpopulated list is a crash
+  /// rather than a lost property (docs/roadmap/scope-clang-cpp-irep2.md §3.3).
+  void adjust_cpp_catch(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_cpp_delete: attach the destructor
+  /// call `delete p` makes, so goto_convert emits `~T(&(*p))`. Without it the
+  /// object's destructors never run (scope-clang-cpp-irep2.md §3.14). The call
+  /// travels in sideeffect2t::arguments[0], which the seam already carries.
+  void adjust_cpp_delete(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_reference: read each operand that
+  /// is a reference through, so it is used as the value it names rather than as
+  /// the pointer IREP2 spells it with (scope-clang-cpp-irep2.md §3.16).
+  void adjust_reference(expr2tc &expr) override;
+  void adjust_cpp_throw(expr2tc &expr);
+
+private:
+  using arm = adjust_arm<clang_cpp_adjust_irep2>;
+
+  /// Defined in clang_cpp_adjust_irep2.cpp. Constant-initialised, as the C
+  /// table is.
+  static const arm arms[];
+};
+
+#endif

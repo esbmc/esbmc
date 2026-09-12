@@ -2076,6 +2076,28 @@ bool clang_c_convertert::get_base_flattened_inits(
   return false;
 }
 
+/// Report an initializer list none of get_expr's arms models. Reported and not
+/// asserted: an assertion aborts the process, leaving the user without a
+/// diagnostic, a source location or a verdict (#7643).
+bool clang_c_convertert::report_unsupported_init_list(
+  const clang::InitListExpr &init_stmt)
+{
+  locationt location;
+  get_start_location_from_stmt(init_stmt, location);
+
+  std::ostringstream oss;
+  llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
+  ross << "Conversion of unsupported initializer list of type \""
+       << init_stmt.getType().getAsString() << "\" with "
+       << init_stmt.getNumInits() << " initializer(s) at "
+       << location.as_string() << "\n";
+  init_stmt.dump(ross, *ASTContext);
+  ross.flush();
+  log_error("{}", oss.str());
+  return true;
+}
+
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -2855,8 +2877,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             init_union_field->getName().str());
       }
     }
-    else if (
-      init_stmt.getNumInits() == 0 && init_stmt.getType()->isScalarType())
+    else if (init_stmt.getNumInits() == 0)
     {
       /* We have a list initializer with no elements.
        * So per https://en.cppreference.com/w/cpp/language/list_initialization
@@ -2868,14 +2889,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
        * > - Otherwise, the object is zero-initialized.
        * So we just zero-initialize the object.
        */
+      /* The rule is the type's, not the scalar types' alone, but gen_zero
+       * answers nil for a type it cannot build a value of (an incomplete
+       * struct, as `std::hash<std::thread::id>` stays in #7643). */
       inits = gen_zero(t);
+      if (inits.is_nil())
+        return report_unsupported_init_list(init_stmt);
     }
-    else
+    else if (init_stmt.getNumInits() == 1)
     {
-      assert(init_stmt.getNumInits() == 1);
       if (get_expr(*init_stmt.getInit(0), inits))
         return true;
     }
+    else
+      return report_unsupported_init_list(init_stmt);
 
     new_expr = inits;
     break;
@@ -3994,7 +4021,9 @@ bool clang_c_convertert::get_cast_expr(
       }
       if (ptr_mode)
       {
-        dereference_exprt deref(cur, cur.type().subtype());
+        // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+        // pointer, not the pointee.
+        dereference_exprt deref(cur, cur.type());
         member_exprt m(deref, comp, base_t);
         cur = address_of_exprt(m);
       }

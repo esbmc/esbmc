@@ -257,6 +257,42 @@ Two things the gates caught that are worth carrying forward:
   pointer itself. The item 1 arms must build the pointer type directly rather
   than route an address-of through `with_type`. PR **#7703**.
 
+### 2.6 Item 1 ported, and what it took (PR #7705)
+
+Both reference arms are in. Three things worth carrying forward, none of which
+was visible before the differential harness rejected a first attempt.
+
+**The address-of must carry the destination's own kind.** irept hardcodes
+`#reference` in `take_reference_address` and gets away with it because
+`operator==` skips comment attributes (`irep.cpp`, literally "comments are NOT
+checked") — so `T&` and `T&&` are the same type there. `ref_kind` is a real
+field, so a hardcoded kind leaves `do_typecast`'s `dest_type != type` guard true
+and appends a cast irept never produces. Two further carriage sites had to
+follow: `migrate_expr`'s address-of arm built its pointer from the pointee and
+dropped the spelling, and `rebuild_with_type<address_of2t>` re-defaulted it —
+that one silently affected every `with_type` caller, not just this one.
+
+**One shape the two copies cannot agree on, and irept is the wrong side.** For a
+`T&&` destination irept produces an address-of spelled `#reference`, i.e. an
+lvalue reference. Measured, neither side adds a cast and only the spelling
+differs:
+
+```
+legacy_migrated:  address_of  ref_kind : lvalue_reference
+native:           address_of  ref_kind : rvalue_reference
+```
+
+The IREP2 side is the faithful one, so that section pins the shape rather than
+byte equality. A port is not obliged to reproduce a defect it can see.
+
+**The complexity gate was already failing before any of this.**
+`implicit_typecast_followed` sits at 19 against a `core` threshold of 15 on
+master, so *any* edit to it fails the gate — which is what #7701 and #7703 were
+failing on, not their own additions. Split into `convert_reference` and
+`convert_to_pointer`, with the pointer-compatibility disjunction factored out;
+the gate then reports no function over threshold. Anything else touching this
+function inherits the same obligation.
+
 ## 3. The design question Phase 6 leaves open: the pass is not extensible
 
 The legacy frontends are one class specialising another:
@@ -307,16 +343,604 @@ options, none yet costed:
 Option B is the one that follows from work already merged, and it should be
 priced first. Deciding this wrong means re-doing Phase 6 inside Phase 7.
 
+### 3.1 §3 answered: neither recorded option, and the working one is cheap (2026-09-10)
+
+Measured against the table #7455 actually built, not against §3's sketch.
+
+```cpp
+struct arm
+{
+  const char *name;
+  void (clang_c_adjust_irep2::*run)(expr2tc &);
+  bool (*when)(const expr2tc &);
+};
+static const arm arms[];          // 24 rows, constant-initialised
+```
+
+**Option B as §3 states it does not compile.** "A second frontend supplying its
+own table entries" cannot work while `run` is a pointer-to-member of
+`clang_c_adjust_irep2`: a derived arm's type does not convert to the base's, and
+the table is `static const` on the base, so a C++ row has nowhere to go.
+
+**Option A is still the wrong shape**, for §3's original reason: retrofitting
+virtuals re-imports the per-statement seams the unified
+`adjust_statement_condition` removed, and only where C++ needs them.
+
+**What works: each frontend owns a table typed on its own class, and the runner
+becomes a template.** Five properties, each compiled rather than recalled — and
+the fifth changed the design:
+
+| property | result |
+|---|---|
+| `decltype(&Derived::shared)` | `void (Base::*)(…)` — the *naming* class decides, so the C rows keep their type |
+| a table of `void (Derived::*)(…)` | holds **both** `&Derived::own` and `&Base::shared`, via the implicit base→derived member-pointer conversion |
+| that table declared `constexpr` | **0 dynamic initialisers** — constant-initialisation survives, which is the property the table's own comment protects |
+| `template <class T, size_t N> run_all(T &, const Row (&)[N], …)` | drives either frontend's table |
+| the same table compiled with `-Werror` | clang 18 clean at `-O0` and `-O2`; **GCC 13.3 fails at `-O2`** |
+
+**And that last row is why the member pointer is the wrong carrier.** Legal is
+not enough: once the runner inlines, GCC's array-bounds analysis reads the
+member-pointer discriminator as a vtable index and rejects the call —
+
+```
+error: array subscript 'int (**)(...)[0]' is partly outside array bounds
+       of 'Derived [1]' [-Werror=array-bounds=]
+```
+
+clean at `-O0`, failing at `-O2`, and clang accepts both. ESBMC builds locally
+with GCC and has an `ENABLE_WERROR` option, so B′ as first written would break a
+developer build while passing CI — the worst way round.
+
+**B″, which is what landed (PR #7714).** Each row carries a trampoline —
+`void (*)(Pass &, expr2tc &)`, a captureless lambda the `ARM` macro generates —
+instead of a pointer-to-member. There is then no base→derived conversion for the
+analysis to mis-read, the row is still an address constant (0 dynamic
+initialisers, re-measured), and both compilers accept it at both levels. The 24
+C rows keep their order and the goto program is byte-identical on all 95
+`irep2_only` tests.
+
+So a `clang_cpp_adjust_irep2` table can list the 24 inherited C arms **by name**
+alongside its own, in one ordered table, with no virtual dispatch, no
+`std::function`, and no start-up cost. The C table does not change.
+
+The cost is confined to making `arm` and `adjust_sole_arms` generic over the
+concrete pass type — the only two places in the dispatch machinery that name
+`clang_c_adjust_irep2` — plus `arm_order()`, which
+`unit/clang-c-frontend/adjust_arms.test.cpp` reads and which stays per-class.
+
+**What this does not answer.** B′ settles how a C++ pass *dispatches*; it says
+nothing about which arms C++ needs. §3's mapping table stands: only
+`adjust_member` and `adjust_function_call_arguments` line up by name with an
+IREP2 arm, and `adjust_code`, `adjust_decl_block`, `adjust_symbol`,
+`adjust_reference` and `adjust_side_effect` have no counterpart at all. Those are
+the real Phase 7 work, and §4.1 says representation will not obstruct them.
+
+### 3.2 The pass stands up, and one arm is 95 % of the gap (2026-09-10)
+
+`clang_cpp_adjust_irep2` derives from the C pass and substitutes its own table
+(PR #7717). One virtual selects the table; the C arms become `protected`. Its
+table lists only the inherited C arms, so running it as the sole adjuster under
+`--clang-cpp-irep2-adjust-only` *measures* what C++ needs.
+
+Over 80 `regression/esbmc-cpp` tests, verdict against the default path:
+
+| | count |
+|---|---:|
+| agree | 17 |
+| diverge | 63 |
+| …of which one signature | **54** |
+
+```
+ERROR: do_function_call: unexpected callee expression (id: member)
+```
+
+A C++ method call. Six of the other nine are multi-file tests the sweep fed only
+their first source, one expects a parse error. **So one arm — member-function
+call lowering — accounts for essentially the whole gap**, and it is the next
+slice. §3's mapping table guessed five missing arms from names; the corpus says
+start with the one the legacy `adjust_side_effect_function_call` override covers.
+
+Worth noting what already works with inherited arms alone: a reference bind
+through a method-free struct verifies identically on both paths. The C arms are
+not merely inert on C++ input.
+
+The nine table guards moved to a shared header (one definition, two tables), and
+`adjust_arms.test.cpp` pins that the two tables stay in the same order — a row
+added to one and not the other should be a decision, not an accident.
+
+### 3.3 The crashes are one cause, and it is not one §3 predicted (2026-09-10)
+
+§3.2 left 24 of 80 tests crashing under `--clang-cpp-irep2-adjust-only` once the
+member-call arm landed. Symbolised and clustered by top frame — SIGSEGV is not a
+cause, and this file has split symptom-named clusters before — **all 23 that
+produce a backtrace share one site**:
+
+```
+remove_exceptions(goto_functionst &, contextt &, namespacet const &)
+    src/goto-programs/remove_exceptions.cpp:1857
+```
+
+Reduced to two lines, with the control beside it:
+
+| program | default | hop-off |
+|---|---|---|
+| a method call, no exceptions | SUCCESSFUL | SUCCESSFUL |
+| `int main(){try{throw 1;}catch(int e){return e-1;}return 1;}` | SUCCESSFUL | **SIGSEGV** |
+
+**Cause.** `clang_cpp_adjust::adjust_catch`
+(`clang_cpp_adjust_code.cpp:319-336`) sets `exception_id` on each catch block,
+and the throw arm (`clang_cpp_adjust_expr.cpp:483`) does the same, both via
+`convert_exception_id`. The IREP2 pass *replaces* `clang_cpp_adjust`, so none of
+that runs, and `remove_exceptions` reaches catch/throw nodes with no catchable-type
+id.
+
+**It is not a representation gap.** `migrate_expr`'s cpp-catch arm carries
+`exception_id` across the seam in both directions, so §4.1's conclusion stands —
+what is missing is the arm that *computes* the ids, not a field to hold them.
+Worth stating because the migrate census could not have found this: the census
+runs after the legacy adjuster, so the attributes were already present when it
+looked.
+
+### 3.4 The ids are computed, and the residue is a spelling the seam drops
+
+PR #7719 ports both arms: `convert_exception_id` becomes a free function taking a
+namespace (it read no other instance state), and the IREP2 arms populate
+`code_cpp_catch2t`'s and `code_cpp_throw2t`'s `exception_list` fields.
+
+| over 80 tests | before | after |
+|---|---:|---:|
+| agree | 31 | **51** |
+| diverge | 49 | 29 |
+| crash | 23 | **0** |
+
+**The residue on the reproducer is a W3 instance that reaches a verdict, not a
+printer.** `throw 1` yields the id `signedbv` on the hop-off where the legacy path
+yields `signed_int`: the id is computed from `migrate_type_back(...)`, and the C
+spelling does not survive `migrate_type`. The throw and the handler then disagree
+and the exception escapes, so the two-line reproducer still reports FAILED where
+the default path succeeds.
+
+Class-typed exceptions are unaffected — their id comes from the tag name, which
+does survive — which is why the corpus improves from 31 to 51 regardless.
+
+This is worth separating from §5's R6 as stated. R6 anticipated a dropped
+attribute surfacing as a *printer* difference; here it changes a verdict. The
+spelling has to be carried, or the ids computed before migration. Reconstructing
+`signed_int` from a 32-bit `signedbv` is available and is the wrong answer, for
+§137's reason: do not rebuild what the representation dropped, either carry it or
+do not claim it.
+
+**What it says about §3's mapping.** Neither of the two arms the corpus has now
+demanded — member-call lowering and exception-id assignment — is among the five
+§3 predicted from name comparison (`adjust_code`, `adjust_decl_block`,
+`adjust_symbol`, `adjust_reference`, `adjust_side_effect`). Two for two, the
+corpus named a different arm than the names did. Treat §3's table as an inventory,
+not a work order.
+
+### 3.5 The residue is 23 false alarms with one cause, and no missed bugs (2026-09-10)
+
+With the crashes gone, the 29 remaining divergences over the 80-test sample split
+by *direction* first, because that is the question that matters for a verifier:
+
+| direction | count |
+|---|---:|
+| false alarm — default SUCCESSFUL, hop-off FAILED | **23** |
+| **missed bug — default FAILED, hop-off SUCCESSFUL** | **0** |
+| no verdict on one side (multi-file tests the sweep fed one source) | 6 |
+
+**Zero missed bugs.** Every divergence the C++ hop-off produces today is in the
+loud direction. That is worth stating explicitly: a pass under construction that
+over-reports is a nuisance, one that under-reports is a soundness hole, and this
+one has not produced a single instance of the latter across the sample.
+
+All 23 false alarms share one property:
+
+```
+file /esbmc-vfs/cpp/ostream line 138 column 3 function operator<<
+dereference failure: NULL pointer
+```
+
+which is `o._put_field(val, strlen(val))` in
+`operator<<(ostream &, const char *)`. Reduced:
+
+```cpp
+#include <iostream>
+int main() { const char *p = "hi"; std::cout << p; return 0; }
+```
+
+default SUCCESSFUL, hop-off FAILED. The literal form (`std::cout << "hi"`) fails
+identically, so it is not the array-to-pointer decay of a string literal — an
+already-decayed pointer argument reproduces it.
+
+The trace puts the violated property at **State 1** with no assignment before it,
+so the call is not being set up rather than an argument holding a wrong value.
+§3.6 instruments it; the answer was not parameter binding.
+
+### 3.6 The ostream false alarm is a dropped code-generation step, not an arm
+
+Instrumented rather than inferred, and the inference in §3.5 would have been
+wrong. `adjust_call_arguments` converts `operator<<`'s arguments correctly; the
+reference parameter takes the `binds_by_reference` path and the pointer argument
+converts pointer→pointer. Carrying the parameter's `ref_kind` into that
+address-of changes nothing, which rules the reference machinery out.
+
+Diffing the whole canonicalised goto program for the two-line reproducer — 897
+differing lines — finds it:
+
+| | default | hop-off |
+|---|---:|---:|
+| `@vtable_pointer=&virtual_table…` assignments | **55** | **0** |
+| …for `ostream` alone | 7 | 0 |
+
+`clang_cpp_adjust::gen_vptr_initializations`
+(`clang_cpp_adjust_code_gen.cpp:5`) writes each class's vtable pointer at
+constructor entry. The IREP2 pass replaces `clang_cpp_adjust`, so none of it
+runs, every vptr stays uninitialised, and `ostream`'s `_discard()` — dispatched
+through `*o->std::ostream@vtable_pointer->…` — dereferences it. The NULL
+dereference at `ostream:138` is that, one call later.
+
+**It does not fit the arm table, and that is the finding.** `gen_vptr_initializations`
+takes a `symbolt &` and emits statements at the front of a constructor body: it is
+per-symbol code *generation*, not a per-node rewrite. §3.1 settled how a C++ pass
+dispatches arms; it said nothing about a pass that also has to synthesise code.
+`adjust()` walks values and applies the table, and has no hook for this.
+
+So the next step is not a fourth arm but a second kind of work in the pass, and
+the order matters — the vptr writes must precede the constructor's own body, as
+the legacy pass arranges. `clang_cpp_adjust` has one further step of this shape,
+`finalize_exception_specification`, so the hook wants to take both rather than be
+built for one.
+
+**A second divergence the same diff shows**, unrelated and smaller: a ternary over
+string literals decays per arm on the default path (`val ? &"1"[0] : &"0"[0]`) and
+as a whole on the hop-off (`&(val ? "1" : "0")[0]`). That is §134.4's ternary decay
+in `scope-clang-c-irep2.md`, recorded there as not reaching symex on C; on C++ it
+reaches the goto program. Worth its own row rather than being folded into the vptr
+work.
+
+### 3.7 The hook exists, and the corpus is at 91 % (2026-09-10)
+
+PR #7724 gives the pass a `gen_symbol_code` hook beside the node walk and ports
+`gen_vptr_initializations` into it. The C pass generates nothing, so the hook is
+a no-op there.
+
+| over 80 tests | §3.4 | after |
+|---|---:|---:|
+| agree | 51 | **73** |
+| false alarms | 23 | **3** |
+| **missed bugs** | 0 | **0** |
+| no verdict one side | 6 | 4 |
+
+Vtable-pointer writes go 0 → **55**, matching the default path exactly.
+
+**Generation runs before the walk, not after.** The legacy pass generates after
+adjusting the body; doing that here would mean migrating the value back to legacy
+form, mutating it and migrating forward again — the round trip §137 shows is
+lossy. Generating first lets the emitted assignments go through the arms like any
+other statement. Worth knowing the two passes differ in that order.
+
+**Freeing a member exposes dead code that private status hid.** Making
+`gen_vptr_initializations` a free function left `gen_vptr_init_code` and
+`gen_vptr_init_lhs` with no callers — `-Werror=unused-function` says so, and
+nothing in `src/` or `unit/` referenced either. Both were already dead on master;
+as private members nothing could observe that. Removed with the compiler as the
+proof.
+
+**What is left.** Three false alarms and four harness artefacts. One of the three
+is §3.4's builtin exception spelling (`throw 1` yields `signedbv` where legacy
+yields `signed_int`). The others are unexamined.
+
+### 3.8 The last three false alarms are three causes, not one (2026-09-10)
+
+Named, so the next tick does not re-derive them:
+
+| test | violated property |
+|---|---|
+| `bitset/bitset6` | `cpp/bitset:88` — incorrect alignment accessing a data object |
+| `cpp/ch21_31` | the test's own `assert`, via `std::queue` |
+| `cpp/github_2284_4` | `cpp/vector:325` — invalid pointer |
+
+Three different OMs and three different properties. Nothing links them yet, and
+after §3.3's single-cause cluster it would be easy to assume another; they are
+listed separately until measurement says otherwise.
+
+**`ch21_31` reduced**, with the controls that bound it:
+
+```cpp
+std::queue<int> q; q.push(12); q.push(75);
+q.back() -= q.front();          // default SUCCESSFUL, hop-off FAILED
+```
+
+- Reading only — `assert(q.back() == 75 && q.front() == 12)` — agrees on both
+  paths, so `back()`/`front()` themselves are fine.
+- The same shape on a hand-written struct returning `int &` agrees on both paths,
+  both for `b.back() = 63` and `b.back() -= b.front()`.
+
+So it is **not** compound assignment through a reference in general, which was
+the obvious guess and is wrong. It is specific to the reference `std::queue`'s
+`back()` returns, which reaches through the underlying container. The narrower
+`q.back() = 63` and single-push variants both exceed 90 s under the queue OM, so
+the next step wants a longer budget or a hand-rolled stand-in for the OM's
+indirection rather than a further reduction of the OM itself.
+
+`bitset6` and `github_2284_4` are unexamined.
+
+### 3.9 The stride-10 sample under-covers try/catch, and one port was refuted
+
+**The sample is not representative of the exception paths.** Over
+`regression/esbmc-cpp/try_catch` (first 14 directories) the hop-off agrees on 8
+and diverges on 6 — 43 % — against 7 of 80 on the stride-10 sample the earlier
+sections use. A stride over a directory listing weights by directory size, and
+`try_catch` is small next to `algorithm` and `cpp`. Quote the sample when quoting
+the 73/80, and census the exception directories separately.
+
+One of the six produces no verdict at all
+(`exception_spec_dynamic_violation_fail`, default FAILED), so a crash survives
+somewhere the sample never looked.
+
+**`finalize_exception_specification` is not the cause, and porting it was
+refuted.** It was the obvious candidate: `clang_cpp_adjust` calls it per code
+symbol, the IREP2 pass replaces that adjuster, and 30 tests in the corpus use a
+dynamic exception specification. Ported into the §3.7 hook it changes **nothing**
+— `try_catch` stays at 8 agree / 6 diverge, and neither
+`exception_spec_dynamic_allowed` nor the violation test moves.
+
+Two things the attempt did establish, both worth keeping:
+
+- **The hook must be offered bodyless symbols.** As first written,
+  `gen_symbol_code` sat inside `adjust()`'s `get_value().is_not_nil()` guard, so
+  a function *declaration* — which is where an exception specification lives —
+  never reached it. Instrumenting showed the resolution firing once under the
+  hop-off against four times on the default path. Whoever ports this next needs
+  the hook moved, not just the function.
+- **The port is unpinnable today.** With no verdict moving and the attribute
+  invisible in `--symbol-table-only`, no test in this repo can distinguish the
+  ported pass from the unported one. It was therefore reverted rather than
+  merged: a change that cannot be pinned is the dead instrumentation the gates
+  exist to catch, however plausible its motivation.
+
+### 3.10 The hop-off DOES produce false proofs — the sample hid them (2026-09-10)
+
+§3.9 said the stride-10 sample under-covers the exception paths. Censusing four
+directories in full says something worse, and it corrects a claim §3.5, §3.7 and
+§3.8 all repeated:
+
+| suite | agree | false alarm | **missed bug** | no verdict |
+|---|---:|---:|---:|---:|
+| `try_catch` | 68 | 52 | 0 | 52 |
+| `destructors` | 2 | 0 | **1** | 11 |
+| `inheritance` | 56 | 25 | **2** | 23 |
+| `polymorphism_bringup` | 9 | 1 | 0 | 36 |
+| **total** | 135 | 78 | **3** | 122 |
+
+**"Zero missed bugs" was false.** It held on the 80-test stride sample and I
+restated it four times as though it were a property of the pass. It is a property
+of the sample. Three tests verify SUCCESSFUL under the hop-off where the default
+path finds the bug:
+
+- `destructors/github_6263_nonvirtual_base_delete`
+- `inheritance/github_7025_vbase_nonfirst_member_fail`
+- `inheritance/mi_base_subobject_layout_fail`
+
+All three are base-subobject layout — the area `scope-clang-c-irep2.md` §3894 and
+#7025 already record as having two competing layout oracles. A pass that silently
+proves those is unsound in exactly the way that matters, and the `_fail` suffix on
+two of them means the corpus was built to catch this.
+
+**And 122 tests produce no verdict at all**, against 4 on the sample. The crash
+class §3.3 closed was not the only one.
+
+**What this says about the method.** Sampling by stride over a directory listing
+weights by directory size, so the suites that concentrate a *semantic* area —
+inheritance, destructors, exceptions — are the ones a stride under-samples, and
+they are exactly where a frontend migration breaks. Every number in §3.2 through
+§3.8 is a stride-sample number and should be read as such. Full-suite figures for
+the four directories above supersede them.
+
+Until the three false proofs are closed, the flag is not merely incomplete; it is
+unsound on inheritance, and no verdict it produces there can be trusted.
+
+### 3.11 The false proofs are two unported arms, and they are C arms
+
+`inheritance/mi_base_subobject_layout_fail` is three lines:
+
+```cpp
+struct A { int a; A() : a(1) {} };
+struct P { virtual ~P() {} int p; P() : p(9) {} };
+struct AP : A, P {};
+int main() { AP ap; A &as = ap; assert(as.a == 9); }
+```
+
+`as.a` is 1, so the assertion is false and the test is a `_fail`. `main`'s goto
+body is **byte-identical** on both paths — both emit
+`as = &ap.@base@tag-A` and `ASSERT as->a == 9` — so the reference bind is not
+where it goes wrong. The symbol table is:
+
+```
+~AP(this == 0 ? 0 : (struct AP *)((signed char *)this - 8))   default
+~AP((struct AP *)this)                                        hop-off
+```
+
+The hop-off drops the base displacement, so `A`'s subobject aliases `P`'s and
+`a` reads 9.
+
+**The two arms that compute it are unported**:
+`clang_c_adjust::adjust_base_to_derived` and `adjust_derived_to_base`
+(`clang_c_adjust_expr.cpp:424,480`) — `grep -c` in
+`clang_c_adjust_irep2.cpp` is **0** for both.
+
+Three things follow:
+
+- **They are C arms, missing from the C pass.** `adjust_base_to_derived` runs
+  from `clang_c_adjust`'s default `else` branch (`clang_c_adjust_expr.cpp:205`),
+  i.e. on every expression the C path adjusts. The C hop-off has the same gap
+  and never shows it, because C has no base classes. §3.2's method — give the
+  C++ pass the inherited C arms and measure — cannot find a hole in the arms it
+  inherits.
+- **This is why the corpus, not the inventory, keeps being right.** §3's mapping
+  compared `clang_cpp_adjust`'s overrides against the IREP2 arms. These two are
+  not overrides; they are base-class arms the IREP2 pass never had, so no
+  comparison of the C++ subclass could have named them.
+- **It plausibly accounts for all three false proofs**, which are all
+  base-subobject layout. Stated as located, not proven: the fix has not been
+  written, and §3.9 is a recent reminder that the obvious cause can be refuted.
+
+Their displacement uses ESBMC's own layout rather than clang's
+(`clang_cpp_convert.cpp:1914`), which `scope-clang-c-irep2.md`'s #3894 note also
+warns about — the port must take the offset from the same oracle the legacy arm
+does, not recompute it.
+
+### 3.12 The soundness fix is blocked on carriage, and the precedent is §2.5
+
+Porting §3.11's two arms is not a port. Both are **marker-driven**:
+
+| arm | fires on | set by |
+|---|---|---|
+| `adjust_derived_to_base` | `#derived_to_base` (`clang_c_adjust_expr.cpp:92`) | the converter, for a conversion it could not route through a `@base@` component |
+| `adjust_base_to_derived` | `#base_to_derived` (`:482`) | the converter, for the downcast |
+
+Both markers are irept **attributes**, and:
+
+- `grep -c` for either in `migrate.cpp` is **0** — nothing carries them across
+  the seam;
+- `typecast2t` has two fields, `from` and `rounding_mode`. There is nowhere to
+  put one.
+
+So an IREP2 pass cannot see that a cast needs displacement. It is not that the
+arm is unwritten; the information it dispatches on does not survive migration.
+
+**The displacement cannot simply be applied earlier.** The converter's own
+comment says why: *"the displacement is only computable once the layout is
+padded, which is here"* (`clang_c_adjust_expr.cpp:90`, #7025). Computing it in
+`clang_cpp_convertert` is the option the legacy design already rejected.
+
+**This is a W3 instance that blocks a soundness fix**, which is a different
+weight class from the two this scope has recorded so far — §137's was a printer
+difference and §3.4's changes one exception id. Here the missing carriage is why
+three `_fail` tests are silently proved.
+
+**The fix has a precedent in this same document.** §2.4 and §2.5 added
+`pointer_ref_kindt` to `pointer_type2t`: a defaulted field, in the `fields`
+tuple, carried both ways by `migrate`, pinned by a round-trip unit test and
+costing no construction site. A base-conversion marker on `typecast2t` is the
+same shape — most of `pointer_ref_kindt`'s cost was discovering the pattern, and
+that is now paid. Two cautions from doing it once:
+
+- `fields_cover_class` will **not** catch the field being dropped from the tuple
+  if the shortfall sits under the alignment tolerance (§2.5). Pin equality
+  explicitly.
+- Whatever rebuilds a `typecast2t` must forward it, as
+  `rebuild_with_type<address_of2t>` had to (§2.6).
+
+Sequencing: the field first, on its own, with the round-trip test — then the two
+arms become an ordinary port against a marker they can read.
+
 ## 4. What does not exist yet
 
-- **No hop-off flag.** `--clang-c-irep2-adjust-only` has no C++ counterpart
-  (`grep -n 'cpp-irep2' src/esbmc/options.cpp` is empty). Phase 6's entire
-  instrument — A/B one binary against itself with and without the flag — is
-  unavailable until one is added. That is the second work item, and it is a
-  prerequisite for any census by verdict.
+- **No hop-off flag** — though a census instrument now exists, §4.1.
+  The reason there is no hop-off:
+  `clang_cpp_languaget::typecheck` (`clang_cpp_language.cpp`'s `typecheck`) runs
+  `clang_cpp_adjust` unconditionally: no option is read, and no IREP2 pass is
+  constructed. Compare `clang_c_languaget` (`clang_c_language.cpp:460-490`),
+  which reads `clang-c-irep2-adjust-only` and either replaces or shadows the
+  legacy pass.
+
+  Measured consequence: instrumenting the IREP2 `implicit_typecast_followed` at
+  entry, a C source under `--clang-c-irep2-adjust-only` reaches it (2 entries)
+  and a C++ source reaches it **zero** times. So every arm Phase 7 ports is
+  dormant until this is wired — §2.3 and §2.6 both had to say "no regression
+  pair is possible", and this is why.
+
+  **The cheap first move is the shadow mode, not the replacement.** Phase 6's
+  `--clang-c-irep2-adjust` runs the IREP2 walk *in addition* to the legacy pass:
+  read-only, byte-identical by construction, and what it buys is migrating every
+  value in the corpus through `get_value2()`, which aborts on any construct
+  `migrate_expr` cannot represent. Wiring that on the C++ path needs no
+  `clang_cpp_adjust_irep2` and no answer to §3 — it is a census instrument, and
+  it would price the whole C++ corpus in one run. That is the next work item.
 - **No scope-doc census by construct.** §39.1's "census before writing" prices
   every construct once, at the start. For clang-cpp that census cannot be run
   until the flag exists, so §1's counts are the static census only.
+
+### 4.1 The census exists, and it inverts the expected risk (2026-09-10)
+
+`--clang-cpp-irep2-migrate-census` migrates every adjusted symbol's type and
+value through IREP2 and discards the result. It is not a shadow of
+`clang_c_adjust_irep2`: that pass writes back whatever it changes and its arms
+are C-shaped, so on C++ it would re-adjust bodies `clang_cpp_adjust` has already
+handled. A census has to leave the program alone.
+
+Read-only, measured with `irep2_canon` over a stride-10 `regression/esbmc-cpp`
+sample: **282 of 282** canonicalised goto programs identical, the one flagged
+difference being an extra `migrate_expr` diagnostic rather than a program change.
+
+Result over 273 tests:
+
+| migrated | count |
+|---|---:|
+| symbol types | **367 738** |
+| symbol values | **86 917** |
+| `migrate_*` diagnostics | **1** |
+| aborts | **0** |
+
+**IREP2 represents everything this corpus's C++ frontend output contains.** That
+was the open question §4 existed to price, and it reframes the phase: the blocker
+is not representation, it is adjuster coverage — §3's arm-table question. W1 was
+already dissolved for structured control flow (`frontends-to-irep2.md` §3); this
+says the same for C++ *values*, over this corpus.
+
+**Where the census runs is load-bearing, and the first version had it wrong.**
+Placed before `c_link` it produced the same counts and looked equally clean — but
+`migrate_namespace_lookup` is the *global* context, so pre-link every symbol of
+the TU under census is absent from it. `sym_name_to_symbol` does not fail on a
+miss: it falls through to building `symbol2tc` from the expression's own type
+instead of `migrate_symbol_type`'s, which `migrate.cpp:670-679` warns "screws up
+future hash tables". So the pre-link census established only that migration ran
+*with every symbol reference on the fallback path*, and any defect reachable only
+through `migrate_symbol_type` — incomplete struct, prototype-versus-definition
+mismatch — was invisible to it.
+
+Nor was the single pre-link diagnostic a measure of the problem: that message is
+`log_debug("migrate", ...)`, so it needs module-level verbosity to appear at all,
+and misses whose names carry `?`/`!` or the k-induction `cs$`/`s$` prefixes
+return silently. Counting one warning said nothing about how many symbols took
+the fallback.
+
+Moved to run after `c_link`, the same test emits **zero** namespace misses under
+`--verbosity migrate:9`, where pre-link it emitted one. The counts are unchanged
+and the failure count is still zero, so the conclusion survives — but it now
+rests on resolved symbol types rather than on substituted ones.
+
+Two consequences worth keeping:
+
+- **The read-only property was true for a reason I had not identified.**
+  `c_link`'s `fix_symbol` (`fix_symbol.cpp:9-14`) round-trips every symbol
+  through `set_type`/`set_value` unconditionally, clearing both IREP2 valid
+  flags — so a pre-link census's migrated values were discarded at the link
+  boundary. That, not the cache-flag argument, is why the goto A/B came out
+  282/282. Post-link that leg is gone, and the 282/282 sweep becomes the actual
+  evidence rather than a construction.
+- **Migration signals failure by throwing a `std::string` on some arms**
+  (`migrate.cpp:395`) and by aborting on others (`:795`, `:837`, `:859`), and
+  the diagnostic names the expression, never the symbol. Each symbol is wrapped,
+  so a *throwing* construct names itself and the walk continues — the difference
+  between a census and a bisection. An aborting arm still stops the run; the
+  wrap does not and cannot cover those.
+- **The counts alone cannot show the census ran.** A symbol or value count is
+  identical on either representation, so replacing `get_type2()` with
+  `get_type()` migrates nothing and prints the same line — a mutant the first
+  version of the test survived, and the natural drift path once the C++
+  frontend starts writing the IREP2 side directly. The line therefore also
+  reports the number of distinct IREP2 `type_id`s, which only the migrated form
+  can produce, and the tests pin it at two or more.
+
+**A measurement trap this cost, recorded because it invalidated a first answer.**
+The C++ goto dump carries `GOTO program creation time:`, which varies run to run.
+A first A/B of this change filtered `time:` and not that prefix, and reported 270
+of 282 tests "differing"; the control — same binary, same flags, twice — reported
+54 of 60. Nothing was diverging. Use `scripts/irep2-migration/lib.sh`'s
+`irep2_canon`, which strips timings, addresses and temp paths, and run the
+same-flags control before believing any A/B on this corpus.
 
 ## 5. Risks, carried forward from Phases 5 and 6
 
@@ -334,14 +958,475 @@ R6 is the newest and the least obvious: §137 found `is_padding` dropped by
 attributes than any other frontend — `#cpp_type`, `#member_name`, catch-match
 spellings (§33) — so W3's carriage problem lands here first.
 
+### 3.1 Option B taken: one arm table, shared
+
+Priced and chosen. `clang_c_adjust_irep2`'s private section became `protected`,
+`adjust_sole_arms` became virtual, and the arm row became a template over the
+pass (`adjust_arm<Pass>` in `clang_c_adjust_irep2.h`), so `clang_cpp_adjust_irep2`
+orders the arms it inherits alongside its own in one table. No per-statement-kind
+virtual was reintroduced, which is what option A would have cost.
+
+One compiler constraint shaped the row. A pointer to a base member stored in a
+derived-typed table is legal, but GCC 13.3 mis-reads the call once the runner
+inlines it and rejects it under `-Werror=array-bounds` at `-O2`; clang 18 accepts
+it. The row therefore holds a function pointer produced by a captureless lambda
+trampoline, which is an address constant, so the table stays
+constant-initialised.
+
+`unit/clang-c-frontend/adjust_arms.test.cpp` reads `arm_order()` as a drift
+guard. It checks a **subsequence**, not equality: a sibling frontend adding rows
+must not fail the C pass's guard.
+
+### 3.2 The hop-off flag, and the census by verdict
+
+`--clang-cpp-irep2-adjust-only` mirrors `--clang-c-irep2-adjust-only`: the IREP2
+pass *replaces* the legacy one, so a divergence under the flag is a missing arm
+rather than a shadow-mode artefact. With the table carrying only the inherited C
+arms, the C++ corpus named the missing work rather than guesswork doing it.
+
+Everything from §3.3 on is one row of that census.
+
+### 3.3–3.11 The arms the census named
+
+Landed, in order: the reference arms of `implicit_typecast_followed`
+(`c_typecast.cpp`), the C++ member-call arm, exception ids
+(`clang_cpp_exception_id.{h,cpp}`, freed from `clang_cpp_adjust` so both passes
+compute them from one place), and vtable-pointer generation
+(`clang_cpp_code_gen.h`, reached through a `gen_symbol_code` hook so a bodyless
+symbol still gets its vptr writes).
+
+### 3.12 Base-conversion displacement: the soundness row
+
+The row that mattered. Three tests proved `SUCCESSFUL` under the flag against
+the legacy pass's `FAILED` — silently false proofs, not crashes:
+`destructors/github_6263_nonvirtual_base_delete`,
+`inheritance/github_7025_vbase_nonfirst_member_fail`,
+`inheritance/mi_base_subobject_layout_fail`.
+
+Four separate defects, each found by fixing the one before it:
+
+1. **The marker reaches IREP2 on the wrong node kind.** A `#derived_to_base`
+   marker names whichever expression is being converted. Counted over
+   `regression/esbmc-cpp`: **symbol 32474, dereference 4502, sideeffect 30,
+   address_of 19, typecast 58**. Carrying it on `typecast2t` alone therefore
+   reached 0.2 % of them. IREP2 has nowhere to hang a flag on an arbitrary node,
+   so `migrate_before_dispatch` wraps a marked non-cast node in a same-type
+   `typecast2t` — the identity — and `back_typecast` unwraps it, leaving the
+   legacy tree unchanged. `#base_to_derived`, by contrast, is on a typecast
+   **14991 times out of 14991**, so the field carries it outright.
+2. **The displacement must come from ESBMC's own layout.** `base_displacement`
+   and its three helpers moved out of `clang_c_adjust_expr.cpp` into
+   `clang_c_base_layout.{h,cpp}` so both passes ask one oracle. Recomputing it
+   from clang's `ASTRecordLayout` is the mistake #3894 records.
+3. **A dereference the converter leaves typed `empty`.**
+   `clang_c_adjust::adjust_dereference` takes the node's type from the pointer's
+   subtype; the IREP2 port had only the array and function-pointer cases. The
+   C++ converter builds `*this` typed `empty` and relies on that assignment, so
+   without it every member offset resolved below the dereference is taken
+   against the wrong struct.
+4. **One cast can carry both markers.** `clang_cpp_convert_vft.cpp` marks a
+   `dynamic_cast`'s typecast `#base_to_derived` and `#derived_to_base` at once.
+   `clang_c_adjust` resolves them by *re-entering* `adjust_expr` on the
+   marker-stripped node, so base-to-derived runs first and the derived-to-base
+   displacement applies to its result — the whole node, not the cast's operand.
+   An arm that rebuilds a `typecast2t` must forward the marker it is not
+   consuming, or the `-16` re-base is dropped while the `+16` is applied.
+
+A fifth defect surfaced only because the pass now rewrites more symbols:
+`back_sideeffect` default-constructed the size `exprt` and wrote it into
+`#size` unconditionally. An empty irep is a third state — `is_not_nil()` reports
+it as *present* — so the forward arm preferred it over the real `size` field and
+threw `migrate expr failed`. See `irept-find-location-nil-ambiguity`: absent,
+present-nil and present-empty are three states, and `is_nil()` separates only
+two of them.
+
+**Measured.** Over the 402 tests in `regression/esbmc-cpp/{inheritance,
+destructors,polymorphism_bringup,polymorphism_bringup_overload,try_catch,
+inheritance_bringup}`, verdict agreement between the legacy pass and
+`--clang-cpp-irep2-adjust-only`:
+
+| | agree | false proofs |
+|---|---|---|
+| before | 160 / 402 | 3 |
+| after | **293 / 402** | **0** |
+
+No test moved away from the legacy verdict. The first attempt did regress one
+(`inheritance/mi_dynamic_cast_fail`), which is how defect 4 was found; the
+before/after census is what caught it, not the suite, because the three
+displacements cancelled in the goto dump and the symbol table — both were
+byte-identical while the verdicts differed.
+
+### 3.13 The catch handler's type does not cross the seam
+
+36 of the 172 `try_catch` tests fail under the flag with `exception lowering:
+cannot lower an unsupported handler shape` (`remove_exceptions.cpp:928`). The
+cause is one carriage loss, measured rather than guessed:
+
+`clang_cpp_adjust::adjust_catch` reads each handler's catch type off the
+**handler block's own type**, computes the id from it, writes it to
+`exception_id`, and only then resets the block to `code_typet()`. So the catch
+type lives on the block's type between conversion and adjust, and nowhere else.
+
+`code_block2t`'s constructor hardcodes `get_empty_type()`
+(`irep2_expr.h`), so `migrate_expr` drops it. Instrumented on
+`try_catch/lower-exceptions_empty_catchall`, the legacy arm sees
+`ty=code ellipsis=1` and produces the id `ellipsis`; the IREP2 arm sees
+`tyid=empty ellipsis=0` and falls through `convert_exception_id`'s last-resort
+branch to the id `empty`, which matches no throw.
+
+A second, separate defect hides behind it: `is_unresolved_cpp_catch` tests
+`exception_list.empty()`, but migrate's source-form arm pushes each handler's
+`exception_id` attribute into that list whether or not it is set, so an
+unadjusted catch arrives with one **empty id per handler**, never an empty list.
+The arm is therefore dead. Fixing the guard alone changes no verdict — the ids
+it then computes are `empty` for want of the type — so the two have to be fixed
+together.
+
+Three options for the carriage, none yet costed:
+
+- **A — give `code_block2t` a type.** Smallest conceptually, largest blast
+  radius: the type participates in `cmp`/`crc`/`hash` for every block in every
+  frontend.
+- **B — put the handler types in `code_cpp_catch2t`,** parallel to
+  `exception_list`. Contained, but stores what the block already knew.
+- **C — compute the ids in the converter,** so `exception_id` is set before
+  either pass runs and no type needs to cross the seam. Architecturally the
+  cleanest, and it deletes work from the legacy pass rather than adding a field.
+
+**C's one assumption holds, measured.** The doubt was whether the class's type
+symbol is complete early enough for `convert_exception_id` at the
+`CXXTryStmtClass` site. A probe calling it there over the whole `try_catch`
+suite saw **266 handlers and 0 fall through to the last-resort id** — every one
+resolved to a real name (`ellipsis` 51, `signed_int` 41, a class tag 31, …).
+The converter already knows everything the adjust pass reads off the block type.
+
+One trap the probe surfaced: `is_catch` is what suppresses the `tag-` strip, and
+neither legacy call site sets it. Whatever computes a handler id must leave it
+`false`, or the id matches no throw.
+
+**Taken, and measured.** The id is now read at the `CXXTryStmtClass` site and
+written to `exception_id`, so nothing crosses the seam and `adjust_catch` keeps
+only the block-type reset. Handler-shape rejections went 36 to 0, `try_catch`
+tests producing a verdict 118 to 162, and agreement over the 402-test census
+293 to 361 -- no test changing away from the legacy verdict, and the default
+path unchanged at `try_catch` 172/172.
+
+### 3.14 What the census names next
+
+**Reproducing the census.** `scripts/irep2-migration/parity_sweep.sh` is the
+harness; `PARITY_FLAG` selects what it sweeps:
+
+```sh
+for d in inheritance destructors polymorphism_bringup \
+         polymorphism_bringup_overload try_catch inheritance_bringup; do
+  PARITY_FLAG=--clang-cpp-irep2-adjust-only PARITY_TIMEOUT=40 \
+    scripts/irep2-migration/parity_sweep.sh build/src/esbmc/esbmc \
+    regression/esbmc-cpp/$d
+done
+```
+
+Pass the binary by a path, not a bare name, and read the per-suite totals: a
+run that measured nothing still prints `0 divergence(s)`.
+
+At this point in the series that reports **33 divergences over 394 tests** --
+`destructors` 4 of 14, `try_catch` 29 of 168, and **zero** in `inheritance`
+(102), `polymorphism_bringup` (46), `polymorphism_bringup_overload` (49) and
+`inheritance_bringup` (15). None is a false proof. Two clusters account for the
+four in `destructors` and the arm that closed seven more:
+
+- **`cpp_delete` (7 rows)** -- `destructors/github_6198*` (5) and
+  `3_SI_virtual_ntvalDtor` (2). `clang_cpp_adjust::adjust_cpp_delete` attaches a
+  `destructor` call to the side effect, which goto_convert emits as
+  `~T(&(*p))`; the IREP2 table has no such arm, so `delete p` through a virtual
+  destructor runs no destructor and `assert(n == 3)` fails. No seam work: the
+  call already travels in `sideeffect2t::arguments[0]` and back
+  (`migrate.cpp`, `back_sideeffect_cpp_delete`), so this is a plain arm port.
+- **`cpp-pseudo-destructor` (4 rows)** -- `destructors/pseudo-destructor*`
+  aborted with `migrate expr failed: cpp-pseudo-destructor`. The node has no
+  migration arm at all, because the legacy pass deletes it before anything
+  migrates: `adjust_cpp_pseudo_destructor_call` replaces it with its base
+  expression. It therefore cannot be an IREP2 arm -- the elimination has to move
+  to conversion time, as §3.13's did. **Done**, §3.15: `destructors` now sweeps
+  0 divergences.
+
+The remaining 29 `try_catch` rows are false alarms clustered on
+`exception_spec_*`, which is `finalize_exception_specification`'s territory.
+
+### 3.15 The pseudo-destructor call, reduced where it is built
+
+`b.~a()` on a scalar has no run-time semantics beyond evaluating the base
+([expr.pseudo]/1). The converter built a `cpp-pseudo-destructor` node for it and
+`clang_cpp_adjust` replaced the whole call with that base; IREP2 has no kind for
+the node, so under the flag it reached `migrate_expr` and aborted.
+
+Reducing it at `clang_cpp_convertert::get_expr`'s exit -- not in one call case
+-- keeps it out of the goto program and covers every call spelling, which is the
+coverage the legacy arm had. Note the shape is a plain `CallExpr`, not a
+`CXXMemberCallExpr`: a pseudo-destructor applies to scalars, so clang never
+builds a member call for it. Reducing it in the member-call case, which is where
+it looks like it belongs, fires never.
+
+`clang_cpp_adjust::adjust_cpp_pseudo_destructor_call` is now unreachable --
+instrumented, it fires 0 times across all five tests that exercise the construct
+-- and is left in place. Deleting it is a branch removal, which owes a C-Dead
+proof this slice has not run; it is a cleanup candidate, not a loose end in the
+migration.
+
+### 3.16 The reference arm, and why the six-suite number was not the whole story
+
+`regression/esbmc-cpp/cpp` had never been swept under the flag. Doing so found
+more divergences than the six tracked suites together, and -- unlike them -- it
+contains **false proofs**:
+
+| test | legacy | flag |
+|---|---|---|
+| `github_4183_fail` | FAILED | **SUCCESSFUL** |
+| `github_4243_mem_init_fail` | FAILED | **SUCCESSFUL** |
+| `github_4243_mem_init` | SUCCESSFUL | FAILED |
+
+The pair inverts, which is the tell: the value is consistently wrong rather than
+the analysis being imprecise. `--goto-functions-only` on `github_4183_fail`
+differs in one instruction:
+
+```
+legacy  ASSIGN *return_value$_operator[]$1 = 7;
+flag    ASSIGN  return_value$_operator[]$1 = &7;
+```
+
+`std::array::operator[]` returns a reference, so the assignment must go
+*through* it. Under the flag the dereference on the left becomes an address-of
+on the right: the write lands on the reference variable, the element keeps its
+zero-initialised value, and `assert(a[0] == 0)` proves.
+
+The cause is a missing arm, not a subtle one. `clang_cpp_adjust::adjust_reference`
+dereferences a reference-typed operand, and `clang_c_adjust` calls it from five
+sites -- the relational arm, binary arithmetic, complex unary, and twice in
+`adjust_side_effect_assignment`. The IREP2 pass has no counterpart: `grep
+adjust_reference` over `clang_c_adjust_irep2.*` and `clang_cpp_adjust_irep2.*`
+returns nothing. Every reference-typed operand in those positions is therefore
+left as a bare pointer.
+
+This is the next arm, and it should come before the `exception_spec_*` cluster:
+it is the only known live soundness defect.
+
+**Written, measured, and not yet shippable.** Ported as a virtual hook (empty
+for C, as the legacy one is), it closes all three false proofs and takes 10 rows
+overall, 89 to 81. But it **introduces two**, `github_6319_mutex` and
+`github_6319_mutex_api`, both `SUCCESSFUL -> FAILED`. Causation is established,
+not assumed: gating the hook behind an environment switch gives the legacy
+verdict with it off and the regression with it on.
+
+Three things are already ruled out:
+
+- *Ordering.* `clang_c_adjust` calls `adjust_reference` **after** the conversion
+  for relational and arithmetic, and **before** it for assignment -- which it
+  documents, because otherwise the source is cast to the reference type.
+  Matching that ordering exactly does not fix the mutex rows.
+- *The predicate.* `pointer_type2t::ref_kind` and legacy's
+  `is_lvalue_or_rvalue_reference` agree on both rewrites the mutex test takes.
+- *The referent type.* Both rewrites produce a pointee that is a bare
+  `symbol_type2t`, which has no width, and symex reports that as a spurious
+  alignment failure. Resolving it through `ns.follow` is right on its own terms
+  and does not fix the mutex rows either.
+
+What the reproducer actually says: on `github_6319_mutex_api`, instrumenting
+both passes shows **legacy dereferences nothing at all** while the IREP2 hook
+dereferences two operands -- and both belong to *one* `sideeffect_assign` whose
+LHS and RHS are **both** references. That is reference *binding*, not a write
+through a reference; dereferencing both copies the mutex instead of binding the
+pointer.
+
+So the arm fires where the legacy pass provably does not. Narrowing that
+further, on the same test:
+
+- Legacy's `adjust_reference` *is* called, four times, but only on assigns to
+  `__owns` -- a `bool`, no reference in sight. It is **never** called on the
+  `__m` assignment, which is the one the IREP2 hook rewrites.
+- The seam is not conflating anything: `migrate_expr` maps a legacy
+  `code`/`assign` to `code_assign2tc` and a `sideeffect`/`assign` to
+  `sideeffect_assign2tc`, and the hook's guard is the latter. So the `__m` node
+  genuinely is a side-effect assign in both representations.
+
+Walk coverage is ruled out too. Tracing the symbol being adjusted at the moment
+of each rewrite puts both of them inside
+`std::lock_guard<std::mutex>::lock_guard(mutex &)` -- the constructor binding
+its reference member -- and instrumenting the legacy pass's own symbol loop
+shows it adjusts that same constructor. Both passes visit it.
+
+What differs is what is *in* it. Across the whole program legacy's
+`adjust_reference` is called four times and never once from that constructor,
+so in the legacy tree the member-initialiser binding is not a side-effect
+assign; in the IREP2 tree it is, which is why the hook's
+`is_sideeffect_assign2t` guard claims it. Since `migrate_expr` keeps
+`code`/`assign` and `sideeffect`/`assign` apart, the node is not being
+reclassified at the seam -- an **earlier IREP2 arm is producing a
+sideeffect_assign where the legacy pass has something else**, and the reference
+hook is merely the first arm to notice.
+
+Dumping that constructor shows the damage exactly:
+
+```
+legacy  ASSIGN this->__m  =  m::0;          FUNCTION_CALL: lock(this->__m)
+flag    ASSIGN *this->__m = *m::0;          FUNCTION_CALL: lock((std::mutex *)this->__m)
+```
+
+The hook dereferenced **both sides of a reference binding**, so the constructor
+copies the mutex instead of binding a pointer to it. That is the whole
+regression, and it says what the missing distinction is: a reference *used as a
+value* must be read through, a reference *being bound* must not.
+
+Six causes are now measured and eliminated -- ordering, predicate, referent
+type, node kind, visitation, and now the damage itself is understood. The one
+open question left is narrow: legacy never routes this binding through
+`adjust_side_effect` (its `adjust_reference` is called four times program-wide
+and never from this constructor), while in IREP2 the node is a
+`sideeffect_assign2t`. Since `migrate_expr` maps `code`/`assign` to
+`code_assign2tc`, the binding is not arriving from the seam in that shape --
+`adjust_decl_init` is the first arm to check, since a member-initialiser can
+reach it as a `code_decl` with an initialiser.
+
+**Answered: `adjust_reference` was the wrong arm.** Legacy does not reach this
+binding through `adjust_side_effect` because `clang_cpp_adjust` overrides that
+and routes an `assign` to its own `adjust_side_effect_assign` -- a C++-only arm
+with a five-way branch on the assignment's shape:
+
+| the assignment | what legacy does |
+|---|---|
+| rhs is a constructor call | fold `x = T()` into `T(&x)` |
+| lhs is a reference symbol | `r = 1` becomes `*r = 1` |
+| lhs is a call returning a reference | `X(a) = 5` becomes `*X(a) = 5` |
+| **lhs carries `#member_init`** | **adjust the rhs only -- leave the lhs alone** |
+| otherwise | fall through to the C arm |
+
+The fourth row is the mutex case, and it is why legacy never dereferences a
+member-initialiser's left side. **None of these five branches is ported**, so
+the reference hook was a fragment of this arm applied without the branch that
+excludes a binding -- which is exactly why it broke a binding.
+
+And the branch that matters cannot be written yet: `#member_init` is a
+converter-set irept flag (`clang_cpp_convert.cpp` sets it in three places and
+reads it in three, including `should_dereference`), and `grep member_init
+src/util/irep/migrate.cpp` returns **nothing**. It is dropped at the seam, the
+same class as §3.12's `#derived_to_base` and with the same shape of fix.
+
+**What shipped, and in what shape.** `#member_init` is carried as a field on
+`sideeffect_assign2t` (declared next to `op`; after `location` the compiler packs
+it into the location's padding and `fields_cover_class` underflows). The
+reference handling is a virtual hook -- empty for C, as the legacy one is --
+reached from the plain-assignment arm, the relational arm, and the
+increment/decrement family, with the member-initialiser case as a branch inside
+it. That is *not* the "port `adjust_side_effect_assign` whole" this section
+originally called for: only one of that arm's five branches is addressed, and
+the constructor-call fold and call-returning-reference branches remain unported.
+
+Measured over `regression/esbmc-cpp/cpp` with the §3.14 command: 89 divergences
+before, 80 after, no regressions and no false proofs.
+
+**What testing this taught, three times over.** A reference *variable* is
+dereferenced at conversion time by `get_decl_ref`'s `should_dereference`, so
+`int &r; r++;` and `r == w` and `(long)r` are already correct and pin nothing --
+a pair built on one passes with the hook in or out. Every test here has to go
+through a reference-**returning call** (`b.at()`). Three pairs were written on
+local references and had to be rewritten after mutation-checking showed they bit
+nothing.
+
+**Still open on this row:**
+
+- Increment/decrement of a reference-returning expression was unhooked entirely
+  until review caught it: `b.at()++` emitted
+  `ASSIGN return_value$_at$1 = return_value$_at$1 + 1`, arithmetic on the
+  reference with the referent untouched. Now hooked, with a pair that bites.
+- The relational hook and `convert_reference`'s typecast branch are not pinned by
+  any test that bites, and may be unreachable -- both were added while chasing
+  the mutex regression. Their reachability is being measured; whichever does not
+  fire over the corpus should come out rather than ship unpinned.
+- The binding case's correctness is not self-contained: after this hook
+  dereferences the rhs, `c_typecastt::convert_reference` (a same-named function
+  in `util/lang/c_typecast.cpp`) re-wraps it in an `address_of2tc` because the
+  lhs is reference-typed. The round trip is a genuine no-op -- `this->__m =
+  &(*m)` -- but it spans two translation units.
+
+Note also that a test for this must use a **function returning a reference**
+(`b.at() = 7`, which is what `std::array::operator[]` is). A local `int &r`
+binding is lowered without going through this path, so a pair built on one
+passes with the arm on or off and pins nothing.
+
+**Lesson for the census.** "Zero false proofs" held only over the six suites
+§3.14 sweeps. The suites were chosen because early divergences clustered there,
+and that selection quietly became the measurement. A number is scoped by what
+was swept, and the scope has to be stated with it.
+
+### 3.17 What is left, bucketed
+
+The 80 divergences `regression/esbmc-cpp/cpp` reports after §3.16 are not one
+cause. Grouped by test family:
+
+| family | rows | shape |
+|---|---|---|
+| `github_5868_*` | 18 | all `SUCCESSFUL -> FAILED`, all STL surface |
+| `github_2284_*` | 4 | |
+| `ptr_to_member_*` | 4 | pointer-to-member |
+| `github_6291_*` | 3 | a reference *parameter* bound to a conditional lvalue |
+| `switch_declaration*` | 3 | a declaration in a switch |
+| `member_array_*`, `static_array_ctor` | 3 | array member construction |
+| ~20 singletons | | map / list / tuple / stream |
+
+`github_5868_*` is the largest and the most likely to share a cause: all 18 are
+`SUCCESSFUL -> FAILED`, and the three sampled so far fail *inside the operational
+models* rather than in the test --
+
+```
+github_5868_container_relational      /esbmc-vfs/cpp/set     line 858  Incorrect alignment
+github_5868_is_scalar_const_lookup    /esbmc-vfs/cpp/utility line 131  invalid pointer
+github_5868_reverse_iterator_base     /esbmc-vfs/cpp/list    line  29  invalid pointer
+```
+
+"Incorrect alignment when accessing data object" is the signature §3.16 met when
+a `dereference2t` was built over a bare `symbol_type2t`, so a type-resolution gap
+looked like the first hypothesis. **Diagnosing one refuted it.**
+
+A goto-diff of `github_5868_is_scalar_const_lookup` shows `std::pair`'s
+constructor byte-identical between the passes apart from instruction numbering
+(+4 under the flag), so the failure inside it comes from different state, not
+different code. Normalising the numbering and diffing the whole program gives 179
+hunks, and the first is unambiguous:
+
+```
+legacy  RETURN: ieee_fma(a, b, c)
+flag    RETURN: return_value$_fmal$1      # an actual call to fmal() instead
+```
+
+Likewise `nearbyint`. The IREP2 pass folds only the **`__builtin_`-prefixed**
+half of `clang_c_adjust::do_special_functions`; the **name-matched** family
+(`fma`, `nearbyint`, …) is unported, so those calls reach the operational model
+rather than becoming IREP2 nodes. `adjust_special_functions`'s own doc comment
+says as much and names the reason it was deferred: unlike a reserved
+`__builtin_` spelling, a program may define `fma` itself, so the fold needs a
+`shadows_user_definition` query first. That helper is already shared
+(`builtin_names.h`'s `builtin_shadows_user_definition`), so no hoist is needed.
+
+That divergence is confirmed. Whether it *causes* the 18 failures is not: they
+are reported inside `<set>`, `<utility>` and `<list>`, not in cmath. Port the
+name-matched half, re-measure, and see how many of the 18 move -- rather than
+assuming, which is the §3.16 mistake.
+
+`github_6291_*` is already known to be something else: `bump((c < 1) ? a : b)`
+binds a reference *parameter* to a conditional lvalue, which needs an address-of
+of a ternary rather than a dereference of a reference.
+
 ## 6. Next
 
 1. ~~Add the reference kind to `pointer_type2t`~~ — **done**, §2.5, PR #7703.
-   Item 1 is now writable, and it is the next slice: 70 % of the corpus needs
-   it, and unlike §2.3's arms it will move verdicts, so it owes a
-   `SUCCESSFUL`/`FAILED` pair.
 2. ~~Port items 6 and 7~~ — **done**, see §2.3.
-3. Price option B in §3 against option A.
-4. Add the C++ hop-off flag, then run the census by verdict.
-
-Only then does a slice make sense.
+3. ~~Price option B in §3 against option A~~ — **done**, §3.1: option B.
+4. ~~Add the C++ hop-off flag, then run the census by verdict~~ — **done**, §3.2.
+5. ~~The 109 remaining divergences in §3.12's census~~ -- §3.13, the
+   `cpp_delete` arm and §3.15 closed 79 of them. §3.14 has the command that
+   reproduces what is left: 29 `try_catch` rows, all on `exception_spec_*`,
+   and nothing anywhere else.
+6. `finalize_exception_specification` is legacy-only, and those 29 rows are
+   its territory. It is the last cluster in these six suites.
+7. `scope-clang-c-irep2.md` §134.4's ternary decay, which is inert on C but
+   reaches the goto program on C++.
+8. ~~`regression/esbmc-cpp/cpp` has never been swept~~ -- swept, and it is the
+   larger half: see §3.16. Take it before item 6.

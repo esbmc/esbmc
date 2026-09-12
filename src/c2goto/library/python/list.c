@@ -204,6 +204,63 @@ bool __ESBMC_list_push(
   return true;
 }
 
+// Copy a tagged scalar's payload. `size` may be symbolic across branches (e.g.
+// int vs str), so this uses a bounded loop rather than __ESBMC_copy_value's
+// memcpy fallback, which never finishes unwinding over a symbolic n. A float
+// payload goes through __ESBMC_copy_value instead, so the element keeps this
+// library's invariant that a float's value lives in __ESBMC_float_buf at
+// float_idx -- __ESBMC_list_push_object and __ESBMC_list_push_shallow_sz both
+// read it back that way.
+static void *__ESBMC_copy_tagged_value(
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id,
+  size_t *out_float_idx)
+{
+  *out_float_idx = 0;
+
+  if (size == 8 && float_type_id != 0 && type_id == float_type_id)
+    return __ESBMC_copy_value(
+      value, size, type_id, float_type_id, out_float_idx, 0);
+
+  __ESBMC_assert(
+    size <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged list element exceeds the modelled bound");
+
+  void *copied = __ESBMC_alloca(size);
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= size)
+      break;
+    ((char *)copied)[i] = ((const char *)value)[i];
+  }
+  return copied;
+}
+
+// Push an already-tagged scalar's own value/type_id/size.
+bool __ESBMC_list_push_tagged(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+
+  size_t float_idx = 0;
+  void *copied =
+    __ESBMC_copy_tagged_value(value, type_id, size, float_type_id, &float_idx);
+
+  PyObject *item = &l->items[l->size];
+  item->value = copied;
+  item->float_idx = float_idx;
+  item->type_id = type_id;
+  item->size = size;
+  l->size++;
+  return true;
+}
+
 bool __ESBMC_list_push_object(
   PyListObject *l,
   PyObject *o,
@@ -593,6 +650,46 @@ bool __ESBMC_list_insert(
   l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
+  l->size++;
+  return true;
+}
+
+// Insert variant of __ESBMC_list_push_tagged. Index normalisation matches
+// __ESBMC_list_insert.
+bool __ESBMC_list_insert_tagged(
+  PyListObject *l,
+  int64_t index,
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id)
+{
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  if (index >= n)
+    return __ESBMC_list_push_tagged(l, value, type_id, size, float_type_id);
+
+  size_t float_idx = 0;
+  void *copied =
+    __ESBMC_copy_tagged_value(value, type_id, size, float_type_id, &float_idx);
+
+  size_t i = l->size;
+  while (i > (size_t)index)
+  {
+    l->items[i] = l->items[i - 1];
+    i--;
+  }
+
+  l->items[index].value = copied;
+  l->items[index].float_idx = float_idx;
+  l->items[index].type_id = type_id;
+  l->items[index].size = size;
   l->size++;
   return true;
 }

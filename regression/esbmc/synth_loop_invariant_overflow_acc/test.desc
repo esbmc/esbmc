@@ -1,0 +1,5 @@
+CORE
+main.c
+--synthesise-loop-invariants --overflow-check --unwind 12
+\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
+^VERIFICATION SUCCESSFUL$
