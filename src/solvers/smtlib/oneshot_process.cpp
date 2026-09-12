@@ -97,7 +97,8 @@ static std::string describe_exit_status(int status)
 smt_resultt run_solver(
   const std::string &cmd_template,
   const std::string &formula_path,
-  const char *name)
+  const char *name,
+  std::string *captured_output)
 {
   std::string cmd = cmd_template;
 
@@ -195,6 +196,12 @@ smt_resultt run_solver(
 
     if (std::optional<smt_resultt> v = parse_verdict_line(line))
       verdict = v;
+
+    if (captured_output)
+    {
+      *captured_output += line;
+      *captured_output += '\n';
+    }
 
     tail.push_back(std::move(line));
     if (tail.size() > 20)
