@@ -3408,7 +3408,11 @@ void python_list::normalize_index_access_position(
       v += s;
       pos_expr = from_integer(v, pos_expr.type());
     }
-    else
+    else if (
+      list_node.contains("value") &&
+      list_node["value"].value("_type", "") == "List" &&
+      list_node["value"].contains("elts") &&
+      list_node["value"]["elts"].is_array())
     {
       // Compute index for compile-time type lookup only.
       // Do NOT overwrite pos_expr: the list may have been mutated
@@ -3416,6 +3420,14 @@ void python_list::normalize_index_access_position(
       // at runtime via build_list_at_call using __ESBMC_list_size.
       index = slice_node["operand"]["value"].get<size_t>();
       index = list_node["value"]["elts"].size() - index;
+    }
+    // A pointer-typed array without a literal list backing it (e.g. a numpy
+    // row/column view, which has no AST list assignment to read a
+    // compile-time element list from) leaves index at its default: the
+    // same "falls back to element 0" fallback documented above for a
+    // non-constant operand.
+    else
+    {
     }
   }
   else if (slice_node["_type"] == "Constant")
