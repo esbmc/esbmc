@@ -939,6 +939,113 @@ TEST_CASE("migrate carries the pointer reference kind", "[migrate]")
     migrate_type_back(migrate_type(rvalue)).get_bool("#rvalue_reference"));
 }
 
+// The base-conversion markers the adjust passes dispatch on. They are irept
+// attributes, so before this they were erased by the round trip and an IREP2
+// pass could not tell that a cast owed a base displacement -- which silently
+// proves false assertions over multiple inheritance.
+TEST_CASE("migrate carries the base-conversion markers", "[migrate]")
+{
+  // migrate_expr resolves a symbol operand through the thread-local namespace.
+  use_test_ns();
+
+  const typet i32 = int_type();
+  exprt operand = symbol_exprt("x", i32);
+
+  typecast_exprt plain(operand, i32);
+  typecast_exprt to_base(operand, i32);
+  to_base.set("#derived_to_base", "tag-A");
+  typecast_exprt to_derived(operand, i32);
+  to_derived.set("#base_to_derived", true);
+
+  expr2tc m_plain, m_base, m_derived;
+  migrate_expr(plain, m_plain);
+  migrate_expr(to_base, m_base);
+  migrate_expr(to_derived, m_derived);
+
+  REQUIRE(to_typecast2t(m_plain).derived_to_base.empty());
+  REQUIRE_FALSE(to_typecast2t(m_plain).base_to_derived);
+  REQUIRE(to_typecast2t(m_base).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m_derived).base_to_derived);
+
+  // Both are in the fields tuple, so a marked cast is a different node from an
+  // unmarked one. fields_cover_class does not catch a field dropped from the
+  // tuple when the shortfall fits the alignment slack, so pin it here.
+  REQUIRE_FALSE(m_plain == m_base);
+  REQUIRE_FALSE(m_plain == m_derived);
+
+  // And they survive the way back, which is what clang_c_adjust reads.
+  REQUIRE(migrate_expr_back(m_base).get("#derived_to_base") == "tag-A");
+  REQUIRE(migrate_expr_back(m_derived).get_bool("#base_to_derived"));
+  REQUIRE(migrate_expr_back(m_plain).get("#derived_to_base").empty());
+}
+
+// migrate_expr has nowhere to hang a #derived_to_base marker on a node that is
+// not a cast, so it wraps one in a same-type typecast2t and back_typecast
+// unwraps it. Asserting only that the marker survives passes whether or not the
+// unwrap happens, so these pin the node kind: the legacy tree must come back
+// the shape it went in as, or clang_c_adjust sees a cast the program never
+// wrote.
+TEST_CASE("migrate unwraps the derived-to-base marker wrapper", "[migrate]")
+{
+  use_test_ns();
+
+  const typet i32 = int_type();
+  exprt marked = symbol_exprt("x", i32);
+  marked.set("#derived_to_base", "tag-A");
+
+  expr2tc m;
+  migrate_expr(marked, m);
+  REQUIRE(is_typecast2t(m));
+  REQUIRE(to_typecast2t(m).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m).type == to_typecast2t(m).from->type);
+
+  const exprt back = migrate_expr_back(m);
+  REQUIRE(back.id() == irept::id_symbol);
+  REQUIRE(back.get("#derived_to_base") == "tag-A");
+
+  // A cast the program did write keeps its cast on the way back, marker and
+  // all: the unwrap must key on the wrapper, not on the marker alone. The two
+  // types have to differ by *kind* -- config.ansi_c's widths are zero here, so
+  // int and long int migrate to the same type2tc and would read as a wrapper.
+  typecast_exprt real(symbol_exprt("y", i32), pointer_typet(i32));
+  real.set("#derived_to_base", "tag-A");
+  expr2tc m_real;
+  migrate_expr(real, m_real);
+  REQUIRE_FALSE(to_typecast2t(m_real).type == to_typecast2t(m_real).from->type);
+  const exprt back_real = migrate_expr_back(m_real);
+  REQUIRE(back_real.id() == exprt::typecast);
+  REQUIRE(back_real.get("#derived_to_base") == "tag-A");
+}
+
+// clang_cpp_convert_vft.cpp marks a dynamic_cast's typecast #base_to_derived
+// and #derived_to_base at once, so neither may be dropped when the other is
+// carried -- including through the wrapper unwrap.
+TEST_CASE("migrate carries both base markers on one cast", "[migrate]")
+{
+  use_test_ns();
+
+  // A constant operand, not a symbol: sym_name_to_symbol resolves a symbol's
+  // type through the namespace, which can leave from->type != type and take the
+  // ordinary path instead of the unwrap this test is about.
+  const typet i32 = int_type();
+  typecast_exprt both(from_integer(1, i32), i32);
+  both.set("#derived_to_base", "tag-A");
+  both.set("#base_to_derived", true);
+
+  expr2tc m;
+  migrate_expr(both, m);
+  REQUIRE(to_typecast2t(m).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m).base_to_derived);
+
+  // Same-type, so back_typecast takes its unwrap branch: the marker goes back
+  // on the operand. Pin that, or the test passes on the ordinary path and says
+  // nothing about the branch it is here for.
+  const exprt back = migrate_expr_back(m);
+  REQUIRE(back.id() != exprt::typecast);
+  REQUIRE(back.get("#derived_to_base") == "tag-A");
+  REQUIRE(back.get_bool("#base_to_derived"));
+}
+
 // struct_type2t and union_type2t have no per-member padding flag, so
 // #is_padding is re-derived from the member name on the way back
 // (migrate.cpp restore_padding_flag). Without it a pad member reads as a

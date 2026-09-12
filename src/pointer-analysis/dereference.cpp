@@ -2357,7 +2357,14 @@ std::vector<expr2tc> dereferencet::extract_bytes(
   unsigned int num_bytes,
   const expr2tc &offset) const
 {
-  assert(num_bytes != 0);
+  /* A zero-width object has no bytes to extract, and the stitching below reads
+   * bytes[num_bytes - 1] -- an out-of-bounds access in ESBMC itself rather than
+   * a verdict. A struct with a zero-length array member reaches here. */
+  if (num_bytes == 0)
+  {
+    log_error("dereference: cannot read a zero-width object");
+    abort();
+  }
 
   std::vector<expr2tc> bytes;
   bytes.reserve(num_bytes);
@@ -2420,6 +2427,8 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes,
   const std::vector<expr2tc> &bytes)
 {
+  /* Every caller sources `bytes` from extract_bytes(), which refuses a
+   * zero-width read before we get here. */
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
