@@ -55,6 +55,12 @@ bool returns_no_value(const typet &t);
 // items placeholder or from a user attribute of that name.
 #define PYTHON_KEYS_VIEW_ATTR "#python_keys_view"
 
+/// Marks the placeholder `dict.items()` view. Its elements are the dict's
+/// *keys*, not (key, value) tuples, so it is neither a plain list nor usable as
+/// the set-like view Python says it is -- comparisons against it are refused
+/// rather than answered from the placeholder's contents (#7553).
+#define PYTHON_ITEMS_VIEW_ATTR "#python_items_view"
+
 // Stamp a Python internal-aggregate kind ("tuple", "dict", "optional") onto a
 // freshly created struct type.
 void set_python_aggregate_kind(typet &type, const irep_idt &kind);
