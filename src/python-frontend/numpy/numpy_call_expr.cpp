@@ -4150,8 +4150,27 @@ std::optional<exprt> numpy_call_expr::try_transpose_decayed_2d_param(
   if (!materialized || materialized->first.size() != 2)
     return std::nullopt;
 
+  // materialized->second can be empty (a (2, 0)/(0, 2)-shaped parameter),
+  // which build_numpy_shape_array_value's own elems.front() would crash on;
+  // resolve the element type from the tracked array's own descriptor type
+  // instead, the same fallback build_numpy_descriptor_materialized_array
+  // uses for the same reason.
+  typet elem_type;
+  if (materialized->second.empty())
+  {
+    const std::string root_id =
+      converter_.resolve_name_symbol_id(arg["id"].get<std::string>());
+    std::optional<typet> empty_elem_type =
+      converter_.get_numpy_descriptor_element_type(root_id);
+    if (!empty_elem_type)
+      return std::nullopt;
+    elem_type = *empty_elem_type;
+  }
+  else
+    elem_type = materialized->second.front().type();
+
   exprt full_array = build_numpy_shape_array_value(
-    materialized->first, materialized->second, type_handler_);
+    materialized->first, materialized->second, elem_type, type_handler_);
 
   // build_numpy_axis_swapped_2d_expr indexes its source_expr once per
   // output element (np_index(source_expr, r, ...) then np_index(..., c,
