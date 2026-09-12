@@ -1067,3 +1067,55 @@ nothing answering differently, so a converter change that breaks something will
 show as a *new* divergence against a known baseline rather than disappearing
 into noise. That baseline is the deliverable of this section, more than any
 single fix in it.
+### 7.25 S.3's first blocker, before a line is ported: `#cformat`
+
+§7.24 said the converter's output faces no representational wall. That is true
+of *forward* migration, which is what the census measures, and it is not the
+whole question. Any boundary that stays legacy needs the **reverse**, and the
+reverse loses something.
+
+The pathfinder's first function, `convert_integer_literal`
+(`solidity_convert_literals.cpp`), builds
+
+```cpp
+the_val = constant_exprt(
+  integer2binary(z_ext_value, bv_width(type)),
+  integer2string(z_ext_value),
+  type);
+```
+
+and that three-argument constructor records the decimal spelling as `#cformat`
+(`util/irep/std_expr.h`):
+
+```cpp
+constant_exprt(const irep_idt &_value, const irep_idt &_cformat, const typet &_type)
+{
+  set("#cformat", _cformat);
+  set_value(_value);
+}
+```
+
+A native port would build `constant_int2tc(type, value)` instead, and
+`migrate_expr_back` reconstructs a `constant_exprt` from **`value` alone**
+(`migrate.cpp`, `constant_int_id`): it sets the binary string and nothing else.
+`#cformat` does not survive the round trip.
+
+So porting this one function, with its callers left legacy, either carries
+`#cformat` across the seam or changes what ESBMC *prints* for every Solidity
+integer literal — counterexamples and goto dumps include it. That is a
+default-path output change of the kind the clang-c doc's §137.5 treats as
+SV-COMP-relevant, not a silent internal refactor.
+
+Three ways out, none free, and the choice belongs to S.3's design rather than
+to this section:
+
+| option | cost |
+|---|---|
+| carry `#cformat` through `migrate_expr_back` | a seam change affecting every frontend's integer literals |
+| port the callers too, so no round trip happens | pushes the boundary into `solidity_convert_expr.cpp` (250 sites) |
+| accept the printed-output change | needs an SV-COMP run and a sweep of tests that pin literal spellings |
+
+This is the same shape as the spelling carriage `scope-c-spelling-carriage.md`
+records, arrived at from a different direction. Worth knowing before 1 685
+sites are ranked: the smallest file in the phase is blocked on a seam question,
+so "mechanical" in §7.24 means *representable*, not *free*.
