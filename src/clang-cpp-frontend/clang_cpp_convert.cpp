@@ -3273,8 +3273,9 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
       derived_struct.is_struct() &&
       to_struct_type(derived_struct).has_component(base_comp))
     {
-      dereference_exprt deref(
-        implicit_this_symb, implicit_this_symb.type().subtype());
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(implicit_this_symb, implicit_this_symb.type());
       member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
       implicit_this_symb = address_of_exprt(m);
       routed = true;
