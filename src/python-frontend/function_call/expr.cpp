@@ -4470,24 +4470,38 @@ void function_call_expr::reject_numpy_sort_write_through_view(
 
 long long function_call_expr::extract_numpy_inplace_sort_axis() const
 {
-  long long axis = -1;
-  if (!call_.contains("keywords"))
-    return axis;
+  // axis is positional-or-keyword in numpy's ndarray.sort(); a(0) and
+  // a(axis=0) must both resolve to the same value, and supplying both is a
+  // TypeError rather than the keyword silently winning.
+  const nlohmann::json *axis_node = nullptr;
+  if (!call_["args"].empty())
+    axis_node = &call_["args"][0];
 
-  for (const auto &kw : call_["keywords"])
+  if (call_.contains("keywords"))
   {
-    if (kw["_type"] != "keyword" || kw["arg"].is_null() || kw["arg"] != "axis")
-      continue;
+    for (const auto &kw : call_["keywords"])
+    {
+      if (
+        kw["_type"] != "keyword" || kw["arg"].is_null() || kw["arg"] != "axis")
+        continue;
 
-    numeric_value axis_value;
-    if (
-      !try_extract_numeric_constant(kw["value"], axis_value) ||
-      !axis_value.is_int)
-      throw std::runtime_error(
-        "TypeError: numpy.ndarray.sort() axis must be a literal integer");
-    axis = axis_value.int_value;
+      if (axis_node != nullptr)
+        throw std::runtime_error(
+          "TypeError: numpy.ndarray.sort() got multiple values for argument "
+          "'axis'");
+      axis_node = &kw["value"];
+    }
   }
-  return axis;
+
+  if (axis_node == nullptr)
+    return -1;
+
+  numeric_value axis_value;
+  if (
+    !try_extract_numeric_constant(*axis_node, axis_value) || !axis_value.is_int)
+    throw std::runtime_error(
+      "TypeError: numpy.ndarray.sort() axis must be a literal integer");
+  return axis_value.int_value;
 }
 
 std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
@@ -4513,18 +4527,19 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
 
   reject_numpy_sort_write_through_view(receiver_node);
 
-  const long long axis = extract_numpy_inplace_sort_axis();
-
-  // Positional args and keywords besides axis= are rejected ahead of the
-  // shape check so a 2-D receiver called with an unsupported argument
-  // reports the argument error, matching argsort()/searchsorted()'s own
-  // validation order in this file.
+  // One positional argument (the axis) is accepted; extra positional args
+  // and keywords besides axis= are rejected ahead of the shape check so a
+  // 2-D receiver called with an unsupported argument reports the argument
+  // error, matching argsort()/searchsorted()'s own validation order in this
+  // file.
   if (
-    !call_["args"].empty() ||
+    call_["args"].size() > 1 ||
     numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
       "TypeError: numpy.ndarray.sort() does not support kind or order "
       "arguments yet");
+
+  const long long axis = extract_numpy_inplace_sort_axis();
 
   std::vector<exprt> elems = materialized->second;
   if (elems.empty())
