@@ -156,6 +156,16 @@ protected:
   /// first (§82).
   void adjust_call_callee(expr2tc &expr);
 
+  /// Rebuild a call's callee from the symbol table when the converter left its
+  /// type incomplete, then let the frontend align the call's own type.
+  void adjust_call_signature(expr2tc &expr);
+
+  /// The call's type follows its callee's return type in C++ but not in C,
+  /// where clang_c_adjust::align_se_function_call_return_type is empty.
+  virtual void align_call_return_type(expr2tc &, const symbolt &)
+  {
+  }
+
   /// IREP2 form of clang_c_adjust::adjust_expr_binary_arithmetic's complex
   /// branch: decompose `a op b` over a complex operand into per-component
   /// arithmetic and rebuild a (real, imag) pair. Unported, a complex `/`

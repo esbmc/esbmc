@@ -24,6 +24,7 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_function_designators), nullptr},
   {ARM(adjust_boolean_operands), is_short_circuit},
   {ARM(adjust_call_callee), is_call_site},
+  {ARM(adjust_call_signature), is_call_site},
   {ARM(adjust_call_arguments), is_call_site},
   {ARM(adjust_if_expr), is_if2t},
   {ARM(adjust_complex_arith), is_binary_arith},
@@ -62,6 +63,34 @@ clang_cpp_adjust_irep2::arm_order()
 void clang_cpp_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
   run_adjust_arms(*this, arms, expr);
+}
+
+void clang_cpp_adjust_irep2::align_call_return_type(
+  expr2tc &expr,
+  const symbolt &callee)
+{
+  if (!is_sideeffect2t(expr))
+    return;
+
+  // Read the return type in legacy form: "constructor" is an irept id with no
+  // IREP2 spelling to test against.
+  const typet &ret = to_code_type(callee.get_type()).return_type();
+  if (ret.is_nil() || ret.id() == "constructor")
+    return;
+
+  const type2tc ret2 = migrate_type(ret);
+  if (expr->type == ret2)
+    return;
+
+  const sideeffect2t &se = to_sideeffect2t(expr);
+  expr = sideeffect2tc(
+    ret2,
+    se.operand,
+    se.size,
+    se.arguments,
+    se.alloctype,
+    se.kind,
+    se.location);
 }
 
 void clang_cpp_adjust_irep2::adjust_cpp_member(expr2tc &expr)

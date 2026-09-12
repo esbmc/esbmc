@@ -33,6 +33,11 @@ protected:
   /// there by the converter, so only the callee changes.
   void adjust_cpp_member(expr2tc &expr);
 
+  /// IREP2 form of clang_cpp_adjust::align_se_function_call_return_type: a call
+  /// evaluates to its callee's return type. Constructors are excluded — their
+  /// "return type" names the class, not the call's value.
+  void align_call_return_type(expr2tc &expr, const symbolt &callee) override;
+
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
 
