@@ -623,6 +623,13 @@ private:
     const symbolt &symbol,
     const std::string &attr_name);
 
+  // Tries try_get_numpy_pointer_view_shape_attr then
+  // try_get_numpy_param_shape_attr, so get_expr's own Attribute dispatch
+  // needs a single `if` for both tracked-shape sources instead of growing
+  // its own decision count by one per source.
+  std::optional<exprt>
+  try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
+
   exprt get_block(
     const nlohmann::json &ast_block,
     bool is_function_body = false,
