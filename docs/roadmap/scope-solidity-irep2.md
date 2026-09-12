@@ -1158,3 +1158,60 @@ corpus's contribution there was to measure that it closes all of them.
 
 What is *not* done: S.3, the converter's 1 685 sites, now gated on §7.25's
 `#cformat` question rather than on anything in this section.
+### 7.27 The `#cformat` question, priced: it bites only above 2^63
+
+§7.25 left three options without costing them. The printer decides which matter.
+
+`c_expr2stringt::convert_constant` uses `#cformat` verbatim when present and
+otherwise decodes `value`:
+
+```cpp
+const std::string &cformat = src.cformat().as_string();
+if (cformat != "")
+  dest = cformat;
+```
+
+and the bitvector fallback is not a plain decimal:
+
+```cpp
+BigInt llong_ub = BigInt::power2(config.ansi_c.long_long_int_width - 1);
+...
+else if (int_value >= llong_ub)
+  dest = "0x" + integer2string(int_value, 16);
+else
+  dest = integer2string(int_value);
+```
+
+So dropping `#cformat`:
+
+| literal | with `#cformat` | fallback | same? |
+|---|---|---|---|
+| below 2^63 | decimal | decimal | **yes** |
+| at or above 2^63 | decimal | **hex** | no |
+
+The Solidity converter always sets `#cformat` to the plain decimal rendering
+(`integer2string`, after normalising scientific notation), which is exactly
+what the fallback computes below 2^63. Above it, the fallback switches to hex
+and the printed text changes — and `uint256` makes that an ordinary case, not a
+corner: 14 contracts in this corpus use a ≥19-digit literal or
+`type(uint256).max`.
+
+**Blast radius, measured.** No `test.desc` in `esbmc-solidity` pins a ≥19-digit
+decimal, so no current expectation breaks. The change would be invisible to the
+suite and visible in counterexamples — which is the combination that makes it
+worth stating rather than discovering later.
+
+That re-prices §7.25's options:
+
+| option | revised cost |
+|---|---|
+| carry `#cformat` across the seam | needs a spelling field on `constant_int2t`; a W3-shaped change |
+| port the callers too | no round trip, no spelling question; pushes into 250 sites |
+| accept the change | free below 2^63, changes counterexample text above it; no test pins it today |
+
+The third is cheaper than §7.25 implied, and still not free: it silently alters
+how large `uint256` values print. Given that the suite would not catch it, a
+deliberate choice with a note in the PR beats a quiet one — and porting the
+callers avoids the question entirely, which is the argument for taking
+`solidity_convert_literals.cpp` and `solidity_convert_expr.cpp` together rather
+than the smallest file alone.
