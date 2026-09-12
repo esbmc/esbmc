@@ -12,7 +12,7 @@ if(ENABLE_SOLIDITY_FRONTEND)
 endif()
 
 if(ENABLE_PYTHON_FRONTEND)
-  set(PYTHON_FRONTEND_TARGETS pythonfrontend)
+  set(PYTHON_FRONTEND_TARGETS pythonfrontend pysrclib)
 endif()
 
 if(ENABLE_LD_FRONTEND)

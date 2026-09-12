@@ -1,3 +1,4 @@
+#include <set>
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/converter/converter_internal.h>
@@ -627,96 +628,144 @@ void python_converter::find_entry_function(
   owning_class = owners.front();
 }
 
+/// The blob supplies the model definitions; this supplies their visibility.
+/// find_symbol resolves a model name by retrying under each namespace here, so
+/// without it `max(...)` is undefined even though the symbol was merged. The C
+/// frontend gets the same effect from declarations in its headers.
+void python_converter::collect_model_namespaces()
+{
+  const std::string prefix = "py:/esbmc-vfs/python/models/";
+  std::set<std::string> seen;
+  symbol_table_.foreach_operand([&](const symbolt &sym) {
+    const std::string id = sym.id.as_string();
+    if (id.compare(0, prefix.size(), prefix) != 0)
+      return;
+    const std::size_t at = id.find('@', prefix.size());
+    const std::string ns =
+      id.substr(3, (at == std::string::npos ? id.size() : at) - 3);
+    if (seen.insert(ns).second)
+      model_namespaces_.push_back(ns);
+  });
+}
+
+/// Convert the operational models this run needs into \p models_block.
+/// The always-loaded ones come from the precompiled blob when there is one;
+/// the folder models (os, numpy) are always converted here, because a user
+/// module of that name must be able to shadow them.
+void python_converter::build_models_block(
+  code_blockt &models_block,
+  bool models_precompiled)
+{
+  {
+  // Load operational models
+  const std::string &ast_output_dir =
+    (*ast_json)["ast_output_dir"].get<std::string>();
+
+  static const std::list<std::string> precompilable_models = {
+    "builtins",
+    "range",
+    "int",
+    "float",
+    "consensus",
+    "random",
+    "exceptions",
+    "datetime",
+    "nondet"};
+  std::list<std::string> model_files;
+  if (!models_precompiled)
+    model_files = precompilable_models;
+  std::list<std::string> model_folders = {"os", "numpy"};
+
+  for (const auto &folder : model_folders)
+  {
+    append_models_from_directory(model_files, ast_output_dir + "/" + folder);
+  }
+
+  is_loading_models = true;
+
+  for (const auto &file : model_files)
+  {
+    std::stringstream model_path;
+    model_path << ast_output_dir << "/" << file << ".json";
+
+    std::ifstream model_file(model_path.str());
+    nlohmann::json model_json;
+    if (!model_file.is_open())
+    {
+      log_error(
+        "Python frontend: missing operational-model AST '{}'. "
+        "This usually means parser.py exited before generating it; "
+        "check the parser output above for the underlying error.",
+        model_path.str());
+      exit(1);
+    }
+    try
+    {
+      model_file >> model_json;
+    }
+    catch (const nlohmann::json::exception &e)
+    {
+      log_error(
+        "Python frontend: failed to parse operational-model AST "
+        "'{}': {}.",
+        model_path.str(),
+        e.what());
+      exit(1);
+    }
+    model_file.close();
+
+    bool imported = false;
+    size_t pos = file.rfind("/");
+    if (pos != std::string::npos)
+    {
+      std::string filename = file.substr(pos + 1);
+      if (imported_modules.find(filename) != imported_modules.end())
+      {
+        current_python_file = imported_modules[filename];
+        imported = true;
+      }
+    }
+    // A model's symbols must not depend on the user's filename: they are
+    // identical on every run, which is what lets them be precompiled.
+    if (!imported)
+      current_python_file = "/esbmc-vfs/python/models/" + file + ".py";
+    model_namespaces_.push_back(current_python_file);
+
+    exprt model_code =
+      with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
+
+    convert_expression_to_code(model_code);
+
+    // Accumulate model code
+    models_block.copy_to_operands(model_code);
+    current_python_file = main_python_file;
+  }
+  is_loading_models = false;
+  }
+}
+
 void python_converter::convert()
 {
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
-  // Create built-in symbols for main module (__name__ = "__main__")
-  create_builtin_symbols();
+  const bool building_library =
+    config.options.get_bool_option("building-python-library");
+
+  if (!building_library)
+    create_builtin_symbols();
 
   // Block to accumulate model library code
   code_blockt models_block;
 
-  if (!config.options.get_bool_option("no-library"))
-  {
-    // Load operational models
-    const std::string &ast_output_dir =
-      (*ast_json)["ast_output_dir"].get<std::string>();
-    std::list<std::string> model_files = {
-      "builtins",
-      "range",
-      "int",
-      "float",
-      "consensus",
-      "random",
-      "exceptions",
-      "datetime",
-      "nondet"};
-    std::list<std::string> model_folders = {"os", "numpy"};
+  const bool models_precompiled =
+    !building_library &&
+    symbol_table_.find_symbol("python_models_init") != nullptr;
 
-    for (const auto &folder : model_folders)
-    {
-      append_models_from_directory(model_files, ast_output_dir + "/" + folder);
-    }
+  if (models_precompiled)
+    collect_model_namespaces();
 
-    is_loading_models = true;
-
-    for (const auto &file : model_files)
-    {
-      std::stringstream model_path;
-      model_path << ast_output_dir << "/" << file << ".json";
-
-      std::ifstream model_file(model_path.str());
-      nlohmann::json model_json;
-      if (!model_file.is_open())
-      {
-        // parser.py exited before producing this model — the user's
-        // program almost certainly hit an unresolvable import that
-        // aborted the AST generation pipeline (issue #2012). Surface
-        // a structured error instead of letting the downstream
-        // ``>> model_json`` throw an uncaught nlohmann parse_error.
-        log_error(
-          "Python frontend: missing operational-model AST '{}'. "
-          "This usually means parser.py exited before generating it; "
-          "check the parser output above for the underlying error.",
-          model_path.str());
-        exit(1);
-      }
-      try
-      {
-        model_file >> model_json;
-      }
-      catch (const nlohmann::json::exception &e)
-      {
-        log_error(
-          "Python frontend: failed to parse operational-model AST "
-          "'{}': {}.",
-          model_path.str(),
-          e.what());
-        exit(1);
-      }
-      model_file.close();
-
-      size_t pos = file.rfind("/");
-      if (pos != std::string::npos)
-      {
-        std::string filename = file.substr(pos + 1);
-        if (imported_modules.find(filename) != imported_modules.end())
-          current_python_file = imported_modules[filename];
-      }
-
-      exprt model_code =
-        with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
-
-      convert_expression_to_code(model_code);
-
-      // Accumulate model code
-      models_block.copy_to_operands(model_code);
-      current_python_file = main_python_file;
-    }
-    is_loading_models = false;
-  }
+  build_models_block(models_block, models_precompiled);
 
   // Create a block to hold intrinsic assignments and load C intrinsics
   code_blockt intrinsic_block;
@@ -956,9 +1005,13 @@ void python_converter::convert()
     code_typet init_type;
     init_type.return_type() = empty_typet();
 
+    // The blob's initialisation and a program's own must coexist:
+    // __ESBMC_main calls python_models_init then python_init.
+    const char *const init_name =
+      building_library ? "python_models_init" : "python_init";
     symbolt init_symbol;
-    init_symbol.id = "python_init";
-    init_symbol.name = "python_init";
+    init_symbol.id = init_name;
+    init_symbol.name = init_name;
     init_symbol.set_type(init_type);
     init_symbol.lvalue = true;
     init_symbol.is_extern = false;
@@ -984,6 +1037,9 @@ void python_converter::convert()
       throw std::runtime_error("The python_init function is already defined");
     }
   }
+
+  if (building_library)
+    return;
 
   // Create python_user_main function containing only user code
   code_typet user_main_type;
@@ -1031,6 +1087,15 @@ void python_converter::convert()
   });
 
   // 2. Call python_init for initialization
+  // The precompiled models, when add_cpython_library merged them.
+  if (
+    const symbolt *models_sym = symbol_table_.find_symbol("python_models_init"))
+  {
+    code_function_callt models_call;
+    models_call.function() = symbol_expr(*models_sym);
+    main_body.copy_to_operands(models_call);
+  }
+
   if (!init_code.operands().empty())
   {
     const symbolt *init_sym = symbol_table_.find_symbol("python_init");

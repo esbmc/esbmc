@@ -885,6 +885,9 @@ private:
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
+  symbolt *find_model_symbol(const std::string &sym_id) const;
+  void collect_model_namespaces();
+  void build_models_block(code_blockt &models_block, bool models_precompiled);
 
   void copy_instance_attributes(
     const std::string &src_obj_id,
@@ -1918,6 +1921,8 @@ private:
   };
   std::unordered_map<std::string, numpy_reshape_view_infot>
     numpy_reshape_view_info_;
+  /// Namespace of each operational model loaded this run, in load order.
+  std::vector<std::string> model_namespaces_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;

@@ -90,3 +90,47 @@ target_include_directories(pythonfrontend
 )
 
 target_link_libraries(pythonfrontend PUBLIC nlohmann_json::nlohmann_json PRIVATE fmt::fmt bigint)
+
+add_executable(python2goto python2goto.cpp)
+target_include_directories(python2goto
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${CMAKE_BINARY_DIR}/src
+    PRIVATE ${Boost_INCLUDE_DIRS}
+)
+target_sources(python2goto PRIVATE python_blank_library.cpp)
+target_link_libraries(python2goto
+  pythonfrontend clangcfrontend clangcppfrontend symex langapi
+  solvers clibs gotoalgorithms cache goto2c
+  filesystem ${Boost_LIBRARIES} ${OS_INCLUDE_LIBS}
+  nlohmann_json::nlohmann_json)
+
+set(pysrc_goto ${CMAKE_CURRENT_BINARY_DIR}/pysrc64.goto)
+set(pysrc_c    ${CMAKE_CURRENT_BINARY_DIR}/pysrc64.c)
+file(GLOB_RECURSE python_model_files CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/models/*.py")
+
+set(pysrc_entry ${CMAKE_CURRENT_BINARY_DIR}/library_entry.py)
+file(WRITE ${pysrc_entry}
+     "# Entry module for python2goto: the models are what gets compiled.\n")
+
+add_custom_command(OUTPUT ${pysrc_goto}
+  COMMAND python2goto library_entry.py --output ${pysrc_goto}
+  DEPENDS python2goto ${python_model_files} ${pysrc_entry}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  COMMENT "Generating Python operational models ${pysrc_goto}"
+  VERBATIM)
+
+add_custom_command(OUTPUT ${pysrc_c}
+  COMMAND ${Python_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+          -o ${pysrc_c} ${pysrc_goto}
+  DEPENDS ${pysrc_goto} ${CMAKE_SOURCE_DIR}/scripts/flail.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  COMMENT "Converting ${pysrc_goto} to data"
+  VERBATIM)
+
+add_library(pysrclib ${pysrc_c} python_library.cpp)
+target_include_directories(pysrclib
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+    PUBLIC ${CMAKE_SOURCE_DIR}/src
+    PRIVATE ${Boost_INCLUDE_DIRS})
+target_link_libraries(pysrclib PRIVATE fmt::fmt)

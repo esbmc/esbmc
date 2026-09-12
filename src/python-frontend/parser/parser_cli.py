@@ -102,15 +102,19 @@ def _read_ast_from_file(filename: str) -> ast.Module:
         return ast.parse(source.read())
 
 
+_FLAGS = ("--deadlock-check", "--typecheck")
+
+
 def check_usage() -> None:
     """Validate CLI args and fail with usage message when invalid."""
-    if len(sys.argv) < 3 or len(sys.argv) > 4:
+    if len(sys.argv) < 3:
         print("Usage: python parser/__main__.py <file path> <output directory> "
-              "[--deadlock-check]")
+              f"[{'] ['.join(_FLAGS)}]")
         sys.exit(2)
-    if len(sys.argv) == 4 and sys.argv[3] != "--deadlock-check":
-        print(f"Unknown flag: {sys.argv[3]}")
-        sys.exit(2)
+    for flag in sys.argv[3:]:
+        if flag not in _FLAGS:
+            print(f"Unknown flag: {flag}")
+            sys.exit(2)
 
 
 def check_dependencies() -> None:
@@ -157,19 +161,22 @@ def _emit_model_jsons(
 def main(*, deps: CliDeps) -> int | None:
     """Run parser CLI orchestration with explicit dependency injection."""
     check_usage()
-    check_dependencies()
 
     import_resolver = deps.import_resolver
     import_resolver.reset_state()
 
     filename = sys.argv[1]
     output_dir = sys.argv[2]
-    deadlock_check = len(sys.argv) == 4 and sys.argv[3] == "--deadlock-check"
+    deadlock_check = "--deadlock-check" in sys.argv[3:]
 
-    returncode, mypy_output = deps.run_mypy_strict(filename)
-    if returncode != 0:
-        print("\033[93m\nType checking warning:\033[0m")
-        print(mypy_output)
+    # Opt-in: the report is advisory -- it never reaches the AST or the
+    # verdict -- and a cold mypy cache costs about half the run.
+    if "--typecheck" in sys.argv[3:]:
+        check_dependencies()
+        returncode, mypy_output = deps.run_mypy_strict(filename)
+        if returncode != 0:
+            print("\033[93m\nType checking warning:\033[0m")
+            print(mypy_output)
 
     script_dir = os.path.dirname(os.path.abspath(filename))
     if script_dir and script_dir not in sys.path:
