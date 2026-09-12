@@ -700,6 +700,15 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  // Records a numpy array parameter's pre-decay shape (when 2-D+) and its
+  // tracked-array-symbol status once its arg_id is known. Split out of
+  // register_function_argument to keep that function's own decision count
+  // down -- both conditions live in here instead of as two more `if`s there.
+  void track_numpy_param(
+    const std::string &arg_id,
+    const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+    bool numpy_array_param);
+
   size_t register_function_argument(
     const nlohmann::json &element,
     code_typet &type,

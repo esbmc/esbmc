@@ -1007,6 +1007,27 @@ static bool param_is_list_like_in_body(
   return false;
 }
 
+// The pre-decay shape of a 2-D+ numpy array parameter, or nullopt for a
+// non-numpy or rank <2 one. register_function_argument's own row-pointer
+// decay (further down) keeps only the row shape, so this is captured ahead
+// of that decay and recorded into numpy_param_shapes_ once the parameter's
+// id is known. Split out to keep register_function_argument's own decision
+// count down.
+static std::optional<std::vector<std::size_t>> numpy_param_full_shape_of(
+  bool numpy_array_param,
+  const typet &arg_type,
+  const type_handler &type_handler)
+{
+  if (!numpy_array_param || !arg_type.is_array())
+    return std::nullopt;
+
+  std::vector<int> dims = type_handler.get_array_type_shape(arg_type);
+  if (dims.size() < 2)
+    return std::nullopt;
+
+  return std::vector<std::size_t>(dims.begin(), dims.end());
+}
+
 // True for a `np.array([...])` call node with a literal list argument whose
 // shape `type_handler::get_typet` can already resolve.
 static bool is_numpy_array_literal_call(const nlohmann::json &node)
@@ -1443,6 +1464,27 @@ bool python_converter::try_infer_numpy_param_type(
   return false;
 }
 
+void python_converter::track_numpy_param(
+  const std::string &arg_id,
+  const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+  bool numpy_array_param)
+{
+  if (numpy_param_full_shape)
+    numpy_param_shapes_[arg_id] = *numpy_param_full_shape;
+
+  // classify_numpy_method_call()'s dispatch_rewrite_methods (sort/transpose/
+  // sum/.../.T, .../) only rewrites `a.<method>(...)` into the free-function
+  // np.<method>(a, ...) shape for a receiver method_base_is_tracked_numpy_array
+  // already recognises -- populated elsewhere for a local `np.array(...)`
+  // variable's own symbol id, never for a parameter. Without this, a numpy
+  // array parameter's method call falls through to the generic function-call
+  // dispatch instead, which resolves "transpose" (etc.) as an unrelated
+  // same-named symbol and raises a spurious "missing required positional
+  // argument" TypeError.
+  if (numpy_array_param)
+    numpy_array_symbols_.insert(arg_id);
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -1510,19 +1552,8 @@ size_t python_converter::register_function_argument(
   // since a bare-variable subscript of it (e.g. `s[i]` in a loop) is a
   // completely unrelated, extremely common pattern that must not be
   // mistaken for numpy mask indexing.
-  // Captured before decay erases the outer dimension(s): a 2-D+ numpy
-  // parameter's row-pointer decay below keeps only the row shape, so
-  // numpy_param_shapes_ (recorded once arg_id is known, further down) is the
-  // only place `.shape`/`.ndim`/`.size` and the array-consuming numpy calls
-  // can recover the full logical shape afterwards.
-  std::optional<std::vector<std::size_t>> numpy_param_full_shape;
-  if (numpy_array_param && arg_type.is_array())
-  {
-    std::vector<int> dims = type_handler_.get_array_type_shape(arg_type);
-    if (dims.size() >= 2)
-      numpy_param_full_shape =
-        std::vector<std::size_t>(dims.begin(), dims.end());
-  }
+  std::optional<std::vector<std::size_t>> numpy_param_full_shape =
+    numpy_param_full_shape_of(numpy_array_param, arg_type, type_handler_);
 
   if (arg_type.is_array())
   {
@@ -1563,20 +1594,7 @@ size_t python_converter::register_function_argument(
   arg.identifier(arg_id);
   arg.location() = get_location_from_decl(element);
 
-  if (numpy_param_full_shape)
-    numpy_param_shapes_[arg_id] = *numpy_param_full_shape;
-
-  // classify_numpy_method_call()'s dispatch_rewrite_methods (sort/transpose/
-  // sum/.../.T, .../) only rewrites `a.<method>(...)` into the free-function
-  // np.<method>(a, ...) shape for a receiver method_base_is_tracked_numpy_array
-  // already recognises -- populated elsewhere for a local `np.array(...)`
-  // variable's own symbol id, never for a parameter. Without this, a numpy
-  // array parameter's method call falls through to the generic function-call
-  // dispatch instead, which resolves "transpose" (etc.) as an unrelated
-  // same-named symbol and raises a spurious "missing required positional
-  // argument" TypeError.
-  if (numpy_array_param)
-    numpy_array_symbols_.insert(arg_id);
+  track_numpy_param(arg_id, numpy_param_full_shape, numpy_array_param);
 
   type.arguments().push_back(arg);
   size_t inserted_index = type.arguments().size() - 1;
