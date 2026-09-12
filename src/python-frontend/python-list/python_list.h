@@ -623,6 +623,13 @@ private:
   /// expects a reference. Box it so the two agree (#7685).
   exprt as_object_reference(const nlohmann::json &op, const exprt &elem);
 
+  list_elem_info
+  get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
+
+  // The type_id a tagged scalar carries when it holds a float, or 0 when the
+  // caller opts out of the float path (dict values compare via void*).
+  exprt tagged_float_type_id(bool enable_float_path) const;
+
   symbolt &create_list();
 
   exprt
