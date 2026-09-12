@@ -3392,7 +3392,8 @@ void python_list::normalize_index_access_position(
     // char* indexing block below.
     else if (
       !array.type().is_pointer() &&
-      (list_node.is_null() || list_node["value"]["_type"] != "List"))
+      (list_node.is_null() || !list_node.contains("value") ||
+       list_node["value"].value("_type", "") != "List"))
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;
