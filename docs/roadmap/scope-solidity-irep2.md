@@ -1255,3 +1255,36 @@ What is measured: all types four members, the AST fewer, the base a symbol with
 a ten-member contract struct. What is not: which earlier expression created the
 stale sort. That is the next probe — the sort's creation site, not another type
 dump.
+### 7.29 The sort is a wrapper, so a three-member type really was converted
+
+Where the stale sort comes from, narrowed by reading rather than probing.
+`convert_sort` caches on the type itself:
+
+```cpp
+typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
+```
+
+and the symbolic flattener's `mk_struct_sort` does not declare or name anything
+— it wraps the type:
+
+```cpp
+return new smt_sort(SMT_SORT_STRUCT, type);
+```
+
+So a struct sort *carries* the type2tc it was built from, and
+`get_tuple_type()` returns exactly that. §7.16 read three members out of it.
+Since padded and unpadded `Book` are different `type2tc` values, they are
+different cache keys — nothing merges them.
+
+Therefore a **three-member `Book` was genuinely converted** at some point in
+the same run, and the AST that reaches the failing projection carries the sort
+made from it. That is consistent with §7.28 and rules out the tidier
+explanations: not a name-keyed declaration reused across two shapes, and not a
+cache collision.
+
+What remains is to find the expression that carried it. The probe for that logs
+every struct sort conversion with its member count and struct name, and reports
+the first three-member `Book` — a creation-site question, which is why the type
+dumps of §7.22 and §7.28 could not answer it. `adjust_struct`'s comment already
+names the shape to expect: an inline copy the converter recorded before
+`add_padding` ran.
