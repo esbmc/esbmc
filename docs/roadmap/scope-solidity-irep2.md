@@ -536,3 +536,36 @@ that pins it, the way the Phase 7 reach probe already did. And the 63 is the
 `interface_7`, `struct_1`, `struct_2`. So is the 2-row `cannot remove side
 effect (assign…)` bucket. Neither has been reduced yet; both are named here so
 the next pass starts from a list rather than a sweep.
+
+### 7.11 The 3 SIGSEGVs are one site, and it is in the solver (2026-09-12)
+
+They do not reproduce from a reduced struct: a contract with a one-field
+struct, its literal constructor, and a member read all convert and verify under
+the flag. What the three rows share is not the construct but the *strategy* —
+`--k-induction` on `interface_7` and `struct_1`, `--incremental-bmc` on
+`struct_2` — and they crash only when symex actually runs:
+`--goto-functions-only` on `struct_1` converts cleanly, and legacy with
+`--k-induction` is fine.
+
+`gdb -batch -ex run -ex bt` on two of the three gives the same top frame:
+
+```
+#0 smt_solver_baset::convert_assign   src/solvers/smt/smt_solver.cpp:366
+#1 smt_convt::convert_assign          src/solvers/smt/smt_conv.cpp:80
+#2 symex_target_equationt             src/goto-symex/equation/symex_target_equation.cpp:139
+```
+
+Line 366 is `side2->assign(this, side1)`, so an SSA assignment reaches the
+encoder with sides it cannot assign across — the shape a sort or structure
+mismatch takes, and the same shape as the mixed-width `ieee_fma` the C work
+declined in §138.2 of the clang-c doc rather than hand to the solver.
+
+So this bucket is **not** a missing adjust arm producing a nil: the body
+converts. It is a type the pass leaves inconsistent, surfacing only once an
+equation is built. Naming the mismatched assignment needs the two sides printed
+at that frame, which `-O2` will not give up — the same wall as §7.5 — so it
+wants the `fprintf` treatment next, not another A/B.
+
+Not yet done, and stated rather than guessed: which assignment, and whether the
+inconsistency is the same one §7.6 repaired for calls, applied to a node the arm
+does not reach.
