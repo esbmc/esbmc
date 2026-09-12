@@ -1215,3 +1215,43 @@ deliberate choice with a note in the PR beats a quiet one — and porting the
 callers avoids the question entirely, which is the argument for taking
 `solidity_convert_literals.cpp` and `solidity_convert_expr.cpp` together rather
 than the smallest file alone.
+### 7.28 §7.22 was wrong: every type agrees, the *sort* is stale (2026-09-12)
+
+§7.22 said a grandparent's `Book` component was unpadded while the child
+member's own type was padded. Measured, that is false. A probe walking the
+member chain from the failing projection to its base, printing each link and
+each base component:
+
+```
+XCHAIN d=0 kind=58 members=4        (the inner member, this->book)
+XCHAIN base d=1 kind=5 members=10   (the base: a symbol, the contract struct)
+XCHAIN   base component 0 (Book) is a struct with 4 members
+XCHAIN   base component 1 (book) is a struct with 4 members
+```
+
+Kind 58 is `member`, kind 5 is `symbol`. So the base's `book` component **is**
+the padded four-member `Book`, and so is the member expression's own type. At
+the crash, every *type* in the chain agrees at four members — and `project(3)`
+still returns garbage, so the AST's tuple has fewer.
+
+The stale thing is therefore the **sort**, not a type. The tuple sort the AST
+carries was not built from the types above; it is a sort created earlier —
+while some expression still carried an inline pre-padding `Book`, the case
+`adjust_struct`'s comment describes — and reused afterwards for the padded
+type.
+
+Three consequences:
+
+- §7.22's diagnosis is retracted. Type-versus-type was the wrong frame; it is
+  type-versus-sort.
+- It explains why `pad_type_tree` (§7.18) changed nothing, and confirms that revert
+  was right rather than lucky: the types were already correct, so padding them harder
+  could not help.
+- The repair moves out of the padding question entirely. Either no expression may
+  carry an unpadded inline struct type — a seam/pass normalisation, §2.1's question
+  again — or the sort cache must distinguish the two, which is a solver change.
+
+What is measured: all types four members, the AST fewer, the base a symbol with
+a ten-member contract struct. What is not: which earlier expression created the
+stale sort. That is the next probe — the sort's creation site, not another type
+dump.
