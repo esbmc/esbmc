@@ -6583,14 +6583,23 @@ static void parse_argsort_axis_keyword(
 exprt numpy_call_expr::handle_argsort_call()
 {
   const std::string &function = function_id_.get_function();
-  if (call_["args"].size() != 1)
+  // axis is positional-or-keyword in numpy.argsort(), and the method-call
+  // rewrite prepends the receiver for a.argsort(0), producing the same
+  // 2-positional-arg shape as np.argsort(a, 0); accept both.
+  if (call_["args"].empty() || call_["args"].size() > 2)
     throw std::runtime_error(
-      "TypeError: numpy.argsort() expects 1 positional argument");
+      "TypeError: numpy.argsort() expects 1 or 2 positional arguments");
+
+  const nlohmann::json *axis_kw = find_keyword_arg("axis");
+  if (call_["args"].size() == 2 && axis_kw != nullptr)
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() got multiple values for argument 'axis'");
 
   bool argsort_flatten = false;
   long long argsort_axis = -1;
-  parse_argsort_axis_keyword(
-    find_keyword_arg("axis"), argsort_flatten, argsort_axis);
+  const nlohmann::json *axis_node =
+    call_["args"].size() == 2 ? &call_["args"][1] : axis_kw;
+  parse_argsort_axis_keyword(axis_node, argsort_flatten, argsort_axis);
 
   if (numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(
