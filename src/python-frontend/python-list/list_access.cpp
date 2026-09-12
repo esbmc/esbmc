@@ -3338,6 +3338,23 @@ std::optional<exprt> python_list::resolve_nested_list_element(
   return std::nullopt;
 }
 
+/// The list's recorded element type when it is a tagged scalar and the index is
+/// not constant, else \p fallback unchanged. Kept out of handle_index_access so
+/// the dispatch adds no decision point to it.
+typet python_list::tagged_elem_type_or(
+  const exprt &array,
+  bool constant_index,
+  const typet &fallback) const
+{
+  if (constant_index || !array.is_symbol())
+    return fallback;
+  const typet uniform =
+    elem_types().uniform_element_type(array.identifier().as_string());
+  return converter_.get_type_handler().is_tagged_scalar_type(uniform)
+           ? uniform
+           : fallback;
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -3943,6 +3960,13 @@ exprt python_list::handle_index_access(
       elem_types().has_mixed_numeric(array.identifier().as_string());
     if (mixed_numeric)
       elem_type = double_type();
+
+    // The constant-index block above is what reads the recorded element type;
+    // a variable index skips it, so a list of tagged scalars fell through to
+    // the generic `*(long *)item->value` unwrap and read 8 bytes out of a
+    // payload that is 2 for "a". Narrowed to the tagged case: every other
+    // element kind keeps whatever the code above resolved.
+    elem_type = tagged_elem_type_or(array, constant_index, elem_type);
 
     // A float-typed element read must dispatch on the stored type_id even for a
     // constant index into a statically "pure-float" list: a list[float]
