@@ -4208,6 +4208,14 @@ exprt python_list::extract_pyobject_value(
     return migrate_expr_back(if2tc(et2, is_float, fv2, iaf2));
   }
 
+  // A tagged-scalar element (a variable that was itself dynamically typed
+  // before being stored) already IS a PyObject header with its own
+  // value/type_id/size -- unlike every other element kind, item->value does
+  // not point at a nested payload to dereference. Read the item directly
+  // instead of treating .value as a pointer to unwrap.
+  if (converter_.get_type_handler().is_tagged_scalar_type(elem_type))
+    return build_dereference(pyobject_expr, elem_type);
+
   // Extract value from PyObject: (*pyobject_expr).value
   exprt obj_value =
     build_deref_member(pyobject_expr, "value", pointer_typet(empty_typet()));
