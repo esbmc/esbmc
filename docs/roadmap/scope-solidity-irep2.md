@@ -170,8 +170,8 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-S.3, the converter's own 1 685 sites. §7.22's padding row is the one open defect in
-the adjust and seam half; §7.23 has the corpus figures.
+S.3, the converter's own 1 685 sites. §7.22's padding row is the one open
+defect in the adjust and seam half; §7.23 has the corpus figures.
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -1031,3 +1031,39 @@ What is *not* done, and should not be read as done: S.3, the converter's 1 685
 construction sites (§1.2), which is the phase's actual bulk. Everything above
 is the adjust and seam half — the half Phase 7 shares — and it is what made the
 converter's half measurable, not a substitute for it.
+### 7.24 S.3 opened: the converter's output has no representational wall
+
+Before ranking 1 685 sites, the prior question: does what `solidity_convertert`
+builds fit in IREP2 at all? An IR that cannot hold a construct would gate the
+whole phase behind a representation change, as W3 did for earlier ones.
+
+The migrate census answers it when run **without** the hop-off flag — that
+configuration prices the converter's own output rather than the round trip,
+which is the distinction §7.19 had to learn the hard way. Stride-8 sample:
+
+```
+--- converter census, stride 8: 65 rows, 65 clean, 0 with failures ---
+```
+
+Every row migrates: `s.get_type2()` and `s.get_value2()` succeed on every
+symbol the corpus produces. So **S.3 has no W3-style wall.** Its risk is volume
+and behaviour preservation, not representation, and the porting order can be
+chosen on cost rather than dictated by a blocker.
+
+Two limits on that claim, stated rather than left implied. It is a stride-8
+sample, not the whole corpus; and it measures only what the corpus exercises —
+a converter path no test reaches is unmeasured either way, which is §4's own
+rule about a census showing the thing under test executed.
+
+**Pathfinder.** `solidity_convert_literals.cpp` is 159 lines with 15 sites
+(§1.2): the smallest self-contained target, and the right place to establish
+the pattern before `solidity_convert_call.cpp` (404) and
+`solidity_convert_expr.cpp` (250), which are 39 % of the surface between them.
+Phase 5 used jimple the same way — smallest surface first, as the kit's
+pathfinder.
+
+What S.3 inherits from §7's half: a corpus that agrees on 441 of 507 rows with
+nothing answering differently, so a converter change that breaks something will
+show as a *new* divergence against a known baseline rather than disappearing
+into noise. That baseline is the deliverable of this section, more than any
+single fix in it.
