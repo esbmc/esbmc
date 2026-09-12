@@ -174,6 +174,44 @@ static bool incompatible_flags(const cmdlinet &cmdline)
         return true;
       }
 
+  // Combined mode owns the whole pipeline: process_goto_program routes
+  // --loop-invariant into goto_loop_invariant_combined, which never reaches
+  // the synthesis pass, so the flag would be a silent no-op. Combined mode
+  // also ASSUMEs the invariant at the end of the body, and assuming a guess
+  // is exactly what synthesis must never do (a wrong candidate has to fail a
+  // claim, not license one). Reject rather than wire the two together.
+  if (
+    cmdline.isset("synthesise-loop-invariants") &&
+    cmdline.isset("loop-invariant"))
+  {
+    log_error(
+      "--synthesise-loop-invariants cannot be combined with --loop-invariant; "
+      "use --loop-invariant-check, which it implies");
+    return true;
+  }
+
+  // --termination havocs every loop head k-induction-style (goto_termination),
+  // and the standalone schema has already rewritten those heads: goto_loop_
+  // invariant uses insert_swap, which leaves the establishment ASSERT in the
+  // head's slot, and havoc_slot then aborts on `loop_head->is_goto()`
+  // (goto_k_induction.cpp). Composing the two would be meaningless even if it
+  // did not abort -- a loop the schema has cut no longer has the iteration
+  // behaviour --termination asks about.
+  //
+  // Combined mode is exempt, and so is --validate-correctness-witness, which
+  // routes to it: goto_loop_invariant_combined splices its verification branch
+  // *before* the head with destructive_insert, so the head is still the guard
+  // GOTO when goto_termination reaches it. Measured on an unbounded loop with
+  // a witness-injected loop invariant, where the ranking check does not
+  // short-circuit: the run completes.
+  for (const char *mode :
+       {"synthesise-loop-invariants", "loop-invariant-check"})
+    if (cmdline.isset(mode) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", mode);
+      return true;
+    }
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).

@@ -507,6 +507,13 @@ private:
   // structs.
   bool is_user_class_struct_type(const typet &t);
 
+  // True iff `t` is a user class that the object model migrates to the heap and
+  // stores in a container as a `Class*`. ESBMC's own model classes (reserved
+  // `__ESBMC_` prefix, e.g. the dataclasses `__ESBMC_DataclassField`) are built
+  // by hand-written models that keep the struct inline, so the push and read
+  // paths must both leave them by value.
+  bool is_heap_migrated_class_type(const typet &t);
+
   // True iff `t` is a pointer to a user-defined class struct (a migrated
   // `Class*` instance). Used to gate the object-model migration's
   // None-keeps-Class* and dunder-dispatch-through-pointer paths to real
@@ -964,6 +971,10 @@ private:
   /// should fall through to the ordinary assignment path.
   bool
   try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  /// Whether a module-scope assignment must probe its RHS type before fixing
+  /// the target's type.
+  bool module_scope_rhs_needs_type_probe(const nlohmann::json &value);
 
   /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
   /// declares it in `target_block` when it is a local, and records the

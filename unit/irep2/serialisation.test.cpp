@@ -94,6 +94,13 @@ TEST_CASE("type_to_string names every enum value (R7)", "[core][irep2]")
                 sak::temporary_object, sak::gcc_conditional_expression,
                 sak::cpp_delete,       sak::cpp_delete_array})
     REQUIRE(!type_to_string(v, 0).empty());
+
+  // Exact strings, not just non-empty: these mirror the attributes
+  // migrate_type_back re-emits, so a renamed arm is a contract change.
+  using prk = pointer_ref_kindt;
+  REQUIRE(type_to_string(prk::NONE, 0) == "none");
+  REQUIRE(type_to_string(prk::LVALUE, 0) == "lvalue_reference");
+  REQUIRE(type_to_string(prk::RVALUE, 0) == "rvalue_reference");
 }
 
 TEST_CASE("every kind has a non-empty pretty name (R7)", "[core][irep2]")

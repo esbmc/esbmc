@@ -377,14 +377,10 @@ private:
    *         under which the dereference occurs; violations are only triggered
    *         when the guard holds.
    */
-  /// Whether the object's base is unconstrained by the address-space model.
-  bool base_declines_alignment(const expr2tc &object) const;
-
   void check_pointer_alignment(
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
-    const expr2tc &object,
     const guard2tc &guard);
 
   /** Construct an expression representing the pointer's offset, in bits, from
@@ -398,10 +394,6 @@ private:
    *          bits, suitable for use in alignment checks.
    */
   expr2tc create_pointer_offset_bits(const expr2tc &deref_expr);
-
-  /// The pointer's address in bits, including the object's base, so the
-  /// alignment check does not assume an aligned base (#7707).
-  expr2tc create_pointer_address_bits(const expr2tc &deref_expr);
 
   /** Check whether an (aggregate) type is compatible with the desired
    *  dereference type. This looks at various things, such as whether the given
@@ -506,10 +498,18 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** \p object is the object being accessed, or nil where the caller does not
+   *  know it yet -- then the base is assumed to carry the access width, as it
+   *  does for everything but a type that declines alignment. */
   void check_alignment(
     BigInt minwidth,
     const expr2tc &offset,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &object);
+  /** The alignment the address-space model guarantees the base of \p object's
+   *  object, i.e. the assumption check_alignment() is entitled to make about
+   *  everything below the offset it checks. */
+  BigInt object_base_alignment(const expr2tc &object) const;
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);

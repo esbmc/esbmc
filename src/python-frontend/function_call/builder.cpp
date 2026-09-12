@@ -554,6 +554,17 @@ symbol_id function_call_builder::build_function_id() const
     // Map Python loop invariant name to ESBMC internal name
     if (func_name == kLoopInvariant)
       func_name = kEsbmcLoopInvariant;
+
+    // `Alias = bytes` resolves fine as an annotation but not as a call
+    // target; without this it crashes calling the alias as a function.
+    if (
+      !type_utils::is_builtin_type(func_name) &&
+      !json_utils::is_class(func_name, ast))
+    {
+      const std::string resolved = th.resolve_builtin_alias(func_name);
+      if (!resolved.empty())
+        func_name = resolved;
+    }
   }
   else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {

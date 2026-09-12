@@ -331,7 +331,7 @@ exprt python_list::as_object_reference(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  if (!converter_.is_user_class_struct_type(elem.type()))
+  if (!converter_.is_heap_migrated_class_type(elem.type()))
     return elem;
 
   return converter_.box_value_on_heap(

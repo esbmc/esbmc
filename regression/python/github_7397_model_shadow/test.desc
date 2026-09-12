@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: class 'Thread' is defined in both .*threading\.py. and .*main\.py.; ESBMC keys a class symbol by name alone

@@ -73,10 +73,19 @@ std::size_t ext_int_representation_bytes(const typet &type);
  * type's layout. */
 BigInt alignment(const typet &type, const namespacet &ns);
 
-/// Whether a type opts out of alignment entirely: `packed` and `#pragma
-/// pack(n)` both leave members at offsets their own types do not require. The
-/// address-space model leaves such an object's base unconstrained, so an
-/// alignment check on the offset alone does not hold for it (#7707).
-bool declines_alignment(const typet &type, const namespacet &ns);
+/* Whether `v` is a positive power of two, i.e. whether it can serve as an
+ * alignment at all. */
+bool is_power_of_two(const BigInt &v);
+
+/* The base alignment the address-space model guarantees an object of this type
+ * and size (smt_solver_baset::init_pointer_obj): `alignment()`, raised to the
+ * largest power of two the object's size admits unless the type declines
+ * alignment (`packed`, `#pragma pack(n)`). dereferencet::check_alignment()
+ * reads a scalar access as aligned from its offset alone, so it has to consult
+ * the same number rather than assume the access width (#6951, #7707). */
+BigInt object_base_alignment(
+  const typet &type,
+  const expr2tc &size,
+  const namespacet &ns);
 
 #endif

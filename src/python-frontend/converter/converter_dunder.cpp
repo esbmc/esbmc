@@ -223,6 +223,17 @@ bool python_converter::is_user_class_struct_type(const typet &t)
   return !cls.empty() && json_utils::is_class(cls, *ast_json);
 }
 
+bool python_converter::is_heap_migrated_class_type(const typet &t)
+{
+  if (!is_user_class_struct_type(t))
+    return false;
+
+  const std::string tag = t.id() == "symbol"
+                            ? to_symbol_type(t).get_identifier().as_string()
+                            : to_struct_type(t).tag().as_string();
+  return extract_class_name_from_tag(tag).rfind("__ESBMC", 0) != 0;
+}
+
 bool python_converter::is_user_class_pointer(const typet &t)
 {
   return t.is_pointer() && is_user_class_struct_type(t.subtype());
