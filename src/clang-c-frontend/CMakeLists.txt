@@ -6,7 +6,7 @@ add_library(clangcfrontend_stuff clang_c_language.cpp clang_c_convert.cpp
             clang_c_convert_literals.cpp clang_headers.cpp padding.cpp
             clang_c_adjust_polymorphic_functions.cpp nested_func_transform.cpp
             clang_c_lexer.cpp clang_ast_dump.cpp clang_c_adjust_irep2.cpp
-            builtin_names.cpp)
+            builtin_names.cpp clang_c_base_layout.cpp)
 target_include_directories(clangcfrontend_stuff
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
