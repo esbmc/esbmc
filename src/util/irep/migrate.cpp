@@ -10,6 +10,7 @@
 #include <util/message/format.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
+#include <set>
 #include <util/base/prefix.h>
 #include <util/irep/pad_names.h>
 #include <util/expr/string_constant.h>
@@ -4826,4 +4827,36 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   default:
     return migrate_expr_back_rest2(ref);
   }
+}
+
+void migrate_census(const contextt &context)
+{
+  unsigned long symbols = 0, values = 0, failures = 0;
+  // The kind tally is what stops the census being vacuous: a count of symbols
+  // or values is identical on either representation, so swapping get_type2()
+  // for get_type() would migrate nothing and print the same line. A type_id
+  // exists only on the IREP2 side.
+  std::set<unsigned> kinds;
+  context.foreach_operand_in_order(
+    [&symbols, &values, &failures, &kinds](const symbolt &s) {
+      ++symbols;
+      try
+      {
+        kinds.insert(static_cast<unsigned>(s.get_type2()->type_id));
+        if (!is_nil_expr(s.get_value2()))
+          ++values;
+      }
+      catch (const std::string &e)
+      {
+        ++failures;
+        log_error("IREP2 migrate census: {} on symbol {}", e, s.id);
+      }
+    });
+  log_status(
+    "IREP2 migrate census: {} symbols, {} values migrated, {} type kinds, {} "
+    "failures",
+    symbols,
+    values,
+    kinds.size(),
+    failures);
 }

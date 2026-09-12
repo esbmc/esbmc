@@ -17,6 +17,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
+#include <util/irep/migrate.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <c2goto/cprover_library.h>
 #include <util/lang/c_link.h>
@@ -395,6 +396,12 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   if (c_link(
         context, new_context, module)) // also populates language_uit::context
     return true;
+
+  // Same census the C++ frontend takes, over one shared definition: it names
+  // each symbol migration cannot represent and keeps walking
+  // (docs/roadmap/scope-solidity-irep2.md §3, step S.2).
+  if (config.options.get_bool_option("clang-cpp-irep2-migrate-census"))
+    migrate_census(context);
 
   return false;
 }
