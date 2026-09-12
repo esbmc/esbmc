@@ -1288,3 +1288,38 @@ the first three-member `Book` — a creation-site question, which is why the typ
 dumps of §7.22 and §7.28 could not answer it. `adjust_struct`'s comment already
 names the shape to expect: an inline copy the converter recorded before
 `add_padding` ran.
+### 7.30 Two `Book` sorts exist, and both are made after symex
+
+The creation-site log, in order, with the pipeline stages it falls between:
+
+```
+Symex completed in: 0.005s (135 assignments)
+XSORT struct addr_space_type members=2
+XSORT struct pointer_struct members=2
+XSORT struct struct Book members=4      <- padded, created first
+XSORT struct struct Book members=3      <- unpadded, created second
+XSORT struct struct BytesPool members=2
+XSORT struct Base members=10
+ESBMC caught SIGSEGV
+```
+
+Three facts, none of them previously established:
+
+- A three-member `Book` sort really is created, so §7.29's deduction holds: some
+  expression in the equation carries the unpadded type. It is not a cache artefact.
+- Both `Book` sorts are created **after symex**, during SSA conversion — so the
+  unpadded type survives the adjust pass, migration, goto conversion *and* symex
+  before anything notices.
+- The padded one is created first and the unpadded second, and `Base`'s sort is
+  created last, immediately before the crash.
+
+That last ordering is the puzzle the next probe has to resolve. The failing
+projection reads `book` out of `Base`, whose `book` component is four members
+(§7.28) — so projecting it should reach the four-member sort that already
+exists, not the three-member one. Something in that projection is not using the
+component type the tuple was built from.
+
+So the question is no longer "is there a stale sort" but "which expression
+carries the unpadded type, and why does the projection prefer it". The probe
+for that prints the expression kind and struct name at each `convert_ast` of a
+struct-typed node, not the sorts alone.
