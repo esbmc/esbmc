@@ -2,4 +2,4 @@ CORE
 main.cpp
 
 ^VERIFICATION FAILED$
-^  FAILED       \[maybe_throw\.assertion\.[0-9]+\] +line +11 +uncaught exception: my_error$
+^  FAILED       \[maybe_throw\.assertion\.[0-9]+\] +line +11 +uncaught exception: struct my_error$
