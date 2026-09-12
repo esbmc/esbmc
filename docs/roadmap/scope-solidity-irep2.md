@@ -170,8 +170,7 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-S.2, and the two rows §7.8 leaves: `github_6759_02`, and confirming §7.8's link
-on a build of #7726.
+S.2, and confirming §7.8's link on a build of #7726.
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -397,9 +396,11 @@ Same stride-8 sample, same binary discipline, flag off against flag on:
 
 | | before | after |
 |---|---:|---:|
-| verdicts agree | 5 | **55** |
-| crash | 51 | **1** |
+| verdicts agree | 5 | **56** |
+| crash | 50 | **0** |
 | neither | 9 | 9 |
+
+Those are the corrected figures; §7.9 says what was wrong with the first set.
 
 **The row has to be in two tables.** `clang_cpp_adjust_irep2` substitutes its
 own arm table rather than adding to the C one (§3.1 of the clang-cpp scope
@@ -413,8 +414,8 @@ discarding a correct diagnosis.
 `function_overload_2_fail`, `import_2`, `inheritance_1`, `inheritance_8`,
 `return_6`, `send_ether_via_creation_1`, `try_catch_1`. They looked like
 timeouts in the sweep (`on=[]`), and they are not: one re-run with a 300 s
-budget exits in 0.6 s with that error. The single remaining crash is
-`github_6759_02`, the row that pins `--no-irep2-native-body`.
+budget exits in 0.6 s with that error. The row first reported as a remaining
+crash, `github_6759_02`, was never one — §7.9.
 
 `regression/esbmc-solidity/irep2_only_call_return_type{,_fail}` pin it,
 generated with `solc --ast-compact-json` so the checked-in `.solast` matches
@@ -478,7 +479,29 @@ list at migrate.cpp:2116 is a red herring, since `cpp_new` is *in* it. The
 one-line `&& expr.op0().is_not_nil()` guard that suggested itself would have
 papered over a defect that already has a correct fix in review.
 
-What is left after this: `github_6759_02`, the single remaining crash, which
-pins `--no-irep2-native-body`; and confirming the link above by running this
-corpus on a build of #7726, which needs that branch built rather than argued
-from the diff.
+What is left after this: confirming the link above by running this corpus on a
+build of #7726, which needs that branch built rather than argued from the diff.
+
+### 7.9 The crash count was wrong, and the instrument was mine (2026-09-12)
+
+`github_6759_02` never crashed. Its `test.desc` runs `--goto-functions-only`,
+and the GOTO dump contains the literal string `uncaught exception` from ESBMC's
+own exception machinery; the sweep classified a row as a crash with an
+unanchored `grep 'SIGSEGV\|uncaught exception'` over the whole output, so the
+dump matched itself. Re-running that row under the flag, with and without
+`--no-irep2-native-body`, produces no crash at all.
+
+So the figures are 50 real crashes before the arm and **0** after, not 51 and
+1, and the same row inflated both ends. The classifier now anchors on the
+diagnostic lines:
+
+```sh
+grep -qE '^ESBMC caught SIGSEGV|^ERROR: uncaught exception'
+```
+
+This is the second time in this section a clean-looking measurement was the
+instrument's fault rather than the subject's — §7.6 was a `--symbol-table-only`
+A/B that renders a typeless call identically to a typed one. Both belong in §4's
+gates: a census must state what it greps for, and a sweep over program *output*
+must anchor its patterns, because a dump quotes the verifier's own diagnostics
+back at it.
