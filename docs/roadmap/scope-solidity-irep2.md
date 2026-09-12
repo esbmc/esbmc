@@ -170,7 +170,8 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-§7.16's padding row. S.2 and the #7726 link are done (§7.19, §7.20).
+S.3, the converter's own 1 685 sites. §7.22's padding row is the one open defect in
+the adjust and seam half; §7.23 has the corpus figures.
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -988,3 +989,45 @@ marked so the next attempt does not repeat them:
 | pad nested type symbols recursively (`pad_type_tree`) | no change; the stale type is on an expression |
 | resolve the member's own source type through the table | cannot work; the AST's sort predates it |
 | retype the base of the member chain | untried, and the only one that reaches the sort |
+### 7.23 The corpus after four fixes, and what is left (2026-09-12)
+
+Full sweep, 531 directories, 507 measured — 8 `KNOWNBUG`, 6 that pin the flag
+themselves (this branch's own tests, skipped by the rule §7.10 added), and the
+rest lacking a source for their flags line to name:
+
+| | earlier (§7.10) | now |
+|---|---:|---:|
+| verdicts agree | 441 | **441** |
+| diverge | 67 | **63** |
+| crash | 3 | 3 |
+| measured | 509 | 507 |
+
+Divergences fall by four: `bitwise_ops_1` and `compound_assign_1` agree, and
+the two artefacts §7.10 found are now excluded rather than miscounted. The
+agreement count is flat because the rows the other two fixes touched moved
+*within* the residue rather than out of it — `op_binary_1` and `op_binary_3`
+each advanced past their first blocker onto §7.8's.
+
+**Nothing answers differently.** Of the 63 divergences, rows where both paths
+reach a verdict and disagree: **zero**. Every residual row declines — loudly,
+with an error — rather than returning a different answer. That is the property
+the migration's gates exist to protect, and it has held through every sweep in
+this section.
+
+The residue is fully owned:
+
+| bucket | rows | owner |
+|---|---:|---|
+| `migrate expr failed` | 63 | #7726, measured closing all 63 (§7.20) |
+| padding disagreement | 3 | §7.22, open — `interface_7`, `struct_1`, `struct_2` |
+
+So with #7726 merged this corpus reaches **504 of 507**, and the only open
+defect is the type normalisation §7.22 describes. Phase 8 opened on a roadmap
+entry that recorded the suite as unmeasurable (§1.1); it now has a measured
+census, the hop-off wired, four mutation-checked fixes, and a residue with
+named owners.
+
+What is *not* done, and should not be read as done: S.3, the converter's 1 685
+construction sites (§1.2), which is the phase's actual bulk. Everything above
+is the adjust and seam half — the half Phase 7 shares — and it is what made the
+converter's half measurable, not a substitute for it.
