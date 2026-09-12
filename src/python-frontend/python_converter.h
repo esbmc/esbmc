@@ -1116,6 +1116,15 @@ private:
 
   bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
 
+  // is_basic_numpy_view_subscript(), excluding `.shape[i]`: that indexes the
+  // plain int tuple `.shape` returns, never the array's own data, so it must
+  // never be tracked as a numpy view/alias (root_name_from_subscript drills
+  // through any Attribute to its base Name, so without this exclusion
+  // `shape_0 = a.shape[0]` would register shape_0 as a view copy of `a`
+  // itself). A wrapper, not a change to is_basic_numpy_view_subscript
+  // itself, to keep that already-large function's own decision count as-is.
+  bool is_tracked_numpy_view_subscript(const nlohmann::json &node) const;
+
   // True for a transpose()/reshape()/ravel()/diagonal() Attribute-call node
   // (module or method form), independent of whether its root array name can
   // be resolved. Shared by is_numpy_view_copy_expr and
