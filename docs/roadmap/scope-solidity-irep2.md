@@ -505,3 +505,34 @@ A/B that renders a typeless call identically to a typed one. Both belong in §4'
 gates: a census must state what it greps for, and a sweep over program *output*
 must anchor its patterns, because a dump quotes the verifier's own diagnostics
 back at it.
+
+### 7.10 The whole corpus, and the residue is three named buckets (2026-09-12)
+
+The stride sample was a stand-in; this is the corpus. 509 rows measured — 525
+directories less 8 `KNOWNBUG` and 8 with no source file for the flags line to
+name — each run twice on one binary:
+
+| bucket | rows |
+|---|---:|
+| verdicts agree | **441** |
+| `migrate expr failed` | 63 |
+| SIGSEGV | 3 |
+| `cannot remove side effect (assign…)` | 2 |
+
+**No row produces a wrong verdict.** Every residual row fails to produce one,
+which is the failure mode to want: the hop-off declines loudly rather than
+answering differently. That is worth stating plainly, because it is the
+property the migration's gates exist to protect, and a 67-row divergence list
+reads much worse than it is until the buckets are named.
+
+Two figures moved while writing this up, both my instrument's fault rather than
+the subject's. 441, not 439: two of the "divergences" were the pair this branch
+itself adds, whose `test.desc` already pins the flag, so the sweep supplied it
+a second time and ESBMC rejected the repeated option. The sweep now skips a row
+that pins it, the way the Phase 7 reach probe already did. And the 63 is the
+§7.8 bucket, still one cause, still #7726's.
+
+**The 3 SIGSEGVs are new work**, and the stride sample missed all three:
+`interface_7`, `struct_1`, `struct_2`. So is the 2-row `cannot remove side
+effect (assign…)` bucket. Neither has been reduced yet; both are named here so
+the next pass starts from a list rather than a sweep.
