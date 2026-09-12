@@ -170,7 +170,7 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-S.2, and confirming §7.8's link on a build of #7726.
+§7.16's padding row. S.2 and the #7726 link are done (§7.19, §7.20).
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -854,3 +854,51 @@ passed each row's source file but dropped its **flags line**, losing
 the fourth harness error in this section, against a comparable number of real
 defects. The standing correction: do not quote a sweep figure without
 re-reading what the sweep passed and what it grepped.
+### 7.20 The #7726 link, tested rather than argued (2026-09-12)
+
+§7.19 refused to claim that all 63 `migrate expr failed` rows shared §7.8's
+cause: the error text is identical everywhere because an empty irept prints as
+nothing, and identical text is not identical cause. So it was tested.
+
+Cherry-picking `d28be5a7e2` conflicts — S.2 touches the same file — and that
+commit also moves the typecast arms and the pre-dispatch forms, none of which
+this question needs. So only the tri-state size selection was hand-applied, on
+a scratch branch, marked in-source as an experiment:
+
+```cpp
+const auto carries_size = [](const irept &i) {
+  return !i.id().empty() && !i.is_nil();
+};
+```
+
+Census over the same 65 rows, before and after:
+
+| failures reported | before | with the guard |
+|---|---:|---:|
+| 1 | 58 | 0 |
+| 2 | 3 | 0 |
+| 3 | 1 | 0 |
+| 0 | 1 | **63** |
+| no census line | 2 | 2 |
+
+Every row with a migrate failure clears, across both symbol shapes — 29
+constructors and 33 methods — so the bucket really is one cause, and #7726
+closes all of it. The generalisation held; the point is that it was checked
+instead of assumed.
+
+A verdict sweep with the guard applied reports **64 agree, 0 diverge, 1 crash**
+over its sample, the crash being `struct_2` from §7.16. Read that against the
+56/9/0 of §7.9 with care: the two stride samples do not have identical
+membership, because the skip lists differ between the two versions of the sweep
+(one skipped no `KNOWNBUG` row, the other one). The robust statement is that
+divergences in the sample fall to zero and the only residual is the padding
+crash.
+
+This is #7726's fix, not work owed here. The guard stays on the scratch branch;
+what is owed is a note on that PR that this corpus exercises it across 63 rows.
+
+One measurement detail worth stating, since it makes two numbers non-comparable
+if left out: `enum_2` cannot answer at all without `--goto-functions-only` —
+the full run exceeds 200 s — so the census and the verdict sweep measure that
+row at different depths. Fine for counting migrate failures, which precede
+symex; not fine to quote side by side unremarked.
