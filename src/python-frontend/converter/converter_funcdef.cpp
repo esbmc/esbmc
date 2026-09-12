@@ -1046,33 +1046,80 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
 }
 
-// `np.array(...)` returned directly (and only) by a user function:
+// Recursively collects every `Return` statement reachable in `body` without
+// crossing into a nested function scope (FunctionDef/AsyncFunctionDef/
+// Lambda) -- a return inside an if/try/for still belongs to the enclosing
+// function, but one inside a nested def does not.
+static void collect_reachable_returns(
+  const nlohmann::json &body,
+  std::vector<const nlohmann::json *> &out)
+{
+  if (!body.is_array())
+    return;
+
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+
+    const std::string type = stmt.value("_type", "");
+    if (type == "Return")
+    {
+      out.push_back(&stmt);
+      continue;
+    }
+    if (type == "FunctionDef" || type == "AsyncFunctionDef" || type == "Lambda")
+      continue;
+
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key))
+        collect_reachable_returns(stmt[key], out);
+
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        if (handler.contains("body"))
+          collect_reachable_returns(handler["body"], out);
+  }
+}
+
+// `np.array(...)` returned by a user function on every reachable path:
 // recognizes `def make(): return np.array([...])` at a call site like
 // `process(make())`, the same shape try_infer_numpy_param_type already
-// resolves for a literal or forwarded-parameter argument. Limited to a
-// single, unconditional, top-level Return (matching a function with one
-// fixed array shape); a branching or absent return is declined rather than
-// guessing between possibly different shapes.
+// resolves for a literal or forwarded-parameter argument. Every Return
+// reachable without crossing a nested function scope must return a supported
+// array literal of the *same* shape; a branching function with divergent or
+// unsupported shapes, or no return at all, is declined rather than guessing.
 static bool numpy_array_literal_return(
   const nlohmann::json &func_def,
-  nlohmann::json &out_literal_call)
+  nlohmann::json &out_literal_call,
+  const type_handler &type_handler)
 {
-  const nlohmann::json *found = nullptr;
-  for (const auto &stmt : func_def["body"])
-  {
-    if (stmt.value("_type", "") != "Return")
-      continue;
-    if (found != nullptr)
-      return false; // more than one top-level return: declined
-    found = &stmt;
-  }
-
-  if (
-    found == nullptr || !found->contains("value") ||
-    !is_numpy_array_literal_call((*found)["value"]))
+  std::vector<const nlohmann::json *> returns;
+  collect_reachable_returns(func_def["body"], returns);
+  if (returns.empty())
     return false;
 
-  out_literal_call = (*found)["value"];
+  std::optional<typet> shape_type;
+  const nlohmann::json *first_call = nullptr;
+  for (const nlohmann::json *ret : returns)
+  {
+    if (
+      !ret->contains("value") || !is_numpy_array_literal_call((*ret)["value"]))
+      return false; // a reachable return without a fixed-shape literal:
+                    // declined
+
+    const nlohmann::json &call = (*ret)["value"];
+    typet this_type = type_handler.get_typet(call["args"][0]);
+    if (!shape_type)
+    {
+      shape_type = this_type;
+      first_call = &call;
+    }
+    else if (*shape_type != this_type)
+      return false; // divergent shapes across returns: declined
+  }
+
+  out_literal_call = *first_call;
   return true;
 }
 
@@ -1355,7 +1402,7 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   nlohmann::json literal_call;
   if (
     callee_def == nullptr ||
-    !numpy_array_literal_return(*callee_def, literal_call))
+    !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
     return std::nullopt;
 
   return type_handler_.get_typet(literal_call["args"][0]);
