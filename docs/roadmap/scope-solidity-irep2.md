@@ -1119,3 +1119,42 @@ This is the same shape as the spelling carriage `scope-c-spelling-carriage.md`
 records, arrived at from a different direction. Worth knowing before 1 685
 sites are ranked: the smallest file in the phase is blocked on a seam question,
 so "mechanical" in §7.24 means *representable*, not *free*.
+### 7.26 504 of 507, measured on the merged tree (2026-09-12)
+
+#7717 and #7742 landed on master, and #7742's merge carried the stacked #7726
+content with it — `cpp_new_size` is on master although #7726 is still open as a
+PR. So the fix §7.20 measured on a scratch branch is now the shipped one.
+
+That had to be re-measured rather than carried across: what landed is #7726's
+fuller restructuring of the cast arms and pre-dispatch forms *around* the
+guard, not the hand-applied `carries_size` lambda alone. Full sweep against the
+merged tree:
+
+```
+--- 507 measured (stride 1), skipped 8 KNOWNBUG/FUTURE: agree=504 diverge=0 crash=3 ---
+```
+
+| | §7.10 | §7.23 | now |
+|---|---:|---:|---:|
+| verdicts agree | 441 | 441 | **504** |
+| diverge | 67 | 63 | **0** |
+| crash | 3 | 3 | 3 |
+
+Zero divergences of any kind, and zero rows where both paths reach a verdict
+and disagree — the property that has held through every sweep in this section.
+The whole residue is §7.22's padding row: `interface_7`, `struct_1`,
+`struct_2`.
+
+So the adjust-and-seam half of Phase 8 is closed but for one defect, at 3 rows
+in 507. The phase opened on a roadmap entry recording the suite as unmeasurable
+(§1.1), and the first sweep after wiring the flag had 50 of 65 sampled rows
+crashing (§7.1, §7.9).
+
+What of that is this branch's: four mutation-checked fixes —
+`adjust_call_signature` (§7.7), the `assign_shr` rewrite (§7.17), the shared
+migrate census (§7.19), and the kind-less `shr` at the seam (§7.21) — plus the
+flag wiring and the baseline itself. The 63-row bucket is #7726's, and this
+corpus's contribution there was to measure that it closes all of them.
+
+What is *not* done: S.3, the converter's 1 685 sites, now gated on §7.25's
+`#cformat` question rather than on anything in this section.
