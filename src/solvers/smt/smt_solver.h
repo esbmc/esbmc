@@ -883,6 +883,9 @@ public:
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
+  /** Constrain a new int-to-ptr reconstruction to agree with every earlier
+   *  one that has the same address (#5369). */
+  void tie_int_to_ptr_cast(smt_astt target, smt_astt output);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */
@@ -1107,6 +1110,12 @@ public:
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
+
+  /** Every int-to-ptr reconstruction converted so far, as (address, pointer)
+   *  pairs, so that convert_typecast_to_ptr() can tie reconstructions with
+   *  equal addresses to equal pointers (#5369). In a list to support pushing
+   *  and popping. */
+  std::list<std::vector<std::pair<smt_astt, smt_astt>>> int_to_ptr_casts;
 
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
