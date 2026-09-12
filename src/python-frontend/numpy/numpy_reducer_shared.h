@@ -215,17 +215,29 @@ bubble_sort_numpy_paired(std::vector<exprt> &keys, std::vector<exprt> *payload)
 // Assembles a rank 1 or 2 array_typet value from already-converted,
 // row-major flat elements -- the sort/argsort counterpart of
 // build_1d_numpy_array_value above, extended to rank 2 so an axis-aware
-// result can be reassembled into its original shape.
+// result can be reassembled into its original shape. Takes elem_type
+// explicitly (rather than reading elems.front().type()) so a zero-element
+// shape (e.g. transposing a (2, 0)-shaped parameter) does not read past an
+// empty vector; descriptor materialization permits empty arrays, so callers
+// over a parameter/descriptor source cannot assume elems is non-empty the
+// way a rejects-empty caller like sort/argsort's own callers can.
 inline exprt build_numpy_shape_array_value(
   const std::vector<std::size_t> &shape,
   const std::vector<exprt> &elems,
+  const typet &elem_type,
   const type_handler &th)
 {
   if (shape.size() == 1)
-    return build_1d_numpy_array_value(elems, th);
+  {
+    typet result_type = th.build_array(elem_type, elems.size());
+    exprt value = gen_zero(result_type);
+    for (std::size_t i = 0; i < elems.size(); ++i)
+      value.operands().at(i) = elems[i];
+    return value;
+  }
 
   const std::size_t cols = shape[1];
-  typet row_type = th.build_array(elems.front().type(), cols);
+  typet row_type = th.build_array(elem_type, cols);
   typet result_type = th.build_array(row_type, shape[0]);
   exprt value = gen_zero(result_type);
   for (std::size_t row = 0; row < shape[0]; ++row)
@@ -315,5 +327,5 @@ inline exprt build_numpy_sort_or_argsort_result(
     }
   }
 
-  return build_numpy_shape_array_value(shape, out, th);
+  return build_numpy_shape_array_value(shape, out, out.front().type(), th);
 }
