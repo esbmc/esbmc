@@ -788,6 +788,23 @@ static bool is_shift_assignment(const irep_idt &op)
 void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
 {
   const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+
+  // `>>=` arrives kind-less from the Solidity converter, and remove_sideeffects
+  // handles only the resolved spellings (goto_sideeffects.cpp) -- it aborts
+  // with "cannot remove side effect (assign_shr)" otherwise. clang_c_adjust
+  // keeps the same rewrite for the same reason; the C converter picks the kind
+  // itself.
+  if (a.op == "assign_shr" && is_number_type(a.rhs->type))
+  {
+    if (is_unsignedbv_type(a.lhs->type) || is_signedbv_type(a.lhs->type))
+    {
+      const irep_idt kind =
+        is_unsignedbv_type(a.lhs->type) ? "assign_lshr" : "assign_ashr";
+      expr = sideeffect_assign2tc(expr->type, kind, a.lhs, a.rhs, a.location);
+      return;
+    }
+  }
+
   if (a.op == "assign" || is_shift_assignment(a.op))
     return;
   if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
