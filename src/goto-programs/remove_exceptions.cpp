@@ -212,7 +212,7 @@ public:
           const code_function_call2t &c = to_code_function_call2t(it->code);
           if (is_symbol2t(c.function))
             direct_call_targets.insert(to_symbol2t(c.function).thename);
-          collect_thread_entry(c);
+          collect_thread_entry(fn.first, c);
         }
       }
     }
@@ -605,16 +605,22 @@ private:
     return call;
   }
 
-  /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
-  /// as a thread entry, so lower_ip enforces the uncaught-escape terminate at
-  /// that function's epilogue. The argument is `&worker`, possibly under
+  /// If @p call is a pthread_create, record its start-routine argument (the
+  /// 3rd) as a thread entry, so lower_ip enforces the uncaught-escape terminate
+  /// at that function's epilogue. The argument is `&worker`, possibly under
   /// typecasts; peel them to the underlying function symbol. A computed
   /// (unresolvable) routine sets thread_entry_unresolved so run() declines the
   /// program rather than silently miss its uncaught-escape check.
-  void collect_thread_entry(const code_function_call2t &call)
+  ///
+  /// Only a call the entry can reach starts a thread, so @p caller gates the
+  /// scan: std::thread's operational model hands pthread_create its own `f`
+  /// parameter, and scanning unreachable bodies reported an unresolved routine
+  /// for any program that merely includes <thread> and uses exceptions (#7644).
+  void
+  collect_thread_entry(const irep_idt &caller, const code_function_call2t &call)
   {
     if (
-      !is_symbol2t(call.function) ||
+      !entry_reachable_.count(caller) || !is_symbol2t(call.function) ||
       id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
         std::string::npos ||
       call.operands.size() < 3)
