@@ -206,11 +206,24 @@ irep_idt irep_serializationt::read_string_ref(std::istream &in)
     // produced by a process that has interned many strings carries ids far
     // past its own size; bounding by the file rejects valid input. A corrupt
     // id instead surfaces as a table this allocator cannot serve.
+    // Relying on resize() to throw made the check depend on how much memory the
+    // host has: it throws only when the allocator cannot serve the request at
+    // all, so a corrupt id of 2.5e9 (a 5e9-entry table, ~80 GiB) was served on
+    // a large machine and the process spun value-initialising it instead of
+    // being rejected. Bound the table by a fixed byte budget so the same input
+    // is refused everywhere, and keep the throwing paths for whatever slips
+    // under.
+    using entryt = std::pair<bool, irep_idt>;
+    static constexpr std::size_t max_table_bytes = std::size_t(512) << 20;
+    const std::size_t entries = 1 + static_cast<std::size_t>(id) * 2;
+    if (entries > max_table_bytes / sizeof(entryt))
+    {
+      log_error("goto binary: string id {} needs an unservable table", id);
+      throw std::string("goto binary: implausible string id");
+    }
     try
     {
-      ireps_container.string_rev_map.resize(
-        1 + static_cast<std::size_t>(id) * 2,
-        std::pair<bool, irep_idt>(false, irep_idt()));
+      ireps_container.string_rev_map.resize(entries, entryt(false, irep_idt()));
     }
     catch (const std::bad_alloc &)
     {
