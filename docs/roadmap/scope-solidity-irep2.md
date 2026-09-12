@@ -170,7 +170,8 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 
 ## 6. Next
 
-The experiment §7.4 names, then S.2. Neither ports an arm.
+S.2, and the two rows §7.8 leaves: `github_6759_02`, and confirming §7.8's link
+on a build of #7726.
 
 ## 7. S.1 executed: the baseline, and it is one cause (2026-09-11)
 
@@ -428,3 +429,56 @@ the C pass because that is where legacy has it, but clang's converter does not
 leave an incomplete callee type, and the alignment hook is empty for C by
 design. The 97 pre-existing C rows passing is consistent with the arm being
 inert there, not evidence of a C-side improvement.
+
+### 7.8 The residue is Phase 7's cpp_new size defect, already fixed in #7726
+
+The nine `migrate expr failed` rows are **not** this branch's doing: the
+diverging set is identical before and after §7.7's arm (`comm -13` over the two
+sweeps is empty). They are a separate defect that closing the crashes merely
+uncovered.
+
+`gdb -batch -ex 'catch throw'` against the current build — line numbers shift
+between builds, which is why a probe placed from an older backtrace never fired
+— gives the chain:
+
+```
+code_block operand loop          src/util/irep/migrate.cpp:2568
+  -> sideeffect_assign, lhs      src/util/irep/migrate.cpp:2093
+    -> cpp_new size operand      src/util/irep/migrate.cpp:2125   throws
+```
+
+So it is a `sideeffect_assign` whose lhs is a `cpp_new` whose size is an **empty
+irept**. The site reads
+
+```cpp
+const exprt &sz = expr.cmt_size().is_not_nil() ? … cmt_size() : … size_irep();
+migrate_expr(sz, thesize);
+```
+
+and `is_not_nil()` is true for a *present-but-empty* irept, so the empty `#size`
+is selected and handed to a `migrate_expr` that has no handler for it.
+
+That is the defect PR **#7726** already fixes, in commit `d28be5a7e2`, with a
+tri-state-aware test:
+
+```cpp
+const auto carries_size = [](const irept &i) {
+  return !i.id().empty() && !i.is_nil();
+};
+```
+
+All four stacked Phase 7 branches carry `cpp_new_size`; master does not. So
+Phase 8's residue and Phase 7's `cpp_new` size fix are one defect, and this
+corpus is a second, independent corpus for it — worth recording on that PR
+rather than fixing twice here.
+
+Two corrections this section makes to §7.5-§7.7's reading. The empty operand is
+the `cpp_new` **size**, not a sideeffect's `op0`; and the five-kind exclusion
+list at migrate.cpp:2116 is a red herring, since `cpp_new` is *in* it. The
+one-line `&& expr.op0().is_not_nil()` guard that suggested itself would have
+papered over a defect that already has a correct fix in review.
+
+What is left after this: `github_6759_02`, the single remaining crash, which
+pins `--no-irep2-native-body`; and confirming the link above by running this
+corpus on a build of #7726, which needs that branch built rather than argued
+from the diff.
