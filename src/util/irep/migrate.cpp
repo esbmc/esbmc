@@ -1033,6 +1033,37 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
     lessthanequal2tc(last, coerce_to_type(extent, offs_type)));
 }
 
+/// The right-shift family. `lshr` and `ashr` name their kind; the Solidity
+/// converter also emits a kind-less `shr` for `>>`, and IREP2 has no node for
+/// it. clang_c_adjust resolves that one by the left operand's signedness before
+/// anything migrates, but --clang-cpp-irep2-adjust-only replaces that pass, so
+/// the resolution belongs here (docs/roadmap/scope-solidity-irep2.md §7.21).
+/// The three are extracted together because migrate_expr is over the complexity
+/// gate: an arm added inline fails it.
+static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (id != "shr" && id != exprt::i_lshr && id != exprt::i_ashr)
+    return false;
+
+  if (expr.operands().size() > 2)
+  {
+    splice_expr(expr, new_expr_ref);
+    return true;
+  }
+
+  const type2tc type = migrate_type(expr.type());
+  expr2tc side1, side2;
+  convert_operand_pair(expr, side1, side2);
+
+  const bool logical =
+    id == exprt::i_lshr || (id == "shr" && is_unsignedbv_type(side1->type));
+
+  new_expr_ref = logical ? expr2tc(lshr2tc(type, side1, side2))
+                         : expr2tc(ashr2tc(type, side1, side2));
+  return true;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1496,23 +1527,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == exprt::i_lshr)
-  {
-    type = migrate_type(expr.type());
-
-    expr2tc side1, side2;
-    if (expr.operands().size() > 2)
-    {
-      splice_expr(expr, new_expr_ref);
-      return;
-    }
-
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = lshr2tc(type, side1, side2);
-    return;
-  }
-
   if (expr.id() == "unary-")
   {
     type = migrate_type(expr.type());
@@ -1647,6 +1661,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
+  if (migrate_right_shift(expr, new_expr_ref))
+    return;
+
   if (expr.id() == exprt::i_shl)
   {
     type = migrate_type(expr.type());
@@ -1657,19 +1674,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, side1, side2);
 
     new_expr_ref = shl2tc(type, side1, side2);
-    return;
-  }
-
-  if (expr.id() == exprt::i_ashr)
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    new_expr_ref = ashr2tc(type, side1, side2);
     return;
   }
 
