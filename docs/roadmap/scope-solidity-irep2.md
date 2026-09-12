@@ -717,3 +717,45 @@ Three probes were needed and two of them refuted their own hypothesis, which is
 the shape to want: each printed something whose *absence* was also informative.
 The one that finally landed differs from its predecessors only in printing both
 sides of the comparison rather than one.
+### 7.17 The last unexplained bucket, closed by two docstrings (2026-09-12)
+
+Both `cannot remove side effect` rows abort on `(assign_shr)`, and the cause is
+written down in the tree twice over. `clang_c_adjust_expr.cpp`:
+
+> The C converter now picks the kind (§76); Solidity still emits the untyped
+> `assign_shr`, so the rewrite below stays for it.
+
+so legacy resolves `>>=` to `assign_lshr` or `assign_ashr` by the target's
+signedness, and `goto_sideeffects.cpp` handles only those two. The IREP2 arm
+returns early on every shift spelling, and its helper says why that looked safe:
+
+> The shift spellings clang_c_adjust returns early on: it promotes only the right
+> operand there, which **the corpus shows** is already the migrated shape.
+
+That was measured on the **C** corpus, where the converter resolves the kind.
+Solidity emits a shape the C corpus does not contain, so the early return was a
+sound conclusion from an incomplete population — which is §2's argument for
+wiring this frontend in as a second corpus, paying for itself.
+
+`adjust_compound_assignment` now performs the rewrite before that early return,
+guarded as legacy guards it: `assign_shr`, a numeric right operand, and a
+signed or unsigned target.
+
+| row | before | after |
+|---|---|---|
+| `compound_assign_1` | `cannot remove side effect` | **agrees** |
+| `op_binary_3` | `cannot remove side effect` | `migrate expr failed` |
+
+So the bucket is empty and the **total residue is unchanged**: one row closes,
+one advances past its first blocker onto §7.8's, which already has an owner in
+#7726. Worth stating that way round — "two rows fixed" would be wrong.
+
+`irep2_only_shift_assign_kind{,_fail}` pin it, and both halves flip to the
+abort when the rewrite is disabled: an abort prints no verdict line, so neither
+`^VERIFICATION SUCCESSFUL$` nor `^VERIFICATION FAILED$` is satisfiable without
+it. `irep2_only` is 101 of 101, and the default path is unchanged at 527 of 529
+with the same two `KNOWNBUG` rows that already passed.
+
+Phase 8's residue is now 64 rows owned by #7726 and 3 by §7.16's padding
+disagreement, with nothing unexplained, against 442 of 509 agreeing and no row
+anywhere answering differently.
