@@ -1329,11 +1329,6 @@ static const char *float_lowering_id(
   const irep_idt &identifier,
   const side_effect_expr_function_callt &expr)
 {
-  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
-  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
-  static const std::pair<const char *, const char *> lowerings[] = {
-    {"nearbyint", "nearbyint"}, {"fma", "ieee_fma"}, {"remainder", "ieee_rem"}};
-
   /* c2goto compiles the models with this same binary, and libm/remainder.c's
    * own call is what puts ieee_rem into the model. The shape test would strip
    * it there, so only a program's call is checked -- which is where a
@@ -1348,9 +1343,19 @@ static const char *float_lowering_id(
         return nullptr;
   }
 
-  for (const auto &[name, node_id] : lowerings)
-    if (compare_float_suffix(identifier, name))
-      return node_id;
+  // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
+  // fp.rem. The fmod/remquo models are built on top of it (libm/fmod.c).
+  switch (ieee_float_builtin_of(identifier))
+  {
+  case ieee_float_builtin::nearbyint:
+    return "nearbyint";
+  case ieee_float_builtin::remainder:
+    return "ieee_rem";
+  case ieee_float_builtin::fma:
+    return "ieee_fma";
+  case ieee_float_builtin::none:
+    return nullptr;
+  }
 
   return nullptr;
 }
