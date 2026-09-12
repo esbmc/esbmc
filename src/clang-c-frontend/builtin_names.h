@@ -26,6 +26,20 @@ bool compare_unscore_builtin(
 /// std::abs(complex) is why <complex> ships without it -- keeps its call.
 bool is_abs_builtin_name(const irep_idt &identifier);
 
+/// The float library calls that have an IEEE node of their own. Both passes
+/// lower these, so the spelling set is shared; the arity each node takes is
+/// not, because legacy splices whatever arguments the call has into a
+/// fixed-arity node (see clang_c_adjust_irep2.cpp).
+enum class ieee_float_builtin
+{
+  none,
+  nearbyint,
+  remainder,
+  fma
+};
+
+ieee_float_builtin ieee_float_builtin_of(const irep_idt &identifier);
+
 /// The lowerings that match a callee's *base* name, so a program that defines
 /// one of these names itself would have its body discarded and the builtin
 /// verified in its place (#6904). These are all spellings a program is free to
@@ -34,8 +48,10 @@ bool is_abs_builtin_name(const irep_idt &identifier);
 bool is_name_matched_builtin(const irep_idt &identifier);
 
 /// True when lowering this call would throw away a definition the program
-/// supplies. Libc's own declarations are bodiless and the <cmath> overloads
-/// forward to their `__builtin_` spelling, so both still lower.
+/// supplies. Libc's own declarations are bodiless, and the <cmath> overloads
+/// forward to a spelling that lowers in their place -- the `__builtin_` one for
+/// most, the `f`/`l` suffixes for fma (src/cpp/library/cmath) -- so a std::
+/// call still reaches a node, one frame further in.
 /// @param base_name the spelling the lowerings match on
 /// @param symbol_id the callee's linkage identifier, which is what the symbol
 ///        table is keyed by
