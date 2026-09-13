@@ -1871,8 +1871,9 @@ would drop it), or move the parameter ahead of `loc` in the constructor so field
 and parameter order agree, which means touching every positional
 `sideeffect2tc(..., location)` call site.
 
-**Shipped unreflected.** `ctest -R irep2` 374 of 374, unit 871 of 871, the four
-rows above agreeing, and both halves of the pair still changing outcome with the
+**Shipped unreflected.** `ctest -R irep2` 374 of 374, unit 871 of 871, the
+Solidity corpus still 507 of 507 agreeing with zero crashes (it shares
+`migrate_expr_back`, so it had to be re-swept), the four rows above agreeing, and both halves of the pair still changing outcome with the
 restore suppressed. The reflected version's 14 failures are gone. `esbmc-cpp/cpp`
 reports 6 failures — `ch8_5` and the five `github_7433*` rows — but they fail
 identically with this change stashed and reverted, so they are not its doing:
@@ -1886,3 +1887,21 @@ Note also what this says about the *other* seam loss, the callee's `constructor`
 return type (§3.17): it is real, but symbol types are read from
 `symbolt::get_type2()` rather than migrated, so a `code_type2t` field is not
 where it would have to be carried.
+
+### 3.19 Next on the last two rows: a present-empty `#type`, not another arm
+
+The whole-body diff §3.17 called for is in hand, and after the marker is carried
+the behavioural residue in `pick` is one entry: the write-back gives the side
+effect `#type: empty` and `#size: nil` where legacy has neither. `back_sideeffect`
+writes `theexpr.cmt_type(cmttype)` unconditionally, and `cmttype` is a
+default-constructed `typet` when the alloctype is nil — an *empty* irep, not a
+nil one. That is the irept tri-state trap the same function already documents one
+line above for `#size`: "an empty irep is a third state that `is_not_nil()`
+reports as present", which is why `size` is initialised to `nil_exprt()` there
+and not left default-constructed.
+
+So the next measurement is a one-line change — set `cmt_type` only when the
+alloctype is not nil — followed by the two rows and a full sweep, rather than
+another arm chosen from an instruction. If it moves neither row, the next thing
+to diff is what `remove_sideeffects` does with a class-typed conditional whose
+arms are lvalues, since that is where `&(c ? a : b)` is actually built.
