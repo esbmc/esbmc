@@ -889,9 +889,7 @@ expr2tc dereferencet::build_reference_to(
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
-    // WRITE and FREE are checked in dereference(), once every target is known.
-    if (!is_write(mode) && !is_free(mode))
-      deref_invalid_ptr(deref_expr, guard, mode);
+    deref_invalid_ptr(deref_expr, guard, mode);
     return value;
   }
 
@@ -1045,6 +1043,10 @@ void dereferencet::deref_invalid_ptr(
   if (is_internal(mode))
     // The caller just wants a list of references -- ensuring that the correct
     // assertions fire is a problem for something or someone else
+    return;
+
+  // Per-target call: dereference() checks WRITE and FREE once, after the loop.
+  if (is_nil_expr(resolved) && (is_write(mode) || is_free(mode)))
     return;
 
   // constraint that it actually is an invalid pointer
