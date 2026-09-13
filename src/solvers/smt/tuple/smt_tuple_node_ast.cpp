@@ -3,6 +3,7 @@
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <sstream>
+#include <string>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 
@@ -201,10 +202,23 @@ tuple_node_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
   // actually allocate all our pieces of ASTs as variables.
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
-#ifndef NDEBUG
-  assert(
-    idx < struct_union_members(sort->get_tuple_type()).size() &&
-    "Out-of-bounds tuple element accessed");
-#endif
+  // Loud in release too, and bounded by `elements` rather than by the sort's
+  // member list: convert_member computes this index from the *expression's*
+  // struct type, so a disagreement with the tuple this AST actually holds reads
+  // past the end of the vector and returns a garbage pointer, surfacing as a
+  // SIGSEGV far from its cause (docs/roadmap/scope-solidity-irep2.md §7.31).
+  if (idx >= elements.size())
+  {
+    log_error(
+      "Tuple field {} out of range: this tuple holds {} elements for sort type "
+      "{}, so it disagrees with the expression type the index came from",
+      idx,
+      elements.size(),
+      is_struct_type(sort->get_tuple_type())
+        ? to_struct_type(sort->get_tuple_type()).name
+        : irep_idt("?"));
+    throw std::string("tuple field out of range");
+  }
+
   return elements[idx];
 }
