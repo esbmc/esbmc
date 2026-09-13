@@ -1419,7 +1419,6 @@ static bool parameter_defaults_to_any(const nlohmann::json &element)
   return is_bare_callable_annotation(element["annotation"]);
 }
 
-
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
