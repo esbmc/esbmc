@@ -320,12 +320,37 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   return elem_info;
 }
 
+/// A constructed instance reaches a list literal as a *value* struct
+/// (function_call_expr's no-LHS constructor path), but every element read emits
+/// `*(Cls **)item->value`. Storing the struct's bytes therefore made
+/// `[Car(120)][0].speed` read the speed field back as a pointer (#7685). Box it
+/// onto a non-expiring object and store that, the same model `return
+/// ClassName(...)` already uses -- the address of the caller's stack temp would
+/// dangle as soon as the literal sits inside a function. Boxing in the
+/// constructor path instead also reaches dict literals, which do expect the
+/// value.
+exprt python_list::as_object_reference(
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  if (!converter_.is_heap_migrated_class_type(elem.type()))
+    return elem;
+
+  return converter_.box_value_on_heap(
+    elem,
+    converter_.get_location_from_decl(op),
+    *converter_.current_block,
+    gen_pointer_type(elem.type()));
+}
+
 exprt python_list::build_push_list_call(
   const symbolt &list,
   const nlohmann::json &op,
-  const exprt &elem,
+  const exprt &elem_in,
   bool enable_float_path)
 {
+  const exprt elem = as_object_reference(op, elem_in);
+
   if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
   {
     const list_elem_info elem_info = get_tagged_element_info(op, elem);

@@ -29,9 +29,21 @@ bool is_abs_builtin_name(const irep_idt &identifier)
          compare_unscore_builtin(identifier, "fabs");
 }
 
+ieee_float_builtin ieee_float_builtin_of(const irep_idt &identifier)
+{
+  if (compare_float_suffix(identifier, "nearbyint"))
+    return ieee_float_builtin::nearbyint;
+  if (compare_float_suffix(identifier, "remainder"))
+    return ieee_float_builtin::remainder;
+  if (compare_float_suffix(identifier, "fma"))
+    return ieee_float_builtin::fma;
+  return ieee_float_builtin::none;
+}
+
 bool is_name_matched_builtin(const irep_idt &identifier)
 {
   return is_abs_builtin_name(identifier) ||
+         ieee_float_builtin_of(identifier) != ieee_float_builtin::none ||
          compare_unscore_builtin(identifier, "isnan") ||
          compare_unscore_builtin(identifier, "isinf") ||
          compare_unscore_builtin(identifier, "isnormal") ||
