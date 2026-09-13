@@ -8,6 +8,7 @@
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
 #include <util/message/format.h>
+#include <util/arith/arith_tools.h>
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <set>
@@ -143,6 +144,22 @@ static pointer_ref_kindt pointer_ref_kind(const typet &type)
   return pointer_ref_kindt::NONE;
 }
 
+/// An explicit `alignas` in bytes, or zero when the record has none. It travels
+/// as an `alignment` sub-irep and add_padding reads it back to size a record's
+/// trailing pad (docs/roadmap/scope-clang-cpp-irep2.md §7.4).
+static BigInt explicit_alignment(const typet &type)
+{
+  const irept &a = type.find("alignment");
+  if (a.is_nil())
+    return 0;
+
+  BigInt v;
+  if (to_integer(static_cast<const exprt &>(a), v))
+    return 0;
+
+  return v;
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -258,7 +275,8 @@ static type2tc migrate_type0(const typet &type)
 
     bool packed = type.get_bool("packed");
 
-    return struct_type2tc(members, names, pretty_names, name, packed);
+    return struct_type2tc(
+      members, names, pretty_names, name, packed, explicit_alignment(type));
   }
 
   if (type.id() == typet::t_union)
@@ -3135,6 +3153,8 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     thetype.set("tag", irep_idt(ref2.name));
     if (ref2.packed)
       thetype.set("packed", true);
+    if (ref2.alignment != 0)
+      thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
     return thetype;
   }
   case type2t::union_id:

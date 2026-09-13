@@ -2084,3 +2084,47 @@ assertion — where a regression row could only show the abort. The construct in
 `ch17_3` that reaches the rebuild is not reduced: it fires four times there with
 `op=assign`, and none of nine hand-written compound- and plain-assignment probes
 reaches it, so the reproducer is the corpus row until someone bisects it.
+
+### 7.4 `bad_optional_access`: one cause, three crash faces
+
+The five rows resolve to a single defect, and the exception name was a symptom of
+it rather than the fault. `catch throw bad_optional_access` in gdb put the first
+one at `member2t::do_simplify` (`expr_simplifier.cpp`), reading
+`struct_union_get_component_number(...).value()` on a component the source's type
+does not describe. Guarding that moved the crash to
+`tuple_node_smt_ast::project` reading past its element vector — #7758's bug,
+whose guard this branch reverted — and the third face was the same `.value()` in
+`value_sett::make_member`.
+
+Behind all three: a **struct literal shorter than its own type**. Diffing
+`alignas_empty_struct`'s GOTO shows it exactly:
+
+```
+legacy  ASSIGN test={ .anon_pad#0=0 };
+flag    ASSIGN test={  };
+```
+
+`adjust_struct` runs and declines. Instrumented, it reports
+`ops=0 unpadded=0 padded=0 align=` — the literal has no operands, its type has no
+members, `add_padding` adds no pad, and the **alignment is empty**: an explicit
+`alignas` travels on the legacy type as an `alignment` sub-irep, `struct_type2t`
+has no field for it, so the back-migrated type add_padding sees is not
+over-aligned. An over-aligned empty struct occupies its alignment, so its padded
+layout has a trailing pad; without the alignment there is nothing to pad to.
+
+Carried as an unreflected `BigInt alignment` on `struct_type2t` — the
+`constructor`/`member_init` pattern, and unreflected for the same reason plus one
+more: two records differing only in alignment would otherwise stop comparing
+equal, which is a wider change than this repair. `fields_cover_class` needs the
+matching `excluded_field_bytes` declaration, as it did for the other two.
+
+Both optional guards stay. They are not redundant once the literal is padded:
+each was a release-build crash on an invariant only a debug build checks
+(`member2t`'s constructor asserts it), and the `make_member` one widens the
+may-points-to set to `unknown` where it previously threw — the conservative
+direction. The same call also read `datatype_members[no]` unguarded, which is an
+out-of-bounds vector read whenever a literal is short, so the guards are a
+memory-safety repair independent of the alignment.
+
+All five rows now agree, and `irep2_overaligned_empty_struct{,_fail}` pins the
+carry: both halves SIGSEGV with the restore suppressed.
