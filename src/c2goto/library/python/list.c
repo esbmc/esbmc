@@ -4,6 +4,12 @@
 #include <string.h>
 #include "python_types.h"
 
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id,
+  size_t bool_type_id);
+
 // Allocate a Python object instance. The frontend emits a call to this for
 // `ClassName(...)` so class instances get CPython reference semantics (a
 // pointer to a non-expiring object) and survive escaping their defining
@@ -329,6 +335,28 @@ static bool __ESBMC_list_push_shallow_sz(
   return __ESBMC_list_push_object(l, o, float_type_id, 0);
 }
 
+// Shallow append for a list of tagged scalars. Their payload width is
+// per-element and symbolic after a branch join, and item->value points at the
+// payload rather than at the PyObject wrapper, so neither the wrapper's static
+// width nor an o->size memcpy is usable here (#7716). Reuses the bounded copy.
+bool __ESBMC_list_push_shallow_tagged(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  return __ESBMC_list_push_tagged(
+    l, o->value, o->type_id, o->size, float_type_id);
+}
+
 // elem_size is threaded straight to the size-aware core above: the slice
 // lowering knows the source list's element width, and passing it keeps the
 // per-element copy off memcpy's byte loop. 0 keeps the previous behaviour.
@@ -510,6 +538,31 @@ bool __ESBMC_list_eq(
         return false;
     }
   }
+  return true;
+}
+
+// Element-wise equality for two lists of tagged scalars (#7723). A tag only
+// ever holds a bool, int, float or str, so there is no nesting to walk and no
+// depth stack; and its payload width is symbolic after a branch join, so the
+// byte compare has to be the bounded one __python_scalar_eq_obj already
+// implements rather than __ESBMC_values_equal's memcmp fallback.
+bool __ESBMC_list_eq_tagged(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  size_t num_type_id,
+  size_t bool_type_id)
+{
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
+  if (l1->size != l2->size)
+    return false;
+
+  for (size_t i = 0; i < l1->size; ++i)
+    if (!__python_scalar_eq_obj(
+          &l1->items[i], &l2->items[i], num_type_id, bool_type_id))
+      return false;
   return true;
 }
 
@@ -849,6 +902,33 @@ void __ESBMC_list_extend(
     l->items[l->size].size = elem->size;
     l->size++;
 
+    ++i;
+  }
+}
+
+// Extend variant for a source list of tagged scalars: their payload width is
+// per-element and symbolic, so the elem_size above and __ESBMC_copy_value's
+// o->size fallback both overrun (#7716). Reuses the bounded copy.
+void __ESBMC_list_extend_tagged(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t float_type_id)
+{
+  if (!l || !other)
+    return;
+
+  size_t i = 0;
+  while (i < other->size)
+  {
+    const PyObject *elem = &other->items[i];
+    if (elem->size == 0)
+    {
+      l->items[l->size] = *elem;
+      l->size++;
+    }
+    else
+      __ESBMC_list_push_tagged(
+        l, elem->value, elem->type_id, elem->size, float_type_id);
     ++i;
   }
 }

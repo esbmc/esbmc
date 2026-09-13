@@ -501,11 +501,21 @@ private:
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
+  // The class name `t` names, or empty when it is neither a struct nor a
+  // `tag-<Class>` symbol reference.
+  std::string class_name_of(const typet &t);
+
   // True iff `t` denotes a user-defined Python class struct — either the struct
   // itself or a `symbol_typet("tag-<Class>")` reference to it (robust to
   // whether the struct has been built yet). Excludes the list/dict/object model
   // structs.
   bool is_user_class_struct_type(const typet &t);
+
+  // True iff `t` is a user class the object model migrates to the heap and
+  // stores in a container as a `Class*`. A reserved `__ESBMC` name opts out:
+  // the push and read paths must agree on which classes stay inline, so both
+  // gate on this one predicate (#7685).
+  bool is_heap_migrated_class_type(const typet &t);
 
   // True iff `t` is a pointer to a user-defined class struct (a migrated
   // `Class*` instance). Used to gate the object-model migration's

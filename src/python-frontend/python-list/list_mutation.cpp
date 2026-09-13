@@ -52,10 +52,24 @@ exprt python_list::tagged_float_type_id(bool enable_float_path) const
   return converter_.get_type_handler().tagged_scalar_type_id(double_type());
 }
 
+// Only build_push_list_call and build_insert_list_call handle a tagged element;
+// they call get_tagged_element_info directly. Every other caller stamps the
+// hash of the wrapper's static C type, which never matches the element's
+// runtime type_id, so list.count() answered 0 and proved `count(x) == 0`.
+// Refuse the way `operator In` already does rather than answer wrongly.
+static void reject_tagged_element(const type_handler &th, const exprt &elem)
+{
+  if (th.is_tagged_scalar_type(elem.type()))
+    throw std::runtime_error(
+      "this list operation on a dynamically-typed element is not yet "
+      "supported");
+}
+
 list_elem_info
 python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
+  reject_tagged_element(type_handler_, elem);
   locationt location = converter_.get_location_from_decl(op);
 
   const std::string elem_type_name = type_handler_.type_to_string(elem.type());
@@ -306,12 +320,37 @@ python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
   return elem_info;
 }
 
+/// A constructed instance reaches a list literal as a *value* struct
+/// (function_call_expr's no-LHS constructor path), but every element read emits
+/// `*(Cls **)item->value`. Storing the struct's bytes therefore made
+/// `[Car(120)][0].speed` read the speed field back as a pointer (#7685). Box it
+/// onto a non-expiring object and store that, the same model `return
+/// ClassName(...)` already uses -- the address of the caller's stack temp would
+/// dangle as soon as the literal sits inside a function. Boxing in the
+/// constructor path instead also reaches dict literals, which do expect the
+/// value.
+exprt python_list::as_object_reference(
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  if (!converter_.is_heap_migrated_class_type(elem.type()))
+    return elem;
+
+  return converter_.box_value_on_heap(
+    elem,
+    converter_.get_location_from_decl(op),
+    *converter_.current_block,
+    gen_pointer_type(elem.type()));
+}
+
 exprt python_list::build_push_list_call(
   const symbolt &list,
   const nlohmann::json &op,
-  const exprt &elem,
+  const exprt &elem_in,
   bool enable_float_path)
 {
+  const exprt elem = as_object_reference(op, elem_in);
+
   if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
   {
     const list_elem_info elem_info = get_tagged_element_info(op, elem);
@@ -512,8 +551,9 @@ void python_list::emit_list_copy(
   // Shallow per-element append: preserves element value pointers so nested
   // lists are shared (Python shallow-copy semantics) rather than corrupted by
   // a pointee byte-copy (esbmc/esbmc#5102).
-  const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
+  const shallow_push_call shallow_push =
+    select_shallow_push(src, from_integer(BigInt(0), size_type()));
+  const symbolt *push_obj_sym = shallow_push.func;
   assert(size_sym && at_sym && push_obj_sym);
 
   // list_size / list_at take `const List*`
@@ -580,7 +620,7 @@ void python_list::emit_list_copy(
     {build_symbol(dst),
      build_symbol(tmp_obj),
      list_type_id_arg,
-     from_integer(BigInt(0), size_type())});
+     shallow_push.last_arg});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -1026,6 +1066,43 @@ BigInt python_list::uniform_elem_size(const std::string &list_id) const
   return width;
 }
 
+bool python_list::has_tagged_elements(const exprt &list) const
+{
+  if (!list.is_symbol())
+    return false;
+  const element_type_registry::entries *entries =
+    elem_types().find(list.identifier().as_string());
+  if (!entries)
+    return false;
+  const type_handler &th = converter_.get_type_handler();
+  for (const auto &entry : *entries)
+    if (th.is_tagged_scalar_type(entry.second))
+      return true;
+  return false;
+}
+
+// Same split as select_shallow_push, for list.extend().
+python_list::shallow_push_call python_list::select_list_extend(
+  const exprt &src,
+  const exprt &untagged_elem_size) const
+{
+  const bool tagged = has_tagged_elements(src);
+  const symbolt *func = converter_.symbol_table().find_symbol(
+    tagged ? "c:@F@__ESBMC_list_extend_tagged" : "c:@F@__ESBMC_list_extend");
+  return {func, tagged ? tagged_float_type_id(true) : untagged_elem_size};
+}
+
+python_list::shallow_push_call python_list::select_shallow_push(
+  const exprt &src,
+  const exprt &untagged_last_arg) const
+{
+  const bool tagged = has_tagged_elements(src);
+  const symbolt *func = converter_.symbol_table().find_symbol(
+    tagged ? "c:@F@__ESBMC_list_push_shallow_tagged"
+           : "c:@F@__ESBMC_list_push_shallow");
+  return {func, tagged ? tagged_float_type_id(true) : untagged_last_arg};
+}
+
 BigInt python_list::uniform_elem_size(const exprt &list) const
 {
   if (!list.is_symbol())
@@ -1038,10 +1115,6 @@ exprt python_list::build_extend_list_call(
   const nlohmann::json &op,
   const exprt &other_list)
 {
-  const symbolt *extend_func_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
-  assert(extend_func_sym);
-
   locationt location = converter_.get_location_from_decl(op);
 
   exprt actual_list = other_list;
@@ -1240,14 +1313,14 @@ exprt python_list::build_extend_list_call(
   // element to be the same scalar width: extend applies one length to all of
   // them, so a mixed-width list must keep the model's symbolic elem->size
   // fallback (0).
-  BigInt elem_size_bytes = uniform_elem_size(actual_list);
+  const shallow_push_call extend_target = select_list_extend(
+    actual_list, from_integer(uniform_elem_size(actual_list), size_type()));
 
   code_function_callt extend_func_call;
-  extend_func_call.function() = build_symbol(*extend_func_sym);
+  extend_func_call.function() = build_symbol(*extend_target.func);
   extend_func_call.arguments().push_back(build_symbol(list));
   extend_func_call.arguments().push_back(actual_list);
-  extend_func_call.arguments().push_back(
-    from_integer(elem_size_bytes, size_type()));
+  extend_func_call.arguments().push_back(extend_target.last_arg);
   extend_func_call.type() = empty_typet();
   extend_func_call.location() = location;
 
