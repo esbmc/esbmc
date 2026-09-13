@@ -806,12 +806,17 @@ void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
   if (!is_struct_type(t))
     return;
 
-  const symbolt *tag =
-    context.find_symbol("tag-" + to_struct_type(t).name.as_string());
-  if (tag == nullptr || !tag->is_type)
-    return;
-
-  const type2tc padded = migrate_type(tag->get_type());
+  // Compute the padded layout from the type itself rather than resolving a tag
+  // symbol by name. `to_struct_type(t).name` is unqualified ("struct Book"),
+  // while a struct declared inside a contract has the qualified tag
+  // "tag-struct Base.Book", so the lookup missed and the literal kept operands
+  // its own type could not describe
+  // (docs/roadmap/scope-solidity-irep2.md §7.37). add_padding is the same
+  // function that gave the tag its layout, and is idempotent, so a type that
+  // already carries its pads is unchanged.
+  typet legacy = migrate_type_back(t);
+  add_padding(legacy, ns);
+  const type2tc padded = migrate_type(legacy);
   if (!is_struct_type(padded))
     return;
 
