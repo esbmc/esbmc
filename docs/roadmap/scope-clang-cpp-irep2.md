@@ -1955,3 +1955,44 @@ builds over a reference-typed object has to carry
 touches the fold in this PR, whose `address_of2tc(a.lhs->type, a.lhs)` defaults
 the same way; no census row moves on it today, so it is fidelity rather than a
 defect, and the two should be fixed together.
+
+### 3.21 Phase 7 closes: 84 of 84
+
+§3.20 named the site. `adjust_call_arguments` took the address of an argument
+bound to a reference itself —
+
+```cpp
+if (binds_by_reference(callee, arg, params[i], i, context, ns))
+  arg = address_of2tc(arg->type, arg);
+```
+
+— where the legacy path routes the same binding through
+`c_typecastt::implicit_typecast_followed` to `take_reference_address`, which does
+two things this did not: it distributes over a conditional's arms, and it records
+the reference kind on the pointer it builds. Both matter, and the second is why
+the first could not be recovered later: `ref_kind` back-migrates to
+`#reference`, and that is the bit the legacy pipeline tests *after* the
+write-back before it would have distributed for itself.
+
+So the arm was never missing, twice over: the IREP2 helper already existed in
+`c_typecast.cpp` and already did both jobs. It was `static`, and this call site
+had grown its own one-line substitute. Exported and called here, with
+`binds_by_reference` now reporting the kind the legacy declaration spells (the
+IREP2 parameter type need not carry it, which is why that predicate reads the
+declaration at all).
+
+Both remaining rows close, so the `regression/esbmc-cpp/cpp` census under
+`--clang-cpp-irep2-adjust-only` reads **84 of 84**, from 82 — and from 31 of 80 at
+#7718's census. `irep2_conditional_reference_bind{,_fail}` pins it: the passing
+half turns SUCCESSFUL -> FAILED with the plain address-of restored. The failing
+half is a conventional twin — it asserts that neither object moved, which is
+false whichever arm is selected, and stays FAILED under the mutation, so the
+passing half is the gate.
+
+**What the whole series says about method.** Three ports were written and reverted
+before this one: the `address_of` distribution as an arm (twice, §3.13 and
+§3.17), and the `constructor` return type as a `code_type2t` field (§3.18). Each
+was a guess at *which rewrite is missing*, and each was refuted by instrumenting
+the thing it claimed to fix. What worked was counting a marker in the two symbol
+tables — four against one — and reading the consumer that tests it. A divergence
+census says which rows disagree; only the tree says why.

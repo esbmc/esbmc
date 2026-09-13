@@ -3491,8 +3491,7 @@ static exprt back_sideeffect(const expr2tc &ref)
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
 
-  // clang_cpp_maint::adjust_init reads this after the frontend, so a body this
-  // pass writes back has to carry it (§3.17).
+  // Read after the frontend by clang_cpp_maint::adjust_init; see sideeffect2t.
   if (ref2.constructor)
     theexpr.set("constructor", true);
 

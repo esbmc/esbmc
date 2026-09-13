@@ -1897,7 +1897,8 @@ public:
   /// parameter order stop matching the field order (`location` sits between),
   /// which is what supports_with_type_v tests -- with_type then rejects every
   /// side effect at run time. Like `location`, it is therefore carried but not
-  /// compared.
+  /// compared, and dropped by a with_type rebuild, which reconstructs from
+  /// `fields` alone.
   bool constructor;
 
   locationt location; // not reflected: source loc travels with the stmt
