@@ -1050,8 +1050,8 @@ void dereferencet::deref_invalid_ptr(
   // constraint that it actually is an invalid pointer
   expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
 
-  /* obj(p) can be a real object outside the value set: invalid_pointer passes it,
-   * and symex models no write or free there. */
+  /* obj(p) can be a real object outside the value set: invalid_pointer passes
+   * it, and symex models no write or free there. */
   if (!is_nil_expr(resolved))
   {
     expr2tc unmodelled = not2tc(resolved);
