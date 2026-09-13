@@ -1671,3 +1671,51 @@ The answer was finally in a symbol-table dump and a `grep` of tag names, not in
 a ninth probe. The by-product was #7758: `project` read past the end of a
 vector in every release build, guarded only under `!NDEBUG`, which is a class
 of undefined behaviour with reach far beyond this corpus.
+### 7.39 The shared arm verified on all three consumers, and S.3 priced
+
+`adjust_struct` is a **C** arm, so §7.38's change runs for the C and C++
+frontends under their flags too, and it is behaviour-altering exactly where the
+old tag lookup used to fail: such literals now get padded where they were
+previously left alone. The default path is unaffected by construction — the arm
+table is entered only under `sole_adjuster` — so the exposure is the two flag
+paths.
+
+C was covered by `irep2_only` (111 of 111). C++ was not, and that corpus is not
+at verdict parity, so a regression there would surface as a new hard failure
+rather than a verdict change. Stride-12 sample of `esbmc-cpp/cpp` under
+`--clang-cpp-irep2-adjust-only`, counting SIGSEGV, `tuple field out of range`
+and uncaught exceptions:
+
+```
+--- 84 sampled: 0 hard failures ---
+```
+
+So the shared arm is verified on all three consumers.
+
+**S.3, priced.** The converter's header declares:
+
+| shape | count |
+|---|---:|
+| functions taking `exprt &` | 136 |
+| of those, named `new_expr` | 67 |
+| functions taking `typet &` | 56 |
+
+So the converter is not a set of value-returning builders that could be ported
+one at a time: 136 entry points write through an `exprt &` out-parameter, 67 of
+them the same `new_expr` that `get_expr` threads through the whole expression
+walk. Porting any one of them natively leaves its caller holding an `expr2tc`
+where an `exprt` is expected, which is why §7.25's boundary question has no
+local answer.
+
+That reframes S.3's decomposition. It is not "port the smallest file first" —
+the smallest file's five functions all write into the same `new_expr` as the
+largest — but "convert the out-parameter", and the unit of work is the
+out-parameter's transitive closure rather than a file. The three options in
+§7.27 are the choices for how that closure's *edge* behaves, and the cheapest
+edge is the one that does not exist: port `new_expr` itself, which means the
+converter moves in one change or not at all.
+
+That is a materially different plan from §3's step S.3, and the parent's §6
+ordering put Solidity before Python precisely so a phase like this could be
+sized honestly before it starts. Recording the measurement rather than a
+porting order, because the measurement says the order does not matter.
