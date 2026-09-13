@@ -4219,8 +4219,7 @@ std::optional<exprt> numpy_call_expr::try_transpose_name_arg(
   if (t.is_pointer() && t.subtype().is_array())
     t = t.subtype();
 
-  if (std::optional<exprt> from_param =
-        try_transpose_decayed_2d_param(arg, t))
+  if (std::optional<exprt> from_param = try_transpose_decayed_2d_param(arg, t))
     return from_param;
 
   if (t.is_array() && t.subtype().is_array())
@@ -4279,7 +4278,8 @@ std::optional<exprt> numpy_call_expr::try_transpose_name_arg(
       args[0] = np_typecast(args[0], flat_ptr_type);
 
     exprt row0 = np_index(
-      *converter_.current_lhs, from_integer(0, size_type()),
+      *converter_.current_lhs,
+      from_integer(0, size_type()),
       result_type.subtype());
     exprt elem00 = np_index(row0, from_integer(0, size_type()), base_type);
     args.push_back(np_typecast(np_address_of(elem00), flat_ptr_type));
@@ -5360,8 +5360,9 @@ exprt numpy_call_expr::create_expr_from_call()
       if (function == "transpose")
       {
         exprt arg_expr = converter_.get_expr(arg);
-        if (std::optional<exprt> transposed =
-              try_transpose_name_arg(arg, arg_expr))
+        if (
+          std::optional<exprt> transposed =
+            try_transpose_name_arg(arg, arg_expr))
           return *transposed;
       }
 
