@@ -73,6 +73,32 @@ protected:
   void adjust_before_operands(expr2tc &expr) override;
   void fold_constructor_assignment(expr2tc &expr);
 
+  /// IREP2 form of clang_cpp_adjust::adjust_decl_block's fan-out: a local array
+  /// of class type arrives with one constructor call for the whole array, and
+  /// every element has to be constructed. Operates on the enclosing block
+  /// because one declaration becomes several statements; rewriting the
+  /// declaration into a block of its own would end the object's scope at that
+  /// block's brace (esbmc/esbmc#4715).
+  void fan_out_array_construction(expr2tc &expr);
+
+  /// Nil unless `stmt` declares a local array whose initialiser is a single
+  /// whole-array constructor call; otherwise that call.
+  expr2tc array_decl_constructor(const expr2tc &stmt);
+  /// False when a dimension's size is not a constant, leaving `out` unusable:
+  /// the caller emits nothing in that case.
+  bool construct_elements(
+    const expr2tc &array,
+    const expr2tc &ctor,
+    std::vector<expr2tc> &out);
+
+  /// Whether `call` is a constructor call. The converter's `#constructor`
+  /// marker does not cross the seam, so the `constructor` return-type spelling
+  /// is read from the symbol table instead. The two are not the same set --
+  /// legacy sets the marker only where it built the call -- but every shape
+  /// measured so far wants the same answer (§3.16).
+  bool is_constructor_call(const expr2tc &call);
+  expr2tc find_constructor_call(const expr2tc &e);
+
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
 

@@ -87,6 +87,7 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_special_functions), is_sideeffect2t},
   {ARM(adjust_binary_arith_operands), is_arith_or_bitwise},
   {ARM(adjust_shift_operands), is_shift},
+  {ARM(fan_out_array_construction), is_code_block2t},
   {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
   {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
   {ARM(adjust_derived_to_base), is_derived_to_base_cast},
@@ -111,6 +112,151 @@ void clang_cpp_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   run_adjust_arms(*this, arms, expr);
 }
 
+bool clang_cpp_adjust_irep2::is_constructor_call(const expr2tc &call)
+{
+  if (!is_sideeffect2t(call))
+    return false;
+
+  const sideeffect2t &se = to_sideeffect2t(call);
+  if (
+    se.kind != sideeffect_allockind::function_call || is_nil_expr(se.operand) ||
+    !is_symbol2t(se.operand))
+    return false;
+
+  const symbolt *s = context.find_symbol(to_symbol2t(se.operand).thename);
+  return s != nullptr && s->get_type().is_code() &&
+         to_code_type(s->get_type()).return_type().id() == "constructor";
+}
+
+expr2tc clang_cpp_adjust_irep2::find_constructor_call(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return expr2tc();
+  if (is_constructor_call(e))
+    return e;
+
+  expr2tc found;
+  e->foreach_operand([this, &found](const expr2tc &op) {
+    if (is_nil_expr(found))
+      found = find_constructor_call(op);
+  });
+  return found;
+}
+
+expr2tc clang_cpp_adjust_irep2::array_decl_constructor(const expr2tc &stmt)
+{
+  if (!is_code_decl2t(stmt))
+    return expr2tc();
+
+  const code_decl2t &d = to_code_decl2t(stmt);
+  if (is_nil_expr(d.init) || !is_array_type(ns.follow(d.type)))
+    return expr2tc();
+
+  // A function-local static is constructed by static_lifetime_init, not from
+  // the body; expanding here would construct it again on every call. That half
+  // is clang_cpp_maint::adjust_init's (clang_cpp_main.cpp), which keys on the
+  // `#constructor` marker this pass's write-back destroys -- a static or global
+  // class-typed array is unconstructed under this flag, §3.16's open row.
+  const symbolt *s = context.find_symbol(d.value);
+  if (s == nullptr || s->static_lifetime)
+    return expr2tc();
+
+  // Whole-array default/value construction only: the initialiser is a *single*
+  // constructor call whose type is the array. `B a[2] = {B(1), B(2)}` arrives
+  // as a constant_array of per-element initialisers, and fanning that out would
+  // construct every element with element 0's arguments.
+  if (
+    !is_sideeffect2t(d.init) ||
+    (to_sideeffect2t(d.init).kind != sideeffect_allockind::temporary_object &&
+     !is_constructor_call(d.init)))
+    return expr2tc();
+
+  const expr2tc ctor = find_constructor_call(d.init);
+  if (is_nil_expr(ctor) || to_sideeffect2t(ctor).arguments.empty())
+    return expr2tc();
+
+  return ctor;
+}
+
+bool clang_cpp_adjust_irep2::construct_elements(
+  const expr2tc &array,
+  const expr2tc &ctor,
+  std::vector<expr2tc> &out)
+{
+  const type2tc array_type = ns.follow(array->type);
+  const array_type2t &at = to_array_type(array_type);
+  // Legacy aborts here ("cannot determine array size for local ctor init").
+  // Declining instead leaves the declaration as it arrived: the caller commits
+  // nothing until this returns true, so a size it cannot read never costs the
+  // object its initialiser.
+  if (!is_constant_int2t(at.array_size))
+    return false;
+
+  const sideeffect2t &call = to_sideeffect2t(ctor);
+  const BigInt count = to_constant_int2t(at.array_size).value;
+  for (BigInt i = 0; i < count; ++i)
+  {
+    const expr2tc element =
+      index2tc(at.subtype, array, constant_int2tc(index_type2(), i));
+    if (is_array_type(ns.follow(at.subtype)))
+    {
+      if (!construct_elements(element, ctor, out))
+        return false;
+      continue;
+    }
+
+    // arguments[0] is the object argument; array_decl_constructor declines a
+    // call that has none. The element's type, not the initialiser's: see the
+    // fold's own choice below.
+    std::vector<expr2tc> args = call.arguments;
+    args[0] = address_of2tc(at.subtype, element);
+    out.push_back(code_expression2tc(
+      sideeffect2tc(
+        at.subtype,
+        call.operand,
+        call.size,
+        args,
+        call.alloctype,
+        call.kind,
+        call.location),
+      call.location));
+  }
+
+  return true;
+}
+
+void clang_cpp_adjust_irep2::fan_out_array_construction(expr2tc &expr)
+{
+  const code_block2t &b = to_code_block2t(expr);
+  std::vector<expr2tc> out;
+  bool fanned = false;
+
+  for (const expr2tc &stmt : b.operands)
+  {
+    const expr2tc ctor = array_decl_constructor(stmt);
+    if (is_nil_expr(ctor))
+    {
+      out.push_back(stmt);
+      continue;
+    }
+
+    const code_decl2t &d = to_code_decl2t(stmt);
+    std::vector<expr2tc> calls;
+    if (!construct_elements(symbol2tc(d.type, d.value), ctor, calls))
+    {
+      out.push_back(stmt);
+      continue;
+    }
+
+    fanned = true;
+    out.push_back(code_decl2tc(d.type, d.value, expr2tc(), d.location));
+    out.insert(out.end(), calls.begin(), calls.end());
+  }
+
+  if (fanned)
+    expr = code_block2tc(out, b.location, b.end_location);
+}
+
 void clang_cpp_adjust_irep2::adjust_before_operands(expr2tc &expr)
 {
   if (is_sideeffect_assign2t(expr))
@@ -125,29 +271,21 @@ void clang_cpp_adjust_irep2::fold_constructor_assignment(expr2tc &expr)
     if (a.op != "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
       return;
 
-    if (
-      !is_sideeffect2t(a.rhs) ||
-      to_sideeffect2t(a.rhs).kind != sideeffect_allockind::function_call)
+    if (!is_constructor_call(a.rhs))
       return;
 
     const sideeffect2t &call = to_sideeffect2t(a.rhs);
-    if (is_nil_expr(call.operand) || !is_symbol2t(call.operand))
-      return;
-
-    // A constructor is spelled by its legacy return type; there is no IREP2 id
-    // for it, so read the callee's type from the table, as
-    // align_call_return_type does.
-    const symbolt *s = context.find_symbol(to_symbol2t(call.operand).thename);
-    if (s == nullptr || !s->get_type().is_code())
-      return;
-    if (to_code_type(s->get_type()).return_type().id() != "constructor")
-      return;
 
     std::vector<expr2tc> args = call.arguments;
     args.insert(args.begin(), address_of2tc(a.lhs->type, a.lhs));
 
+    // The call's value is the object constructed, so it takes the object's
+    // type, not the initialiser's: for a class-typed array member the
+    // converter hands each per-element call the whole array's type, and left
+    // there adjust_expression_statement reads it as an array-valued statement
+    // and wraps it in `&stmt[0]`.
     folded = sideeffect2tc(
-      call.type,
+      a.lhs->type,
       call.operand,
       call.size,
       args,
