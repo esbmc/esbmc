@@ -656,7 +656,9 @@ void python_converter::build_models_block(
   code_blockt &models_block,
   bool models_precompiled)
 {
-  {
+  if (config.options.get_bool_option("no-library"))
+    return;
+
   // Load operational models
   const std::string &ast_output_dir =
     (*ast_json)["ast_output_dir"].get<std::string>();
@@ -741,7 +743,6 @@ void python_converter::build_models_block(
     current_python_file = main_python_file;
   }
   is_loading_models = false;
-  }
 }
 
 void python_converter::convert()

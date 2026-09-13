@@ -89,7 +89,8 @@ languaget *new_python_language()
 static void append_parser_flags(std::vector<std::string> &args)
 {
   static const std::pair<const char *, const char *> flags[] = {
-    {"deadlock-check", "--deadlock-check"}, {"python-typecheck", "--typecheck"}};
+    {"deadlock-check", "--deadlock-check"},
+    {"python-typecheck", "--typecheck"}};
 
   for (const auto &[option, flag] : flags)
     if (config.options.get_bool_option(option))
