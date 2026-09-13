@@ -1572,3 +1572,52 @@ four-name type, nothing downstream reconciling them, and — now — no arm in t
 adjust pass that ever sees the value. What changed: the fix is not in
 `adjust_struct`, and §7.34's and §7.35's framings of it as an arm or walk
 problem are both retired.
+### 7.37 Root cause: the tag lookup misses a nested struct's qualified name
+
+The inconsistent literal is in the symbol table after all — as the value of
+`sol:@C@Base@book#11`:
+
+```
+Type........: struct Book
+Value.......: { .title=0, .author=0, .book_id=0 }
+```
+
+Three initialisers, no pad, under a type whose padded layout has four members
+(§7.32). So the pass *does* walk it, and `adjust_struct` *is* dispatched on it.
+
+What it does next is resolve the padded layout by name:
+
+```cpp
+const symbolt *tag =
+  context.find_symbol("tag-" + to_struct_type(t).name.as_string());
+if (tag == nullptr || !tag->is_type)
+  return;
+```
+
+The literal's struct type is named **`struct Book`**, and the only tag symbols
+in the table are **`tag-struct Base.Book`** and `tag-Base` — the nested
+struct's tag is qualified by its enclosing contract. So
+`find_symbol("tag-struct Book")` misses, the arm returns before padding
+anything, and the literal keeps three operands under a four-member type.
+
+That is the root cause, and it explains §7.36's silence exactly: the probe sat
+*after* the tag lookup, so a literal that bails at the lookup is never logged. The
+arm's own comment says the padded layout "lives on the tag symbol; resolve by
+name to reach it" — which is right, and the name it builds is wrong for a
+nested struct.
+
+It also explains the asymmetry in §7.32: the three operational-model structs
+(`BytesStatic`, `BytesDynamic`, `BytesPool`) are top-level, so their tags are
+`tag-struct BytesDynamic` and the lookup succeeds; only a struct declared
+inside a contract gets the qualified tag.
+
+The fix is at the lookup, not in the padding: resolve the tag for a nested
+struct by the name its symbol actually carries. `ns.follow` already resolves
+the type, so the qualified name is available — and a lookup miss should not
+silently leave a value its own type cannot describe, which is the second half
+of the repair and what
+#7758's guard would then never need to fire for.
+
+Seven readings before this one. Each was corrected by a measurement, and the
+last of them was misled by where I placed the probe rather than by what the
+code does — a probe after an early return cannot see the case that takes it.
