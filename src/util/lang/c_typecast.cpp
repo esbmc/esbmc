@@ -778,7 +778,7 @@ static bool is_reference_type(const type2tc &type)
 /// because its operator== skips comment attributes, so `T&` and `T&&` compare
 /// equal there; ref_kind is a real field, so a wrong kind leaves do_typecast's
 /// `dest_type != type` guard true and appends a cast irept never produces.
-static void take_reference_address(expr2tc &expr, pointer_ref_kindt rk)
+void take_reference_address(expr2tc &expr, pointer_ref_kindt rk)
 {
   if (is_if2t(expr))
   {

@@ -1208,13 +1208,17 @@ void clang_c_adjust_irep2::adjust_call_callee(expr2tc &expr)
 /// `__builtin_va_list` is a pointer or a struct, and an already-decayed
 /// pointer where it is an array (x86-64 Linux). Reading the bit follows the
 /// target; a name test would take the address on both.
+/// \p rk receives the reference kind the legacy declaration spells, which the
+/// IREP2 parameter type need not carry -- that asymmetry is why the check below
+/// reads the declaration at all.
 static bool binds_by_reference(
   const expr2tc &callee,
   const expr2tc &arg,
   const type2tc &param,
   std::size_t i,
   const contextt &context,
-  const namespacet &ns)
+  const namespacet &ns,
+  pointer_ref_kindt &rk)
 {
   // address_of2t asserts its operand is not another address_of, so a caller
   // that already took the address is left alone.
@@ -1237,7 +1241,12 @@ static bool binds_by_reference(
     return false;
 
   const code_typet::argumentst &decl = to_code_type(s->get_type()).arguments();
-  return i < decl.size() && is_lvalue_or_rvalue_reference(decl[i].type());
+  if (i >= decl.size() || !is_lvalue_or_rvalue_reference(decl[i].type()))
+    return false;
+
+  rk = is_rvalue_reference(decl[i].type()) ? pointer_ref_kindt::RVALUE
+                                           : pointer_ref_kindt::LVALUE;
+  return true;
 }
 
 /// IREP2 form of the callee refresh in
@@ -1317,9 +1326,14 @@ void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
 
       // Converted instead of bound, `va_start` gets the va_list's own value
       // and the callee initialises whatever that value happens to point at.
-      if (binds_by_reference(callee, arg, params[i], i, context, ns))
+      // Not a plain address_of: the binding has to distribute over a
+      // conditional and keep the reference kind, or the legacy pipeline reading
+      // the written-back tree no longer sees a reference and takes the pointer
+      // conversion instead (docs/roadmap/scope-clang-cpp-irep2.md §3.20).
+      pointer_ref_kindt rk = pointer_ref_kindt::LVALUE;
+      if (binds_by_reference(callee, arg, params[i], i, context, ns, rk))
       {
-        arg = address_of2tc(arg->type, arg);
+        take_reference_address(arg, rk);
         continue;
       }
 
