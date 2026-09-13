@@ -564,6 +564,25 @@ rebuild_with_type<address_of2t>(const address_of2t &k, const type2tc &new_type)
     to_pointer_type(new_type).ref_kind);
 }
 
+// sideeffect2t carries `constructor` outside `fields` (see irep2_expr.h), so
+// the generic rebuild would drop it and a constructor call would stop reading
+// as one in clang_cpp_maint::adjust_init. Forwarded here for the same reason
+// address_of2t forwards ref_kind.
+template <>
+expr2tc
+rebuild_with_type<sideeffect2t>(const sideeffect2t &k, const type2tc &new_type)
+{
+  return sideeffect2tc(
+    new_type,
+    k.operand,
+    k.size,
+    k.arguments,
+    k.alloctype,
+    k.kind,
+    k.location,
+    k.constructor);
+}
+
 [[noreturn]] void with_type_unsupported(const expr2t &e)
 {
   log_error(
