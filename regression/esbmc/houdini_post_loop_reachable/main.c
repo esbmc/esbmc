@@ -3,8 +3,8 @@
  * or if a claim is wrongly carried over from an earlier Houdini round -- every
  * post-loop claim discharges without ever being solved. assert(0) is reachable
  * here, so a PASSED or a missing row means the pipeline stopped checking. The
- * verdict is unknown, not failed: the claim sits downstream of the havoc, so
- * its counterexample is against the abstraction (#7480). */
+ * claim is downstream of the havoc, but assert(0) can hold in no state at all,
+ * so the abstraction refutes it and #7626 reports the failure (#7480, #7585). */
 #include <assert.h>
 
 int main()
