@@ -2017,8 +2017,8 @@ absent (87 in total), the measurable set is **3095**:
 | hard failure under the flag | 7 classified as crashes, plus 18 rows that produce no verdict |
 
 So 98.0% of the corpus agrees, and the residue is 62 rows rather than the two the
-sample suggested. Reproduce with `scratchpad/cpp_full_census.sh` (resumable, one
-TSV row per test: status, directory, both verdicts).
+sample suggested. Reproduce with `scripts/irep2-migration/cpp_full_census.sh <out.tsv> [jobs]`
+(resumable, one TSV row per test: status, directory, both verdicts).
 
 ### 7.1 The residue by cause, not by directory
 
