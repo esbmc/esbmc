@@ -1452,3 +1452,50 @@ earlier arm may not be revisited.
 A `tuple_create` that refuses to build a tuple whose element count disagrees
 with its sort would have caught this at the source rather than at the
 projection, and is worth considering alongside #7758's guard.
+### 7.34 `adjust_struct` sees the inconsistency and declines it
+
+The arm, in full:
+
+```cpp
+  std::vector<expr2tc> ops = to_constant_struct2t(expr).datatype_members;
+  if (ops.size() == st.members.size())
+    return;
+
+  ops = pad_struct_operands(st, ops);
+  // A residual mismatch is not this pass's to guess at: leave the literal as
+  // it stands rather than build one the type cannot describe.
+  if (ops.size() == st.members.size())
+    expr = constant_struct2tc(padded, ops);
+```
+
+The failing literal has **three operands and a four-name type** (§7.32 read the
+four names; §7.31's guard reports three elements). So `ops.size()` is 3,
+`st.members.size()` is 4, `pad_struct_operands` does not bring it to 4, and the
+arm takes its documented bail-out: it leaves the literal alone rather than
+building one its type cannot describe.
+
+That bail-out is defensible read locally and wrong read end-to-end. The literal
+it declines to touch is *already* inconsistent — a four-member type over three
+operands — and `tuple_create` then sizes the sort from the type and the
+elements from the operands (§7.33), so the malformed value reaches the solver
+and the projection runs off the end.
+
+Note what this says about provenance: the arm does not create the
+inconsistency. The literal arrives with a padded type and unpadded operands, so
+the padding of its
+*type* happened elsewhere — `migrate_type` resolving the inline copy through the
+padded tag symbol is the candidate, and the arm's own comment says `ns.follow`
+leaves such a type short, which is no longer what it observes.
+
+Two repairs, and the first is small:
+
+1. **Do not leave an inconsistent literal.** If the operands cannot be padded to the
+   type, put the literal back on a type that matches what it has, rather than
+   letting a four-member type sit over three operands. The invariant to hold is
+   type-length equals operand-length, either way round.
+2. **Find why `pad_struct_operands` declines this shape**, which is the real fix if
+   the operands *should* be paddable.
+
+Worth adding to #7758's reasoning: a `tuple_create` that refused to build a
+tuple whose element count disagrees with its sort would have stopped this at
+the source, one layer before the projection.
