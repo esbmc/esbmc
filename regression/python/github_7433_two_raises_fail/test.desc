@@ -2,5 +2,6 @@ CORE
 main.py
 --sarif-output -
 ^VERIFICATION FAILED$
-^  FAILED       \[global\.assertion\.[0-9]+\] +line +0 +uncaught exception: ValueError$
+^  FAILED       \[check\.assertion\.[0-9]+\] +line +3 +uncaught exception: ValueError$
 "uri": ".*main\.py"
+"startLine": 3
