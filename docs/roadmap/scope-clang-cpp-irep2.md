@@ -1835,3 +1835,44 @@ same marker but only on the `cpp_new` path, so it is not what these two
 conditional rows turn on; those stay open, and the next measurement on them
 should be a whole-body diff of the pass's output for `pick`, not another arm
 guessed from an instruction.
+
+### 3.18 The marker that does have a consumer: measured, and blocked on with_type
+
+§3.17 named `#constructor` on the side effect as the loss worth carrying, because
+`clang_cpp_maint::adjust_init` (`clang_cpp_main.cpp:23`, `:61`) reads it in
+`final()`, *after* the pass and its write-back. Carried as a field on
+`sideeffect2t` — set from `expr.get_bool("constructor")` in `migrate_expr`,
+restored in `back_sideeffect` — it **closes the static/global row §3.16 opened**:
+
+| row | before | after |
+|---|---|---|
+| a file-scope `R g[2]` | SUCCESSFUL -> FAILED | **AGREE** |
+| a function-local `static R s[2]` | SUCCESSFUL -> FAILED | **AGREE** |
+| `esbmc-cpp11/constructors/Constructor9-1` | SUCCESSFUL -> FAILED | **AGREE** |
+| `esbmc-cpp11/constructors/local_array_of_class_ctor` | SUCCESSFUL -> FAILED | **AGREE** |
+
+`irep2_global_array_construction{,_fail}` is written and mutation-checked against
+the carry: both halves change outcome with the restore suppressed, and both agree
+with the legacy path.
+
+**It is not shippable in that shape.** Listing the field in `sideeffect2t::fields`
+makes the field order stop matching the primary constructor's parameter order —
+`location` sits between `kind` and the new field — and that is exactly what
+`supports_with_type_v` tests (`irep2_expr.cpp:500`). The trait goes false, so
+every `with_type` on a side effect takes the "no substitutable type" error path
+and aborts: 14 of 374 `irep2` rows and 12 of 1062 `esbmc-cpp/cpp` rows, including
+four that this branch had just brought to parity. §3.16's `#member_init` on
+`sideeffect_assign2t` has the same shape and is already with_type-unsupported;
+nothing calls with_type on that kind, which is why it went unnoticed there.
+
+Two ways out, for whoever takes this next: leave the field **unreflected** (like
+`location`, carried but not compared — cheap, but a `with_type` rebuild between
+the fold and the write-back would drop it), or move the parameter ahead of `loc`
+in the constructor so field and parameter order agree, which means touching every
+positional `sideeffect2tc(..., location)` call site. The unreflected version
+compiles; it has not been measured, because the build it needed was killed.
+
+Note also what this says about the *other* seam loss, the callee's `constructor`
+return type (§3.17): it is real, but symbol types are read from
+`symbolt::get_type2()` rather than migrated, so a `code_type2t` field is not
+where it would have to be carried.
