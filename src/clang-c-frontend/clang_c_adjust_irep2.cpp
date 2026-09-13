@@ -223,6 +223,9 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (const locationt l = statement_location(expr); !l.get_line().empty())
     enclosing_location = l;
 
+  if (sole_adjuster)
+    adjust_before_operands(expr);
+
   expr->Foreach_operand([this](expr2tc &op) { adjust_expr(op); });
 
   if (is_index2t(expr))

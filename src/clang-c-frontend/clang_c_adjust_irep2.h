@@ -291,6 +291,14 @@ protected:
   {
   }
 
+  /// A rewrite whose *result* must be walked, so it cannot be an arm: the arms
+  /// run after the operand walk. The legacy passes dispatch top-down and get
+  /// this ordering for free. C has no such rewrite
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.15).
+  virtual void adjust_before_operands(expr2tc &)
+  {
+  }
+
   /// Arms that run only when this pass is the sole adjuster, applied in the
   /// order `arms` lists them. Virtual so a derived pass substitutes its own
   /// table: one virtual for the whole dispatch, rather than the per-arm

@@ -59,6 +59,20 @@ protected:
   /// "return type" names the class, not the call's value.
   void align_call_return_type(expr2tc &expr, const symbolt &callee) override;
 
+  /// IREP2 form of clang_cpp_adjust::adjust_side_effect_assign's constructor
+  /// fold: `obj = C(args)` becomes the bare call `C(&obj, args)`. Left as an
+  /// assignment, remove_sideeffects materialises a temporary for the call's
+  /// value and that temporary acquires destructors of its own
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.14). Runs before the operand
+  /// walk: the call-site arms must see the object argument, since they convert
+  /// each argument against the matching parameter and a constructor's first
+  /// parameter is `this`. Legacy asserts the callee is a constructor and that
+  /// the object roots at a symbol; both are declines here, since a pass that
+  /// substitutes for the legacy one should leave a node it does not understand
+  /// alone rather than abort on it.
+  void adjust_before_operands(expr2tc &expr) override;
+  void fold_constructor_assignment(expr2tc &expr);
+
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
 

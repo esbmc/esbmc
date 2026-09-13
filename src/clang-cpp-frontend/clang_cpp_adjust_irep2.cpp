@@ -111,6 +111,56 @@ void clang_cpp_adjust_irep2::adjust_sole_arms(expr2tc &expr)
   run_adjust_arms(*this, arms, expr);
 }
 
+void clang_cpp_adjust_irep2::adjust_before_operands(expr2tc &expr)
+{
+  if (is_sideeffect_assign2t(expr))
+    fold_constructor_assignment(expr);
+}
+
+void clang_cpp_adjust_irep2::fold_constructor_assignment(expr2tc &expr)
+{
+  expr2tc folded;
+  {
+    const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
+    if (a.op != "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+      return;
+
+    if (
+      !is_sideeffect2t(a.rhs) ||
+      to_sideeffect2t(a.rhs).kind != sideeffect_allockind::function_call)
+      return;
+
+    const sideeffect2t &call = to_sideeffect2t(a.rhs);
+    if (is_nil_expr(call.operand) || !is_symbol2t(call.operand))
+      return;
+
+    // A constructor is spelled by its legacy return type; there is no IREP2 id
+    // for it, so read the callee's type from the table, as
+    // align_call_return_type does.
+    const symbolt *s = context.find_symbol(to_symbol2t(call.operand).thename);
+    if (s == nullptr || !s->get_type().is_code())
+      return;
+    if (to_code_type(s->get_type()).return_type().id() != "constructor")
+      return;
+
+    std::vector<expr2tc> args = call.arguments;
+    args.insert(args.begin(), address_of2tc(a.lhs->type, a.lhs));
+
+    folded = sideeffect2tc(
+      call.type,
+      call.operand,
+      call.size,
+      args,
+      call.alloctype,
+      call.kind,
+      call.location);
+  }
+
+  // The views above are dead here on purpose: this drops the assignment node
+  // they referenced.
+  expr = folded;
+}
+
 void clang_cpp_adjust_irep2::align_call_return_type(
   expr2tc &expr,
   const symbolt &callee)
