@@ -1369,3 +1369,54 @@ Two repairs, and they are not alternatives:
 The first is worth doing on its own account and belongs to whoever owns the
 solver's tuple layer; the second is what closes these three rows. Recording
 both, because the first is the reason this defect cost what it did to find.
+### 7.32 The offending expression is a nested struct literal — and it is padded
+
+With #7758's guard in place the failure is reportable, so a probe in
+`convert_member` can print the expression at the mismatch rather than inferring
+it. The source is
+
+```
+XSEAM member=book_id
+SOURCE member
+* source_value : constant_struct        <- a struct *literal*, not a symbol
+```
+
+so the chain is `member(member(<literal>, book), book_id)`, and the inner `book`
+value is itself a `constant_struct`. That explains at last why padding *type
+symbols* never helped (§7.18): the stale value is a literal, which
+`adjust_struct` owns, not a type symbol.
+
+**But the literal is not short.** Its type carries four member names —
+
+```
+member_names : 0: title  1: author  2: anon_pad#2  3: book_id
+```
+
+— and it carries four operands to match (`symbol`, `symbol`, `constant_int`,
+`constant_int`). So `adjust_struct` did its job: type and value agree at four,
+and `anon_pad#2` is in place. `get_member_name_field` returning 3 for `book_id`
+is right.
+
+Yet the AST built from that literal carries a **three**-member sort. So the
+disagreement is not between a type and a value, and not between two types: it
+is between a correctly padded literal and the AST constructed from it. That
+moves the question to `constant_struct2t`'s AST construction or to an AST
+reused for a differently-typed literal — and away from padding entirely, for
+the third time.
+
+Also worth recording: the guard changes the outcome from a SIGSEGV to
+
+```
+ERROR: Tuple field 3 out of range: … struct Book …
+ERROR: SMT solver failed
+VERIFICATION UNKNOWN
+```
+
+so these three rows reclassify from *crash* to *divergence* in the sweep, and
+the tool degrades gracefully with the cause on screen.
+
+One methodological note: `gdb -ex 'catch throw'` is not a shortcut to this
+throw. It stops at the first throw in the run, which here is an unrelated
+internal one in `type_byte_size`'s `size_bits_expr` reached through
+`convert_addr_of`, caught and handled. Reading that backtrace as the fatal path
+would have been a fourth wrong-site diagnosis.
