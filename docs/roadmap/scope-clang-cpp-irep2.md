@@ -1763,3 +1763,11 @@ row by hand; only 42 `test.desc` rows in the tree pass it themselves, and
 `member_array_ctor_dtor_symmetry` is not one of them, so CI runs that row under
 the legacy adjuster. A census row is evidence about the pass, not a gate on it —
 the gate is the flag-pinned pair.
+
+**And a VLA row, undocumented until now.** With the decline staged, a class-typed
+variable-length array keeps its initialiser and element 0 is constructed —
+elements 1..n-1 are not, silently, the same false-alarm family as the static row
+above. `irep2_array_vla_construction{,_fail}` pins element 0 only: a test over
+the rest would cement the false alarm, and pinning element 0 stays correct when
+the VLA path is completed. The pair is flag-only by necessity — legacy aborts on
+this input.
