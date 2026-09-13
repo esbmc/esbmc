@@ -48,15 +48,21 @@
 const char *const kSynthesisedInvariantProperty = "synthesised-loop-invariant";
 const char *const kHoudiniCandidatePrefix = "houdini-candidate:";
 
-/// Instructions that may sit between a synthesised marker and the loop head it
-/// was emitted for. The marker is inserted immediately before that head, so
-/// only bookkeeping and the assumes a later pass (--interval-analysis) injects
-/// can legitimately intervene.
-static bool is_inert_before_loop_head(goto_programt::const_targett t)
+namespace loop_invariant
 {
+bool is_inert_scan_instruction(goto_programt::const_targett t)
+{
+  // OTHER also carries `free`, `delete`, `printf` and `asm`, whose effects a
+  // caller cannot ignore; a code_expression2t is only an evaluation
+  // (symex_other.cpp). glibc spells assert(e) with a leading
+  // `(void) sizeof ((e) ? 1 : 0)`, which lands here.
+  if (t->type == OTHER)
+    return !is_nil_expr(t->code) && is_code_expression2t(t->code);
+
   return t->is_skip() || t->is_location() || t->is_decl() || t->type == DEAD ||
          t->is_assume();
 }
+} // namespace loop_invariant
 
 /// True for a name the frontend generated rather than the user: ESBMC spells
 /// those with a '$' (e.g. return_value$___ESBMC_forall$N).
@@ -190,7 +196,8 @@ static std::vector<expr2tc> extract_invariants_near(
 
     if (!it->is_loop_invariant())
     {
-      if (!is_inert_before_loop_head(it) && !is_compiler_temp(it))
+      if (
+        !loop_invariant::is_inert_scan_instruction(it) && !is_compiler_temp(it))
         crossed_real_instruction = true;
       continue;
     }

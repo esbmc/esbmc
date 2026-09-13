@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-bounds-check
+^VERIFICATION FAILED$
+^.*\[main\.assertion\.1\].*dereference failure: Incorrect alignment when accessing data object.*$

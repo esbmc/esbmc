@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cctype>
 #include <map>
 #include <string>
 
@@ -110,13 +111,22 @@ public:
     return consensus_func_to_type().at(name);
   }
 
+  /// True for the monomorphic collection builders in models/nondet.py
+  /// (`_nondet_list_int`, `_nondet_dict_str_float`, ...), which the
+  /// preprocessor substitutes for `nondet_list`/`nondet_dict`.
+  static bool is_nondet_collection_builder(const std::string &name)
+  {
+    return name.rfind("_nondet_list_", 0) == 0 ||
+           (name.rfind("_nondet_dict_", 0) == 0 && name != "_nondet_dict_size");
+  }
+
   static bool is_python_model_func(const std::string &name)
   {
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "conjugate" || name == "from_bytes" ||
       name == "to_bytes" || name == "randint" || name == "random" ||
-      name == "all");
+      name == "all" || is_nondet_collection_builder(name));
   }
 
   static bool is_python_exceptions(const std::string &name)
@@ -323,6 +333,30 @@ public:
       "complex",
       "frozenset"};
     return type_identifiers.find(name) != type_identifiers.end();
+  }
+
+  /// Copies @p s to @p out with PEP 515 underscore separators removed.
+  /// Returns false when one is misplaced: a numeric string may carry a single
+  /// underscore between two digits, never leading, trailing or doubled.
+  static bool strip_pep515_underscores(const std::string &s, std::string &out)
+  {
+    out.clear();
+    out.reserve(s.size());
+    for (std::size_t i = 0; i < s.size(); i++)
+    {
+      if (s[i] != '_')
+      {
+        out.push_back(s[i]);
+        continue;
+      }
+      const bool between_digits =
+        i > 0 && i + 1 < s.size() &&
+        isdigit(static_cast<unsigned char>(s[i - 1])) &&
+        isdigit(static_cast<unsigned char>(s[i + 1]));
+      if (!between_digits)
+        return false;
+    }
+    return true;
   }
 
 private:

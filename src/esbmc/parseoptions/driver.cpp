@@ -18,9 +18,9 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -190,6 +190,28 @@ static bool incompatible_flags(const cmdlinet &cmdline)
       "use --loop-invariant-check, which it implies");
     return true;
   }
+
+  // --termination havocs every loop head k-induction-style (goto_termination),
+  // and the standalone schema has already rewritten those heads: goto_loop_
+  // invariant uses insert_swap, which leaves the establishment ASSERT in the
+  // head's slot, and havoc_slot then aborts on `loop_head->is_goto()`
+  // (goto_k_induction.cpp). Composing the two would be meaningless even if it
+  // did not abort -- a loop the schema has cut no longer has the iteration
+  // behaviour --termination asks about.
+  //
+  // Combined mode is exempt, and so is --validate-correctness-witness, which
+  // routes to it: goto_loop_invariant_combined splices its verification branch
+  // *before* the head with destructive_insert, so the head is still the guard
+  // GOTO when goto_termination reaches it. Measured on an unbounded loop with
+  // a witness-injected loop invariant, where the ranking check does not
+  // short-circuit: the run completes.
+  for (const char *mode :
+       {"synthesise-loop-invariants", "loop-invariant-check"})
+    if (cmdline.isset(mode) && cmdline.isset("termination"))
+    {
+      log_error("--{} cannot be combined with --termination", mode);
+      return true;
+    }
 
   // --houdini-loop-invariants owns the outer loop too: it re-derives the
   // program once per filtering round from a pristine copy and applies the

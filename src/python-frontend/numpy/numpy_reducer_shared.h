@@ -9,6 +9,7 @@
 
 #include <python-frontend/type/type_handler.h>
 #include <nlohmann/json.hpp>
+#include <python-frontend/math/convert_float_literal.h>
 #include <util/irep/expr.h>
 #include <util/irep/std_expr.h>
 #include <cstdint>
@@ -66,6 +67,13 @@ inline numeric_value extract_value(const nlohmann::json &arg)
     return make_int_value(value.get<int64_t>());
   if (value.is_number_float())
     return make_float_value(value.get<double>());
+
+  // A non-finite literal arrives with a nulled value and a spelling tag, so
+  // the number checks above all miss it (#7545).
+  if (arg.contains("value_nonfinite"))
+    return make_float_value(
+      nonfinite_float_from_spelling(arg["value_nonfinite"].get<std::string>())
+        ->to_double());
 
   throw std::runtime_error("Unknown numeric type in JSON");
 }

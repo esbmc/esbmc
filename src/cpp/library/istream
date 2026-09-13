@@ -1,6 +1,7 @@
 #ifndef STL_ISTREAM
 #define STL_ISTREAM
 
+#include "iosfwd"
 #include "ios"
 #include "definitions.h"
 #include "cstdio"
@@ -352,17 +353,9 @@ ios::streampos istream::tellg()
 {
   return _filepos;
 }
-#if __cplusplus >= 201103L
-template <class charT>
-struct char_traits;
-template <class CharT, class Traits = char_traits<CharT>>
-using basic_istream = istream;
-/* [istream.syn] declares basic_iostream here too; the model defines the class
- * itself in <iostream>, which every use that needs it complete includes. */
-class iostream;
-template <class CharT, class Traits = char_traits<CharT>>
-using basic_iostream = iostream;
-#endif
+/* basic_istream and basic_iostream are alias templates declared in <iosfwd>,
+ * which this header includes; repeating them here would declare the default
+ * template argument twice (#7531). */
 
 } // namespace std
 

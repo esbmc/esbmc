@@ -904,5 +904,21 @@ void python_converter::get_class_definition(
   const nlohmann::json &class_node,
   codet &target_block)
 {
+  // A class symbol is keyed by name alone, with no enclosing-scope component,
+  // so two functions each defining a class of the same name share one symbol:
+  // the second registration is dropped and the second function silently runs
+  // the first one's constructor, proving the wrong value (#7541). #6765 already
+  // makes is_class decline such a name; declining does not prevent the
+  // collision, so refuse the program rather than answer it wrongly.
+  const std::string &class_name = class_node["name"].get<std::string>();
+  if (
+    ast_json && json_utils::count_function_scope_classes(
+                  (*ast_json)["body"], class_name) > 1)
+    throw std::runtime_error(
+      "class '" + class_name +
+      "' is defined in more than one function body; ESBMC keys a class symbol "
+      "by name alone, so the definitions would share one symbol. Rename one of "
+      "them.");
+
   python_class_builder(*this, class_node).build(target_block);
 }

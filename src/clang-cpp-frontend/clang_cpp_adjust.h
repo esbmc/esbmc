@@ -65,17 +65,6 @@ public:
   void adjust_cpp_member(member_exprt &expr);
 
   /**
-   * The callee of a `delete` expression's destructor call: the virtual function
-   * table slot reached through \p object, so that the most-derived destructor
-   * runs ([expr.delete]/3, [class.dtor]/9), or the destructor symbol itself
-   * when it is not virtual.
-   */
-  exprt destructor_binding(
-    const struct_typet &class_type,
-    const struct_typet::componentt &dtor,
-    const exprt &object);
-
-  /**
    * Adjusts a C++ pseudo-destructor call expression.
    *
    * This method is responsible for handling adjustments specific to
@@ -92,7 +81,6 @@ public:
   /**
    * methods for implicit GOTO code generation
    */
-  void gen_vptr_initializations(symbolt &symbol);
   /*
    * generate vptr initialization code for constructor:
    *  this->BLAH@vtable_ptr = $vtable::BLAH
@@ -103,13 +91,6 @@ public:
    *  - ctor_type: type of the constructor symbol
    *  - new_code: the code expression for vptr initialization
    */
-  void gen_vptr_init_code(
-    const struct_union_typet::componentt &comp,
-    side_effect_exprt &new_code,
-    const code_typet &ctor_type);
-  exprt gen_vptr_init_lhs(
-    const struct_union_typet::componentt &comp,
-    const code_typet &ctor_type);
   exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
     const code_typet &ctor_type);

@@ -219,7 +219,8 @@ Given the program and the generated monitor, ESBMC:
    `ltl2ba_finish_monitor` are injected at the top of the entry function and
    before each of its `return` instructions (`property_monitors.cpp:97`).
    `ltl2ba_start_monitor` spawns the automaton as a pthread and registers it via
-   the `__ESBMC_register_monitor` intrinsic (`src/goto-symex/symex_main.cpp:609`).
+   the `__ESBMC_register_monitor` intrinsic
+   (`src/goto-symex/engine/symex_main.cpp:640`).
 4. **Explores the automaton symbolically.** The monitor keeps the current
    automaton state in a single nondeterministic-but-constrained integer, with
    each transition guarded by `__ESBMC_assume`. The automaton is never
@@ -240,9 +241,9 @@ Given the program and the generated monitor, ESBMC:
    assertion was present to prove.
 
 Two smaller accommodations: the context-switch threshold is raised from 2 to 3
-under `--ltl` (`src/goto-symex/execution_state.cpp:106`), and the assertion
-cache is disabled (`src/esbmc/bmc.cpp:118`) because the LTL assertions are
-re-checked with different maskings.
+under `--ltl` (`src/goto-symex/scheduler/execution_state.cpp:109`), and the
+assertion cache is disabled (`src/esbmc/bmc.cpp:118`) because the LTL
+assertions are re-checked with different maskings.
 
 ## Limitations
 

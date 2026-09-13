@@ -344,26 +344,55 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   backing_decl.location() = location;
   instructions.push_back(backing_decl);
 
-  exprt elem_size = type_handler_.tagged_scalar_byte_size(value_to_store);
+  // A runtime string has no statically known length -- measure it with
+  // the bounded-length helper, +1 for the trailing NUL.
+  exprt elem_size;
+  if (
+    value_to_store.type().is_pointer() &&
+    value_to_store.type().subtype() == char_type())
+  {
+    const symbolt *strlen_func = converter_.symbol_table().find_symbol(
+      "c:@F@__python_scalar_strlen_bounded");
+    assert(
+      strlen_func &&
+      "__python_scalar_strlen_bounded not found in symbol table");
+    exprt base_addr = converter_.get_string_handler().get_array_base_address(
+      build_symbol(backing));
+    exprt len_call = build_call_expr(*strlen_func, size_type(), {base_addr});
+    elem_size = build_add(len_call, from_integer(1, size_type()), size_type());
+  }
+  else
+    elem_size = type_handler_.tagged_scalar_byte_size(value_to_store);
 
-  // `backing` goes DEAD at the end of this branch; copy its value into
-  // non-expiring storage first so `.value` stays valid past the join.
-  const symbolt *copy_func =
-    converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
+  // A pointer `backing` already refers to non-expiring storage, so use it
+  // as `.value` directly. Anything else lives in `backing`'s own stack
+  // storage, which goes DEAD at branch exit, so it needs an explicit copy.
+  exprt tag_value;
+  if (value_to_store.type().is_pointer())
+    tag_value =
+      build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+  else
+  {
+    const symbolt *copy_func =
+      converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
+    assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
+    exprt backing_addr = build_typecast(
+      build_address_of(build_symbol(backing)), pointer_typet(empty_typet()));
+    tag_value = build_call_expr(
+      *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
+  }
 
-  assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
-
-  exprt backing_addr = build_typecast(
-    build_address_of(build_symbol(backing)), pointer_typet(empty_typet()));
-  exprt copy_call = build_call_expr(
-    *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
-
-  exprt type_id_value = type_handler_.tagged_scalar_type_id(rhs.type());
+  // Normalise to the canonical str type before hashing, so type_id
+  // doesn't vary with length or array-vs-pointer shape.
+  typet type_id_source = value_to_store.type();
+  if (type_handler_.is_string_type(type_id_source))
+    type_id_source = pointer_typet(char_type());
+  exprt type_id_value = type_handler_.tagged_scalar_type_id(type_id_source);
 
   exprt tag_expr = build_symbol(tag_symbol);
 
   code_assignt value_assign(
-    build_member(tag_expr, "value", pointer_typet(empty_typet())), copy_call);
+    build_member(tag_expr, "value", pointer_typet(empty_typet())), tag_value);
   value_assign.location() = location;
   instructions.push_back(value_assign);
 
@@ -721,6 +750,12 @@ exprt dynamic_type_handler::handle_arithmetic(
   assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
   return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
                     : build_div_literal(rhs, lhs, false, location);
+}
+
+exprt dynamic_type_handler::build_neg_tagged(const exprt &tagged)
+{
+  exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
+  return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
 
 exprt dynamic_type_handler::build_add_tagged(const exprt &lhs, const exprt &rhs)

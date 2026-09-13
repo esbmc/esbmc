@@ -561,17 +561,61 @@ public:
    *        or 0 when there is no single answer.
    *
    * The list models apply one copy length to every element, so a width is only
-   * usable when all of them agree. Non-scalar elements (nested lists, dicts)
-   * and mixed widths both yield 0, which keeps the model on its symbolic
-   * o->size path. Distinct from build_shallow_copy_call, which reads only the
-   * last type-map entry.
+   * usable when all of them agree. Scalars and tuples have one, both being
+   * stored inline; a pointer-stored element (a nested list, a dict) and mixed
+   * widths yield 0, which keeps the model on its symbolic o->size path.
+   * Distinct from build_shallow_copy_call, which reads only the last type-map
+   * entry.
    */
-  BigInt uniform_scalar_elem_size(const std::string &list_id) const;
+  BigInt uniform_elem_size(const std::string &list_id) const;
 
   /** Same, for a list reached as an expression: a non-symbol operand names no
    *  list to look up, so it has no single width and yields 0.
    */
-  BigInt uniform_scalar_elem_size(const exprt &list) const;
+  BigInt uniform_elem_size(const exprt &list) const;
+
+  // True when the list's recorded element types include a tagged scalar, whose
+  // payload width is per-element and symbolic (#7716).
+  bool has_tagged_elements(const exprt &list) const;
+
+  /// The recorded element type when it is a tagged scalar and the index is not
+  /// constant; otherwise the fallback (#7716 family).
+  typet tagged_elem_type_or(
+    const exprt &array,
+    bool constant_index,
+    const typet &fallback) const;
+
+  struct shallow_push_call
+  {
+    const symbolt *func;
+    exprt last_arg;
+  };
+
+  /** Shallow-push entry point for a copy of `src`. A list of tagged scalars
+   *  needs the bounded-copy variant, which reads its trailing argument as a
+   *  float_type_id rather than as an element width (#7716).
+   */
+  shallow_push_call
+  select_shallow_push(const exprt &src, const exprt &untagged_last_arg) const;
+
+  shallow_push_call
+  select_list_extend(const exprt &src, const exprt &untagged_elem_size) const;
+
+  struct list_eq_target
+  {
+    const symbolt *func;
+    std::vector<exprt> trailing_args;
+  };
+
+  /** Equality entry point for `l1 == l2` and the arguments that follow the two
+   *  list operands. A tagged element has no single static width and cannot hold
+   *  a nested list, so neither elem_size nor the depth stack applies (#7723).
+   */
+  list_eq_target select_list_eq(
+    const exprt &l1,
+    const exprt &l2,
+    const symbolt &generic_func,
+    const std::vector<exprt> &generic_trailing_args) const;
 
   /**
    * @brief Unpack a list variable into multiple targets, supporting starred
@@ -617,6 +661,25 @@ private:
 
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
+
+  /// Refuses `dict.items()` against a set of tuples, whose pairs the
+  /// placeholder view does not model (#7553).
+  void reject_items_view_vs_tuple_set(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &converted_lhs,
+    const exprt &converted_rhs);
+
+  /// A constructed class instance arrives as a value struct; the element read
+  /// expects a reference. Box it so the two agree (#7685).
+  exprt as_object_reference(const nlohmann::json &op, const exprt &elem);
+
+  list_elem_info
+  get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
+
+  // The type_id a tagged scalar carries when it holds a float, or 0 when the
+  // caller opts out of the float path (dict values compare via void*).
+  exprt tagged_float_type_id(bool enable_float_path) const;
 
   symbolt &create_list();
 

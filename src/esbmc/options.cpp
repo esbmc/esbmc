@@ -194,7 +194,22 @@ const struct group_opt_templ all_cmd_options[] = {
     {"clang-c-irep2-adjust-only",
      NULL,
      "Use the IREP2-native C adjuster instead of the legacy adjust pass "
-     "(Phase 6 hop-off; experimental, default off)"}}},
+     "(Phase 6 hop-off; experimental, default off)"},
+    {"clang-c-irep2-adjust-writeback-all",
+     NULL,
+     "Diagnostic: make the IREP2-native C adjuster refresh every symbol's "
+     "legacy value, not only the ones it changed. Without it a body the pass "
+     "did not touch still prints its converter tree under "
+     "--symbol-table-only, which is not what the pass produced"},
+    {"clang-cpp-irep2-migrate-census",
+     NULL,
+     "Diagnostic: migrate every adjusted C++ symbol through IREP2 and report "
+     "the count, to find what the C++ frontend emits that IREP2 cannot "
+     "represent (Phase 7; read-only, default off)"},
+    {"clang-cpp-irep2-adjust-only",
+     NULL,
+     "Use the IREP2-native C++ adjuster instead of the legacy adjust pass "
+     "(Phase 7 hop-off; experimental, default off)"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
    {
@@ -564,20 +579,22 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Verify using loop invariant havoc abstraction (standalone mode). Cuts "
      "the loop, so cost is independent of the bound; the only mode that "
-     "reasons about the loop exit condition"},
+     "reasons about the loop exit condition. Implies --check-vacuity"},
     {"synthesise-loop-invariants",
      NULL,
      "Synthesise invariants for affine counter/accumulator loops and discharge "
      "them with the loop-invariant havoc schema; implies "
-     "--loop-invariant-check, and --multi-property unless a k-induction phase "
-     "is selected"},
+     "--loop-invariant-check, --check-vacuity, and --multi-property unless a "
+     "k-induction phase is selected. --check-vacuity applies to the whole run, "
+     "so a program with no loop at all can still report UNKNOWN where it "
+     "reported SUCCESSFUL; --no-vacuity-check turns it back off"},
     {"houdini-loop-invariants",
      NULL,
      "Infer loop invariants by Houdini: guess a pool of candidate facts from "
      "the program's own constants and delete the ones the solver refutes, "
      "until the surviving set is inductive. Reaches loops with no affine "
-     "counter; implies --loop-invariant-check, and --multi-property unless a "
-     "k-induction phase is selected"},
+     "counter; implies --loop-invariant-check, --check-vacuity, and "
+     "--multi-property unless a k-induction phase is selected"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "
@@ -586,7 +603,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "After UNSAT discharge, re-solve path assumptions alone; if also UNSAT, "
      "report VERIFICATION UNKNOWN (vacuous discharge) instead of SUCCESSFUL. "
-     "Default on when --loop-invariant or --loop-invariant-check is set."},
+     "Applies to every claim in the run, not only the ones a loop invariant "
+     "reaches. Default on under --loop-invariant-check and "
+     "--synthesise-loop-invariants; opt-in elsewhere."},
     {"no-vacuity-check",
      NULL,
      "Disable the vacuity probe (overrides default-on behavior)."}}},
@@ -757,6 +776,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
     {"no-align-check", NULL, "Do not check pointer alignment"},
+    {"no-fp-conversion-check",
+     NULL,
+     "Do not check that a floating-point to integer conversion is in range "
+     "(C11 6.3.1.4p1); the rest of --overflow-check is unaffected"},
     {"no-unlimited-scanf-check",
      NULL,
      "Do not do overflow check for scanf/fscanf with unlimited character "

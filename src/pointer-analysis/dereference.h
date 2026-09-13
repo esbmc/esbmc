@@ -498,10 +498,18 @@ private:
     const type2tc &type,
     const guard2tc &guard,
     modet mode);
+  /** \p object is the object being accessed, or nil where the caller does not
+   *  know it yet -- then the base is assumed to carry the access width, as it
+   *  does for everything but a type that declines alignment. */
   void check_alignment(
     BigInt minwidth,
     const expr2tc &offset,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &object);
+  /** The alignment the address-space model guarantees the base of \p object's
+   *  object, i.e. the assumption check_alignment() is entitled to make about
+   *  everything below the offset it checks. */
+  BigInt object_base_alignment(const expr2tc &object) const;
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc &offset,
     unsigned long num_bits);

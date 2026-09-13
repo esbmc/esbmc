@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --no-standard-checks --no-irep2-native-body --goto-functions-only
+Contract \(sol:@C@Contract@F@Contract#\):\n[\s\S]*?// \d+ no location\n\s+FUNCTION_CALL:  _str_assign\(&this->s, &"HELLO"\[0\]\)

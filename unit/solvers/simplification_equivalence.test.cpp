@@ -87,6 +87,32 @@ SCENARIO(
     }
   }
 
+  GIVEN("an overflow_cast whose bound the operand's type cannot hold")
+  {
+    // overflow_cast(x, bits) asks whether x lies in [0, 2^bits - 1]. The SMT
+    // lowering built that bound in the operand's own type, where at equal
+    // widths a signed operand wraps it to -1 and the check becomes a tautology
+    // (#7324). Only a unit test reaches the shape: goto_check builds it with
+    // bits == width solely under --ir, where the constant does not wrap.
+    THEN("32 bits over an int32 reduces to the sign test")
+    {
+      REQUIRE(
+        check_simplification_equivalence(
+          overflow_cast2tc(x, 32), lessthan2tc(x, zero), ns, options) ==
+        simplification_equivalencet::equivalent);
+    }
+    THEN("8 bits over an int32 still catches a value that does not fit")
+    {
+      const expr2tc max_byte = from_integer(255, get_int32_type());
+      const expr2tc narrow =
+        or2tc(lessthan2tc(x, zero), greaterthan2tc(x, max_byte));
+      REQUIRE(
+        check_simplification_equivalence(
+          overflow_cast2tc(x, 8), narrow, ns, options) ==
+        simplification_equivalencet::equivalent);
+    }
+  }
+
   GIVEN("a boolean rewrite")
   {
     const expr2tc b = symbol2tc(get_bool_type(), "b");
@@ -240,15 +266,6 @@ SCENARIO(
 
   GIVEN("shapes whose bitvector lowering cannot be trusted")
   {
-    THEN("an overflow_cast is declined")
-    {
-      // Its lowering builds an upper bound its own type cannot hold (#7324).
-      REQUIRE(
-        check_simplification_equivalence(
-          overflow_cast2tc(x, 32), gen_false_expr(), ns, options) ==
-        simplification_equivalencet::skipped);
-    }
-
     THEN("a fixedbv constant wider than 64 bits is declined")
     {
       // convert_terminal() asserts such a constant fits a uint64_t.

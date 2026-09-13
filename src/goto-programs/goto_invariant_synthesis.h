@@ -2,6 +2,7 @@
 #define GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_
 
 #include <goto-programs/goto_functions.h>
+#include <irep2/irep2_expr.h>
 
 /// What goto_check will instrument on the guards this pass emits. It checks
 /// every instruction guard, including the synthesised ones, so a closed form
@@ -16,6 +17,31 @@ struct overflow_checkst
   /// type is safe to emit the closed form at, so synthesis declines outright.
   bool unsigned_arith = false;
 };
+
+/// The recogniser's pure syntactic predicates. Exposed for unit testing: every
+/// other route to them runs through a frontend and a solver, where a predicate
+/// that never fires is indistinguishable from one that answers correctly.
+namespace invariant_synthesis
+{
+/// Split `cond` into counter and bound for the `<`/`<=` shapes this pass
+/// handles, and report which one it was. Other comparisons (and decrementing
+/// loops) are left to a later revision.
+bool split_bound(
+  const expr2tc &cond,
+  expr2tc &counter,
+  expr2tc &bound,
+  bool &inclusive);
+
+/// `lhs = lhs + addend` -- the only body assignment shape recognised here.
+bool is_self_increment(
+  const expr2tc &target,
+  const expr2tc &source,
+  expr2tc &addend);
+
+/// Whether the two-disjunct bound `(i <op> B) || i == E` is established from a
+/// counter entry value of `entry`. See the definition for the case analysis.
+bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive);
+} // namespace invariant_synthesis
 
 /// Synthesise loop invariants for affine counter/accumulator loops and attach
 /// them as LOOP_INVARIANT instructions, exactly as if the user had written
@@ -67,6 +93,26 @@ struct overflow_checkst
 ///                     guard and the closed form reports an accumulator the
 ///                     loop could not produce.
 ///
+/// TWO PRECONDITIONS THE ABSTRACTION ITSELF DOES NOT ENFORCE.
+///
+/// Concurrency. Cutting a loop deletes its interleaving points, so a claim
+/// another thread could only violate through one of them is no longer reachable
+/// in the cut program and is reported passed -- #7491's classifier acts on the
+/// refutation side only and does not catch it. Synthesis therefore declines
+/// outright on a program that can reach __ESBMC_spawn_thread; see
+/// spawns_threads, and regression/esbmc/synth_loop_invariant_thread_falseproof
+/// for the shape the decline exists to keep out.
+///
+/// A user-written invariant is authoritative. A synthesised marker on the same
+/// loop is declined (has_user_invariant), and so is synthesis inside any
+/// function a user invariant's expression calls, transitively -- otherwise the
+/// user's own marker reads a havoc-abstracted return value. See
+/// collect_invariant_dependencies. It is a call-graph rule and nothing wider:
+/// the same value reaching a marker through a local this pass has cut is not
+/// declined, and does not need to be -- the closed form describes that local
+/// exactly, where a cut callee's return value is only havoc plus whatever the
+/// invariant on its own loop happens to say.
+///
 /// `i >= i0` prunes havoced states below the entry value, where `i - i0` wraps.
 /// It is emitted for unsigned counters only: a signed `i == n == INT_MAX` still
 /// satisfies the guard, so the body's `i + 1` wraps and the conjunct is false
@@ -74,8 +120,13 @@ struct overflow_checkst
 /// and are declined where that weakness is observable — a body that asserts, or
 /// a run with signed overflow checking on. --unsigned-overflow-check
 /// declines every loop, signed or not; see overflow_checkst.
+/// `k_induction_ran` reports whether goto_k_induction has already rewritten the
+/// loop heads. It is a diagnostic input only: the recogniser matches on a head
+/// this pass then no longer finds, so the run is a no-op and the user is told
+/// why rather than left with a silent one.
 void goto_synthesise_loop_invariants(
   goto_functionst &goto_functions,
-  const overflow_checkst &overflow);
+  const overflow_checkst &overflow,
+  bool k_induction_ran);
 
 #endif /* GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_ */

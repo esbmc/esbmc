@@ -75,24 +75,74 @@ public:
 
   //Protected member functions
 protected:
-  basic_streambuf();
+  // [streambuf.cons]: both areas start empty, i.e. all six pointers null.
+  basic_streambuf()
+    : __gbeg(0), __gnext(0), __gend(0), __pbeg(0), __pnext(0), __pend(0)
+  {
+  }
   virtual ~basic_streambuf()
   {
   }
 
+  // [streambuf.get.area] / [streambuf.put.area]. These were declared and never
+  // defined, and the class held no areas, so setg stored nothing and every
+  // accessor returned an unconstrained pointer: a derived buffer's underflow /
+  // overflow arithmetic ran over nondet rather than over the area it set up
+  // (#7539).
+  char_type *__gbeg;
+  char_type *__gnext;
+  char_type *__gend;
+  char_type *__pbeg;
+  char_type *__pnext;
+  char_type *__pend;
+
   //	Input sequence (get):
-  char_type *eback() const;
-  char_type *gptr() const;
-  char_type *egptr() const;
-  void gbump(int n);
-  void setg(char_type *gbeg, char_type *gnext, char_type *gend);
+  char_type *eback() const
+  {
+    return __gbeg;
+  }
+  char_type *gptr() const
+  {
+    return __gnext;
+  }
+  char_type *egptr() const
+  {
+    return __gend;
+  }
+  void gbump(int n)
+  {
+    __gnext += n;
+  }
+  void setg(char_type *gbeg, char_type *gnext, char_type *gend)
+  {
+    __gbeg = gbeg;
+    __gnext = gnext;
+    __gend = gend;
+  }
 
   //	Output sequence (put):
-  char_type *pbase() const;
-  char_type *pptr() const;
-  char_type *epptr() const;
-  void pbump(int n);
-  void setp(char_type *pbeg, char_type *pend);
+  char_type *pbase() const
+  {
+    return __pbeg;
+  }
+  char_type *pptr() const
+  {
+    return __pnext;
+  }
+  char_type *epptr() const
+  {
+    return __pend;
+  }
+  void pbump(int n)
+  {
+    __pnext += n;
+  }
+  void setp(char_type *pbeg, char_type *pend)
+  {
+    __pbeg = pbeg;
+    __pnext = pbeg;
+    __pend = pend;
+  }
 
   //Virtual protected member functions
   //	Locales

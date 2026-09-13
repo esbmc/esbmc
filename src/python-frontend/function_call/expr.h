@@ -145,6 +145,12 @@ private:
   void get_function_type();
 
   /*
+   * The AST node of the named class, from the main module or, when the main
+   * module's body does not hold it, from the module that defines it (#7546).
+   */
+  nlohmann::json find_class_node(const std::string &name) const;
+
+  /*
    * Retrieves the object (caller) name from the AST.
    */
   std::string get_object_name() const;
@@ -357,6 +363,11 @@ private:
    * Rewrites the argument AST node into an integer Constant holding the given
    * code point and returns the resulting int expression. Helper for handle_ord.
    */
+  /// Code point of a constant char array -- what chr() folds to -- or nullopt
+  /// when @p e is not one. bytes are long_long_int arrays and are excluded, so
+  /// ord(b"\xc3") keeps its existing behaviour rather than becoming an error.
+  std::optional<int> folded_char_array_codepoint(const exprt &e) const;
+
   exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
 
   /*
@@ -707,6 +718,53 @@ private:
    * Returns nullopt for any other function shape or non-array parameter.
    */
   std::optional<exprt> try_fold_identity_array_return();
+
+  /**
+   * Suffix selecting the models/random.py variant that matches a sequence
+   * argument's type: "_float" or "_str" for a list of those, "_chars" for a
+   * str, and "" for a list of ints and for any argument this cannot type,
+   * which keeps the base model it had before the dispatch existed.
+   *
+   * @param seq  the converted sequence argument.
+   * @param func_name  "choice" or "sample", used in the diagnostic.
+   * @return the suffix to append to the model function name.
+   * @throws std::runtime_error naming func_name for a tuple, which no model
+   *         parameter can take and on which the list model would raise a
+   *         spurious memory-safety claim; and from
+   *         element_type_registry::homogeneous_element_type for a list whose
+   *         elements mix incompatibly.
+   */
+  std::string
+  random_sequence_suffix(const exprt &seq, const std::string &func_name);
+
+  /**
+   * Selects an element of a tuple for random.choice(), inline.
+   *
+   * A model function cannot take a tuple, whose arity and member types vary
+   * per call site, so the choice is folded into a nested conditional over a
+   * nondet index instead.
+   *
+   * @param seq  the converted sequence argument.
+   * @return the selected element, or nullopt when @p seq is not a tuple.
+   * @throws std::runtime_error on an empty tuple, which has no element to
+   *         select, and on a tuple whose members differ in type, which one
+   *         conditional cannot carry.
+   */
+  std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
+
+  /**
+   * Folds sum() over a numeric tuple into a chain of additions.
+   *
+   * The sum/sum_float models iterate a list representation a tuple struct does
+   * not have, so they would return garbage.
+   *
+   * @param is_user_imported  whether a user import shadows the builtin.
+   * @param is_numpy_model_call  whether the call is inside models/numpy.py.
+   * @return the folded sum, or nullopt when the call is not sum() over a
+   *         numeric tuple.
+   */
+  std::optional<exprt>
+  fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
 
   /*
    * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the

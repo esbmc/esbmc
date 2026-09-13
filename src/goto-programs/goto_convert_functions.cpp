@@ -3,6 +3,7 @@
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/remove_no_op.h>
+#include <util/irep/migrate.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
@@ -33,6 +34,7 @@ void goto_convert_functionst::goto_convert()
   for (auto &it : symbol_list)
   {
     convert_function(*it);
+    migrate_type_back_cache_clear();
   }
 
   functions.compute_location_numbers();
@@ -109,6 +111,19 @@ static void stamp_value_locations(exprt &expr, const locationt &loc)
 
   Forall_operands (it, expr)
     stamp_value_locations(*it, loc);
+}
+
+// convert_expression() restores the statement's own location onto a
+// round-trip-stripped side effect before lowering it (goto_convert.cpp). The
+// mutable read materialises an empty #location, which the assignment then
+// replaces with the statement's -- nil included, and that is what
+// remove_function_call copies onto the FUNCTION_CALL it emits. Skipping it left
+// a generated call carrying an empty-but-present location where the round-trip
+// leaves it nil (esbmc/esbmc#6759).
+static void restore_sideeffect_location(exprt &op, const locationt &stmt)
+{
+  if (op.id() == "sideeffect" && op.location().get_file().empty())
+    op.location() = stmt;
 }
 
 // IREP2 value-level expressions carry no source location (only the
@@ -711,6 +726,8 @@ bool goto_convert_functionst::convert_native_rec(
         effective_location(expr_stmt.location, inherited);
       if (!stamp.get_file().empty())
         stamp_value_locations(op, stamp);
+
+      restore_sideeffect_location(op, expr_stmt.location);
 
       // convert_expression hands a side-effecting operand to remove_sideeffects
       // with result_is_used false, then emits an OTHER only if anything is left

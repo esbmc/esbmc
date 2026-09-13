@@ -67,7 +67,8 @@ protected:
   void apply_loop_invariants(
     goto_functionst &goto_functions,
     contextt &context,
-    const optionst &options);
+    const optionst &options,
+    bool k_induction_ran);
 
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);

@@ -2,9 +2,9 @@
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
-#include <goto-symex/goto_symex.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/sarif.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/sarif.h>
 #include <util/base/cwe_mapping.h>
 #include <solvers/smt/smt_result.h>
 #include <solvers/smtlib/smtlib_conv.h>
@@ -421,7 +421,7 @@ bool esbmc_parseoptionst::process_goto_program(
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (wants_loop_invariants())
-        apply_loop_invariants(goto_functions, context, options);
+        apply_loop_invariants(goto_functions, context, options, is_k_induction);
     }
 
     // --termination: reduce non-termination to a reachability safety
@@ -850,7 +850,8 @@ bool esbmc_parseoptionst::wants_loop_invariants() const
 void esbmc_parseoptionst::apply_loop_invariants(
   goto_functionst &goto_functions,
   contextt &context,
-  const optionst &options)
+  const optionst &options,
+  bool k_induction_ran)
 {
   // Houdini re-derives the program per round from a pristine copy, so the
   // schema must not have been applied here; do_houdini_strategy runs it.
@@ -869,7 +870,8 @@ void esbmc_parseoptionst::apply_loop_invariants(
       goto_functions,
       overflow_checkst{
         options.get_bool_option("overflow-check"),
-        options.get_bool_option("unsigned-overflow-check")});
+        options.get_bool_option("unsigned-overflow-check")},
+      k_induction_ran);
 
   bool use_frame_rule = cmdline.isset("loop-frame-rule");
   goto_loop_invariant(goto_functions, context, use_frame_rule);

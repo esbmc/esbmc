@@ -844,7 +844,10 @@ void dereferencet::check_pointer_alignment(
 
   expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
   simplify(ptr_offset_bits);
-  check_alignment(access_size_bits, ptr_offset_bits, guard);
+  /* The object is not known here -- build_reference_to() has yet to unpack the
+   * descriptor -- so this pre-check keeps assuming the base carries the width.
+   * The object-aware sites below make the claim that actually bites. */
+  check_alignment(access_size_bits, ptr_offset_bits, guard, expr2tc());
 }
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
@@ -1165,7 +1168,12 @@ void dereferencet::build_reference_rec(
   // no-op, so return any value of the target type (issue #723).
   if (type_byte_size_bits(type) == 0)
   {
-    // gen_zero asserts on memberless unions, so fall back to a nondet symbol.
+    // Still not gen_zero for a member-less union: it now answers with a
+    // zero-member constant_union2t, and everything downstream of here assumes
+    // a union constant has exactly one initialiser (constant_union2t in
+    // irep2_expr.h, and the assert in build_reference_rec's constant_union2t
+    // arm). A nondet symbol of the target type is a zero-width value nothing
+    // reads, and keeps that invariant intact.
     value = (is_union_type(type) && to_union_type(type).members.empty())
               ? make_failed_symbol(type)
               : gen_zero(type);
@@ -1461,7 +1469,7 @@ void dereferencet::construct_from_array(
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard);
+    check_alignment(deref_size, std::move(mod), guard, value);
 
   if (!overflows_boundaries)
   {
@@ -2349,7 +2357,14 @@ std::vector<expr2tc> dereferencet::extract_bytes(
   unsigned int num_bytes,
   const expr2tc &offset) const
 {
-  assert(num_bytes != 0);
+  /* A zero-width object has no bytes to extract, and the stitching below reads
+   * bytes[num_bytes - 1] -- an out-of-bounds access in ESBMC itself rather than
+   * a verdict. A struct with a zero-length array member reaches here. */
+  if (num_bytes == 0)
+  {
+    log_error("dereference: cannot read a zero-width object");
+    abort();
+  }
 
   std::vector<expr2tc> bytes;
   bytes.reserve(num_bytes);
@@ -2412,6 +2427,8 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   unsigned int num_bytes,
   const std::vector<expr2tc> &bytes)
 {
+  /* Every caller sources `bytes` from extract_bytes(), which refuses a
+   * zero-width read before we get here. */
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
@@ -2495,7 +2512,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
 // allocation "symex_dynamic::...". Heap allocations (malloc/calloc/realloc) use
 // that bare prefix; alloca, which lives on the stack, carries the extra
 // "alloca::" infix (see symex_mem() in
-// goto-symex/builtin_functions/memory_alloc.cpp).
+// goto-symex/engine/builtin_functions/memory_alloc.cpp).
 static bool is_symex_dynamic_object(const std::string &id)
 {
   return has_prefix(id, "symex_dynamic::");
@@ -2842,13 +2859,42 @@ void dereferencet::check_data_obj_access(
    * manner (e.g. for __attribute__((packed)) structures),
    * check that the access being made is aligned. */
   if (is_scalar_type(type) && !mode.unaligned)
-    check_alignment(access_sz, std::move(offset), guard);
+    check_alignment(access_sz, std::move(offset), guard, value);
+}
+
+BigInt dereferencet::object_base_alignment(const expr2tc &object) const
+{
+  /* The base carries the guarantee, so a member or element has to be resolved
+   * back to the object it lives in before its alignment means anything. */
+  const expr2tc &base = get_base_object(object);
+
+  /* The legacy typet, not migrate_type_back(): `max_field_alignment` is an
+   * irep attribute that does not survive migration, and without it a
+   * `#pragma pack(n)` record reads as naturally aligned. */
+  const symbolt *sym =
+    is_symbol2t(base) ? ns.lookup(to_symbol2t(base).thename) : nullptr;
+  const typet type = sym ? sym->get_type() : migrate_type_back(base->type);
+
+  expr2tc size;
+  try
+  {
+    size = type_byte_size_expr(base->type, &ns);
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    /* Same stand-in convert_identifier_pointer() uses for an unknown extent,
+     * so both models keep answering from one number. */
+    size = gen_ulong(0x10000);
+  }
+
+  return ::object_base_alignment(type, size, ns);
 }
 
 void dereferencet::check_alignment(
   BigInt minwidth,
   const expr2tc &offset_bits,
-  const guard2tc &guard)
+  const guard2tc &guard,
+  const expr2tc &object)
 {
   if (options.get_bool_option("no-align-check"))
     return;
@@ -2866,10 +2912,30 @@ void dereferencet::check_alignment(
 
   // Perform conversion to bytes here
   minwidth = minwidth / 8;
-  expr2tc offset = typecast2tc(
+  expr2tc addr = typecast2tc(
     size_type2(),
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8)));
-  simplify(offset);
+  simplify(addr);
+
+  /* The offset is only half the address. Reading it alone assumes the object's
+   * base already carries the access width, which the address-space model
+   * guarantees for every object but the ones that decline alignment -- `packed`
+   * and `#pragma pack(n)`, whose base it deliberately leaves free. For those,
+   * decide the claim on the whole address, so a program that constrains its own
+   * object still discharges it (#6951, #7707).
+   *
+   * A width that is not a power of two -- `long double` under --32 -- has no
+   * meaningful mask either way, so leave it on the offset path it was already
+   * on rather than report against a base no object could satisfy. */
+  if (
+    !is_nil_expr(object) && is_power_of_two(minwidth) &&
+    object_base_alignment(object) < minwidth)
+  {
+    expr2tc base = typecast2tc(
+      size_type2(), address_of2tc(pointer_type2tc(object->type), object));
+    addr = add2tc(size_type2(), base, addr);
+    simplify(addr);
+  }
 
   expr2tc mask_expr = gen_ulong(minwidth - 1);
   expr2tc neq;
@@ -2877,12 +2943,12 @@ void dereferencet::check_alignment(
   if (options.get_bool_option("int-encoding"))
   {
     expr2tc align = gen_ulong(minwidth);
-    expr2tc moded = modulus2tc(align->type, offset, align);
+    expr2tc moded = modulus2tc(align->type, addr, align);
     neq = notequal2tc(moded, gen_zero(moded->type));
   }
   else
   {
-    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, offset);
+    expr2tc anded = bitand2tc(mask_expr->type, mask_expr, addr);
     neq = notequal2tc(anded, gen_zero(anded->type));
   }
 

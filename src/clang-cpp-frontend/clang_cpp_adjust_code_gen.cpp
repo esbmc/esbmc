@@ -1,8 +1,14 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
 #include <util/irep/std_expr.h>
 #include <functional>
 
-void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
+static exprt gen_vptr_init_rhs(
+  contextt &context,
+  const struct_union_typet::componentt &comp,
+  const code_typet &ctor_type);
+
+void gen_vptr_initializations(contextt &context, symbolt &symbol)
 {
   /*
    * This function traverses the vptr components of the correponding class type
@@ -103,7 +109,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
           side_effect_exprt new_code("assign");
           new_code.type() = comp.type();
           new_code.operands().push_back(member);
-          new_code.operands().push_back(gen_vptr_init_rhs(comp, ctor_type));
+          new_code.operands().push_back(
+            gen_vptr_init_rhs(context, comp, ctor_type));
           codet code_expr("expression");
           code_expr.move_to_operands(new_code);
           body_ops.insert(body_ops.begin() + insert_at, code_expr);
@@ -125,65 +132,8 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
   symbol.set_value(std::move(value));
 }
 
-void clang_cpp_adjust::gen_vptr_init_code(
-  const struct_union_typet::componentt &comp,
-  side_effect_exprt &new_code,
-  const code_typet &ctor_type)
-{
-  /*
-   * Generate the statement to assign each vptr the corresponding
-   * vtable address, e.g.:
-   *  this->vptr = &<vtable_struct_var_name>
-   */
-
-  // 1. set the type
-  new_code.type() = comp.type();
-
-  // 2. LHS: generate the member pointer dereference expression
-  exprt lhs_expr = gen_vptr_init_lhs(comp, ctor_type);
-
-  // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr = gen_vptr_init_rhs(comp, ctor_type);
-
-  // now push them to the assignment statement code
-  new_code.operands().push_back(lhs_expr);
-  new_code.operands().push_back(rhs_expr);
-}
-
-exprt clang_cpp_adjust::gen_vptr_init_lhs(
-  const struct_union_typet::componentt &comp,
-  const code_typet &ctor_type)
-{
-  /*
-   * Generate the LHS expression for virtual pointer initialization,
-   * as in:
-   *  this->vptr = &<vtable_struct_variable>
-   */
-
-  exprt lhs_code;
-
-  // get the `this` argument symbol
-  const symbolt *this_symb = namespacet(context).lookup(
-    ctor_type.arguments().at(0).type().subtype().identifier());
-  assert(this_symb);
-
-  // prepare dereference operand
-  exprt deref_operand = symbol_exprt(
-    ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
-
-  // get the reference symbol
-  dereference_exprt this_deref(deref_operand.type());
-  this_deref.operands().resize(0);
-  this_deref.operands().push_back(deref_operand);
-
-  // now we can get the member expr for "this->vptr"
-  lhs_code = member_exprt(comp.name(), comp.type());
-  lhs_code.operands().push_back(this_deref);
-
-  return lhs_code;
-}
-
-exprt clang_cpp_adjust::gen_vptr_init_rhs(
+static exprt gen_vptr_init_rhs(
+  contextt &context,
   const struct_union_typet::componentt &comp,
   const code_typet &ctor_type)
 {

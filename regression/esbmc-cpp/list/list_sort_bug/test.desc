@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cpp
 --incremental-bmc --timeout 900
 ^VERIFICATION FAILED$

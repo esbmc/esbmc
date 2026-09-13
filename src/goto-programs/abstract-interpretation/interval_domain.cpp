@@ -859,7 +859,9 @@ void print_interval(
   out << name;
 
   if (i.upper)
-    out << " <= " << i.get_upper() << "\n";
+    out << " <= " << i.get_upper();
+
+  out << "\n";
 }
 
 // TODO: refactor
@@ -1029,10 +1031,17 @@ void interval_domaint::transform(
     // Let's do an assignment for all parameters!
     for (size_t i = 0; i < function.arguments.size(); i++)
     {
-      const expr2tc &arg_value = code_function_call.operands[i];
       const type2tc &arg_type = function.arguments[i];
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);
+
+      if (i >= code_function_call.operands.size())
+      {
+        havoc_rec(arg_symbol);
+        continue;
+      }
+
+      const expr2tc &arg_value = code_function_call.operands[i];
 
       // Are we dealing with a recursive function?
       std::unordered_set<expr2tc, irep2_hash> symbols;
