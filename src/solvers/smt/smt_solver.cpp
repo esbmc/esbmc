@@ -46,22 +46,25 @@ unsigned int smt_solver_baset::get_member_name_field(
   const type2tc &t,
   const irep_idt &name) const
 {
-  unsigned int idx = 0;
   // Pointer types lower to the synthetic pointer_struct tuple in SMT;
   // for them the named lookup uses pointer_struct's member_names.
-  const std::vector<irep_idt> &names =
-    struct_union_member_names(is_pointer_type(t) ? pointer_struct : t);
+  const type2tc &lookup_type = is_pointer_type(t) ? pointer_struct : t;
+  const std::vector<irep_idt> &names = struct_union_member_names(lookup_type);
 
-  for (const irep_idt &it : names)
-  {
-    if (it == name)
-      break;
-    idx++;
-  }
-  assert(
-    idx != names.size() && "Member name of with expr not found in struct type");
+  for (unsigned int idx = 0; idx < names.size(); idx++)
+    if (names[idx] == name)
+      return idx;
 
-  return idx;
+  // Never fall out returning names.size(): both callers index a tuple with the
+  // result, project() reading and update() writing, so an out-of-range answer
+  // is an out-of-bounds access rather than a diagnosable error. The assert
+  // that used to stand here vanished under NDEBUG.
+  log_error(
+    "Member '{}' is not a field of {}, whose members are: {}",
+    name,
+    struct_union_name(lookup_type),
+    fmt::join(names, ", "));
+  throw std::string("member name not found in struct type");
 }
 
 unsigned int smt_solver_baset::get_member_name_field(

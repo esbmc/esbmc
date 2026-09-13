@@ -3,7 +3,6 @@
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>
 #include <sstream>
-#include <string>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 
@@ -135,6 +134,12 @@ smt_astt tuple_sym_smt_ast::update(
   const std::vector<type2tc> &members =
     struct_union_members(sort->get_tuple_type());
 
+  // The loop below matches idx against each field in turn, so an out-of-range
+  // index matches none and the update is dropped: `with(s, f, v)` would return
+  // a tuple equal to `s`, and a claim that depends on the write could then
+  // discharge as proved.
+  check_tuple_field(idx, members.size(), sort->get_tuple_type());
+
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
 
@@ -184,23 +189,9 @@ tuple_sym_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
   const std::vector<irep_idt> &member_names =
     struct_union_member_names(sort->get_tuple_type());
 
-  // Loud in release too. The index is computed by convert_member from the
-  // *expression's* struct type, while the members read here come from the
-  // sort's; when the two disagree this reads past the end of the vector and
-  // hands convert_sort a garbage type, so the failure surfaces as a SIGSEGV far
-  // from its cause (docs/roadmap/scope-solidity-irep2.md §7.31).
-  if (idx >= members.size())
-  {
-    log_error(
-      "Tuple field {} out of range: the sort's type {} has {} members, so it "
-      "disagrees with the expression's type this index came from",
-      idx,
-      is_struct_type(sort->get_tuple_type())
-        ? to_struct_type(sort->get_tuple_type()).name
-        : irep_idt("?"),
-      members.size());
-    throw std::string("tuple field out of range");
-  }
+  // members and member_names come from the same type, so one check covers both
+  // reads below.
+  check_tuple_field(idx, members.size(), sort->get_tuple_type());
 
   const std::string &fieldname = member_names[idx].as_string();
   std::string sym_name = name + fieldname;

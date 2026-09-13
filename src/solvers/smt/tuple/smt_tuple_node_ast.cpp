@@ -3,7 +3,6 @@
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <sstream>
-#include <string>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 
@@ -173,6 +172,10 @@ smt_astt tuple_node_smt_ast::update(
   // unit/solvers/tuple_node_update.test.cpp.
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
+  // Same disagreement as in project(), but this one writes. Checked before the
+  // result is built so a rejected update allocates nothing.
+  check_tuple_field(idx, elements.size(), sort->get_tuple_type());
+
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
@@ -202,23 +205,12 @@ tuple_node_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
   // actually allocate all our pieces of ASTs as variables.
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
-  // Loud in release too, and bounded by `elements` rather than by the sort's
-  // member list: convert_member computes this index from the *expression's*
-  // struct type, so a disagreement with the tuple this AST actually holds reads
-  // past the end of the vector and returns a garbage pointer, surfacing as a
-  // SIGSEGV far from its cause (docs/roadmap/scope-solidity-irep2.md §7.31).
-  if (idx >= elements.size())
-  {
-    log_error(
-      "Tuple field {} out of range: this tuple holds {} elements for sort type "
-      "{}, so it disagrees with the expression type the index came from",
-      idx,
-      elements.size(),
-      is_struct_type(sort->get_tuple_type())
-        ? to_struct_type(sort->get_tuple_type()).name
-        : irep_idt("?"));
-    throw std::string("tuple field out of range");
-  }
+  // Bounded by `elements` rather than by the sort's member list, because that
+  // is the vector indexed below. smt_solver_baset::convert_member takes this
+  // index from the *expression's* struct type while the AST carries the sort
+  // it was built from; where a frontend leaves the two disagreeing this read
+  // ran off the end and returned a garbage pointer.
+  check_tuple_field(idx, elements.size(), sort->get_tuple_type());
 
   return elements[idx];
 }
