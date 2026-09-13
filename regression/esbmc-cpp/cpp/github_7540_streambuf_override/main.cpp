@@ -1,8 +1,10 @@
 // A streambuf override spelled with the standard position types must match
 // basic_streambuf's virtuals, which now use the same 64-bit types (#7540).
+// <streambuf> comes first so it has to name those types on its own.
+#include <streambuf>
+
 #include <cassert>
 #include <ios>
-#include <streambuf>
 
 class Buf : public std::streambuf
 {

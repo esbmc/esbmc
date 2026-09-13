@@ -1,6 +1,7 @@
 // setprecision(-1) leaves precision() negative, and a negative precision
-// formats as the default six digits. The model clamped it to 0, the reason
-// being an unsigned streamsize, and printed only the integer part (#7540).
+// formats as the default six significant digits. The model clamped it to 0,
+// the reason being an unsigned streamsize, and printed only the integer part
+// (#7540).
 #include <cassert>
 #include <cstring>
 #include <iomanip>
@@ -11,7 +12,7 @@ int main()
   std::ostringstream s;
   s << std::setprecision(-1);
   assert(s.precision() < 0);
-  s << 1.5;
-  assert(strcmp(s.str().c_str(), "1.5") == 0);
+  s << 1.234567;
+  assert(strcmp(s.str().c_str(), "1.23457") == 0);
   return 0;
 }

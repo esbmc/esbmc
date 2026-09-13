@@ -1,8 +1,9 @@
 // Counterpart of github_7540_streambuf_override: the override returns the
 // 64-bit offset it was given, so asserting a truncated value fails (#7540).
+#include <streambuf>
+
 #include <cassert>
 #include <ios>
-#include <streambuf>
 
 class Buf : public std::streambuf
 {
