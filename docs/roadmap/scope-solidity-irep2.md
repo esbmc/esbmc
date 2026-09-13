@@ -1420,3 +1420,35 @@ throw. It stops at the first throw in the run, which here is an unrelated
 internal one in `type_byte_size`'s `size_bits_expr` reached through
 `convert_addr_of`, caught and handled. Reading that backtrace as the fatal path
 would have been a fourth wrong-site diagnosis.
+### 7.33 The mechanism, from `tuple_create`: operands size the tuple, the type sizes the sort
+
+`smt_tuple_node_flattener::tuple_create` builds a literal's AST like this:
+
+```cpp
+tuple_node_smt_ast *result = new tuple_node_smt_ast(
+  *this, ctx, ctx->convert_sort(structdef->type), name);
+result->elements.resize(structdef->get_num_sub_exprs());
+```
+
+The **sort** comes from the literal's `type`; the **element count** comes from
+its `get_num_sub_exprs()`. Nothing checks that the two agree. So a struct
+literal whose operands were not padded while its type was produces a tuple with
+fewer elements than its own sort advertises — precisely the state §7.31's guard
+reports, and the reason the index from `get_member_name_field` (computed off
+the type) can exceed it.
+
+That makes the defect a struct literal that `adjust_struct` did not pad. §7.32
+measured one `Book` literal in the failing expression with four operands and a
+four-name type — correctly padded. But the expression contains **two** `Book`
+literals, and the failing tuple holds three elements, so the second is the
+unpadded one. `adjust_struct` reached one and not the other.
+
+That is the target: not padding in general, not the sort cache, not the seam —
+one arm that pads the literal it is dispatched on and misses a sibling. Why it
+misses the second is the next question, and the arm's own dispatch is where to
+look: the table visits nodes during the walk, so a literal rebuilt by an
+earlier arm may not be revisited.
+
+A `tuple_create` that refuses to build a tuple whose element count disagrees
+with its sort would have caught this at the source rather than at the
+projection, and is worth considering alongside #7758's guard.
