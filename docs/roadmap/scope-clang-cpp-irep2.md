@@ -1663,3 +1663,103 @@ reaches the same residual through the converter's own per-element fan-out
 `member_array_ctor_dtor_symmetry` may also need the `&ctor(...)[0]` unwrap
 (`clang_cpp_adjust_code.cpp:196`). Measure each row rather than assuming one arm
 covers both -- the mistake §3.14 made and this section nearly repeated.
+
+### 3.16 The array shapes, and two things §3.15's fold had wrong (2026-09-13)
+
+§3.15 named `clang_cpp_adjust::adjust_decl_block`'s per-element fan-out as the
+next arm and the two array rows as its coverage. Ported, it closes one of them,
+and the second exposed two defects in the fold itself. Phase 7 now reads **82 of
+84**; only `github_6291_conditional_ref_shapes` and
+`github_6717_throw_conditional_ok` remain.
+
+**The fan-out is an arm on the block, not on the declaration.** One declaration
+becomes a bare declaration plus one call per element, and a node cannot expand
+into several statements in place. Rewriting the declaration into a block of its
+own would work syntactically and end the object's scope at that block's brace,
+which is the defect #4715 records and which `hoist_for_init` already documents
+for the same reason. So the guard is `is_code_block2t` and the arm splices,
+exactly as legacy does over `decl-block` — a distinction that does not survive
+the seam anyway (`migrate.cpp` maps `code("decl-block")` to `code_block2t`).
+The `temporary_object` wrapper needs no special case: its initialiser travels as
+`arguments[0]`, so the recursive search for the constructor call reaches it
+through `foreach_operand`.
+
+`array_element_destructors_leak` then produces a GOTO program byte-identical to
+the legacy one.
+
+**A guard that was not a defect, and the cost of guessing.** The first
+hypothesis for the member-array row was that §3.15's fold over-fires: legacy
+keys it on `rhs.get_bool("constructor")`, a converter marker, while the port
+promoted legacy's *assert* on the `constructor` return type to the guard, and the
+two need not be the same set. Narrowing it to calls still missing their object
+argument (`arguments.size() + 1 == parameters.size()`) was written, measured
+against the row, and **refuted**:
+
+- Legacy does not leave those calls alone. `clang_cpp_convert.cpp:2544` emits
+  `assign(array_init$.buf[i], rhs)` with the shared whole-array call as `rhs`,
+  and `copy_to_operands` carries the marker onto every element, so legacy's fold
+  fires on each. The two GOTO programs are byte-identical there.
+- Those calls have zero arguments against one parameter, so the arity guard
+  passes them anyway. It was inert on the shape it was written for, which is why
+  no test in the branch changed verdict when it was removed.
+- Its only measured effect was a regression: a **variadic** constructor supplies
+  more arguments than its parameter list declares, so the guard declined the
+  fold and the first argument was then converted against the `this` parameter —
+  `this->m=T((T *)4, 5, 6)`, a false alarm on a correct program.
+
+Dropped, and `irep2_constructor_assign_variadic{,_fail}` pins it so it cannot
+come back. Default arguments and virtual bases were checked and do not have the
+shape: clang materialises a `CXXDefaultArgExpr` at the call site, and the hidden
+`__is_complete` flag is appended to both lists. Carrying the marker as a field on
+`sideeffect2t`, the `#member_init` precedent, remains the faithful fix if a shape
+ever does need the distinction.
+
+**Defect 2, the real one: the folded call took the initialiser's type.** Legacy's
+`expr.swap(rhs)` keeps the right-hand side's type, which for a member array's
+per-element call is *the whole array's*. Under the flag that made the statement
+array-valued, so `adjust_expression_statement` wrapped it in `&stmt[0]` (C11
+6.5.3.2p4's decay arm), the call acquired a temporary of array type, and the
+temporary's elements were destroyed without ever having been constructed — a
+destructor assertion firing on a correct program. The call's value is the object
+constructed, so it now takes **the object's** type, `a.lhs->type`. That is also
+what legacy has, the two spellings coinciding for every scalar shape.
+
+That defect is pinned by `irep2_member_array_construction{,_fail}`, a
+three-element class-typed member array with a destructor assertion. Its passing
+half turns SUCCESSFUL -> FAILED under the initialiser-type mutation and its
+failing half stops matching its own violated-property line, since the first
+property to fail becomes the destructor's. A pair without the destructor pins
+neither: the elements *are* constructed in place either way, and only the
+spurious temporaries differ.
+
+**What the fan-out declines, and why the declines are staged.** A dimension
+whose size is not a constant — a class-typed VLA, which is a GNU extension, not
+C++ — makes legacy `abort()` with "cannot determine array size for local ctor
+init". The arm declines instead, and the decline is *staged*: the per-element
+calls are built into a local vector and the declaration is replaced only if all
+of them were built, so a size the arm cannot read never costs the object its
+initialiser. Aggregate initialisation (`B a[2] = {B(1), B(2)}`) arrives as a
+`constant_array` and is declined by the single-constructor-call gate; fanning it
+out would construct every element with element 0's arguments. Both declines now
+have pairs, `irep2_array_aggregate_init{,_fail}` and the nested `R a[2][3]` in
+`irep2_array_element_construction{,_fail}`.
+
+**Open row: a static or global class-typed array is unconstructed under the
+flag.** The arm excludes static-storage locals because
+`clang_cpp_maint::adjust_init` (`clang_cpp_main.cpp:59`) constructs them — but
+that keys on the `#constructor` marker, and this pass's write-back destroys it.
+So `static R a[2];` and a file-scope `R g[2];` both reach `__ESBMC_main` with
+element 0 constructed on a temporary, the rest nondeterministic, and destructors
+on never-constructed memory. It is **pre-existing**: a file-scope global has no
+block and no assignment, so nothing in this arm can reach it. It is also
+invisible to the 84-row census, which sweeps `regression/esbmc-cpp/cpp` only:
+`regression/esbmc-cpp11/constructors/local_array_of_class_ctor` and
+`Constructor9-1` — the two tests legacy's own `adjust_decl_block` comment names —
+diverge under the flag, and in the first the whole remaining divergence is its
+`static B s[2];`.
+
+**Scope of "82 of 84".** The census adds `--clang-cpp-irep2-adjust-only` to each
+row by hand; only 42 `test.desc` rows in the tree pass it themselves, and
+`member_array_ctor_dtor_symmetry` is not one of them, so CI runs that row under
+the legacy adjuster. A census row is evidence about the pass, not a gate on it —
+the gate is the flag-pinned pair.
