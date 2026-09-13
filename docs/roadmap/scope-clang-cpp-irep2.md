@@ -1983,7 +1983,11 @@ declaration at all).
 
 Both remaining rows close, so the `regression/esbmc-cpp/cpp` census under
 `--clang-cpp-irep2-adjust-only` reads **84 of 84**, from 82 — and from 31 of 80 at
-#7718's census. `irep2_conditional_reference_bind{,_fail}` pins it: the passing
+#7718's census. The change is in the *C* pass, shared by every frontend that runs
+it, so the nets are wider than usual: `ctest -R irep2` 374 of 374, unit 872 of
+872, the Solidity corpus 507 of 507 agreeing with zero crashes, and the C suite's
+2292 rows with two THOROUGH k-induction rows timing out under parallel load
+(`github_302` passes standalone). `irep2_conditional_reference_bind{,_fail}` pins it: the passing
 half turns SUCCESSFUL -> FAILED with the plain address-of restored. The failing
 half is a conventional twin — it asserts that neither object moved, which is
 false whichever arm is selected, and stays FAILED under the mutation, so the
