@@ -2391,7 +2391,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = sideeffect2tc(
-      plaintype, operand, thesize, args, cmt_type, t, expr.location());
+      plaintype,
+      operand,
+      thesize,
+      args,
+      cmt_type,
+      t,
+      expr.location(),
+      expr.get_bool("constructor"));
     return;
   }
 
@@ -3483,6 +3490,11 @@ static exprt back_sideeffect(const expr2tc &ref)
     size.is_not_nil())
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
+
+  // clang_cpp_maint::adjust_init reads this after the frontend, so a body this
+  // pass writes back has to carry it (§3.17).
+  if (ref2.constructor)
+    theexpr.set("constructor", true);
 
   // ref2.location is deliberately *not* restored onto the legacy node.
   // goto_convert falls back to the enclosing statement's location for a side

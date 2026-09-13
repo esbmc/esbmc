@@ -1884,6 +1884,22 @@ public:
   std::vector<expr2tc> arguments;
   type2tc alloctype;
   sideeffect_allockind kind;
+
+  /// This call constructs an object. The converter's `#constructor` marker,
+  /// which has nowhere else to live in IREP2 -- the callee's `constructor`
+  /// return type migrates to empty (migrate.cpp) and cannot be restored from
+  /// it. clang_cpp_maint::adjust_init reads the marker *after* this pass, so a
+  /// body written back without it loses a global's construction
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.17).
+  ///
+  /// Declared next to `kind`, where it packs into existing padding, and *not*
+  /// reflected: listing it in `fields` makes the primary constructor's
+  /// parameter order stop matching the field order (`location` sits between),
+  /// which is what supports_with_type_v tests -- with_type then rejects every
+  /// side effect at run time. Like `location`, it is therefore carried but not
+  /// compared.
+  bool constructor;
+
   locationt location; // not reflected: source loc travels with the stmt
   static constexpr std::size_t excluded_field_bytes = sizeof(locationt);
 
@@ -1904,13 +1920,15 @@ public:
     const std::vector<expr2tc> &a,
     const type2tc &alloct,
     sideeffect_allockind k,
-    const locationt &loc = locationt())
+    const locationt &loc = locationt(),
+    bool ctor = false)
     : expr2t(t, sideeffect_id),
       operand(oper),
       size(sz),
       arguments(a),
       alloctype(alloct),
       kind(k),
+      constructor(ctor),
       location(loc)
   {
     if (k == sideeffect_allockind::alloca)
