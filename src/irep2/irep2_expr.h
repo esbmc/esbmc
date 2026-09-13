@@ -713,6 +713,18 @@ public:
   expr2tc from;
   expr2tc rounding_mode;
 
+  /// The base class this cast converts to, when the frontend could not route
+  /// the conversion through a `@base@` component and the displacement has to
+  /// be applied once the layout is padded (clang_c_adjust_expr.cpp, #7025).
+  /// Empty on every other cast. Carried because an IREP2 adjust pass cannot
+  /// otherwise tell such a cast apart, and reading the base subobject without
+  /// the displacement silently proves false assertions
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+  irep_idt derived_to_base;
+
+  /// The mirror: a downcast whose operand points at a base subobject.
+  bool base_to_derived;
+
   /** Primary constructor.
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
@@ -721,8 +733,14 @@ public:
   typecast2t(
     const type2tc &type,
     const expr2tc &from_,
-    const expr2tc &rounding_mode_)
-    : expr2t(type, typecast_id), from(from_), rounding_mode(rounding_mode_)
+    const expr2tc &rounding_mode_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
+    : expr2t(type, typecast_id),
+      from(from_),
+      rounding_mode(rounding_mode_),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -731,10 +749,16 @@ public:
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
    */
-  typecast2t(const type2tc &type, const expr2tc &from_)
+  typecast2t(
+    const type2tc &type,
+    const expr2tc &from_,
+    const irep_idt &derived_to_base_ = irep_idt(),
+    bool base_to_derived_ = false)
     : expr2t(type, typecast_id),
       from(from_),
-      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode"))
+      rounding_mode(symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode")),
+      derived_to_base(derived_to_base_),
+      base_to_derived(base_to_derived_)
   {
   }
 
@@ -744,7 +768,9 @@ public:
   static constexpr auto fields = std::make_tuple(
     &expr2t::type,
     &typecast2t::from,
-    &typecast2t::rounding_mode);
+    &typecast2t::rounding_mode,
+    &typecast2t::derived_to_base,
+    &typecast2t::base_to_derived);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -1421,8 +1447,9 @@ public:
   address_of2t(
     const type2tc &subtype,
     const expr2tc &ptrobj,
-    bool is_implicit = false)
-    : expr2t(pointer_type2tc(subtype), address_of_id),
+    bool is_implicit = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : expr2t(pointer_type2tc(subtype, false, rk), address_of_id),
       ptr_obj(ptrobj),
       implicit(is_implicit)
   {
@@ -2441,6 +2468,19 @@ class sideeffect_assign2t : public expr2t
 {
 public:
   irep_idt op; // "assign", "assign+", "assign-", "assign*", etc.
+
+  /// This assignment is a constructor's member initialiser. The C++ adjust
+  /// pass leaves such an lhs alone: a reference member is being *bound* here,
+  /// and reading it through would copy the referent instead
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.16). The converter marks the lhs
+  /// with `#member_init`, which has nowhere else to live in IREP2.
+  ///
+  /// Declared next to `op` deliberately: it packs into that field's padding, so
+  /// the class does not grow and fields_cover_class's slack is unaffected.
+  /// Placed after `location` the compiler packs it into the location's padding
+  /// and the invariant underflows instead.
+  bool member_init;
+
   expr2tc lhs;
   expr2tc rhs;
   locationt location; // not reflected: source loc travels with the stmt
@@ -2451,8 +2491,14 @@ public:
     const irep_idt &o,
     const expr2tc &l,
     const expr2tc &r,
-    const locationt &loc = locationt())
-    : expr2t(t, sideeffect_assign_id), op(o), lhs(l), rhs(r), location(loc)
+    const locationt &loc = locationt(),
+    bool member_init_ = false)
+    : expr2t(t, sideeffect_assign_id),
+      op(o),
+      member_init(member_init_),
+      lhs(l),
+      rhs(r),
+      location(loc)
   {
   }
   sideeffect_assign2t(const sideeffect_assign2t &ref) = default;
@@ -2461,7 +2507,8 @@ public:
     &expr2t::type,
     &sideeffect_assign2t::op,
     &sideeffect_assign2t::lhs,
-    &sideeffect_assign2t::rhs);
+    &sideeffect_assign2t::rhs,
+    &sideeffect_assign2t::member_init);
   static std::string field_names[esbmct::num_type_fields];
 };
 

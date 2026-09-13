@@ -4,6 +4,12 @@
 #include <string.h>
 #include "python_types.h"
 
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id,
+  size_t bool_type_id);
+
 // Allocate a Python object instance. The frontend emits a call to this for
 // `ClassName(...)` so class instances get CPython reference semantics (a
 // pointer to a non-expiring object) and survive escaping their defining
@@ -204,6 +210,63 @@ bool __ESBMC_list_push(
   return true;
 }
 
+// Copy a tagged scalar's payload. `size` may be symbolic across branches (e.g.
+// int vs str), so this uses a bounded loop rather than __ESBMC_copy_value's
+// memcpy fallback, which never finishes unwinding over a symbolic n. A float
+// payload goes through __ESBMC_copy_value instead, so the element keeps this
+// library's invariant that a float's value lives in __ESBMC_float_buf at
+// float_idx -- __ESBMC_list_push_object and __ESBMC_list_push_shallow_sz both
+// read it back that way.
+static void *__ESBMC_copy_tagged_value(
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id,
+  size_t *out_float_idx)
+{
+  *out_float_idx = 0;
+
+  if (size == 8 && float_type_id != 0 && type_id == float_type_id)
+    return __ESBMC_copy_value(
+      value, size, type_id, float_type_id, out_float_idx, 0);
+
+  __ESBMC_assert(
+    size <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged list element exceeds the modelled bound");
+
+  void *copied = __ESBMC_alloca(size);
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= size)
+      break;
+    ((char *)copied)[i] = ((const char *)value)[i];
+  }
+  return copied;
+}
+
+// Push an already-tagged scalar's own value/type_id/size.
+bool __ESBMC_list_push_tagged(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+
+  size_t float_idx = 0;
+  void *copied =
+    __ESBMC_copy_tagged_value(value, type_id, size, float_type_id, &float_idx);
+
+  PyObject *item = &l->items[l->size];
+  item->value = copied;
+  item->float_idx = float_idx;
+  item->type_id = type_id;
+  item->size = size;
+  l->size++;
+  return true;
+}
+
 bool __ESBMC_list_push_object(
   PyListObject *l,
   PyObject *o,
@@ -270,6 +333,28 @@ static bool __ESBMC_list_push_shallow_sz(
     return __ESBMC_list_push(
       l, o->value, o->type_id, elem_size, float_type_id, 0);
   return __ESBMC_list_push_object(l, o, float_type_id, 0);
+}
+
+// Shallow append for a list of tagged scalars. Their payload width is
+// per-element and symbolic after a branch join, and item->value points at the
+// payload rather than at the PyObject wrapper, so neither the wrapper's static
+// width nor an o->size memcpy is usable here (#7716). Reuses the bounded copy.
+bool __ESBMC_list_push_shallow_tagged(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  return __ESBMC_list_push_tagged(
+    l, o->value, o->type_id, o->size, float_type_id);
 }
 
 // elem_size is threaded straight to the size-aware core above: the slice
@@ -456,6 +541,31 @@ bool __ESBMC_list_eq(
   return true;
 }
 
+// Element-wise equality for two lists of tagged scalars (#7723). A tag only
+// ever holds a bool, int, float or str, so there is no nesting to walk and no
+// depth stack; and its payload width is symbolic after a branch join, so the
+// byte compare has to be the bounded one __python_scalar_eq_obj already
+// implements rather than __ESBMC_values_equal's memcmp fallback.
+bool __ESBMC_list_eq_tagged(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  size_t num_type_id,
+  size_t bool_type_id)
+{
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
+  if (l1->size != l2->size)
+    return false;
+
+  for (size_t i = 0; i < l1->size; ++i)
+    if (!__python_scalar_eq_obj(
+          &l1->items[i], &l2->items[i], num_type_id, bool_type_id))
+      return false;
+  return true;
+}
+
 // Order-insensitive set equality: compare by value only.
 bool __ESBMC_list_set_eq(const PyListObject *l1, const PyListObject *l2)
 {
@@ -593,6 +703,46 @@ bool __ESBMC_list_insert(
   l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
+  l->size++;
+  return true;
+}
+
+// Insert variant of __ESBMC_list_push_tagged. Index normalisation matches
+// __ESBMC_list_insert.
+bool __ESBMC_list_insert_tagged(
+  PyListObject *l,
+  int64_t index,
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id)
+{
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  if (index >= n)
+    return __ESBMC_list_push_tagged(l, value, type_id, size, float_type_id);
+
+  size_t float_idx = 0;
+  void *copied =
+    __ESBMC_copy_tagged_value(value, type_id, size, float_type_id, &float_idx);
+
+  size_t i = l->size;
+  while (i > (size_t)index)
+  {
+    l->items[i] = l->items[i - 1];
+    i--;
+  }
+
+  l->items[index].value = copied;
+  l->items[index].float_idx = float_idx;
+  l->items[index].type_id = type_id;
+  l->items[index].size = size;
   l->size++;
   return true;
 }
@@ -752,6 +902,33 @@ void __ESBMC_list_extend(
     l->items[l->size].size = elem->size;
     l->size++;
 
+    ++i;
+  }
+}
+
+// Extend variant for a source list of tagged scalars: their payload width is
+// per-element and symbolic, so the elem_size above and __ESBMC_copy_value's
+// o->size fallback both overrun (#7716). Reuses the bounded copy.
+void __ESBMC_list_extend_tagged(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t float_type_id)
+{
+  if (!l || !other)
+    return;
+
+  size_t i = 0;
+  while (i < other->size)
+  {
+    const PyObject *elem = &other->items[i];
+    if (elem->size == 0)
+    {
+      l->items[l->size] = *elem;
+      l->size++;
+    }
+    else
+      __ESBMC_list_push_tagged(
+        l, elem->value, elem->type_id, elem->size, float_type_id);
     ++i;
   }
 }

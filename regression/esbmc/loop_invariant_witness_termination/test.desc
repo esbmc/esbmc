@@ -1,0 +1,6 @@
+CORE
+main.c
+--validate-correctness-witness --witness witness.yml --termination
+^Injecting loop invariant at line 12: s == i$
+\A(?![\s\S]*cannot be combined with --termination)[\s\S]*\Z
+^VERIFICATION UNKNOWN$

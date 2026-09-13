@@ -327,13 +327,10 @@ void clang_cpp_adjust::adjust_catch(codet &code)
   {
     // The following operands are the catchs
     adjust_expr(*it);
-    code_blockt &block = to_code_block(to_code(*it));
 
-    std::vector<irep_idt> ids;
-    convert_exception_id(block.type(), "", ids);
-
-    block.type() = code_typet();
-    block.set("exception_id", ids.front());
+    // The id was computed at conversion time (§3.13); the type carried it only
+    // for that, so it goes back to being a plain block.
+    to_code_block(to_code(*it)).type() = code_typet();
   }
 }
 

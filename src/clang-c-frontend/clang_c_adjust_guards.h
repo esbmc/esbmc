@@ -63,6 +63,56 @@ inline bool is_short_circuit(const expr2tc &expr)
   return is_and2t(expr) || is_or2t(expr) || is_not2t(expr);
 }
 
+/// A C++ reference: IREP2 spells one as a pointer carrying a reference kind
+/// (scope-clang-cpp-irep2.md §2.5), so a value of this type has to be read
+/// through before it is used as one.
+inline bool is_reference_type(const type2tc &type)
+{
+  return is_pointer_type(type) &&
+         to_pointer_type(type).ref_kind != pointer_ref_kindt::NONE;
+}
+
+/// `x++`, `++x`, `x--`, `--x`. Its operand is updated in place, so a
+/// reference-typed one has to be read through first -- clang_c_adjust adjusts
+/// references here for the same reason (scope-clang-cpp-irep2.md §3.16).
+inline bool is_increment_sideeffect(const expr2tc &expr)
+{
+  if (!is_sideeffect2t(expr))
+    return false;
+
+  switch (to_sideeffect2t(expr).kind)
+  {
+  case sideeffect2t::allockind::preincrement:
+  case sideeffect2t::allockind::postincrement:
+  case sideeffect2t::allockind::predecrement:
+  case sideeffect2t::allockind::postdecrement:
+    return true;
+  default:
+    return false;
+  }
+}
+
+/// An allocation side effect: `new`, `new[]`, `delete`, `delete[]`. Its
+/// `arguments` are carriage -- the destructor call, a replaced operator
+/// new/delete -- rather than program operands, because the legacy pass keeps
+/// them in named subs where no walk reaches them.
+inline bool is_alloc_sideeffect(const expr2tc &expr)
+{
+  if (!is_sideeffect2t(expr))
+    return false;
+
+  switch (to_sideeffect2t(expr).kind)
+  {
+  case sideeffect2t::allockind::cpp_new:
+  case sideeffect2t::allockind::cpp_new_arr:
+  case sideeffect2t::allockind::cpp_delete:
+  case sideeffect2t::allockind::cpp_delete_array:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /// Both spellings of a call: a bare `f(x);` statement is a sideeffect2t of kind
 /// function_call rather than a code_function_call2t.
 inline bool is_call_site(const expr2tc &expr)
@@ -79,6 +129,20 @@ inline bool is_call_site(const expr2tc &expr)
 inline bool is_promotable_unary(const expr2tc &expr)
 {
   return (is_neg2t(expr) || is_bitnot2t(expr)) && !is_complex_type(expr->type);
+}
+
+/// A cast the frontend marked as a derived->base conversion it could not route
+/// through a "@base@" component, or the wrapper migrate_expr builds when the
+/// marker sat on a node that is not a cast (#7025).
+inline bool is_derived_to_base_cast(const expr2tc &expr)
+{
+  return is_typecast2t(expr) && !to_typecast2t(expr).derived_to_base.empty();
+}
+
+/// The mirror: a downcast whose operand points at a base subobject (#1866).
+inline bool is_base_to_derived_cast(const expr2tc &expr)
+{
+  return is_typecast2t(expr) && to_typecast2t(expr).base_to_derived;
 }
 
 #endif

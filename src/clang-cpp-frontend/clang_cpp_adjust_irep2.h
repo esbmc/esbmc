@@ -24,6 +24,8 @@ public:
   static std::vector<arm_info> arm_order();
 
 protected:
+  void gen_symbol_code(symbolt &symbol) override;
+
   void adjust_sole_arms(expr2tc &expr) override;
 
   /// IREP2 form of clang_cpp_adjust::adjust_cpp_member. `OBJECT.setX()` reaches
@@ -32,6 +34,25 @@ protected:
   /// naming the method. The object is already the call's first argument, put
   /// there by the converter, so only the callee changes.
   void adjust_cpp_member(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_catch's id assignment and of the
+  /// throw arm's. Both nodes hold their catchable-type ids in an
+  /// `exception_list` field, which the converter leaves empty;
+  /// remove_exceptions dereferences it, so an unpopulated list is a crash
+  /// rather than a lost property (docs/roadmap/scope-clang-cpp-irep2.md §3.3).
+  void adjust_cpp_catch(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_cpp_delete: attach the destructor
+  /// call `delete p` makes, so goto_convert emits `~T(&(*p))`. Without it the
+  /// object's destructors never run (scope-clang-cpp-irep2.md §3.14). The call
+  /// travels in sideeffect2t::arguments[0], which the seam already carries.
+  void adjust_cpp_delete(expr2tc &expr);
+
+  /// IREP2 form of clang_cpp_adjust::adjust_reference: read each operand that
+  /// is a reference through, so it is used as the value it names rather than as
+  /// the pointer IREP2 spells it with (scope-clang-cpp-irep2.md §3.16).
+  void adjust_reference(expr2tc &expr) override;
+  void adjust_cpp_throw(expr2tc &expr);
 
 private:
   using arm = adjust_arm<clang_cpp_adjust_irep2>;
