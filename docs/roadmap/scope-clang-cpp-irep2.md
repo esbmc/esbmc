@@ -1921,3 +1921,37 @@ in `address_of2t`'s constructor, firing when the operand is an `if2t`, on
 `github_6717_throw_conditional_ok` under the flag. There is no backtrace helper
 in `src/util`, so that probe brings its own. Note gdb is the wrong tool here:
 these constructors are inlined statics and breakpoints slide.
+
+### 3.20 The last two rows: the write-back drops `#reference` inside the body
+
+Counting the reference spelling in the two symbol tables answers it. On
+`github_6717_throw_conditional_ok`, legacy's tree carries **four** `#reference`
+markers and the pass's written-back tree carries **one**:
+
+| where | legacy | flag |
+|---|---:|---:|
+| the copy constructor's parameter type | 1 | 1 |
+| `pointer` types inside the function body | 3 | **0** |
+
+The parameter survives because §2.5's `pointer_type2t::ref_kind` carries it on
+the symbol's type, and `migrate_type_back` restores it (`migrate.cpp:3215`). The
+three inside the body do not, and they are what the legacy pipeline reads *after*
+the write-back: `c_typecastt::implicit_typecast_followed` tests
+`is_lvalue_or_rvalue_reference(dest_type)` before calling
+`take_reference_address`, the irept helper that distributes the address-of over a
+conditional's arms (`c_typecast.cpp:584`). With the spelling gone the argument
+takes the plain pointer conversion instead, which is exactly the
+`&(c ? a : b)` the GOTO shows.
+
+So the missing rewrite was never missing: it is legacy's own, and it declines
+because the tree it is handed no longer says "reference".
+
+**Why the body loses it.** Every `address_of2tc(subtype, obj)` in the pass
+defaults `ref_kind` to `none` — `irep2_expr.cpp:553` documents that default for
+`carry_provenance` in the same breath — so any reference binding the pass rebuilds
+comes back as a plain pointer. That is the fix's shape: an address-of the pass
+builds over a reference-typed object has to carry
+`pointer_ref_kindt::LVALUE`, the way #7703 carries it on types. Note this also
+touches the fold in this PR, whose `address_of2tc(a.lhs->type, a.lhs)` defaults
+the same way; no census row moves on it today, so it is fidelity rather than a
+defect, and the two should be fixed together.
