@@ -2498,6 +2498,12 @@ public:
   /// the class does not grow and fields_cover_class's slack is unaffected.
   /// Placed after `location` the compiler packs it into the location's padding
   /// and the invariant underflows instead.
+  ///
+  /// Not reflected, for the reason `sideeffect2t::constructor` is not: listing
+  /// it makes the field order stop matching the primary constructor's parameter
+  /// order (`location` sits between), which is what supports_with_type_v tests,
+  /// and every with_type on an assignment then aborts (§7.2). A with_type
+  /// rebuild carries it through the specialization in irep2_expr.cpp.
   bool member_init;
 
   expr2tc lhs;
@@ -2526,8 +2532,7 @@ public:
     &expr2t::type,
     &sideeffect_assign2t::op,
     &sideeffect_assign2t::lhs,
-    &sideeffect_assign2t::rhs,
-    &sideeffect_assign2t::member_init);
+    &sideeffect_assign2t::rhs);
   static std::string field_names[esbmct::num_type_fields];
 };
 

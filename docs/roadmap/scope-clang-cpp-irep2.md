@@ -2028,12 +2028,14 @@ Every hard failure names itself, and they group into five causes:
 |---|---|
 | `Unexpected type: ptrmem` | `ch22_11`, `github_2672{,_fail}`, `ptrmem18`, `ptr_to_member_3{,_fail}`, `github_6293_member_fn_ptr{,_fail}` |
 | `uncaught exception [bad_optional_access]` | `alignas_empty_struct{,_fail}`, `stack_class{,_bug}`, `github_3522_2` |
-| `with_type called on kind sideeffect_assign` | `ch17_3` |
+| `with_type called on kind sideeffect_assign` | `ch17_3` — **fixed**, §7.3 |
 | `ERROR: compute_pointer_offset` | `ostringstream_str`, `sstream_str_bool` |
 | `caught SIGSEGV` | `ptr_to_member_2{,_fail}` |
 
 plus `github_2040` and `github_6368_insert`, which produce no output at all
-within 45s.
+within 45s — **not defects**: both agree given 90s, so the census's per-run cap
+is what they hit. A cap is part of the measurement, and two of the 62 residual
+rows were the cap rather than the pass.
 
 The 55 verdict divergences are 36 `SUCCESSFUL -> FAILED`, 14
 `SUCCESSFUL -> none`, 4 `FAILED -> none`, and one row where the **flag is
@@ -2056,3 +2058,29 @@ union constructors in `esbmc-cpp11/constructors`, and three singletons.
    The largest family and the only one that needs a new type kind rather than a
    repair.
 4. **`try_catch`** (27 rows) — the known exception-specification cluster.
+
+### 7.3 `with_type` on an assignment, and the fix that was already written
+
+`ch17_3` aborted under the flag with `with_type called on kind sideeffect_assign
+which has no substitutable type`. §3.18 predicted it and mis-scoped it: it said
+nothing calls `with_type` on that kind, which is why carrying `#member_init`
+outside `fields` had gone unnoticed. Over the whole corpus something does.
+
+The cause is the one §3.18 measured for the sibling kind. `supports_with_type_v`
+requires the `fields` order to match the primary constructor's parameter order;
+`sideeffect_assign2t` listed `member_init` after `rhs` while its constructor
+takes `location` there, so the trait was false and every `with_type` on an
+assignment took the abort. Unreflecting the field makes the trait true, and a
+`rebuild_with_type` specialization carries the flag through — the same pair of
+moves the `constructor` marker needed, and the specialization for it was already
+in the tree to copy.
+
+`ch17_3` now agrees. The gate is a unit test rather than a regression row:
+`unit/irep2/with_type.test.cpp` asserts that a `with_type` on an assignment
+carrying `member_init` neither aborts nor loses the flag, and the same for a
+constructor-marked side effect. That test bites on both halves of the change —
+re-reflecting the field aborts it, dropping the specialization fails the flag
+assertion — where a regression row could only show the abort. The construct in
+`ch17_3` that reaches the rebuild is not reduced: it fires four times there with
+`op=assign`, and none of nine hand-written compound- and plain-assignment probes
+reaches it, so the reproducer is the corpus row until someone bisects it.
