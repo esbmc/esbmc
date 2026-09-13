@@ -454,7 +454,8 @@ private:
   void deref_invalid_ptr(
     const expr2tc &deref_expr,
     const guard2tc &guard,
-    modet mode);
+    modet mode,
+    const expr2tc &resolved = expr2tc());
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(

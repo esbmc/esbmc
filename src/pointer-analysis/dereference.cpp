@@ -679,12 +679,16 @@ expr2tc dereferencet::dereference(
   if (!known_exhaustive)
     value = make_failed_symbol(type);
 
+  // Where p can land: every target build_reference_to() produced a guard for.
+  expr2tc resolved = gen_false_expr();
+
   for (const expr2tc &target : points_to_set)
   {
     expr2tc new_value, pointer_guard;
 
     new_value = build_reference_to(
       target, mode, src, type, guard, lexical_offset, pointer_guard);
+    resolved = or2tc(resolved, pointer_guard);
 
     if (is_nil_expr(new_value))
       continue;
@@ -706,6 +710,9 @@ expr2tc dereferencet::dereference(
     else
       value = if2tc(type, pointer_guard, new_value, value);
   }
+
+  if (!known_exhaustive && (is_write(mode) || is_free(mode)))
+    deref_invalid_ptr(src, guard, mode, resolved);
 
   if (is_internal(mode))
   {
@@ -882,7 +889,9 @@ expr2tc dereferencet::build_reference_to(
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
-    deref_invalid_ptr(deref_expr, guard, mode);
+    // WRITE and FREE are checked in dereference(), once every target is known.
+    if (!is_write(mode) && !is_free(mode))
+      deref_invalid_ptr(deref_expr, guard, mode);
     return value;
   }
 
@@ -902,7 +911,7 @@ expr2tc dereferencet::build_reference_to(
     type2tc nullptrtype = pointer_type2tc(type);
     expr2tc null_ptr = symbol2tc(nullptrtype, "NULL");
 
-    expr2tc pointer_guard = same_object2tc(deref_expr, null_ptr);
+    pointer_guard = same_object2tc(deref_expr, null_ptr);
 
     guard2tc tmp_guard(guard);
     tmp_guard.add(pointer_guard);
@@ -1030,7 +1039,8 @@ expr2tc dereferencet::build_reference_to(
 void dereferencet::deref_invalid_ptr(
   const expr2tc &deref_expr,
   const guard2tc &guard,
-  modet mode)
+  modet mode,
+  const expr2tc &resolved)
 {
   if (is_internal(mode))
     // The caller just wants a list of references -- ensuring that the correct
@@ -1039,6 +1049,25 @@ void dereferencet::deref_invalid_ptr(
 
   // constraint that it actually is an invalid pointer
   expr2tc invalid_pointer_expr = invalid_pointer2tc(deref_expr);
+
+  /* obj(p) can be a real object outside the value set: invalid_pointer passes it,
+   * and symex models no write or free there. */
+  if (!is_nil_expr(resolved))
+  {
+    expr2tc unmodelled = not2tc(resolved);
+    if (is_free(mode))
+    {
+      // valid_object is the alloc bit, so this also passes an alloca block.
+      type2tc offs_type = get_int_type(config.ansi_c.address_width);
+      unmodelled = and2tc(
+        unmodelled,
+        or2tc(
+          not2tc(valid_object2tc(deref_expr)),
+          notequal2tc(
+            pointer_offset2tc(offs_type, deref_expr), gen_zero(offs_type))));
+    }
+    invalid_pointer_expr = or2tc(invalid_pointer_expr, unmodelled);
+  }
 
   expr2tc validity_test;
   std::string foo;
