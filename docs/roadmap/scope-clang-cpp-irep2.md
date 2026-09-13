@@ -1905,3 +1905,19 @@ alloctype is not nil — followed by the two rows and a full sweep, rather than
 another arm chosen from an instruction. If it moves neither row, the next thing
 to diff is what `remove_sideeffects` does with a class-typed conditional whose
 arms are lvalues, since that is where `&(c ? a : b)` is actually built.
+
+**The `#type` hypothesis is refuted.** Setting `cmt_type` only when the alloctype
+is not nil changes neither row, so the present-empty `#type` is not what they turn
+on either. Reverted, unshipped: a fidelity change that moves nothing measurable
+does not belong in the tree.
+
+What is left to try is not a guess about which rewrite is missing but a direct
+answer to "who builds this node". The `address_of` over the conditional exists in
+the final GOTO and does not exist in the pass's tree, and the three sites that
+could have built it are eliminated by instrumentation (`adjust_address_of`,
+`take_reference_address`, `convert_reference`). The next step is therefore to
+instrument the *construction*: a temporary `fprintf` plus `::backtrace_symbols`
+in `address_of2t`'s constructor, firing when the operand is an `if2t`, on
+`github_6717_throw_conditional_ok` under the flag. There is no backtrace helper
+in `src/util`, so that probe brings its own. Note gdb is the wrong tool here:
+these constructors are inlined statics and breakpoints slide.
