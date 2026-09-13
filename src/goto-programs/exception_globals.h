@@ -18,7 +18,8 @@ class contextt;
 ///   $esbmc_exc_uncaught_count : size_t — number of exceptions thrown (or
 ///                                   rethrown) in this thread that have not yet
 ///                                   entered their matching handler; backs
-///                                   std::uncaught_exception(s) ([except.uncaught]).
+///                                   std::uncaught_exception(s)
+///                                   ([except.uncaught]).
 ///   $esbmc_exc_site    : size_t  — id of the raise the in-flight exception
 ///                                   came from, so the uncaught-exception
 ///                                   property can name the raising statement

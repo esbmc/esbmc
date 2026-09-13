@@ -1584,24 +1584,22 @@ private:
     expr2tc known_disj;
     goto_programt::targett head = before;
     bool have_head = false;
-    auto emit = [&](
-                  const expr2tc &escapes,
-                  const locationt &at,
-                  const irep_idt &name) {
-      auto t = emit_terminate(
-        body,
-        before,
-        not2tc(escapes),
-        at,
-        fn,
-        exception_globals::terminate_reason_uncaught,
-        "uncaught exception: " + name.as_string());
-      if (!have_head)
-      {
-        head = t;
-        have_head = true;
-      }
-    };
+    auto emit =
+      [&](const expr2tc &escapes, const locationt &at, const irep_idt &name) {
+        auto t = emit_terminate(
+          body,
+          before,
+          not2tc(escapes),
+          at,
+          fn,
+          exception_globals::terminate_reason_uncaught,
+          "uncaught exception: " + name.as_string());
+        if (!have_head)
+        {
+          head = t;
+          have_head = true;
+        }
+      };
 
     for (const irep_idt &name : thrown_dynamic_types_)
     {
