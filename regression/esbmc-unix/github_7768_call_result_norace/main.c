@@ -1,10 +1,11 @@
 #include <pthread.h>
 
 /* No-race companion to github_7768_call_result_race: the increment is locked.
- * Each thread's copy of the call result is thread-local, so the two stores
- * must not be reported as racing with each other. */
+ * Both threads run the same call site, so the local that carries its result
+ * must be private to each thread for the stores into distinct slots to stay
+ * race-free. */
 int shared;
-int r1, r2;
+int results[2];
 pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;
 
 int bump(void)
@@ -15,22 +16,16 @@ int bump(void)
   return 0;
 }
 
-void *t1(void *arg)
+void *t(void *arg)
 {
-  r1 = bump();
-  return 0;
-}
-
-void *t2(void *arg)
-{
-  r2 = bump();
+  results[(long)arg] = bump();
   return 0;
 }
 
 int main(void)
 {
   pthread_t a, b;
-  pthread_create(&a, 0, t1, 0);
-  pthread_create(&b, 0, t2, 0);
+  pthread_create(&a, 0, t, (void *)0);
+  pthread_create(&b, 0, t, (void *)1);
   return 0;
 }
