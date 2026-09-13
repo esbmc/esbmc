@@ -2000,3 +2000,59 @@ was a guess at *which rewrite is missing*, and each was refuted by instrumenting
 the thing it claimed to fix. What worked was counting a marker in the two symbol
 tables — four against one — and reading the consumer that tests it. A divergence
 census says which rows disagree; only the tree says why.
+
+## 7. The whole C++ corpus, swept once (2026-09-13)
+
+"84 of 84" was a stride-12 sample of **one** subdirectory. The corpus is
+`regression/esbmc-cpp` (2891 rows) plus `esbmc-cpp11` (166) and
+`esbmc-cpp14/17/20/23` (125): **3182 rows**. Swept end to end under
+`--clang-cpp-irep2-adjust-only` against the default path, skipping
+`KNOWNBUG`/`FUTURE`, rows that pin an irep2 flag, and rows whose source is
+absent (87 in total), the measurable set is **3095**:
+
+| | rows |
+|---|---:|
+| verdicts agree | **3033** |
+| diverge | 55 |
+| hard failure under the flag | 7 classified as crashes, plus 18 rows that produce no verdict |
+
+So 98.0% of the corpus agrees, and the residue is 62 rows rather than the two the
+sample suggested. Reproduce with `scratchpad/cpp_full_census.sh` (resumable, one
+TSV row per test: status, directory, both verdicts).
+
+### 7.1 The residue by cause, not by directory
+
+Every hard failure names itself, and they group into five causes:
+
+| cause | rows |
+|---|---|
+| `Unexpected type: ptrmem` | `ch22_11`, `github_2672{,_fail}`, `ptrmem18`, `ptr_to_member_3{,_fail}`, `github_6293_member_fn_ptr{,_fail}` |
+| `uncaught exception [bad_optional_access]` | `alignas_empty_struct{,_fail}`, `stack_class{,_bug}`, `github_3522_2` |
+| `with_type called on kind sideeffect_assign` | `ch17_3` |
+| `ERROR: compute_pointer_offset` | `ostringstream_str`, `sstream_str_bool` |
+| `caught SIGSEGV` | `ptr_to_member_2{,_fail}` |
+
+plus `github_2040` and `github_6368_insert`, which produce no output at all
+within 45s.
+
+The 55 verdict divergences are 36 `SUCCESSFUL -> FAILED`, 14
+`SUCCESSFUL -> none`, 4 `FAILED -> none`, and one row where the **flag is
+better**: `ch9_7` answers where the default path does not. By family: 27 are
+`try_catch` (the `exception_spec_*` cluster §3.14 named, which is
+`finalize_exception_specification`'s territory), 17 in `esbmc-cpp/cpp`, 6 in
+`bug_fixes` (two POD-initialisation rows, two member-function-pointer rows), 2
+union constructors in `esbmc-cpp11/constructors`, and three singletons.
+
+### 7.2 Next, in order of what the causes cost
+
+1. **`with_type` on `sideeffect_assign2t`** — one row today, and §3.18 predicted
+   it: that kind carries `#member_init` outside `fields` exactly as
+   `sideeffect2t` carried `constructor`, so its field order does not match its
+   constructor's parameter order and the generic rebuild refuses it. The fix is
+   the specialization already written for the sibling kind.
+2. **`bad_optional_access`** (5 rows) — one unchecked `std::optional` somewhere in
+   the flag path; the exception name is the whole lead.
+3. **`ptrmem`** (8 rows) — the seam has no IREP2 type for a pointer to member.
+   The largest family and the only one that needs a new type kind rather than a
+   repair.
+4. **`try_catch`** (27 rows) — the known exception-specification cluster.
