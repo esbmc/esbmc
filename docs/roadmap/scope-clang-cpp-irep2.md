@@ -1771,3 +1771,26 @@ above. `irep2_array_vla_construction{,_fail}` pins element 0 only: a test over
 the rest would cement the false alarm, and pinning element 0 stays correct when
 the VLA path is completed. The pair is flag-only by necessity — legacy aborts on
 this input.
+
+### 3.17 Next: the conditional distribution, this time with a row that shows it
+
+Of the two rows left, `github_6717_throw_conditional_ok` differs from legacy in
+exactly one instruction:
+
+```
+legacy  FUNCTION_CALL: S(&tmp$1, c::0 ? &a : &b)
+flag    FUNCTION_CALL: S(&tmp$1, &(c::0 ? a : b))
+```
+
+That is `clang_c_adjust::adjust_address_of`'s distribution of `&(c ? a : b)` into
+`c ? &a : &b` ([expr.cond] makes a conditional over same-typed lvalues an
+lvalue), which the IREP2 arm does not do — it handles only the array decay.
+
+§3.13 ported that distribution and reverted it, because
+`github_6291_conditional_ref_shapes` diverged identically with it. The revert was
+right on the evidence then: the arm was exercised by nothing measurable. It is
+not evidence now — this row's IR differs at precisely that rewrite, so the port
+has a reproducer whose GOTO is expected to change. Re-port it, diff this row's
+GOTO, and expect `github_6291` to need something else: a reference *parameter*
+bound to a conditional lvalue is a different shape from taking a conditional's
+address.
