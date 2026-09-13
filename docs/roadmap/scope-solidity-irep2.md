@@ -1536,3 +1536,39 @@ corrected by an instrument built so it could say so. What survives from all of
 them: the failing value is a nested struct literal with three operands under a
 four-name type; nothing downstream reconciles the two; and the arm that would
 have fixed it did not see it.
+### 7.36 `adjust_struct` never sees a `Book` literal at all
+
+The arm, logging every literal it visits with its operand and type counts:
+
+```
+28 XLIT visit struct BytesStatic  ops=2 type_members=2 padded_members=2
+12 XLIT visit struct BytesDynamic ops=5 type_members=5 padded_members=5
+ 2 XLIT visit struct BytesPool    ops=2 type_members=2 padded_members=2
+```
+
+Three struct literals, all from the operational models, every one already
+consistent. **No `Book` literal is visited — not the padded one, not the short
+one.** So §7.35 was right that the arm never ran on the failing literal, and
+understated it: the arm never runs on any `Book` literal, so `adjust_struct` is
+not where this is fixed and the walk is not skipping a sibling it otherwise
+reaches.
+
+That relocates the defect again, and this time away from the adjust pass
+entirely. The failing expression lives in the **SSA equation**, after symex
+(§7.30 timed the sorts as post-symex). The `Book` literals in it are therefore
+not in the set the pass walks: they are built later — by symex propagating an
+initialiser, or by a value position the walk does not descend into. Either way,
+a pass that runs over symbol values before goto conversion cannot repair a
+literal that does not exist until symex has run.
+
+So the open question is now provenance: **what constructs a three-operand
+`Book` literal under a four-member type, after the adjust pass has finished?**
+The candidates are the contract's initial-value construction in the Solidity
+converter and symex's own struct propagation, and telling them apart wants the
+literal's origin, not another count.
+
+This is the seventh reading. What has held throughout: three operands under a
+four-name type, nothing downstream reconciling them, and — now — no arm in the
+adjust pass that ever sees the value. What changed: the fix is not in
+`adjust_struct`, and §7.34's and §7.35's framings of it as an arm or walk
+problem are both retired.
