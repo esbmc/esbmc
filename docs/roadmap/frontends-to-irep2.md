@@ -431,6 +431,14 @@ are about: a census must show the thing under test executed before its zero
 means anything. Both suites need Linux CI (Solidity) or a build with
 `-DENABLE_JIMPLE_FRONTEND=On` (Jimple).
 
+**Superseded for Solidity (2026-09-11).** With `ENABLE_SOLIDITY_FRONTEND=On` the
+suite runs locally: `ctest -L esbmc-solidity` is 523 of 525, the other two being
+`KNOWNBUG` rows that now pass. Tests ship a pre-generated `contract.solast`, and
+their flags line names it, so `solc` is not needed. Phase 8 is therefore
+measurable and is opened at `scope-solidity-irep2.md`. Jimple's blocker is not
+re-tested here, though the same build has `ENABLE_JIMPLE_FRONTEND=On` and 26
+`jimple` tests.
+
 ### 15.2 Python, re-censused with the §14 fix
 
 The docstring-location fix (#6695) applied, same instrumentation, the five tests

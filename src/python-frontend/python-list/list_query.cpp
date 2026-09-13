@@ -3,6 +3,56 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+/// `dict.items()` is modelled by a placeholder holding the dict's *keys*, not
+/// (key, value) tuples. Against a set of bare keys the fold below still answers
+/// correctly -- an items view never equals one, which github_7553_items_fail
+/// pins. Against a set of *tuples* it answered from contents that are not the
+/// view's, which proved `d.items() != {(k, v)}`, a property CPython makes false
+/// (#7553). Refuse only that shape, as set ordering already does.
+void python_list::reject_items_view_vs_tuple_set(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &converted_lhs,
+  const exprt &converted_rhs)
+{
+  const bool lhs_items = lhs.get_bool(PYTHON_ITEMS_VIEW_ATTR);
+  const bool rhs_items = rhs.get_bool(PYTHON_ITEMS_VIEW_ATTR);
+  if (!lhs_items && !rhs_items)
+    return;
+
+  const exprt &other = lhs_items ? converted_rhs : converted_lhs;
+  if (!other.is_symbol())
+    return;
+
+  const typet elem =
+    elem_types().uniform_element_type(other.identifier().as_string());
+  if (!elem.is_struct() && elem.id() != "symbol")
+    return;
+
+  throw std::runtime_error(
+    "comparing dict.items() with a set of tuples is not yet supported: the "
+    "view's (key, value) pairs are not modelled");
+}
+
+python_list::list_eq_target python_list::select_list_eq(
+  const exprt &l1,
+  const exprt &l2,
+  const symbolt &generic_func,
+  const std::vector<exprt> &generic_trailing_args) const
+{
+  if (!has_tagged_elements(l1) && !has_tagged_elements(l2))
+    return {&generic_func, generic_trailing_args};
+
+  const symbolt *eq_tagged_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq_tagged");
+  assert(eq_tagged_sym);
+  const type_handler &th = converter_.get_type_handler();
+  return {
+    eq_tagged_sym,
+    {th.tagged_scalar_type_id(long_long_int_type()),
+     th.tagged_scalar_type_id(bool_type())}};
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -52,6 +102,7 @@ exprt python_list::compare(
   const bool rhs_is_set = rhs_symbol->is_set || is_keys_view(l2);
   if (lhs_is_set || rhs_is_set)
   {
+    reject_items_view_vs_tuple_set(l1, l2, converted_l1, converted_l2);
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
 
@@ -553,18 +604,25 @@ exprt python_list::compare(
     (lhs_elem_size != 0 && lhs_elem_size == rhs_elem_size) ? lhs_elem_size
                                                            : BigInt(0);
 
+  const list_eq_target eq_target = select_list_eq(
+    converted_l1,
+    converted_l2,
+    *list_eq_func_sym,
+    {list_type_id,
+     max_depth_expr,
+     from_integer(float_type_id, size_type()),
+     from_integer(eq_elem_size_bytes, size_type())});
+
   code_function_callt list_eq_func_call;
-  list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
-  // passing arguments
-  list_eq_func_call.arguments().push_back(build_symbol(*lhs_symbol)); // l1
-  list_eq_func_call.arguments().push_back(build_symbol(*rhs_symbol)); // l2
-  list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
-  list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
-  list_eq_func_call.arguments().push_back(
-    from_integer(float_type_id, size_type())); // float_type_id
-  list_eq_func_call.arguments().push_back(
-    from_integer(eq_elem_size_bytes, size_type())); // elem_size
+  list_eq_func_call.function() = build_symbol(*eq_target.func);
+  exprt::operandst &eq_args = list_eq_func_call.arguments();
+  eq_args.push_back(build_symbol(*lhs_symbol)); // l1
+  eq_args.push_back(build_symbol(*rhs_symbol)); // l2
+  eq_args.insert(
+    eq_args.end(),
+    eq_target.trailing_args.begin(),
+    eq_target.trailing_args.end());
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);

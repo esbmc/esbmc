@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
-# V.4.4 verdict-parity sweep: for each regression test, compare the verdict
-# produced with the test's own flags (legacy, --irep2-bodies OFF) against the
-# verdict with --irep2-bodies added. Any divergence or flag-on crash is a
-# V.4.4 parity blocker. Deterministic verdict comparison per Part V §V.5.
+# Verdict-parity sweep: for each regression test, compare the verdict produced
+# with the test's own flags (the flag under test OFF) against the verdict with
+# it added. Any divergence or flag-on crash is a parity blocker. Deterministic
+# verdict comparison per Part V §V.5.
 #
 # Usage: parity_sweep.sh <esbmc-binary> <regression-subdir> [max-tests]
+#
+# PARITY_FLAG selects what is being swept; it defaults to V.4.4's
+# --irep2-bodies. The frontend adjust-pass hop-offs use the same harness, e.g.
+#
+#   PARITY_FLAG=--clang-cpp-irep2-adjust-only \
+#     scripts/irep2-migration/parity_sweep.sh build/src/esbmc/esbmc \
+#     regression/esbmc-cpp/inheritance
+#
+# which is how docs/roadmap/scope-clang-cpp-irep2.md's Phase 7 counts are taken.
 set -u
 
 # Resolve the binary to an absolute path: the sweep cd's into each test dir
 # before invoking it, so a relative path would silently fail there (esbmc never
 # runs, both sides score OTHER, and the test is falsely reported as parity-OK).
-ESBMC="$(command -v "$1" || realpath "$1")"
+# `command -v` alone is not enough: given a relative path containing a slash it
+# succeeds and hands the path back unchanged, so after the cd below esbmc never
+# runs, both sides score OTHER, and the sweep reports parity-OK having measured
+# nothing. Absolutise a path; leave a bare command name to PATH.
+case "$1" in
+  */*) ESBMC="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" ;;
+  *)   ESBMC="$(command -v "$1" || printf '%s' "$1")" ;;
+esac
 if [ ! -x "$ESBMC" ]; then
   echo "error: esbmc binary not found or not executable: $1" >&2
   exit 2
@@ -18,6 +34,7 @@ fi
 DIR="$2"
 MAX="${3:-100000}"
 TIMEOUT="${PARITY_TIMEOUT:-30}"
+FLAG="${PARITY_FLAG:---irep2-bodies}"
 
 verdict() {
   # Extract a normalized verdict / crash signal from esbmc output.
@@ -39,7 +56,7 @@ while IFS= read -r desc; do
   flags=$(sed -n '3p' "$desc")
   [ "$kind" = "KNOWNBUG" ] && continue
   [ -z "$src" ] && continue
-  case "$flags" in *--irep2-bodies*) continue;; esac   # skip tests already pinning the flag
+  case "$flags" in *"$FLAG"*) continue;; esac   # skip tests already pinning the flag
   n=$((n+1))
   # Split source and flags into words deliberately: $flags is a flag list that
   # must reach esbmc as separate arguments. Arrays keep that splitting explicit
@@ -48,7 +65,7 @@ while IFS= read -r desc; do
   read -ra flag_arr <<<"$flags"
   out_off=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" 2>&1)
   rc_off=$?
-  out_on=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" --irep2-bodies 2>&1)
+  out_on=$(cd "$tdir" && timeout "$TIMEOUT" "$ESBMC" "${src_arr[@]}" "${flag_arr[@]}" "$FLAG" 2>&1)
   rc_on=$?
   v_off=$(verdict "$out_off"); v_on=$(verdict "$out_on")
   # ignore timeouts (rc 124) on either side — not a parity signal

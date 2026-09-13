@@ -140,15 +140,15 @@ pull request mentions at all: the `test.desc` file is the only record that the d
 
 ### 6.1 Stale KNOWNBUG — the defect appears fixed (`C0`)
 
-These produce their full expected output. Two are registered with ctest, so the suite
-is red on them right now; the other three sit in trees that never run (`disabled/`,
+These produce their full expected output on the build measured here. Two are
+registered with ctest; the other three sit in trees that never run (`disabled/`,
 `windows/`), which is why nothing has flagged them.
 
 | Test | Registered? | Tracking | Reference |
 |---|---|---|---|
 | `regression/disabled/ch21_3` | no | Untracked | — |
-| `regression/esbmc-solidity/delegate_shadow_3` | yes — **suite is red** | PR provenance only | [#5318](https://github.com/esbmc/esbmc/pull/5318) (PR, closed) |
-| `regression/esbmc-solidity/nested_array_deep_1` | yes — **suite is red** | PR provenance only | [#5318](https://github.com/esbmc/esbmc/pull/5318) (PR, closed) |
+| `regression/esbmc-solidity/delegate_shadow_3` | yes — but see below | PR provenance only | [#5318](https://github.com/esbmc/esbmc/pull/5318) (PR, closed) |
+| `regression/esbmc-solidity/nested_array_deep_1` | yes — but see below | PR provenance only | [#5318](https://github.com/esbmc/esbmc/pull/5318) (PR, closed) |
 | `regression/windows/cpp_priority_queue_size_bug` | no | Untracked | — |
 | `regression/windows/k-induction_cpp_stack_empty_bug` | no | Untracked | — |
 
@@ -163,9 +163,23 @@ ERROR: Test 'esbmc-solidity/nested_array_deep_1' passed but is marked as KNOWNBU
 0% tests passed, 2 tests failed out of 2
 ```
 
-Both are subject to the provenance caveat in §2 — re-run them against a `master`
-build before reclassifying. If they hold, they become `CORE` and gain a
-`VERIFICATION FAILED` counterpart.
+**Measured, and the `C0` reading does not hold for the two Solidity rows.** The
+`SUCCESSFUL` above comes from a build with `NDEBUG` set. On the `static llvm-22
+DebugOpt` runner, which is what CI uses and which keeps assertions, both abort
+before reaching a verdict:
+
+| Test | Assertion |
+|---|---|
+| `delegate_shadow_3` | `member2t::member2t`, `irep2_expr.h:1615` |
+| `nested_array_deep_1` | `assert_type_compat_for_with`, `irep2_expr.cpp:328` (`is_pointer_type(b)`) |
+
+Both assertions sit inside `#ifndef NDEBUG`, so a release build drops them and
+ESBMC proceeds on the malformed IR they were guarding. The verdict those rows
+produce is therefore reached *through* the defect, not in spite of it, and
+reclassifying them to `CORE` reddens CI on any assertions-enabled build
+(esbmc/esbmc#7756). They stay `KNOWNBUG`; the defect each names is live.
+
+The remaining three rows sit in trees that never run and are untouched by this.
 
 ### 6.2 Tests that cannot fail, whatever ESBMC does (`C1`)
 
