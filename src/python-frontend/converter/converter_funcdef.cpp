@@ -1411,7 +1411,7 @@ static bool is_bare_callable_annotation(const nlohmann::json &ann)
 }
 
 /// Whether the parameter takes the Any (void*) default: no annotation at all,
-/// or a bare `Callable`, which is worse than none (#7672).
+/// or a bare `Callable`, which is worse than none.
 static bool parameter_defaults_to_any(const nlohmann::json &element)
 {
   if (!element.contains("annotation") || element["annotation"].is_null())
@@ -1440,15 +1440,9 @@ size_t python_converter::register_function_argument(
     if (parameter_defaults_to_any(element))
     {
       // Python does not require type annotations; treat unannotated parameters
-      // as Any (void*) to follow Python semantics.
-      //
-      // A bare `Callable` joins them: it resolves to a pointer whose code type
-      // returns void, so the call through the parameter carries no value and
-      // the caller's use of the result folds away (#7672). Any keeps the
-      // callee's own return type, which the unannotated form already does.
-      // converter_stmt.cpp's variable path defers a bare `Callable` for the
-      // same reason (#6640). A subscripted `Callable[[A], R]` spells its
-      // signature out and is left to get_type_from_annotation.
+      // as Any (void*) to follow Python semantics. A bare `Callable` resolves
+      // to a pointer whose code type returns void, so a call through the
+      // parameter would carry no value -- Any is the better default (#7672).
       arg_type = any_type();
     }
     else
