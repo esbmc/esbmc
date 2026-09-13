@@ -1499,3 +1499,40 @@ Two repairs, and the first is small:
 Worth adding to #7758's reasoning: a `tuple_create` that refused to build a
 tuple whose element count disagrees with its sort would have stopped this at
 the source, one layer before the projection.
+### 7.35 §7.34 corrected: the padding helper would fix it, so the arm never ran
+
+`pad_struct_operands` is four lines:
+
+```cpp
+for (size_t i = 0; i < st.members.size(); i++)
+  if (i <= ops.size() && is_padding_name(st.member_names[i].as_string()))
+    ops.insert(ops.begin() + i, gen_zero(st.members[i]));
+```
+
+and `is_padding_name` matches `anon_pad#` (`util/irep/pad_names.h`), which the
+observed member name `anon_pad#2` satisfies. So for the failing shape —
+operands `[title, author, book_id]` against names `[title, author, anon_pad#2,
+book_id]` — it inserts a zero at index 2 and returns four operands. The helper
+handles this shape exactly.
+
+So §7.34's reading is wrong: the arm does not reach its bail-out on this
+literal, because had it run, `ops.size()` would have become 4 and the literal
+would have been rebuilt on the padded type. **The arm never ran on the failing
+literal at all.**
+
+That fits what §7.32 measured — two `Book` literals in one expression, one with
+four operands and one with three. The arm fixed the first and never visited the
+second.
+
+So the target is the **walk**, not the arm's logic: which `constant_struct2t`
+nodes does the dispatcher reach, and which does it skip? §7.33 guessed at this
+already ("a literal rebuilt by an earlier arm may not be revisited"), and it is
+now the only candidate left standing. The instrument is a log in
+`adjust_struct` of every literal it visits, with its operand and type counts,
+against the two the failing expression contains.
+
+Six readings of this defect, five of them wrong in some particular, and each
+corrected by an instrument built so it could say so. What survives from all of
+them: the failing value is a nested struct literal with three operands under a
+four-name type; nothing downstream reconciles the two; and the arm that would
+have fixed it did not see it.
