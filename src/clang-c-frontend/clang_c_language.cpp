@@ -323,6 +323,13 @@ write_witness_tmp(const std::string &content)
   return tmp;
 }
 
+// Clang returns no unit, rather than one with errors, when it cannot set up the
+// compilation (e.g. an unknown target triple); its diagnostic is already out.
+static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
+{
+  return !unit || unit->getDiagnostics().hasErrorOccurred();
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -405,8 +412,7 @@ bool clang_c_languaget::parse(const std::string &path)
   // Generate ASTUnit and add to our vector
   auto newAST = buildASTs(intrinsics, new_compiler_args);
 
-  // Use diagnostics to find errors, rather than the return code.
-  if (newAST->getDiagnostics().hasErrorOccurred())
+  if (ast_failed(newAST))
     return true;
 
   if (!AST)
