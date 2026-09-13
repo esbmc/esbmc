@@ -1,6 +1,6 @@
-// streamsize is signed ([stream.types]), so setw(-1) leaves a negative width,
-// which pads nothing and the insertion resets to 0. With an unsigned
-// streamsize the model clamped the argument to 0 instead (#7540).
+// streamsize is signed ([stream.types]), so setw(-1) leaves a negative width
+// until the next insertion resets it to 0. With an unsigned streamsize the
+// model clamped the argument to 0 instead (#7540).
 #include <cassert>
 #include <iomanip>
 #include <iostream>

@@ -14,8 +14,8 @@
 
 namespace std
 {
-// [iosfwd.syn], with libstdc++'s int64_t offset. streampos stays an offset
-// rather than fpos<mbstate_t>, which the model does not have.
+// [iosfwd.syn], spelled as libstdc++ spells streamoff. streampos stays an
+// offset rather than fpos<mbstate_t>, which the model does not have.
 typedef __INT64_TYPE__ streamoff;
 typedef streamoff streampos;
 

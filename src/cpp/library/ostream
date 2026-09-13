@@ -61,7 +61,9 @@ public:
     sentry &operator=(const sentry &); // not defined
   };
   ostream &operator=(const ostream &); // disabled
-  static streamsize _filesize;
+  // nondet_uint()'s own type: a signed 64-bit size needs a widening cast that
+  // --ir --overflow-check reports as an overflow (#7540).
+  static unsigned int _filesize;
   static ios::streampos _filepos;
 
   /* The character sink the inserters below feed. It hangs off the base, so
@@ -420,7 +422,9 @@ void ostream::_put_double(double val)
     return;
 
   char buf[OSTREAM_CAPACITY];
-  _put_field(buf, _ostream_dtoa(val, (int)precision(), buf));
+  // A negative precision is as if omitted (C17 7.21.6.1p5), which means 6.
+  _put_field(
+    buf, _ostream_dtoa(val, precision() < 0 ? 6 : (int)precision(), buf));
 }
 
 /* Only width and fill reach the output; the remaining settings are recorded
@@ -436,7 +440,7 @@ void ostream::_apply(const smanip &m)
     fill((char)m._arg);
     break;
   case smanip::_setprecision:
-    precision(m._arg > 0 ? (streamsize)m._arg : 0);
+    precision((streamsize)m._arg);
     break;
   case smanip::_setbase:
     setf(

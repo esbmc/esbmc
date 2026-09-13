@@ -1,6 +1,6 @@
-// The end of a file can lie past 2 GiB. A 32-bit stream position wrapped such
-// an offset negative, so tellp() after seeking to the end reported an invalid
-// stream position (#7540).
+// The end of a file can lie past 2 GiB. With a 32-bit signed size or stream
+// position the model wrapped it negative, so tellp() after seeking to the end
+// reported an invalid stream position (#7540).
 #include <cassert>
 #include <fstream>
 
