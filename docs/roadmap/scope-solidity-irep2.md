@@ -1621,3 +1621,53 @@ of the repair and what
 Seven readings before this one. Each was corrected by a measurement, and the
 last of them was misled by where I placed the probe rather than by what the
 code does — a probe after an early return cannot see the case that takes it.
+### 7.38 507 of 507: the corpus agrees on every row (2026-09-13)
+
+The fix is at the lookup §7.37 named, and it removes the lookup rather than
+correcting the name:
+
+```cpp
+typet legacy = migrate_type_back(t);
+add_padding(legacy, ns);
+const type2tc padded = migrate_type(legacy);
+```
+
+`add_padding` is the same function that gave the tag symbol its layout, and
+`clang_c_adjust::adjust_type` asserts it is idempotent, so a type already
+carrying its pads is unchanged. No symbol, no name, nothing for a frontend's
+tag-qualification convention to break. Correcting the name would have left
+`adjust_struct` needing to know how each frontend qualifies nested tags — and
+the struct type itself carries only the unqualified name, so that knowledge has
+nowhere to come from.
+
+| | §7.10 | §7.23 | §7.26 | now |
+|---|---:|---:|---:|---:|
+| verdicts agree | 441 | 441 | 504 | **507** |
+| diverge | 67 | 63 | 0 | **0** |
+| crash | 3 | 3 | 3 | **0** |
+
+All three rows reach the *correct* verdict, not a masked one: `struct_1`
+SUCCESSFUL, `struct_2` and `interface_7` FAILED, each matching the default
+path.
+
+`irep2_only_nested_struct_pad{,_fail}` pin it, and both halves flip to `tuple
+field out of range` when the tag lookup is restored — so neither verdict is
+satisfiable without the fix. The test declares its struct *inside* a contract
+with a `string` member on purpose: a top-level struct resolves its tag under
+either code path and would pin nothing. #7758's guard is what makes that
+mutation legible; without it the mutant would SIGSEGV and the cause would have
+to be inferred again.
+
+Nets: `irep2_only` 111 of 111, unit 871 of 871, and the Solidity default path
+unchanged at 523 of 525 with the two `KNOWNBUG` rows that already passed.
+
+**What this section cost, and what it bought.** Eight readings of one defect, seven of
+them wrong in some particular: an ill-sorted assignment, a missing member name,
+a stale sort, a nested type symbol, an inline snapshot on an expression, the
+arm's bail-out, the dispatcher's walk. Each was retired by an instrument built
+so that silence or a surprise would contradict it — and one reading was wrong
+only because a probe sat *after* the early return it needed to observe (§7.36).
+The answer was finally in a symbol-table dump and a `grep` of tag names, not in
+a ninth probe. The by-product was #7758: `project` read past the end of a
+vector in every release build, guarded only under `!NDEBUG`, which is a class
+of undefined behaviour with reach far beyond this corpus.
