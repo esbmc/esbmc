@@ -1865,12 +1865,22 @@ four that this branch had just brought to parity. §3.16's `#member_init` on
 `sideeffect_assign2t` has the same shape and is already with_type-unsupported;
 nothing calls with_type on that kind, which is why it went unnoticed there.
 
-Two ways out, for whoever takes this next: leave the field **unreflected** (like
-`location`, carried but not compared — cheap, but a `with_type` rebuild between
-the fold and the write-back would drop it), or move the parameter ahead of `loc`
-in the constructor so field and parameter order agree, which means touching every
-positional `sideeffect2tc(..., location)` call site. The unreflected version
-compiles; it has not been measured, because the build it needed was killed.
+Two ways out: leave the field **unreflected** (like `location`, carried but not
+compared — cheap, but a `with_type` rebuild between the fold and the write-back
+would drop it), or move the parameter ahead of `loc` in the constructor so field
+and parameter order agree, which means touching every positional
+`sideeffect2tc(..., location)` call site.
+
+**Shipped unreflected.** `ctest -R irep2` 374 of 374, unit 871 of 871, the four
+rows above agreeing, and both halves of the pair still changing outcome with the
+restore suppressed. The reflected version's 14 failures are gone. `esbmc-cpp/cpp`
+reports 6 failures — `ch8_5` and the five `github_7433*` rows — but they fail
+identically with this change stashed and reverted, so they are not its doing:
+they expect an *elaborated* type name (`uncaught exception: struct my_error`,
+`class std::out_of_range`) and this build's bundled clang 21 prints the
+unelaborated one. Those descriptors have a blank flags line, so they pin whatever
+LLVM the build used, which is the trap CLAUDE.md's *Pin the mode in every test*
+note describes.
 
 Note also what this says about the *other* seam loss, the callee's `constructor`
 return type (§3.17): it is real, but symbol types are read from
