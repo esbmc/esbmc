@@ -1794,3 +1794,44 @@ has a reproducer whose GOTO is expected to change. Re-port it, diff this row's
 GOTO, and expect `github_6291` to need something else: a reference *parameter*
 bound to a conditional lvalue is a different shape from taking a conditional's
 address.
+
+**§3.17's inference was wrong, and the measurement says where the node comes
+from.** Ported again, the distribution fires on **nothing**: instrumented, the
+arm sees five `address_of(new_object)` and two `address_of(sideeffect)` on
+`github_6717_throw_conditional_ok` and no `address_of(if)` at all, and the row's
+GOTO is unchanged. So the `&(c ? a : b)` in the GOTO is not built by the pass.
+Two further sites are ruled out by the same method: `c_typecastt`'s IREP2
+`take_reference_address` (`c_typecast.cpp:781`) already distributes per arm, and
+neither it nor `convert_reference` is called with a conditional on this input.
+The node is therefore created downstream of the adjuster, and the reverted
+distribution is reverted again — with the reason measured this time rather than
+inferred from a row that names the issue.
+
+**What the write-back does lose, and what actually consumes it.** Diffing the
+back-migrated body of `pick` against the legacy one (`--symbol-table-only`, the
+pass's own tree under `--clang-cpp-irep2-adjust-writeback-all`) shows 274 lines
+against 170. Most is known round-trip loss — `#location`, `#base_name`,
+`#cpp_type`, `#cformat` — but two entries are not cosmetic: the callee's
+`return_type: constructor` becomes `empty` (`migrate.cpp:387` maps
+`typet("constructor")` to the empty type, and nothing can restore it), and the
+side effect's `constructor: 1` marker is dropped. Legacy's tree has five
+`return_type: constructor` spellings in that function; the pass's has none.
+
+Carrying the return-type spelling as a field on `code_type2t` was written and
+**reverted**: it closes neither row, and instrumented, neither `migrate_type`'s
+nor `migrate_type_back`'s code arm is reached on this input — symbol types are
+read from `symbolt::get_type2()` (`migrate.cpp:434`), not migrated on read. An
+unexercised field on a core IREP2 type is not shippable evidence of anything.
+
+**So the next task is the marker, not the spelling, and it has a named
+consumer.** `#constructor` on the *side effect* is read after the frontend by
+`clang_cpp_maint::adjust_init` (`clang_cpp_main.cpp:23`, `:61`), which is the
+static-initialisation half — §3.16's open row. Carry it on `sideeffect2t`, the
+`#member_init` precedent, and measure that row: it has two reproducers (a
+file-scope `R g[2]` and a function-local `static R s[2]`) and two regression rows
+that diverge for it, `esbmc-cpp11/constructors/Constructor9-1` and
+`local_array_of_class_ctor`. `goto-programs/builtin_functions.cpp:679` reads the
+same marker but only on the `cpp_new` path, so it is not what these two
+conditional rows turn on; those stay open, and the next measurement on them
+should be a whole-body diff of the pass's output for `pick`, not another arm
+guessed from an instruction.
