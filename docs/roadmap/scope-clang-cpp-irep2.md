@@ -1481,3 +1481,49 @@ The inference that failed was: a test named for the issue, containing the source
 construct, must reach the arm that serves it. Two steps of plausibility, neither
 measured. The comment's claim stands unrefuted, and refuting it needs the arm
 instrumented to show it fires — not a name and a source shape.
+### 3.14 The seven rows are pre-existing, and the shape is a typed constructor call
+
+§3.13 left seven false alarms. Two name array construction, so
+`array_element_destructors_leak` was dumped both ways. Legacy:
+
+```
+FUNCTION_CALL: R(&a[0])        FUNCTION_CALL: R(&a[1])
+FUNCTION_CALL: ~R(&a[1])       FUNCTION_CALL: ~R(&a[0])
+```
+
+under the flag:
+
+```
+DECL struct [2] return_value$_R$1;
+FUNCTION_CALL: return_value$_R$1=R(&a[0])
+FUNCTION_CALL: ~R(&a[1])                    ~R(&a[0])
+FUNCTION_CALL: ~R(&return_value$_R$1[1])    ~R(&return_value$_R$1[0])
+```
+
+So the constructor call is **value-returning** on the flag path:
+`remove_sideeffects` gives it a temporary, and that temporary then acquires
+destructors of its own, whose `p` was never allocated — hence a leak reported
+on a program that leaks nothing. Note the flag path has *more* destructor
+calls, not fewer; the test's own header comment frames the defect as "skipped
+array-element destructors", which is the opposite of what the dump shows.
+
+**The obvious suspect was mine, and it is cleared.** Phase 8 added
+`align_call_return_type`, whose whole job is to give a call its callee's return
+type, guarded by `if (ret.id() == "constructor") return;`. If an array
+constructor's return type were not spelled `constructor` after the round trip,
+that guard would miss and the hook would create exactly this temporary.
+Disabled behind an env gate, all seven rows diverge **identically**:
+
+| row | hook on | hook off |
+|---|---|---|
+| all seven | FAILED | FAILED |
+
+So the typed constructor call predates Phase 8's arms. Worth stating that the
+question had to be asked: the 77-of-84 measurement was taken *after* that arm
+landed, and #7718's census predates the merges, so neither isolates it — a gap
+in how the work was sequenced, since a shared-arm change should be measured
+against the same base before and after.
+
+What is established: the call carries a non-void type under the flag, and
+something other than the alignment hook gives it one. That is the next
+diagnosis, and the two array rows are the cheapest instance of it.
