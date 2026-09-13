@@ -730,8 +730,14 @@ cudaDeviceCanAccessPeer(int *canAccessPeer, int device, int peerDevice)
   return cudaSuccess;
 }
 
+// Access is one-way: from the current device to peerDevice only.
 cudaError_t cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags)
 {
+  if (flags != 0)
+  {
+    lastError = CUDA_ERROR_INVALID_VALUE;
+    return CUDA_ERROR_INVALID_VALUE;
+  }
   if (
     peerDevice < 0 || peerDevice >= __cudaDeviceCount ||
     peerDevice == __cudaCurrentDevice)
@@ -745,10 +751,11 @@ cudaError_t cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags)
     lastError = CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED;
     return CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED;
   }
+  // Whether the current device can reach peerDevice is platform-dependent.
   if (nondet_bool())
   {
-    lastError = CUDA_ERROR_PEER_ACCESS_UNSUPPORTED;
-    return CUDA_ERROR_PEER_ACCESS_UNSUPPORTED;
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
   }
   __cudaPeerAccess[pair] = 1;
   lastError = cudaSuccess;
@@ -757,14 +764,18 @@ cudaError_t cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags)
 
 cudaError_t cudaDeviceDisablePeerAccess(int peerDevice)
 {
-  if (
-    peerDevice < 0 || peerDevice >= __cudaDeviceCount ||
-    !__cudaPeerAccess[__cudaPeerIndex(__cudaCurrentDevice, peerDevice)])
+  if (peerDevice < 0 || peerDevice >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  const unsigned int pair = __cudaPeerIndex(__cudaCurrentDevice, peerDevice);
+  if (!__cudaPeerAccess[pair])
   {
     lastError = CUDA_ERROR_PEER_ACCESS_NOT_ENABLED;
     return CUDA_ERROR_PEER_ACCESS_NOT_ENABLED;
   }
-  __cudaPeerAccess[__cudaPeerIndex(__cudaCurrentDevice, peerDevice)] = 0;
+  __cudaPeerAccess[pair] = 0;
   lastError = cudaSuccess;
   return cudaSuccess;
 }
