@@ -1,7 +1,6 @@
 
-//xfail:BOOGIE_ERROR
-//--blockDim=2 --gridDim=1 --no-inline
-//Write by thread .+kernel\.cu:8:21:
+// No-race companion to 113_curand_race_fail: each thread draws from its own
+// generator state.
 
 #include <cuda_runtime_api.h>
 #include <curand.h>
@@ -9,8 +8,8 @@
 
 #define N 2 //4
 
-__global__ void curand_test(curandState *state, float *A) { // test: replace curandState for curandStateXORWOW_t
-   A[threadIdx.x] = curand_uniform(state);
+__global__ void curand_test(curandState *state, float *A) {
+   A[threadIdx.x] = curand_uniform(&state[threadIdx.x]);
 }
 
 int main(){
