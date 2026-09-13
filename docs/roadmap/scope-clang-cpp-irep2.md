@@ -1527,3 +1527,139 @@ against the same base before and after.
 What is established: the call carries a non-void type under the flag, and
 something other than the alignment hook gives it one. That is the next
 diagnosis, and the two array rows are the cheapest instance of it.
+### 3.15 The constructor-call fold: two rows of the seven, and a split cause
+
+§3.14 established that under the flag a constructor call carries a non-void
+type and `remove_sideeffects` gives it a temporary. The unported branch that
+explains the shape is the first row of §3.16's table:
+`clang_cpp_adjust::adjust_side_effect_assign` folds `x = T(args)` into
+`T(&x, args)`, so on the legacy path there is no value-returning call to give a
+temporary to.
+
+Reading the callee's `return_type().id() == "constructor"` from the symbol table
+is what identifies a constructor: IREP2 has no id for one, which is the same
+detour `align_call_return_type` takes.
+
+**It cannot be an arm, and finding out why is the useful part of this row.**
+Registered in the table ahead of `adjust_plain_assignment` it produces a
+*silently wrong* argument list. The arms run after the operand walk, so by the
+time the fold sees the assignment, the walker has already visited the rhs call
+as a node in its own right — and `is_call_site` matches any `sideeffect2t`, so
+`adjust_call_arguments` has already converted each argument against the
+*matching parameter*, with the object argument still absent. Every actual is
+therefore converted against its predecessor's formal. Folding then inserts
+`&lhs` and converts again against the correct slots, and the two compose:
+
+```cpp
+struct T { int a; double b; T(int x, double y) : a(x), b(y) {} };
+struct L { T m;   L(int x, double y) : m(x, y) {} };
+```
+
+| | the call in `L` |
+|---|---|
+| legacy | `T(&this->m, x::0, y::1)` |
+| fold as an arm | `T(&this->m, (signed int)((T *)x::0), (double)((signed int)y::1))` |
+
+The double is round-tripped through `int`, so `assert(l.m.b == 2.5)` fails on a
+correct program. Note the single-`int`-parameter case survives by accident
+(`int -> T* -> int` round-trips), which is why none of the 34 pre-existing flag
+rows catches it. A by-value **struct** parameter is worse than a wrong value:
+paired against `this`, `binds_by_reference` matches on the type id alone
+(`struct_id == struct_id`), takes the argument's address, and the call is built
+with a pointer where a struct is expected —
+
+```
+ERROR: function call: argument "…@S@T@F@T#$@S@A#@a::0" type mismatch:
+       got pointer, expected struct
+```
+
+— a hard abort on a program legacy verifies. All three shapes are pinned by
+pairs in this change.
+
+The legacy passes never meet this because they dispatch **top-down**:
+`adjust_side_effect_assign` folds before anything descends into the rhs. The
+IREP2 walk is bottom-up, so the fold runs from a new pre-recursion hook,
+`adjust_before_operands` (empty for C), called before
+`expr->Foreach_operand(...)`. The walker then descends into the *folded* call
+and the call-site arms see the complete argument list, which reproduces legacy's
+output byte for byte — and no re-entry into those arms is needed.
+
+**It closes three of the seven, and not the two it was diagnosed from:**
+
+| row | as an arm | pre-recursion |
+|---|---|---|
+| `ch21_4` | **AGREE** | **AGREE** |
+| `github_3978` | **AGREE** | **AGREE** |
+| `tuple_tie` | DIVERGE | **AGREE** |
+| `array_element_destructors_leak` | DIVERGE | DIVERGE |
+| `member_array_ctor_dtor_symmetry` | DIVERGE | DIVERGE |
+| `github_6291_conditional_ref_shapes` | DIVERGE | DIVERGE |
+| `github_6717_throw_conditional_ok` | DIVERGE | DIVERGE |
+
+`tuple_tie` moved only once the argument list was right, which is the ordering
+defect above showing up as a verdict. Phase 7 is therefore 80 of 84 agreeing,
+from 77.
+
+The two array rows are §3.14's own reproducers, and they still fail. So the
+temporary-creating shape is *not* one cause across the seven: the fold covers
+the scalar-member spelling and something else produces a value-returning
+constructor call for an array element. Stating that rather than stretching one
+fix over seven rows is the point of the table.
+
+**What the pair pins.** The two rows that moved are both `std::list` programs,
+and the biting construct reduces to a member whose type has a *user-declared*
+default constructor:
+
+```cpp
+struct Pool { int buf[4]; Pool() { buf[0] = 1; } };
+struct L    { Pool p; L() { p.buf[1] = 7; } };
+```
+
+Unfolded, `Pool()` runs with no object argument and symex reports an alignment
+failure inside `Pool`. Two more pairs cover the argument list: it pins
+`l.m.b == 2.5` through a two-parameter constructor with a mixed-width parameter
+list, and its failing half asserts `l.m.b != 2.5`, which **proves** under the
+as-an-arm placement — a false proof, which is the outcome worth pinning; and a
+by-value struct parameter, which aborts under that placement.
+
+**A stride sample is not a fixed set of rows.** The C++ hard-failure sample went
+0 -> 1 across this change, naming `ptr_to_member_2` ("tuple field out of range",
+the release-active bound from #7758). It is *not* a regression: with the fold
+disabled behind an env switch the same row still aborts, so it fails at the
+branch's own HEAD. The six new test directories shifted the stride-12 window,
+and `ptr_to_member_2` was never in the earlier sample — `ptr_to_member_*` is one
+of §3.17's known families. Adding tests to a suite invalidates comparison with
+an earlier stride sample of it; compare named rows, or re-run the old sample on
+the old tree. An implicitly-declared or `= default` constructor does
+**not** reach the fold (probed: `Pool {}`, `Pool() = default`, and a template
+specialisation of the `__om_list_pool` shape all agree with or without it), so a
+pair built on one of those pins nothing — the same vacuity trap §3.16 hit three
+times on local references. The failing half pins the violated property's own
+line, not just the verdict: unfolded, the run still reports FAILED, but inside
+`Pool` rather than at main's assertion.
+
+**And the array rows have a name now.** Dumped again with the fold in place,
+`array_element_destructors_leak`'s `main` still reads
+
+```
+DECL struct [2] return_value$_R$1;
+FUNCTION_CALL: return_value$_R$1=R(&a[0])
+OTHER &return_value$_R$1[0];
+```
+
+so the node is not a `sideeffect_assign` at all — the declaration's initialiser
+is a single constructor call whose *type is the whole array*, and only element 0
+is constructed. That is `clang_cpp_adjust::adjust_decl_block`
+(`clang_cpp_adjust_code.cpp:222`), a C++-only arm over the `decl-block` node
+which fans one whole-array constructor call out into one call per element,
+recursing into nested arrays, and which deliberately excludes static-storage
+locals and aggregate initialisation. The IREP2 table has `adjust_decl_init` and
+no decl-block arm, so the fan-out never happens. That is the next arm, and it
+covers both array rows.
+
+One qualification before relying on it for both: the *member*-array spelling
+reaches the same residual through the converter's own per-element fan-out
+(`clang_cpp_convert.cpp:2514`), not through `adjust_decl_block`, so
+`member_array_ctor_dtor_symmetry` may also need the `&ctor(...)[0]` unwrap
+(`clang_cpp_adjust_code.cpp:196`). Measure each row rather than assuming one arm
+covers both -- the mistake §3.14 made and this section nearly repeated.
