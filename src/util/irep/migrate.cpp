@@ -1091,21 +1091,34 @@ static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
 static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
 {
   const irep_idt &id = expr.id();
-  if (id != "shr" && id != exprt::i_lshr && id != exprt::i_ashr)
+  bool logical;
+  if (id == exprt::i_lshr)
+    logical = true;
+  else if (id == exprt::i_ashr)
+    logical = false;
+  else if (id == "shr" && expr.operands().size() == 2)
+  {
+    // clang_c_adjust_expr resolves a kind-less shift only for a bit-vector
+    // left operand and leaves any other kind-less, so do not guess one here.
+    const irep_idt &op0_type = expr.op0().type().id();
+    if (op0_type != typet::t_unsignedbv && op0_type != typet::t_signedbv)
+      return false;
+    logical = op0_type == typet::t_unsignedbv;
+  }
+  else
     return false;
 
-  if (expr.operands().size() > 2)
+  // n-ary lshr was spliced and ashr asserted binary before these arms merged.
+  if (id == exprt::i_lshr && expr.operands().size() > 2)
   {
     splice_expr(expr, new_expr_ref);
     return true;
   }
+  assert(expr.operands().size() == 2);
 
   const type2tc type = migrate_type(expr.type());
   expr2tc side1, side2;
   convert_operand_pair(expr, side1, side2);
-
-  const bool logical =
-    id == exprt::i_lshr || (id == "shr" && is_unsignedbv_type(side1->type));
 
   new_expr_ref = logical ? expr2tc(lshr2tc(type, side1, side2))
                          : expr2tc(ashr2tc(type, side1, side2));
