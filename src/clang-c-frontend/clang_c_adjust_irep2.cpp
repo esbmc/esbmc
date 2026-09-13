@@ -1,7 +1,9 @@
 #include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_adjust_guards.h>
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/builtin_names.h>
+#include <clang-c-frontend/clang_c_base_layout.h>
 #include <util/irep/migrate.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -48,6 +50,8 @@ bool clang_c_adjust_irep2::adjust()
 
     if (!s->is_type && s->get_value().is_not_nil())
     {
+      gen_symbol_code(*s);
+
       const expr2tc before = s->get_value2();
       expr2tc value = before;
       adjust_expr(value);
@@ -81,67 +85,13 @@ void clang_c_adjust_irep2::pad_type_symbol(symbolt &symbol)
   symbol.set_type(std::move(t));
 }
 
-/// The operators C admits over a complex operand: `mod` and the bitwise ones
-/// are not among them, and `clang_c_adjust` aborts rather than lowering those.
-static bool is_binary_arith(const expr2tc &expr)
-{
-  return is_add2t(expr) || is_sub2t(expr) || is_mul2t(expr) || is_div2t(expr);
-}
 
-/// `-z` and GNU `~z` (conjugation) are the only unary operators clang leaves
-/// carrying a complex type.
-static bool is_complex_unary(const expr2tc &expr)
-{
-  return (is_neg2t(expr) || is_bitnot2t(expr)) && is_complex_type(expr->type);
-}
 
-/// The operators clang_c_adjust routes through adjust_expr_binary_arithmetic.
-static bool is_arith_or_bitwise(const expr2tc &expr)
-{
-  return is_binary_arith(expr) || is_modulus2t(expr) || is_bitand2t(expr) ||
-         is_bitor2t(expr) || is_bitxor2t(expr);
-}
 
-/// The shifts clang_c_adjust routes through adjust_expr_shifts. They are not
-/// in is_arith_or_bitwise: C11 6.5.7p3 promotes each operand on its own and
-/// takes the result type from the left, where the usual arithmetic conversions
-/// would bring the two to a common type.
-static bool is_shift(const expr2tc &expr)
-{
-  return is_shl2t(expr) || is_ashr2t(expr) || is_lshr2t(expr);
-}
 
-/// The statements whose controlling expression clang_c_adjust converts to bool
-/// (adjust_ifthenelse, adjust_while, adjust_for). `switch` is not among them:
-/// its selector is an integer.
-static bool is_statement_with_condition(const expr2tc &expr)
-{
-  return is_code_ifthenelse2t(expr) || is_code_while2t(expr) ||
-         is_code_dowhile2t(expr) || is_code_for2t(expr);
-}
 
-/// The comparisons clang_c_adjust routes through adjust_expr_rel. IREP2 already
-/// types these bool, so only the operand half of that arm ports.
-static bool is_relational(const expr2tc &expr)
-{
-  return is_equality2t(expr) || is_notequal2t(expr) || is_lessthan2t(expr) ||
-         is_lessthanequal2t(expr) || is_greaterthan2t(expr) ||
-         is_greaterthanequal2t(expr);
-}
 
-/// The short-circuit operators, whose operands goto_convert's lowering rejects
-/// unless they are boolean.
-static bool is_short_circuit(const expr2tc &expr)
-{
-  return is_and2t(expr) || is_or2t(expr) || is_not2t(expr);
-}
 
-/// Both spellings of a call: a bare `f(x);` statement is a sideeffect2t of kind
-/// function_call rather than a code_function_call2t.
-static bool is_call_site(const expr2tc &expr)
-{
-  return is_code_function_call2t(expr) || is_sideeffect2t(expr);
-}
 
 namespace
 {
@@ -211,16 +161,6 @@ std::optional<const_call_view> as_call(const expr2tc &expr)
 }
 } // namespace
 
-/// The unary operators promote_unary_bool_operand claims: the complement of
-/// is_complex_unary within the family. The chain spelled this exclusion as the
-/// `else` of is_complex_unary, which is a strict subset of the same family;
-/// stating it as a predicate holds in both the rewriting and the declining case
-/// for the same reason, rather than relying on the first arm having mutated the
-/// node out of the second's reach.
-static bool is_promotable_unary(const expr2tc &expr)
-{
-  return (is_neg2t(expr) || is_bitnot2t(expr)) && !is_complex_type(expr->type);
-}
 
 /// The source location of `expr` when it is a statement that can hold a call
 /// in a sub-expression, empty otherwise. sideeffect2t carries none of its own,
@@ -314,7 +254,9 @@ void clang_c_adjust_irep2::adjust_comma_type(expr2tc &expr)
 
 /// Name and member from one token, so the string the ordering test matches on
 /// and the member it names cannot drift apart.
-#define ARM(member) #member, &clang_c_adjust_irep2::member
+#define ARM(member)                                                            \
+#  member,                                                                     \
+    +[](clang_c_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
 
 /// The arms that run when this pass is the sole adjuster, in application order.
 ///
@@ -348,11 +290,14 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},
   {ARM(adjust_relational), is_relational},
+  {ARM(adjust_increment_reference), is_increment_sideeffect},
   {ARM(adjust_special_functions), is_sideeffect2t},
   {ARM(adjust_binary_arith_operands), is_arith_or_bitwise},
   {ARM(adjust_shift_operands), is_shift},
   {ARM(adjust_plain_assignment), is_sideeffect_assign2t},
   {ARM(adjust_compound_assignment), is_sideeffect_assign2t},
+  {ARM(adjust_derived_to_base), is_derived_to_base_cast},
+  {ARM(adjust_base_to_derived), is_base_to_derived_cast},
   // Ran after the chain returned; as the last row it runs at the same point,
   // and under !sole_adjuster the table is never entered either way.
   {ARM(adjust_address_of), is_address_of2t},
@@ -371,9 +316,7 @@ std::vector<clang_c_adjust_irep2::arm_info> clang_c_adjust_irep2::arm_order()
 
 void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 {
-  for (const arm &a : arms)
-    if (!a.when || a.when(expr))
-      (this->*a.run)(expr);
+  run_adjust_arms(*this, arms, expr);
 }
 
 /// One of a family of spellings differing only by the argument's width:
@@ -616,6 +559,154 @@ void clang_c_adjust_irep2::adjust_special_functions(expr2tc &expr)
 /// `c ? &a : &b`, which #6291 needs for the pointer analysis to resolve either
 /// arm -- is not ported: no corpus input reaches it under this flag, and an arm
 /// no test executes is the trap §90.4 records.
+namespace
+{
+bool has_side_effect(const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return false;
+  if (is_sideeffect2t(expr))
+    return true;
+
+  bool found = false;
+  expr->foreach_operand(
+    [&found](const expr2tc &op) { found = found || has_side_effect(op); });
+  return found;
+}
+
+/// The marker is consumed whether or not a displacement is owed, exactly as
+/// clang_c_adjust removes it before dispatching. A wrapper -- the identity cast
+/// migrate_expr builds for a marker on a non-cast node -- disappears with it.
+void drop_derived_to_base(expr2tc &expr)
+{
+  const typecast2t cast = to_typecast2t(expr);
+  // One cast can carry both markers (clang_cpp_convert_vft.cpp builds exactly
+  // that for a dynamic_cast), so the surviving one has to be forwarded onto
+  // the rebuilt node.
+  expr = cast.type == cast.from->type && !cast.base_to_derived
+           ? cast.from
+           : typecast2tc(
+               cast.type,
+               cast.from,
+               cast.rounding_mode,
+               irep_idt(),
+               cast.base_to_derived);
+}
+} // namespace
+
+void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
+{
+  const irep_idt base_id = to_typecast2t(expr).derived_to_base;
+  drop_derived_to_base(expr);
+
+  // clang_c_adjust reaches this arm by re-entering adjust_expr on the
+  // marker-stripped node, so a cast carrying both markers is re-based off its
+  // own base subobject first and displaced onto base_id afterwards -- and the
+  // displacement applies to what that left behind, not to the cast's operand.
+  if (is_base_to_derived_cast(expr))
+    adjust_base_to_derived(expr);
+
+  // Pointer form: (Base *)derived_ptr. Value form: the derived lvalue itself,
+  // which clang leaves in place for an implicit object argument.
+  const bool ptr_mode = is_pointer_type(expr->type);
+  const type2tc derived =
+    ptr_mode ? to_pointer_type(expr->type).subtype : expr->type;
+
+  BigInt offset = 0;
+  if (
+    !base_displacement(ns, migrate_type_back(derived), base_id, offset) ||
+    offset == 0)
+    return;
+
+  // The null guard below names the operand twice, and side effects are not
+  // lifted out until remove_sideeffects; displacing `f()` would call f twice.
+  if (has_side_effect(expr))
+  {
+    log_debug(
+      "c++",
+      "derived-to-base displacement onto {} skipped: side-effecting operand",
+      base_id);
+    return;
+  }
+
+  const type2tc base_ptr = migrate_type(pointer_typet(symbol_typet(base_id)));
+  const type2tc char_ptr = migrate_type(pointer_typet(char_type()));
+
+  const expr2tc src = ptr_mode ? expr : expr2tc(address_of2tc(derived, expr));
+  expr2tc adjusted = typecast2tc(char_ptr, src);
+  adjusted = add2tc(
+    char_ptr, adjusted, constant_int2tc(migrate_type(index_type()), offset));
+  adjusted = typecast2tc(base_ptr, adjusted);
+
+  // [conv.ptr]/3: a null pointer operand converts to a null pointer, so the
+  // displacement must not be applied to it. A value-form operand is an lvalue
+  // and can never be null, so only the pointer form needs the guard.
+  if (ptr_mode)
+  {
+    expr = if2tc(
+      base_ptr,
+      equality2tc(src, gen_zero(src->type)),
+      gen_zero(base_ptr),
+      adjusted);
+    return;
+  }
+
+  expr = dereference2tc(to_pointer_type(base_ptr).subtype, adjusted);
+}
+
+void clang_c_adjust_irep2::adjust_base_to_derived(expr2tc &expr)
+{
+  const typecast2t cast = to_typecast2t(expr);
+  expr = typecast2tc(
+    cast.type, cast.from, cast.rounding_mode, cast.derived_to_base, false);
+
+  const expr2tc &src = cast.from;
+  if (!is_pointer_type(src->type) || !is_pointer_type(cast.type))
+    return;
+
+  // By-name, as the legacy arm requires: a resolved struct never reaches here
+  // (14672 of 14672 over regression/esbmc-cpp are symbol-typed), and accepting
+  // one would displace where the legacy pass declines.
+  const type2tc &base_t = to_pointer_type(src->type).subtype;
+  if (!is_symbol_type(base_t))
+    return;
+
+  const irep_idt base_id = to_symbol_type(base_t).symbol_name;
+  const type2tc derived = to_pointer_type(cast.type).subtype;
+
+  BigInt offset = 0;
+  if (!base_displacement(ns, migrate_type_back(derived), base_id, offset))
+  {
+    // Neither layout places the base at a single fixed displacement -- a
+    // virtual base shared by two sibling bases has none. Left as a plain
+    // typecast the result keeps pointing at the base subobject, which is only
+    // exact when the two coincide.
+    log_debug(
+      "c++",
+      "base-to-derived cast left unadjusted: no fixed displacement for {} in "
+      "ESBMC's layout",
+      base_id);
+    return;
+  }
+  if (offset == 0)
+    return;
+
+  const type2tc char_ptr = migrate_type(pointer_typet(char_type()));
+  expr2tc adjusted = typecast2tc(char_ptr, src);
+  adjusted = sub2tc(
+    char_ptr, adjusted, constant_int2tc(migrate_type(index_type()), offset));
+  adjusted = typecast2tc(cast.type, adjusted);
+
+  // [expr.static.cast]/11: a null pointer operand yields a null pointer, so
+  // the displacement must not be applied to it. Without the guard the
+  // check-then-downcast idiom dereferences a non-null (char *)0 - offset.
+  expr = if2tc(
+    cast.type,
+    equality2tc(src, gen_zero(src->type)),
+    gen_zero(cast.type),
+    adjusted);
+}
+
 void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
 {
   const address_of2t &a = to_address_of2t(expr);
@@ -825,6 +916,7 @@ void clang_c_adjust_irep2::adjust_shift_operands(expr2tc &expr)
 /// their own, and are left where this mode already had them.
 void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
 {
+  adjust_reference(expr);
   const sideeffect_assign2t &a = to_sideeffect_assign2t(expr);
   if (a.op != "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
     return;
@@ -834,7 +926,8 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
   c_implicit_typecast(rhs, target, ns);
 
   if (rhs != a.rhs || expr->type != target)
-    expr = sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location);
+    expr =
+      sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location, a.member_init);
 }
 
 /// The shift spellings clang_c_adjust returns early on: it promotes only the
@@ -864,7 +957,8 @@ void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
   c_implicit_typecast_arithmetic(lhs, rhs, ns);
 
   if (lhs != a.lhs || rhs != a.rhs || expr->type != target)
-    expr = sideeffect_assign2tc(target, a.op, lhs, rhs, a.location);
+    expr =
+      sideeffect_assign2tc(target, a.op, lhs, rhs, a.location, a.member_init);
 }
 
 /// IREP2 form of the `gen_typecast_bool` each of adjust_ifthenelse,
@@ -915,6 +1009,11 @@ void clang_c_adjust_irep2::adjust_statement_condition(expr2tc &expr)
   }
 }
 
+void clang_c_adjust_irep2::adjust_increment_reference(expr2tc &expr)
+{
+  adjust_reference(expr);
+}
+
 void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
 {
   expr2tc op0 = *expr->get_sub_expr(0);
@@ -924,13 +1023,22 @@ void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
 
   const expr2tc before0 = op0, before1 = op1;
   c_implicit_typecast_arithmetic(op0, op1, ns);
-  if (op0 == before0 && op1 == before1)
-    return;
 
-  // In-place operand surgery: never round-trip a resolved subtree through
-  // migrate_expr_back (docs/roadmap/frontends-to-irep2.md §38.3).
-  unsigned i = 0;
-  expr->Foreach_operand([&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  if (op0 != before0 || op1 != before1)
+  {
+    // In-place operand surgery: never round-trip a resolved subtree through
+    // migrate_expr_back (docs/roadmap/frontends-to-irep2.md §38.3).
+    unsigned i = 0;
+    expr->Foreach_operand(
+      [&i, &op0, &op1](expr2tc &o) { o = i++ ? op1 : op0; });
+  }
+
+  // Unconditionally, and after the conversion -- the order clang_c_adjust uses
+  // here, unlike the assignment arm, which dereferences first or it casts the
+  // source to the reference type. Behind the early return above it never ran:
+  // a comparison whose operands already agree returns before reaching it, which
+  // is most of them (scope-clang-cpp-irep2.md §3.16).
+  adjust_reference(expr);
 }
 
 void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)
@@ -958,6 +1066,13 @@ void clang_c_adjust_irep2::adjust_if_expr(expr2tc &expr)
 void clang_c_adjust_irep2::adjust_function_designators(expr2tc &expr)
 {
   if (is_address_of2t(expr))
+    return;
+
+  // Not into an allocation side effect's carriage: wrapping a replaced
+  // operator delete in the `&f` sugar leaves goto_convert's convert_cpp_delete
+  // reading a pointer where it wants a code type, and it then indexes an empty
+  // argument list (github #6494).
+  if (is_alloc_sideeffect(expr))
     return;
 
   expr->Foreach_operand([](expr2tc &op) {
@@ -1169,6 +1284,12 @@ void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
       to_array_type(op_type).subtype,
       pointer,
       gen_zero(migrate_type(index_type())));
+  else if (is_pointer_type(op_type))
+    // The C++ converter leaves `*this` typed empty for the adjust pass to
+    // fill in. Kept empty, every member offset resolved below it is taken
+    // against the wrong struct and the base subobject reads the derived
+    // object's leading storage.
+    expr = dereference2tc(to_pointer_type(op_type).subtype, pointer);
 
   if (!is_code_type(expr->type))
     return;
@@ -1220,7 +1341,8 @@ void clang_c_adjust_irep2::lower_complex_compound_assignment(expr2tc &expr)
   if (binop == before)
     return;
 
-  expr = sideeffect_assign2tc(ct, "assign", a.lhs, binop, a.location);
+  expr =
+    sideeffect_assign2tc(ct, "assign", a.lhs, binop, a.location, a.member_init);
 }
 
 /// clang emits `ieee_*` for scalar float arithmetic itself, but hands over a

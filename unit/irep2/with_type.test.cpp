@@ -113,6 +113,13 @@ TEST_CASE("with_type rebuilds an address-of from the pointee", "[core][irep2]")
     address_of2tc(u32, obj, true)->with_type(pointer_type2tc(u64));
   REQUIRE(to_address_of2t(sugar).implicit);
 
+  // ref_kind is forwarded, not re-defaulted: a reference destination's
+  // address-of has to keep the spelling or do_typecast adds a cast the irept
+  // copy does not produce (c_typecast.cpp).
+  expr2tc ref = address_of2tc(u32, obj)->with_type(
+    pointer_type2tc(u32, false, pointer_ref_kindt::LVALUE));
+  REQUIRE(to_pointer_type(ref->type).ref_kind == pointer_ref_kindt::LVALUE);
+
   // The rebuild reads new_type as a pointer; a non-pointer is a caller bug.
   REQUIRE_THROWS_AS(address_of2tc(u32, obj)->with_type(u64), irep2_cast_error);
 }

@@ -5,11 +5,73 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+// A tagged (PyObject-shaped) element already carries its own runtime
+// value/type_id/size -- hashing its wrapper struct's static C type would bake
+// in a single compile-time type_id, losing whichever branch actually ran.
+// Forward its own fields instead, exactly like list elements already store
+// their type_id alongside the value.
+list_elem_info python_list::get_tagged_element_info(
+  const nlohmann::json &op,
+  const exprt &elem)
+{
+  const locationt location = converter_.get_location_from_decl(op);
+
+  symbolt &elem_type_sym =
+    converter_.create_tmp_symbol(op, "$list_elem_type$", size_type(), exprt());
+  code_assignt type_id_assign(
+    build_symbol(elem_type_sym), build_member(elem, "type_id", size_type()));
+  type_id_assign.location() = location;
+  converter_.add_instruction(type_id_assign);
+
+  const typet char_ptr_type = pointer_typet(char_type());
+  symbolt &elem_symbol = converter_.create_tmp_symbol(
+    op, "$list_elem_value$", char_ptr_type, exprt());
+  code_assignt value_assign(
+    build_symbol(elem_symbol),
+    build_typecast(
+      build_member(elem, "value", pointer_typet(empty_typet())),
+      char_ptr_type));
+  value_assign.location() = location;
+  converter_.add_instruction(value_assign);
+
+  list_elem_info tagged_info;
+  tagged_info.elem_type_sym = &elem_type_sym;
+  tagged_info.elem_symbol = &elem_symbol;
+  tagged_info.elem_size = build_member(elem, "size", size_type());
+  tagged_info.location = location;
+  return tagged_info;
+}
+
+// The tag stamps a float payload with the hash of `double`, the same hash the
+// non-tagged push path passes as float_type_id, so the model can route it
+// through __ESBMC_float_buf.
+exprt python_list::tagged_float_type_id(bool enable_float_path) const
+{
+  if (!enable_float_path)
+    return from_integer(BigInt(0), size_type());
+  return converter_.get_type_handler().tagged_scalar_type_id(double_type());
+}
+
+// Only build_push_list_call and build_insert_list_call handle a tagged element;
+// they call get_tagged_element_info directly. Every other caller stamps the
+// hash of the wrapper's static C type, which never matches the element's
+// runtime type_id, so list.count() answered 0 and proved `count(x) == 0`.
+// Refuse the way `operator In` already does rather than answer wrongly.
+static void reject_tagged_element(const type_handler &th, const exprt &elem)
+{
+  if (th.is_tagged_scalar_type(elem.type()))
+    throw std::runtime_error(
+      "this list operation on a dynamically-typed element is not yet "
+      "supported");
+}
+
 list_elem_info
 python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
 {
   const type_handler type_handler_ = converter_.get_type_handler();
+  reject_tagged_element(type_handler_, elem);
   locationt location = converter_.get_location_from_decl(op);
+
   const std::string elem_type_name = type_handler_.type_to_string(elem.type());
 
   // Create type name as null-terminated char array
@@ -264,6 +326,29 @@ exprt python_list::build_push_list_call(
   const exprt &elem,
   bool enable_float_path)
 {
+  if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
+  {
+    const list_elem_info elem_info = get_tagged_element_info(op, elem);
+    const symbolt *push_tagged_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_tagged");
+    if (!push_tagged_sym)
+      throw std::runtime_error("Push (tagged) function symbol not found");
+
+    code_function_callt push_tagged_call;
+    push_tagged_call.function() = build_symbol(*push_tagged_sym);
+    push_tagged_call.arguments().push_back(build_symbol(list));
+    push_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_symbol));
+    push_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_type_sym));
+    push_tagged_call.arguments().push_back(elem_info.elem_size);
+    push_tagged_call.arguments().push_back(
+      tagged_float_type_id(enable_float_path));
+    push_tagged_call.type() = bool_type();
+    push_tagged_call.location() = elem_info.location;
+    return push_tagged_call;
+  }
+
   list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *push_func_sym =
@@ -368,7 +453,30 @@ exprt python_list::build_insert_list_call(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  list_elem_info elem_info = get_list_element_info(op, elem);
+  if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
+  {
+    const list_elem_info elem_info = get_tagged_element_info(op, elem);
+    const symbolt *insert_tagged_sym =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert_tagged");
+    if (!insert_tagged_sym)
+      throw std::runtime_error("Insert (tagged) function symbol not found");
+
+    code_function_callt insert_tagged_call;
+    insert_tagged_call.function() = build_symbol(*insert_tagged_sym);
+    insert_tagged_call.arguments().push_back(build_symbol(list));
+    insert_tagged_call.arguments().push_back(index);
+    insert_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_symbol));
+    insert_tagged_call.arguments().push_back(
+      build_symbol(*elem_info.elem_type_sym));
+    insert_tagged_call.arguments().push_back(elem_info.elem_size);
+    insert_tagged_call.arguments().push_back(tagged_float_type_id(true));
+    insert_tagged_call.type() = bool_type();
+    insert_tagged_call.location() = elem_info.location;
+    return converter_.convert_expression_to_code(insert_tagged_call);
+  }
+
+  const list_elem_info elem_info = get_list_element_info(op, elem);
 
   const symbolt *insert_func_sym =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert");
@@ -418,8 +526,9 @@ void python_list::emit_list_copy(
   // Shallow per-element append: preserves element value pointers so nested
   // lists are shared (Python shallow-copy semantics) rather than corrupted by
   // a pointee byte-copy (esbmc/esbmc#5102).
-  const symbolt *push_obj_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_shallow");
+  const shallow_push_call shallow_push =
+    select_shallow_push(src, from_integer(BigInt(0), size_type()));
+  const symbolt *push_obj_sym = shallow_push.func;
   assert(size_sym && at_sym && push_obj_sym);
 
   // list_size / list_at take `const List*`
@@ -486,7 +595,7 @@ void python_list::emit_list_copy(
     {build_symbol(dst),
      build_symbol(tmp_obj),
      list_type_id_arg,
-     from_integer(BigInt(0), size_type())});
+     shallow_push.last_arg});
   push_call.location() = loc;
   body.copy_to_operands(converter_.convert_expression_to_code(push_call));
 
@@ -932,6 +1041,43 @@ BigInt python_list::uniform_elem_size(const std::string &list_id) const
   return width;
 }
 
+bool python_list::has_tagged_elements(const exprt &list) const
+{
+  if (!list.is_symbol())
+    return false;
+  const element_type_registry::entries *entries =
+    elem_types().find(list.identifier().as_string());
+  if (!entries)
+    return false;
+  const type_handler &th = converter_.get_type_handler();
+  for (const auto &entry : *entries)
+    if (th.is_tagged_scalar_type(entry.second))
+      return true;
+  return false;
+}
+
+// Same split as select_shallow_push, for list.extend().
+python_list::shallow_push_call python_list::select_list_extend(
+  const exprt &src,
+  const exprt &untagged_elem_size) const
+{
+  const bool tagged = has_tagged_elements(src);
+  const symbolt *func = converter_.symbol_table().find_symbol(
+    tagged ? "c:@F@__ESBMC_list_extend_tagged" : "c:@F@__ESBMC_list_extend");
+  return {func, tagged ? tagged_float_type_id(true) : untagged_elem_size};
+}
+
+python_list::shallow_push_call python_list::select_shallow_push(
+  const exprt &src,
+  const exprt &untagged_last_arg) const
+{
+  const bool tagged = has_tagged_elements(src);
+  const symbolt *func = converter_.symbol_table().find_symbol(
+    tagged ? "c:@F@__ESBMC_list_push_shallow_tagged"
+           : "c:@F@__ESBMC_list_push_shallow");
+  return {func, tagged ? tagged_float_type_id(true) : untagged_last_arg};
+}
+
 BigInt python_list::uniform_elem_size(const exprt &list) const
 {
   if (!list.is_symbol())
@@ -944,10 +1090,6 @@ exprt python_list::build_extend_list_call(
   const nlohmann::json &op,
   const exprt &other_list)
 {
-  const symbolt *extend_func_sym =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_extend");
-  assert(extend_func_sym);
-
   locationt location = converter_.get_location_from_decl(op);
 
   exprt actual_list = other_list;
@@ -1146,14 +1288,14 @@ exprt python_list::build_extend_list_call(
   // element to be the same scalar width: extend applies one length to all of
   // them, so a mixed-width list must keep the model's symbolic elem->size
   // fallback (0).
-  BigInt elem_size_bytes = uniform_elem_size(actual_list);
+  const shallow_push_call extend_target = select_list_extend(
+    actual_list, from_integer(uniform_elem_size(actual_list), size_type()));
 
   code_function_callt extend_func_call;
-  extend_func_call.function() = build_symbol(*extend_func_sym);
+  extend_func_call.function() = build_symbol(*extend_target.func);
   extend_func_call.arguments().push_back(build_symbol(list));
   extend_func_call.arguments().push_back(actual_list);
-  extend_func_call.arguments().push_back(
-    from_integer(elem_size_bytes, size_type()));
+  extend_func_call.arguments().push_back(extend_target.last_arg);
   extend_func_call.type() = empty_typet();
   extend_func_call.location() = location;
 

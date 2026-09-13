@@ -3,6 +3,25 @@
 using namespace python_expr;
 using namespace python_list_detail;
 
+python_list::list_eq_target python_list::select_list_eq(
+  const exprt &l1,
+  const exprt &l2,
+  const symbolt &generic_func,
+  const std::vector<exprt> &generic_trailing_args) const
+{
+  if (!has_tagged_elements(l1) && !has_tagged_elements(l2))
+    return {&generic_func, generic_trailing_args};
+
+  const symbolt *eq_tagged_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_eq_tagged");
+  assert(eq_tagged_sym);
+  const type_handler &th = converter_.get_type_handler();
+  return {
+    eq_tagged_sym,
+    {th.tagged_scalar_type_id(long_long_int_type()),
+     th.tagged_scalar_type_id(bool_type())}};
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -553,18 +572,25 @@ exprt python_list::compare(
     (lhs_elem_size != 0 && lhs_elem_size == rhs_elem_size) ? lhs_elem_size
                                                            : BigInt(0);
 
+  const list_eq_target eq_target = select_list_eq(
+    converted_l1,
+    converted_l2,
+    *list_eq_func_sym,
+    {list_type_id,
+     max_depth_expr,
+     from_integer(float_type_id, size_type()),
+     from_integer(eq_elem_size_bytes, size_type())});
+
   code_function_callt list_eq_func_call;
-  list_eq_func_call.function() = build_symbol(*list_eq_func_sym);
   list_eq_func_call.lhs() = build_symbol(eq_ret);
-  // passing arguments
-  list_eq_func_call.arguments().push_back(build_symbol(*lhs_symbol)); // l1
-  list_eq_func_call.arguments().push_back(build_symbol(*rhs_symbol)); // l2
-  list_eq_func_call.arguments().push_back(list_type_id);   // list_type_id
-  list_eq_func_call.arguments().push_back(max_depth_expr); // max_depth
-  list_eq_func_call.arguments().push_back(
-    from_integer(float_type_id, size_type())); // float_type_id
-  list_eq_func_call.arguments().push_back(
-    from_integer(eq_elem_size_bytes, size_type())); // elem_size
+  list_eq_func_call.function() = build_symbol(*eq_target.func);
+  exprt::operandst &eq_args = list_eq_func_call.arguments();
+  eq_args.push_back(build_symbol(*lhs_symbol)); // l1
+  eq_args.push_back(build_symbol(*rhs_symbol)); // l2
+  eq_args.insert(
+    eq_args.end(),
+    eq_target.trailing_args.begin(),
+    eq_target.trailing_args.end());
   list_eq_func_call.type() = bool_type();
   list_eq_func_call.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(list_eq_func_call);

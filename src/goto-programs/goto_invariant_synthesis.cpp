@@ -1,0 +1,1011 @@
+#include <goto-programs/goto_invariant_synthesis.h>
+#include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/goto_loops.h>
+#include <goto-programs/loopst.h>
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_expr.h>
+#include <algorithm>
+#include <list>
+#include <unordered_map>
+#include <map>
+#include <set>
+#include <vector>
+
+namespace invariant_synthesis
+{
+/// Split `cond` into counter and bound for the `<`/`<=` shapes this pass
+/// handles, and report which one it was. Other comparisons (and decrementing
+/// loops) are left to a later revision.
+bool split_bound(
+  const expr2tc &cond,
+  expr2tc &counter,
+  expr2tc &bound,
+  bool &inclusive)
+{
+  if (is_lessthanequal2t(cond))
+  {
+    counter = to_lessthanequal2t(cond).side_1;
+    bound = to_lessthanequal2t(cond).side_2;
+    inclusive = true;
+    return true;
+  }
+  if (is_lessthan2t(cond))
+  {
+    counter = to_lessthan2t(cond).side_1;
+    bound = to_lessthan2t(cond).side_2;
+    inclusive = false;
+    return true;
+  }
+  return false;
+}
+
+/// `lhs = lhs + addend` — the only body assignment shape recognised here.
+bool is_self_increment(
+  const expr2tc &target,
+  const expr2tc &source,
+  expr2tc &addend)
+{
+  if (!is_add2t(source))
+    return false;
+
+  const auto &add = to_add2t(source);
+  if (add.side_1 == target)
+  {
+    addend = add.side_2;
+    return true;
+  }
+  if (add.side_2 == target)
+  {
+    addend = add.side_1;
+    return true;
+  }
+  return false;
+}
+
+/// The two-disjunct bound `(i <op> B) || i == E` is established only when the
+/// counter's entry value cannot sit past the loop's exit value. Working the
+/// cases through for a constant i0:
+///
+///   `<=`, E = B+1: establishment fails iff i0 > B and i0 != B+1. At i0 == 1
+///                  the first conjunct forces B == 0, which makes E == 1 == i0,
+///                  so it cannot fail; at i0 == 0 it cannot fail either.
+///                  i0 >= 2 admits B <= i0 - 2 and does fail.
+///   `<`,  E = B:   establishment fails iff i0 > B, which only i0 == 0 rules
+///                  out.
+///
+/// Anything else needs the third disjunct, which only the constant-addend
+/// regime can afford; see the header.
+bool entry_admits_two_disjunct_bound(const expr2tc &entry, bool inclusive)
+{
+  if (!is_constant_int2t(entry))
+    return false;
+
+  const BigInt &v = to_constant_int2t(entry).value;
+  return v == 0 || (inclusive && v == 1);
+}
+} // namespace invariant_synthesis
+
+namespace
+{
+using namespace invariant_synthesis;
+
+/// How far back from the loop head to look for the entry assignment of a
+/// counter/accumulator. The scan stops early at any control flow, so this is
+/// only a guard against walking a very long straight-line prologue.
+///
+/// Independent of goto_loop_invariantt::kMaxInvariantSearchBack, the other
+/// window over the same prologue: that one has to agree with the extractor
+/// that discharges the marker, so it is that pass's constant and is used
+/// verbatim by has_user_invariant. This one bounds a search for an assignment
+/// and answers to nothing but its own cost. Neither bound constrains the
+/// other; a change to either is local.
+constexpr size_t kMaxEntryScanBack = 64;
+
+bool mentions_modified_var(
+  const expr2tc &expr,
+  const loopst::loop_varst &modified)
+{
+  if (modified.find(expr) != modified.end())
+    return true;
+
+  bool found = false;
+  expr->foreach_operand([&modified, &found](const expr2tc &sub) {
+    if (!found && mentions_modified_var(sub, modified))
+      found = true;
+  });
+  return found;
+}
+
+/// The loop's entry condition. The head IF holds the *exit* condition: a while
+/// loop is lowered to `IF !(cond) GOTO exit`, but a pass that simplifies the
+/// guard (--interval-analysis does) leaves the equivalent `IF i > n GOTO exit`
+/// with no not2t to strip. Negate and simplify, which covers both spellings.
+void guard_condition(const goto_programt::targett &head_if, expr2tc &cond)
+{
+  // instructiont::guard is initialised to gen_true_expr() and no pass writes a
+  // nil one, so a GOTO always has a guard to negate.
+  const expr2tc &g = head_if->guard;
+  cond = is_not2t(g) ? to_not2t(g).value : not2tc(g);
+  simplify(cond);
+}
+
+/// True when the instruction cannot appear in a body this pass is willing to
+/// summarise. Branches would make the per-iteration effect conditional, and a
+/// call or return can write the counter or accumulator out of sight.
+bool breaks_straight_line(const goto_programt::targett &it)
+{
+  return it->is_goto() || it->is_function_call() || it->is_return() ||
+         it->is_throw() || it->is_catch() || it->is_atomic_begin() ||
+         it->is_atomic_end();
+}
+
+/// Gate for the symbolic-addend regime and for the `i >= i0` conjunct; see the
+/// header. Also keeps pointers out of the arithmetic builders entirely, where a
+/// `p = p + 1` accumulator would build mul2t over pointer types and trip
+/// assert_arith_2ops_consistency.
+bool is_unsigned_integer(const expr2tc &expr)
+{
+  return expr && is_unsignedbv_type(expr->type);
+}
+
+/// Type gate for the constant-addend regime, which admits signed counters; see
+/// the header for why the sign is not what the restriction was ever about.
+bool is_integer(const expr2tc &expr)
+{
+  return expr &&
+         (is_unsignedbv_type(expr->type) || is_signedbv_type(expr->type));
+}
+
+/// Key for the per-variable write map. Every caller has already established
+/// the expression is a symbol, so this is the whole identity -- and cheaper
+/// than pretty(), which dumps the expression textually on every lookup.
+std::string write_key(const expr2tc &var)
+{
+  return to_symbol2t(var).thename.as_string();
+}
+
+bool is_constant_one(const expr2tc &expr)
+{
+  return is_constant_int2t(expr) && to_constant_int2t(expr).value == 1;
+}
+
+/// True when a LOOP_INVARIANT already sits in the window goto_loop_invariant's
+/// extractor searches -- the extractor's own constant, so the two agree by
+/// construction. Both invariants would be folded into one conjunction, so
+/// adding a guess next to a user-written one risks failing the user's proof.
+bool has_user_invariant(
+  const goto_programt::targett &head,
+  const goto_programt::targett &begin)
+{
+  goto_programt::targett it = head;
+  for (size_t steps = 0;
+       it != begin && steps < goto_loop_invariantt::kMaxInvariantSearchBack;
+       ++steps)
+  {
+    --it;
+    // A marker this pass emitted is not a user's; enclosed_by_user_invariant
+    // runs after some have already been inserted.
+    if (
+      it->is_loop_invariant() &&
+      it->location.property().as_string() != kSynthesisedInvariantProperty)
+      return true;
+    if (breaks_straight_line(it))
+      return false;
+  }
+  return false;
+}
+
+/// Position of every instruction in one function body, so two loops can be
+/// compared for containment. Absolute indices go stale once a marker is
+/// inserted; only their order is read, and std::list::insert preserves it.
+using instruction_indext =
+  std::unordered_map<const goto_programt::instructiont *, size_t>;
+
+/// Whether a user-written invariant governs a loop that encloses `loop`.
+///
+/// has_user_invariant scans back at most kMaxInvariantSearchBack instructions
+/// and stops at the first control flow, so for an inner loop the outer loop's
+/// marker is neither within range nor reachable. Cutting the inner loop would
+/// then leave the outer marker's preservation obligation to be discharged
+/// across a body containing a havoc -- the same mechanism as the callee case
+/// collect_invariant_dependencies rules out, and the same rule: a user-written
+/// invariant is authoritative over everything beneath it.
+///
+/// Position in the instruction list is the containment test. A loop's own head
+/// and exit come from the same body, so an enclosing loop is one whose span
+/// starts no later and ends no earlier, and is not the loop itself.
+bool enclosed_by_user_invariant(
+  const goto_programt::targett &begin,
+  const instruction_indext &index,
+  const std::list<loopst> &loops,
+  const loopst &loop)
+{
+  // at(), not find(): index covers every instruction of the body the loops were
+  // computed over, and create_function_loop takes both ends from that body.
+  const size_t self_head = index.at(&*loop.get_original_loop_head());
+  const size_t self_exit = index.at(&*loop.get_original_loop_exit());
+
+  for (const auto &outer : loops)
+  {
+    const size_t head = index.at(&*outer.get_original_loop_head());
+    const size_t exit = index.at(&*outer.get_original_loop_exit());
+    if (head == self_head && exit == self_exit)
+      continue;
+    if (head > self_head || exit < self_exit)
+      continue;
+    if (has_user_invariant(outer.get_original_loop_head(), begin))
+      return true;
+  }
+  return false;
+}
+
+/// Functions a user-written invariant's expression can depend on.
+///
+/// The frontend lowers `__ESBMC_loop_invariant(f(x) == 1)` to a FUNCTION_CALL
+/// into a temporary ahead of the LOOP_INVARIANT marker, so the call is an
+/// instruction the marker consumes rather than a subexpression of it, and
+/// has_user_invariant does not see it. Synthesising inside `f` cuts its loop,
+/// and the user's marker then reads a havoc-abstracted return value --
+/// including in the base case, the one obligation evaluated at the concrete
+/// pre-loop state, which no havoc should reach.
+///
+/// Exactly which calls a marker consumes is the extractor's rule
+/// (extract_and_remove_side_effects_impl in goto_loop_invariant.cpp), and that
+/// rule walks back across branches: an invariant spelling its operand behind a
+/// `?:` puts a join label between the call and the marker. Re-deriving the rule
+/// here is how the two drift apart, so take every call ahead of a marker in the
+/// same function instead. Over-protecting costs a missed invariant;
+/// under-protecting costs the user theirs.
+///
+/// `protect_all` is set when such a call names something other than a symbol (a
+/// call through a pointer): the callee cannot be named, so the only
+/// conservative answer is to synthesise nothing at all.
+struct invariant_dependenciest
+{
+  std::set<irep_idt> functions;
+  bool protect_all = false;
+};
+
+/// The callee of a FUNCTION_CALL, or nil when it is not named by a symbol.
+expr2tc call_target(const goto_programt::instructiont &i)
+{
+  return to_code_function_call2t(i.code).function;
+}
+
+/// Every function whose address `e` takes, restricted to names that are
+/// functions. A thread's start routine is reached no other way.
+void collect_taken_functions(
+  const expr2tc &e,
+  const goto_functionst &goto_functions,
+  std::vector<irep_idt> &out)
+{
+  if (!e)
+    return;
+
+  if (is_address_of2t(e))
+  {
+    const expr2tc &obj = to_address_of2t(e).ptr_obj;
+    if (
+      is_symbol2t(obj) &&
+      goto_functions.function_map.count(to_symbol2t(obj).thename))
+      out.push_back(to_symbol2t(obj).thename);
+  }
+
+  e->foreach_operand([&goto_functions, &out](const expr2tc &sub) {
+    collect_taken_functions(sub, goto_functions, out);
+  });
+}
+
+/// Whether the program can create a thread. Every route -- pthread_create,
+/// std::thread, a CUDA kernel launch, threading.Thread -- lowers to the
+/// __ESBMC_spawn_thread intrinsic, so reaching it is the creation point.
+/// Reachability and not presence: pthread_lib.c is linked into every program.
+/// An indirect call needs no special case: symex resolves one through the value
+/// set into a list of concrete symbols (get_function_list in
+/// symex_function.cpp), so it can only reach a function whose address is taken
+/// somewhere -- which is exactly what collect_taken_functions seeds the
+/// worklist with.
+///
+/// Synthesis declines outright on such a program: cutting a loop deletes the
+/// interleaving points its body carried, and
+/// regression/esbmc/synth_loop_invariant_thread_falseproof is the shape where
+/// that reads as a proof rather than a lost bug.
+bool spawns_threads(const goto_functionst &goto_functions)
+{
+  const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
+
+  std::set<irep_idt> seen;
+  std::vector<irep_idt> work{goto_functions.main_id()};
+  while (!work.empty())
+  {
+    const irep_idt fn = work.back();
+    work.pop_back();
+    if (fn == spawn_intrinsic)
+      return true;
+    if (!seen.insert(fn).second)
+      continue;
+
+    const auto f = goto_functions.function_map.find(fn);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+
+    forall_goto_program_instructions (it, f->second.body)
+    {
+      if (it->is_function_call())
+      {
+        const expr2tc callee = call_target(*it);
+        if (!is_nil_expr(callee) && is_symbol2t(callee))
+          work.push_back(to_symbol2t(callee).thename);
+      }
+      collect_taken_functions(it->code, goto_functions, work);
+      collect_taken_functions(it->guard, goto_functions, work);
+    }
+  }
+  return false;
+}
+
+/// One forward pass: hold each call until a marker is reached, then record the
+/// held calls as that marker's dependencies. A call after the last marker in
+/// the function cannot feed one, so it is dropped.
+void collect_marker_dependencies(
+  const goto_programt &body,
+  invariant_dependenciest &deps)
+{
+  std::vector<irep_idt> pending;
+  bool pending_unnameable = false;
+
+  forall_goto_program_instructions (it, body)
+  {
+    if (it->is_function_call())
+    {
+      const expr2tc callee = call_target(*it);
+      if (is_nil_expr(callee) || !is_symbol2t(callee))
+        pending_unnameable = true;
+      else
+        pending.push_back(to_symbol2t(callee).thename);
+      continue;
+    }
+
+    if (!it->is_loop_invariant())
+      continue;
+
+    deps.functions.insert(pending.begin(), pending.end());
+    pending.clear();
+    deps.protect_all |= pending_unnameable;
+    pending_unnameable = false;
+  }
+}
+
+/// Callees of the body of a loop that carries a user-written invariant.
+///
+/// enclosed_by_user_invariant reaches the nesting shape; this reaches the same
+/// thing through a call. Cutting a loop inside such a callee leaves the
+/// marker's preservation obligation to be discharged across a body containing a
+/// havoc, so the callee is protected for the same reason its own nested loops
+/// are.
+void collect_annotated_loop_callees(
+  goto_functionst &goto_functions,
+  const irep_idt &name,
+  goto_functiont &goto_function,
+  invariant_dependenciest &deps)
+{
+  goto_loopst loops(name, goto_functions, goto_function);
+  const goto_programt::targett begin = goto_function.body.instructions.begin();
+
+  for (auto &loop : loops.get_loops())
+  {
+    const goto_programt::targett head = loop.get_original_loop_head();
+    if (!has_user_invariant(head, begin))
+      continue;
+
+    for (goto_programt::targett it = head; it != loop.get_original_loop_exit();
+         ++it)
+    {
+      if (!it->is_function_call())
+        continue;
+      const expr2tc callee = call_target(*it);
+      if (is_nil_expr(callee) || !is_symbol2t(callee))
+        deps.protect_all = true;
+      else
+        deps.functions.insert(to_symbol2t(callee).thename);
+    }
+  }
+}
+
+/// Close the marker dependencies over the call graph: abstracting a loop
+/// anywhere below the call changes the value the user's marker reads.
+invariant_dependenciest
+collect_invariant_dependencies(goto_functionst &goto_functions)
+{
+  invariant_dependenciest deps;
+
+  Forall_goto_functions (f, goto_functions)
+    if (f->second.body_available)
+    {
+      collect_marker_dependencies(f->second.body, deps);
+      collect_annotated_loop_callees(goto_functions, f->first, f->second, deps);
+    }
+
+  std::vector<irep_idt> worklist(deps.functions.begin(), deps.functions.end());
+  while (!worklist.empty() && !deps.protect_all)
+  {
+    const irep_idt name = worklist.back();
+    worklist.pop_back();
+
+    const auto f = goto_functions.function_map.find(name);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+
+    forall_goto_program_instructions (it, f->second.body)
+    {
+      if (!it->is_function_call())
+        continue;
+      const expr2tc callee = call_target(*it);
+      if (is_nil_expr(callee) || !is_symbol2t(callee))
+      {
+        deps.protect_all = true;
+        return deps;
+      }
+      if (deps.functions.insert(to_symbol2t(callee).thename).second)
+        worklist.push_back(to_symbol2t(callee).thename);
+    }
+  }
+
+  return deps;
+}
+
+/// Value of `var` on entry to the loop: the nearest preceding assignment in the
+/// straight-line prologue, and only when its RHS is a literal.
+/// Returns false when the scan meets control flow first, so the value we would
+/// report might not be the one that reaches the head.
+bool entry_value(
+  const goto_programt::targett &head,
+  const goto_programt::targett &begin,
+  const expr2tc &var,
+  expr2tc &value)
+{
+  goto_programt::targett it = head;
+  for (size_t steps = 0; it != begin && steps < kMaxEntryScanBack; ++steps)
+  {
+    --it;
+
+    // Stepping over a jump target would leave the other incoming edge
+    // unexamined, and the assignment we then report is only the value that
+    // reaches the head along one path. `if (c) s = 5;` before the loop is
+    // enough to make the reported entry value wrong on the other branch.
+    if (it->is_target() || breaks_straight_line(it))
+      return false;
+
+    if (!it->is_assign())
+      continue;
+
+    const auto &assign = to_code_assign2t(it->code);
+
+    // A write through a dereference, member or index (`*p = 5`, `q->v = 5`,
+    // `w[0] = 9`) may land on `var` itself. It compares unequal, so skipping it
+    // would let the scan walk past and report an older, stale constant -- the
+    // same defect as a symbolic RHS, reached by a different spelling. We cannot
+    // show it does not alias, so stop.
+    if (!is_symbol2t(assign.target))
+      return false;
+
+    if (assign.target != var)
+      continue;
+
+    // M-4: only a literal is safe. A symbolic RHS records an *expression*, not
+    // a value, and any write to one of its symbols between here and the loop
+    // head silently changes what the closed form means (`s = k; k = 7;`).
+    if (!is_constant_int2t(assign.source))
+      return false;
+
+    value = assign.source;
+    return true;
+  }
+  return false;
+}
+
+struct accumulatort
+{
+  expr2tc var;
+  expr2tc addend;
+  expr2tc entry;
+};
+
+struct affine_loopt
+{
+  expr2tc counter;
+  expr2tc bound;
+  expr2tc counter_entry;
+  /// The loop's entry condition, as computed by guard_condition. Carried out of
+  /// the recogniser rather than recomputed, so the two spellings cannot drift.
+  expr2tc cond;
+  bool inclusive = true;
+  /// True when every accumulator's addend is a literal, so the closed form
+  /// contains no symbolic multiplier. Licenses the three-disjunct bound, and
+  /// with it signed counters and any literal entry value.
+  bool constant_addends = true;
+  std::vector<accumulatort> accumulators;
+};
+
+/// MSVC spells `assert(e)` as `(!!(e)) || (_wassert(...), 0)`, so on that
+/// target a loop body that asserts holds a branch around the ASSERT rather than
+/// the single one do_assert_fail() folds the glibc and Darwin spellings to.
+/// The region such a branch spans writes nothing, so the per-iteration effect
+/// is still exactly the assignments outside it and stepping over it is sound.
+///
+/// `first` indexes the branch that opens the region. On success `join` is the
+/// index control rejoins at -- the caller resumes there -- and `saw_assert` is
+/// set if the region asserts.
+bool assertion_only_region(
+  const std::vector<goto_programt::targett> &body,
+  const std::map<const goto_programt::instructiont *, size_t> &index,
+  size_t first,
+  size_t &join,
+  bool &saw_assert)
+{
+  join = first + 1;
+  for (size_t i = first; i < join; ++i)
+  {
+    const goto_programt::targett it = body[i];
+
+    if (it->is_goto())
+    {
+      for (const auto &target : it->targets)
+      {
+        const auto found = index.find(&*target);
+        // A target outside the body leaves the loop (a `break`, whose iteration
+        // count this pass cannot express); one at or behind `first` is a back
+        // edge, so a nested loop rather than an assertion diamond.
+        if (found == index.end() || found->second <= first)
+          return false;
+        join = std::max(join, found->second);
+      }
+      continue;
+    }
+
+    if (it->is_assert())
+    {
+      saw_assert = true;
+      continue;
+    }
+
+    // Anything that can write a variable or call out of the region would make
+    // the per-iteration effect conditional, which is what the region has to
+    // rule out to be skippable. The same inert set the straight-line scan
+    // accepts: glibc spells assert(e) with a leading
+    // `(void) sizeof ((e) ? 1 : 0)`, which lands in the region as an OTHER.
+    if (!loop_invariant::is_inert_scan_instruction(it))
+      return false;
+  }
+  return true;
+}
+
+/// Summarise the loop body into per-variable (target, addend) pairs, and check
+/// the counter advances by exactly one. Anything that is not a plain
+/// self-increment, or a second write to a variable already summarised, makes
+/// the per-iteration effect something this pass cannot express in closed form.
+static bool summarise_body(
+  goto_programt::targett head,
+  goto_programt::targett exit,
+  const expr2tc &counter,
+  std::map<std::string, std::pair<expr2tc, expr2tc>> &writes,
+  bool &body_asserts)
+{
+  body_asserts = false;
+
+  std::vector<goto_programt::targett> body;
+  std::map<const goto_programt::instructiont *, size_t> index;
+  for (goto_programt::targett it = std::next(head); it != exit; ++it)
+  {
+    index.emplace(&*it, body.size());
+    body.push_back(it);
+  }
+
+  for (size_t i = 0; i < body.size(); ++i)
+  {
+    const goto_programt::targett it = body[i];
+
+    if (it->is_goto())
+    {
+      size_t join;
+      if (!assertion_only_region(body, index, i, join, body_asserts))
+        return false;
+      i = join - 1;
+      continue;
+    }
+
+    if (breaks_straight_line(it))
+      return false;
+    if (it->is_assert())
+    {
+      body_asserts = true;
+      continue;
+    }
+    if (!it->is_assign())
+    {
+      // Whitelist rather than blacklist: OTHER carries `free`, `delete` and
+      // `asm` (symex_other.cpp), whose effect the schema's havoc of
+      // get_modified_loop_vars() cannot express -- it names variables and
+      // says nothing about heap validity. Cutting a loop over a `free` proved
+      // a post-loop use-after-free safe.
+      if (!loop_invariant::is_inert_scan_instruction(it))
+        return false;
+      continue;
+    }
+
+    const auto &assign = to_code_assign2t(it->code);
+    if (!is_symbol2t(assign.target))
+      return false;
+
+    expr2tc addend;
+    if (!is_self_increment(assign.target, assign.source, addend))
+      return false;
+
+    if (!writes
+           .emplace(
+             write_key(assign.target), std::make_pair(assign.target, addend))
+           .second)
+      return false;
+  }
+
+  const auto counter_write = writes.find(write_key(counter));
+  return counter_write != writes.end() &&
+         is_constant_one(counter_write->second.second);
+}
+
+/// Classify every modified variable other than the counter as an accumulator
+/// whose per-iteration addend is loop-invariant, recording its entry value. A
+/// variable we cannot classify means we have misread the loop, so reject
+/// rather than emit a summary alongside it.
+static bool classify_accumulators(
+  goto_programt::targett head,
+  goto_programt::targett begin,
+  const loopst::loop_varst &modified,
+  const std::map<std::string, std::pair<expr2tc, expr2tc>> &writes,
+  affine_loopt &out)
+{
+  for (const auto &var : modified)
+  {
+    if (var == out.counter)
+      continue;
+
+    // Both lookups are total: get_modified_loop_vars() holds only symbols
+    // (goto_loops.cpp:370,455), and summarise_body has already recorded every
+    // assignment it accepted, having rejected the loop otherwise.
+    const auto write = writes.find(write_key(var));
+
+    accumulatort acc;
+    acc.var = var;
+    acc.addend = write->second.second;
+    if (!is_integer(acc.var) || !is_integer(acc.addend))
+      return false;
+    if (mentions_modified_var(acc.addend, modified))
+      return false;
+    if (!is_constant_int2t(acc.addend))
+      out.constant_addends = false;
+    if (!entry_value(head, begin, acc.var, acc.entry))
+      return false;
+
+    out.accumulators.push_back(acc);
+  }
+
+  // loop_varst is hashed on interned-string order, which varies between runs;
+  // sort so the emitted invariants are identical across invocations.
+  std::sort(
+    out.accumulators.begin(),
+    out.accumulators.end(),
+    [](const accumulatort &a, const accumulatort &b) {
+      return write_key(a.var) < write_key(b.var);
+    });
+  return true;
+}
+
+/// The syntactic shape of the head: guard, counter and bound, before the body
+/// is read. Fills `out.cond`, `out.counter`, `out.bound` and `out.inclusive`.
+bool match_counter_and_bound(
+  const goto_programt::targett &head,
+  const goto_programt::targett &exit,
+  const loopst::loop_varst &modified,
+  affine_loopt &out)
+{
+  if (!head->is_goto() || head == exit)
+    return false;
+
+  guard_condition(head, out.cond);
+  if (!split_bound(out.cond, out.counter, out.bound, out.inclusive))
+    return false;
+
+  if (!is_symbol2t(out.counter) || modified.find(out.counter) == modified.end())
+    return false;
+  if (!is_integer(out.counter) || !is_integer(out.bound))
+    return false;
+  return !mentions_modified_var(out.bound, modified);
+}
+
+/// Whether the regime the accumulators put us in admits this counter. Which
+/// bound shape is affordable decides how strict the counter has to be, so this
+/// runs only once classify_accumulators has set `out.constant_addends`.
+bool regime_admits_counter(
+  const affine_loopt &out,
+  bool body_asserts,
+  const overflow_checkst &overflow)
+{
+  // Symbolic addend: two disjuncts only, so an unsigned counter entering at 0
+  // or 1. See the header.
+  if (!out.constant_addends)
+  {
+    if (!is_unsigned_integer(out.counter) || !is_unsigned_integer(out.bound))
+      return false;
+    if (!entry_admits_two_disjunct_bound(out.counter_entry, out.inclusive))
+      return false;
+  }
+
+  // A signed counter cannot carry the `i >= i0` conjunct (its `i + 1` wraps at
+  // the type maximum while still inside the guard), so the havoc is free to
+  // pick i < i0, where `i - i0` is negative and the closed form describes a
+  // state the loop never reaches. That is invisible unless something reads the
+  // accumulator mid-loop -- so decline exactly when the body asserts. Measured:
+  // without this, a correct signed loop with an in-loop `assert(sn <= 2 * n)`
+  // reports FAILED on the user's own assertion while both invariant claims
+  // pass. Unsigned counters keep the conjunct and are unaffected.
+  if (body_asserts && !is_unsigned_integer(out.counter))
+    return false;
+
+  // goto_check instruments the guards this pass emits, and
+  // --unsigned-overflow-check widens what it instruments to unsigned
+  // arithmetic as well, leaving no integer type the closed form could be
+  // emitted at without inventing claims. Decline outright.
+  if (overflow.unsigned_arith)
+    return false;
+
+  if (!overflow.signed_arith)
+    return true;
+
+  // The closed form is built at each accumulator's type, not the counter's, so
+  // an unsigned counter with a signed accumulator would still emit signed
+  // arithmetic and draw claims on operations the user never wrote.
+  if (!is_unsigned_integer(out.counter))
+    return false;
+  for (const auto &acc : out.accumulators)
+    if (!is_unsigned_integer(acc.var))
+      return false;
+  return true;
+}
+
+/// Match the loop against the affine counter/accumulator shape. Every rejection
+/// here costs only a missed invariant, so the tests are deliberately strict.
+bool recognise_affine_loop(
+  goto_functiont &goto_function,
+  const loopst &loop,
+  const overflow_checkst &overflow,
+  goto_programt::targett &head_out,
+  affine_loopt &out)
+{
+  goto_programt::targett head = loop.effective_loop_head();
+  const goto_programt::targett exit = loop.get_original_loop_exit();
+  const auto &modified = loop.get_modified_loop_vars();
+
+  if (!match_counter_and_bound(head, exit, modified, out))
+    return false;
+
+  std::map<std::string, std::pair<expr2tc, expr2tc>> writes;
+  bool body_asserts = false;
+  if (!summarise_body(head, exit, out.counter, writes, body_asserts))
+    return false;
+
+  const goto_programt::targett begin = goto_function.body.instructions.begin();
+  if (!entry_value(head, begin, out.counter, out.counter_entry))
+    return false;
+
+  // Classify first: whether any addend is symbolic decides which bound shape is
+  // affordable, and that in turn decides how strict the counter has to be.
+  if (!classify_accumulators(head, begin, modified, writes, out))
+    return false;
+
+  if (!regime_admits_counter(out, body_asserts, overflow))
+    return false;
+
+  head_out = head;
+  return true;
+}
+
+/// (i <op> B) || i == E, where E is the value the counter holds once the guard
+/// first fails. See the header for why this is a disjunction and not the
+/// tighter `i <= B + 1`, and why it stays at exactly two disjuncts.
+expr2tc build_bound_invariant(const affine_loopt &shape, const expr2tc &cond)
+{
+  expr2tc exit_value = shape.bound;
+  if (shape.inclusive)
+    exit_value = add2tc(
+      shape.bound->type, shape.bound, constant_int2tc(shape.bound->type, 1));
+
+  expr2tc inv = or2tc(
+    cond,
+    equality2tc(shape.counter, typecast2tc(shape.counter->type, exit_value)));
+
+  // Third arm: makes establishment unconditional when the entry value may sit
+  // past the exit value. Constant-addend regime only — see the header.
+  const expr2tc entry_as_counter =
+    typecast2tc(shape.counter->type, shape.counter_entry);
+
+  if (shape.constant_addends)
+  {
+    inv = or2tc(inv, equality2tc(shape.counter, entry_as_counter));
+
+    // "Either the loop was entered, or the counter is still its entry value."
+    // Without this the exit admits i == E for a bound that never satisfied the
+    // guard: for a signed loop that is i == n < i0, and the closed form then
+    // reports an accumulator value the loop could never produce -- a false
+    // alarm on the user's own assertion after the loop. Costs no arithmetic on
+    // i, so unlike `i >= i0` it survives the wrap that makes that conjunct
+    // unusable for a signed counter.
+    const expr2tc entered =
+      shape.inclusive ? expr2tc(lessthanequal2tc(entry_as_counter, shape.bound))
+                      : expr2tc(lessthan2tc(entry_as_counter, shape.bound));
+    inv =
+      and2tc(inv, or2tc(entered, equality2tc(shape.counter, entry_as_counter)));
+  }
+
+  // `i >= i0`, unsigned counters only -- see the header for why it is needed
+  // and why a signed counter cannot carry it. Pinned by the lowerbnd and
+  // entrytwo tests.
+  if (is_unsignedbv_type(shape.counter->type))
+    inv = and2tc(
+      inv,
+      greaterthanequal2tc(
+        shape.counter, typecast2tc(shape.counter->type, shape.counter_entry)));
+
+  simplify(inv);
+  return inv;
+}
+
+/// s == s0 + (i - i0) * e, with the difference taken at the accumulator's type.
+/// Widening the counter before subtracting rather than after is what makes this
+/// exact: a narrower counter's subtraction wraps at its own width and the
+/// widening does not follow it, so `int i` with a `long` accumulator failed its
+/// own inductive step at i near INT_MIN. Where the counter is at least as wide
+/// the two spellings agree, the product depending only on (i - i0) modulo the
+/// accumulator's width.
+expr2tc
+build_accumulator_invariant(const affine_loopt &shape, const accumulatort &acc)
+{
+  const type2tc &t = acc.var->type;
+  const expr2tc elapsed = sub2tc(
+    t, typecast2tc(t, shape.counter), typecast2tc(t, shape.counter_entry));
+
+  expr2tc inv = equality2tc(
+    acc.var,
+    add2tc(
+      t,
+      typecast2tc(t, acc.entry),
+      mul2tc(t, elapsed, typecast2tc(t, acc.addend))));
+  simplify(inv);
+  return inv;
+}
+
+/// Attach the synthesised conjuncts as a LOOP_INVARIANT immediately before the
+/// loop head. A plain list insert is used rather than insert_swap: the latter
+/// moves the head's content down, which would leave the back-edge targeting the
+/// marker instead of the guard, and the extractor in goto_loop_invariant walks
+/// strictly backwards from the head and would then never see it.
+void emit_invariant(
+  goto_functiont &goto_function,
+  const goto_programt::targett &insert_before,
+  const goto_programt::targett &head,
+  const affine_loopt &shape,
+  const expr2tc &cond)
+{
+  goto_programt::instructiont inv;
+  inv.type = LOOP_INVARIANT;
+  inv.location = head->location;
+  inv.function = head->function;
+  // Claim ownership: the extractor accepts this marker only for the loop head
+  // it sits immediately before. See kSynthesisedInvariantProperty.
+  inv.location.property(kSynthesisedInvariantProperty);
+
+  inv.add_loop_invariant(build_bound_invariant(shape, cond));
+  for (const auto &acc : shape.accumulators)
+    inv.add_loop_invariant(build_accumulator_invariant(shape, acc));
+
+  goto_function.body.instructions.insert(insert_before, inv);
+}
+
+} // namespace
+
+void goto_synthesise_loop_invariants(
+  goto_functionst &goto_functions,
+  const overflow_checkst &overflow,
+  bool k_induction_ran)
+{
+  size_t synthesised = 0;
+
+  if (spawns_threads(goto_functions))
+  {
+    log_warning(
+      "--synthesise-loop-invariants: the program creates threads, and cutting "
+      "a loop deletes the interleaving points its body carried. Synthesising "
+      "nothing rather than report a claim only violable through one of them as "
+      "passed");
+    return;
+  }
+
+  const invariant_dependenciest deps =
+    collect_invariant_dependencies(goto_functions);
+  if (deps.protect_all)
+  {
+    log_warning(
+      "--synthesise-loop-invariants: a user-written loop invariant reaches a "
+      "call through a function pointer, whose callee cannot be named. "
+      "Synthesising nothing rather than risk weakening that invariant");
+    return;
+  }
+
+  Forall_goto_functions (it, goto_functions)
+  {
+    if (!it->second.body_available || it->second.body.hide)
+      continue;
+
+    if (deps.functions.count(it->first))
+      continue;
+
+    goto_loopst loops(it->first, goto_functions, it->second);
+    if (loops.get_loops().empty())
+      continue;
+
+    instruction_indext position;
+    forall_goto_program_instructions (i, it->second.body)
+      position.emplace(&*i, position.size());
+
+    for (auto &loop : loops.get_loops())
+    {
+      if (loop.get_modified_loop_vars().empty())
+        continue;
+
+      goto_programt::targett head;
+      affine_loopt shape;
+      if (!recognise_affine_loop(it->second, loop, overflow, head, shape))
+        continue;
+
+      // goto_loop_invariant's extractor walks backwards from the *original*
+      // loop head, which --interval-analysis can leave pointing at an ASSUME
+      // ahead of the guard. Anchor on that instruction, not on the effective
+      // head, or the marker lands after the point the extractor searches from.
+      const goto_programt::targett anchor = loop.get_original_loop_head();
+
+      // A user-written invariant on this loop is authoritative; a synthesised
+      // one would be a second LOOP_INVARIANT that the extractor folds into the
+      // same conjunction, so a rejected guess would fail the user's proof.
+      const goto_programt::targett begin = it->second.body.instructions.begin();
+      if (has_user_invariant(anchor, begin))
+        continue;
+
+      // ... and so is one on a loop that encloses this one; see
+      // enclosed_by_user_invariant.
+      if (enclosed_by_user_invariant(begin, position, loops.get_loops(), loop))
+        continue;
+
+      emit_invariant(it->second, anchor, head, shape, shape.cond);
+      ++synthesised;
+    }
+  }
+
+  if (synthesised)
+    log_status(
+      "Synthesised loop invariants for {} loop{}",
+      synthesised,
+      synthesised == 1 ? "" : "s");
+  else if (k_induction_ran)
+    log_warning(
+      "--synthesise-loop-invariants added no invariant: the k-induction "
+      "transform has already rewritten the loop heads it matches on. Drop the "
+      "k-induction phase to use it");
+  else
+    log_warning(
+      "--synthesise-loop-invariants added no invariant: no loop matched the "
+      "affine counter/accumulator shape, or every match was declined; the run "
+      "proceeds unchanged");
+
+  goto_functions.update();
+}

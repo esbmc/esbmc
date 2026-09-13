@@ -5480,6 +5480,28 @@ void python_converter::propagate_list_type_info(
   }
 }
 
+/// Whether a module-scope assignment has to probe its RHS type before choosing
+/// the target's type.
+///
+/// The probe runs unconditionally for a symbol id carrying `@F`. At module
+/// scope it used to run only when the annotation already resolved to a tagged
+/// type, so copying a tagged name there (`y = x`) left the target scalar and
+/// the scalar path built a member over the tagged struct, aborting in member2t.
+/// The same assignment inside a function already worked. A `for` over a list of
+/// tagged scalars hits this too: the preprocessor unrolls it into exactly such
+/// a chain of tagged-name copies.
+bool python_converter::module_scope_rhs_needs_type_probe(
+  const nlohmann::json &value)
+{
+  if (!current_func_name_.empty())
+    return false;
+  if (type_handler_.is_tagged_scalar_type(current_element_type))
+    return true;
+  return value.is_object() && value.value("_type", "") == "Name" &&
+         value.contains("id") &&
+         dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -5784,8 +5806,7 @@ void python_converter::get_var_assign(
     if (
       (sid.to_string().find("@F") != std::string::npos &&
        sid.to_string().find("@C") == std::string::npos) ||
-      (type_handler_.is_tagged_scalar_type(current_element_type) &&
-       current_func_name_.empty()))
+      module_scope_rhs_needs_type_probe(ast_node["value"]))
     {
       is_right = true;
       if (!ast_node["value"].is_null())
