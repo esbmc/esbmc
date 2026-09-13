@@ -3452,9 +3452,27 @@ smt_resultt bmct::multi_property_check(
 
     // TODO: Running everything in parallel might be a bad idea.
     //       Should we also add a thread pool?
+    // An exception escaping a thread's entry function is std::terminate, with
+    // none of the handling run_thread gives the sequential path. Convert it
+    // here so a conversion failure ends as ERROR under either scheduler.
+    auto guarded_job = [&](const size_t &i) {
+      try
+      {
+        job_function(i);
+      }
+      catch (const std::string &error_str)
+      {
+        log_error("{}", error_str);
+        report_incomplete = true;
+        std::lock_guard lock(result_mutex);
+        if (final_result != P_SATISFIABLE)
+          final_result = P_ERROR;
+      }
+    };
+
     std::vector<std::thread> parallel_jobs;
     for (const auto &i : jobs)
-      parallel_jobs.push_back(std::thread(job_function, i));
+      parallel_jobs.push_back(std::thread(guarded_job, i));
 
     // Main driver
     for (auto &t : parallel_jobs)
