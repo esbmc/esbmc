@@ -218,7 +218,8 @@ bool clang_cpp_adjust_irep2::construct_elements(
         args,
         call.alloctype,
         call.kind,
-        call.location),
+        call.location,
+        call.constructor),
       call.location));
   }
 
@@ -244,6 +245,16 @@ void clang_cpp_adjust_irep2::fan_out_array_construction(expr2tc &expr)
     std::vector<expr2tc> calls;
     if (!construct_elements(symbol2tc(d.type, d.value), ctor, calls))
     {
+      // Legacy aborts on this input, so nothing downstream expects a partly
+      // constructed array: every element past the first is left
+      // nondeterministic, which surfaces as a violated assertion rather than
+      // as the decline it is.
+      const symbolt *sym = context.find_symbol(d.value);
+      log_warning(
+        "{}: '{}' has a non-constant extent, so only its first element is "
+        "constructed",
+        d.location.as_string(),
+        sym != nullptr ? sym->name : d.value);
       out.push_back(stmt);
       continue;
     }
@@ -291,7 +302,8 @@ void clang_cpp_adjust_irep2::fold_constructor_assignment(expr2tc &expr)
       args,
       call.alloctype,
       call.kind,
-      call.location);
+      call.location,
+      call.constructor);
   }
 
   // The views above are dead here on purpose: this drops the assignment node
