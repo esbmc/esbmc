@@ -2278,10 +2278,8 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
         expr2tc target = value; // The byte array;
 
         simplify(array_offset);
-        if (is_array_type(target_type))
-          construct_from_array(target, array_offset, target_type, tmp, mode);
-        else
-          build_reference_rec(target, array_offset, target_type, tmp, mode);
+        construct_struct_member_from_byte_array(
+          target, array_offset, target_type, tmp, mode);
         fields.push_back(target);
 
         // Update dynamic offset into array
@@ -2313,6 +2311,22 @@ void dereferencet::construct_struct_ref_from_dyn_offs_rec(
     }
     return;
   }
+}
+
+void dereferencet::construct_struct_member_from_byte_array(
+  expr2tc &value,
+  const expr2tc &offset,
+  const type2tc &type,
+  const guard2tc &guard,
+  modet mode)
+{
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (is_array_type(type) && type_byte_size_bits(type) == 0)
+    value = gen_zero(type);
+  else if (is_array_type(type))
+    construct_from_array(value, offset, type, guard, mode);
+  else
+    build_reference_rec(value, offset, type, guard, mode);
 }
 
 /**************************** Dereference utilities ***************************/
@@ -2359,7 +2373,7 @@ std::vector<expr2tc> dereferencet::extract_bytes(
 {
   /* A zero-width object has no bytes to extract, and the stitching below reads
    * bytes[num_bytes - 1] -- an out-of-bounds access in ESBMC itself rather than
-   * a verdict. A struct with a zero-length array member reaches here. */
+   * a verdict. Callers must build zero-width values without stitching. */
   if (num_bytes == 0)
   {
     log_error("dereference: cannot read a zero-width object");
@@ -2483,11 +2497,15 @@ expr2tc dereferencet::stitch_together_from_byte_array(
       return byte_array;
   }
 
+  BigInt num_bits = type_byte_size_bits(type);
+  // A zero-length or flexible array member owns no bytes (C17 6.7.2.1p18).
+  if (num_bits == 0)
+    return gen_zero(type);
+
   expr2tc offset_bytes =
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8));
   simplify(offset_bytes);
 
-  BigInt num_bits = type_byte_size_bits(type);
   assert(num_bits.is_uint64());
   uint64_t num_bits64 = num_bits.to_uint64();
   assert(num_bits64 <= ULONG_MAX);

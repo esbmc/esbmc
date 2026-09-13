@@ -584,6 +584,12 @@ private:
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_member_from_byte_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_from_array(
     expr2tc &value,
     const expr2tc &offset,
