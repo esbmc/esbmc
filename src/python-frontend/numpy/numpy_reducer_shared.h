@@ -264,7 +264,8 @@ inline exprt build_numpy_sort_or_argsort_result(
   std::vector<exprt> elems,
   bool flatten,
   long long axis,
-  bool want_indices)
+  bool want_indices,
+  const typet &elem_type)
 {
   auto make_index = [&](std::size_t i) {
     nlohmann::json node{
@@ -327,5 +328,5 @@ inline exprt build_numpy_sort_or_argsort_result(
     }
   }
 
-  return build_numpy_shape_array_value(shape, out, out.front().type(), th);
+  return build_numpy_shape_array_value(shape, out, elem_type, th);
 }

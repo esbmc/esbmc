@@ -6616,12 +6616,13 @@ exprt numpy_call_expr::handle_argsort_call()
     std::vector<exprt> elems = materialized->second;
     if (elems.empty())
       throw std::runtime_error(
-        "TypeError: numpy.argsort() currently supports 1-D arrays only");
+        "TypeError: numpy.argsort() currently supports only constant arrays");
     if (elems.size() > max_numpy_sort_elements)
       throw std::runtime_error(
         "TypeError: numpy.argsort() currently supports arrays up to " +
         std::to_string(max_numpy_sort_elements) + " elements");
 
+    const typet elem_type = elems.front().type();
     return build_numpy_sort_or_argsort_result(
       converter_,
       type_handler_,
@@ -6629,7 +6630,8 @@ exprt numpy_call_expr::handle_argsort_call()
       std::move(elems),
       argsort_flatten,
       argsort_axis,
-      /*want_indices=*/true);
+      /*want_indices=*/true,
+      elem_type);
   }
 
   if (argsort_flatten || (argsort_axis != 0 && argsort_axis != -1))
@@ -6818,6 +6820,7 @@ exprt numpy_call_expr::handle_sort_call()
         "TypeError: numpy.sort() currently supports arrays up to " +
         std::to_string(max_numpy_sort_elements) + " elements");
 
+    const typet elem_type = elems.front().type();
     return build_numpy_sort_or_argsort_result(
       converter_,
       type_handler_,
@@ -6825,7 +6828,8 @@ exprt numpy_call_expr::handle_sort_call()
       std::move(elems),
       flatten,
       axis,
-      /*want_indices=*/false);
+      /*want_indices=*/false,
+      elem_type);
   }
 
   nlohmann::json arr_arg =

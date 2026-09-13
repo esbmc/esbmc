@@ -4550,6 +4550,7 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
       "TypeError: numpy.ndarray.sort() currently supports arrays up to " +
       std::to_string(max_numpy_sort_elements) + " elements");
 
+  const typet elem_type = elems.front().type();
   exprt sorted_value = build_numpy_sort_or_argsort_result(
     converter_,
     type_handler_,
@@ -4557,7 +4558,8 @@ std::optional<exprt> function_call_expr::try_numpy_inplace_sort()
     std::move(elems),
     /*flatten=*/false,
     axis,
-    /*want_indices=*/false);
+    /*want_indices=*/false,
+    elem_type);
 
   exprt receiver = converter_.get_expr(receiver_node);
   if (
