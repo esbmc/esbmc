@@ -2688,11 +2688,8 @@ base names and never reads one back off a round-tripped type. The generalisation
 from that to code types in general is what failed.
 
 **A code-type symbol may be stored IREP2-side only where no consumer reads an
-argument's `#base_name`.** That is true of jimple's method symbols and false of C++
-thunks. Unlike the identifier this is not a one-line fix in `migrate_type_back`:
-there is no field to restore from, so closing it means adding one to
-`code_type2t` -- which changes a reflected type's layout and every
-`fields_cover_class` computation that depends on it.
+argument's `#base_name`** -- until there is a field to restore it from. §44.4 adds
+one.
 
 ### 44.3 The diagnosis this section first shipped was wrong
 
@@ -2704,3 +2701,28 @@ It named `#identifier` rather than `#base_name`, on the reasoning that
 so the round trip preserves it. A four-line unit probe printing both fields after a
 round trip settled it in one build. It should have been written before the
 section, not after.
+
+### 44.4 The field, and the slice it unblocks
+
+`code_type2t` now carries `argument_base_names`, **unreflected**. Unreflected is
+the point rather than an economy: a parameter's spelling is no part of the function
+type (C11 6.7.6.3p15, the same clause §144 turned on), so two signatures differing
+only there must still hash and compare equal. A reflected field would have made
+them distinct and re-opened exactly the divergence §144 closed.
+
+It rides the pattern `struct_type2t::alignment` already uses -- a defaulted
+trailing constructor argument plus `excluded_field_bytes` -- so
+`fields_cover_class` passes and no `with_type` specialisation is needed. Both
+migrate arms carry it, and the back arm tolerates its absence, since a frontend
+that builds a `code_type2tc` directly supplies no base names.
+
+The unit case that pinned the loss now pins the carriage, and asserts the
+equality property alongside it: changing one argument's base name leaves
+`migrate_type` returning the same type.
+
+With that, the §44.1 slice works. The three writes in
+`clang_cpp_convert_vft.cpp` -- two thunk code types and one symbol type -- are
+converted, and `esbmc-cpp/cpp` is back to **6 failures out of 1 058**, the six
+master fails anyway (`ch8_5`, `github_7433*`). The 26 C++ probes of
+`scope-clang-cpp-irep2.md` §9-§10 abort nowhere, the Solidity suite is 525/525, and
+the unit suite is 874/874.
