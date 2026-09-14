@@ -2973,3 +2973,43 @@ Tests: `regression/esbmc-cpp/cpp/github_4715_vtable_thunk_irep2{,_fail}`, a
 two-base hierarchy dispatching through the second base. Both halves change verdict
 when either reader is restored; neither moves when the base names are dropped,
 which is the measurement above in test form.
+
+## 48. The thunk symbols, and §44's field gets an end-to-end gate (2026-09-14)
+
+Three of the vtable builder's remaining B-2 writes go together, because two of
+them were feeding the third.
+
+`add_thunk_method` wrote the component's legacy type into the symbol, read it
+straight back out, adjusted the `this` argument, and wrote it again through
+`migrate_type`. The first write was never observed: `set_thunk_name` touches only
+the symbol's name. It now builds the adjusted type from `component.type()`
+directly and writes once.
+
+`add_thunk_method_arguments` then had the same shape one level down -- legacy type
+out, `#identifier` written on each argument, legacy type back in. It reads
+`code_type2t` instead: the argument types come from `arguments`, the base name a
+symbol is named after from `argument_base_names`, and the new identifiers are
+assembled into a fresh `code_type2tc`. The legacy round trip goes with it.
+
+### 48.1 §44's field now has a corpus gate, and it is 12 tests
+
+`argument_base_names` (§44) was carried across the seam for this reader, but until
+now nothing read it back, so a unit test was its only pin. With the argument loop
+on the IREP2 side, making `migrate_type`'s code arm push an empty base name for
+every argument takes `regression/esbmc-cpp/cpp` from 6 failures to **18**:
+
+```
+functional, functional_fail, functional_fail2,
+github_5868_function_signatures, github_5868_function_signatures_fail,
+github_7540_capacity_fail, github_7540_capacity_write_fail,
+github_7540_precision, ostringstream_str, ostringstream_str_fail,
+pmr_memory_resource, pmr_memory_resource_fail
+```
+
+An argument symbol is named `<thunk>::<base_name>`, so an empty base name collides
+every argument of a thunk onto one symbol id. That is the gate §44 could not have
+had: it is the first consumer of the field outside `migrate.cpp`.
+
+The slice itself moves no verdict -- it is the same types written through a
+different API -- so it adds no regression pair. What pins it is those 12 tests plus
+the rest of the C++ tree holding at its baseline.
