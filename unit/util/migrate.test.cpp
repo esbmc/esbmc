@@ -136,6 +136,37 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
     /*ellipsis=*/false));
 }
 
+// What a code type's arguments keep across the seam, and what they lose.
+// code_type2t reflects `argument_names` and nothing else per argument, so an
+// argument's `#base_name` has nowhere to live: migrate_type_back can restore
+// the identifier and the ellipsis and cannot restore the base name. Pinned here
+// because a consumer that reads one -- clang_cpp_convert_vft.cpp's thunk
+// argument loop does -- cannot have its symbol stored IREP2-side
+// (docs/roadmap/frontends-to-irep2.md §44).
+TEST_CASE(
+  "a code argument keeps its identifier and loses its base name",
+  "[migrate]")
+{
+  code_typet t;
+  t.return_type() = int_type();
+  code_typet::argumentt a(int_type());
+  a.cmt_identifier("f::p");
+  a.cmt_base_name("p");
+  t.arguments().push_back(a);
+
+  const type2tc t2 = migrate_type(t);
+  REQUIRE(to_code_type(t2).argument_names.at(0) == irep_idt("f::p"));
+
+  const typet back_t = migrate_type_back(t2);
+  const code_typet &back = to_code_type(back_t);
+  REQUIRE(back.arguments().size() == 1);
+  // argumentt::set_identifier writes `#identifier`, which is what
+  // get_identifier and cmt_identifier both read, so this survives.
+  REQUIRE(back.arguments().at(0).cmt_identifier() == irep_idt("f::p"));
+  // The base name does not.
+  REQUIRE(back.arguments().at(0).cmt_base_name().empty());
+}
+
 TEST_CASE("a default code_typet migrates to a void signature", "[migrate]")
 {
   // The forward direction, which the round-trip cases above do not reach: a
