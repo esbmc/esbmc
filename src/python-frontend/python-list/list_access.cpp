@@ -3362,6 +3362,33 @@ bool python_list::is_numpy_param_negative_index_target(const exprt &array) const
            0;
 }
 
+// True when a negative index over `array` must be normalized against the
+// array_typet's own compile-time size -- i.e. array isn't a numpy parameter
+// (handled separately via numpy_param_shapes_) and isn't backed by a literal
+// list either (handled by is_literal_list_backed below). Split out of
+// normalize_index_access_position to keep that function's own decision
+// count down.
+static bool array_size_negative_index_target(
+  const exprt &array,
+  const nlohmann::json &list_node)
+{
+  return !array.type().is_pointer() &&
+         (list_node.is_null() || !list_node.contains("value") ||
+          list_node["value"].value("_type", "") != "List");
+}
+
+// True when `list_node` is a variable declaration whose initializer is a
+// literal List AST node, giving a compile-time element count to normalize a
+// negative index against. Split out of normalize_index_access_position to
+// keep that function's own decision count down.
+static bool is_literal_list_backed(const nlohmann::json &list_node)
+{
+  return list_node.contains("value") &&
+         list_node["value"].value("_type", "") == "List" &&
+         list_node["value"].contains("elts") &&
+         list_node["value"]["elts"].is_array();
+}
+
 void python_list::normalize_index_access_position(
   const exprt &array,
   const nlohmann::json &slice_node,
@@ -3406,10 +3433,7 @@ void python_list::normalize_index_access_position(
     // For char* (string parameters), skip compile-time normalization: the size
     // is not known statically, so normalization happens at runtime in the
     // char* indexing block below.
-    else if (
-      !array.type().is_pointer() &&
-      (list_node.is_null() || !list_node.contains("value") ||
-       list_node["value"].value("_type", "") != "List"))
+    else if (array_size_negative_index_target(array, list_node))
     {
       BigInt v = binary2integer(pos_expr.op0().value().c_str(), true);
       v *= -1;
@@ -3424,11 +3448,7 @@ void python_list::normalize_index_access_position(
       v += s;
       pos_expr = from_integer(v, pos_expr.type());
     }
-    else if (
-      list_node.contains("value") &&
-      list_node["value"].value("_type", "") == "List" &&
-      list_node["value"].contains("elts") &&
-      list_node["value"]["elts"].is_array())
+    else if (is_literal_list_backed(list_node))
     {
       // Compute index for compile-time type lookup only.
       // Do NOT overwrite pos_expr: the list may have been mutated
@@ -3441,10 +3461,7 @@ void python_list::normalize_index_access_position(
     // row/column view, which has no AST list assignment to read a
     // compile-time element list from) leaves index at its default: the
     // same "falls back to element 0" fallback documented above for a
-    // non-constant operand.
-    else
-    {
-    }
+    // non-constant operand. No further branch is needed here.
   }
   else if (slice_node["_type"] == "Constant")
   {
