@@ -79,6 +79,7 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_struct), is_constant_struct2t},
   {ARM(adjust_array_subtype), is_constant_array2t},
   {ARM(adjust_decl_init), is_code_decl2t},
+  {ARM(hoist_switch_declaration), is_code_switch2t},
   {ARM(adjust_ptr_mem), is_ptr_mem2t},
   {ARM(adjust_dereference), is_dereference2t},
   {ARM(adjust_complex_unary), is_complex_unary},
@@ -509,6 +510,32 @@ void clang_cpp_adjust_irep2::adjust_symbol_type(symbolt &symbol)
   typet t = symbol.get_type();
   finalize_exception_specification(ns, t);
   symbol.set_type(std::move(t));
+}
+
+void clang_cpp_adjust_irep2::hoist_switch_declaration(expr2tc &expr)
+{
+  const code_switch2t &sw = to_code_switch2t(expr);
+
+  // The seam flattens a single-declaration decl-block, so the condition arrives
+  // either as the declaration or as a block holding just it.
+  expr2tc decl = sw.value;
+  if (
+    is_code_block2t(decl) && to_code_block2t(decl).operands.size() == 1 &&
+    is_code_decl2t(to_code_block2t(decl).operands[0]))
+    decl = to_code_block2t(decl).operands[0];
+
+  if (!is_code_decl2t(decl))
+    return;
+
+  const code_decl2t &d = to_code_decl2t(decl);
+  const expr2tc switched = symbol2tc(d.type, d.value);
+
+  // Spliced, not nested: the declaration's scope is the switch statement, which
+  // is what the enclosing block gives it -- the same shape legacy builds.
+  expr = code_block2tc(
+    std::vector<expr2tc>{decl, code_switch2tc(switched, sw.body, sw.location)},
+    sw.location,
+    locationt());
 }
 
 void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)

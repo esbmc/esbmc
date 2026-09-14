@@ -27,6 +27,14 @@ protected:
   void gen_symbol_code(symbolt &symbol) override;
   void adjust_symbol_type(symbolt &symbol) override;
 
+  /// IREP2 form of clang_cpp_adjust::adjust_switch's declaration case. C++ lets
+  /// a switch condition be a declaration -- `switch (int x = 0)` -- and the
+  /// declaration has to be hoisted ahead of the switch, which then switches on
+  /// the declared symbol. Left in place the declaration *is* the switched value
+  /// and reaches the solver as a statement
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §8.1).
+  void hoist_switch_declaration(expr2tc &expr);
+
   void adjust_sole_arms(expr2tc &expr) override;
 
   /// IREP2 form of clang_cpp_adjust::adjust_cpp_member. `OBJECT.setX()` reaches

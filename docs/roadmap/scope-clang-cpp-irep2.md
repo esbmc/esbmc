@@ -2292,3 +2292,32 @@ The nine that remain, by cause rather than by count:
 
 `switch_declaration` is the next task: three rows, one error message, and the only
 group left that produces no verdict at all.
+
+### 8.1 A switch condition that is a declaration
+
+The three `switch_declaration` rows produced no verdict: the solver was handed a
+`code_decl`.
+
+```
+ERROR: Couldn't convert expression in unrecognised format
+code_decl
+* value : c:main.cpp@42@F@main#@x
+* init : constant_int …
+```
+
+C++ lets a switch condition be a declaration — `switch (int x = 0)` — and
+`clang_cpp_adjust::adjust_switch` hoists it: the declaration goes ahead of the
+switch, which then switches on the declared symbol. Without that the declaration
+*is* the switched value, so it flows into the guard and reaches the SMT layer as a
+statement.
+
+Ported as an arm on `code_switch2t`. Two details: the seam flattens a
+single-declaration `decl-block`, so the condition arrives either as the
+declaration or as a block holding just it, and the rewrite **splices** rather than
+nests — the declaration's scope is the switch statement, which is exactly what the
+enclosing block gives it, and it is the shape legacy builds. `hoist_for_init`
+documents the same choice for the other reason: a nested block would end the
+scope too early (#4715).
+
+All three rows agree. `irep2_switch_declaration{,_fail}` pins it; both halves fall
+back to `unrecognised format` with the arm gated off.
