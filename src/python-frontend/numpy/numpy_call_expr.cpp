@@ -1617,6 +1617,50 @@ get_literal_numpy_array_arg(const nlohmann::json &node)
   return std::nullopt;
 }
 
+// A literal integer index, allowing a UnaryOp(-x) negation of a literal --
+// shared by resolve_literal_numpy_row_view and resolve_literal_numpy_col_view
+// so both axes agree on what counts as a resolvable literal index.
+static std::optional<int64_t>
+parse_literal_signed_index(const nlohmann::json &node)
+{
+  if (
+    node.is_object() && node.value("_type", std::string()) == "Constant" &&
+    node.contains("value") && node["value"].is_number_integer())
+    return node["value"].get<int64_t>();
+
+  if (
+    node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
+    node.contains("op") && node["op"].value("_type", std::string()) == "USub" &&
+    node.contains("operand") &&
+    node["operand"].value("_type", std::string()) == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<int64_t>();
+
+  return std::nullopt;
+}
+
+// Resolves `base` (following it through its declaration first if it's a
+// Name) to the `elts` of a literal 2-D numpy array -- the base-array
+// resolution shared by resolve_literal_numpy_row_view and
+// resolve_literal_numpy_col_view.
+static std::optional<nlohmann::json>
+resolve_literal_2d_array_rows(nlohmann::json base, python_converter &converter)
+{
+  if (base.value("_type", std::string()) == "Name")
+  {
+    nlohmann::json decl = json_utils::find_var_decl(
+      base["id"], converter.current_function_name(), converter.ast());
+    if (decl.contains("value") && decl["value"].is_object())
+      base = decl["value"];
+  }
+
+  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
+  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+    return std::nullopt;
+  return (*literal)["elts"];
+}
+
 static std::optional<nlohmann::json>
 resolve_literal_numpy_row_view(nlohmann::json arg, python_converter &converter)
 {
@@ -1633,53 +1677,65 @@ resolve_literal_numpy_row_view(nlohmann::json arg, python_converter &converter)
     !arg.contains("value") || !arg.contains("slice"))
     return std::nullopt;
 
-  auto parse_index = [](const nlohmann::json &node) -> std::optional<int64_t> {
-    if (
-      node.is_object() && node.value("_type", std::string()) == "Constant" &&
-      node.contains("value") && node["value"].is_number_integer())
-      return node["value"].get<int64_t>();
-
-    if (
-      node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
-      node.contains("op") &&
-      node["op"].value("_type", std::string()) == "USub" &&
-      node.contains("operand") &&
-      node["operand"].value("_type", std::string()) == "Constant" &&
-      node["operand"].contains("value") &&
-      node["operand"]["value"].is_number_integer())
-      return -node["operand"]["value"].get<int64_t>();
-
-    return std::nullopt;
-  };
-
-  std::optional<int64_t> index = parse_index(arg["slice"]);
+  std::optional<int64_t> index = parse_literal_signed_index(arg["slice"]);
   if (!index)
     return std::nullopt;
 
-  nlohmann::json base = arg["value"];
-  if (base.value("_type", std::string()) == "Name")
-  {
-    nlohmann::json decl = json_utils::find_var_decl(
-      base["id"], converter.current_function_name(), converter.ast());
-    if (decl.contains("value") && decl["value"].is_object())
-      base = decl["value"];
-  }
-
-  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
-  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+  std::optional<nlohmann::json> rows =
+    resolve_literal_2d_array_rows(arg["value"], converter);
+  if (!rows)
     return std::nullopt;
 
-  const auto &rows = (*literal)["elts"];
   int64_t resolved_index = *index;
   if (resolved_index < 0)
-    resolved_index += static_cast<int64_t>(rows.size());
-  if (resolved_index < 0 || resolved_index >= static_cast<int64_t>(rows.size()))
+    resolved_index += static_cast<int64_t>(rows->size());
+  if (
+    resolved_index < 0 || resolved_index >= static_cast<int64_t>(rows->size()))
     return std::nullopt;
 
-  const nlohmann::json &row = rows[static_cast<std::size_t>(resolved_index)];
+  const nlohmann::json &row = (*rows)[static_cast<std::size_t>(resolved_index)];
   if (row.is_object() && row.value("_type", std::string()) == "List")
     return row;
   return std::nullopt;
+}
+
+// True for a `Slice` AST node shaped as a bare `:` (no lower/upper/step) --
+// the only row-axis spelling resolve_literal_numpy_col_view accepts.
+static bool is_bare_slice(const nlohmann::json &node)
+{
+  return node.value("_type", std::string()) == "Slice" &&
+         (!node.contains("lower") || node["lower"].is_null()) &&
+         (!node.contains("upper") || node["upper"].is_null()) &&
+         (!node.contains("step") || node["step"].is_null());
+}
+
+// Extracts column `col_index` (numpy-style, negative indexes from the end)
+// from each row of a literal 2-D array's `elts`, building a synthetic 1-D
+// List AST node. Declines (nullopt) if a row isn't itself a literal List or
+// the column index is out of range for some row.
+static std::optional<nlohmann::json>
+extract_numpy_literal_column(const nlohmann::json &rows, int64_t col_index)
+{
+  nlohmann::json column;
+  column["_type"] = "List";
+  column["elts"] = nlohmann::json::array();
+  for (const nlohmann::json &row : rows)
+  {
+    if (
+      row.value("_type", std::string()) != "List" || !row.contains("elts") ||
+      !row["elts"].is_array())
+      return std::nullopt;
+
+    const auto &cells = row["elts"];
+    int64_t resolved_col = col_index;
+    if (resolved_col < 0)
+      resolved_col += static_cast<int64_t>(cells.size());
+    if (resolved_col < 0 || resolved_col >= static_cast<int64_t>(cells.size()))
+      return std::nullopt;
+
+    column["elts"].push_back(cells[static_cast<std::size_t>(resolved_col)]);
+  }
+  return column;
 }
 
 // `a[:, j]` over a literal 2-D numpy array: the column-view counterpart of
@@ -1706,74 +1762,21 @@ resolve_literal_numpy_col_view(nlohmann::json arg, python_converter &converter)
   const nlohmann::json &slice = arg["slice"];
   if (
     slice.value("_type", std::string()) != "Tuple" || !slice.contains("elts") ||
-    !slice["elts"].is_array() || slice["elts"].size() != 2)
+    !slice["elts"].is_array() || slice["elts"].size() != 2 ||
+    !is_bare_slice(slice["elts"][0]))
     return std::nullopt;
 
-  const nlohmann::json &row_axis = slice["elts"][0];
-  if (
-    row_axis.value("_type", std::string()) != "Slice" ||
-    (row_axis.contains("lower") && !row_axis["lower"].is_null()) ||
-    (row_axis.contains("upper") && !row_axis["upper"].is_null()) ||
-    (row_axis.contains("step") && !row_axis["step"].is_null()))
-    return std::nullopt;
-
-  auto parse_index = [](const nlohmann::json &node) -> std::optional<int64_t> {
-    if (
-      node.is_object() && node.value("_type", std::string()) == "Constant" &&
-      node.contains("value") && node["value"].is_number_integer())
-      return node["value"].get<int64_t>();
-
-    if (
-      node.is_object() && node.value("_type", std::string()) == "UnaryOp" &&
-      node.contains("op") &&
-      node["op"].value("_type", std::string()) == "USub" &&
-      node.contains("operand") &&
-      node["operand"].value("_type", std::string()) == "Constant" &&
-      node["operand"].contains("value") &&
-      node["operand"]["value"].is_number_integer())
-      return -node["operand"]["value"].get<int64_t>();
-
-    return std::nullopt;
-  };
-
-  std::optional<int64_t> col_index = parse_index(slice["elts"][1]);
+  std::optional<int64_t> col_index =
+    parse_literal_signed_index(slice["elts"][1]);
   if (!col_index)
     return std::nullopt;
 
-  nlohmann::json base = arg["value"];
-  if (base.value("_type", std::string()) == "Name")
-  {
-    nlohmann::json decl = json_utils::find_var_decl(
-      base["id"], converter.current_function_name(), converter.ast());
-    if (decl.contains("value") && decl["value"].is_object())
-      base = decl["value"];
-  }
-
-  std::optional<nlohmann::json> literal = get_literal_numpy_array_arg(base);
-  if (!literal || !literal->contains("elts") || !(*literal)["elts"].is_array())
+  std::optional<nlohmann::json> rows =
+    resolve_literal_2d_array_rows(arg["value"], converter);
+  if (!rows)
     return std::nullopt;
 
-  const auto &rows = (*literal)["elts"];
-  nlohmann::json column;
-  column["_type"] = "List";
-  column["elts"] = nlohmann::json::array();
-  for (const nlohmann::json &row : rows)
-  {
-    if (
-      row.value("_type", std::string()) != "List" || !row.contains("elts") ||
-      !row["elts"].is_array())
-      return std::nullopt;
-
-    const auto &cells = row["elts"];
-    int64_t resolved_col = *col_index;
-    if (resolved_col < 0)
-      resolved_col += static_cast<int64_t>(cells.size());
-    if (resolved_col < 0 || resolved_col >= static_cast<int64_t>(cells.size()))
-      return std::nullopt;
-
-    column["elts"].push_back(cells[static_cast<std::size_t>(resolved_col)]);
-  }
-  return column;
+  return extract_numpy_literal_column(*rows, *col_index);
 }
 
 static bool is_sorted_numeric_list(
@@ -6581,6 +6584,18 @@ static void parse_argsort_axis_keyword(
   axis = axis_value.int_value;
 }
 
+// Resolves numpy.argsort()'s axis argument, positional (call_["args"][1]) or
+// keyword (axis=), rejecting a call that supplies both. Split out of
+// handle_argsort_call to keep its own decision count down.
+const nlohmann::json *numpy_call_expr::resolve_argsort_axis_node() const
+{
+  const nlohmann::json *axis_kw = find_keyword_arg("axis");
+  if (call_["args"].size() == 2 && axis_kw != nullptr)
+    throw std::runtime_error(
+      "TypeError: numpy.argsort() got multiple values for argument 'axis'");
+  return call_["args"].size() == 2 ? &call_["args"][1] : axis_kw;
+}
+
 exprt numpy_call_expr::handle_argsort_call()
 {
   const std::string &function = function_id_.get_function();
@@ -6591,16 +6606,10 @@ exprt numpy_call_expr::handle_argsort_call()
     throw std::runtime_error(
       "TypeError: numpy.argsort() expects 1 or 2 positional arguments");
 
-  const nlohmann::json *axis_kw = find_keyword_arg("axis");
-  if (call_["args"].size() == 2 && axis_kw != nullptr)
-    throw std::runtime_error(
-      "TypeError: numpy.argsort() got multiple values for argument 'axis'");
-
   bool argsort_flatten = false;
   long long argsort_axis = -1;
-  const nlohmann::json *axis_node =
-    call_["args"].size() == 2 ? &call_["args"][1] : axis_kw;
-  parse_argsort_axis_keyword(axis_node, argsort_flatten, argsort_axis);
+  parse_argsort_axis_keyword(
+    resolve_argsort_axis_node(), argsort_flatten, argsort_axis);
 
   if (numpy_reducer_has_unsupported_keywords_besides_axis(call_))
     throw std::runtime_error(

@@ -98,6 +98,11 @@ private:
   exprt handle_searchsorted_call();
   exprt handle_sort_call();
 
+  // numpy.argsort()'s axis argument: positional (2nd arg) or axis= keyword,
+  // never both. Split out of handle_argsort_call to keep that function's
+  // own decision count down.
+  const nlohmann::json *resolve_argsort_axis_node() const;
+
   // numpy.sort()'s axis argument: positional (2nd arg) or axis= keyword,
   // never both; None flattens, otherwise a literal integer, or throws.
   // Split out of handle_sort_call to keep that function's own decision
