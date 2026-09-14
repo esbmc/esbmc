@@ -2036,6 +2036,30 @@ changes the message a user sees and so wants its own change and its own test. Af
 it, the twelve expression arms and `jimple_assignment`'s go the way the seven in
 #7786 did.
 
+### 38.4a `and` and `or` were invalid in both representations
+
+CI found this, and no local run could have. `github_4715_binop_kinds_01` aborted
+the assert-enabled `DebugOpt` build at `goto_check.cpp`'s `and_id`/`or_id` arm,
+which asserts the node *and each operand* are bool. The arm here handed
+`and2tc`/`or2tc` two `signed int` operands, because the legacy arm it mirrors
+passed `gen_binary` the left-hand side's type.
+
+The legacy spelling is no better: `migrate_expr`'s `and` arm asserts
+`expr.type().id() == typet::t_bool`, so a jimple `and` over two ints aborted an
+assert build on *either* path. The defect predates the IREP2 arm; what the new
+test did was reach it for the first time, since no corpus program used a Boolean
+binop.
+
+Both operands are now converted with `c_implicit_typecast` and the node is bool,
+so the dump reads `(signed int)((_Bool)$i1 && 1)` where it read
+`(signed int)($i1 && 2)`. That is a deliberate change to the emitted GOTO rather
+than a byte-identical port, and the only one in this slice: the constant folds to
+`1` because `(_Bool)2` is `true`.
+
+The lesson for the campaign's gates: a byte-identical dump comparison under
+`NDEBUG` proves the two paths agree, not that either is *valid*. Two asserts that
+both paths trip stay invisible to it.
+
 ### 38.5 Status
 
 Twenty-eight PRs. B-1 reads 155, one more than §37, and the extra hit is a comment

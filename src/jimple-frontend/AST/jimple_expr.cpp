@@ -211,13 +211,19 @@ expr2tc jimple_binop::to_expr2t(
   if (binop == ">=")
     return greaterthanequal2tc(l, r);
 
-  // The operands are whatever the jimple types give, not bool: the legacy arm
-  // builds these with the lhs type too, and the enclosing assignment is what
-  // casts the result.
-  if (binop == "and")
-    return and2tc(l, r);
-  if (binop == "or")
-    return or2tc(l, r);
+  // Both representations require these to be bool throughout: migrate_expr
+  // asserts the legacy node's type is bool, and goto_check asserts the node and
+  // *each operand* are (goto_check.cpp, and_id/or_id). The legacy arm handed
+  // gen_binary the lhs type, so a jimple `and` over two ints aborted an
+  // assert-enabled build in either representation -- which no NDEBUG build and
+  // no test in the corpus could show (§38.5).
+  if (binop == "and" || binop == "or")
+  {
+    namespacet ns(ctx);
+    c_implicit_typecast(l, get_bool_type(), ns);
+    c_implicit_typecast(r, get_bool_type(), ns);
+    return binop == "and" ? expr2tc(and2tc(l, r)) : expr2tc(or2tc(l, r));
+  }
 
   if (binop == "bitand")
     return bitand2tc(t, l, r);
