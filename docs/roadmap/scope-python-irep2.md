@@ -67,7 +67,35 @@ converter builds. Both rows now agree.
   the arm gated off, which the CORE rows themselves cannot show, since they do not
   carry the flag.
 
-## 2. Next
+## 2. The census, complete: 5077 of 5078, and the one row is the cap
 
-Resume the census. 274 of 5101 rows is 5%, and the C++ experience says the
-residue is in families that only a full sweep names.
+Run to the end — 5188 rows across `regression/python`, `python-contracts` and
+`python-coverage`, 110 skipped (37 `KNOWNBUG`/`FUTURE`, 73 pinning an irep2 flag
+themselves), so **5078 measurable**:
+
+| | rows |
+|---|---:|
+| verdicts agree | **5077** |
+| diverge | 1 |
+| hard failure under the flag | 0 |
+
+and the one divergence is not one. `github_7553` reported `none` for the *legacy*
+side, which is the 45s per-run cap again: given 500s both paths answer
+`VERIFICATION SUCCESSFUL`. That is the fifth row this series mis-read for that
+reason, after `vector_reserve_realloc_nested_fail`, `ch9_7`, `github_2040` and
+`github_6368_insert` on the C++ side — a census row with no verdict is a row to
+re-run.
+
+So Phase 9's corpus agrees end to end after **one** fix (§1.1), which is a
+different shape of result from Phase 7's nine causes. The reason is visible in the
+skip column: 73 Python rows already pin `--python-irep2-adjust-only`, so the
+adjuster has been exercised by the suite as it was written, while the C++ flag had
+42 such rows against a 3192-row corpus.
+
+## 3. Next
+
+Corpus agreement is not §1's bar. What it licenses is the question Phase 7 also
+reached: making the flag the default, which needs an SV-COMP run because it moves
+every Python verdict path. What it does *not* cover is the converter — Python
+still builds legacy `exprt` and migrates, and the 5 547 sites of
+`frontends-to-irep2.md` §2 are untouched by an adjuster flip.
