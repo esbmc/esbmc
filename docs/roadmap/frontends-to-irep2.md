@@ -2885,3 +2885,88 @@ vector into the other's slot survived the whole 50-case suite -- the three vecto
 are pushed on consecutive lines and passed to the helper in a row, so crossing them
 is the likely edit. Spell every name differently in a test over per-component
 metadata.
+
+## 47. The vtable struct types need no new field after all (2026-09-14)
+
+§46.2 proposed one unreflected carrier for the whole per-component attribute
+family. Reading what the two vtable readers actually need says otherwise: every
+attribute they read is already recoverable from a *reflected* field, so the slice
+is to stop reading the unreflected one rather than to carry it.
+
+### 47.1 What the vtable type's components carry
+
+| attribute | set at | recoverable from |
+|---|---|---|
+| `name` | `:308`, `rtti_name_component` | reflected |
+| `pretty_name` | `:318`, `rtti_name_component` | reflected |
+| `base_name` | `:311`, `rtti_name_component` | §46's `member_base_names` |
+| `virtual_name` | `:319` | **its own `pretty_name`** -- `:318` and `:319` are set from the same expression, `comp.get("virtual_name")` |
+| `is_rtti_name` | `rtti_name_component` | **the component name**, which is exactly `rtti_name_component_id(vt_name)` |
+| `access` | both | nothing reads it (below) |
+
+So both readers can be rewritten against reflected data:
+`clang_cpp_convert_vft.cpp:737`'s override switch map keys on
+`compo.get("virtual_name")`, which equals `compo.pretty_name()` for every entry it
+walks; `clang_cpp_destructor_call.cpp:35` compares a vtable entry's `virtual_name`
+against a class method component's, and only the vtable side needs to change.
+`is_rtti_name` is a name test against the same helper that produced the name.
+
+`is_vtptr` is not in the table because `add_vptr` puts it on the *class* type, not
+the vtable type, so it is out of this slice; when the class types move, note that a
+class method component's `virtual_name` is the *ultimate overridden* method's id
+(`annotate_virtual_overriding_methods`), which is genuinely extra information and
+not derivable from that component's own names.
+
+### 47.2 `access` on a component is write-only
+
+`struct_union_typet::componentt::get_access()` (`util/irep/std_types.h:131`) has
+**no caller** in `src/` or `unit/`. `set_access` has five, plus three `set("access",
+…)` in the vtable builder. The field is written and never read, so the seam need not
+carry it and a later PR can delete the writes.
+
+### 47.3 Consequence for §46.2
+
+The leftover-`irept` carrier is not needed for this slice and should not be built
+for it. It would also work against the bars: a generic legacy-attribute carrier is
+exactly the escape hatch B-4 forbids, and it would let a frontend keep depending on
+legacy component metadata indefinitely. Derive from reflected data, or from the name
+as `restore_padding_flag` does (§137); carry a field only where the information
+exists nowhere else.
+
+### 47.4 Both writes now store IREP2 -- and §45.1's cause was wrong
+
+With the two readers rewritten, `add_vtable_type_symbol` stores
+`migrate_type(st)` and `add_vtable_type_entry` appends to the IREP2 type
+directly. `regression/esbmc-cpp/cpp` is **6 failures of 1 060**, master's
+baseline, and the whole `esbmc-cpp` tree is 8 of 3 155 -- the two extra pass when
+re-run serially.
+
+Three measurements on that state, each a rebuild plus the full label:
+
+| change | failures |
+|---|---|
+| both readers rewritten | 6 |
+| forward arm pushes no base names at all | **6** |
+| `is_rtti_name` reader restored | 655 |
+| `virtual_name` reader restored | 655 |
+
+So §46's `member_base_names` is **not** what unblocks this, and §45.1 named the
+wrong consumer. The thunk builder's `component.base_name()` reads the component
+passed at `clang_cpp_convert_vft.cpp:104`, which is the **class** type's method
+component, not the vtable type's -- and class types still store IREP1, so that
+read never crosses this seam. §46 inherited the error.
+
+The real cause is either lost attribute on its own: the rtti entry is the first
+component of every vtable, so failing to recognise it sends `@rtti_name` into
+`switch_map.find`, which misses, and the assertion at
+`clang_cpp_convert_vft.cpp:753` fires on every polymorphic program. `virtual_name`
+does the same for every other entry.
+
+§46's field stays correct on its own terms -- a component's base name now survives
+the round trip, pinned by a unit test -- but it is not on this slice's critical
+path, and the 653-failure figure belongs to `virtual_name`.
+
+Tests: `regression/esbmc-cpp/cpp/github_4715_vtable_thunk_irep2{,_fail}`, a
+two-base hierarchy dispatching through the second base. Both halves change verdict
+when either reader is restored; neither moves when the base names are dropped,
+which is the measurement above in test form.
