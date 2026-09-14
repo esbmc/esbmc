@@ -9,6 +9,9 @@ esbmc does not have to spawn a second interpreter to ask the same question.
 import sys
 
 if sys.version_info[0] != 3:
+    # pylint: disable=consider-using-f-string
+    # An f-string here would not compile under the interpreter this branch
+    # exists to diagnose; bootstrap.ensure_python3 carries the same waiver.
     sys.stderr.write("ERROR: ESBMC's Python frontend requires Python 3 (this interpreter, "
                      "%s, reports version %d.%d).\nRe-run with --python <path-to-python3>.\n" %
                      (sys.executable, sys.version_info[0], sys.version_info[1]))
