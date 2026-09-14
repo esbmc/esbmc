@@ -1782,8 +1782,30 @@ same conclusion: the flag-on side agrees with the type system and the default pa
 is the outlier. So Phase 8's corpus has **no row where the IREP2 pass is wrong** --
 513 agree, and the one that differs differs in the IREP2 pass's favour.
 
+### 4.3a Where the fix is not
+
+The obvious one-line fix is wrong, and measuring it costs less than arguing about
+it. The converter builds the assignment from the Solidity-declared type:
+
+```cpp
+exprt tmp = side_effect_exprt("assign", base_t);
+convert_type_expr(ns, new_expr, base_t, expr);
+```
+
+Substituting `base.type()` -- convert to the lvalue rather than to the declaration
+-- changes nothing, because `base.type()` *is* `T[4]*` at that point. The converter
+emits the declared shape for both the member and the cast.
+
+What separates the paths is later: **both** adjust passes lower the member to
+`T***`, and only the IREP2 one also lowers the cast the converter left at `T[4]*`.
+So the legacy pass is internally inconsistent -- it lowers the lvalue's type and
+not the cast feeding it -- and closing the row means changing how the legacy adjust
+lowers an array-typed pointee, which reaches every such cast on the default path.
+That is wider than a converter tweak and wants its own measurement.
+
 Changing the default path is a behaviour change for every nested-array push, so it
-stays its own PR. What is settled is which side would be changed.
+stays its own PR. What is settled is which side would be changed, and now also
+that the change is not where it first appeared to be.
 
 ### 4.4 The abort is not ours
 
