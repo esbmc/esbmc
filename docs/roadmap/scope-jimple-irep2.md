@@ -1761,3 +1761,115 @@ Jimple is the first frontend to reach it either way.
 Twenty-five PRs. B-1 is 183, from 202 at the start of §32. Remaining in this
 frontend: `jimple_throw` (§31.1), the four items in §32.7, and §33.2/§33.3's two
 defects -- none of which is a symbol-table write.
+
+## 36. Retiring the dead legacy arms, and why most of them are not dead
+
+B-2 is met (§35), and B-1 sits at 183 mentions. Three quarters of those are in
+the legacy `to_exprt` overrides and their declarations, so the question this
+slice answers is which of the 26 overrides the pipeline can still reach.
+
+A reachability census answers the first half. Instrumenting every override with a
+one-line print and running all 28 tests (breakpoints slide on inlined code; a
+`fprintf` does not) gives 8 reached and 18 not:
+
+| Reached | Hits | Not reached |
+|---|---|---|
+| `jimple_method` | 64 | `jimple_full_method_body`, `jimple_declaration` |
+| `jimple_file` | 28 | `jimple_return`, `jimple_label`, `jimple_goto`, `jimple_if`, `jimple_invoke` |
+| `jimple_throw` | 14 | `jimple_identity`, `jimple_assertion` |
+| `jimple_symbol` | 10 | `jimple_binop`, `jimple_cast`, `jimple_lengthof` |
+| `jimple_expr_invoke` | 8 | `jimple_virtual_invoke`, `jimple_newarray`, `jimple_deref` |
+| `jimple_assignment` | 8 | `jimple_nondet`, `jimple_static_member` |
+| `jimple_constant` | 4 | `jimple_virtual_member` |
+| `jimple_class_field` | 2 | |
+
+### 36.1 Not reached is not dead, and for the expression arms it is not even close
+
+Eleven of the 18 are *expression* kinds, and they are reachable — the corpus
+simply has no test that reaches them. `jimple_expr_invoke::to_exprt` converts
+each of its parameters with `parameters[i]->to_exprt`, and
+`jimple_assignment::to_exprt` converts its right-hand side the same way; both are
+live (8 hits each, entered through the migrating default). An invoke parameter or
+an assignment right-hand side can be any expression kind, so every expression
+arm is one test away from being exercised. Deleting them would be deleting live
+code on the evidence of an incomplete corpus.
+
+That is the difference this section exists to record: a zero hit count is a
+statement about the corpus. It becomes a statement about the program only with a
+caller argument on top.
+
+### 36.2 The statement arms do have that argument
+
+Nothing calls `to_exprt` on a `jimple_method_body`. `jimple_method.cpp` calls
+`to_code2t`, whose only other implementation is the base default, and that
+default is reached solely by `jimple_empty_method_body`, which overrides neither.
+So `jimple_full_method_body::to_exprt` is callerless — and it is the only caller
+of a statement's `to_exprt` other than `jimple_method_field::to_code2t`'s
+default, which a kind reaches only if it does not override `to_code2t`.
+
+Three kinds do not override it, so their `to_exprt` stays: `jimple_identity` and
+`jimple_assertion` (both unconstructible, §19) and `jimple_throw`, whose 14 hits
+are real. `jimple_assignment` overrides `to_code2t` but its invoke arms delegate
+to the default (§22), which is why it is reached.
+
+That leaves seven provably callerless overrides, removed here:
+`jimple_full_method_body`, `jimple_return`, `jimple_label`, `jimple_goto`,
+`jimple_if`, `jimple_invoke` and `jimple_declaration` -- 234 lines, and B-1 from
+183 to 160.
+
+### 36.3 What discharges the removal
+
+The obligation on removing a branch is that it was unreachable before. Here the
+enclosing *function* has no caller, which is a compile-time fact rather than a
+path condition, so a reachability query inside it would be answering a question
+that cannot arise: there is no execution that reaches the function to reach a
+branch within it. What discharges the removal is the caller argument in §36.2,
+the census confirming 0 hits over 28 tests, and one property of the deletion
+itself -- a statement that silently fell through to `jimple_method_field`'s base
+`to_exprt` would become a `code_skipt` and change the GOTO. All 28 GOTO dumps and
+all 28 symbol tables are byte-identical, so nothing did.
+
+### 36.4 Status
+
+Twenty-six PRs. B-1 is 160, from 202 at the start of §32; B-2 is met. §32 had
+converted `jimple_declaration::to_exprt`, one of the sites deleted here — the
+seam's signature was the point of that slice and this one does not undo it, but
+the conversion at that particular site was incidental and is now gone.
+
+### 36.5 What keeps the eleven expression arms alive, and how to kill it
+
+B-1 cannot approach zero while the expression arms remain, and tracing why they
+remain gives one concrete obstacle rather than the five separate design questions
+§31.1 implies.
+
+Exactly two live `to_exprt` bodies call an expression's `to_exprt`:
+`jimple_assignment::to_exprt` (its left-hand side and right-hand side) and
+`jimple_expr_invoke::to_exprt` (each parameter). Both are entered the same way:
+`jimple_assignment::to_code2t` delegates to `jimple_method_field::to_code2t`'s
+migrating default whenever the right-hand side is a non-nondet, non-intrinsic
+invoke. `jimple_throw::to_exprt` is live too but is a dead end -- its operand
+conversion is commented out upstream, so it reaches nothing.
+
+The reason that delegation is still there is a single pattern:
+`jimple_assignment::to_exprt` converts its left-hand side, calls `set_lhs` on the
+right-hand side *invoke object* with the resulting legacy `exprt`, and then asks
+that object to convert itself -- so the invoke lowers to a call with an already
+built left-hand side rather than to an assignment. Porting it needs three things,
+all mechanical:
+
+1. `jimple_expr_invoke` and `jimple_virtual_invoke` to carry their injected
+   left-hand side as an `expr2tc`.
+2. Their `to_expr2t` to build the remaining arms: two `code_skip2t`s for the
+   `Intrinsics` and `Runtime` skips, the nondet arm, and the main path's
+   `code_block2t` of `@parameterN` assignments followed by the call.
+3. `jimple_assignment::to_code2t` to stop delegating, setting the IREP2
+   left-hand side and calling `to_expr2t`.
+
+The payoff is the whole of `jimple_expr.cpp`: with those two callers gone, every
+expression `to_exprt` becomes callerless -- the eleven untested arms plus
+`jimple_symbol` and `jimple_constant`, which are only reached through them.
+
+The corpus cannot verify steps 1-3 on its own: §19's census found the
+`Intrinsics`, `Runtime` and nondet arms unreachable from any test in it, so each
+needs a Jimple source written to reach it, the same way nine tests in this suite
+already were.

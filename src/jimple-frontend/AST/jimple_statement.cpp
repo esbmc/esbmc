@@ -35,23 +35,6 @@ std::string jimple_identity::to_string() const
   return oss.str();
 }
 
-exprt jimple_return::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: jimple return with support to other returns
-  typet return_type = empty_typet();
-  code_returnt ret_expr;
-  if (expr)
-  {
-    auto return_value = expr->to_exprt(ctx, class_name, function_name);
-    ret_expr.op0() = return_value;
-  }
-  // TODO: jimple return should support values
-  return ret_expr;
-}
-
 expr2tc jimple_return::to_code2t(
   contextt &ctx,
   const std::string &class_name,
@@ -85,26 +68,6 @@ std::string jimple_label::to_string() const
   return oss.str();
 }
 
-exprt jimple_label::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: DRY (clang-c-converter)
-  code_labelt c_label;
-  c_label.set_label(label);
-
-  code_blockt block;
-  for (auto member : members->members)
-  {
-    block.operands().push_back(
-      std::move(member->to_exprt(ctx, class_name, function_name)));
-  }
-  c_label.code() = to_code(block);
-
-  return c_label;
-}
-
 // K.3 of docs/roadmap/scope-jimple-irep2.md. migrate_expr's label arm also
 // flattens a single-declaration decl-block body to the bare decl; this frontend
 // never builds a decl-block, so there is nothing to reproduce. The members are
@@ -136,16 +99,6 @@ std::string jimple_goto::to_string() const
   std::ostringstream oss;
   oss << "Goto: " << this->label;
   return oss.str();
-}
-
-exprt jimple_goto::to_exprt(
-  contextt &,
-  const std::string &,
-  const std::string &) const
-{
-  code_gotot code_goto;
-  code_goto.set_destination(label);
-  return code_goto;
 }
 
 // K.3 of docs/roadmap/scope-jimple-irep2.md: the first statement to build its
@@ -265,21 +218,6 @@ void jimple_if::from_json(const json &j)
   j.at("goto").get_to(label);
 }
 
-exprt jimple_if::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  code_gotot code_goto;
-  code_goto.set_destination(label);
-
-  auto condition = cond->to_exprt(ctx, class_name, function_name);
-  codet if_expr("ifthenelse");
-  if_expr.copy_to_operands(condition, code_goto);
-
-  return if_expr;
-}
-
 // The first statement to reach an expression through to_expr2t. migrate_expr's
 // ifthenelse arm leaves else_case nil when the legacy node has only two
 // operands, which is the shape built above, so the else stays default.
@@ -369,90 +307,6 @@ void jimple_invoke::from_json(const json &j)
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
   method += "_" + get_hash_name();
-}
-
-exprt jimple_invoke::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Move intrinsics to backend
-  if (base_class == "kotlin.jvm.internal.Intrinsics")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // Don't care for the default object constructor
-  if (base_class == "java.lang.Object")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // Don't care for Random
-  if (base_class == "java.util.Random")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // Don't care for String
-  if (base_class == "java.lang.String")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  if (base_class == "java.lang.AssertionError")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  code_blockt block;
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << base_class << ":" << method;
-  auto symbol = ctx.find_symbol(oss.str());
-  call.function() = symbol_expr(*symbol);
-
-  if (variable != "")
-  {
-    // Let's add @THIS
-    auto this_expression =
-      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(this_expression);
-    auto temp = get_symbol_name(base_class, method, "@this");
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), this_expression);
-    block.operands().push_back(assign);
-  }
-
-  for (unsigned long int i = 0; i < parameters.size(); i++)
-  {
-    // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr =
-      parameters[i]->to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters
-    std::ostringstream oss;
-    oss << "@parameter" << i;
-    auto temp = get_symbol_name(base_class, method, oss.str());
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
-    block.operands().push_back(assign);
-  }
-  block.operands().push_back(call);
-  return block;
 }
 
 expr2tc jimple_invoke::to_code2t(
