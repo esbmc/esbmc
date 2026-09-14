@@ -84,14 +84,14 @@ public:
 
   virtual void _sink_write(const char *s, streamsize n)
   {
-    __ESBMC_assert(_len + n < OSTREAM_CAPACITY, "ostream capacity exceeded");
+    __ESBMC_assert(n < OSTREAM_CAPACITY - _len, "ostream capacity exceeded");
     memcpy(_buf + _len, s, n);
     _len += n;
   }
 
   virtual void _sink_fill(char c, streamsize n)
   {
-    __ESBMC_assert(_len + n < OSTREAM_CAPACITY, "ostream capacity exceeded");
+    __ESBMC_assert(n < OSTREAM_CAPACITY - _len, "ostream capacity exceeded");
     memset(_buf + _len, c, n);
     _len += n;
   }

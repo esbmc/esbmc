@@ -114,9 +114,9 @@ bool read_bin_goto_object(
 
   if (!goto_functions)
   {
-    /* c2goto never runs goto_convert, so a library body travels in its
-     * symbol value and is built later by goto_convert_functions; the section
-     * read below is empty by construction. */
+    /* A blob written without goto_convert carries each body in its symbol's
+     * value, to be built later by goto_convert_functions; its function
+     * section is empty by construction. */
     assert(count == 0);
     return false;
   }
