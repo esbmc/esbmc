@@ -1651,3 +1651,57 @@ Twenty-three PRs. `jimple_newarray::to_expr2t` builds no legacy type; the
 remaining legacy surface is §32.5's two completion sites (still blocked on the
 *legacy* `to_exprt` arm reading the `width` attribute, though that arm is
 measured unreachable), `jimple_throw`, and the items in §32.7.
+
+## 34. The symbol table's truth moves to IREP2
+
+§32.5 recorded the blocker on the two completion sites and §33 removed half of
+it. This slice removes the rest and takes both sites, in four measured steps.
+
+1. `jimple_newarray::to_exprt` — the legacy arm, and the last reader of a class
+   struct's legacy `width` attribute — takes the width off the IREP2 form the
+   same way `to_expr2t` does.
+2. `jimple_file.cpp` writes the completed class struct with
+   `set_type(migrate_type(t))`, so the class symbol's IREP2 side is the one last
+   written.
+3. The `width` attribute and the `total_size` accumulation that fed it are
+   removed: with step 1 done and step 2 storing IREP2, nothing reads it, and
+   `migrate_type`'s struct arm never did.
+4. `jimple_method.cpp` writes the completed method signature the same way.
+
+### 34.1 The gate a slice like this needs, and the one it does not
+
+A GOTO dump cannot see this change at all — it shows bodies, and §32.3 measured
+that it prints no function signature and no parameter symbol's type. Nothing
+about steps 2 and 4 is observable there, and indeed all 27 dumps are unchanged.
+
+The instrument that can see it is the whole symbol table. Captured for all 28
+tests before and after, `--symbol-table-only` output is byte-identical, which is
+the claim this slice actually needs: after it, each symbol's legacy type is
+*derived* through `migrate_type_back` rather than stored, and the question is
+whether anything the pipeline renders differs. It does not, including the method
+signatures — `migrate_type_back`'s code arm restores argument identifiers and the
+ellipsis flag, and the argument `#base_name` it does not restore has no reader.
+
+One gap in that instrument, found by probing for it: the rendered type does not
+show a signature's ellipsis. Forcing `make_ellipsis()` unconditionally leaves
+`signed int (signed int, signed int)` unchanged and passes all 28 tests. So the
+symbol-table comparison covers argument and return types but not that flag; what
+covers the flag is `migrate_type_back` restoring it, and
+`unit/util/migrate.test.cpp`'s round-trip case over `make_func_type()`.
+
+The class struct that step 2 now writes IREP2-side *is* pinned: dropping a
+component fails both `github_4715_symbol_table_types_01` and
+`github_4715_local_member_01`.
+
+### 34.2 Status
+
+Twenty-four PRs. Every symbol the jimple frontend creates now carries an IREP2
+type, written IREP2-side. B-2 still counts 8 lines, and four of those are now
+false positives — `jimple_ast.h:69`, `jimple_file.cpp:158`,
+`jimple_method.cpp:92` and `:93` all pass an IREP2 argument, the first written as
+a bare `t` and the rest through `migrate_type`/`to_code2t`, none of which spells
+`2tc` on the call. B-1 is 189, from 202 before §32.
+
+Remaining: `jimple-language.cpp`'s four `set_type`/`set_value` calls (the module
+and `__ESBMC_main` symbols), `jimple_throw` (§31.1), §33.2's 8x over-allocation
+and §33.3's `lengthof`, and the four items in §32.7.
