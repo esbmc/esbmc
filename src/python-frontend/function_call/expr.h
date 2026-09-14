@@ -827,6 +827,17 @@ private:
     symbolt *obj_symbol,
     const symbolt *func_symbol,
     const locationt &location);
+
+  /*
+   * Reconciles a converted call argument with its parameter's type: passes
+   * an already-tagged argument through, boxes a concrete numeric/string
+   * scalar into a tagged-object temporary, or throws otherwise.
+   */
+  exprt coerce_tagged_argument(
+    exprt arg,
+    const typet &param_type,
+    const locationt &location) const;
+
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
