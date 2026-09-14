@@ -8223,3 +8223,23 @@ type, an added ellipsis, and `void *`. Reverting `same_c_type` fails it at
 That is the cheaper gate of the two: a regression test needs a frontend, a flag
 and a GOTO dump to see this, where the unit case sees it directly in the function
 that decides.
+
+### 144.5 The same axis, swept -- and the one thing it cannot compare
+
+The admission matrices in that file ask whether a conversion is *permitted*.
+§144's defect was that both copies permitted one and then disagreed on whether to
+wrap it, and no matrix covered that. A sweep now runs `require_overloads_agree`
+over the scalar table plus pointer, array and both function-pointer spellings:
+**576 pairs, all agreeing.** So the defect §144 fixed appears to have been the
+only one of its kind in the C-shaped matrix -- a negative result, but a measured
+one, and now a standing gate. Reverting `same_c_type` fails it.
+
+`c_enum` is excluded, and the reason is a property of the seam rather than of
+either copy. `migrate_type` maps it to `signedbv` (C99 6.7.2.2.3), so an enum
+destination *is* `int` on the IREP2 side, and every question involving one is
+asked of a different type on the two sides. Measured before excluding it: 11
+disagreements, every one an enum row. `int -> c_enum` inserts a cast on the legacy
+side and none on the IREP2 side; `double -> c_enum` is refused there and admitted
+here. Comparing them would pin the collapse, not the copies -- so the sweep says
+nothing about enum conversions, and any future claim that the two copies agree
+must carry that exception.
