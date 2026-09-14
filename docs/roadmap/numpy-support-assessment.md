@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-09-11.
+**Updated:** 2026-09-14.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -27,7 +27,7 @@ Architectural decisions that gate specific pendencies here (referenced as
 | Category | Missing items |
 |---|---|
 | Array creation | Advanced dtype forms (`object`, structured/record dtypes, custom dtype objects) and broad constructor parity. |
-| Sorting / searching | `np.sort`/`np.argsort`/`np.searchsorted` and the `a.sort()`/`a.argsort()` method forms now accept concrete ndarray *variables* (including ones returned by a pure user function), row/column views (`a[i]`, `a[:, j]`), and 2-D arrays with an `axis=0`/`axis=1`/`axis=None`/negative-axis argument — `np.sort`/`np.argsort` via `build_numpy_descriptor_materialized_elements` (the same descriptor materialization reducers already used), sorting/permuting each row or column independently via a shared conversion-time bubble-sort network (`bubble_sort_numpy_paired`, capped at `max_numpy_sort_elements`). Still missing: stable-kind variants, sorter/vector-value forms of `searchsorted`, `searchsorted` on a 2-D array or view, and symbolic arrays. |
+| Sorting / searching | `np.sort`/`np.argsort`/`np.searchsorted` and the `a.sort()`/`a.argsort()` method forms now accept concrete ndarray *variables* (including ones returned by a pure user function), row/column views (`a[i]`, `a[:, j]` — both axes, including through `np.searchsorted`), and 2-D arrays with an `axis` argument, positional or `axis=` keyword (never both) — `np.sort`/`np.argsort` via `build_numpy_descriptor_materialized_elements` (the same descriptor materialization reducers already used), sorting/permuting each row or column independently via a shared conversion-time bubble-sort network (`bubble_sort_numpy_paired`, capped at `max_numpy_sort_elements`). Still missing: stable-kind variants, sorter/vector-value forms of `searchsorted`, `searchsorted` on a genuine 2-D array (as opposed to a 1-D row/column view of one), and symbolic arrays. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
 | Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
@@ -143,9 +143,10 @@ distinct designs are sized accordingly instead of assumed to be one PR each.
    gets its return type locked to the static annotator's guess ahead of
    body conversion.
 3. **Stable-kind sort/searching gaps** (~1 PR) — `kind=` stability,
-   sorter/vector-value `searchsorted`, `searchsorted` on a 2-D array/view,
+   sorter/vector-value `searchsorted`, `searchsorted` on a genuine 2-D array,
    and symbolic arrays (axis-aware and 2-D `sort`/`argsort`/`searchsorted`
-   over concrete arrays and views are now implemented).
+   over concrete arrays and row/column views, positional or keyword axis,
+   are now implemented).
 4. **Advanced dtype and constructors** (~2 PRs) — dtype policy
    (object/structured/custom) separate from constructor
    diagnostics/propagation.
