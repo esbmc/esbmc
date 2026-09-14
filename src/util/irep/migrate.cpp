@@ -393,6 +393,15 @@ static type2tc migrate_type0(const typet &type)
     return get_empty_type();
   }
 
+  // clang's BoundMember: the type of `obj.*pmf` before it is called, and a
+  // placeholder rather than storage -- clang_c_adjust::adjust_ptr_mem replaces
+  // the whole node with the member function. Empty is the round-trip-stable
+  // form, as it is for a constructor's return type, and a ptr_mem2t typed
+  // empty is exactly that placeholder: a pointer-to-*data*-member selection
+  // carries the member's own type (docs/roadmap/scope-clang-cpp-irep2.md §7.5).
+  if (type.id() == typet::t_ptrmem)
+    return get_empty_type();
+
   if (type.id() == "destructor")
   {
     // This is a destructor return type. Which is nil.

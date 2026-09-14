@@ -220,6 +220,14 @@ protected:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_ptr_mem. `obj->*pmf` dereferences its
+  /// base, and a *bound member* selection -- which carries clang's BoundMember
+  /// type, empty after the seam -- becomes the member function itself, with
+  /// `this` prepended to the pointed-to code type's parameters. Left standing,
+  /// the node reaches goto_convert as a callee it cannot read
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §7.5).
+  void adjust_ptr_mem(expr2tc &expr);
+
   /// The GCC `__sync_*` / C11 `__c11_atomic_*` half of
   /// clang_c_adjust::adjust_side_effect_function_call: clang hands these
   /// builtins over body-less, so the concrete instance has to be declared and

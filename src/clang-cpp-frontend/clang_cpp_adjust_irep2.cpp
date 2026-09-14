@@ -79,6 +79,7 @@ const clang_cpp_adjust_irep2::arm clang_cpp_adjust_irep2::arms[] = {
   {ARM(adjust_struct), is_constant_struct2t},
   {ARM(adjust_array_subtype), is_constant_array2t},
   {ARM(adjust_decl_init), is_code_decl2t},
+  {ARM(adjust_ptr_mem), is_ptr_mem2t},
   {ARM(adjust_dereference), is_dereference2t},
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},

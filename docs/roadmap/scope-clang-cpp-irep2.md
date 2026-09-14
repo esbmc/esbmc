@@ -2128,3 +2128,32 @@ memory-safety repair independent of the alignment.
 
 All five rows now agree, and `irep2_overaligned_empty_struct{,_fail}` pins the
 carry: both halves SIGSEGV with the restore suppressed.
+
+### 7.5 The `ptrmem` family: a type with no IREP2 form, and the arm behind it
+
+Eleven rows — the eight `Unexpected type: ptrmem` ones, the two
+`ptr_to_member_2` SIGSEGVs and `github_6717_inline_ptr_to_member`'s verdict
+divergence — are one construct: `obj.*pmf` and `obj->*pmf`, a *bound member*
+selection. The expression kind was never the problem; `ptr_mem2t` exists and
+`migrate.cpp` carries it both ways. Its **type** was: clang types the selection
+`BuiltinType::BoundMember`, the converter records `ptrmem_typet`, and
+`migrate_type` had no arm for it, so the body failed to migrate at all.
+
+The type is a placeholder rather than storage — `clang_c_adjust::adjust_ptr_mem`
+replaces the whole node with the member function before anything computes a
+width — so it maps to the empty type, the round-trip-stable form a constructor's
+return type already uses. That alone moved the failure to
+`ERROR: do_function_call: unexpected callee`, which is the elimination itself
+missing: the node survived to goto_convert.
+
+Ported as an arm in both tables (the C++ table substitutes its own list, so a row
+added to the C one never dispatches for C++ or Solidity). It dereferences a
+pointer base, and for the placeholder type rebuilds the *function* with `this`
+prepended to the pointed-to code type's parameters. Two details are legacy's and
+kept deliberately: only the parameter **type** is prepended, the argument being
+the call site's business; and a pointer-to-*data*-member selection is left alone,
+since it carries the member's own type rather than the placeholder.
+
+All eleven rows now agree. `irep2_bound_member_call{,_fail}` pins it over both
+spellings; both halves fail with `do_function_call: unexpected callee` when the
+arm is gated off.

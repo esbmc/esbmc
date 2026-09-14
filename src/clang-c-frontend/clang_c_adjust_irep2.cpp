@@ -292,6 +292,7 @@ const clang_c_adjust_irep2::arm clang_c_adjust_irep2::arms[] = {
   {ARM(adjust_struct), is_constant_struct2t},
   {ARM(adjust_array_subtype), is_constant_array2t},
   {ARM(adjust_decl_init), is_code_decl2t},
+  {ARM(adjust_ptr_mem), is_ptr_mem2t},
   {ARM(adjust_dereference), is_dereference2t},
   {ARM(adjust_complex_unary), is_complex_unary},
   {ARM(promote_unary_bool_operand), is_promotable_unary},
@@ -1413,6 +1414,45 @@ void clang_c_adjust_irep2::adjust_expression_statement(expr2tc &expr)
 ///
 /// Legacy's remaining arm retypes the node to the pointer's subtype; the
 /// migration already builds that type, so no corpus input distinguishes it.
+void clang_c_adjust_irep2::adjust_ptr_mem(expr2tc &expr)
+{
+  const ptr_mem2t &pm = to_ptr_mem2t(expr);
+  if (is_nil_expr(pm.source_value) || is_nil_expr(pm.member_pointer))
+    return;
+
+  expr2tc base = pm.source_value;
+  if (is_pointer_type(base->type))
+    base = dereference2tc(to_pointer_type(base->type).subtype, base);
+
+  // A pointer to *data* member carries the member's own type; only the bound
+  // member function is the placeholder legacy replaces.
+  if (!is_empty_type(expr->type))
+  {
+    if (base != pm.source_value)
+      expr = ptr_mem2tc(expr->type, base, pm.member_pointer);
+    return;
+  }
+
+  const expr2tc &func = pm.member_pointer;
+  if (!is_pointer_type(func->type))
+    return;
+
+  const type2tc &pointee = to_pointer_type(func->type).subtype;
+  if (!is_code_type(pointee))
+    return;
+
+  // Legacy prepends the *type* of `&base` and leaves the argument itself to the
+  // call site; kept identical so both paths hand goto_convert the same callee.
+  const code_type2t &ct = to_code_type(pointee);
+  std::vector<type2tc> args{pointer_type2tc(base->type)};
+  args.insert(args.end(), ct.arguments.begin(), ct.arguments.end());
+  std::vector<irep_idt> names{irep_idt()};
+  names.insert(names.end(), ct.argument_names.begin(), ct.argument_names.end());
+
+  expr = func->with_type(
+    pointer_type2tc(code_type2tc(args, ct.ret_type, names, ct.ellipsis)));
+}
+
 void clang_c_adjust_irep2::adjust_dereference(expr2tc &expr)
 {
   const expr2tc pointer = to_dereference2t(expr).value;
