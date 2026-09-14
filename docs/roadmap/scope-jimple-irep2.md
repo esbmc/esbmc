@@ -2090,3 +2090,64 @@ Twenty-eight PRs. B-1 reads 155, one more than §37, and the extra hit is a comm
 mentioning `to_exprt` by name -- the same class of false positive B-2's command has
 (§35.2), now on B-1. The deletion §37.3 promised is one small slice further away
 than that section claimed.
+
+## 39. The expression subtree retires
+
+Two changes, the second only possible because of the first.
+
+### 39.1 Rejecting an unsupported operator where it is built
+
+§38.4 left one caller for the expression `to_exprt` arms: an operator outside the
+twenty reached `jimple_expr::to_expr2t`, whose legacy arm handed it to
+`gen_binary` and then to `migrate_expr`, which rejected it. `jimple_binop::to_expr2t`
+now rejects it directly, with `throw "Unsupported Jimple operator: " + binop` --
+the same mechanism `jimple_type` already uses two files away, so the same handler
+and the same exit code 6.
+
+The user-visible output improves rather than merely moving. Before, `%` produced
+three lines: the irep dump of the node, `migrate expr failed`, and
+`ERROR: migrate expr failed: %`. Now it produces one, naming the operator the
+source actually contained. The partition is unchanged, re-measured across all 29
+candidate spellings: 20 convert, 9 are rejected, same nine.
+
+`github_4715_binop_unsupported_01` pins the message; replacing the throw with a
+silent `add2tc` fails it and nothing else.
+
+### 39.2 Twelve arms, and the argument for each
+
+With that, no live code calls an expression `to_exprt`. Removed:
+`jimple_constant`, `jimple_symbol`, `jimple_binop`, `jimple_cast`,
+`jimple_lengthof`, `jimple_expr_invoke`, `jimple_virtual_invoke`,
+`jimple_newarray`, `jimple_deref`, `jimple_nondet`, `jimple_virtual_member`, and
+`jimple_assignment`'s.
+
+The caller argument is the same shape as §36.2's, and it is now complete because
+the two escape hatches are closed: `jimple_binop`'s (§39.1) and
+`jimple_assignment::to_code2t`'s delegation (§37). Every surviving `to_exprt` was
+checked for operand conversions first -- `jimple_identity`, `jimple_assertion`,
+`jimple_static_member`, `jimple_class_field` and `jimple_throw` are all leaves,
+and `jimple_method` and `jimple_file` reach only `to_code2t` and
+`jimple_class_field` respectively. So nothing that survives can call something
+that was deleted, which matters here because virtual dispatch would have fallen
+back to the base silently rather than failing to compile.
+
+B-1 goes from 155 to 97.
+
+### 39.3 What is left, and why each one is there
+
+| Arm | Why it stays |
+|---|---|
+| `jimple_method`, `jimple_file`, `jimple_class_field` | the class and method conversion path, which is not an expression |
+| `jimple_static_member` | its `to_expr2t` covers two intrinsics and leaves the member access on the default, still marked "Needs OOP members" (§25.2) |
+| `jimple_throw` | live, but its operand conversion is commented out upstream (§31.1) |
+| `jimple_identity`, `jimple_assertion` | unconstructible (§19) -- a different argument from callerless, so left alone as in #7786 |
+
+Three of those seven are the honest remainder of the frontend: the static member
+access, `jimple_throw`, and the two unconstructible classes. None is a mechanical
+port.
+
+### 39.4 Status
+
+Twenty-nine PRs. B-1 is 97, from 202 when §32 opened; B-2 is met (§35). The
+expression and statement migrations are complete and their legacy arms are gone
+except for the four above.
