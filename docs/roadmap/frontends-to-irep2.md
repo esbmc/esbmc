@@ -24,6 +24,12 @@ Per frontend `F` in {clang-c, clang-cpp, python, solidity, jimple}:
 | B-3 | Bodies reach `goto_convert` with no `migrate_*` back-hop | native dispatcher coverage = 100 %, round-trip deleted |
 | B-4 | No `#`-attribute escape hatch into a shared pass | W3 removed, not merely seamed |
 
+B-2's command counts the spelling of the argument, not its type: a
+`symbol.set_type(t)` whose `t` is a `type2tc` still matches, because the `2tc`
+token is at the declaration and not at the call. Measuring jimple's declaration
+sites found this (`scope-jimple-irep2.md` §32.3) — read B-2 as an upper bound
+whose lines each need inspecting, not as a count.
+
 B-1/B-2 are frontend-local. **B-3 and B-4 are shared** — they are one repo-wide
 job each, not five. That asymmetry is the whole shape of this program: do the
 two shared jobs once, then the five frontends become largely mechanical.

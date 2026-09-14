@@ -1379,3 +1379,200 @@ arms listed in §31.1.
 Next is not another jimple slice: it is `to_typet` -> `type2tc` at the
 *declaration* sites (`create_jimple_symbolt` still takes a `typet`, §23), which
 is a different shape of change, or a return to the parent document's Phase list.
+
+## 32. The declaration sites: `create_jimple_symbolt` takes a `type2tc`
+
+§31.3 named this as the next step, and it is a different shape of change from
+the twenty-one slices before it. Those migrated a *body*: one `to_exprt`
+override gained a `to_expr2t` twin, and the gate was that the GOTO stayed
+byte-identical. This one migrates a *signature*. `create_jimple_symbolt` and
+`get_temp_symbol` (`jimple_ast.h`) now take a `const type2tc &`, all nine call
+sites were adjusted, and the two other symbol builders in that header
+(`get_allocation_function`, `get_lengthof_function`) spell their signatures in
+IREP2 instead of assembling a `code_typet`.
+
+### 32.1 What `symbolt` actually does, which is not what this slice first assumed
+
+The first draft of this section claimed `symbolt` holds the IREP2 type as its
+source of truth, so `set_type(typet)` migrated on the way in and each
+declaration site was building a `typet` only to have it converted. That is
+wrong, and the review that caught it is worth recording. `set_type(const typet
+&)` writes the legacy field and *invalidates* the IREP2 one
+(`src/util/symtab/symbol.cpp:36-47`); the forward migration happens lazily on
+the first `get_type2()` (`symbol.cpp:97-107`). The header says why: the lazy
+split avoids forward-migrating a `typet` whose sub-expressions may not survive
+a recursive descent.
+
+So the honest accounting of this slice is the opposite of a saving. Three sites
+now build the type natively and never touch the legacy form; six migrate at the
+boundary, and for those the migration is work the old code did not do — at two
+of them it is provably wasted, because the symbol's type is overwritten
+legacy-side a few lines later (`jimple_file.cpp:159`, `jimple_method.cpp:92`),
+which discards what the boundary migration produced. What the slice buys is
+that the seam's *signature* no longer accepts a legacy type, so the three
+natively-built sites cannot regress to one, and §32.5's blocker becomes visible
+rather than latent.
+
+### 32.2 Three sites convert natively, six migrate at the boundary
+
+Native, via `jimple_type::to_type2t(ctx)`: both `jimple_declaration` sites
+(`to_exprt` and `to_code2t`). The equivalence is not obvious, because the two
+converters do not take the same route for a class type: `to_typet`'s default arm
+is `pointer_typet(symbol->get_type())` and `to_type2t`'s is
+`pointer_type2tc(migrate_symbol_type(*symbol))`. The argument is the write order,
+not a round-trip property: the class symbol's legacy side is the last written
+(`jimple_file.cpp:159`), so `get_type2()` *is* `migrate_type(get_type())` by
+construction. The only window where the IREP2 side is last-written runs from
+`jimple_file.cpp:130` to `:159`, where the struct is empty in both forms.
+
+An earlier draft argued this from `migrate_symbol_type`'s round-trip assertion
+instead. That argument is void in the configuration the gate ran in: the
+assertion is inside `#ifndef NDEBUG` (`migrate.cpp:466-476`) and this build is
+RelWithDebInfo, `-DNDEBUG`. `strings` on the binary finds no "not stable under
+IREP2" message. An assertion compiled out is not evidence.
+
+`jimple_assertion::to_exprt` converts natively too, by construction rather than
+by a converter. A default `code_typet` sets only `id(code)`, so its argument list
+is empty, `has_ellipsis()` is false, and its return type is *absent* — the const
+accessor is `find_type`, so the code arm migrates an id-less `typet`, which
+`migrate_type` maps to the empty type (`migrate.cpp:385-388`). The IREP2
+spelling is therefore `code_type2tc({}, get_empty_type(), {}, /*ellipsis=*/false)`.
+Two reviews reached opposite conclusions about this, one of them reading the nil
+id as falling through to `migrate_type`'s throw, so it is now pinned in
+`unit/util/migrate.test.cpp` ("a default code_typet migrates to a void
+signature") rather than argued. A trap found while writing that test: probing
+with `code_typet().return_type().is_nil()` returns false, because on a non-const
+object `return_type()` is `add_type` and *creates* the sub-irep it is being asked
+about. Probe absence with `find("return_type").is_nil()`.
+
+The remaining six keep `migrate_type` at the call:
+
+| Site | Type it assembles |
+|---|---|
+| `jimple_file::to_exprt` | `struct_typet`, tagged with the class name, still empty here |
+| `jimple_method::to_exprt`, the method symbol | `code_typet`, arguments appended as `code_typet::argumentt` |
+| `jimple_method::to_exprt`, the `this` parameter | `int_type()`, with a standing TODO to make it the struct |
+| `jimple_method::to_exprt`, each declared parameter | from `jimple_type::to_typet` |
+| `jimple_newarray::to_exprt` and `::to_expr2t`, the temp symbol | `pointer_typet(base_type)` |
+
+These are not the same job. The first two build a type incrementally, so
+converting them means converting the assembly — and §32.5 shows the second one
+cannot be converted at all yet. The `newarray` sites keep the legacy `base_type`
+regardless, because the allocation arithmetic reads a width off it.
+
+### 32.3 Four of the nine sites are unreachable, and the dump gate reaches two
+
+`ctest -R jimple` is 26/26 and every test's `--goto-functions-only` output is
+byte-identical to the pre-change baseline, excluding the timing lines and the
+version banner. Capture stderr: `--goto-functions-only` prints there, so a
+baseline captured from stdout is empty and comparing against it proves nothing.
+
+That gate is much weaker than it looks, in two independent ways.
+
+First, four sites never execute. `jimple_assertion` is constructed nowhere in
+`src/`: no key in `jimple_full_method_body::from_map` yields it, and Kotlin
+assertions arrive as `java.lang.AssertionError` invokes that are skipped
+(`jimple_statement.cpp:411-414`). `jimple_declaration::to_exprt` and
+`jimple_newarray::to_exprt` sit in the legacy `to_exprt` subtree that the live
+dispatch no longer enters, each shadowed by its own `to_code2t`/`to_expr2t`
+override. A per-site breakpoint count over all 26 tests measures them at zero,
+and the live counts reconcile exactly with the count at the shared body, so the
+zeros are real and not an instrumentation artefact.
+
+Second, the dump does not print what this slice changes. Types appear in a GOTO
+dump at `DECL`, inside `NONDET`/`MALLOC`, and in casts; function signatures and
+parameter symbols' types do not appear at all. So the dump constrains the
+`to_code2t` declaration site directly and the class struct transitively, and
+says nothing about the method signature, the parameter symbols, or the temp
+symbol.
+
+### 32.4 The test that does pin it, and three mutations that prove it
+
+The instrument that observes these types is `--symbol-table-only`, which renders
+each symbol's type and is validated like any other output — the harness matches
+line 4+ regexes against stdout and stderr concatenated.
+`github_4715_symbol_table_types_01` is one Jimple class carrying a field, a
+non-static method with a declared parameter, a local, a `newarray` and a
+`lengthof`, and it pins nine rendered types: the class struct, the method
+signature, `@this`, `@parameter0`, the local, the array local, the discarded
+temp symbol, and both converted helper signatures.
+
+Pin each type to *its own* symbol. The obvious spelling — the symbol's name,
+then a lazy gap, then the type line — does not bite: the gap happily runs past a
+wrong type into the next symbol's block and matches there. The table has a fixed
+layout, so `^Symbol\.+: X\n(?:.*\n){3}Type\.+: Y$` is the form that holds.
+
+Three mutations, each rebuilt and measured:
+
+| Mutation | New test | 26 old tests | 26 GOTO dumps |
+|---|---|---|---|
+| `malloc`'s argument `uint_type2()` → `int_type2()` | **FAILED** | pass | identical |
+| `@this` symbol's type wrapped in a pointer | **FAILED** | pass | identical |
+| `newarray` temp symbol loses a pointer level | **FAILED** | pass | identical |
+
+Every one of the three is invisible to the byte-identical dump comparison *and*
+to the whole pre-existing corpus. That is the measured answer to whether this
+slice needed a test: the dump gate was never watching the sites the slice
+changed, and one test that reads the symbol table is worth more here than any
+number of verdict assertions. No `VERIFICATION FAILED` counterpart is added,
+because nothing about the change moves a verdict — the failing halves of
+`github_4715_irep2_bodies_jimple_01` and `_legacy_body_throw_01` already pin the
+counterexample side of this seam.
+
+### 32.5 Why the two completion sites cannot follow, measured
+
+`jimple_file.cpp:159` and `jimple_method.cpp:92` overwrite the symbol's type
+legacy-side once the struct's components and the method's arguments are known.
+Converting them is the obvious next step and it does not work yet.
+
+`jimple_file.cpp:158` sets a legacy `width` attribute on the struct, and
+`migrate_type_back` does not restore it: the struct arm rebuilds components,
+tag, `packed` and `alignment` and nothing else (`migrate.cpp:3141-3168`). So
+making the class symbol IREP2-authoritative makes its derived legacy type lose
+`width`, and `jimple_newarray` reads exactly that — `std::stoi(base_type.
+subtype().width().as_string())` at `jimple_expr.cpp:575` and `:622`. The reader
+has to stop asking a legacy attribute for the size before the writer can move.
+That, not the `code_typet` assembly, is the next slice.
+
+### 32.6 What this did to the parent document's bars, and a caveat on B-2
+
+`frontends-to-irep2.md` §1 sets four bars per frontend. Measured on this branch
+against its parent commit:
+
+| Bar | Before | After |
+|---|---|---|
+| B-1 legacy type mentions | 202 | 190 |
+| B-2 non-IREP2 symbol-table writes | 10 | 8 |
+
+B-2's command counts the *spelling* of the argument, not its type:
+`symbol.set_type(t)` with `t` a `type2tc` is exactly what the bar asks for and
+the grep still counts it, because the token `2tc` is at the declaration and not
+at the call. Read it as an upper bound whose lines each need inspecting. Of the
+eight that remain, two are false positives (`jimple_ast.h:69`, and
+`jimple_method.cpp:93`, whose argument is a `code_block2t` built by `to_code2t`),
+two are the completion sites §32.5 blocks, and four are in
+`jimple-language.cpp`.
+
+### 32.7 Status, and what was deliberately left
+
+Twenty-two PRs. The expression and statement migrations are complete (§31.1);
+the declaration seam now takes an IREP2 type, natively built at three of nine
+call sites and migrated at the boundary at the other six.
+
+Reviewed and deliberately not done here, each its own change:
+
+- Deleting `jimple_assertion`. It is orphaned scaffolding rather than a
+  reference arm, so deletion is right, but it is a removal with its own
+  justification and a unit test referencing the class.
+- Deleting the unreachable `BASE_TYPES::BOOLEAN` arm. `get_base_type` has it and
+  `get_base_type2` documents its absence (§23.1); the asymmetry is a drift trap
+  now that `get_base_type2` is the declaration sites' only path, but removing an
+  enumerator touches `from_map`.
+- `jimple_expr.cpp`'s write-only `alloc_type` local, whose `is_nil()` guard is a
+  branch: deleting a branch carries a proof obligation this slice has no reason
+  to discharge.
+- `get_temp_symbol`'s base name: `name += counter` with an `unsigned int`
+  appends a character with that code point, not the digits, and `id` uses the
+  pre-increment value while `name` uses the post-increment one. Invisible only
+  because the temp symbol is never referenced (§26). A one-line fix, and
+  `--symbol-table-only` can now pin it.
