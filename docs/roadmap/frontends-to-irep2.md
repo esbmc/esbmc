@@ -2648,3 +2648,54 @@ re-doing Phase 6 inside Phase 7.
 There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
 whole instrument — one binary A/B'd against itself — does not exist here. A
 census by verdict waits on it.
+
+## 44. A code type does not round-trip its argument identifiers (2026-09-14)
+
+`scope-jimple-irep2.md` §34.1 states that a code type round-trips, because
+`migrate_type_back` restores the argument identifiers and the ellipsis. The
+ellipsis part holds. The identifier part is wrong in a way that matters, and it
+cost twelve broken tests to find.
+
+`migrate_type_back`'s code arm does:
+
+```cpp
+args.back().set_identifier(ref2.argument_names[i]);
+```
+
+`set_identifier` writes `identifier` (`std_types.h:41`). But `cmt_identifier`
+writes **`#identifier`** (`irep.cpp:506`) -- a different field with a confusingly
+similar name. So an argument's `#identifier` is lost whenever a code type is stored
+IREP2-side and read back legacy-side.
+
+### 44.1 How it surfaced
+
+Converting three writes in `clang_cpp_convert_vft.cpp` to store IREP2 -- two thunk
+code types and one symbol type -- broke **12 of 1 058** `esbmc-cpp/cpp` tests:
+`functional{,_fail,_fail2}`, `github_5868_function_signatures{,_fail}`,
+`github_7540_{capacity_fail,capacity_write_fail,precision}`,
+`ostringstream_str{,_fail}` and `pmr_memory_resource{,_fail}`. All are
+standard-library models, which is where thunks are generated.
+
+The thunk body builder reads the field back:
+
+```cpp
+symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier()))
+```
+
+With the type stored IREP2-side that lookup is handed an empty name, so every
+thunk body it builds is wrong. The change is reverted; the failures return to the
+6 that fail on master anyway.
+
+### 44.2 Why jimple did not show it
+
+§34.1's claim was measured, on jimple, and jimple's method symbols really do
+survive -- its own code writes the argument names and never reads `cmt_identifier`
+back off a round-tripped type. The claim generalised from one frontend that does
+not exercise the lossy field to a statement about code types.
+
+So the rule is narrower than §34.1 says: **a code-type symbol may be stored
+IREP2-side only where no consumer reads an argument's `cmt_identifier`.** That
+holds for jimple's method symbols and not for C++ thunks. Either
+`migrate_type_back` should write both fields, or `code_type2t` needs to carry the
+comment identifier -- and until one of those, B-2 cannot be closed on
+`clang_cpp_convert_vft.cpp`.
