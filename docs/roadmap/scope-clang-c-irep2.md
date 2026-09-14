@@ -8122,8 +8122,8 @@ differs, which is what the metric counts. Shadow mode agreeing with the default
 places the difference in the IREP2 pass rather than in anything downstream of
 both.
 
-**The cause is not located.** Three candidates are eliminated, each by reading
-the code rather than by a corpus being quiet:
+**The cause is located -- §144 -- after three wrong candidates.** Each was
+eliminated by reading the code rather than by a corpus being quiet:
 
 - Not the legacy dispatcher. A `typecast` falls into `clang_c_adjust::adjust_expr`'s
   final `else`, which is `adjust_operands` followed by `adjust_base_to_derived`;
@@ -8136,9 +8136,70 @@ the code rather than by a corpus being quiet:
 
 Recorded at this depth deliberately. Two earlier causes in this campaign were
 refuted by measurement after being written down as fact (§136.5, §140), and a
-row with three eliminations is worth more to the next attempt than a fourth
-guess.
+row with three eliminations was worth more than a fourth guess -- §144 found the
+cause by instrumenting rather than reasoning, and it was in none of the three
+places.
 
 `regression/esbmc/github_4715_fnptr_cast_collapse` pins the default path's
 `ASSIGN p=&g;`. It carries no flag: the invariant is the default path's, and
 pinning it keeps that half from drifting while the flag half is chased.
+
+## 144. Parameter names are not part of a C function type (2026-09-14)
+
+§143.1's row, resolved. The method that worked was instrumentation, after three
+readings of plausible code had each been wrong.
+
+### 144.1 What the probes said, in order
+
+The legacy `adjust_decl` was instrumented to print the initialiser before its
+`adjust_expr` and after its `gen_typecast`:
+
+```
+PROBE decl before=symbol/code mid=address_of/pointer after=address_of/pointer
+```
+
+So on the default path **there is no cast at any point**. The initialiser arrives
+as the bare code-typed symbol `g`; `adjust_symbol` rewrites it to `&g`; and
+`gen_typecast` adds nothing. The cast in the flag output is therefore *added by
+the IREP2 pass*, not retained by it -- the opposite of what §143.1 assumed when
+it looked for whatever removed it.
+
+Instrumenting `adjust_decl_init` then showed the initialiser already `address_of`
+of `pointer` type and the declared type also `pointer`, with `equal=0`. A field
+comparison narrowed it to one field:
+
+```
+PROBE di2 sub_eq=0 prov=0/0 refk=0/0 subkind=code/code
+PROBE di3 ret_eq=1 args_eq=1 names_eq=0 ell=0/0 nargs=1/1
+```
+
+Return type, argument types, arity, ellipsis and both pointer flags agree. Only
+`argument_names` differs: `g`'s own type names its parameter, the declared
+`int (*p)(int)` does not.
+
+### 144.2 The fix, and where it is not
+
+C11 6.7.6.3p15 requires compatible return types and agreeing parameter type
+lists for two function types to be compatible; it says nothing about parameter
+names, because they are not part of the type. `code_type2t` reflects
+`argument_names`, so `==` separates two types C calls the same, and
+`convert_to_pointer` then takes its `do_typecast` branch where the irept copy
+takes none.
+
+`same_c_type` in `c_typecast.cpp` answers that question, and both places that
+asked it with `==` now use it. Two earlier attempts at the fix missed:
+`adjust_decl_init` (skipping a code-typed initialiser changed nothing, because by
+then the designator sugar had already run) and `implicit_typecast_followed`'s
+final comparison (never reached -- `convert_to_pointer` returns first). Only the
+third landed, which is why the probe output above is in this section rather than a
+narrative.
+
+### 144.3 Gate
+
+The change is in the IREP2 overload only, so the default path cannot see it. All
+22 §143 probes now agree, and so do the 112 clang-c flag tests, the 49 python
+IREP2 flag tests, and the unit suite.
+
+`github_4715_fnptr_cast_collapse_irep2` pins the flag half; reverting
+`same_c_type` to a bare `==` fails it and leaves the default-path half passing,
+which is the pair §143.1 could not write while the flag path diverged.
