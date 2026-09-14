@@ -149,6 +149,13 @@ private:
    * module's body does not hold it, from the module that defines it (#7546).
    */
   nlohmann::json find_class_node(const std::string &name) const;
+  bool resolves_to_staticmethod(
+    const nlohmann::json &class_node,
+    const std::string &method) const;
+  const symbolt *
+  find_inherited_classmethod(const std::string &func_symbol_id) const;
+  std::optional<exprt>
+  build_post_init_forward_call(const std::string &func_symbol_id);
 
   /*
    * Retrieves the object (caller) name from the AST.

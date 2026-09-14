@@ -1,6 +1,6 @@
 // [iosfwd.syn] declares streamoff and streampos at namespace scope; the model
 // had them only inside class ios, so the standard spelling did not parse
-// (#7540). Their width is unchanged and still not standard-conforming.
+// (#7540). github_7540_width pins their width.
 #include <cassert>
 #include <ios>
 

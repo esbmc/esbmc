@@ -1,6 +1,5 @@
-# A @staticmethod inherited from a base is still classified as an instance
-# method, so the receiver is bound and the operands shift. Pre-existing: the
-# decorator lookup searches the receiver's own class body only (#7546).
+# A @staticmethod inherited from a base binds no receiver either, so the
+# derived-class call must not pass the instance as the first argument (#7546).
 class B:
     @staticmethod
     def add(a: int, b: int) -> int:

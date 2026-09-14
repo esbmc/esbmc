@@ -8,6 +8,7 @@
 #include <util/config/cmdline.h>
 #include <util/config/config.h>
 #include <irep2/irep2.h>
+#include <util/irep/std_expr.h>
 #include <util/config/parseoptions.h>
 
 const struct group_opt_templ python2goto_options[] = {
@@ -68,6 +69,26 @@ public:
       return 1;
     if (typecheck())
       return 1;
+
+    /* A model symbol: one converted from a models/ source, plus the initialiser
+     * built for their globals. Everything else here is the clib closure their
+     * calls resolve against, which esbmc links itself. */
+    auto is_model = [](const symbolt &s) {
+      return s.id.as_string().compare(0, 3, "py:") == 0 ||
+             s.id == "python_models_init";
+    };
+
+    context.Foreach_operand([&is_model](symbolt &s) {
+      if (!s.is_type && s.get_type().is_code() && !is_model(s))
+        s.set_value(nil_exprt());
+    });
+
+    goto_convert(context, config.options, goto_functions);
+
+    context.Foreach_operand([&is_model](symbolt &s) {
+      if (!s.is_type && s.get_type().is_code() && is_model(s))
+        s.set_value(nil_exprt());
+    });
 
     std::ofstream out(
       cmdline.getval("output"), std::ios::out | std::ios::binary);
