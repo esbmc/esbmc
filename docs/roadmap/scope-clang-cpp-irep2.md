@@ -2438,3 +2438,54 @@ Two things that number does *not* say, and both belong next to it:
   not yet build IREP2 natively end to end, which is what §1's bar asks for. What
   agreement buys is the right to consider making the flag the default — and that
   needs an SV-COMP run, since it moves every C++ verdict path.
+
+## 9. Twelve probes, written without reference to this branch
+
+§7 and §8 swept the whole corpus, which is the broad measurement. This is the
+narrow one, and it is worth having because the corpus was also what the branch was
+developed against: a probe set written fresh, from the C++ feature list rather
+than from the diff, and run on master first.
+
+Twelve constructs: a virtual call through a base pointer, an lvalue and a const
+reference, a function template at two instantiations, an overloaded `operator+`,
+`throw`/`catch` of an `int`, a scoped constructor and destructor, `new`/`delete`,
+a capturing lambda, multiple inheritance with a cast to the second base, a static
+data member, a default argument, and `std::vector::push_back`.
+
+| | master | this branch |
+|---|---|---|
+| agree | 10 | **12** |
+| diverge | 2 | 0 |
+| abort under asserts | 0 | 0 |
+
+### 9.1 Which two, and why it matters that they were not chosen
+
+On master the two that diverge are `v05_exception` and `v12_vector`, and their
+shapes are exactly the families this branch addresses:
+
+- the uncaught-exception assertion names the type `signed_int` on the default path
+  and `signedbv` under the flag, and `__ESBMC_exc_site` differs -- the
+  exception-id-at-conversion-time work;
+- the vector model shows `val ? &"1"[0] : &"0"[0]` against
+  `&(val ? "1" : "0")[0]`, the per-arm conditional decay, and
+  `__refcnted_cstr(&this->msg)` against `this->msg=__refcnted_cstr()`, the
+  constructor fold.
+
+Nothing in the probe set was selected for those; the list is a textbook C++
+feature enumeration. That the two failures land on the two families this branch
+fixes, and that all twelve agree once it is applied, is the strongest evidence
+available that its scope was the right one rather than a scope fitted to whatever
+the corpus happened to contain.
+
+### 9.2 What it says about the rest of C++
+
+Ten agree on master already, including the constructs a reader would most expect
+to be hard: virtual dispatch, multiple inheritance with a displaced second base,
+templates, operator overloading, destructor scoping, `new`/`delete` and a
+capturing lambda. So the C++ hop-off's remaining divergence is not spread thinly
+across the language; before this branch it was two families, and after it, over
+this probe set, none.
+
+Run under `DebugOpt`, so with asserts: no probe aborts on either tree, which the
+byte-identical comparison alone would not have shown
+(`scope-jimple-irep2.md` §38.4a).
