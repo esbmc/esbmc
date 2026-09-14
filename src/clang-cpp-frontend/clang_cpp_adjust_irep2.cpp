@@ -497,6 +497,20 @@ void clang_cpp_adjust_irep2::adjust_reference(expr2tc &expr)
   });
 }
 
+/// A dynamic `throw(T...)` specification reaches this pass with its declared
+/// types unresolved; left so, the specification permits nothing and every throw
+/// through such a function reports "exception specification violated". The
+/// legacy pass resolves it in adjust_symbol, which this pass replaces.
+void clang_cpp_adjust_irep2::adjust_symbol_type(symbolt &symbol)
+{
+  if (!symbol.get_type().is_code())
+    return;
+
+  typet t = symbol.get_type();
+  finalize_exception_specification(ns, t);
+  symbol.set_type(std::move(t));
+}
+
 void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)
 {
   // The legacy pass generates these *after* adjusting the body; here they are

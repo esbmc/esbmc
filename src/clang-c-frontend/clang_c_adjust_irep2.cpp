@@ -48,6 +48,9 @@ bool clang_c_adjust_irep2::adjust()
       has_prefix(s->id.as_string(), "c:@F@main"))
       declare_argc_argv(context, *s);
 
+    if (sole_adjuster)
+      adjust_symbol_type(*s);
+
     if (!s->is_type && s->get_value().is_not_nil())
     {
       gen_symbol_code(*s);

@@ -299,6 +299,13 @@ protected:
   {
   }
 
+  /// Per-symbol *type* work, run for every symbol including the value-less
+  /// ones. C has none; C++ resolves a dynamic exception specification here
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §7.7).
+  virtual void adjust_symbol_type(symbolt &)
+  {
+  }
+
   /// A rewrite whose *result* must be walked, so it cannot be an arm: the arms
   /// run after the operand walk. The legacy passes dispatch top-down and get
   /// this ordering for free. C has no such rewrite

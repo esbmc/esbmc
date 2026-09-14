@@ -2213,3 +2213,27 @@ needed for this family; reconstruction from the width would not have worked
 anyway, since on this target a 32-bit signed type is `signed_int` or `wchar_t`, a
 64-bit one `signed_long` or `signed_long_long`, and picking wrong turns a valid
 `catch` into a false "uncaught exception" with the same symptom.
+
+### 7.7 The other 11: a dynamic exception specification is never resolved
+
+`exception specification violated` on 11 rows, and §3.14 named the right function
+for them: `clang_cpp_adjust::finalize_exception_specification`. The converter
+stashes a `throw(T...)` specification's declared types under
+`exception_spec_decl`; the legacy pass resolves them to exception ids in
+`adjust_symbol`, once the namespace is populated. The IREP2 pass *replaces*
+`adjust_symbol`, and had no counterpart — so the specification reached symex with
+its declared list unresolved, which permits nothing, and every throw through such
+a function was a violation.
+
+Two moves, both small. The finaliser leaves `clang_cpp_adjust` for
+`clang_cpp_exception_id.{h,cpp}`, next to `convert_exception_id` and shared for
+the same stated reason: it reads nothing but the namespace. And the C pass gains
+a per-symbol *type* hook, `adjust_symbol_type`, called for **every** symbol rather
+than only those with a value — `gen_symbol_code` is gated on a non-nil value, and
+a declaration with a specification and no body still needs resolving. C overrides
+nothing; C++ resolves the specification there.
+
+**All 27 `try_catch` rows now agree**, from 0 at the start of §7.6, and
+`ctest -R try_catch` is 174 of 174. `irep2_dynamic_exception_spec{,_fail}` pins
+it — both halves change outcome with the hook gated off, and the mode is pinned
+`c++11` because a dynamic specification is ill-formed in C++17.

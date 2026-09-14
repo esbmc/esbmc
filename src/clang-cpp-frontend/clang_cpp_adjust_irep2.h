@@ -25,6 +25,7 @@ public:
 
 protected:
   void gen_symbol_code(symbolt &symbol) override;
+  void adjust_symbol_type(symbolt &symbol) override;
 
   void adjust_sole_arms(expr2tc &expr) override;
 
