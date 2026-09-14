@@ -32,18 +32,18 @@ module_manager::module_manager(const std::string &module_search_path)
 {
 }
 
-std::shared_ptr<module> create_module(const fs::path &json_path)
+/// Read \p json_path into \p md, reporting whether it could. Only functions,
+/// classes and overloads may be added here -- see module::add_source for why.
+/// Diagnostics keep the create_module tag the messages have always carried.
+static bool populate_module(module &md, const fs::path &json_path)
 {
   std::ifstream json_file(json_path);
   if (!json_file.is_open())
   {
     log_warning(
       "[module_manager] create_module: failed to open {}", json_path.string());
-    return nullptr;
+    return false;
   }
-
-  std::string module_name = json_path.stem().string();
-  auto md = std::make_shared<module>(module_name);
 
   try
   {
@@ -60,7 +60,7 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
       log_error(
         "[module_manager] create_module: Invalid or missing 'body' in {}",
         json_path.string());
-      return nullptr;
+      return false;
     }
 
     for (const auto &node : ast["body"])
@@ -127,9 +127,9 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
           f.return_type_ = "None";
 
         if (json_utils::has_overload_decorator(node))
-          md->add_overload(node);
+          md.add_overload(node);
 
-        md->add_function(f);
+        md.add_function(f);
       }
       else if (node_type == "ClassDef")
       {
@@ -167,11 +167,10 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
           }
         }
 
-        md->add_class(c);
+        md.add_class(c);
       }
     }
-
-    return md;
+    return true;
   }
   catch (const nlohmann::json::type_error &e)
   {
@@ -180,20 +179,18 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
       json_path.string(),
       e.what(),
       e.id);
-    return nullptr;
   }
   catch (const nlohmann::json::parse_error &e)
   {
     // Catches JSON parsing errors (e.g., invalid JSON content)
     log_error("Error parsing the JSON {}: {}", json_path.string(), e.what());
-    return nullptr;
   }
   catch (const std::exception &e)
   {
     log_error(
       "Exception in create_module for {}: {}", json_path.string(), e.what());
-    return nullptr;
   }
+  return false;
 }
 
 void module_manager::load_directory(
@@ -204,35 +201,30 @@ void module_manager::load_directory(
   {
     if (entry.is_regular_file() && entry.path().extension() == ".json")
     {
-      // Create a module for the JSON file
-      auto submodule = create_module(entry.path());
-      if (submodule)
+      const std::string name = entry.path().stem().string();
+
+      // The entry-script JSON is only at the top level; a submodule whose
+      // basename happens to match (e.g. kernels/<main>.py) is a distinct
+      // module and must be loaded.
+      if (!parent_module && main_module_ == name)
+        continue;
+
+      // find_module is a top-level lookup, so two files sharing a stem merge
+      // into one node even when one of them is a submodule: `import pkg.math`
+      // attaches pkg/math.json to the stdlib `math` model and leaves pkg.math
+      // unresolvable. Pre-existing (the old code merged their functions and
+      // classes the same way); preserved here rather than fixed.
+      auto current_module = find_module(name);
+      if (!current_module)
       {
-        // The entry-script JSON is only at the top level; a submodule whose
-        // basename happens to match (e.g. kernels/<main>.py) is a distinct
-        // module and must be loaded.
-        if (!parent_module && main_module_ == submodule->name())
-        {
-          continue;
-        }
-
-        auto current_module = get_module(submodule->name());
-        if (current_module)
-        {
-          current_module->add_functions(submodule->functions());
-          current_module->add_classes(submodule->classes());
-          continue;
-        }
-
+        current_module = std::make_shared<module>(name);
+        ++discovered_;
         if (parent_module)
-        {
-          parent_module->add_submodule(submodule); // Add to the parent module
-        }
+          parent_module->add_submodule(current_module);
         else
-        {
-          modules_.insert(submodule); // Add to the top level
-        }
+          modules_.insert(current_module);
       }
+      current_module->add_source(entry.path().string());
     }
     else if (entry.is_directory())
     {
@@ -265,10 +257,11 @@ ModulePtr module_manager::get_module_from_dir(
     if (!current_module)
     {
       // If there is no parent module, create or get it at the top level
-      current_module = get_module(module_name);
+      current_module = find_module(module_name);
       if (!current_module && !module_name.empty())
       {
         current_module = std::make_shared<module>(module_name);
+        ++discovered_;
         modules_.insert(current_module);
       }
     }
@@ -285,6 +278,7 @@ ModulePtr module_manager::get_module_from_dir(
       if (existing_submodule == current_module->submodules().end())
       {
         auto new_submodule = std::make_shared<module>(module_name);
+        ++discovered_;
         current_module->add_submodule(new_submodule);
         current_module = new_submodule;
       }
@@ -357,9 +351,55 @@ ModulePtr get_module_recursive(
   return nullptr; // Return nullptr if the module is not found
 }
 
-const ModulePtr module_manager::get_module(const std::string &module_name) const
+const ModulePtr
+module_manager::find_module(const std::string &module_name) const
 {
   std::vector<std::string> parts = split(module_name, '.');
-  auto result = get_module_recursive(parts, modules_);
-  return result;
+  return get_module_recursive(parts, modules_);
+}
+
+bool module_manager::hydrate(const ModulePtr &mod)
+{
+  if (!mod)
+    return false;
+
+  if (mod->hydrated())
+    return mod->readable();
+
+  // Set before parsing, not after: a source that throws past populate_module's
+  // handlers would otherwise be retried on every lookup, and overloads_ is a
+  // vector, so a retry would append duplicates.
+  mod->mark_hydrated();
+  if (mod->sources().empty())
+    return true;
+
+  ++parsed_;
+  bool any = false;
+  // By index: populate_module must not add sources (module::add_source), but
+  // indexing costs nothing and does not depend on it holding.
+  for (std::size_t i = 0; i < mod->sources().size(); ++i)
+    any |= populate_module(*mod, mod->sources()[i]);
+
+  mod->set_readable(any);
+  return any;
+}
+
+module_manager::~module_manager()
+{
+  log_debug(
+    "python",
+    "module cache: {} modules discovered, {} parsed",
+    discovered_,
+    parsed_);
+}
+
+const ModulePtr module_manager::get_module(const std::string &module_name)
+{
+  const ModulePtr result = find_module(module_name);
+
+  // A module whose every source failed to parse answers as absent, the way it
+  // did when the parse happened during the directory walk: callers branch on
+  // null, and an empty module would take a different path through the
+  // annotator's import and attribute resolution.
+  return hydrate(result) ? result : nullptr;
 }
