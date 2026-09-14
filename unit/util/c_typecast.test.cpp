@@ -409,6 +409,80 @@ static void require_overloads_agree(
   REQUIRE(legacy_migrated == native);
 }
 
+// A function's parameter names are not part of its type: C11 6.7.6.3p15 asks
+// only for compatible return types and agreeing parameter type lists. But
+// code_type2t reflects argument_names, so two types C calls the same compare
+// unequal as IREP2 nodes, and the expr2tc copy of convert_to_pointer inserted a
+// cast where the irept copy inserts none -- visible as a hop-off divergence on
+// `int (*p)(int) = (int (*)(int))g;` (scope-clang-c-irep2.md §144).
+static code_typet one_arg_code(const irep_idt &param_identifier)
+{
+  code_typet t;
+  t.return_type() = int_type();
+  code_typet::argumentt arg(int_type());
+  if (!param_identifier.empty())
+  {
+    arg.cmt_base_name("x");
+    arg.set_identifier(param_identifier);
+  }
+  t.arguments().push_back(arg);
+  return t;
+}
+
+TEST_CASE(
+  "both c_implicit_typecast overloads agree on function pointers",
+  "[c_typecast]")
+{
+  contextt ctx;
+  namespacet ns(ctx);
+
+  const code_typet named = one_arg_code("g::x");
+  const code_typet unnamed = one_arg_code(irep_idt());
+
+  // The two spellings really do differ as IREP2 nodes, in argument_names only.
+  const type2tc named2 = migrate_type(named);
+  const type2tc unnamed2 = migrate_type(unnamed);
+  REQUIRE(named2 != unnamed2);
+  REQUIRE(to_code_type(named2).arguments == to_code_type(unnamed2).arguments);
+  REQUIRE(to_code_type(named2).ret_type == to_code_type(unnamed2).ret_type);
+  REQUIRE(
+    to_code_type(named2).argument_names !=
+    to_code_type(unnamed2).argument_names);
+
+  symbolt g;
+  g.id = "c:@F@g";
+  g.name = "g";
+  g.mode = "C";
+  g.set_type(named);
+  ctx.add(g);
+
+  const symbolt &gs = *ctx.find_symbol("c:@F@g");
+  symbol_exprt g_expr(gs.id, gs.get_type());
+  const exprt addr = address_of_exprt(g_expr);
+
+  // Assigning it to a pointer spelled without the parameter name, and to one
+  // spelled with it: neither is a conversion, so neither copy may add a cast.
+  require_overloads_agree(ns, addr, pointer_typet(unnamed));
+  require_overloads_agree(ns, addr, pointer_typet(named));
+
+  // A genuine difference in the signature is a conversion, and the two copies
+  // must still agree on it.
+  code_typet two_args = unnamed;
+  two_args.arguments().push_back(code_typet::argumentt(int_type()));
+  require_overloads_agree(ns, addr, pointer_typet(two_args));
+
+  code_typet other_return = unnamed;
+  other_return.return_type() = double_type();
+  require_overloads_agree(ns, addr, pointer_typet(other_return));
+
+  code_typet variadic = unnamed;
+  variadic.make_ellipsis();
+  require_overloads_agree(ns, addr, pointer_typet(variadic));
+
+  // And to void*, which is the conversion C does allow here.
+  require_overloads_agree(ns, addr, pointer_typet(empty_typet()));
+}
+
 TEST_CASE(
   "both c_implicit_typecast overloads agree on arithmetic conversions",
   "[c_typecast]")
