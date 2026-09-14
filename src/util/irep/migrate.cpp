@@ -80,6 +80,31 @@ static void restore_padding_flag(struct_union_typet::componentt &component)
     component.set_is_padding(true);
 }
 
+static struct_union_typet::componentst migrate_components_back(
+  const std::vector<type2tc> &members,
+  const std::vector<irep_idt> &names,
+  const std::vector<irep_idt> &pretty_names,
+  const std::vector<irep_idt> &base_names)
+{
+  struct_union_typet::componentst comps;
+  for (std::size_t idx = 0; idx < members.size(); idx++)
+  {
+    struct_union_typet::componentt component;
+    component.id("component");
+    component.type() = migrate_type_back(members[idx]);
+    component.set_name(names[idx]);
+    component.pretty_name(pretty_names[idx]);
+    // Only when there is one to restore. `base_name` is not a comment field, so
+    // writing it empty inserts a named_sub key that irept::operator== compares,
+    // making a round-tripped component unequal to the original (§46).
+    if (idx < base_names.size() && !base_names[idx].empty())
+      component.set_base_name(base_names[idx]);
+    restore_padding_flag(component);
+    comps.push_back(component);
+  }
+  return comps;
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -239,6 +264,7 @@ static type2tc migrate_type0(const typet &type)
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
     std::vector<irep_idt> pretty_names;
+    std::vector<irep_idt> base_names;
     const struct_typet &strct = to_struct_type(type);
     const struct_union_typet::componentst &comps = strct.components();
 
@@ -249,6 +275,7 @@ static type2tc migrate_type0(const typet &type)
       members.push_back(ref);
       names.push_back(comp.get(typet::a_name));
       pretty_names.push_back(comp.get(typet::a_pretty_name));
+      base_names.push_back(comp.get_base_name());
     }
 
     irep_idt name = type.get("tag");
@@ -257,7 +284,8 @@ static type2tc migrate_type0(const typet &type)
 
     bool packed = type.get_bool("packed");
 
-    return struct_type2tc(members, names, pretty_names, name, packed);
+    return struct_type2tc(
+      members, names, pretty_names, name, packed, base_names);
   }
 
   if (type.id() == typet::t_union)
@@ -3090,52 +3118,27 @@ static typet migrate_type_back_uncached(const type2tc &ref)
   }
   case type2t::struct_id:
   {
-    unsigned int idx;
-    struct_typet thetype;
-    struct_union_typet::componentst comps;
     const struct_type2t &ref2 = to_struct_type(ref);
+    struct_typet thetype;
 
-    idx = 0;
-    for (auto const &it : ref2.members)
-    {
-      struct_union_typet::componentt component;
-      component.id("component");
-      component.type() = migrate_type_back(it);
-      component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
-      restore_padding_flag(component);
-      comps.push_back(component);
-      idx++;
-    }
-
-    thetype.components() = comps;
-    thetype.set("tag", irep_idt(ref2.name));
+    thetype.components() = migrate_components_back(
+      ref2.members,
+      ref2.member_names,
+      ref2.member_pretty_names,
+      ref2.member_base_names);
+    thetype.set("tag", ref2.name);
     if (ref2.packed)
       thetype.set("packed", true);
     return thetype;
   }
   case type2t::union_id:
   {
-    unsigned int idx;
-    union_typet thetype;
-    struct_union_typet::componentst comps;
     const union_type2t &ref2 = to_union_type(ref);
+    union_typet thetype;
 
-    idx = 0;
-    for (auto const &it : ref2.members)
-    {
-      struct_union_typet::componentt component;
-      component.id("component");
-      component.type() = migrate_type_back(it);
-      component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
-      restore_padding_flag(component);
-      comps.push_back(component);
-      idx++;
-    }
-
-    thetype.components() = comps;
-    thetype.set("tag", irep_idt(ref2.name));
+    thetype.components() = migrate_components_back(
+      ref2.members, ref2.member_names, ref2.member_pretty_names, {});
+    thetype.set("tag", ref2.name);
     return thetype;
   }
   case type2t::code_id:
