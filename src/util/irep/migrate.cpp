@@ -160,6 +160,22 @@ static BigInt explicit_alignment(const typet &type)
   return v;
 }
 
+/// Type ids that carry no storage and so migrate to the empty type: an unset
+/// or nil id; an ellipsis, which is not a type at all; clang's BoundMember,
+/// the type of `obj.*pmf` before it is called, which is a placeholder rather
+/// than storage -- clang_c_adjust::adjust_ptr_mem replaces the whole node with
+/// the member function, and a ptr_mem2t typed empty is exactly that
+/// placeholder, a pointer-to-*data*-member selection carrying the member's own
+/// type (docs/roadmap/scope-clang-cpp-irep2.md §7.5); and the return types of a
+/// destructor and of a constructor, which is a void method on an existing
+/// object rather than something that returns a value.
+static bool migrates_to_empty(const typet &type)
+{
+  return type.id().as_string().empty() || type.id() == "nil" ||
+         type.id() == "ellipsis" || type.id() == typet::t_ptrmem ||
+         type.id() == "destructor" || type.id() == "constructor";
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -382,38 +398,8 @@ static type2tc migrate_type0(const typet &type)
     return cpp_name_type2tc(name, template_args);
   }
 
-  if (type.id().as_string().size() == 0 || type.id() == "nil")
-  {
+  if (migrates_to_empty(type))
     return get_empty_type();
-  }
-
-  if (type.id() == "ellipsis")
-  {
-    // Eh? Ellipsis isn't a type. It's a special case.
-    return get_empty_type();
-  }
-
-  // clang's BoundMember: the type of `obj.*pmf` before it is called, and a
-  // placeholder rather than storage -- clang_c_adjust::adjust_ptr_mem replaces
-  // the whole node with the member function. Empty is the round-trip-stable
-  // form, as it is for a constructor's return type, and a ptr_mem2t typed
-  // empty is exactly that placeholder: a pointer-to-*data*-member selection
-  // carries the member's own type (docs/roadmap/scope-clang-cpp-irep2.md §7.5).
-  if (type.id() == typet::t_ptrmem)
-    return get_empty_type();
-
-  if (type.id() == "destructor")
-  {
-    // This is a destructor return type. Which is nil.
-    return get_empty_type();
-  }
-
-  if (type.id() == "constructor")
-  {
-    // New operator returns something; constructor is a void method on an
-    // existing object.
-    return get_empty_type();
-  }
 
   if (type.id() == "incomplete_array")
   {
