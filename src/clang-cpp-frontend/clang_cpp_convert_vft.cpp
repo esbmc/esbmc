@@ -467,23 +467,25 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
    * Each argument symbol's id is of the form - "<thunk_func_symbol_ID>::<argument_base_name>"
    */
 
-  typet thunk_type = thunk_func_symb.get_type();
-  code_typet &code_type = to_code_type(thunk_type);
-  code_typet::argumentst &args = code_type.arguments();
-  for (unsigned i = 0; i < args.size(); i++)
+  const code_type2t &code_type = to_code_type(thunk_func_symb.get_type2());
+  // migrate_type gives one base name per argument, and the thunk's type comes
+  // from it (frontends-to-irep2.md §44).
+  assert(code_type.argument_base_names.size() == code_type.arguments.size());
+  std::vector<irep_idt> identifiers = code_type.argument_names;
+
+  for (std::size_t i = 0; i < code_type.arguments.size(); i++)
   {
-    code_typet::argumentt &arg = args[i];
-    irep_idt base_name = arg.get_base_name();
+    const irep_idt &base_name = code_type.argument_base_names[i];
 
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
     arg_symb.name = base_name;
     arg_symb.mode = mode;
     arg_symb.location = thunk_func_symb.location;
-    arg_symb.set_type(arg.type());
+    arg_symb.set_type(code_type.arguments[i]);
 
     // Change argument identifier field to thunk function
-    arg.set("#identifier", arg_symb.id);
+    identifiers[i] = arg_symb.id;
 
     // In a multi-file build the same class — and thus the same thunk — can be
     // converted once per translation unit that sees its definition. The thunk
@@ -506,7 +508,13 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
       abort();
     }
   }
-  thunk_func_symb.set_type(migrate_type(thunk_type));
+
+  thunk_func_symb.set_type(code_type2tc(
+    code_type.arguments,
+    code_type.ret_type,
+    identifiers,
+    code_type.ellipsis,
+    code_type.argument_base_names));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
