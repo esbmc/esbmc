@@ -2719,3 +2719,39 @@ program, so it stays its own PR; what is no longer open is which side is right.
 The 49 tests using the python flag all pass, before and after this measurement.
 They assert verdicts, and the divergence changes none -- which is exactly why it
 took a probe to see it.
+
+## 41. The python flag's divergence, filtered down to two known rows
+
+§40.2 found every python probe diverging and traced it to one model site. With
+that site filtered out, the same 12 probes show **zero** user-program divergence,
+so a second batch went after harder constructs: dict, tuple unpacking, string
+indexing, `try`/`except`/`raise`, a module global, default arguments, a list
+comprehension, inheritance with an override, simultaneous swap, `for`/`else`,
+`abs`/`max`/`min`, and nested loops with `continue`.
+
+Ten of the twelve agree. The two that do not are both already-known rows, and
+neither is an unported arm:
+
+| Probe | Shape | Status |
+|---|---|---|
+| `u01_dict` | `&a` against `&a[0]` on a `list_push` argument | §40.2/§40.4 -- address-equivalent, and the *legacy* side is the outlier |
+| `u01_dict`, `u03_string` | `(signed int)((signed char)x) == ...` against `(signed char)x == ...` | deliberate: `python_adjust.cpp` mirrors the usual arithmetic conversions only for shapes the SMT layer cannot encode |
+
+The second is worth quoting rather than re-deriving, because the code already
+says it: running `gen_typecast_arithmetic` on every relational node "was tried and
+rejected ... because it diverges corpus-wide from clang's promotions over the OM
+bodies", and the gate that replaced it admits a signedness mismatch and a
+float/integer mix while "a same-signedness width promotion (char vs int) is
+encodable and stays untouched". That is exactly the shape these two probes hit.
+
+### 41.1 What that means for Phase 9
+
+Twenty-four probes over two batches reduce to two characterised rows. Neither is
+a gap in the IREP2 pass: one is a legacy inconsistency (§40.4) and the other is a
+deliberate non-mirror with a prior failed attempt behind it. So the python flag's
+remaining divergence is a pair of *decisions*, not a backlog of porting work --
+and the next python step is to settle them, not to look for more gaps.
+
+Recorded because a raw diff count says the opposite. Every python program diverges
+under the flag, at 64 lines plus a handful more for a dict or a string, and none
+of it is an unported arm.
