@@ -70,14 +70,9 @@ public:
     if (typecheck())
       return 1;
 
-    /* Only the models belong in this blob. add_cprover_library brought the
-     * whole clib closure in so their calls resolve; dropping those bodies
-     * first keeps goto_convert to the models, and keeps esbmc's own copy of
-     * clib authoritative. */
-    /* What the converter produced for the models: their own symbols, plus the
-     * initialiser it builds for their globals (python_converter::convert,
-     * `building_library ? "python_models_init" : "python_init"`). Leaving the
-     * initialiser out drops every model global's initial value. */
+    /* A model symbol: one converted from models/*.py, plus the initialiser
+     * built for their globals. Everything else here is the clib closure their
+     * calls resolve against, which esbmc links itself. */
     auto is_model = [](const symbolt &s) {
       return s.id.as_string().compare(0, 3, "py:") == 0 ||
              s.id == "python_models_init";
@@ -88,11 +83,6 @@ public:
         s.set_value(nil_exprt());
     });
 
-    /* Lower the models here rather than leaving each body in its symbol's
-     * value for every esbmc run to lower again: converting them cost ~0.3s of
-     * a ~2s Python run, and the result is identical on every run. The values
-     * are dropped afterwards, so goto_convert_functions sees declarations and
-     * link_cpython_library_bodies supplies the bodies. */
     goto_convert(context, config.options, goto_functions);
 
     context.Foreach_operand([&is_model](symbolt &s) {

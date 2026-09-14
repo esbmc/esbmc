@@ -49,9 +49,6 @@
 
 namespace
 {
-/* The Python operational models ship already lowered, so their symbols reach
- * goto_convert as declarations and their bodies are attached afterwards.
- * Nothing to attach in a build without the frontend. */
 void link_python_model_bodies([[maybe_unused]] goto_functionst &goto_functions)
 {
 #ifdef ENABLE_PYTHON_FRONTEND

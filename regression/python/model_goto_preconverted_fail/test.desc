@@ -1,5 +1,0 @@
-CORE
-main.py
---verbosity python:9
-^model bodies: [1-9][0-9]* of [0-9]+ linked, 0 had no declaration$
-^VERIFICATION FAILED$
