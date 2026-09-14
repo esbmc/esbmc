@@ -209,14 +209,6 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  // Before the recursion, so the located spelling wins over the unlocated one
-  // the walk would otherwise reach first.
-  if (sole_adjuster && is_code_expression2t(expr))
-  {
-    const code_expression2t &stmt = to_code_expression2t(expr);
-    declare_implicit_callee(stmt.operand, stmt.location);
-  }
-
   // A call reached below a statement takes that statement's location; a
   // sideeffect2t has none of its own.
   const locationt saved_location = enclosing_location;
@@ -1611,9 +1603,7 @@ void clang_c_adjust_irep2::declare_polymorphic_builtin(expr2tc &expr)
   *call->callee = target;
 }
 
-void clang_c_adjust_irep2::declare_implicit_callee(
-  const expr2tc &expr,
-  const locationt &stmt_location)
+void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
 {
   // A bare `f(x);` statement is a sideeffect2t of kind function_call, not a
   // code_function_call2t; both spellings reach here. The const overload keeps
@@ -1626,12 +1616,11 @@ void clang_c_adjust_irep2::declare_implicit_callee(
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;
 
-  // Location stays per site. Both spellings now carry one of their own, so the
-  // caller's stmt_location is only a fallback for a sideeffect2t built without
-  // it -- and it is a lossy one: the statement names the statement, not the
-  // callee, so `int x = f(1);` would report the column of `int`, not of `f`
-  // (§110.3, §136).
-  locationt loc = stmt_location;
+  // Location stays per site: both spellings carry one of their own since §136,
+  // which is what made the caller's statement-location fallback redundant
+  // (§141). A statement location would name the statement rather than the
+  // callee -- `int x = f(1);` would report the column of `int`.
+  locationt loc;
   if (is_code_function_call2t(expr))
     loc = to_code_function_call2t(expr).location;
   else if (const locationt &l = to_sideeffect2t(expr).location; l.is_not_nil())
