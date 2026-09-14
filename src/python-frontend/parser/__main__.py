@@ -14,6 +14,8 @@ if sys.version_info[0] != 3:
                      (sys.executable, sys.version_info[0], sys.version_info[1]))
     sys.exit(1)
 
+# pylint: disable=wrong-import-position
+# These are Python 3 only, so they must follow the guard above, not precede it.
 import importlib
 import os
 
