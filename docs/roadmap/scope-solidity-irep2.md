@@ -1760,12 +1760,30 @@ applied to `__ESBMC_array_push`'s result:
 ```
 
 Legacy casts to pointer-to-array-of-4; the IREP2 pass casts to
-pointer-to-pointer. Unlike the python row in `frontends-to-irep2.md` §40.4 this is
-not address-equivalent -- the pointee size differs, which is what pointer
-arithmetic and the next dereference read. Both paths verify SUCCESSFUL here, so
-nothing observable moves on this input, but the two types are not interchangeable
-in general and this is the kind of row that should be closed rather than
-characterised.
+pointer-to-pointer. The two are not interchangeable -- the pointee size differs,
+which is what pointer arithmetic and the next dereference read -- so this looked
+like the one row worth closing.
+
+**It is the legacy side that is wrong.** Three things in the same symbol-table dump
+settle it, all identical on both paths:
+
+```
+this->mixed = (unsigned _ExtInt(256) * * *)(calloc(2, sizeof(... * *)));
+... sizeof(unsigned _ExtInt(256) [4]) ...
+```
+
+`this->mixed` is `T***` on both paths, so `this->mixed[0]` is `T**`. The IREP2
+pass casts the pushed result to `T**`, which is the type of the lvalue it is
+assigned to; the legacy pass casts it to `T[4]*`, which is not. The `sizeof` the
+call is given is the same either way, so the allocation is unaffected.
+
+That is the same shape as the python row in `frontends-to-irep2.md` §40.4, and the
+same conclusion: the flag-on side agrees with the type system and the default path
+is the outlier. So Phase 8's corpus has **no row where the IREP2 pass is wrong** --
+513 agree, and the one that differs differs in the IREP2 pass's favour.
+
+Changing the default path is a behaviour change for every nested-array push, so it
+stays its own PR. What is settled is which side would be changed.
 
 ### 4.4 The abort is not ours
 
