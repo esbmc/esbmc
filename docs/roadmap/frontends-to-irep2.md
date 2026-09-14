@@ -30,6 +30,11 @@ token is at the declaration and not at the call. Measuring jimple's declaration
 sites found this (`scope-jimple-irep2.md` §32.3) — read B-2 as an upper bound
 whose lines each need inspecting, not as a count.
 
+**jimple has met B-2** (2026-09-14), by inspection rather than by the command:
+every `set_type`/`set_value` call in `src/jimple-frontend` passes an IREP2
+argument, and the command still prints 7 (`scope-jimple-irep2.md` §35.2 lists
+them).
+
 B-1/B-2 are frontend-local. **B-3 and B-4 are shared** — they are one repo-wide
 job each, not five. That asymmetry is the whole shape of this program: do the
 two shared jobs once, then the five frontends become largely mechanical.
