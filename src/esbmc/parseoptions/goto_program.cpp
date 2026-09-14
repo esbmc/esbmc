@@ -43,6 +43,7 @@
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
+#include <c2goto/cprover_library.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
@@ -649,6 +650,7 @@ bool esbmc_parseoptionst::parse_goto_program(
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
+    assert_no_pruned_calls(goto_functions);
   }
 
   catch (const char *e)

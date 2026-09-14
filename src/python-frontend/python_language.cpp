@@ -322,6 +322,12 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
     return py_adjuster.adjust();
   }
 
+  /* The models were linked wholesale before the converter ran, because the
+   * converter resolves their calls by name. Now that the program is in the
+   * context, drop the ones it cannot reach; assert_no_pruned_calls checks
+   * after goto_convert that nothing since has referenced one. */
+  prune_unreferenced_library_functions(context);
+
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
