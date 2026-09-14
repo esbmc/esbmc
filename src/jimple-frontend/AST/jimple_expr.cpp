@@ -599,15 +599,15 @@ expr2tc jimple_newarray::to_expr2t(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  typet base_type = type->to_typet(ctx);
+  const type2tc base_type = type->to_type2t(ctx);
 
   // to_exprt's temp symbol only ever becomes the lhs of a call it then
   // discards, but it is still entered into the context; keep that side effect.
-  symbolt tmp_symbol = get_temp_symbol(
-    pointer_type2tc(migrate_type(base_type)), class_name, function_name);
+  symbolt tmp_symbol =
+    get_temp_symbol(pointer_type2tc(base_type), class_name, function_name);
   ctx.move_symbol_to_context(tmp_symbol);
 
-  const type2tc uint2 = migrate_type(uint_type());
+  const type2tc uint2 = uint_type2();
 
   expr2tc alloc_size = size->to_expr2t(ctx, class_name, function_name);
   if (is_nil_expr(alloc_size))
@@ -616,18 +616,19 @@ expr2tc jimple_newarray::to_expr2t(
   symbolt alloca = get_allocation_function();
   symbolt &alloca_symbol = *ctx.move_symbol_to_context(alloca);
 
-  int type_width = 64;
-  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
-    type_width = std::stoi(
-      (base_type.is_pointer() ? base_type.subtype().width() : base_type.width())
-        .as_string());
+  // A row of a multi-dimensional array is a pointer. Keep the literal 64 the
+  // legacy arm used rather than the pointer type's own width, which would
+  // change the allocation on a 32-bit target.
+  const type2tc &element =
+    is_pointer_type(base_type) ? to_pointer_type(base_type).subtype : base_type;
+  unsigned int type_width =
+    is_pointer_type(element) ? 64 : element->get_width();
 
   expr2tc bytes =
     mul2tc(uint2, alloc_size, constant_int2tc(uint2, BigInt(type_width)));
 
   return side_effect_function_call2tc(
-    migrate_type(
-      static_cast<const typet &>(alloca_symbol.get_type().return_type())),
+    to_code_type(alloca_symbol.get_type2()).ret_type,
     symbol_expr2tc(alloca_symbol),
     {bytes});
 }
