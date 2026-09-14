@@ -48,7 +48,13 @@ void record_library_symbol(const irep_idt &id);
 /// between the two can introduce a reference this closure could not see, and
 /// that must fail loudly rather than leave a bodyless function returning
 /// nondet.
-void prune_unreferenced_library_functions(contextt &context);
+///
+/// \p prelowered carries the bodies of a library shipped as GOTO (the Python
+/// model blob), whose symbols reach the context with nil values: without it the
+/// walk sees no edge out of a model function and erases everything it calls.
+void prune_unreferenced_library_functions(
+  contextt &context,
+  const goto_functionst *prelowered = nullptr);
 
 /// Abort if any call in \p functions targets a symbol the prune erased.
 void assert_no_pruned_calls(const goto_functionst &functions);

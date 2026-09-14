@@ -606,7 +606,23 @@ void record_library_symbol(const irep_idt &id)
   library_ids.insert(id);
 }
 
-void prune_unreferenced_library_functions(contextt &context)
+/// Record every symbol \p e names, however deeply, as a dependency of \p from.
+static void collect_expr_deps(
+  const irep_idt &from,
+  const expr2tc &e,
+  std::multimap<irep_idt, irep_idt> &deps)
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_symbol2t(e))
+    deps.emplace(from, to_symbol2t(e).thename);
+  e->foreach_operand(
+    [&from, &deps](const expr2tc &op) { collect_expr_deps(from, op, deps); });
+}
+
+void prune_unreferenced_library_functions(
+  contextt &context,
+  const goto_functionst *prelowered)
 {
   if (library_ids.empty())
     return;
@@ -616,6 +632,16 @@ void prune_unreferenced_library_functions(contextt &context)
     generate_symbol_deps(s.id, s.get_value(), deps);
     generate_symbol_deps(s.id, s.get_type(), deps);
   });
+
+  /* A blob written after goto_convert leaves its symbols' values nil, so the
+   * walk above sees none of its edges. Take them from the bodies instead. */
+  if (prelowered)
+    for (const auto &named : prelowered->function_map)
+      for (const auto &ins : named.second.body.instructions)
+      {
+        collect_expr_deps(named.first, ins.code, deps);
+        collect_expr_deps(named.first, ins.guard, deps);
+      }
 
   /* Roots: everything the program itself contributed. A library symbol becomes
    * live only by being reached from one of them. */

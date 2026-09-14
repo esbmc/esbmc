@@ -1396,6 +1396,29 @@ bool python_converter::try_infer_numpy_param_type(
   return false;
 }
 
+/// A `Callable` annotation with no `[[A], R]` signature, spelled either bare or
+/// through `typing`. A subscripted one carries its return type and is usable.
+static bool is_bare_callable_annotation(const nlohmann::json &ann)
+{
+  if (!ann.is_object())
+    return false;
+  const std::string kind = ann.value("_type", "");
+  if (kind == "Name")
+    return ann.value("id", "") == "Callable";
+  if (kind == "Attribute")
+    return ann.value("attr", "") == "Callable";
+  return false;
+}
+
+/// Whether the parameter takes the Any (void*) default: no annotation at all,
+/// or a bare `Callable`, which is worse than none.
+static bool parameter_defaults_to_any(const nlohmann::json &element)
+{
+  if (!element.contains("annotation") || element["annotation"].is_null())
+    return true;
+  return is_bare_callable_annotation(element["annotation"]);
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -1414,10 +1437,12 @@ size_t python_converter::register_function_argument(
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
   else
   {
-    if (!element.contains("annotation") || element["annotation"].is_null())
+    if (parameter_defaults_to_any(element))
     {
       // Python does not require type annotations; treat unannotated parameters
-      // as Any (void*) to follow Python semantics.
+      // as Any (void*) to follow Python semantics. A bare `Callable` resolves
+      // to a pointer whose code type returns void, so a call through the
+      // parameter would carry no value -- Any is the better default (#7672).
       arg_type = any_type();
     }
     else

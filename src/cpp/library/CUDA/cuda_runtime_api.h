@@ -64,7 +64,10 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
   if (*devPtr == NULL)
     tmp = CUDA_ERROR_OUT_OF_MEMORY;
   else
+  {
+    __cudaDeviceOf[__ESBMC_POINTER_OBJECT(*devPtr)] = __cudaCurrentDevice + 1;
     tmp = CUDA_SUCCESS;
+  }
 
   //post-conditions
   __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
@@ -397,41 +400,20 @@ int cudaDeviceStart(int device)
 // Choose a device to work
 cudaError_t cudaSetDevice(int device)
 {
-  cudaDeviceList_t *auxDevice = cudaDeviceList;
-
-  while (auxDevice != NULL)
-  { //Scroll through the list
-    if (auxDevice->id == device)
-    { //Checks if the device
-      if (auxDevice->active == 1)
-      { //Verifies that the device is active
-        return cudaErrorDeviceAlreadyInUse;
-        lastError = cudaErrorDeviceAlreadyInUse;
-      }
-      auxDevice->active = 1;
-      lastError = cudaSuccess;
-      return cudaSuccess;
-    }
-    else
-      auxDevice = auxDevice->prox;
+  if (device < 0 || device >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
   }
-  //If not found, return cudaErrorInvalidDevice
-  lastError = cudaErrorInvalidDevice;
-  return cudaErrorInvalidDevice;
+  __cudaCurrentDevice = device;
+  lastError = cudaSuccess;
+  return cudaSuccess;
 }
 
 // Returns the number of compute-capable devices.
 cudaError_t cudaGetDeviceCount(int *count)
 {
-  /*
-	cudaDeviceList_t *auxDevice = cudaDeviceList;
-	int i;
-
-	while(auxDevice!=NULL){
-		i++;
-		auxDevice = auxDevice->prox;
-	}
-	 */
+  *count = __cudaDeviceCount;
   lastError = cudaSuccess;
   return cudaSuccess;
 }
@@ -732,14 +714,71 @@ extern __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(
   struct cudaPointerAttributes *attributes,
   const void *ptr);
 
-extern __host__ cudaError_t CUDARTAPI
-cudaDeviceCanAccessPeer(int *canAccessPeer, int device, int peerDevice);
+// The model does not know the platform's peer topology.
+cudaError_t
+cudaDeviceCanAccessPeer(int *canAccessPeer, int device, int peerDevice)
+{
+  if (
+    device < 0 || device >= __cudaDeviceCount || peerDevice < 0 ||
+    peerDevice >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  *canAccessPeer = nondet_bool();
+  lastError = cudaSuccess;
+  return cudaSuccess;
+}
 
-extern __host__ cudaError_t CUDARTAPI
-cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags);
+// Access is one-way: from the current device to peerDevice only.
+cudaError_t cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags)
+{
+  if (flags != 0)
+  {
+    lastError = CUDA_ERROR_INVALID_VALUE;
+    return CUDA_ERROR_INVALID_VALUE;
+  }
+  if (
+    peerDevice < 0 || peerDevice >= __cudaDeviceCount ||
+    peerDevice == __cudaCurrentDevice)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  const unsigned int pair = __cudaPeerIndex(__cudaCurrentDevice, peerDevice);
+  if (__cudaPeerAccess[pair])
+  {
+    lastError = CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED;
+    return CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED;
+  }
+  // Whether the current device can reach peerDevice is platform-dependent.
+  if (nondet_bool())
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  __cudaPeerAccess[pair] = 1;
+  lastError = cudaSuccess;
+  return cudaSuccess;
+}
 
-extern __host__ cudaError_t CUDARTAPI
-cudaDeviceDisablePeerAccess(int peerDevice);
+cudaError_t cudaDeviceDisablePeerAccess(int peerDevice)
+{
+  if (peerDevice < 0 || peerDevice >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  const unsigned int pair = __cudaPeerIndex(__cudaCurrentDevice, peerDevice);
+  if (!__cudaPeerAccess[pair])
+  {
+    lastError = CUDA_ERROR_PEER_ACCESS_NOT_ENABLED;
+    return CUDA_ERROR_PEER_ACCESS_NOT_ENABLED;
+  }
+  __cudaPeerAccess[pair] = 0;
+  lastError = cudaSuccess;
+  return cudaSuccess;
+}
 
 extern __host__ cudaError_t CUDARTAPI cudaBindTexture(
   size_t *offset,
