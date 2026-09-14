@@ -43,6 +43,9 @@
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
+#ifdef ENABLE_PYTHON_FRONTEND
+#  include <python-frontend/python_library.h>
+#endif
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_exceptions.h>
 #include <goto-programs/set_claims.h>
@@ -649,6 +652,13 @@ bool esbmc_parseoptionst::parse_goto_program(
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
+
+#ifdef ENABLE_PYTHON_FRONTEND
+    /* The Python operational models ship already lowered, so their symbols
+     * reach goto_convert as declarations and their bodies are attached here.
+     * A no-op for every other language: nothing read the blob. */
+    link_cpython_library_bodies(goto_functions);
+#endif
   }
 
   catch (const char *e)
