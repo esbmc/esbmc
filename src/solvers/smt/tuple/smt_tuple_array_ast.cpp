@@ -173,6 +173,21 @@ array_sym_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
   std::string sym_name = name + fieldname;
 
   const type2tc &restype = members[idx];
+
+  /* A member that is itself an array makes new_arr_type an array of arrays,
+   * which convert_sort flattens to an N*M domain -- while select() and
+   * update() below still hand it the outer, N-wide index, so mk_store gets an
+   * ill-sorted term. Representing the member properly needs a (base, stride)
+   * view over the flattened array; until that exists, say which construct is
+   * unsupported rather than trip an assertion deep in the backend (#37). */
+  if (is_array_type(restype))
+  {
+    log_error(
+      "--tuple-sym-flattener: a struct member of array type, inside an array "
+      "of structs, is not supported; use --tuple-node-flattener");
+    abort();
+  }
+
   type2tc new_arr_type =
     array_type2tc(restype, arr.array_size, arr.size_is_infinite);
   smt_sortt s = ctx->convert_sort(new_arr_type);

@@ -7,6 +7,8 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
+#include <solvers/smt/tuple/smt_tuple_concat.h>
+#include <solvers/smt/tuple/smt_tuple_soa.h>
 
 #include <unordered_map>
 
@@ -206,13 +208,23 @@ smt_convt *create_solver(
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
+  bool concat_flat = options.get_bool_option("tuple-concat-flattener");
+  bool soa_flat = options.get_bool_option("tuple-soa-flattener");
   bool array_flat = options.get_bool_option("array-flattener");
   bool fp_to_bv = options.get_bool_option("fp2bv");
 
   // Pick a tuple flattener to use. If the solver has native support, and no
   // options were given, use that by default
-  if (tuple_api != nullptr && !node_flat && !sym_flat)
+  if (
+    tuple_api != nullptr && !node_flat && !sym_flat && !concat_flat &&
+    !soa_flat)
     ctx->set_tuple_iface(tuple_api);
+  // Use the struct-of-arrays flattener if specified
+  else if (soa_flat)
+    ctx->set_tuple_iface(new smt_tuple_soa_flattener(ctx, ns));
+  // Use the concat flattener if specified
+  else if (concat_flat)
+    ctx->set_tuple_iface(new smt_tuple_concat_flattener(ctx, ns));
   // Use the node flattener if specified
   else if (node_flat)
     ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
