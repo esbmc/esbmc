@@ -19,9 +19,13 @@ run_row() {
   case "$kind" in KNOWNBUG|FUTURE) printf 'SKIP\t%s\tknownbug\t-\n' "$d" >> "$out"; return;; esac
   case "$flags" in *irep2*) printf 'SKIP\t%s\tpins-flag\t-\n' "$d" >> "$out"; return;; esac
   [ -f "$d/$src" ] || { printf 'SKIP\t%s\tno-source\t-\n' "$d" >> "$out"; return; }
+  # The flags line is a list of words, so it is split deliberately; an
+  # array does that without exposing the words to globbing too.
+  local -a flag_words
+  read -r -a flag_words <<<"$flags"
   local off on voff von
-  off=$( (cd "$d" && timeout 45 $E "$src" $flags 2>&1) )
-  on=$(  (cd "$d" && timeout 45 $E "$src" $flags --python-irep2-adjust-only 2>&1) )
+  off=$( (cd "$d" && timeout 45 "$E" "$src" "${flag_words[@]}" 2>&1) )
+  on=$(  (cd "$d" && timeout 45 "$E" "$src" "${flag_words[@]}" --python-irep2-adjust-only 2>&1) )
   voff=$(grep -oE '^VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN)' <<<"$off" | tail -1)
   von=$( grep -oE '^VERIFICATION (SUCCESSFUL|FAILED|UNKNOWN)' <<<"$on"  | tail -1)
   [ -z "$voff" ] && voff=none

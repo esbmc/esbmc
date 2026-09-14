@@ -729,6 +729,32 @@ static bool exception_id_needs_no_lookup(const typet &type)
          !type.cpp_type().empty();
 }
 
+/// Record a throw's exception ids at conversion time, for the operand types
+/// whose ids follow from the type alone.
+///
+/// A primitive's id is its `#cpp_type` spelling, and the IREP2 seam does not
+/// carry that: computed from a back-migrated type, `throw 1` reads as
+/// `signedbv` while the handler, whose ids never cross the seam, still reads
+/// `signed_int`, and the throw escapes uncaught. A class type is left to the
+/// adjust pass instead: its id is the type symbol's name, which crosses
+/// intact, and resolving its bases needs a lookup this early in conversion
+/// (docs/roadmap/scope-clang-cpp-irep2.md §7.6).
+static void
+record_primitive_exception_ids(exprt &throw_expr, const namespacet &ns)
+{
+  if (!exception_id_needs_no_lookup(throw_expr.op0().type()))
+    return;
+
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, throw_expr.op0().type(), "", ids);
+
+  irept exception_list("exception_list");
+  exception_list.get_sub().resize(ids.size());
+  for (std::size_t i = 0; i < ids.size(); i++)
+    exception_list.get_sub()[i].id(ids[i]);
+  throw_expr.set("exception_list", exception_list);
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -1459,25 +1485,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       // should).
       new_expr.type() = tmp.type();
 
-      // A primitive's exception id is its `#cpp_type` spelling, and the IREP2
-      // seam does not carry that: computed from a back-migrated type, `throw 1`
-      // reads as `signedbv` while the handler, whose ids never cross the seam,
-      // still reads `signed_int`, and the throw escapes uncaught. Recorded
-      // here, where the spelling is in hand. A class type is left to the adjust
-      // pass: its id is the type symbol's name, which crosses intact, and
-      // resolving its bases needs a lookup this early conversion cannot rely on
-      // (docs/roadmap/scope-clang-cpp-irep2.md §7.6).
-      if (exception_id_needs_no_lookup(new_expr.op0().type()))
-      {
-        std::vector<irep_idt> ids;
-        namespacet ns(context);
-        convert_exception_id(ns, new_expr.op0().type(), "", ids);
-        irept exception_list("exception_list");
-        exception_list.get_sub().resize(ids.size());
-        for (std::size_t i = 0; i < ids.size(); i++)
-          exception_list.get_sub()[i].id(ids[i]);
-        new_expr.set("exception_list", exception_list);
-      }
+      record_primitive_exception_ids(new_expr, namespacet(context));
     }
 
     break;
