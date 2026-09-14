@@ -2726,3 +2726,58 @@ converted, and `esbmc-cpp/cpp` is back to **6 failures out of 1 058**, the six
 master fails anyway (`ch8_5`, `github_7433*`). The 26 C++ probes of
 `scope-clang-cpp-irep2.md` §9-§10 abort nowhere, the Solidity suite is 525/525, and
 the unit suite is 874/874.
+
+## 45. A struct component loses its base name, and that blocks the rest of B-2
+
+§44.4 closed the code-type half of this. The struct half is the same defect with a
+larger blast radius, and it is what stops the remaining struct-typed symbol writes
+from moving.
+
+`struct_type2t` carries `members`, `member_names` and `member_pretty_names` --
+nothing else per component. So a component's `#base_name`, and any other attribute
+on it, is dropped by `migrate_type`. `unit/util/migrate.test.cpp` ("a struct
+component loses its base name") pins exactly that: `name` and `pretty_name` survive,
+`#base_name` and an arbitrary `#member_attr` do not.
+
+### 45.1 The measurement
+
+Converting the two vtable struct-type writes in `clang_cpp_convert_vft.cpp` to store
+IREP2 fails **653 of 1 058** `esbmc-cpp/cpp` tests. Not a subtle regression: the
+thunk builder takes its symbol name straight from the component,
+
+```cpp
+thunk_func_symb.name = component.base_name();
+```
+
+so every vtable component arrives with an empty base name and every thunk symbol is
+misnamed. Reverted; the suite returns to master's 6 failures.
+
+### 45.2 Why the earlier caution was right for the wrong reason
+
+`scope-clang-c-irep2.md` §139.3 declined to convert `pad_type_symbol` on the
+grounds that a padded struct's derived legacy form "loses what `migrate_type_back`
+does not restore", naming the `width` attribute and `#bitfield`. The conclusion
+holds; the reason given does not.
+
+A struct's legacy `width` is set in exactly one place in the tree --
+`jimple_file.cpp:158` -- and read only by jimple's own `newarray` arms. No C or C++
+struct symbol carries one, so losing it could not have been the blocker there. The
+blocker is the component base name, which every C++ vtable depends on.
+
+That distinction matters for the next attempt: it is not padding or bitfields that
+make a struct symbol unsafe to store IREP2-side, it is per-component metadata, and
+the fix is the §44.4 one applied to components rather than arguments.
+
+### 45.3 What closing it would take
+
+An unreflected `member_base_names` on `struct_type2t`, carried by both migrate
+arms, exactly as `argument_base_names` now is for code types. Unreflected for the
+same reason: a member's spelling is not part of the struct's identity, and making
+two otherwise-identical structs compare unequal would be a worse defect than the
+one being fixed.
+
+It is a wider change than the code-type one -- `struct_type2t` is far more heavily
+used, `union_type2t` shares its data base, and the field has to thread through
+`fields_cover_class` -- so it wants its own PR and its own gate rather than riding
+this one. With it, `pad_type_symbol`, the two vtable struct types, and
+`scope-jimple-irep2.md` §32.5's two completion sites all become tractable.
