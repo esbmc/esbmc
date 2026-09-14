@@ -1576,3 +1576,78 @@ Reviewed and deliberately not done here, each its own change:
   pre-increment value while `name` uses the post-increment one. Invisible only
   because the temp symbol is never referenced (§26). A one-line fix, and
   `--symbol-table-only` can now pin it.
+
+## 33. `jimple_newarray::to_expr2t` goes native, and two defects it exposes
+
+§32.5 named the width reader as the blocker on making the class symbol
+IREP2-authoritative, so this slice takes it. `to_expr2t` now builds no legacy
+type at all: the element type comes from `jimple_type::to_type2t`, the size type
+from `uint_type2()`, and the callee's return type from
+`to_code_type(alloca_symbol.get_type2()).ret_type` instead of a round trip
+through the symbol's derived legacy signature.
+
+The width itself comes from `type2t::get_width()`. That is sound here without
+any new arithmetic: `struct_type2t::get_width()` sums its members' widths
+(`irep2_type.cpp:199-209`), which is exactly what `jimple_file.cpp:158`
+accumulates into the legacy `width` attribute the old code read. The IREP2 form
+already carried the number.
+
+### 33.1 The campaign's gate was never in the repository
+
+No `test.desc` under `regression/jimple` had ever passed
+`--goto-functions-only`. Twenty-two slices were gated on a byte-identical GOTO
+comparison run out of a scratch directory, which is exactly the kind of claim the
+PR conventions ask not to rely on: nobody else can reproduce it, and it vanishes
+with the shell that produced it.
+
+`github_4715_newarray_alloc_size_01` puts one construct's worth of it in the
+repository, pinning both arms of the element-width choice from the dump itself:
+`MALLOC(signed char, 2 * 32)` for an `int[]` and `MALLOC(signed char, 3 * 64)`
+for a row of an `int[][]`. Two mutations, each rebuilt and measured, fail it and
+nothing else:
+
+| Mutation | New test | 27 other jimple tests |
+|---|---|---|
+| element width halved | FAILED | pass |
+| pointer-row width 64 → 32 | FAILED | pass |
+
+A trap on the way: the first version of the regex ended at `\)` and the dump
+line ends `);`, so it could not match on *any* tree. It "failed under mutation"
+and would have failed identically without one. A mutation check only means
+something once the test is known to pass on the unmutated tree — run that
+direction first.
+
+### 33.2 Why halving the width changed no verdict: the allocation is 8x too big
+
+The first mutation tried was the element width halved, and all 27 tests passed.
+The reason is a pre-existing defect. `jimple_newarray` multiplies the element
+count by the width **in bits** and hands that to `malloc`, whose argument is
+bytes — the legacy arm even carries the comment `// we want bytes` next to the
+bit width (`jimple_expr.cpp:577`). `new int[20]` allocates
+`MALLOC(signed char, 20 * 32)`, 640 bytes for 80 bytes of array. The heap bounds
+claim (`heap-array-bounds-violated`) is generated and passes, so nothing is
+unsound; the object is simply 8x oversized, which is why the width can be halved
+and even quartered without any access going out of bounds.
+
+Not fixed here: it changes every allocation size in the frontend, so it needs
+its own change, its own pair, and §33.3 settled first.
+
+### 33.3 `lengthof` returns bytes, not elements
+
+`jimple_lengthof` lowers to `__ESBMC_get_object_size`, which answers in bytes.
+With §33.2's inflation, `new int[5]` followed by `arr.length` yields 160 where
+Java and Kotlin both specify 5. `github_4715_lengthof_01` asserts only
+`^VERIFICATION SUCCESSFUL$` and never reads the value, so it passes without
+observing any of this.
+
+The two defects interact, which is why neither should be fixed alone: correcting
+the allocation to bytes alone would make `lengthof` answer 20 instead of 160,
+still not 5. The lowering wants `get_object_size(p)` divided by the element
+size, and a test that asserts the count rather than a verdict.
+
+### 33.4 Status
+
+Twenty-three PRs. `jimple_newarray::to_expr2t` builds no legacy type; the
+remaining legacy surface is §32.5's two completion sites (still blocked on the
+*legacy* `to_exprt` arm reading the `width` attribute, though that arm is
+measured unreachable), `jimple_throw`, and the items in §32.7.
