@@ -2694,12 +2694,27 @@ python pass is the one that skips the decay. It is not `restore_array_lvalue`
 either -- that undo exists in `clang_c_adjust` but is gated to
 `__ESBMC_assigns_impl` (#7010), so it cannot reach a `list_push` argument.
 
-**Not fixed here, deliberately.** Making the two agree means either changing the
-default python path, which is a behaviour change for every python program and
-wants its own PR, or making the IREP2 path disagree with the C frontend to match
-the legacy python one. Which is right depends on whether any model relies on
-receiving a pointer-to-array, and that is a Phase 9 question rather than
-something to settle from a GOTO diff.
+### 40.4 The Phase 9 question, answered
+
+§40.3 first left this as a judgement about whether a model relies on receiving a
+pointer-to-array. It does not, and three measurements settle it:
+
+- `__ESBMC_list_push`'s parameter is `const void *value`
+  (`src/c2goto/library/python/list.c:190`), and it copies `type_size` bytes from
+  it. `&a` and `&a[0]` are the same address, so the callee cannot tell them apart.
+- No operational model under `src/c2goto/library/python/` declares a
+  pointer-to-array parameter at all.
+- All 12 probes give the same verdict with the flag and without it.
+
+So the IREP2 python pass is sound here, and the row is a **legacy inconsistency
+rather than a porting gap**: the default python path skips a decay its own C
+frontend always performs. The consequence for the phase is that this row should
+not be counted against the IREP2 pass when the python flag's divergence is
+measured -- it is one site, address-equivalent, verdict-neutral, and the flag-on
+side is the one that matches C.
+
+Changing the default path to match is still a behaviour change for every python
+program, so it stays its own PR; what is no longer open is which side is right.
 
 The 49 tests using the python flag all pass, before and after this measurement.
 They assert verdicts, and the divergence changes none -- which is exactly why it
