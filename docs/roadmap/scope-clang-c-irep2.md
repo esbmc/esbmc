@@ -7877,3 +7877,81 @@ this. The six rows among that family's 112 that are about C library headers --
 -- agree between legacy and `--clang-cpp-irep2-adjust-only` on both sides of
 this change. The builtin gap was confirmed; its link to those failures was never
 measured, and for the cmath rows it is now refuted.
+
+## 139. Phase 6's remaining surface, measured (2026-09-14)
+
+Phase 5 (jimple) finished its mechanical work -- `scope-jimple-irep2.md` §39 --
+so this section measures where Phase 6 actually stands rather than continuing to
+work row by row. All three numbers are from `git grep` on this tree.
+
+| Bar | jimple, at §39 | clang-c, today |
+|---|---|---|
+| B-1 legacy type mentions | 97 | **1147** |
+| B-2 non-IREP2 symbol-table writes | 7, all false positives | **34, of which 1 is a false positive** |
+| LOC | 3 259 | 17 595 |
+
+`frontends-to-irep2.md` §2 recorded 971 mentions for this frontend; it is 1147
+now. The figure was never a budget -- the frontend has grown since -- but it is
+worth restating so the parent table is not read as current.
+
+The B-2 contrast is the useful one. Jimple ended with every symbol-table write
+carrying IREP2 and a bar that could not say so (§35.2). Here 33 of 34 are real:
+`uint_type()`, `array_typet(...)`, `f_op.type()`, `std::move(t)` on a `typet`.
+The one false positive is `clang_c_adjust_irep2.cpp`'s `s->set_value(value)`,
+whose argument is an `expr2tc`.
+
+### 139.1 Where B-1 sits
+
+| File | Mentions |
+|---|---|
+| `clang_c_convert.cpp` | 389 |
+| `clang_c_adjust_polymorphic_functions.cpp` | 252 |
+| `clang_c_adjust_expr.cpp` | 243 |
+| `clang_c_adjust.h` | 56 |
+| `clang_c_main.cpp` | 54 |
+| everything else | 153 |
+
+Three files hold 77% of it. That shapes the phase: `clang_c_convert.cpp` is the
+converter, which the campaign has always planned to leave for last; the other two
+are the legacy adjust pass the IREP2 pass shadows, so they shrink only when the
+IREP2 pass stops calling into them.
+
+### 139.2 The back-hops inside the IREP2 pass, and what each waits on
+
+Bar B-3 asks for bodies reaching `goto_convert` with no `migrate_*` back-hop.
+Inside `clang_c_adjust_irep2.cpp` there are six, two of them comments aside:
+
+| Site | Waits on |
+|---|---|
+| `declare_implicit_callee`, the symbol's type | **nothing -- removed here** |
+| `adjust_base_displacement` ×2 | `base_displacement` takes a `typet`; an IREP2 overload is a shared-helper change |
+| `declare_polymorphic_builtin`, the argument types and the callee | `clang_c_adjust::declare_gcc_polymorphic_builtin`, i.e. the 252 mentions in its own file |
+| `adjust_comma_at_dispatch` | nothing: it takes `exprt &` by contract, so migrating in and back is what it is for |
+
+So five of the six are one shared legacy helper each, not frontend work, and the
+sixth is not a back-hop at all. That is the honest shape of B-3 here: it is
+gated on porting `base_displacement` and the polymorphic-builtin declarator,
+neither of which is a clang-c-local change.
+
+### 139.3 The one that needed nothing
+
+`declare_implicit_callee` creates a symbol for a callee the converter never
+declared, and it had the IREP2 type in hand: `sym.set_type(migrate_type_back(
+callee->type))`. `symbolt` derives the legacy type with the same
+`migrate_type_back` on first read, so storing the IREP2 form is the same value
+with one fewer conversion -- and it stops `get_type2()` migrating it straight
+back.
+
+The site is pinned: storing `get_empty_type()` instead fails
+`irep2_only_array_arith_memcpy`, and only that. The whole 112-test flag corpus
+agrees before and after, and nothing on the default path can reach either version
+-- `clang_c_language.cpp:488` runs this pass only under
+`--clang-c-irep2-adjust-only` or `--clang-c-irep2-adjust`.
+
+`pad_type_symbol`'s legacy write is deliberately left. It derives the legacy
+type, pads it with the shared `add_padding`, and writes it back; storing IREP2
+there would make a *padded struct* symbol IREP2-authoritative, and the derived
+legacy side loses what `migrate_type_back` does not restore. Jimple hit the same
+wall from the other end (`scope-jimple-irep2.md` §32.5, a struct's `width`); here
+the exposure includes `#bitfield` on components and the whole C pipeline reads
+these symbols, so it wants its own measurement rather than a one-line change.
