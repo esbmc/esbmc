@@ -214,6 +214,65 @@ exprt jimple_binop::to_exprt(
 // >= and >, with from_json rewriting == to = beforehand. Anything else falls
 // through to the base default and takes exactly the path it takes today, so an
 // operator this switch does not know cannot silently build the wrong node.
+
+// gen_binary gives the node the lhs type; these kinds keep it.
+static expr2tc jimple_typed_binop(
+  const std::string &op,
+  const type2tc &t,
+  const expr2tc &l,
+  const expr2tc &r)
+{
+  if (op == "+")
+    return add2tc(t, l, r);
+  if (op == "-")
+    return sub2tc(t, l, r);
+  if (op == "*")
+    return mul2tc(t, l, r);
+  if (op == "/")
+    return div2tc(t, l, r);
+  if (op == "mod")
+    return modulus2tc(t, l, r);
+  if (op == "bitand")
+    return bitand2tc(t, l, r);
+  if (op == "bitor")
+    return bitor2tc(t, l, r);
+  if (op == "bitxor")
+    return bitxor2tc(t, l, r);
+  if (op == "shl")
+    return shl2tc(t, l, r);
+  if (op == "ashr")
+    return ashr2tc(t, l, r);
+  // Mirrors migrate_expr's arm rather than a test: jimple builds no unsigned
+  // type, so a logical and an arithmetic shift right of a signed operand print
+  // the same and agree on every verdict -- swapping the two changes nothing
+  // observable (§38.2).
+  if (op == "lshr")
+    return lshr2tc(t, l, r);
+  return expr2tc();
+}
+
+// The relational kinds force bool themselves, which is what migrate_expr
+// produces for them too.
+static expr2tc jimple_relational_binop(
+  const std::string &op,
+  const expr2tc &l,
+  const expr2tc &r)
+{
+  if (op == "=")
+    return equality2tc(l, r);
+  if (op == "notequal")
+    return notequal2tc(l, r);
+  if (op == "<")
+    return lessthan2tc(l, r);
+  if (op == "<=")
+    return lessthanequal2tc(l, r);
+  if (op == ">")
+    return greaterthan2tc(l, r);
+  if (op == ">=")
+    return greaterthanequal2tc(l, r);
+  return expr2tc();
+}
+
 expr2tc jimple_binop::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
@@ -222,33 +281,11 @@ expr2tc jimple_binop::to_expr2t(
   expr2tc l = lhs->to_expr2t(ctx, class_name, function_name);
   expr2tc r = rhs->to_expr2t(ctx, class_name, function_name);
 
-  // gen_binary gives the node the lhs type; the relational kinds force bool
-  // themselves, which is what migrate_expr produces for them too.
-  const type2tc &t = l->type;
-
-  if (binop == "+")
-    return add2tc(t, l, r);
-  if (binop == "-")
-    return sub2tc(t, l, r);
-  if (binop == "*")
-    return mul2tc(t, l, r);
-  if (binop == "/")
-    return div2tc(t, l, r);
-  if (binop == "mod")
-    return modulus2tc(t, l, r);
-
-  if (binop == "=")
-    return equality2tc(l, r);
-  if (binop == "notequal")
-    return notequal2tc(l, r);
-  if (binop == "<")
-    return lessthan2tc(l, r);
-  if (binop == "<=")
-    return lessthanequal2tc(l, r);
-  if (binop == ">")
-    return greaterthan2tc(l, r);
-  if (binop == ">=")
-    return greaterthanequal2tc(l, r);
+  expr2tc e = jimple_typed_binop(binop, l->type, l, r);
+  if (is_nil_expr(e))
+    e = jimple_relational_binop(binop, l, r);
+  if (!is_nil_expr(e))
+    return e;
 
   // Both representations require these to be bool throughout: migrate_expr
   // asserts the legacy node's type is bool, and goto_check asserts the node and
@@ -263,23 +300,6 @@ expr2tc jimple_binop::to_expr2t(
     c_implicit_typecast(r, get_bool_type(), ns);
     return binop == "and" ? expr2tc(and2tc(l, r)) : expr2tc(or2tc(l, r));
   }
-
-  if (binop == "bitand")
-    return bitand2tc(t, l, r);
-  if (binop == "bitor")
-    return bitor2tc(t, l, r);
-  if (binop == "bitxor")
-    return bitxor2tc(t, l, r);
-  if (binop == "shl")
-    return shl2tc(t, l, r);
-  if (binop == "ashr")
-    return ashr2tc(t, l, r);
-  // Mirrors migrate_expr's arm rather than a test: jimple builds no unsigned
-  // type, so a logical and an arithmetic shift right of a signed operand print
-  // the same and agree on every verdict -- swapping the two changes nothing
-  // observable (§38.2).
-  if (binop == "lshr")
-    return lshr2tc(t, l, r);
 
   // Every spelling the frontend converts end to end is covered above
   // (scope-jimple-irep2.md §38). Anything else reaches migrate_expr through the
