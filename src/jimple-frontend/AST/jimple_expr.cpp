@@ -568,14 +568,13 @@ exprt jimple_newarray::to_exprt(
 
   // LHS of call is the tmp var
   call.lhs() = symbol_expr(tmp_added_symbol);
-  int type_width = 64;
-  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
-  {
-    auto to_convert =
-      base_type.is_pointer() ? base_type.subtype().width() : base_type.width();
-
-    type_width = std::stoi(to_convert.as_string()); // we want bytes
-  }
+  // Mirrors to_expr2t: take the width off the IREP2 form rather than a legacy
+  // `width` attribute, which a struct only carries while its symbol's legacy
+  // side is the one last written (#4715).
+  const typet &element =
+    base_type.is_pointer() ? base_type.subtype() : base_type;
+  unsigned int type_width =
+    element.is_pointer() ? 64 : migrate_type(element)->get_width();
 
   auto new_expr = exprt("*", uint_type());
   auto base_size = constant_exprt(
