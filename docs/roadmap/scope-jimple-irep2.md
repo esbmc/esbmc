@@ -1873,3 +1873,87 @@ The corpus cannot verify steps 1-3 on its own: §19's census found the
 `Intrinsics`, `Runtime` and nondet arms unreachable from any test in it, so each
 needs a Jimple source written to reach it, the same way nine tests in this suite
 already were.
+
+## 37. The invoke expression forms, and the expression subtree goes quiet
+
+§36.5 named one obstacle: `jimple_assignment::to_code2t` delegated to the
+migrating default whenever its right-hand side was a non-nondet, non-intrinsic
+invoke, because `jimple_assignment::to_exprt` converts its left-hand side, injects
+it into the right-hand side *invoke object* with `set_lhs`, and lets that object
+lower itself to a call rather than to an assignment. Both invoke forms now carry
+that injected left-hand side as an `expr2tc`, both `to_expr2t`s cover every arm,
+and the delegation is gone.
+
+The block both forms produce -- one assignment per bound argument into the
+callee's own `@this`/`@parameterN` symbol, then the call -- is now built once, in
+`jimple_expr::lower_invoke2t`. The two legacy twins differ only in that the
+virtual form binds `@this` and skips one more base class, so the helper takes the
+`this` variable as a parameter and each caller keeps its own skip list.
+
+### 37.1 The location tri-state, and a convention nothing pinned
+
+The first version diverged on 8 of 28 dumps, all of the same shape: an instruction
+the legacy path rendered `// 10 no location` came out as `// 10 ` instead.
+
+`migrate_expr` reads a legacy statement's absent `#location` through the *const*
+accessor, i.e. as nil, and `goto_programt::output_instruction` prints a nil
+location as "no location". A default-constructed `locationt` is empty but **not**
+nil, so it prints blank. `goto_convert_functions.cpp`'s `emitted_location`
+documents the same distinction from the other side, where the legacy path
+materialises the empty one. Building these statements natively therefore means
+passing an explicitly nil location, which is what `no_location()` is for.
+
+No test in the repository pinned that convention: the 8 dumps that caught it are
+compared out of a scratch directory (§33.1). `github_4715_invoke_intrinsic_skip_01`
+pins it now, together with the four arms the corpus could not reach.
+
+### 37.2 One test, five things, four mutations
+
+§19 found the `Intrinsics`, `Runtime`, `java.lang.Class` and nondet arms
+unreachable from the corpus, so converting them needed a source written to reach
+them. One `SetVariable` per arm, plus a real static invoke so the block path is
+in the same dump, and a single regex over the instruction sequence pins all of
+it: that nothing is emitted between the constant assignment and the nondet (the
+three skips), the nondet itself, and the binding assignment and call with their
+nil locations.
+
+| Mutation | This test | 28 other jimple tests |
+|---|---|---|
+| block path takes a default `locationt` | **FAILED** | pass |
+| `Runtime` dropped from the expression form's skips | **FAILED** | pass |
+| `java.lang.Class` dropped from the virtual form's skips | **FAILED** | pass |
+| nondet arm removed from the expression form | **FAILED** | pass |
+
+A note on the third: reverting the second mutation with a one-shot text
+replacement patched the *wrong function*, because both `to_expr2t`s contain the
+same `base_class == "java.lang.Runtime")` line and the expression form comes
+first in the file. The gate caught it immediately -- `java.lang.Class:getName_1`
+is not a symbol, so the virtual form fell through to the block path and aborted.
+When two functions differ only in a list, anchor an edit by line rather than by a
+shared string.
+
+### 37.3 The expression subtree is now callerless
+
+Re-running §36's census: 4 of the remaining 19 `to_exprt` overrides are reached,
+down from 8. `jimple_expr_invoke`, `jimple_assignment`, `jimple_symbol` and
+`jimple_constant` are all at zero, and with them the eleven arms §36.1 had to keep
+because those two could carry any expression.
+
+What is left live, and what it reaches:
+
+| Arm | Reaches |
+|---|---|
+| `jimple_method` | `body->to_code2t`, which is native |
+| `jimple_file` | `field->to_exprt`, i.e. `jimple_class_field` |
+| `jimple_class_field` | nothing -- it builds a struct component from a type |
+| `jimple_throw` | nothing -- its operand conversion is commented out upstream |
+
+So every expression `to_exprt` is callerless, as is `jimple_assignment`'s. That
+is the next slice, and it is the §36.2 shape rather than the §36.1 one: a caller
+argument exists for all of them, so they can go the way the seven in #7786 did.
+
+### 37.4 Status
+
+Twenty-seven PRs. B-1 is 154, from 160 -- the drop is the two `exprt lhs`
+members and their setters. The slice mostly adds native code rather than removing
+legacy code; the removal it unlocks is worth most of `jimple_expr.cpp`.
