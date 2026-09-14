@@ -8038,3 +8038,51 @@ reachability query confirms the branch is live and stops -- which is what
 before/after comparison of the state the branch writes, over every input that
 reaches it. Naming the wrong instrument in the plan is how a bounded measurement
 turns into a blocked one.
+
+## 142. Two verifications, and a number not to publish (2026-09-14)
+
+### 142.1 The assert build, checked without one
+
+CI builds `-b DebugOpt -e ON`, i.e. with asserts; local work here is
+RelWithDebInfo with `NDEBUG`. So `migrate_symbol_type`'s round-trip assertion --
+`migrate_type(migrate_type_back(t)) == t` on every symbol type the pipeline reads
+-- has never run against the symbols this campaign has been making
+IREP2-authoritative. `scope-jimple-irep2.md` §32.2 flagged that and left it open.
+
+Rebuilding with asserts costs a full rebuild and there is no disk for a second
+build directory, so the check was run directly instead: the same condition,
+unconditionally, printing the symbol id on failure. One TU and a relink.
+
+Both lines are clean. The whole jimple corpus (31 tests, the stack through
+`feat/jimple-irep2-retire-expression-arms`) reports **0** failures, and so do the
+112 clang-c flag tests. That closes §32.2 without waiting for CI.
+
+### 142.2 The flag replaces the legacy pass -- the code said otherwise
+
+`clang_c_language.cpp` carried, directly above the block that runs this pass:
+
+> Phase 6 C.3: shadow the legacy pass with the IREP2-native walk. Read-only, so
+> flag-on and flag-off are byte-identical by construction
+
+That is true of `--clang-c-irep2-adjust`, which runs both passes. It is false of
+`--clang-c-irep2-adjust-only`, which the block twenty lines above describes
+correctly as *replacing* `clang_c_adjust` -- and the comment sat over an `if`
+covering both modes. Read as written it says the phase's whole metric is a
+tautology. Corrected to distinguish the two.
+
+### 142.3 A census that would have been misleading
+
+Name-matching `clang_c_adjust`'s 50 methods against `clang_c_adjust_irep2`'s 43
+leaves 38 legacy arms with no same-named counterpart. **That is not a debt
+figure** and is recorded here only so nobody publishes it as one: the IREP2 pass
+dispatches through a 28-entry arm table whose names deliberately describe what
+the arm does rather than mirroring the legacy method, so `adjust_expr_rel` is
+`adjust_relational`, `adjust_expr_shifts` is `adjust_shift_operands`,
+`adjust_side_effect_assignment` is split across `adjust_plain_assignment` and
+`adjust_compound_assignment`, and the five statement arms collapse into
+`adjust_statement_condition` and `hoist_for_init`.
+
+Counting the remainder needs a judgement per name, and the measure that does not
+need one already exists: the divergence count under the flag (§66). The 112
+tests using it pass, which — given §142.2 — means the IREP2 pass alone produces
+those results.
