@@ -317,12 +317,14 @@ static type2tc migrate_type0(const typet &type)
     if (ref.has_ellipsis())
       ellipsis = true;
 
+    std::vector<irep_idt> arg_base_names;
     const code_typet::argumentst &old_args = ref.arguments();
     for (const auto &old_arg : old_args)
     {
       type2tc tmp = migrate_type(old_arg.type());
       args.push_back(tmp);
       arg_names.push_back(old_arg.get_identifier());
+      arg_base_names.push_back(old_arg.cmt_base_name());
     }
 
     // Don't migrate return type if it's a symbol. There are a variety of C++
@@ -337,7 +339,7 @@ static type2tc migrate_type0(const typet &type)
       ret_type = migrate_type(static_cast<const typet &>(type.return_type()));
     }
 
-    return code_type2tc(args, ret_type, arg_names, ellipsis);
+    return code_type2tc(args, ret_type, arg_names, ellipsis, arg_base_names);
   }
 
   if (type.id() == "cpp-name")
@@ -3150,6 +3152,10 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     {
       args.emplace_back(migrate_type_back(it));
       args.back().set_identifier(ref2.argument_names[i]);
+      // Unreflected, so it may be absent on a type built by a frontend rather
+      // than by migrate_type (§44).
+      if (i < ref2.argument_base_names.size())
+        args.back().cmt_base_name(ref2.argument_base_names[i]);
       i++;
     }
 

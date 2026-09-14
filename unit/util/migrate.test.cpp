@@ -143,9 +143,7 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
 // because a consumer that reads one -- clang_cpp_convert_vft.cpp's thunk
 // argument loop does -- cannot have its symbol stored IREP2-side
 // (docs/roadmap/frontends-to-irep2.md §44).
-TEST_CASE(
-  "a code argument keeps its identifier and loses its base name",
-  "[migrate]")
+TEST_CASE("a code argument keeps its identifier and its base name", "[migrate]")
 {
   code_typet t;
   t.return_type() = int_type();
@@ -163,8 +161,15 @@ TEST_CASE(
   // argumentt::set_identifier writes `#identifier`, which is what
   // get_identifier and cmt_identifier both read, so this survives.
   REQUIRE(back.arguments().at(0).cmt_identifier() == irep_idt("f::p"));
-  // The base name does not.
-  REQUIRE(back.arguments().at(0).cmt_base_name().empty());
+  // And the base name, carried by the unreflected argument_base_names (§44).
+  REQUIRE(back.arguments().at(0).cmt_base_name() == irep_idt("p"));
+
+  // Unreflected means two signatures differing only in a parameter's spelling
+  // are the same type, which is what C11 6.7.6.3p15 says and what the hash and
+  // equality must agree on.
+  code_typet other = t;
+  other.arguments().at(0).cmt_base_name("q");
+  REQUIRE(migrate_type(other) == t2);
 }
 
 TEST_CASE("a default code_typet migrates to a void signature", "[migrate]")

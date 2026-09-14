@@ -230,14 +230,17 @@ public:
     const std::vector<type2tc> &args,
     const type2tc &ret,
     const std::vector<irep_idt> &names,
-    bool e)
+    bool e,
+    const std::vector<irep_idt> &base_names = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
       argument_names(names),
+      argument_base_names(base_names),
       ellipsis(e)
   {
     assert(args.size() == names.size());
+    assert(base_names.empty() || base_names.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
   unsigned int get_width() const;
@@ -245,6 +248,13 @@ public:
   std::vector<type2tc> arguments;
   type2tc ret_type;
   std::vector<irep_idt> argument_names;
+  /// The arguments' `#base_name`s, carried across the migrate seam but *not*
+  /// reflected: C11 6.7.6.3p15 makes a parameter's spelling no part of the
+  /// function type, so two signatures differing only here are the same type and
+  /// must hash and compare equal. Kept because a consumer reads it back --
+  /// clang_cpp_convert_vft.cpp's thunk argument loop does
+  /// (docs/roadmap/frontends-to-irep2.md §44).
+  std::vector<irep_idt> argument_base_names;
   bool ellipsis;
 
   static constexpr auto fields = std::make_tuple(
@@ -252,6 +262,8 @@ public:
     &code_type2t::ret_type,
     &code_type2t::argument_names,
     &code_type2t::ellipsis);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(std::vector<irep_idt>);
   static std::string field_names[esbmct::num_type_fields];
 };
 
