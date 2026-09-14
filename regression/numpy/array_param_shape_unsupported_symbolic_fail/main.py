@@ -11,4 +11,4 @@ __ESBMC_assume(n >= 1 and n <= 3)
 a_nondet = np.ones(n)
 shape_result = symbolic_shape(a_nondet)
 
-assert shape_result[0] == 3
+assert shape_result[0] == n
