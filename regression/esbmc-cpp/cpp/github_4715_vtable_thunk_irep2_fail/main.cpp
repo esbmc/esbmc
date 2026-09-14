@@ -1,7 +1,8 @@
-// esbmc/esbmc#4715: the vtable type symbols are stored IREP2-side, so a thunk's
-// symbol name comes back through the migrate seam. Dispatching through the
-// second base needs a this-adjusting thunk, whose name the builder takes from
-// the vtable component's base name.
+// esbmc/esbmc#4715: the vtable type symbols are stored IREP2-side, so what the
+// vtable value builder and the virtual-destructor dispatch read off a component
+// has to be a field the IREP2 struct type carries. Dispatch through each base,
+// and delete through the first, which is what reaches the destructor slot
+// lookup.
 #include <cassert>
 
 struct A
@@ -45,5 +46,9 @@ int main()
   B *pb = &c;
   assert(pa->a() == 10);
   assert(pb->b() == 21);
+
+  A *heap = new C;
+  assert(heap->a() == 10);
+  delete heap;
   return 0;
 }

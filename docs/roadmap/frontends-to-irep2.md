@@ -2946,12 +2946,15 @@ Three measurements on that state, each a rebuild plus the full label:
 | change | failures |
 |---|---|
 | both readers rewritten | 6 |
-| forward arm pushes no base names at all | **6** |
+| forward arm pushes an empty base name per component | **6** |
 | `is_rtti_name` reader restored | 655 |
 | `virtual_name` reader restored | 655 |
 
-So §46's `member_base_names` is **not** what unblocks this, and §45.1 named the
-wrong consumer. The thunk builder's `component.base_name()` reads the component
+The second row keeps the vector's length -- dropping the pushes altogether would
+trip `struct_type2t`'s length assertion on the first appended entry -- so it
+isolates the base names' *content*, which is what a reader would need. Nothing
+does. So §46's `member_base_names` is **not** what unblocks this, and §45.1 named
+the wrong consumer. The thunk builder's `component.base_name()` reads the component
 passed at `clang_cpp_convert_vft.cpp:104`, which is the **class** type's method
 component, not the vtable type's -- and class types still store IREP1, so that
 read never crosses this seam. §46 inherited the error.
