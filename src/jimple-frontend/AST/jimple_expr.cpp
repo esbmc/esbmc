@@ -276,10 +276,10 @@ expr2tc jimple_binop::to_expr2t(
     return lshr2tc(t, l, r);
 
   // Every spelling the frontend converts end to end is covered above
-  // (scope-jimple-irep2.md §38). Anything else reaches migrate_expr through the
-  // legacy arm, which is where it is rejected -- and that is the only remaining
-  // caller of any expression to_exprt.
-  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+  // (scope-jimple-irep2.md §38.1). Rejecting the rest here rather than letting
+  // migrate_expr reject them names the operator instead of the irep id, and it
+  // is what leaves no caller for any expression to_exprt.
+  throw "Unsupported Jimple operator: " + binop;
 }
 
 void jimple_cast::from_json(const json &j)
