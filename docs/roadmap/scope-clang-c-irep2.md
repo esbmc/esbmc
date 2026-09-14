@@ -7992,3 +7992,49 @@ That reads like a hop-off gap and is not one: the legacy pass calls the same
 helper with the same namespace, so it declines on exactly the same rows. Recorded
 because a `got=0` count is the sort of number that invites a fix to a pass that
 is behaving identically to its twin.
+
+## 141. The pre-recursion path was redundant, not dead (2026-09-14)
+
+§136.5 left the pre-recursion path in `adjust_expr` -- the one passing
+`stmt.location` for a bare `f(x);` -- as "a dead-code candidate", to be removed
+under a Mode C (C-Dead) proof. That framing was wrong, and it matters, because it
+asks for the wrong evidence.
+
+The branch is **reachable**: it runs for every `code_expression2t` the pass walks
+under the flag. C-Dead's obligation is that a removed branch was *unreachable
+before*, which is false here -- by that rule the deletion would be dropping live
+behaviour. What is actually true is that the branch's *effect* is subsumed: §136
+gave `sideeffect2t` a location of its own, so the post-recursion
+`declare_implicit_callee` reaches the same node with the same location the
+pre-recursion pass was supplying.
+
+That is an equivalence claim, and the measurement for it is the thing the branch
+existed to influence -- the location stamped on the symbol it declares, not a
+green corpus. Instrumenting the symbol write and running all 112 flag tests gives
+12 declarations across 8 tests:
+
+```
+irep2_only_implicit_callee_location_stmt  c:@F@outer  line 8 column 3
+irep2_only_implicit_callee_location_stmt  c:@F@inner  line 12 column 5
+irep2_only_implicit_callee_location_init  c:@F@undeclared_fn  line 7 column 11
+irep2_only_array_arith_memcpy            c:@F@memcpy line 10 column 3
+...
+```
+
+All 12 are **identical** with the branch and without it, `..._location_stmt`'s
+nested pair included -- which is the case the branch was written for. So it is
+removed, and with it the `stmt_location` parameter it was the only caller to pass:
+every other caller relied on the default, so the parameter had become a
+permanently-empty one and its comment described a fallback that could no longer
+be selected.
+
+### 141.1 Why this is not a Mode C run
+
+Recorded because the next redundant-branch removal in this campaign will hit the
+same question. The dead-code rule's instrument answers "can control reach this?".
+When the answer is yes and the point is that reaching it changes nothing, a
+reachability query confirms the branch is live and stops -- which is what
+§136.5's earlier contaminated run half-measured. The evidence that fits is a
+before/after comparison of the state the branch writes, over every input that
+reaches it. Naming the wrong instrument in the plan is how a bounded measurement
+turns into a blocked one.
