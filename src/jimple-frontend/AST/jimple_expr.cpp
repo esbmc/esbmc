@@ -544,8 +544,8 @@ exprt jimple_newarray::to_exprt(
   const std::string &function_name) const
 {
   auto base_type = type->to_typet(ctx);
-  auto tmp_symbol =
-    get_temp_symbol(pointer_typet(base_type), class_name, function_name);
+  auto tmp_symbol = get_temp_symbol(
+    pointer_type2tc(migrate_type(base_type)), class_name, function_name);
   symbolt &tmp_added_symbol = *ctx.move_symbol_to_context(tmp_symbol);
 
   // get alloc type and size
@@ -603,8 +603,8 @@ expr2tc jimple_newarray::to_expr2t(
 
   // to_exprt's temp symbol only ever becomes the lhs of a call it then
   // discards, but it is still entered into the context; keep that side effect.
-  symbolt tmp_symbol =
-    get_temp_symbol(pointer_typet(base_type), class_name, function_name);
+  symbolt tmp_symbol = get_temp_symbol(
+    pointer_type2tc(migrate_type(base_type)), class_name, function_name);
   ctx.move_symbol_to_context(tmp_symbol);
 
   const type2tc uint2 = migrate_type(uint_type());

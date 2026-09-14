@@ -136,6 +136,26 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
     /*ellipsis=*/false));
 }
 
+TEST_CASE("a default code_typet migrates to a void signature", "[migrate]")
+{
+  // The forward direction, which the round-trip cases above do not reach: a
+  // default-constructed code_typet has no "return_type" sub-irep, so the code
+  // arm migrates an id-less typet as the return type, and migrate_type maps
+  // that to the empty type. A frontend spelling such a signature natively must
+  // write the empty type to stay equal to the legacy path
+  // (jimple_statement.cpp, scope-jimple-irep2.md 32.1).
+  const code_typet fresh;
+  REQUIRE(fresh.find("return_type").is_nil());
+  REQUIRE(fresh.arguments().empty());
+  REQUIRE_FALSE(fresh.has_ellipsis());
+  REQUIRE(
+    migrate_type(fresh) == code_type2tc(
+                             std::vector<type2tc>{},
+                             get_empty_type(),
+                             std::vector<irep_idt>{},
+                             /*ellipsis=*/false));
+}
+
 TEST_CASE("migrate expr round-trips for constant kinds", "[migrate]")
 {
   require_expr_roundtrip(constant_int2tc(get_int_type(32), BigInt(42)));

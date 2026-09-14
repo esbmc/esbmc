@@ -7,13 +7,12 @@ exprt jimple_declaration::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  typet t = this->type.to_typet(ctx);
-
   std::string id, name;
   id = get_symbol_name(class_name, function_name, this->name);
   name = this->name;
 
-  auto symbol = create_jimple_symbolt(t, class_name, name, id, function_name);
+  auto symbol = create_jimple_symbolt(
+    this->type.to_type2t(ctx), class_name, name, id, function_name);
 
   symbol.lvalue = true;
   symbol.static_lifetime = false;
@@ -33,7 +32,7 @@ expr2tc jimple_declaration::to_code2t(
   const locationt &loc) const
 {
   symbolt symbol = create_jimple_symbolt(
-    this->type.to_typet(ctx),
+    this->type.to_type2t(ctx),
     class_name,
     this->name,
     get_symbol_name(class_name, function_name, this->name),
