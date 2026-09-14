@@ -7924,14 +7924,13 @@ Inside `clang_c_adjust_irep2.cpp` there are six, two of them comments aside:
 | Site | Waits on |
 |---|---|
 | `declare_implicit_callee`, the symbol's type | **nothing -- removed here** |
-| `adjust_base_displacement` ×2 | `base_displacement` takes a `typet`; an IREP2 overload is a shared-helper change |
+| `adjust_derived_to_base` / `adjust_base_to_derived` | **nothing: not a body back-hop, see §140** |
 | `declare_polymorphic_builtin`, the argument types and the callee | `clang_c_adjust::declare_gcc_polymorphic_builtin`, i.e. the 252 mentions in its own file |
 | `adjust_comma_at_dispatch` | nothing: it takes `exprt &` by contract, so migrating in and back is what it is for |
 
-So five of the six are one shared legacy helper each, not frontend work, and the
-sixth is not a back-hop at all. That is the honest shape of B-3 here: it is
-gated on porting `base_displacement` and the polymorphic-builtin declarator,
-neither of which is a clang-c-local change.
+So B-3's real debt in this pass is two sites on one helper -- the
+polymorphic-builtin declarator -- and not the six a grep for `migrate_*_back`
+suggests. §140 measures why the two base-displacement sites do not count.
 
 ### 139.3 The one that needed nothing
 
@@ -7955,3 +7954,41 @@ legacy side loses what `migrate_type_back` does not restore. Jimple hit the same
 wall from the other end (`scope-jimple-irep2.md` §32.5, a struct's `width`); here
 the exposure includes `#bitfield` on components and the whole C pipeline reads
 these symbols, so it wants its own measurement rather than a one-line change.
+
+## 140. The base-displacement back-hops are symbol-name conversions (2026-09-14)
+
+§139.2 listed `adjust_derived_to_base` and `adjust_base_to_derived` as waiting on
+an IREP2 `base_displacement`. They are not, and the reason is worth measuring
+rather than asserting, because the same measurement also kills a plausible bug.
+
+`base_displacement` reads `#base_owner` off a struct's components to decide which
+of the two layout oracles applies -- and `#base_owner` appears nowhere in
+`migrate.cpp` or in `struct_type2t`. So if the IREP2 pass handed it an *expanded*
+struct, `uses_flattened_layout` would answer false on a hierarchy that is
+flattened, and `base_subobject_offset` would walk the `@base@` components a
+flattened layout duplicates -- landing on displacement zero, which is exactly the
+wrong-oracle failure `clang_c_base_layout.cpp`'s own comment warns about.
+
+It cannot happen. Instrumenting both sites and sweeping
+`regression/esbmc-cpp/cpp` under `--clang-cpp-irep2-adjust-only` gives ~25 000
+observations and **every one** is `kind=symbol`: the type in the expression is
+always a `symbol_type2t`, `migrate_type_back` turns it into a `symbol_typet`, and
+both helpers then do `ns.follow`, which resolves it to the symbol table's legacy
+struct with `#base_owner` intact.
+
+So the conversion at those two sites costs one field and loses nothing. It is not
+the kind of back-hop B-3 is about -- no body crosses the seam -- and removing it
+would mean porting a layout walk whose input is an attribute IREP2 does not
+model. Both sites now say so in one line.
+
+### 140.1 The declines are the oracle's, not the pass's
+
+The sweep also shows where `base_displacement` returns false: `std::ios` (5 413
+observations), `std::istream`, `std::ostream`, and in user code
+`dtor_virtual_base`'s `B` and `ch22_1`'s `DerivedTwo`. Every one is a virtual
+base, which the helper documents as having no single fixed displacement.
+
+That reads like a hop-off gap and is not one: the legacy pass calls the same
+helper with the same namespace, so it declines on exactly the same rows. Recorded
+because a `got=0` count is the sort of number that invites a fix to a pass that
+is behaving identically to its twin.

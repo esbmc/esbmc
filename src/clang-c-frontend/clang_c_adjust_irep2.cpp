@@ -668,6 +668,9 @@ void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
   const type2tc derived =
     ptr_mode ? to_pointer_type(expr->type).subtype : expr->type;
 
+  // A symbol-name conversion, not a body migration: `derived` is a
+  // symbol_type2t at every observed site (§140), and the layout walk reads
+  // #base_owner from the namespace, which no IREP2 type models.
   BigInt offset = 0;
   if (
     !base_displacement(ns, migrate_type_back(derived), base_id, offset) ||
@@ -730,6 +733,7 @@ void clang_c_adjust_irep2::adjust_base_to_derived(expr2tc &expr)
   const irep_idt base_id = to_symbol_type(base_t).symbol_name;
   const type2tc derived = to_pointer_type(cast.type).subtype;
 
+  // As in adjust_derived_to_base: a symbol-name conversion (§140).
   BigInt offset = 0;
   if (!base_displacement(ns, migrate_type_back(derived), base_id, offset))
   {
