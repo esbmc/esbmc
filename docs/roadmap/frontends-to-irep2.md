@@ -2642,3 +2642,202 @@ re-doing Phase 6 inside Phase 7.
 There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
 whole instrument — one binary A/B'd against itself — does not exist here. A
 census by verdict waits on it.
+
+## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
+
+A hop-off flag's divergence count is only as good as the inputs it is measured
+over. `scope-clang-c-irep2.md` §143 probed 22 constructs chosen for being
+unlikely to appear in the 112 tests that use `--clang-c-irep2-adjust-only`, and
+found one real defect (§144). This section records the next two batches and what
+they say about the two frontends that have a flag.
+
+### 40.1 clang-c: 15 more constructs, all agreeing
+
+Nested designated initialisers over an array of structs, a flexible array
+member, `__builtin_offsetof`, a pointer to an array, a round trip through
+`long`, `const`/`volatile` assignment, a compound assignment mixing `int` and
+`double`, pointer increment, a mixed-arithmetic conditional, `switch` on an
+enum, a bitfield inside a union, a struct return, whole-struct assignment, a call
+through a function-pointer struct member, and a variadic struct argument.
+
+All 15 agree, which puts the clang-c probe total at 37 of 38 over three batches.
+The one failure was §144's.
+
+### 40.2 python: every program diverges, at one site
+
+Twelve python probes -- mixed arithmetic, floor division and modulo, augmented
+assignment, boolean operators, `while`, `for ... range`, list append and
+indexing, a class with an attribute and a method, unary minus, a comparison
+chain, a nested function, float comparison -- **all diverge** under
+`--python-irep2-adjust-only`, and each by exactly 64 lines.
+
+That constant is the tell: it is one site, not twelve defects. Every diff line is
+inside the operational model `src/python-frontend/models/nondet.py` at the
+`list[str]` literal on line 283, and every one has the same shape:
+
+```
+- FUNCTION_CALL: list_push(..., &...$list_elem$281, ...)
++ FUNCTION_CALL: list_push(..., &...$list_elem$281[0], ...)
+```
+
+So the model is pulled in by every python program, and one argument in it is
+spelled `&a` on the default path and `&a[0]` under the flag.
+
+### 40.3 Which side is the outlier, measured
+
+The C frontend settles it. `sink(&buf)` and `sink(buf)` for a `char buf[4]` both
+emit `sink((void *)(&buf[0]))`, and they do so identically with and without
+`--clang-c-irep2-adjust-only`. The C path always decays, and agrees with itself.
+
+So the IREP2 python pass produces what the C frontend produces, and the *legacy*
+python pass is the one that skips the decay. It is not `restore_array_lvalue`
+either -- that undo exists in `clang_c_adjust` but is gated to
+`__ESBMC_assigns_impl` (#7010), so it cannot reach a `list_push` argument.
+
+### 40.4 The Phase 9 question, answered
+
+§40.3 first left this as a judgement about whether a model relies on receiving a
+pointer-to-array. It does not, and three measurements settle it:
+
+- `__ESBMC_list_push`'s parameter is `const void *value`
+  (`src/c2goto/library/python/list.c:190`), and it copies `type_size` bytes from
+  it. `&a` and `&a[0]` are the same address, so the callee cannot tell them apart.
+- No operational model under `src/c2goto/library/python/` declares a
+  pointer-to-array parameter at all.
+- All 12 probes give the same verdict with the flag and without it.
+
+So the IREP2 python pass is sound here, and the row is a **legacy inconsistency
+rather than a porting gap**: the default python path skips a decay its own C
+frontend always performs. The consequence for the phase is that this row should
+not be counted against the IREP2 pass when the python flag's divergence is
+measured -- it is one site, address-equivalent, verdict-neutral, and the flag-on
+side is the one that matches C.
+
+Changing the default path to match is still a behaviour change for every python
+program, so it stays its own PR; what is no longer open is which side is right.
+
+The 49 tests using the python flag all pass, before and after this measurement.
+They assert verdicts, and the divergence changes none -- which is exactly why it
+took a probe to see it.
+
+## 41. The python flag's divergence, filtered down to two known rows
+
+§40.2 found every python probe diverging and traced it to one model site. With
+that site filtered out, the same 12 probes show **zero** user-program divergence,
+so a second batch went after harder constructs: dict, tuple unpacking, string
+indexing, `try`/`except`/`raise`, a module global, default arguments, a list
+comprehension, inheritance with an override, simultaneous swap, `for`/`else`,
+`abs`/`max`/`min`, and nested loops with `continue`.
+
+Ten of the twelve agree. The two that do not are both already-known rows, and
+neither is an unported arm:
+
+| Probe | Shape | Status |
+|---|---|---|
+| `u01_dict` | `&a` against `&a[0]` on a `list_push` argument | §40.2/§40.4 -- address-equivalent, and the *legacy* side is the outlier |
+| `u01_dict`, `u03_string` | `(signed int)((signed char)x) == ...` against `(signed char)x == ...` | deliberate: `python_adjust.cpp` mirrors the usual arithmetic conversions only for shapes the SMT layer cannot encode |
+
+The second is worth quoting rather than re-deriving, because the code already
+says it: running `gen_typecast_arithmetic` on every relational node "was tried and
+rejected ... because it diverges corpus-wide from clang's promotions over the OM
+bodies", and the gate that replaced it admits a signedness mismatch and a
+float/integer mix while "a same-signedness width promotion (char vs int) is
+encodable and stays untouched". That is exactly the shape these two probes hit.
+
+### 41.1 What that means for Phase 9
+
+Twenty-four probes over two batches reduce to two characterised rows. Neither is
+a gap in the IREP2 pass: one is a legacy inconsistency (§40.4) and the other is a
+deliberate non-mirror with a prior failed attempt behind it. So the python flag's
+remaining divergence is a pair of *decisions*, not a backlog of porting work --
+and the next python step is to settle them, not to look for more gaps.
+
+Recorded because a raw diff count says the opposite. Every python program diverges
+under the flag, at 64 lines plus a handful more for a dict or a string, and none
+of it is an unported arm.
+
+## 42. Phase 8 is not an adjust-pass phase (2026-09-14)
+
+§1's four bars are written per frontend, which reads as five comparable jobs.
+Measuring solidity shows one of them is a different shape, and it changes what
+Phase 8 costs.
+
+| | B-1 legacy type mentions | B-2 non-IREP2 symbol writes | IREP2 nodes built | LOC | Owns an adjust pass |
+|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | many | 3 259 | no |
+| clang-c | 1 147 | 34, 33 real | some | 17 595 | yes |
+| solidity | 1 420 | **100, all real** | **0** | 23 599 | **no** |
+
+`grep -c '2tc('` over every `.cpp` in `src/solidity-frontend` is zero: the
+frontend constructs no IREP2 node anywhere, so all 100 symbol-table writes are
+genuinely legacy. And it owns no adjust pass -- `solidity_language.cpp:370`
+instantiates `clang_cpp_adjust`, the C++ one.
+
+### 42.1 What that means
+
+Phase 8 has no adjust pass to port. Its hop-off is Phase 7's pass measured over
+Solidity input, which is what PR #7753 wires up -- so Phase 8 inherits its metric
+rather than building one, and the arms it would otherwise have to write are
+already Phase 7's work.
+
+What is left for Phase 8 alone is the converter: 1 420 mentions, concentrated in
+`solidity_convert_call.cpp` (306), `solidity_convert_expr.cpp` (219) and
+`solidity_convert.h` (216). That is the same shape as clang-c's remainder (§139.1),
+where `clang_c_convert.cpp`'s 389 are also deliberately last.
+
+Two consequences for the phase list in §"Phases 5-9":
+
+- Solidity cannot reach B-3 or B-4 ahead of clang-cpp, because it does not own the
+  pass those bars are about. Sequencing it after Phase 7 is not a preference; it
+  is a dependency.
+- Its B-1 is the largest of the three measured so far, and every mention is
+  converter-side. A frontend that builds zero IREP2 nodes has no partial state to
+  preserve, so the converter work can be sliced by construct without the
+  round-trip gates the other phases needed.
+
+jimple owns no adjust pass either and reached B-2 regardless (§35), which is the
+evidence that the converter half is separable.
+
+## 43. All five frontends, measured and normalised (2026-09-14)
+
+§2's table is from 2026-08 and counts only legacy type mentions. §139 and §42
+re-measured clang-c and solidity; this completes the set, adds the two columns
+that change how the numbers read, and normalises by size as §2 asked for and
+nobody had.
+
+| Frontend | B-1 mentions | B-2 writes | IREP2 nodes built | LOC | B-1 per KLOC | Owns an adjust pass |
+|---|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | 3 | 3 428 | **28** | no |
+| clang-cpp | 639 | 16 | 8 | 8 011 | 80 | yes |
+| clang-c | 1 147 | 34, 33 real | 143 | 17 595 | 65 | yes |
+| solidity | 1 420 | 100, all real | 0 | 23 599 | 60 | no |
+| python | 6 457 | 106 | 84 | 92 366 | 70 | yes |
+
+### 43.1 What the normalisation says
+
+jimple is the only frontend whose expression and statement migrations are
+complete (`scope-jimple-irep2.md` §39), and it sits at **28 mentions per KLOC**
+against 60-80 for the other four. So the residue a finished frontend carries is
+roughly a third of an unstarted one's density, not zero -- and §1's "~0, modulo
+enumerated boundary glue" is worth reading as that ratio rather than as a target
+of zero. jimple's remaining 97 are the boundary: `jimple_type`'s two converters,
+the class and method builders, and `jimple-language.cpp`'s module symbols.
+
+The four unfinished ones sit within 20 of each other per KLOC, which is the
+useful negative result: there is no frontend where the legacy density is
+anomalous, so the ordering in §"Phases 5-9" cannot be improved by picking the
+"most legacy" one first. Absolute size is what differs, and python is 5× the next
+largest.
+
+### 43.2 The two columns §2 did not have
+
+**IREP2 nodes built** separates a frontend that has started from one that has
+not, which a mention count cannot. solidity builds **zero** -- so it has no
+partial state, and §42 draws the consequence. clang-cpp builds 8 against
+clang-c's 143, which is the measured form of §2's remark that clang-c "has a
+partial head start".
+
+**Owns an adjust pass** is the column that reorders the work. Two frontends do
+not: jimple reached B-2 without one, and solidity cannot reach B-3 or B-4 without
+Phase 7 (§42.1). A phase list written per frontend hides that dependency; the
+column makes it explicit.
