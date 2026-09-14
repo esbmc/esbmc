@@ -16,7 +16,8 @@ exprt jimple_method::to_exprt(
   method_type.return_type() = inner_type;
 
   auto id = get_method_name(class_name, name);
-  auto symbol = create_jimple_symbolt(method_type, class_name, name, id);
+  auto symbol =
+    create_jimple_symbolt(migrate_type(method_type), class_name, name, id);
 
   std::string symbol_name = symbol.id.as_string();
 
@@ -40,8 +41,8 @@ exprt jimple_method::to_exprt(
     param_id = temp;
     param_name = oss.str();
 
-    auto param_symbol =
-      create_jimple_symbolt(this_type, class_name, param_name, param_id, id);
+    auto param_symbol = create_jimple_symbolt(
+      migrate_type(this_type), class_name, param_name, param_id, id);
     param_symbol.lvalue = true;
     param_symbol.is_parameter = true;
     param_symbol.file_local = true;
@@ -74,8 +75,8 @@ exprt jimple_method::to_exprt(
     param.cmt_base_name(param_name);
     param.cmt_identifier(param_id);
 
-    auto param_symbol =
-      create_jimple_symbolt(param_type, class_name, param_name, param_id, id);
+    auto param_symbol = create_jimple_symbolt(
+      migrate_type(param_type), class_name, param_name, param_id, id);
     param_symbol.lvalue = true;
     param_symbol.is_parameter = true;
     param_symbol.file_local = true;

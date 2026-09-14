@@ -127,7 +127,7 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   struct_typet t;
   t.tag(name);
 
-  auto symbol = create_jimple_symbolt(t, name, name, id);
+  auto symbol = create_jimple_symbolt(migrate_type(t), name, name, id);
   std::string symbol_name = symbol.id.as_string();
 
   // A class/interface is a type

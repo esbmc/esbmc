@@ -323,8 +323,16 @@ exprt jimple_assertion::to_exprt(
   id = "__ESBMC_assert";
   name = "__ESBMC_assert";
 
-  auto symbol =
-    create_jimple_symbolt(code_typet(), class_name, name, id, function_name);
+  auto symbol = create_jimple_symbolt(
+    code_type2tc(
+      std::vector<type2tc>{},
+      get_empty_type(),
+      std::vector<irep_idt>{},
+      /*ellipsis=*/false),
+    class_name,
+    name,
+    id,
+    function_name);
 
   symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
 
