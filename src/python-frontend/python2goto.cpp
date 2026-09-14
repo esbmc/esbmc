@@ -70,7 +70,7 @@ public:
     if (typecheck())
       return 1;
 
-    /* A model symbol: one converted from models/*.py, plus the initialiser
+    /* A model symbol: one converted from a models/ source, plus the initialiser
      * built for their globals. Everything else here is the clib closure their
      * calls resolve against, which esbmc links itself. */
     auto is_model = [](const symbolt &s) {
