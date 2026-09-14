@@ -3297,8 +3297,8 @@ void smt_solver_baset::pre_solve()
 }
 
 /* get()'s index_id case: read one element out of the solver's array model
- * rather than materialising the whole array. Nullopt where the case falls
- * through to get()'s generic tail, having possibly rewritten @p res. */
+ * rather than materialising the whole array. Nullopt where the index has no
+ * constant value, leaving @p res for get()'s generic tail. */
 std::optional<expr2tc>
 smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
 {
@@ -3355,6 +3355,10 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
     // If we got a nil result, return original expression
     if (is_nil_expr(res))
       return expr;
+
+    // The element is already a model value. Walking its operands would query
+    // the object inside an address_of: a function aborts, data prints as &0.
+    return is_symbol2t(res) ? res : get(res);
   }
 
   // TODO: Give up, then what?
