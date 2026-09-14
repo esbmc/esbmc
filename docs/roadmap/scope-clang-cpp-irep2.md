@@ -2237,3 +2237,27 @@ nothing; C++ resolves the specification there.
 `ctest -R try_catch` is 174 of 174. `irep2_dynamic_exception_spec{,_fail}` pins
 it — both halves change outcome with the hook gated off, and the mode is pinned
 `c++11` because a dynamic specification is ill-formed in C++17.
+
+### 7.8 The two stream rows: a conditional over arrays decays per arm
+
+`ostringstream_str` and `sstream_str_bool` aborted with `ERROR:
+compute_pointer_offset, unexpected irep: if`. The dump names the node, and the
+GOTO diff names the difference, inside the bool stream operator:
+
+```
+legacy  _put_field(&(*o::0), val::1 ? &"1"[0] : &"0"[0], 1)
+flag    _put_field(&(*o::0), &(val::1 ? "1" : "0")[0], 1)
+```
+
+`c_typecastt::do_typecast`'s irept copy has an explicit arm for this
+(`c_typecast.cpp:985`): an array-typed destination that *is* an `if` typecasts
+each arm instead of indexing the conditional. The IREP2 copy did not, so the
+decay produced `&(if)[0]` and the pointer machinery met an `if` where it expects
+an object. Ported, both rows agree.
+
+**The pair that pins it needed a second measurement to be worth anything.** Arms
+of *different* lengths each decay on their own — no array-typed conditional is
+ever formed — so the first version of the test passed with the arm gated off.
+Same-length arms (`"ab"` / `"xy"`) are what form the node, and then both halves
+abort with the arm off. The condition is recorded in the test source, since it is
+invisible from the construct.

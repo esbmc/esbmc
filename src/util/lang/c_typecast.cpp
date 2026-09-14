@@ -1032,6 +1032,20 @@ void c_typecastt::do_typecast(expr2tc &dest, const type2tc &type)
 
   if (is_array_type(dest_type))
   {
+    // A conditional over arrays decays per arm, as the irept copy above does:
+    // `(c ? "1" : "0")` becomes `c ? &"1"[0] : &"0"[0]`, not `&(c ? …)[0]`.
+    // Indexing the conditional instead reaches compute_pointer_offset as an
+    // `if` it cannot read (docs/roadmap/scope-clang-cpp-irep2.md §7.8).
+    if (is_if2t(dest))
+    {
+      const if2t &i = to_if2t(dest);
+      expr2tc taken = i.true_value, other = i.false_value;
+      do_typecast(taken, type);
+      do_typecast(other, type);
+      dest = if2tc(type, i.cond, taken, other, i.location);
+      return;
+    }
+
     const array_type2t &arr_type = to_array_type(dest_type);
     expr2tc index = index2tc(arr_type.subtype, dest, gen_zero(index_type2()));
     expr2tc tmp = address_of2tc(arr_type.subtype, index);
