@@ -704,6 +704,57 @@ static void reduce_pseudo_destructor_call(exprt &expr)
   expr = expr.op0().op0();
 }
 
+/// Whether a thrown type's exception ids follow from the type alone, *and*
+/// cannot change between here and the adjust pass.
+///
+/// A class type's id is its symbol's name and its bases come from the symbol
+/// table, a lookup this early in conversion cannot rely on; everything else
+/// resolves to the `#cpp_type` spelling, which the IREP2 seam does not carry,
+/// so those ids are recorded at conversion time instead (§7.6). Pointer layers
+/// are stripped because convert_exception_id recurses through them.
+///
+/// An **array** operand is excluded: it decays between here and the legacy
+/// pass, so an id recorded from the pre-decay type is not the one the handler
+/// is matched against. A pointer is fine and is recursed through, as
+/// convert_exception_id does.
+static bool exception_id_needs_no_lookup(const typet &type)
+{
+  if (type.id() == "array")
+    return false;
+
+  if (type.id() == "pointer")
+    return exception_id_needs_no_lookup(type.subtype());
+
+  return type.id() != "symbol" && type.id() != "struct" &&
+         !type.cpp_type().empty();
+}
+
+/// Record a throw's exception ids at conversion time, for the operand types
+/// whose ids follow from the type alone.
+///
+/// A primitive's id is its `#cpp_type` spelling, and the IREP2 seam does not
+/// carry that: computed from a back-migrated type, `throw 1` reads as
+/// `signedbv` while the handler, whose ids never cross the seam, still reads
+/// `signed_int`, and the throw escapes uncaught. A class type is left to the
+/// adjust pass instead: its id is the type symbol's name, which crosses
+/// intact, and resolving its bases needs a lookup this early in conversion
+/// (docs/roadmap/scope-clang-cpp-irep2.md §7.6).
+static void
+record_primitive_exception_ids(exprt &throw_expr, const namespacet &ns)
+{
+  if (!exception_id_needs_no_lookup(throw_expr.op0().type()))
+    return;
+
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, throw_expr.op0().type(), "", ids);
+
+  irept exception_list("exception_list");
+  exception_list.get_sub().resize(ids.size());
+  for (std::size_t i = 0; i < ids.size(); i++)
+    exception_list.get_sub()[i].id(ids[i]);
+  throw_expr.set("exception_list", exception_list);
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -1428,7 +1479,13 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         return true;
 
       new_expr.move_to_operands(tmp);
+      // Deliberately the moved-from `tmp`, i.e. empty: a cpp-throw's own type
+      // is set by the adjust pass, and giving it the operand's type here
+      // changes the default path (three try_catch rows stop failing as they
+      // should).
       new_expr.type() = tmp.type();
+
+      record_primitive_exception_ids(new_expr, namespacet(context));
     }
 
     break;

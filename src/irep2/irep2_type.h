@@ -108,13 +108,15 @@ public:
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
     const irep_idt &_name,
-    bool _packed = false)
+    bool _packed = false,
+    const BigInt &_alignment = 0)
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
       member_pretty_names(memb_pretty_names),
       name(_name),
-      packed(_packed)
+      packed(_packed),
+      alignment(_alignment)
   {
   }
   struct_type2t(const struct_type2t &ref) = default;
@@ -125,6 +127,16 @@ public:
   std::vector<irep_idt> member_pretty_names;
   irep_idt name;
   bool packed;
+
+  /// An explicit `alignas`, in bytes; zero when the record has none. IREP2 does
+  /// not otherwise represent it, and add_padding reads it to decide a record's
+  /// trailing padding -- an over-aligned empty struct occupies its alignment,
+  /// so without it the back-migrated type gets no pad member and a literal of
+  /// it stays shorter than its own type (§7.4). Not reflected: two records that
+  /// differ only here would otherwise stop comparing equal, which is a wider
+  /// change than this repair.
+  BigInt alignment;
+  static constexpr std::size_t excluded_field_bytes = sizeof(BigInt);
 
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,

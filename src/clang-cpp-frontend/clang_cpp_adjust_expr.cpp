@@ -76,7 +76,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
   if (symbol.get_type().is_code())
   {
     typet t = symbol.get_type();
-    finalize_exception_specification(t);
+    ::finalize_exception_specification(ns, t);
     symbol.set_type(std::move(t));
   }
 

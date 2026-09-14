@@ -220,6 +220,14 @@ protected:
   /// IREP2 form of clang_c_adjust::adjust_address_of's array decay (§105).
   void adjust_address_of(expr2tc &expr);
 
+  /// IREP2 form of clang_c_adjust::adjust_ptr_mem. `obj->*pmf` dereferences its
+  /// base, and a *bound member* selection -- which carries clang's BoundMember
+  /// type, empty after the seam -- becomes the member function itself, with
+  /// `this` prepended to the pointed-to code type's parameters. Left standing,
+  /// the node reaches goto_convert as a callee it cannot read
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §7.5).
+  void adjust_ptr_mem(expr2tc &expr);
+
   /// The GCC `__sync_*` / C11 `__c11_atomic_*` half of
   /// clang_c_adjust::adjust_side_effect_function_call: clang hands these
   /// builtins over body-less, so the concrete instance has to be declared and
@@ -288,6 +296,21 @@ protected:
   /// arm: an arm rewrites one node, this takes the whole symbol. C generates
   /// nothing (docs/roadmap/scope-clang-cpp-irep2.md §3.6).
   virtual void gen_symbol_code(symbolt &)
+  {
+  }
+
+  /// Per-symbol *type* work, run for every symbol including the value-less
+  /// ones. C has none; C++ resolves a dynamic exception specification here
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §7.7).
+  virtual void adjust_symbol_type(symbolt &)
+  {
+  }
+
+  /// A rewrite whose *result* must be walked, so it cannot be an arm: the arms
+  /// run after the operand walk. The legacy passes dispatch top-down and get
+  /// this ordering for free. C has no such rewrite
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §3.15).
+  virtual void adjust_before_operands(expr2tc &)
   {
   }
 
