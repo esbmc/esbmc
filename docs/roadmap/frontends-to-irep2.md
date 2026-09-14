@@ -2991,12 +2991,10 @@ out, `#identifier` written on each argument, legacy type back in. It reads
 symbol is named after from `argument_base_names`, and the new identifiers are
 assembled into a fresh `code_type2tc`. The legacy round trip goes with it.
 
-### 48.1 §44's field now has a corpus gate, and it is 12 tests
+### 48.1 What the slice moves, and what §44's gate already was
 
-`argument_base_names` (§44) was carried across the seam for this reader, but until
-now nothing read it back, so a unit test was its only pin. With the argument loop
-on the IREP2 side, making `migrate_type`'s code arm push an empty base name for
-every argument takes `regression/esbmc-cpp/cpp` from 6 failures to **18**:
+Making `migrate_type`'s code arm push an empty base name per argument takes
+`regression/esbmc-cpp/cpp` from 6 failures to **18**:
 
 ```
 functional, functional_fail, functional_fail2,
@@ -3007,9 +3005,56 @@ pmr_memory_resource, pmr_memory_resource_fail
 ```
 
 An argument symbol is named `<thunk>::<base_name>`, so an empty base name collides
-every argument of a thunk onto one symbol id. That is the gate §44 could not have
-had: it is the first consumer of the field outside `migrate.cpp`.
+every argument of a thunk onto one symbol id.
 
-The slice itself moves no verdict -- it is the same types written through a
-different API -- so it adds no regression pair. What pins it is those 12 tests plus
-the rest of the C++ tree holding at its baseline.
+**That gate is not new, and an earlier draft of this section claimed it was.** §44.4
+already converted the thunk's type write, after which the argument loop read the
+base name back off `migrate_type_back`'s restoration (`migrate.cpp:3160`) via
+`arg.get_base_name()` -- the line §44.1 calls "The reader". The 12 tests have gated
+the field since then.
+
+What this slice moves is the *shape* of the dependency, and that is measurable.
+Disabling the back arm's restoration alone now leaves all 12, plus
+`thunk_multi_tu{,_fail}` and `github_4715_vtable_thunk_irep2{,_fail}`, green -- 16
+of 16 -- where before it was the thunk path's only source of the name. The read is
+direct, so `argument_base_names` is consumed as an IREP2 field rather than
+recovered through a legacy attribute.
+
+### 48.2 What pins the slice, stated exactly
+
+The slice moves no verdict -- measured, not asserted: the `--symbol-table-only`
+output for `pmr_memory_resource` (four-argument thunks) and `thunk_multi_tu` (the
+duplicate-symbol path) is byte-identical to the previous commit's. So it adds no
+verdict pair, and the honest accounting of what pins each half is:
+
+- the base-name read is pinned by the 12 tests above, and now also directly by
+  `regression/esbmc-cpp/cpp/github_4715_thunk_arg_symbols`, which asserts the two
+  argument symbols `…::a::0` and `…::b::1` exist. It fails in 0.3s under the
+  empty-base-name mutation, against 12 verdict flips.
+- the identifier bookkeeping (`identifiers[i] = arg_symb.id` and the
+  `code_type2tc` that carries it) is **not** pinned end to end, and was equally
+  unpinned before: deleting it, or the legacy `arg.set("#identifier", …)` it
+  replaces, leaves all 16 green on either version. Without it a thunk's formals
+  alias the callee's own parameter symbols and values still flow.
+
+A code type's `argument_base_names` are also inert *downstream* of this function in
+the C++ path -- dropping them from the final `code_type2tc` changes no output -- so
+the field earns its place at the point of construction, not after it.
+
+### 48.3 A pre-existing false alarm this slice's probing found
+
+An override whose *declaration* leaves its parameters unnamed gets empty
+`#base_name`s from `clang_cpp_convert.cpp`, so all of them collapse onto one thunk
+argument symbol and the thunk forwards the last actual for every parameter:
+
+```cpp
+struct Base { virtual ~Base() {} virtual int f(int, int) { return 0; } };
+struct Derived : Base { int f(int, int) override; };
+int Derived::f(int a, int b) { return a - b; }
+int main() { Derived d; Base *b = &d; assert(b->f(5, 2) == 3); }
+```
+
+`VERIFICATION FAILED` on a program whose answer is 3; naming the parameters in the
+declaration gives SUCCESSFUL. It reproduces identically on the previous commit --
+`pmr_memory_resource`'s thunk prints `do_allocate((…)this, , )` on both -- so it is
+not this slice's doing. It wants its own issue and a KNOWNBUG pair.
