@@ -9,8 +9,8 @@ could run.
 import ast
 import pathlib
 
-ENTRY = (pathlib.Path(__file__).resolve().parents[2] / "src" / "python-frontend" /
-         "parser" / "__main__.py")
+ENTRY = (pathlib.Path(__file__).resolve().parents[2] / "src" / "python-frontend" / "parser" /
+         "__main__.py")
 
 
 def _tree():
@@ -34,14 +34,17 @@ def test_entry_module_has_no_python3_only_syntax():
 
 def test_version_guard_precedes_every_other_import():
     body = _tree().body
-    guards = [i for i, n in enumerate(body)
-              if isinstance(n, ast.If) and "version_info" in ast.dump(n.test)]
+    guards = [
+        i for i, n in enumerate(body)
+        if isinstance(n, ast.If) and "version_info" in ast.dump(n.test)
+    ]
     assert guards, "no sys.version_info guard in " + ENTRY.name
 
-    imports = [i for i, n in enumerate(body)
-               if isinstance(n, (ast.Import, ast.ImportFrom))
-               and not (isinstance(n, ast.Import)
-                        and any(a.name == "sys" for a in n.names))]
-    assert all(i > guards[0] for i in imports), (
-        "an import runs before the version guard, so Python 2 would fail on it "
-        "instead of reporting the version")
+    imports = [
+        i for i, n in enumerate(body) if isinstance(n, (ast.Import, ast.ImportFrom))
+        and not (isinstance(n, ast.Import) and any(a.name == "sys" for a in n.names))
+    ]
+    assert all(
+        i > guards[0]
+        for i in imports), ("an import runs before the version guard, so Python 2 would fail on it "
+                            "instead of reporting the version")
