@@ -1779,6 +1779,33 @@ resolve_literal_numpy_col_view(nlohmann::json arg, python_converter &converter)
   return extract_numpy_literal_column(*rows, *col_index);
 }
 
+// Tries resolve_literal_numpy_row_view then resolve_literal_numpy_col_view
+// over `arg`, replacing it in place on the first match. Returns whether
+// either resolved, so a call site can fall back to its own literal-array
+// handling only when both decline. Shared by every literal-view call site
+// (reducers, argmin/argmax, median, searchsorted) so row and column views
+// stay wired in together instead of drifting apart one call site at a time.
+static bool resolve_literal_numpy_row_or_col_view(
+  nlohmann::json &arg,
+  python_converter &converter)
+{
+  if (
+    std::optional<nlohmann::json> row_view =
+      resolve_literal_numpy_row_view(arg, converter))
+  {
+    arg = std::move(*row_view);
+    return true;
+  }
+  if (
+    std::optional<nlohmann::json> col_view =
+      resolve_literal_numpy_col_view(arg, converter))
+  {
+    arg = std::move(*col_view);
+    return true;
+  }
+  return false;
+}
+
 static bool is_sorted_numeric_list(
   const nlohmann::json &list,
   const std::string &diagnostic)
@@ -4408,10 +4435,7 @@ exprt numpy_call_expr::create_expr_from_call()
     nlohmann::json arg = try_inline_pure_call_arg(call_["args"][0]);
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
-    if (
-      std::optional<nlohmann::json> row_view =
-        resolve_literal_numpy_row_view(arg, converter_))
-      arg = std::move(*row_view);
+    resolve_literal_numpy_row_or_col_view(arg, converter_);
 
     std::vector<numeric_value> values_1d;
     std::vector<std::vector<numeric_value>> values_2d;
@@ -6723,18 +6747,9 @@ exprt numpy_call_expr::handle_searchsorted_call()
 
   const bool right = parse_searchsorted_side_keyword(call_);
 
-  nlohmann::json arr_arg;
-  if (
-    std::optional<nlohmann::json> row_view =
-      resolve_literal_numpy_row_view(call_["args"][0], converter_))
-    arr_arg = std::move(*row_view);
-  else if (
-    std::optional<nlohmann::json> col_view =
-      resolve_literal_numpy_col_view(call_["args"][0], converter_))
-    arr_arg = std::move(*col_view);
-  else
-    arr_arg =
-      resolve_literal_numpy_array_input(call_["args"][0], function, false);
+  nlohmann::json arr_arg = call_["args"][0];
+  if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
+    arr_arg = resolve_literal_numpy_array_input(arr_arg, function, false);
 
   std::vector<std::size_t> shape;
   if (!get_literal_shape(arr_arg, shape) || shape.size() != 1)
@@ -6935,10 +6950,7 @@ exprt numpy_call_expr::get()
     nlohmann::json arg = try_inline_pure_call_arg(call_["args"][0]);
     resolve_var(arg);
     materialize_inline_numpy_constructor_call(arg, converter_.ast());
-    if (
-      std::optional<nlohmann::json> row_view =
-        resolve_literal_numpy_row_view(arg, converter_))
-      arg = std::move(*row_view);
+    resolve_literal_numpy_row_or_col_view(arg, converter_);
 
     if (
       std::optional<exprt> axis_result =
@@ -7859,11 +7871,7 @@ exprt numpy_call_expr::get()
     }
 
     nlohmann::json arr_arg = call_["args"][0];
-    if (
-      std::optional<nlohmann::json> row_view =
-        resolve_literal_numpy_row_view(arr_arg, converter_))
-      arr_arg = std::move(*row_view);
-    else
+    if (!resolve_literal_numpy_row_or_col_view(arr_arg, converter_))
       arr_arg = resolve_literal_numpy_array_input(arr_arg, function, true);
 
     std::vector<std::size_t> shape;
