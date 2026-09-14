@@ -2261,3 +2261,34 @@ ever formed — so the first version of the test passed with the arm gated off.
 Same-length arms (`"ab"` / `"xy"`) are what form the node, and then both halves
 abort with the arm off. The condition is recorded in the test source, since it is
 invisible from the construct.
+
+## 8. The corpus re-swept: 3086 of 3095, and no crashes anywhere
+
+Re-run end to end on the tree at this point, the same 3192 rows and the same
+harness as §7:
+
+| | §7 (before) | now |
+|---|---:|---:|
+| verdicts agree | 3033 | **3086** |
+| diverge | 55 | **9** |
+| hard failure under the flag | 25 | **0** |
+
+The measurable set is 3095 either way (97 rows are `KNOWNBUG`/`FUTURE`, pin an
+irep2 flag, or have no source), so agreement is **99.7%**, and not one row
+crashes, aborts or fails to migrate. Five causes closed it: the `with_type` trait
+on an assignment, the record alignment behind three `bad_optional_access` faces,
+the bound-member type and its elimination, a primitive throw's exception ids, and
+a dynamic exception specification — plus the conditional array decay of §7.8.
+
+The nine that remain, by cause rather than by count:
+
+| rows | what |
+|---|---|
+| `switch_declaration{,_1,_2}` | no verdict: `Couldn't convert expression in unrecognised format`, a migrate gap on a declaration inside a `switch` |
+| `1032_POD_init`, `1043_POD_init` | POD aggregate initialisation |
+| `CpyConstructorUnion`, `MoveConstructorUnion` | implicit union copy/move constructors — `gen_implicit_union_copy_move_constructor` is legacy-only, the same shape as §7.7's finaliser |
+| `github_4317` | singleton |
+| `vector_reserve_realloc_nested_fail` | the **flag** answers and the default path does not; the second such row, after `ch9_7` |
+
+`switch_declaration` is the next task: three rows, one error message, and the only
+group left that produces no verdict at all.
