@@ -2797,3 +2797,47 @@ Two consequences for the phase list in §"Phases 5-9":
 
 jimple owns no adjust pass either and reached B-2 regardless (§35), which is the
 evidence that the converter half is separable.
+
+## 43. All five frontends, measured and normalised (2026-09-14)
+
+§2's table is from 2026-08 and counts only legacy type mentions. §139 and §42
+re-measured clang-c and solidity; this completes the set, adds the two columns
+that change how the numbers read, and normalises by size as §2 asked for and
+nobody had.
+
+| Frontend | B-1 mentions | B-2 writes | IREP2 nodes built | LOC | B-1 per KLOC | Owns an adjust pass |
+|---|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | 3 | 3 428 | **28** | no |
+| clang-cpp | 639 | 16 | 8 | 8 011 | 80 | yes |
+| clang-c | 1 147 | 34, 33 real | 143 | 17 595 | 65 | yes |
+| solidity | 1 420 | 100, all real | 0 | 23 599 | 60 | no |
+| python | 6 457 | 106 | 84 | 92 366 | 70 | yes |
+
+### 43.1 What the normalisation says
+
+jimple is the only frontend whose expression and statement migrations are
+complete (`scope-jimple-irep2.md` §39), and it sits at **28 mentions per KLOC**
+against 60-80 for the other four. So the residue a finished frontend carries is
+roughly a third of an unstarted one's density, not zero -- and §1's "~0, modulo
+enumerated boundary glue" is worth reading as that ratio rather than as a target
+of zero. jimple's remaining 97 are the boundary: `jimple_type`'s two converters,
+the class and method builders, and `jimple-language.cpp`'s module symbols.
+
+The four unfinished ones sit within 20 of each other per KLOC, which is the
+useful negative result: there is no frontend where the legacy density is
+anomalous, so the ordering in §"Phases 5-9" cannot be improved by picking the
+"most legacy" one first. Absolute size is what differs, and python is 5× the next
+largest.
+
+### 43.2 The two columns §2 did not have
+
+**IREP2 nodes built** separates a frontend that has started from one that has
+not, which a mention count cannot. solidity builds **zero** -- so it has no
+partial state, and §42 draws the consequence. clang-cpp builds 8 against
+clang-c's 143, which is the measured form of §2's remark that clang-c "has a
+partial head start".
+
+**Owns an adjust pass** is the column that reorders the work. Two frontends do
+not: jimple reached B-2 without one, and solidity cannot reach B-3 or B-4 without
+Phase 7 (§42.1). A phase list written per frontend hides that dependency; the
+column makes it explicit.
