@@ -2060,6 +2060,30 @@ The lesson for the campaign's gates: a byte-identical dump comparison under
 `NDEBUG` proves the two paths agree, not that either is *valid*. Two asserts that
 both paths trip stay invisible to it.
 
+### 38.4b Probing for the rest of that class
+
+With the workspace switched to `DebugOpt` (`-O2 -g`, no `-DNDEBUG`, i.e. CI's
+asserts locally) the obvious follow-up was to ask what else aborts. Seven jimple
+probes over shapes the corpus has no instance of: an `If` on a bare `int` symbol,
+a comparison stored into an `int` and then used as a condition, three-level nested
+arithmetic, an `and` of two comparisons, an `and` inside an `If` condition, a
+`bitand` over a comparison, and a shift by a comparison.
+
+Two abort on master, both `and` with operands that are *already* bool, at
+`migrate.cpp:1434` -- the same assertion as §38.4a, reached because master's arm
+covers six operators and sends `and` to the legacy one. Both pass here.
+
+They are kept as `github_4715_and_of_comparisons_01` and
+`github_4715_and_in_condition_01`, and what they pin is worth stating exactly:
+**not** the bool conversion -- their operands are bool already, so dropping the
+conversion leaves them passing -- but that a Boolean binop is handled natively at
+all. `github_4715_binop_kinds_01` is the one that pins the conversion, its `and`
+having `int` operands. The three together cover both halves, and the mutation that
+separates them is what showed which is which.
+
+The other 126 probe runs from `scope-clang-c-irep2.md` §143 and
+`frontends-to-irep2.md` §40-41, re-run under asserts, abort nowhere.
+
 ### 38.5 Status
 
 Twenty-eight PRs. B-1 reads 155, one more than §37, and the extra hit is a comment
