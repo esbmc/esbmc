@@ -230,15 +230,55 @@ expr2tc jimple_binop::to_expr2t(
     return add2tc(t, l, r);
   if (binop == "-")
     return sub2tc(t, l, r);
+  if (binop == "*")
+    return mul2tc(t, l, r);
+  if (binop == "/")
+    return div2tc(t, l, r);
+  if (binop == "mod")
+    return modulus2tc(t, l, r);
+
   if (binop == "=")
     return equality2tc(l, r);
   if (binop == "notequal")
     return notequal2tc(l, r);
+  if (binop == "<")
+    return lessthan2tc(l, r);
+  if (binop == "<=")
+    return lessthanequal2tc(l, r);
   if (binop == ">")
     return greaterthan2tc(l, r);
   if (binop == ">=")
     return greaterthanequal2tc(l, r);
 
+  // The operands are whatever the jimple types give, not bool: the legacy arm
+  // builds these with the lhs type too, and the enclosing assignment is what
+  // casts the result.
+  if (binop == "and")
+    return and2tc(l, r);
+  if (binop == "or")
+    return or2tc(l, r);
+
+  if (binop == "bitand")
+    return bitand2tc(t, l, r);
+  if (binop == "bitor")
+    return bitor2tc(t, l, r);
+  if (binop == "bitxor")
+    return bitxor2tc(t, l, r);
+  if (binop == "shl")
+    return shl2tc(t, l, r);
+  if (binop == "ashr")
+    return ashr2tc(t, l, r);
+  // Mirrors migrate_expr's arm rather than a test: jimple builds no unsigned
+  // type, so a logical and an arithmetic shift right of a signed operand print
+  // the same and agree on every verdict -- swapping the two changes nothing
+  // observable (§38.2).
+  if (binop == "lshr")
+    return lshr2tc(t, l, r);
+
+  // Every spelling the frontend converts end to end is covered above
+  // (scope-jimple-irep2.md §38). Anything else reaches migrate_expr through the
+  // legacy arm, which is where it is rejected -- and that is the only remaining
+  // caller of any expression to_exprt.
   return jimple_expr::to_expr2t(ctx, class_name, function_name);
 }
 
