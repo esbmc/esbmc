@@ -379,7 +379,6 @@ void clang_cpp_convertert::add_thunk_method(
   thunk_func_symb.name = component.base_name();
   thunk_func_symb.mode = mode;
   thunk_func_symb.location = component.location();
-  thunk_func_symb.set_type(component.type());
   thunk_func_symb.module =
     get_modulename_from_path(component.location().file().as_string());
 
@@ -388,10 +387,10 @@ void clang_cpp_convertert::add_thunk_method(
 
   // update the type of `this` argument in thunk
   {
-    typet t = thunk_func_symb.get_type();
+    typet t = component.type();
     update_thunk_this_type(t, base_class_id);
-    // A code type now carries its arguments' base names across the seam, which
-    // the argument loop below reads back (frontends-to-irep2.md §44).
+    // A code type carries its arguments' base names across the seam, which
+    // add_thunk_method_arguments reads back (frontends-to-irep2.md §44).
     thunk_func_symb.set_type(migrate_type(t));
   }
 
