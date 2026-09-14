@@ -601,6 +601,26 @@ void python_adjust::adjust_expr(expr2tc &expr)
     expr = code_assign2tc(a.target, decayed, a.location);
   }
   else if (
+    is_code_decl2t(expr) && !is_nil_expr(to_code_decl2t(expr).init) &&
+    is_array_type(to_code_decl2t(expr).init->type) &&
+    !is_array_type(expr->type))
+  {
+    // A declaration whose initialiser is an array but whose type is not: a
+    // Python list element is stored as a pointer-sized integer, so appending a
+    // string literal declares `unsigned long v = "…"`. Legacy lowers it to
+    // `(unsigned long)&arr[0]` -- the array→pointer decay of
+    // c_typecastt::do_typecast, then the integer conversion -- and left as a
+    // bare array the declaration and its value reach the solver with different
+    // sorts, which bitwuzla rejects as "terms with mismatching sort"
+    // (docs/roadmap/scope-python-irep2.md §1). This is clang_c_adjust_irep2's
+    // adjust_decl_init narrowed to the one shape the Python converter builds.
+    const code_decl2t &d = to_code_decl2t(expr);
+    expr2tc init = d.init;
+    c_implicit_typecast(init, expr->type, ns);
+    if (init != d.init)
+      expr = code_decl2tc(expr->type, d.value, init, d.location);
+  }
+  else if (
     is_code_assign2t(expr) &&
     is_pointer_type(to_code_assign2t(expr).target->type) &&
     is_struct_type(ns.follow(to_code_assign2t(expr).source->type)))
