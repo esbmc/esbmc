@@ -2157,3 +2157,41 @@ since it carries the member's own type rather than the placeholder.
 All eleven rows now agree. `irep2_bound_member_call{,_fail}` pins it over both
 spellings; both halves fail with `do_function_call: unexpected callee` when the
 arm is gated off.
+
+### 7.6 The 27 `try_catch` rows: `#cpp_type` does not cross the seam
+
+They are one cause, and it is not `finalize_exception_specification` as §3.14
+guessed. `try-catch_simple_01` is the whole family in five lines: `throw 1`
+caught by `catch (int)`, and under the flag the GOTO reads
+
+```
+ASSERT !(exc_thrown && exc_typeid == 92)   // uncaught exception: signedbv
+```
+
+where the legacy path reads `uncaught exception: signed_int`. An exception id for
+a primitive is its `#cpp_type` **spelling** (`clang_cpp_exception_id.cpp`'s
+`append_cpp_spelling_and_fallback`, falling back to `type.id()`), the adjust pass
+computes the throw's ids from `migrate_type_back(operand->type)`, and the seam
+carries no `#cpp_type` — so the throw reads `signedbv` while the handler, whose
+ids never cross the seam, still reads `signed_int`. Nothing matches, and every
+throw of a primitive escapes as uncaught: 36 of the census's 55 divergences are
+`SUCCESSFUL -> FAILED`, and this is most of them.
+
+**Conversion time does not work here, and that is measured.** §3.15's precedent —
+move the computation to where the legacy spelling still exists — fails because the
+spelling does not exist yet: instrumented at the converter's `CXXThrowExpr` arm,
+the operand's type id is **empty**, since the operand's type is settled by the
+adjust pass, which is exactly what the flag replaces. An `exception_list`
+recorded there would be empty of anything useful, and the change was written,
+measured inert, and reverted rather than parked.
+
+**So the fix is the fourth marker carry**: `#cpp_type` on the primitive type
+kinds (bool, signedbv, unsignedbv, floatbv, fixedbv), joining `#constructor`,
+`#member_init` and the record alignment. Reconstruction from the width is not
+equivalent and must not be substituted for it: on this target a 32-bit signed
+type is `signed_int` or `wchar_t`, a 64-bit one `signed_long` or
+`signed_long_long`, an 8-bit one `char` or `signed_char`, and picking wrong turns
+a valid `catch` into a false "uncaught exception" — the same symptom, silently.
+The carry is per-kind bookkeeping (field, constructor parameter, the
+`excluded_field_bytes` declaration `fields_cover_class` demands, both migrate
+arms), which is why it is recorded here rather than half-done.
