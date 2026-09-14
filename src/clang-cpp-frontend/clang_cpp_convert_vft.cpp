@@ -723,7 +723,10 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     exprt values("struct", symbol_typet(vt_symb_type->id));
     for (const auto &compo : vt_type.components())
     {
-      if (compo.get_bool("is_rtti_name"))
+      // Recovered from the name rather than an `is_rtti_name` flag: the name is
+      // exactly what rtti_name_component_id produced, and a flag on a component
+      // does not survive the IREP2 seam (#4715).
+      if (compo.get_name() == rtti_name_component_id(vt_symb_type->id))
       {
         // The vtable belongs to the most-derived class cxxrd, whatever base
         // class' vptr selects it, so this is where the dynamic type is pinned.
@@ -733,8 +736,11 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         continue;
       }
 
+      // An entry's `pretty_name` is set from the same `virtual_name` the switch
+      // map is keyed on (add_vtable_type_entry), and unlike `virtual_name` it
+      // is part of the IREP2 struct type (#4715).
       std::map<irep_idt, exprt>::const_iterator cit2 =
-        switch_map.find(compo.get("virtual_name").as_string());
+        switch_map.find(compo.pretty_name().as_string());
       assert(cit2 != switch_map.end());
       const exprt &value = cit2->second;
       assert(value.type().id() == compo.type().id());
