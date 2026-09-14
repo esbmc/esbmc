@@ -211,8 +211,6 @@ clang_cpp_convertert::rtti_name_component(const irep_idt &vtable_type_id)
   c.set_name(rtti_name_component_id(vtable_type_id));
   c.set("base_name", "@rtti_name");
   c.set("pretty_name", "@rtti_name");
-  c.set("access", "public");
-  c.set("is_rtti_name", true);
   return c;
 }
 
@@ -239,7 +237,7 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   vt_type_symb.mode = mode;
   {
     struct_typet st;
-    st.set("name", vt_type_symb.id);
+    st.tag(vt_type_symb.id);
     // Every vtable leads with the most-derived type's name, the way a real
     // Itanium-ABI vtable leads with a type_info pointer. `typeid` on a
     // polymorphic glvalue reads it through the object's vptr, which is the only
@@ -304,34 +302,31 @@ void clang_cpp_convertert::add_vtable_type_entry(
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
-  std::string virtual_name = comp.name().as_string();
-  struct_typet::componentt vt_entry;
-  vt_entry.type() = pointer_typet(comp.type());
-  vt_entry.set_name(vt_name.as_string() + "::" + virtual_name);
-  vt_entry.set("base_name", comp.base_name());
   /*
-   * `pretty_name` gets printed in symbol table:
-   *    virtual_table::BLAH@tag-BLAH={ .<pretty_name>=&<virtual_method_base_class> };
-   *    virtual_table::BLAH@tag-BLEH={ .<pretty_name>=&<thunk_to_overriding_method_in_derived_class> };
-   *    virtual_table::BLEH@tag-BLEH={ .<pretty_name>=&<overriding_function_in_derived_class> };
+   * `pretty_name` is what the symbol table prints for an entry, whether it
+   * resolves to a base's method, a thunk, or a derived override:
+   *    virtual_table::BLAH@tag-BLEH={ .<pretty_name>=&<thunk> };
+   * add_vtable_variable_symbols also keys the override switch map on it, since
+   * a component's `virtual_name` is no part of the IREP2 struct type (#4715).
    */
-  vt_entry.set("pretty_name", comp.get("virtual_name"));
-  vt_entry.set("virtual_name", comp.get("virtual_name"));
-  vt_entry.set("access", "public");
-  vt_entry.location() = comp.location();
-  // add an entry to the virtual table
+  const irep_idt entry_pretty_name = comp.get("virtual_name");
+
   assert(vtable_type_symbol);
   {
     const struct_type2t &vt = to_struct_type(vtable_type_symbol->get_type2());
+    // migrate_type gives one base name per component, and every vtable type is
+    // created from it, so the vectors stay in step as entries are appended.
+    assert(vt.member_base_names.size() == vt.members.size());
+
     std::vector<type2tc> members = vt.members;
     std::vector<irep_idt> names = vt.member_names;
     std::vector<irep_idt> pretty_names = vt.member_pretty_names;
     std::vector<irep_idt> base_names = vt.member_base_names;
 
-    members.push_back(migrate_type(vt_entry.type()));
-    names.push_back(vt_entry.get_name());
-    pretty_names.push_back(vt_entry.pretty_name());
-    base_names.push_back(vt_entry.get_base_name());
+    members.push_back(pointer_type2tc(migrate_type(comp.type())));
+    names.push_back(vt_name.as_string() + "::" + comp.name().as_string());
+    pretty_names.push_back(entry_pretty_name);
+    base_names.push_back(comp.base_name());
 
     vtable_type_symbol->set_type(struct_type2tc(
       members, names, pretty_names, vt.name, vt.packed, base_names));
@@ -730,12 +725,13 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     // add vtable variable symbols
     const struct_typet &vt_type = to_struct_type(vt_symb_type->get_type());
     exprt values("struct", symbol_typet(vt_symb_type->id));
+    // Recovered from the name rather than an `is_rtti_name` flag: the name is
+    // exactly what rtti_name_component_id produced from this symbol's own id,
+    // and a flag on a component is no part of the IREP2 struct type (#4715).
+    const irep_idt rtti_name = rtti_name_component_id(vt_symb_type->id);
     for (const auto &compo : vt_type.components())
     {
-      // Recovered from the name rather than an `is_rtti_name` flag: the name is
-      // exactly what rtti_name_component_id produced, and a flag on a component
-      // does not survive the IREP2 seam (#4715).
-      if (compo.get_name() == rtti_name_component_id(vt_symb_type->id))
+      if (compo.get_name() == rtti_name)
       {
         // The vtable belongs to the most-derived class cxxrd, whatever base
         // class' vptr selects it, so this is where the dynamic type is pinned.
@@ -745,12 +741,19 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         continue;
       }
 
-      // An entry's `pretty_name` is set from the same `virtual_name` the switch
-      // map is keyed on (add_vtable_type_entry), and unlike `virtual_name` it
-      // is part of the IREP2 struct type (#4715).
+      // Every other entry's `pretty_name` is the `virtual_name` the switch map
+      // is keyed on: add_vtable_type_entry sets it from that. The rtti entry is
+      // the one component whose two names differ, and it is handled above.
       std::map<irep_idt, exprt>::const_iterator cit2 =
-        switch_map.find(compo.pretty_name().as_string());
-      assert(cit2 != switch_map.end());
+        switch_map.find(compo.pretty_name());
+      if (cit2 == switch_map.end())
+      {
+        log_error(
+          "No virtual table slot for {} in {}",
+          compo.get_name(),
+          vt_symb_type->id);
+        abort();
+      }
       const exprt &value = cit2->second;
       assert(value.type().id() == compo.type().id());
       values.operands().push_back(value);
