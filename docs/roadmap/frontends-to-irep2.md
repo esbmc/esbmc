@@ -2755,3 +2755,45 @@ and the next python step is to settle them, not to look for more gaps.
 Recorded because a raw diff count says the opposite. Every python program diverges
 under the flag, at 64 lines plus a handful more for a dict or a string, and none
 of it is an unported arm.
+
+## 42. Phase 8 is not an adjust-pass phase (2026-09-14)
+
+§1's four bars are written per frontend, which reads as five comparable jobs.
+Measuring solidity shows one of them is a different shape, and it changes what
+Phase 8 costs.
+
+| | B-1 legacy type mentions | B-2 non-IREP2 symbol writes | IREP2 nodes built | LOC | Owns an adjust pass |
+|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | many | 3 259 | no |
+| clang-c | 1 147 | 34, 33 real | some | 17 595 | yes |
+| solidity | 1 420 | **100, all real** | **0** | 23 599 | **no** |
+
+`grep -c '2tc('` over every `.cpp` in `src/solidity-frontend` is zero: the
+frontend constructs no IREP2 node anywhere, so all 100 symbol-table writes are
+genuinely legacy. And it owns no adjust pass -- `solidity_language.cpp:370`
+instantiates `clang_cpp_adjust`, the C++ one.
+
+### 42.1 What that means
+
+Phase 8 has no adjust pass to port. Its hop-off is Phase 7's pass measured over
+Solidity input, which is what PR #7753 wires up -- so Phase 8 inherits its metric
+rather than building one, and the arms it would otherwise have to write are
+already Phase 7's work.
+
+What is left for Phase 8 alone is the converter: 1 420 mentions, concentrated in
+`solidity_convert_call.cpp` (306), `solidity_convert_expr.cpp` (219) and
+`solidity_convert.h` (216). That is the same shape as clang-c's remainder (§139.1),
+where `clang_c_convert.cpp`'s 389 are also deliberately last.
+
+Two consequences for the phase list in §"Phases 5-9":
+
+- Solidity cannot reach B-3 or B-4 ahead of clang-cpp, because it does not own the
+  pass those bars are about. Sequencing it after Phase 7 is not a preference; it
+  is a dependency.
+- Its B-1 is the largest of the three measured so far, and every mention is
+  converter-side. A frontend that builds zero IREP2 nodes has no partial state to
+  preserve, so the converter work can be sliced by construct without the
+  round-trip gates the other phases needed.
+
+jimple owns no adjust pass either and reached B-2 regardless (§35), which is the
+evidence that the converter half is separable.
