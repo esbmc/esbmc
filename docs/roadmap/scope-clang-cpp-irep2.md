@@ -2353,3 +2353,35 @@ right, each found by measuring rather than reading:
 Both rows agree, `ctest -R esbmc-cpp11` is 161 of 161, and
 `irep2_union_copy_ctor{,_fail}` pins it over both the copy and the move
 spelling — the passing half flips with the generator gated off.
+
+### 8.3 The POD rows: a bitfield's flag does not cross the seam
+
+`1032_POD_init` and `1043_POD_init` failed inside `memset`: *"memset of memory
+segment of size 6 with 8 bytes"*. The type symbol is identical on both paths; the
+global's initialiser is not:
+
+```
+legacy  { .a=0, .b=0, .c=0, .d=0, .anon_bit_field_pad#4=0, .anon_pad#5=0 }
+flag    { .a=0, .b=0, .c=0, .d=0, .anon_pad#4=0 }
+```
+
+One pad short, so the object is 6 bytes where `sizeof` says 8. A bitfield
+member's legacy type carries `#bitfield` **and** a subtype naming the underlying
+type; `migrate_type` keeps the width and drops both. `adjust_struct` computed its
+padded layout by back-migrating the literal's type and re-running `add_padding`,
+which then saw three plain 2-bit integers rather than bitfields and inserted no
+bit-field pad.
+
+The fix is to stop round-tripping when there is no need to: the **tag symbol
+already carries the padded layout**, so resolve it by name first and compute from
+the type only when that lookup misses. §7.37 had replaced the lookup with the
+computation because a struct declared inside a Solidity contract has a qualified
+tag the literal's type does not name — so both paths stay, lookup first,
+computation as the fallback. The Solidity corpus is still 507 of 507, which is
+what keeps the fallback honest.
+
+Both rows agree. `irep2_bitfield_global_init{,_fail}` pins it: with the lookup
+forced to miss, the passing half fails on the same `memset` and the failing half's
+violated property moves off its pinned line. Carrying `#bitfield` and its subtype
+across the seam remains the more faithful fix, and is now the only known reason a
+*computed* layout can differ from the tag's.

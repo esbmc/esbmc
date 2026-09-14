@@ -813,17 +813,30 @@ void clang_c_adjust_irep2::adjust_struct(expr2tc &expr)
   if (!is_struct_type(t))
     return;
 
-  // Compute the padded layout from the type itself rather than resolving a tag
-  // symbol by name. `to_struct_type(t).name` is unqualified ("struct Book"),
-  // while a struct declared inside a contract has the qualified tag
-  // "tag-struct Base.Book", so the lookup missed and the literal kept operands
-  // its own type could not describe
-  // (docs/roadmap/scope-solidity-irep2.md §7.37). add_padding is the same
-  // function that gave the tag its layout, and is idempotent, so a type that
+  // The tag symbol's own layout first: it is already padded, and reaching it
+  // needs no round trip through the seam -- which matters, because migrate_type
+  // carries neither a member's `#bitfield` flag nor its underlying type, so
+  // add_padding applied to a back-migrated type sees plain narrow integers and
+  // inserts no bit-field pad (scope-clang-cpp-irep2.md §8.3).
+  type2tc padded;
+  const std::string tag = "tag-" + to_struct_type(t).name.as_string();
+  if (const symbolt *s = ns.lookup(irep_idt(tag));
+      s != nullptr && s->get_type().is_struct())
+    padded = s->get_type2();
+
+  // No tag symbol under that name: a struct declared inside a Solidity contract
+  // has the qualified tag "tag-struct Base.Book" while the literal's type names
+  // it "struct Book", so the lookup misses and the layout is computed from the
+  // type itself (scope-solidity-irep2.md §7.37). add_padding is the same
+  // function that gave the tag its layout and is idempotent, so a type that
   // already carries its pads is unchanged.
-  typet legacy = migrate_type_back(t);
-  add_padding(legacy, ns);
-  const type2tc padded = migrate_type(legacy);
+  if (is_nil_type(padded))
+  {
+    typet legacy = migrate_type_back(t);
+    add_padding(legacy, ns);
+    padded = migrate_type(legacy);
+  }
+
   if (!is_struct_type(padded))
     return;
 
