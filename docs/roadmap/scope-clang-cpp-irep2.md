@@ -2385,3 +2385,31 @@ forced to miss, the passing half fails on the same `memset` and the failing half
 violated property moves off its pinned line. Carrying `#bitfield` and its subtype
 across the seam remains the more faithful fix, and is now the only known reason a
 *computed* layout can differ from the tag's.
+
+### 8.4 The last singleton: an array-typed element is not a decay
+
+`github_4317` — a range-for over `S cases[][2]` — differed in one instruction:
+
+```
+legacy  ASSIGN __end1=&(*__range1)[0] + 1;
+flag    ASSIGN __end1=&(*__range1)[0][0] + 1;
+```
+
+One index too many, so the end pointer is one *element* past the start rather than
+one row, and the second row read is out of bounds. Instrumented, the decay fires
+four times on an operand that is already an `index`, and twice on the symbol
+itself, which is the correct one.
+
+`&row` where `row` is a row of a 2-D array has type `S (*)[2]`: taking the address
+of an array-typed *element* is not the array-to-pointer decay (C11 6.3.2.1p3),
+and the arm now declines it. The legacy arm decays unconditionally too and gets
+away with it because its converter leaves such an index typed as the element —
+this pass types it as the row, correctly, and the decay was the only thing
+relying on the old typing.
+
+`irep2_nested_array_row_address{,_fail}` pins it; the passing half fails with an
+array-bounds violation when the decay is forced on every array operand.
+
+**Phase 7's census is now one row from exhausted**, and that row is not a defect:
+`vector_reserve_realloc_nested_fail` is the second where the flag answers and the
+default path does not.

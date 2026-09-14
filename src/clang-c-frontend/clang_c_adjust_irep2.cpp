@@ -790,6 +790,14 @@ void clang_c_adjust_irep2::adjust_address_of(expr2tc &expr)
   if (!is_array_type(a.ptr_obj->type))
     return;
 
+  // `&row`, where `row` is a row of a 2-D array, has type `S (*)[2]`: an
+  // explicit address-of an array-typed *element* is not a decay, and decaying
+  // it walks the pointer arithmetic by an element instead of a row
+  // (docs/roadmap/scope-clang-cpp-irep2.md §8.4). The legacy arm never fires
+  // here because its converter leaves such an index typed as the element.
+  if (is_index2t(a.ptr_obj))
+    return;
+
   const type2tc &elem = to_array_type(a.ptr_obj->type).subtype;
   const expr2tc idx =
     index2tc(elem, a.ptr_obj, gen_zero(migrate_type(index_type())));
