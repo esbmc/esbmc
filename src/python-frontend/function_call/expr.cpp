@@ -37,6 +37,7 @@
 #include <limits>
 #include <unordered_map>
 #include <boost/algorithm/string/predicate.hpp>
+#include <deque>
 #include <optional>
 #include <python-frontend/consteval/python_consteval.h>
 #include <regex>
@@ -64,29 +65,32 @@ std::string node_type_of(const nlohmann::json &node)
   return node["_type"].get<std::string>();
 }
 
-/// Whether \p class_node declares \p method with a @staticmethod decorator.
-/// The decorator decides this, not the first parameter's name, which Python
-/// does not fix.
-bool declares_staticmethod(
-  const nlohmann::json &class_node,
-  const std::string &method)
+/// \p class_node's own declaration of \p method, or a null pointer when the
+/// class body does not declare it.
+const nlohmann::json *
+find_method_def(const nlohmann::json &class_node, const std::string &method)
 {
   if (method.empty() || class_node.empty() || !class_node.contains("body"))
-    return false;
+    return nullptr;
 
   for (const auto &member : class_node["body"])
-  {
-    if (
-      node_type_of(member) != "FunctionDef" || member["name"] != method ||
-      !member.contains("decorator_list"))
-      continue;
+    if (node_type_of(member) == "FunctionDef" && member["name"] == method)
+      return &member;
+  return nullptr;
+}
 
-    for (const auto &d : member["decorator_list"])
-      if (
-        node_type_of(d) == "Name" && d.contains("id") &&
-        d["id"] == "staticmethod")
-        return true;
-  }
+/// Whether \p method_def carries the @staticmethod decorator. The decorator
+/// decides this, not the first parameter's name, which Python does not fix.
+bool is_staticmethod_def(const nlohmann::json &method_def)
+{
+  if (!method_def.contains("decorator_list"))
+    return false;
+
+  for (const auto &d : method_def["decorator_list"])
+    if (
+      node_type_of(d) == "Name" && d.contains("id") &&
+      d["id"] == "staticmethod")
+      return true;
   return false;
 }
 
@@ -265,6 +269,42 @@ exprt function_call_expr::build_temporary_receiver(
   return ctor_result;
 }
 
+/// Whether the declaration of \p method that \p class_node resolves to is a
+/// @staticmethod. The declaration may come from a base class, and a class that
+/// redeclares the method overrides whatever its bases say (#7546).
+bool function_call_expr::resolves_to_staticmethod(
+  const nlohmann::json &class_node,
+  const std::string &method) const
+{
+  std::deque<nlohmann::json> pending{class_node};
+  std::unordered_set<std::string> seen;
+
+  while (!pending.empty())
+  {
+    const nlohmann::json cls = std::move(pending.front());
+    pending.pop_front();
+
+    if (const nlohmann::json *def = find_method_def(cls, method))
+      return is_staticmethod_def(*def);
+
+    if (!cls.contains("bases") || !cls["bases"].is_array())
+      continue;
+
+    for (const auto &base : cls["bases"])
+    {
+      if (!base.is_object() || !base.contains("id") || !base["id"].is_string())
+        continue;
+      // A malformed AST can name a base twice or cycle; `seen` bounds the walk.
+      if (!seen.insert(base["id"].get<std::string>()).second)
+        continue;
+      nlohmann::json base_node = find_class_node(base["id"]);
+      if (!base_node.empty())
+        pending.push_back(std::move(base_node));
+    }
+  }
+  return false;
+}
+
 nlohmann::json
 function_call_expr::find_class_node(const std::string &name) const
 {
@@ -371,7 +411,7 @@ void function_call_expr::get_function_type()
         : std::string();
     const nlohmann::json class_node =
       find_class_node(type_handler_.get_var_type(caller));
-    function_type_ = declares_staticmethod(class_node, method)
+    function_type_ = resolves_to_staticmethod(class_node, method)
                        ? FunctionType::ClassMethod
                        : FunctionType::InstanceMethod;
   }
@@ -5518,36 +5558,65 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   return call;
 }
 
+/// The base-class declaration of a ClassMethod call the derived class does not
+/// declare itself, or a null pointer when there is none (#7546).
+const symbolt *function_call_expr::find_inherited_classmethod(
+  const std::string &func_symbol_id) const
+{
+  if (function_type_ != FunctionType::ClassMethod)
+    return nullptr;
+
+  return converter_.find_function_in_base_classes(
+    function_id_.get_class(),
+    func_symbol_id,
+    function_id_.get_function(),
+    false);
+}
+
+/// A forward-reference call for `Class.__post_init__(...)`, which a dataclass's
+/// synthesized constructor may issue before the method symbol is registered.
+/// Keeping class scope here stops the lookup falling back to global scope.
+std::optional<exprt> function_call_expr::build_post_init_forward_call(
+  const std::string &func_symbol_id)
+{
+  if (
+    function_type_ != FunctionType::ClassMethod ||
+    function_id_.get_function() != "__post_init__" ||
+    function_id_.get_class().empty())
+    return std::nullopt;
+
+  code_function_callt call;
+  call.location() = converter_.get_location_from_decl(call_);
+  call.function() = symbol_exprt(func_symbol_id, code_typet());
+  call.type() = empty_typet();
+
+  for (const auto &arg_node : call_["args"])
+  {
+    exprt arg = converter_.get_expr(arg_node);
+    call.arguments().push_back(
+      arg.type().is_array() ? build_address_of(arg) : arg);
+  }
+
+  return exprt(call);
+}
+
 std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
   const symbolt *&func_symbol,
   const std::string &func_symbol_id,
   symbolt *obj_symbol,
   const symbol_id &obj_symbol_id)
 {
-  // Dataclass synthesized constructors may call Class.__post_init__(...) before
-  // the class method symbol is fully registered. Preserve class scope and emit
-  // a forward reference call instead of falling back to global scope.
-  if (
-    function_type_ == FunctionType::ClassMethod &&
-    function_id_.get_function() == "__post_init__" &&
-    !function_id_.get_class().empty())
-  {
-    locationt location = converter_.get_location_from_decl(call_);
-    code_function_callt call;
-    call.location() = location;
-    call.function() = symbol_exprt(func_symbol_id, code_typet());
-    call.type() = empty_typet();
-
-    for (const auto &arg_node : call_["args"])
-    {
-      exprt arg = converter_.get_expr(arg_node);
-      if (arg.type().is_array())
-        call.arguments().push_back(build_address_of(arg));
-      else
-        call.arguments().push_back(arg);
-    }
-
+  if (std::optional<exprt> call = build_post_init_forward_call(func_symbol_id))
     return call;
+
+  // A @staticmethod inherited from a base is called as a ClassMethod on the
+  // derived class, whose own body does not declare it (#7546). Only the
+  // lookup applies here: there is no receiver to bind and no constructor to
+  // record, and a miss keeps the unresolved-call handling below.
+  if (const symbolt *inherited = find_inherited_classmethod(func_symbol_id))
+  {
+    func_symbol = inherited;
+    return std::nullopt;
   }
 
   if (
