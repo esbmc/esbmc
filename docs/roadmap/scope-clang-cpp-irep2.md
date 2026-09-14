@@ -2413,3 +2413,28 @@ array-bounds violation when the decay is forced on every array operand.
 **Phase 7's census is now one row from exhausted**, and that row is not a defect:
 `vector_reserve_realloc_nested_fail` is the second where the flag answers and the
 default path does not.
+
+### 8.5 Phase 7's census is exhausted
+
+The last row was the harness, not the pass.
+`vector_reserve_realloc_nested_fail` showed `none` for the *legacy* side, which
+read as "the flag answers where the default path does not". Re-run with a real
+budget both paths report `VERIFICATION FAILED`: the census caps each run at 45s
+and that row needs more. `ch9_7`, the other row of that shape, is the same
+artefact.
+
+So over `regression/esbmc-cpp`, `esbmc-cpp11` and the standard-mode suites —
+3192 rows, 3095 of them measurable — **every row agrees under
+`--clang-cpp-irep2-adjust-only`**, and none crashes, aborts or fails to migrate.
+The nine causes this took are §7.3 through §8.4, plus §7.6's throw ids and §7.7's
+exception specifications.
+
+Two things that number does *not* say, and both belong next to it:
+
+- The cap is part of the measurement. Two rows were mis-read because of it, and a
+  third pair (`github_2040`, `github_6368_insert`) was mis-read the same way in
+  §7.1. A census row that reports no verdict is a row to re-run, not a defect.
+- Agreement is not sufficiency. The flag replaces the legacy adjuster; it does
+  not yet build IREP2 natively end to end, which is what §1's bar asks for. What
+  agreement buys is the right to consider making the flag the default — and that
+  needs an SV-COMP run, since it moves every C++ verdict path.
