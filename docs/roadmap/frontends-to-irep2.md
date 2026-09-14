@@ -2642,3 +2642,65 @@ re-doing Phase 6 inside Phase 7.
 There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
 whole instrument — one binary A/B'd against itself — does not exist here. A
 census by verdict waits on it.
+
+## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
+
+A hop-off flag's divergence count is only as good as the inputs it is measured
+over. `scope-clang-c-irep2.md` §143 probed 22 constructs chosen for being
+unlikely to appear in the 112 tests that use `--clang-c-irep2-adjust-only`, and
+found one real defect (§144). This section records the next two batches and what
+they say about the two frontends that have a flag.
+
+### 40.1 clang-c: 15 more constructs, all agreeing
+
+Nested designated initialisers over an array of structs, a flexible array
+member, `__builtin_offsetof`, a pointer to an array, a round trip through
+`long`, `const`/`volatile` assignment, a compound assignment mixing `int` and
+`double`, pointer increment, a mixed-arithmetic conditional, `switch` on an
+enum, a bitfield inside a union, a struct return, whole-struct assignment, a call
+through a function-pointer struct member, and a variadic struct argument.
+
+All 15 agree, which puts the clang-c probe total at 37 of 38 over three batches.
+The one failure was §144's.
+
+### 40.2 python: every program diverges, at one site
+
+Twelve python probes -- mixed arithmetic, floor division and modulo, augmented
+assignment, boolean operators, `while`, `for ... range`, list append and
+indexing, a class with an attribute and a method, unary minus, a comparison
+chain, a nested function, float comparison -- **all diverge** under
+`--python-irep2-adjust-only`, and each by exactly 64 lines.
+
+That constant is the tell: it is one site, not twelve defects. Every diff line is
+inside the operational model `src/python-frontend/models/nondet.py` at the
+`list[str]` literal on line 283, and every one has the same shape:
+
+```
+- FUNCTION_CALL: list_push(..., &...$list_elem$281, ...)
++ FUNCTION_CALL: list_push(..., &...$list_elem$281[0], ...)
+```
+
+So the model is pulled in by every python program, and one argument in it is
+spelled `&a` on the default path and `&a[0]` under the flag.
+
+### 40.3 Which side is the outlier, measured
+
+The C frontend settles it. `sink(&buf)` and `sink(buf)` for a `char buf[4]` both
+emit `sink((void *)(&buf[0]))`, and they do so identically with and without
+`--clang-c-irep2-adjust-only`. The C path always decays, and agrees with itself.
+
+So the IREP2 python pass produces what the C frontend produces, and the *legacy*
+python pass is the one that skips the decay. It is not `restore_array_lvalue`
+either -- that undo exists in `clang_c_adjust` but is gated to
+`__ESBMC_assigns_impl` (#7010), so it cannot reach a `list_push` argument.
+
+**Not fixed here, deliberately.** Making the two agree means either changing the
+default python path, which is a behaviour change for every python program and
+wants its own PR, or making the IREP2 path disagree with the C frontend to match
+the legacy python one. Which is right depends on whether any model relies on
+receiving a pointer-to-array, and that is a Phase 9 question rather than
+something to settle from a GOTO diff.
+
+The 49 tests using the python flag all pass, before and after this measurement.
+They assert verdicts, and the divergence changes none -- which is exactly why it
+took a probe to see it.
