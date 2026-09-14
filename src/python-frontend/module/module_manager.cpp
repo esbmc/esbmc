@@ -32,6 +32,94 @@ module_manager::module_manager(const std::string &module_search_path)
 {
 }
 
+/// A legacy forward reference, `-> "int"`, and the `-> None` that shares its
+/// node type.
+static std::string string_annotation_type(const nlohmann::json &returns)
+{
+  if (!returns.contains("value"))
+    return "";
+  if (returns["value"].is_string())
+    return returns["value"].get<std::string>();
+  return returns["value"].is_null() ? "None" : "";
+}
+
+/// The return type named by a FunctionDef's annotation, or "" when it carries
+/// none. "None" stands for an annotation this reader understands to be
+/// NoneType, so a caller cannot tell it apart from an unrecognised shape --
+/// which is the behaviour callers have always seen.
+static std::string annotated_return_type(const nlohmann::json &returns)
+{
+  // PEP 604 union syntax: int | bool
+  if (returns["_type"] == "BinOp")
+    return "Union";
+
+  if (returns["_type"] == "Subscript")
+  {
+    if (
+      returns.contains("value") && returns["value"].contains("id") &&
+      returns["value"]["id"].is_string())
+      return returns["value"]["id"].get<std::string>();
+    return "";
+  }
+
+  if (returns["_type"] == "Tuple")
+    return "Tuple";
+
+  if (returns["_type"] == "Constant" || returns["_type"] == "Str")
+    return string_annotation_type(returns);
+
+  if (returns.contains("value") && returns["value"].is_null())
+    return "None";
+
+  if (returns.contains("id") && returns["id"].is_string())
+    return returns["id"].get<std::string>();
+
+  return "None";
+}
+
+static void add_function_def(module &md, const nlohmann::json &node)
+{
+  function f;
+  f.name_ = get_string_safe(node, "name");
+  if (f.name_.empty() || node["returns"].is_null())
+    return;
+
+  f.return_type_ = annotated_return_type(node["returns"]);
+
+  if (json_utils::has_overload_decorator(node))
+    md.add_overload(node);
+
+  md.add_function(f);
+}
+
+static void add_class_def(module &md, const nlohmann::json &node)
+{
+  class_definition c;
+  c.name_ = get_string_safe(node, "name");
+  if (c.name_.empty())
+    return;
+
+  if (node.contains("bases") && node["bases"].is_array())
+    for (const auto &base : node["bases"])
+    {
+      std::string base_name = get_string_safe(base, "id");
+      if (!base_name.empty())
+        c.bases_.push_back(base_name);
+    }
+
+  if (node.contains("body") && node["body"].is_array())
+    for (const auto &item : node["body"])
+    {
+      if (item["_type"] != "FunctionDef")
+        continue;
+      std::string method_name = get_string_safe(item, "name");
+      if (!method_name.empty())
+        c.methods_.push_back(method_name);
+    }
+
+  md.add_class(c);
+}
+
 /// Read \p json_path into \p md, reporting whether it could. Only functions,
 /// classes and overloads may be added here -- see module::add_source for why.
 /// Diagnostics keep the create_module tag the messages have always carried.
@@ -79,96 +167,9 @@ static bool populate_module(module &md, const fs::path &json_path)
       }
 
       if (node_type == "FunctionDef")
-      {
-        function f;
-        f.name_ = get_string_safe(node, "name");
-        if (f.name_.empty())
-        {
-          continue;
-        }
-
-        if (node["returns"].is_null())
-          continue;
-
-        // Handle PEP 604 union syntax: int | bool
-        if (node["returns"]["_type"] == "BinOp")
-          f.return_type_ = "Union";
-        else if (node["returns"]["_type"] == "Subscript")
-        {
-          if (
-            node["returns"].contains("value") &&
-            node["returns"]["value"].contains("id") &&
-            node["returns"]["value"]["id"].is_string())
-            f.return_type_ = node["returns"]["value"]["id"].get<std::string>();
-        }
-        else if (node["returns"]["_type"] == "Tuple")
-          f.return_type_ = "Tuple";
-        else if (
-          node["returns"]["_type"] == "Constant" ||
-          node["returns"]["_type"] == "Str")
-        {
-          // Handle string annotations like -> "int" (legacy forward references)
-          if (node["returns"].contains("value"))
-          {
-            if (node["returns"]["value"].is_string())
-              f.return_type_ = node["returns"]["value"].get<std::string>();
-            else if (node["returns"]["value"].is_null())
-              f.return_type_ = "None";
-          }
-        }
-        else if (
-          node["returns"].contains("value") &&
-          node["returns"]["value"].is_null())
-          f.return_type_ = "None";
-        else if (
-          node["returns"].contains("id") && node["returns"]["id"].is_string())
-          f.return_type_ = node["returns"]["id"].get<std::string>();
-        else
-          f.return_type_ = "None";
-
-        if (json_utils::has_overload_decorator(node))
-          md.add_overload(node);
-
-        md.add_function(f);
-      }
+        add_function_def(md, node);
       else if (node_type == "ClassDef")
-      {
-        class_definition c;
-
-        // Safely get class name
-        c.name_ = get_string_safe(node, "name");
-        if (c.name_.empty())
-        {
-          continue;
-        }
-
-        // Process base classes
-        if (node.contains("bases") && node["bases"].is_array())
-        {
-          for (const auto &base : node["bases"])
-          {
-            std::string base_name = get_string_safe(base, "id");
-            if (!base_name.empty())
-              c.bases_.push_back(base_name);
-          }
-        }
-
-        // Process methods
-        if (node.contains("body") && node["body"].is_array())
-        {
-          for (const auto &item : node["body"])
-          {
-            if (item["_type"] == "FunctionDef")
-            {
-              std::string method_name = get_string_safe(item, "name");
-              if (!method_name.empty())
-                c.methods_.push_back(method_name);
-            }
-          }
-        }
-
-        md.add_class(c);
-      }
+        add_class_def(md, node);
     }
     return true;
   }
