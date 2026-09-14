@@ -2489,3 +2489,38 @@ this probe set, none.
 Run under `DebugOpt`, so with asserts: no probe aborts on either tree, which the
 byte-identical comparison alone would not have shown
 (`scope-jimple-irep2.md` §38.4a).
+
+## 10. Fourteen harder probes, and what 26 agreeing rules out
+
+§9's twelve were a textbook feature list. These fourteen are the constructs a
+reader would reach for to break a C++ adjust pass, run on this branch under
+`DebugOpt`:
+
+virtual inheritance through a diamond with a cast to the shared base; an abstract
+class called through its interface; a copy constructor with a side effect; an
+overloaded assignment operator; a nested class; a friend function; `catch (...)`
+selected over a non-matching `catch (int)`; a bare `throw;` rethrow from inside a
+handler; `dynamic_cast` to a derived pointer; a template class with a member
+function; a `const` member function beside a mutating one; `operator()` and
+`operator[]`; `const_cast` followed by `static_cast`; and an array of objects with
+a default constructor.
+
+**All fourteen agree, and none aborts.** With §9 that is 26 independent probes
+agreeing on this branch, against a corpus of 3 095 rows (§8) that also agrees.
+
+### 10.1 What that does and does not establish
+
+It rules out the failure mode §9 was written to test for: that the corpus
+agreement reflects the corpus rather than the pass, since the pass was developed
+against that corpus. Twenty-six constructs chosen from the language instead, two
+of which fail on master and both of which this branch fixes (§9.1), is evidence
+the agreement is a property of the pass.
+
+It does not establish completeness. Every probe here is a *whole-program* check
+of the emitted GOTO; a construct whose adjust arm is wrong in a way that cancels
+out by the time goto_convert has run would pass. And the probes are small: none
+mixes the features, where the corpus's 3 095 rows do.
+
+What remains for this frontend is therefore not more probing of the adjust pass.
+It is `clang_cpp_convert.cpp` and the 639 legacy type mentions
+(`frontends-to-irep2.md` §43), which the phase list puts last for every frontend.
