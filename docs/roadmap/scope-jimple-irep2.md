@@ -1836,8 +1836,40 @@ converted `jimple_declaration::to_exprt`, one of the sites deleted here — the
 seam's signature was the point of that slice and this one does not undo it, but
 the conversion at that particular site was incidental and is now gone.
 
-B-1 cannot approach zero while the expression arms remain, and they remain
-because five defaults are deliberately unmigrated (§31.1). Closing that is the
-next question for this frontend, and it is a design one, not a mechanical one:
-each of the five returns a statement from an expression method or rewrites its
-own operand.
+### 36.5 What keeps the eleven expression arms alive, and how to kill it
+
+B-1 cannot approach zero while the expression arms remain, and tracing why they
+remain gives one concrete obstacle rather than the five separate design questions
+§31.1 implies.
+
+Exactly two live `to_exprt` bodies call an expression's `to_exprt`:
+`jimple_assignment::to_exprt` (its left-hand side and right-hand side) and
+`jimple_expr_invoke::to_exprt` (each parameter). Both are entered the same way:
+`jimple_assignment::to_code2t` delegates to `jimple_method_field::to_code2t`'s
+migrating default whenever the right-hand side is a non-nondet, non-intrinsic
+invoke. `jimple_throw::to_exprt` is live too but is a dead end -- its operand
+conversion is commented out upstream, so it reaches nothing.
+
+The reason that delegation is still there is a single pattern:
+`jimple_assignment::to_exprt` converts its left-hand side, calls `set_lhs` on the
+right-hand side *invoke object* with the resulting legacy `exprt`, and then asks
+that object to convert itself -- so the invoke lowers to a call with an already
+built left-hand side rather than to an assignment. Porting it needs three things,
+all mechanical:
+
+1. `jimple_expr_invoke` and `jimple_virtual_invoke` to carry their injected
+   left-hand side as an `expr2tc`.
+2. Their `to_expr2t` to build the remaining arms: two `code_skip2t`s for the
+   `Intrinsics` and `Runtime` skips, the nondet arm, and the main path's
+   `code_block2t` of `@parameterN` assignments followed by the call.
+3. `jimple_assignment::to_code2t` to stop delegating, setting the IREP2
+   left-hand side and calling `to_expr2t`.
+
+The payoff is the whole of `jimple_expr.cpp`: with those two callers gone, every
+expression `to_exprt` becomes callerless -- the eleven untested arms plus
+`jimple_symbol` and `jimple_constant`, which are only reached through them.
+
+The corpus cannot verify steps 1-3 on its own: §19's census found the
+`Intrinsics`, `Runtime` and nondet arms unreachable from any test in it, so each
+needs a Jimple source written to reach it, the same way nine tests in this suite
+already were.
