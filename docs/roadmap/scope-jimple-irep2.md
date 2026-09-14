@@ -1948,12 +1948,97 @@ What is left live, and what it reaches:
 | `jimple_class_field` | nothing -- it builds a struct component from a type |
 | `jimple_throw` | nothing -- its operand conversion is commented out upstream |
 
-So every expression `to_exprt` is callerless, as is `jimple_assignment`'s. That
-is the next slice, and it is the §36.2 shape rather than the §36.1 one: a caller
-argument exists for all of them, so they can go the way the seven in #7786 did.
+So every expression `to_exprt` looked callerless, as did `jimple_assignment`'s.
+
+**That conclusion was wrong, and §38 corrects it.** `jimple_binop::to_expr2t`
+covered six operators and sent the rest to the migrating default, which converts
+its operands with `to_exprt` -- so any expression kind was still reachable as the
+operand of, say, a multiplication. The census read zero only because every binop
+in the corpus happens to be one of the six. That is exactly §36.1's lesson
+applied to a conclusion drawn one section after stating it.
 
 ### 37.4 Status
 
 Twenty-seven PRs. B-1 is 154, from 160 -- the drop is the two `exprt lhs`
 members and their setters. The slice mostly adds native code rather than removing
 legacy code; the removal it unlocks is worth most of `jimple_expr.cpp`.
+
+## 38. Every binop the frontend supports, and what a zero still hid
+
+§37.3 concluded that the expression `to_exprt` arms were callerless. They were
+not. `jimple_binop::to_expr2t` handled six operators and sent everything else to
+the migrating default, whose legacy arm converts *its own operands* with
+`to_exprt` -- so a multiplication with a cast operand would have reached
+`jimple_cast::to_exprt`. The census read zero because the corpus's binops are all
+among the six, which is §36.1's own lesson landing one section after it was
+written down.
+
+### 38.1 What the frontend actually supports
+
+`jimple_binop::from_json` takes the operator string verbatim apart from mapping
+`==` to `=`, and the legacy arm hands it to `gen_binary`, which builds an `exprt`
+with that id whatever it is. So the supported set is not a list in the frontend at
+all -- it is whatever `migrate_expr` knows. Probing 29 candidate spellings through
+the frontend separates them cleanly:
+
+| Converts | Rejected |
+|---|---|
+| `+ - * / mod < <= > >= = == notequal and or bitand bitor bitxor shl ashr lshr` | `% shr << >> >>> != & \| ^` |
+
+Twenty work; nine produce `ERROR: migrate expr failed: <op>`. The rejected ones
+are mostly the symbolic spellings of operators that *are* supported under a word
+(`&` versus `bitand`), which is worth knowing before assuming a parser change is
+safe.
+
+The IREP2 arm covered 6 of the 20. The other 13 are added here, and all 20 emit a
+byte-identical instruction. Two details fell out of the measurement rather than
+from reading: the relational and logical kinds return a bool-typed node and the
+*enclosing assignment* is what casts it, which is why the dump shows
+`(signed int)($i1 < 2)`; and `and`/`or` take the operands as they come, not as
+bools, because the legacy arm typed the node with the left-hand side's type too.
+
+### 38.2 `ashr` and `lshr` cannot be told apart here
+
+Both print `>>`, so the dump cannot separate them. Nor can a verdict: `-8 ashr 1`
+is `-4` and `-8 lshr 1` is `2147483644`, but a program dividing by
+`(x >> 1) + 4` reports division-by-zero either way. Swapping the two arms leaves
+every dump identical and all 30 tests passing.
+
+The reason is structural: `jimple_type` builds nothing but int, bool, void and
+pointers (§23.1), so the left operand of a shift is always signed, and that is the
+case where the two coincide in everything this frontend can observe. So the
+mapping is pinned by mirroring `migrate_expr`'s arms (`migrate.cpp:1565` and
+`:1725`) and by nothing else -- stated here rather than left as an unexamined pass
+in the test log. The repo has hit this before from the C side, where unsigned types
+make the difference visible.
+
+### 38.3 The test, and three mutations
+
+`github_4715_binop_kinds_01` puts all twenty operators in one method and pins the
+emitted instructions as a single ordered sequence, so each mapping is pinned by
+its own printed form and by its position. Three mutations, each failing that test
+and nothing else: `mod` mapped to `div`, `<=` to `<`, and `bitxor` to `bitor`.
+
+A regex trap, for the next person writing one of these: a raw-string `r";\n"` puts
+a literal backslash and `n` in the pattern, which `rstrip("\n")` does not remove,
+so the pattern ends up requiring a newline before `$` and cannot match anything.
+Build the separators explicitly instead of trimming them off the end.
+
+### 38.4 What still blocks the deletion
+
+One thing. An unsupported operator reaches `jimple_expr::to_expr2t`, whose legacy
+arm produces `ERROR: migrate expr failed: <op>` -- so `jimple_binop::to_exprt`
+remains reachable purely as the error path, and its operand conversions keep every
+expression arm reachable with it.
+
+Closing that means rejecting an unsupported operator in the IREP2 arm, which
+changes the message a user sees and so wants its own change and its own test. After
+it, the twelve expression arms and `jimple_assignment`'s go the way the seven in
+#7786 did.
+
+### 38.5 Status
+
+Twenty-eight PRs. B-1 reads 155, one more than §37, and the extra hit is a comment
+mentioning `to_exprt` by name -- the same class of false positive B-2's command has
+(§35.2), now on B-1. The deletion §37.3 promised is one small slice further away
+than that section claimed.
