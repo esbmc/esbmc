@@ -136,13 +136,45 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
     /*ellipsis=*/false));
 }
 
-// What a code type's arguments keep across the seam, and what they lose.
-// code_type2t reflects `argument_names` and nothing else per argument, so an
-// argument's `#base_name` has nowhere to live: migrate_type_back can restore
-// the identifier and the ellipsis and cannot restore the base name. Pinned here
-// because a consumer that reads one -- clang_cpp_convert_vft.cpp's thunk
-// argument loop does -- cannot have its symbol stored IREP2-side
+// What a code type's arguments carry across the seam. The identifier is
+// reflected; the base name rides `argument_base_names`, which is deliberately
+// *not* reflected -- a parameter's spelling is no part of the function type
+// (C11 6.7.6.3p15), so two signatures differing only there must still hash and
+// compare equal. Both halves are asserted, because a consumer reads the base
+// name back: clang_cpp_convert_vft.cpp's thunk argument loop
 // (docs/roadmap/frontends-to-irep2.md §44).
+// The struct counterpart of the code-argument case below, and the reason a
+// struct-typed symbol cannot yet be stored IREP2-side. struct_type2t carries
+// `member_names` and `member_pretty_names` and nothing else per component, so a
+// component's `#base_name` -- and any other attribute on it -- is dropped.
+//
+// Measured consequence: converting the two vtable struct-type writes in
+// clang_cpp_convert_vft.cpp to store IREP2 fails 653 of 1058 esbmc-cpp/cpp
+// tests, because the thunk builder takes its symbol name from
+// `component.base_name()` and every vtable component arrives with an empty one
+// (docs/roadmap/frontends-to-irep2.md §45).
+TEST_CASE("a struct component loses its base name", "[migrate]")
+{
+  struct_typet st;
+  st.tag("S");
+  struct_typet::componentt c("S::f", "f", int_type());
+  c.cmt_base_name("f");
+  c.set("#member_attr", "keepme");
+  st.components().push_back(c);
+
+  const typet back_t = migrate_type_back(migrate_type(st));
+  const struct_typet &back = to_struct_type(back_t);
+  REQUIRE(back.components().size() == 1);
+
+  // Carried, because struct_type2t reflects both.
+  REQUIRE(back.components().at(0).get_name() == irep_idt("S::f"));
+  REQUIRE(back.components().at(0).pretty_name() == irep_idt("f"));
+
+  // Not carried: nothing holds them.
+  REQUIRE(back.components().at(0).cmt_base_name().empty());
+  REQUIRE(back.components().at(0).get("#member_attr").empty());
+}
+
 TEST_CASE("a code argument keeps its identifier and its base name", "[migrate]")
 {
   code_typet t;
