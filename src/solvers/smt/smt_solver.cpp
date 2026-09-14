@@ -3296,9 +3296,21 @@ void smt_solver_baset::pre_solve()
   array_api->add_array_constraints_for_solving();
 }
 
+/* An element get_index_value() read from the model is a value already. Walking
+ * its operands would query the object inside an address_of: a function aborts,
+ * data prints as &0. A symbol element (NULL, INVALID<n>) is returned as is. */
+std::optional<expr2tc>
+smt_solver_baset::get_index(const expr2tc &expr, expr2tc &res)
+{
+  std::optional<expr2tc> v = get_index_value(expr, res);
+  if (!v && res != expr)
+    v = is_symbol2t(res) ? res : get(res);
+  return v;
+}
+
 /* get()'s index_id case: read one element out of the solver's array model
  * rather than materialising the whole array. Nullopt where the case falls
- * through; @p res then holds the element read, if the index was constant. */
+ * through to get()'s generic tail, having possibly rewritten @p res. */
 std::optional<expr2tc>
 smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
 {
@@ -3375,13 +3387,8 @@ expr2tc smt_solver_baset::get(const expr2tc &expr)
   switch (res->expr_id)
   {
   case expr2t::index_id:
-    if (auto v = get_index_value(expr, res))
+    if (auto v = get_index(expr, res))
       return *v;
-    // An element read from the model is a value already. Walking its operands
-    // would query the object inside an address_of: a function aborts, data
-    // prints as &0. A symbol element (NULL, INVALID<n>) is returned as is.
-    if (res != expr)
-      return is_symbol2t(res) ? res : get(res);
     break;
 
   case expr2t::with_id:
