@@ -5496,6 +5496,10 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
       for (const auto &arg_node : call_["args"])
       {
         exprt arg = converter_.get_expr(arg_node);
+        if (type_handler_.is_tagged_scalar_type(arg.type()))
+          throw std::runtime_error(
+            "passing a dynamically-typed variable to a function is not yet "
+            "supported");
         if (arg.type().is_code() && arg.is_symbol())
           arg = build_address_of(arg);
         call.arguments().push_back(arg);
@@ -5607,6 +5611,10 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
+    if (type_handler_.is_tagged_scalar_type(arg.type()))
+      throw std::runtime_error(
+        "passing a dynamically-typed variable to a function is not yet "
+        "supported");
     call.arguments().push_back(
       arg.type().is_array() ? build_address_of(arg) : arg);
   }
@@ -5796,6 +5804,10 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         for (const auto &arg_node : call_["args"])
         {
           exprt arg = converter_.get_expr(arg_node);
+          if (type_handler_.is_tagged_scalar_type(arg.type()))
+            throw std::runtime_error(
+              "passing a dynamically-typed variable to a function is not "
+              "yet supported");
           if (arg.type().is_array())
           {
             if (
@@ -5895,6 +5907,10 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         for (const auto &arg_node : call_["args"])
         {
           exprt arg = converter_.get_expr(arg_node);
+          if (type_handler_.is_tagged_scalar_type(arg.type()))
+            throw std::runtime_error(
+              "passing a dynamically-typed variable to a function is not "
+              "yet supported");
           if (arg.type().is_array())
           {
             if (
@@ -6245,6 +6261,36 @@ size_t function_call_expr::bind_call_receiver(
   return param_offset;
 }
 
+exprt function_call_expr::coerce_tagged_argument(
+  exprt arg,
+  const typet &param_type,
+  const locationt &location) const
+{
+  const bool param_is_tagged = type_handler_.is_tagged_scalar_type(param_type);
+
+  if (type_handler_.is_tagged_scalar_type(arg.type()))
+  {
+    if (!param_is_tagged)
+      throw std::runtime_error(
+        "passing a dynamically-typed variable to a function is not yet "
+        "supported");
+    return arg;
+  }
+
+  if (!param_is_tagged)
+    return arg;
+
+  if (
+    type_handler_.is_numeric_scalar_type(arg.type()) ||
+    type_handler_.is_string_type(arg.type()))
+    return converter_.dynamic_type_handler_.build_tagged_value(
+      arg, location, *converter_.current_block);
+
+  throw std::runtime_error(
+    "passing a value of this type to a dynamically-typed parameter is not "
+    "yet supported");
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -6265,8 +6311,12 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     exprt arg = converter_.get_expr(arg_node);
     converter_.current_lhs = saved_lhs;
 
-    // Tagged arguments aren't supported yet; refuse before goto-symex.
-    if (type_handler_.is_tagged_scalar_type(arg.type()))
+    // Check if the corresponding parameter is Optional / tagged.
+    size_t param_idx = arg_index + param_offset;
+
+    if (param_idx < params.size())
+      arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
+    else if (type_handler_.is_tagged_scalar_type(arg.type()))
       throw std::runtime_error(
         "passing a dynamically-typed variable to a function is not yet "
         "supported");
@@ -6284,9 +6334,6 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // mirroring C's implicit function-to-pointer conversion.
     if (arg.type().is_code() && arg.is_symbol())
       arg = build_address_of(arg);
-
-    // Check if the corresponding parameter is Optional
-    size_t param_idx = arg_index + param_offset;
 
     if (param_idx < params.size())
     {
@@ -6423,9 +6470,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // violated" on valid Python (#7550).
     const bool arg_is_bytes_literal =
       arg_node["_type"] == "Constant" && converter_.is_bytes_literal(arg_node);
+    // Same issue as the complex-literal guard above: coerce_tagged_argument
+    // already boxed this literal, so don't rebuild and discard the wrapper.
+    const bool arg_is_tagged_param =
+      param_idx < params.size() &&
+      type_handler_.is_tagged_scalar_type(params[param_idx].type());
     if (
       !arg_is_complex_literal && !arg_is_bytes_literal &&
-      arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+      !arg_is_tagged_param && arg_node["_type"] == "Constant" &&
+      arg_node["value"].is_string())
     {
       std::string str_value = arg_node["value"].get<std::string>();
       arg = converter_.get_string_builder().build_string_literal(str_value);
@@ -6657,6 +6710,7 @@ exprt function_call_expr::finalize_call(
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
+          kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)
             call.arguments().resize(i + 1);
           call.arguments()[i] = kw_val;
@@ -7274,6 +7328,13 @@ exprt function_call_expr::check_argument_types(
   }
 
   auto types_match = [&](const typet &expected, const typet &actual) {
+    // A tagged parameter also accepts a concrete scalar that gets auto-boxed
+    // later; base_type_eq alone wouldn't recognise either as a match.
+    if (type_handler_.is_tagged_scalar_type(expected))
+      return type_handler_.is_tagged_scalar_type(actual) ||
+             type_handler_.is_numeric_scalar_type(actual) ||
+             type_handler_.is_string_type(actual);
+
     return base_type_eq(expected, actual, converter_.ns) ||
            (type_utils::is_string_type(expected) &&
             type_utils::is_string_type(actual));
