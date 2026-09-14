@@ -245,7 +245,7 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
     // polymorphic glvalue reads it through the object's vptr, which is the only
     // way the dynamic type is available at a use site typed by a base (#6310).
     st.components().push_back(rtti_name_component(vt_name));
-    vt_type_symb.set_type(std::move(st));
+    vt_type_symb.set_type(migrate_type(st));
   }
   vt_type_symb.is_type = true;
   vt_type_symb.location = comp.location();
@@ -322,10 +322,19 @@ void clang_cpp_convertert::add_vtable_type_entry(
   // add an entry to the virtual table
   assert(vtable_type_symbol);
   {
-    typet t = vtable_type_symbol->get_type();
-    struct_typet &vtable_type = to_struct_type(t);
-    vtable_type.components().push_back(vt_entry);
-    vtable_type_symbol->set_type(std::move(t));
+    const struct_type2t &vt = to_struct_type(vtable_type_symbol->get_type2());
+    std::vector<type2tc> members = vt.members;
+    std::vector<irep_idt> names = vt.member_names;
+    std::vector<irep_idt> pretty_names = vt.member_pretty_names;
+    std::vector<irep_idt> base_names = vt.member_base_names;
+
+    members.push_back(migrate_type(vt_entry.type()));
+    names.push_back(vt_entry.get_name());
+    pretty_names.push_back(vt_entry.pretty_name());
+    base_names.push_back(vt_entry.get_base_name());
+
+    vtable_type_symbol->set_type(struct_type2tc(
+      members, names, pretty_names, vt.name, vt.packed, base_names));
   }
 }
 
