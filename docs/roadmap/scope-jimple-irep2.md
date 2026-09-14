@@ -1705,3 +1705,59 @@ a bare `t` and the rest through `migrate_type`/`to_code2t`, none of which spells
 Remaining: `jimple-language.cpp`'s four `set_type`/`set_value` calls (the module
 and `__ESBMC_main` symbols), `jimple_throw` (§31.1), §33.2's 8x over-allocation
 and §33.3's `lengthof`, and the four items in §32.7.
+
+## 35. B-2 is met: `jimple-language.cpp`, and a grep that cannot say so
+
+§34.2 left four legacy symbol writes, all in `jimple-language.cpp`: the four
+intrinsic globals `add_global_static_variable` creates, and `__ESBMC_main`'s type
+and value. All four are converted here, in three measured steps -- the globals,
+then `__ESBMC_main`'s type, then its value -- each gated on both the GOTO dumps
+and the full symbol table over all 28 tests, each 0 of 28.
+
+The globals build their type natively: `array_type2tc(get_bool_type(), expr2tc(),
+true)` is the infinite array `migrate_type` produced from
+`array_typet(bool_type(), exprt("infinity"))`, and `irep2_utils.h`'s
+`gen_zero(const type2tc &, bool)` mirrors the legacy overload arm for arm --
+`array_as_array_of` yields `constant_array_of2tc`, exactly what an
+`array_of_exprt` migrates to.
+
+### 35.1 A marker with no reader, checked rather than assumed
+
+The legacy value carried `#zero_initializer`, and no IREP2 node models it, so the
+conversion drops it. Markers dropped at this seam have bitten this campaign
+before, so it was checked rather than assumed: the only readers of the attribute
+in the tree are `solidity_convert_constructor.cpp:503` and `:516`, in Solidity's
+own converter, which never sees a jimple symbol. Everything else only ever writes
+it.
+
+`__ESBMC_main`'s value was the one step expected to be awkward, because
+`setup_main` resizes the call's arguments with *nil* ireps before migrating. It
+is not: the symbol table has always migrated that value lazily on the first
+`get_value2()`, so doing it eagerly reaches the same code.
+
+### 35.2 B-2 is met, and its command reports 7
+
+Every symbol-table write in the jimple frontend now carries an IREP2 argument,
+which is what bar B-2 in `frontends-to-irep2.md` §1 asks for. Its command still
+prints 7 lines, and all 7 are false positives:
+
+| Line | Argument |
+|---|---|
+| `jimple_ast.h:69` | the `type2tc` parameter, as a bare `t` |
+| `jimple_file.cpp:158`, `jimple_method.cpp:92` | `migrate_type(...)` |
+| `jimple_method.cpp:93` | `to_code2t(...)`, a `code_block2t` |
+| `jimple-language.cpp:99` | a `type2tc` local |
+| `jimple-language.cpp:110` | `gen_zero(const type2tc &, bool)` |
+| `jimple-language.cpp:198` | an `expr2tc` filled by `migrate_expr` |
+
+A bar whose command cannot distinguish a met state from an unmet one is not a
+bar. Either it needs the argument's type rather than its spelling -- which a grep
+cannot get -- or B-2 should be restated as "no `set_type`/`set_value` call whose
+argument is a `typet`/`exprt`", verified by inspection and recorded per frontend.
+Jimple is the first frontend to reach it either way.
+
+### 35.3 Status
+
+Twenty-five PRs. B-1 is 183, from 202 at the start of §32. Remaining in this
+frontend: `jimple_throw` (§31.1), the four items in §32.7, and §33.2/§33.3's two
+defects -- none of which is a symbol-table write.
