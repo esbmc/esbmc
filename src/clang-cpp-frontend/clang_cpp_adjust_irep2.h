@@ -25,6 +25,14 @@ public:
 
 protected:
   void gen_symbol_code(symbolt &symbol) override;
+
+  /// IREP2 form of clang_cpp_adjust::gen_implicit_union_copy_move_constructor.
+  /// A union's implicitly-defined copy/move constructor copies the object
+  /// representation ([class.copy.ctor]/14), which here is one assignment of the
+  /// whole union. Generated before the value walk so the assignment goes
+  /// through the arms like any other statement
+  /// (docs/roadmap/scope-clang-cpp-irep2.md §8.2).
+  void gen_implicit_union_copy_move_body(symbolt &symbol);
   void adjust_symbol_type(symbolt &symbol) override;
 
   /// IREP2 form of clang_cpp_adjust::adjust_switch's declaration case. C++ lets

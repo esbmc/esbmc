@@ -2321,3 +2321,35 @@ scope too early (#4715).
 
 All three rows agree. `irep2_switch_declaration{,_fail}` pins it; both halves fall
 back to `unrecognised format` with the arm gated off.
+
+### 8.2 The union copy/move constructor is generated, not converted
+
+`CpyConstructorUnion` and `MoveConstructorUnion` diverged because a union's
+implicitly-defined copy and move constructors have **no converted body at all**:
+clang declares them, and `clang_cpp_adjust::gen_implicit_union_copy_move_constructor`
+generates the one assignment that copies the object representation
+([class.copy.ctor]/14). The IREP2 pass replaces that pass and generated only the
+vptr initialisations, so both constructors ran with an empty body and the copy
+never happened.
+
+Generated in `gen_symbol_code`, before the value walk, so the assignment goes
+through the arms like any other statement. Three things the port had to get
+right, each found by measuring rather than reading:
+
+1. A `sideeffect_assign2t` is an expression; a block's operands must be
+   statements. `goto_convert: non-code operand` until it became a
+   `code_assign2t`.
+2. The marker is the converter's `#implicit_union_copy_move_constructor` on the
+   constructor's return type, read from the symbol's legacy type — it is there,
+   unlike the `constructor` spelling inside a *body*, which the write-back loses
+   (§3.17).
+3. Legacy's body is `*this = *ref`, **both** sides dereferenced: the second
+   parameter is a reference, modelled as a pointer, and legacy reaches that shape
+   through `adjust_assign`, which this pass's reference handling does not cover
+   for a statement assignment. Assigning `*this = ref` instead handed the encoder
+   a mismatch it has no handler for — a null function pointer in
+   `convert_ast_node`, i.e. a SIGSEGV rather than a diagnosis.
+
+Both rows agree, `ctest -R esbmc-cpp11` is 161 of 161, and
+`irep2_union_copy_ctor{,_fail}` pins it over both the copy and the move
+spelling — the passing half flips with the generator gated off.

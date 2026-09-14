@@ -544,4 +544,48 @@ void clang_cpp_adjust_irep2::gen_symbol_code(symbolt &symbol)
   // generated before, so the assignments go through the arms like any other
   // statement rather than being migrated back out and in again.
   gen_vptr_initializations(context, symbol);
+  gen_implicit_union_copy_move_body(symbol);
+}
+
+void clang_cpp_adjust_irep2::gen_implicit_union_copy_move_body(symbolt &symbol)
+{
+  if (!symbol.get_type().is_code())
+    return;
+
+  // The marker is the converter's, on the constructor's return type.
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
+  if (
+    ctor_type.return_type().id() != "constructor" ||
+    !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
+    return;
+
+  const expr2tc body = symbol.get_value2();
+  if (!is_code_block2t(body) || !to_code_block2t(body).operands.empty())
+    return;
+
+  const code_typet::argumentt &this_arg = ctor_type.arguments().at(0);
+  const code_typet::argumentt &other_arg = ctor_type.arguments().at(1);
+  const type2tc this_type = migrate_type(this_arg.type());
+  if (!is_pointer_type(this_type))
+    return;
+
+  // `*this = other`: one assignment of the whole union, which is what copying
+  // the object representation comes to here.
+  const expr2tc lhs = dereference2tc(
+    to_pointer_type(this_type).subtype,
+    symbol2tc(this_type, this_arg.cmt_identifier()));
+  // The second parameter is a reference, modelled as a pointer, so it is read
+  // *through* -- legacy reaches the same shape via adjust_assign, which this
+  // pass's reference handling does not cover for a statement assignment.
+  const type2tc other_type = migrate_type(other_arg.type());
+  expr2tc rhs = symbol2tc(other_type, other_arg.cmt_identifier());
+  if (
+    is_pointer_type(other_type) &&
+    to_pointer_type(other_type).ref_kind != pointer_ref_kindt::NONE)
+    rhs = dereference2tc(to_pointer_type(other_type).subtype, rhs);
+
+  symbol.set_value(code_block2tc(
+    std::vector<expr2tc>{code_assign2tc(lhs, rhs)},
+    to_code_block2t(body).location,
+    to_code_block2t(body).end_location));
 }
