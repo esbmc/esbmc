@@ -8203,3 +8203,23 @@ IREP2 flag tests, and the unit suite.
 `github_4715_fnptr_cast_collapse_irep2` pins the flag half; reverting
 `same_c_type` to a bare `==` fails it and leaves the default-path half passing,
 which is the pair §143.1 could not write while the flag path diverged.
+
+### 144.4 The check that would have caught it
+
+`unit/util/c_typecast.test.cpp` already differential-tests the two copies, but
+only over admission (`check_c_implicit_typecast`) and arithmetic conversions.
+§144's defect was in the *result* -- both copies admitted the conversion and then
+disagreed on whether to wrap. The file's own `require_overloads_agree` is the
+right instrument for that: it runs both overloads and requires the migrated
+results to be equal.
+
+A function-pointer case now uses it, and it asserts the premise first -- that the
+two spellings differ as IREP2 nodes in `argument_names` and in nothing else --
+before requiring the conversions to agree. It covers the named/unnamed pair both
+ways, and the shapes that *are* conversions: a different arity, a different return
+type, an added ellipsis, and `void *`. Reverting `same_c_type` fails it at
+`require_overloads_agree`'s equality check.
+
+That is the cheaper gate of the two: a regression test needs a frontend, a flag
+and a GOTO dump to see this, where the unit case sees it directly in the function
+that decides.
