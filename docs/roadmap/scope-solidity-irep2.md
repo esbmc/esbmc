@@ -1719,3 +1719,57 @@ That is a materially different plan from §3's step S.3, and the parent's §6
 ordering put Solidity before Python precisely so a phase like this could be
 sized honestly before it starts. Recording the measurement rather than a
 porting order, because the measurement says the order does not matter.
+## 4. The corpus swept under asserts, and two ways to measure it wrong
+
+The flag this frontend honours is Phase 7's, so this is the first divergence count
+for it. Run under `DebugOpt`, so with asserts, over every test in
+`regression/esbmc-solidity`.
+
+**Result: 513 agree, 1 diverges, 1 aborts, 10 have no source to run.**
+
+Both non-agreeing rows are characterised below, but the number took three attempts
+to produce, and the two wrong ones are worth recording because each looked
+authoritative.
+
+### 4.1 First wrong answer: 514 divergences
+
+The Solidity frontend extracts to `/tmp` with a random suffix per run, so the
+source paths in a GOTO dump differ between *any* two runs -- flag or no flag. The
+first sweep therefore reported almost every row as diverging. Normalising
+`/tmp/esbmc_solidity_temp-[0-9a-f-]+` to a fixed token is required before any
+A/B of this frontend, and the same applies to python.
+
+### 4.2 Second wrong answer: 9 divergences
+
+Eight of those nine were `irep2_only_*` tests, whose descriptors *already* pass
+`--clang-cpp-irep2-adjust-only`. The sweep appended it a second time, and ESBMC
+does not tolerate that: the run collapses from 7 057 lines of output to one. So
+the A/B is meaningless for any test that already enables the flag -- there is
+nothing to compare, and passing it twice does not produce the same run.
+
+Skip those rows rather than comparing them.
+
+### 4.3 The one genuine divergence
+
+`nested_array_mixed_1`, eight lines, one shape -- the target type of a cast
+applied to `__ESBMC_array_push`'s result:
+
+```
+- ASSIGN this->mixed[0]=(unsigned _ExtInt(256) [4] *)return_value$...
++ ASSIGN this->mixed[0]=(unsigned _ExtInt(256) * *)return_value$...
+```
+
+Legacy casts to pointer-to-array-of-4; the IREP2 pass casts to
+pointer-to-pointer. Unlike the python row in `frontends-to-irep2.md` §40.4 this is
+not address-equivalent -- the pointee size differs, which is what pointer
+arithmetic and the next dereference read. Both paths verify SUCCESSFUL here, so
+nothing observable moves on this input, but the two types are not interchangeable
+in general and this is the kind of row that should be closed rather than
+characterised.
+
+### 4.4 The abort is not ours
+
+`delegate_shadow_3` trips `member2t`'s component assertion at
+`irep2_expr.h:1641`. It does so **identically on both paths**, and its descriptor's
+first line is already `KNOWNBUG`. Recorded so the next sweep does not read it as a
+hop-off failure.
