@@ -8086,3 +8086,59 @@ Counting the remainder needs a judgement per name, and the measure that does not
 need one already exists: the divergence count under the flag (§66). The 112
 tests using it pass, which — given §142.2 — means the IREP2 pass alone produces
 those results.
+
+## 143. A divergence census over what the corpus does not reach (2026-09-14)
+
+§142.3 said the measure of Phase 6 is the divergence count under the flag, and
+that the 112 tests using it pass. That is a statement about those 112 inputs.
+This section probes 22 constructs chosen because the corpus is unlikely to reach
+them, comparing `--goto-functions-only` with and without
+`--clang-c-irep2-adjust-only`.
+
+Twenty-one agree: `va_arg`, a VLA `sizeof`, statement expressions (including
+nested ones with side effects), `argc`/`argv`, float and `_Complex` arithmetic,
+pointer arithmetic, `__atomic_*`, `__sync_fetch_and_add`,
+`__builtin_add_overflow`, bitfields, `_Generic`, a designated compound literal,
+a K&R definition, `__builtin_alloca`, a comma in a loop condition,
+`__builtin_choose_expr`, a variadic `double`, a union member write, and a
+conditional lvalue. That is a useful negative result: the 38 name-unmatched
+legacy arms of §142.3 really are covered under other names.
+
+### 143.1 The one row, and three causes eliminated
+
+```c
+int g(int x) { return x + 1; }
+int (*p)(int) = (int (*)(int))g;
+```
+
+| mode | instruction |
+|---|---|
+| default | `ASSIGN p=&g;` |
+| `--clang-c-irep2-adjust` (both passes) | `ASSIGN p=&g;` |
+| `--clang-c-irep2-adjust-only` | `ASSIGN p=(signed int (*)(signed int))(&g);` |
+
+The cast is a no-op -- both verdicts are SUCCESSFUL -- but the instruction
+differs, which is what the metric counts. Shadow mode agreeing with the default
+places the difference in the IREP2 pass rather than in anything downstream of
+both.
+
+**The cause is not located.** Three candidates are eliminated, each by reading
+the code rather than by a corpus being quiet:
+
+- Not the legacy dispatcher. A `typecast` falls into `clang_c_adjust::adjust_expr`'s
+  final `else`, which is `adjust_operands` followed by `adjust_base_to_derived`;
+  neither collapses a same-type cast.
+- Not `migrate_expr`'s typecast arm. It builds a `typecast2tc` unconditionally,
+  with no same-type shortcut -- so "the IREP2 pass writes back and skips the
+  migration that would have normalised it" is wrong, however plausible.
+- Not `adjust_function_designators`. Instrumented, it produces no output for this
+  input, so the `&g` both paths show is built elsewhere.
+
+Recorded at this depth deliberately. Two earlier causes in this campaign were
+refuted by measurement after being written down as fact (§136.5, §140), and a
+row with three eliminations is worth more to the next attempt than a fourth
+guess.
+
+`regression/esbmc/github_4715_fnptr_cast_collapse` pins the default path's
+`ASSIGN p=&g;`. It carries no flag: the invariant is the default path's, and
+pinning it keeps that half from drifting while the flag half is chased.
