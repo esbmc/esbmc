@@ -1597,14 +1597,17 @@ void dereferencet::construct_from_const_struct_offset(
 
     if (m_size == 0)
     {
-      // This field has no size: it's most likely a struct that has no members.
-      // Just skip over it: we can never correctly build a reference to a field
-      // in that struct, because there are no fields. The next field in the
+      // This field has no size: either a struct with no members, or an array
+      // with no elements -- a flexible array member (C17 6.7.2.1p18) or a GNU
+      // `[0]` member (#5393). Just skip over it: we can never correctly build a
+      // reference to a field in it, because it has none. The next field in the
       // current struct lies at the same offset and is probably what the pointer
-      // is supposed to point at.
+      // is supposed to point at; a flexible array member is the struct's last,
+      // so the loop then falls out and the access is reported out of bounds,
+      // which is what it is.
       // If user is seeking a reference to this substruct, a different method
       // should have been called (construct_struct_ref_from_const_offset).
-      assert(is_struct_type(it));
+      assert(is_struct_type(it) || is_union_type(it) || is_array_type(it));
       assert(!is_struct_type(type));
       i++;
       continue;
