@@ -2177,21 +2177,39 @@ ids never cross the seam, still reads `signed_int`. Nothing matches, and every
 throw of a primitive escapes as uncaught: 36 of the census's 55 divergences are
 `SUCCESSFUL -> FAILED`, and this is most of them.
 
-**Conversion time does not work here, and that is measured.** §3.15's precedent —
-move the computation to where the legacy spelling still exists — fails because the
-spelling does not exist yet: instrumented at the converter's `CXXThrowExpr` arm,
-the operand's type id is **empty**, since the operand's type is settled by the
-adjust pass, which is exactly what the flag replaces. An `exception_list`
-recorded there would be empty of anything useful, and the change was written,
-measured inert, and reverted rather than parked.
+**Conversion time is where it belongs, and a bad probe nearly hid that.** §3.15's
+precedent is to move a computation to where the legacy spelling still exists.
+Instrumented at the converter's `CXXThrowExpr` arm the operand's type id printed
+**empty**, which read as "the type is not settled yet" — and was wrong: the probe
+read `tmp` *after* `move_to_operands` had moved it. Reading `new_expr.op0()`
+instead prints `id=signedbv cpp_type=signed_int`. The spelling is in hand at
+conversion time; the reading of the first probe was the defect.
 
-**So the fix is the fourth marker carry**: `#cpp_type` on the primitive type
-kinds (bool, signedbv, unsignedbv, floatbv, fixedbv), joining `#constructor`,
-`#member_init` and the record alignment. Reconstruction from the width is not
-equivalent and must not be substituted for it: on this target a 32-bit signed
-type is `signed_int` or `wchar_t`, a 64-bit one `signed_long` or
-`signed_long_long`, an 8-bit one `char` or `signed_char`, and picking wrong turns
-a valid `catch` into a false "uncaught exception" — the same symptom, silently.
-The carry is per-kind bookkeeping (field, constructor parameter, the
-`excluded_field_bytes` declaration `fields_cover_class` demands, both migrate
-arms), which is why it is recorded here rather than half-done.
+So the throw's ids are recorded there, for any type whose ids follow from the
+type alone — pointer and array layers stripped, since `convert_exception_id`
+recurses through them. A class type is left to the adjust pass: its id is the
+type symbol's name, which crosses the seam intact, and expanding its bases needs
+a symbol-table lookup this early in conversion cannot rely on. The legacy pass
+recomputes the same strings from a type that still carries the spelling, so the
+default path is unchanged.
+
+**16 of the 27 rows now agree**, and `ctest -R try_catch` is 174 of 174. The
+remaining 11 all fail with `exception specification violated`, which *is*
+`finalize_exception_specification`'s territory as §3.14 said — a legacy-only
+step, and the next task.
+
+An array operand is excluded from the recording: it decays between conversion and
+the legacy pass, so an id taken from the pre-decay type is not the one the handler
+is matched against. Measured, not assumed — and the measurement was worth having
+for a second reason. The first version of this change also replaced
+`new_expr.type() = tmp.type()` with the operand's type, on the reading that the
+original assigned from a moved-from `tmp` and was therefore a bug. It is not: a
+cpp-throw's own type is set by the adjust pass, and giving it the operand's type
+at conversion made three `try_catch` rows stop failing as they should **on the
+default path**. Bisected by stashing the change, and the line is now commented so
+the next reader does not repeat the correction. The
+alternative fix, carrying `#cpp_type` on the primitive type kinds, is no longer
+needed for this family; reconstruction from the width would not have worked
+anyway, since on this target a 32-bit signed type is `signed_int` or `wchar_t`, a
+64-bit one `signed_long` or `signed_long_long`, and picking wrong turns a valid
+`catch` into a false "uncaught exception" with the same symptom.
