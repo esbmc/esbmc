@@ -7877,3 +7877,39 @@ this. The six rows among that family's 112 that are about C library headers --
 -- agree between legacy and `--clang-cpp-irep2-adjust-only` on both sides of
 this change. The builtin gap was confirmed; its link to those failures was never
 measured, and for the cmath rows it is now refuted.
+
+## 145. B-2's type writes, bisected (2026-09-15)
+
+Applying to Phase 6 what Phases 8 and 9 established: convert every single-line type
+write, measure, bisect the failures, keep what stays green. `pad_type_symbol`
+(`clang_c_adjust_irep2.cpp:85`) was excluded from the start -- §139.3 and the
+`clang-c-irep2-hopoff-phase6` note both say it must not move.
+
+| state | `regression/esbmc` failures of 2 293 |
+|---|---|
+| all 21 converted | 620 |
+| `clang_c_convert.cpp` reverted | 19 |
+| `clang_c_adjust_expr.cpp` also reverted | 2 (the two THOROUGH tests that pass serially) |
+
+So the six conversions that land are `clang_c_main.cpp`'s three and
+`clang_c_adjust_polymorphic_functions.cpp`'s three. `esbmc-cpp/cpp` stays at 6 of
+1 065 and the unit suite at 876 of 876.
+
+### 145.1 What the two reverted files are carrying
+
+`clang_c_convert.cpp` accounts for 601 of the 620 -- it writes the type of every
+converted declaration, so it carries everything C's type system spells that IREP2
+normalises.
+
+`clang_c_adjust_expr.cpp`'s nine are narrower and the failing tests name the family
+rather than needing a guess: `restrict_alias_fail`, `restrict_assume`,
+`restrict_const_alias`, `restrict_struct_alias` (four), `volatile_01`, `volatile_02`,
+`github_7707-overaligned`, `github_7707-pack2`, `memset-const-2`, the five
+`github_1548*`, `github_6950`, `github_2512_8` and `cwe_dead_store_negative`. That is
+**qualifiers and layout** -- `restrict`, `volatile`, alignment and packing -- which are
+type properties in C and are not in `type2t`.
+
+This is the same wall as Solidity's eleven attributes and python's `#cpp_type`, in a
+third language: what a frontend needs to say about a type is wider than what the shared
+representation models. The three phases now agree on the finding, which is worth more
+than any one of them converting a few more sites.
