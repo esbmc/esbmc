@@ -6,6 +6,26 @@
 #include <util/arith/arith_tools.h>
 #include "util/lang/c_typecast.h"
 
+// Restored: PR #7841 measured this arm unreached over the jimple tests and
+// deleted it, but nothing gives the class a native to_code2t, so the default
+// reaches it and the base's code_skipt was returned instead. No test builds
+// this statement, which is why the deletion was invisible
+// (docs/roadmap/scope-jimple-irep2.md §44).
+exprt jimple_identity::to_exprt(
+  contextt &ctx,
+  const std::string &,
+  const std::string &) const
+{
+  // TODO: Symbol-table / Typecast
+  exprt val("at_identifier");
+  symbolt &added_symbol = *ctx.find_symbol(local_name);
+  symbolt rhs;
+  rhs.name = "@" + at_identifier;
+  rhs.id = "@" + at_identifier;
+  code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
+  return assign;
+}
+
 void jimple_identity::from_json(const json &j)
 {
   j.at("identifier").get_to(at_identifier);
@@ -126,6 +146,7 @@ exprt jimple_assignment::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
+  fprintf(stderr, "PROBE3 jimple_assignment\n");
   //TODO: Remove this hack
   if (is_skip)
   {
@@ -172,15 +193,17 @@ expr2tc jimple_assignment::to_code2t(
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
   auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
 
-  // jimple_virtual_invoke has no native arm yet, so it stays on the migrating
-  // default; jimple_expr_invoke builds the call itself once told where to put
-  // the result.
-  if (dyn2_expr && !dyn2_expr->is_nondet_call())
-    return jimple_method_field::to_code2t(ctx, class_name, function_name, loc);
-
+  // Both invoke forms build the call themselves once told where to put the
+  // result.
   if (dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
   {
     dyn_expr->set_lhs2(lhs->to_expr2t(ctx, class_name, function_name));
+    return rhs->to_expr2t(ctx, class_name, function_name);
+  }
+
+  if (dyn2_expr && !dyn2_expr->is_nondet_call())
+  {
+    dyn2_expr->set_lhs2(lhs->to_expr2t(ctx, class_name, function_name));
     return rhs->to_expr2t(ctx, class_name, function_name);
   }
 
@@ -230,6 +253,54 @@ std::string jimple_assertion::to_string() const
   std::ostringstream oss;
   oss << "Assertion: " << variable << " = " << value;
   return oss.str();
+}
+
+// Restored: PR #7841 measured this arm unreached over the jimple tests and
+// deleted it, but nothing gives the class a native to_code2t, so the default
+// reaches it and the base's code_skipt was returned instead. No test builds
+// this statement, which is why the deletion was invisible
+// (docs/roadmap/scope-jimple-irep2.md §44).
+exprt jimple_assertion::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  code_function_callt call;
+
+  std::ostringstream oss;
+  oss << class_name << ":" << function_name << "@" << variable;
+
+  // TODO: move this from here
+  std::string id, name;
+  id = "__ESBMC_assert";
+  name = "__ESBMC_assert";
+
+  auto symbol = create_jimple_symbolt(
+    code_type2tc(
+      std::vector<type2tc>{},
+      get_empty_type(),
+      std::vector<irep_idt>{},
+      /*ellipsis=*/false),
+    class_name,
+    name,
+    id,
+    function_name);
+
+  symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
+
+  call.function() = symbol_expr(added_symbol);
+
+  symbolt &test = *ctx.find_symbol(oss.str());
+  int as_number = std::stoi(value);
+  exprt value_operand = from_integer(as_number, int_type());
+
+  equality_exprt ge(symbol_expr(test), value_operand);
+  not_exprt qwe(ge);
+  call.arguments().push_back(qwe);
+
+  array_of_exprt arr;
+  // TODO: Create binop operation between symbol and value
+  return call;
 }
 
 void jimple_assertion::from_json(const json &j)

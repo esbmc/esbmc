@@ -513,13 +513,53 @@ expr2tc jimple_virtual_invoke::to_expr2t(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  // The only arm reachable here: jimple_assignment sends an invoke right-hand
-  // side to the migrating default unless it is nondet. The three skip arms and
-  // the main path all produce statements, so they belong there in any case.
+  // TODO: Move intrinsics to backend
+  if (
+    base_class == "kotlin.jvm.internal.Intrinsics" ||
+    base_class == "java.lang.Runtime" || base_class == "java.lang.Class")
+    return code_skip2tc(get_empty_type());
+
   if (is_nondet_call())
     return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
 
-  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+  const std::string callee = base_class + ":" + method;
+  const symbolt *symbol = ctx.find_symbol(callee);
+  if (!symbol)
+  {
+    log_error("Could not find symbol {}", callee);
+    abort();
+  }
+
+  // As in jimple_expr_invoke: a block of the parameter assignments followed by
+  // the call. The receiver is passed as the first argument and also assigned to
+  // the callee's `@this`, which is that arm's "should be done at symex" note.
+  std::vector<expr2tc> ops;
+  std::vector<expr2tc> args;
+  args.reserve(parameters.size() + 1);
+
+  if (!variable.empty())
+  {
+    expr2tc self =
+      jimple_symbol(variable).to_expr2t(ctx, class_name, function_name);
+    args.push_back(self);
+    const std::string self_param = get_symbol_name(base_class, method, "@this");
+    ops.push_back(
+      code_assign2tc(symbol_expr2tc(*ctx.find_symbol(self_param)), self));
+  }
+
+  for (std::size_t i = 0; i < parameters.size(); i++)
+  {
+    expr2tc arg = parameters[i]->to_expr2t(ctx, class_name, function_name);
+    args.push_back(arg);
+
+    const std::string param =
+      get_symbol_name(base_class, method, "@parameter" + std::to_string(i));
+    ops.push_back(code_assign2tc(symbol_expr2tc(*ctx.find_symbol(param)), arg));
+  }
+
+  ops.push_back(code_function_call2tc(lhs2, symbol_expr2tc(*symbol), args));
+  const locationt &nil = static_cast<const locationt &>(get_nil_irep());
+  return code_block2tc(ops, nil, nil);
 }
 
 expr2tc jimple_newarray::to_expr2t(

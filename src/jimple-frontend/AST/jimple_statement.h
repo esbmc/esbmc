@@ -17,6 +17,11 @@ class jimple_identity : public jimple_statement
 {
 public:
   virtual void from_json(const json &j) override;
+
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
   virtual std::string to_string() const override;
 
   std::string local_name;
@@ -150,6 +155,11 @@ class jimple_assertion : public jimple_statement
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
+
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
 
   std::string variable;
   std::string value;

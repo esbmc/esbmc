@@ -1737,3 +1737,43 @@ It bites on exactly the over-deletion it exists to catch: delete
 it all passed. `jimple` is 29 of 29 with it added.
 
 B-1 is 115 rather than the 110 §42 reported, the difference being the restored arm.
+
+## 44. `jimple_virtual_invoke` converted, and two more over-deletions found (2026-09-15)
+
+With §43.2's test in place, `jimple_virtual_invoke` gets the native arm
+`jimple_expr_invoke` got in §43: a `code_block2tc` of the `@this` and `@parameter<i>`
+assignments followed by `code_function_call2tc`, and `jimple_assignment::to_code2t` now
+routes both invoke forms to their own arm instead of to the migrating default. 29 of 29
+jimple and 876 of 876 unit tests.
+
+### 44.1 The caller audit §43.1 asked for, and what it found
+
+§43.1 said a deletion needs a caller audit rather than the probe. Doing that audit across
+both hierarchies -- which classes declare a native arm, and which inherit the base's
+migrating default -- found **two more classes** in the same state
+`jimple_virtual_invoke` was in:
+
+| class | native `to_code2t` | legacy `to_exprt` |
+|---|---|---|
+| `jimple_identity` | no | deleted by §40.3 |
+| `jimple_assertion` | no | deleted by §40.3 |
+
+Both fall through `jimple_method_field::to_code2t` to the base's `to_exprt`, which returns
+`code_skipt`. So since §40.3 an identity statement and an `Assertion` statement have
+silently produced a skip. Both arms are restored here with a comment saying why.
+
+No test builds either statement -- jimple tests express an assertion through the
+`If`/`AssertionError` idiom rather than the `Assertion` object, and nothing in the corpus
+emits `Identity` -- which is exactly why three deletions in a row passed 27 of 27.
+
+### 44.2 The rule, stated properly this time
+
+The probe answers *"does the corpus reach this?"*. A deletion needs *"can anything reach
+this?"*, and for a virtual with a non-abstract base the answer is yes unless the class
+overrides the replacement. So the criterion is:
+
+> an arm may be deleted only if its class declares the native replacement.
+
+That is checkable without running anything, it is what the table above applies, and it
+would have prevented all three over-deletions. B-1 is 124: the true figure once the three
+restorations are counted, against the 110 §42 claimed.

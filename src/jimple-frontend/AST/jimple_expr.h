@@ -325,12 +325,19 @@ public:
   std::string base_class;
   std::string method;
   exprt lhs;
+  /// The IREP2 return target, as in jimple_expr_invoke.
+  expr2tc lhs2;
   std::string variable;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 
   void set_lhs(exprt expr)
   {
     lhs = expr;
+  }
+
+  void set_lhs2(const expr2tc &expr)
+  {
+    lhs2 = expr;
   }
 
   bool is_nondet_call() const
