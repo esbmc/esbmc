@@ -3860,3 +3860,44 @@ question in Phase 6's dialect: an incompleteness flag and a padding algorithm, n
 which `type2t` has a place for. So in the row audited here, the part that needs a
 decision rather than a conversion is 2 of 20 -- smaller again than §58.2 suggested, though
 the proportion does not carry over: clang-cpp's three are all §56.1's design questions.
+
+## 60. A write classified by what it looked like (2026-09-15)
+
+§59 counted 20 for clang-c and named two of them design questions. One was not a question.
+`clang_c_convert.cpp` cleared `#incomplete` on a record's type part-way through converting
+it, which §147.2 filed under "what `type2t` does not model" because the thing being written
+was an irep attribute. It was a recursion sentinel; it had been disabled in March 2025 by
+the fix for #2323, which added a second conjunct to the guard so the re-entrant arrival it
+was blocking would fall through. Nobody removed what the sentinel had been guarding with.
+
+Deleted, with the exhaustive state argument in `scope-clang-c-irep2.md` §148.3.1: for a
+struct or a class the guard falls through either way, and the one state where the two differ
+needs a union, which cannot be a base class or a lambda closure type -- the only two
+unguarded edges into an open window. The completeness check it preceded is load-bearing and
+stays; removing that one takes `esbmc-cpp/cpp` from 225 s to over 560 s.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9807    10807    10506      263    170
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§148.1 also closes the audit §59 opened. The migration has added nine validating IREP2
+casts across all five frontends; seven were `declare_argc_argv`, and the two in the vtable
+builder hold because each reads a symbol its own caller created three lines earlier.
+
+Two lessons, and the second is the one worth carrying. B-2 counts writes by their
+*argument*, so a write is classified by what it hands over, and this one was classified by
+that and by the type system it appeared to need; neither told anyone what it was for. Of
+the 170 left, the ones blocked on a legacy builder are genuinely blocked, and the ones that
+exist to mark state during construction are not -- nothing in the census distinguishes
+them. And twice now a claim in these documents has been refuted by widening the measured
+set rather than by a better argument: §147.3's 26 sites needed the script's own false
+positives removed, and §148.3's first draft claimed 0 re-entries from a corpus glob that
+had quietly dropped every suite nested one level deeper. The real figure is 7 of 8 682.
