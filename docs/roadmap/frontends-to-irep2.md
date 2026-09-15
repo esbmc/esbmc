@@ -3305,3 +3305,42 @@ Each earlier reading was consistent with the evidence available and wrong:
 The step that separated them was applying the two candidate patches **one at a
 time** -- the repo's own rule -- rather than together. Applied together they pass,
 and the argument-symbol half would have shipped as though it were load-bearing.
+
+## 53. §52's precondition made a property of the pass (2026-09-15)
+
+§52 fixed one call site. The precondition it found is not site-specific: any pass
+that migrates an expression has to point `migrate_namespace_lookup` at its own
+context first, and a pass that forgets gets silent name mangling rather than an
+error. So the exchange moves up to `clang_c_adjust::adjust()`, which both the C and
+C++ legacy adjust passes run through, and the per-site version in §52 goes away.
+
+Measured on the shared entry point, not just the C++ one: `regression/esbmc` is 2 of
+2 293 -- the two THOROUGH tests that pass when re-run serially -- and
+`regression/esbmc-cpp/cpp` stays at 6.
+
+### 53.1 The vptr-init body moves too
+
+With the precondition holding for the pass, `gen_vptr_initializations` stores the
+constructor body it rewrites IREP2-side. Two things had to be checked rather than
+assumed:
+
+`need_vptr_init` is the flag that pass consumes, and `migrate_expr` carries nothing
+like it -- but the write being converted is the one that *clears* it, and absent
+reads as false, so dropping it is what the line already meant.
+
+The body is the whole constructor, so it can contain a `new` whose initialiser is a
+constructor call, and that `constructor` flag is read after adjust
+(`goto-programs/builtin_functions.cpp:679`). `migrate_expr` does not carry it
+either. A probe with a nondet field value -- so the claim cannot be folded away --
+verifies: `PASSED ... assertion b->get() == v`. Landed as
+`regression/esbmc-cpp/cpp/github_4715_vptr_init_body_irep2{,_fail}`; both halves fail
+if the conversion is applied without the namespace fix, which is the combination
+this slice is.
+
+### 53.2 Two C++ frontend value writes remain, both converter-time
+
+`clang_cpp_convert.cpp:3189` (the `need_vptr_init` flag being *set*) and the vtable
+variable's initialiser (§49.1). Both are converter-time, so §52's precondition is
+necessary but not sufficient there: the converter is mid-population, and the
+namespace can only see what it has already added. Whether pointing it at the
+converter's own context is enough for those two is the next thing to measure.
