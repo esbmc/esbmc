@@ -119,6 +119,7 @@ smt_solver_baset::smt_solver_baset(
   addr_space_arr_type = array_type2tc(addr_space_type, expr2tc(), true);
 
   addr_space_data.emplace_back();
+  int_to_ptr_casts.emplace_back();
 
   machine_ptr = get_uint_type(config.ansi_c.pointer_width()); /* CHERI-TODO */
 
@@ -193,6 +194,7 @@ void smt_solver_baset::push_ctx()
   array_api->push_array_ctx();
 
   addr_space_data.push_back(addr_space_data.back());
+  int_to_ptr_casts.push_back(int_to_ptr_casts.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
   renumber_map.push_back(renumber_map.back());
@@ -269,6 +271,7 @@ void smt_solver_baset::pop_ctx()
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
+  int_to_ptr_casts.pop_back();
   renumber_map.pop_back();
 
   ctx_level--;
