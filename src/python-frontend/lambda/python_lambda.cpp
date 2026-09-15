@@ -762,7 +762,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
         {
           typet t = added_symbol->get_type();
           to_code_type(t).return_type() = actual_ret;
-          added_symbol->set_type(std::move(t));
+          added_symbol->set_type(migrate_type(t));
         }
       }
     }
