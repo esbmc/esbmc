@@ -678,7 +678,7 @@ bool solidity_convertert::get_sol_builtin_ref(
             aux_sym.file_local = true;
 
             auto &inserted = *move_symbol_to_context(aux_sym);
-            inserted.set_value(default_value);
+            inserted.set_value(migrate_expr(default_value));
 
             code_declt decl(symbol_expr(inserted));
             decl.operands().push_back(default_value);
@@ -712,7 +712,7 @@ bool solidity_convertert::get_sol_builtin_ref(
               l);
             auto &added_aux = *move_symbol_to_context(aux_idx);
             code_declt decl(symbol_expr(added_aux));
-            added_aux.set_value(args);
+            added_aux.set_value(migrate_expr(args));
             decl.operands().push_back(args);
             move_to_front_block(decl);
             args = address_of_exprt(symbol_expr(added_aux));

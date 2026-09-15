@@ -691,3 +691,101 @@ that field can only be non-empty because the write ran.
 Had the ten been deleted instead, a `--goto-functions-only` test pinning
 `ASSIGN old_sender=NONDET` would have been owed and would have bitten. That test is the
 reason to prefer the conversion, not a reason to add it.
+
+## 15. The rest of the duplicated-initialiser family (2026-09-15)
+
+§14 converted ten of these and left one question open: for a `static_lifetime` symbol
+`init_variable` emits the value's *content* into `__ESBMC_main`, so what the migrate seam
+drops is rendered there rather than ignored. §14.4 said that had to be measured rather than
+assumed from ten non-static sites. This section measures it, converts sixteen more, and
+finds two things §14 did not know about.
+
+### 15.1 The first attempt at the answer was vacuous
+
+`solidity_convert_decl.cpp:565` looked like the site to test -- it is the dynarray-state
+arm, where `static_lifetime` is set when `is_dynarray_state` holds (`:346-349`). Converting
+it gave an identical GOTO across all 515 programs, which answered nothing: instrumenting
+the site shows **6 of 515 programs reach it and none with a static symbol**. The clean
+comparison was a comparison of the non-static path.
+
+`static_lifetime` is decided per *declaration* from the AST, not per site (`:346-349`: file
+level, mapping, mapping-array, dynarray state, library constant), so no site is statically
+one or the other and the only way to find one exercising both is to count. Every write in
+the file, by flag:
+
+```
+site   runs static      site   runs static
+:369    760     96      :565      6      0
+:398      3      3      :665      4      4
+:423     26     26      :695      4      0
+:500      9      0      :710     15      0
+:513     22      0      :718    845     12
+:539      1      1      :1344    11      0
+:545      2      2
+```
+
+### 15.2 The answer: the GOTO round trip is exact, the rendering is not
+
+`:718` is the site that exercises both -- 845 runs, 12 with a static symbol. Converting it
+leaves the `--goto-functions-only` dump identical for all 515 programs, so `init_variable`
+emits the same assignment. §14.4's caveat is discharged for the GOTO.
+
+It is not discharged for the symbol table, and that is the second thing §14 did not know.
+Comparing `--symbol-table-only` instead -- which renders each symbol's value -- **12 of 515
+programs differ, and all twelve differ only at `:718`**:
+
+```
+- this->x = 180374059643543449999388718682590567161426737540;
++ this->x = 0x1F9840A85D5AF5BF1D1762F925BDADDC4201F984;
+```
+
+Same number. `migrate_expr_back` rebuilds a constant through `integer2binary`
+(`migrate.cpp:4408-4416`), so the literal's original spelling is discarded and the printer's
+own default takes over; `a_hex_or_oct` is declared in `irep.h:1298` and appears nowhere in
+`migrate.cpp`. So the round trip preserves the value and loses how it was written.
+
+`:718` is therefore **not** converted here. The other sixteen are, and for those both
+artefacts are identical across all 515 programs. Carrying the spelling across the seam --
+the `argument_base_names` pattern of `frontends-to-irep2.md` §44 -- is what `:718` needs, and
+that is a change to `irep2`, not to Solidity.
+
+### 15.3 A fourth reader of a symbol's value
+
+`frontends-to-irep2.md` §61 recorded three readers. There is a fourth, and it is the one
+that makes attribute loss observable: `solidity_convert_constructor.cpp:499` reads
+`symbol->get_value()` for a state variable and branches on `rhs.get("#zero_initializer")`
+(`:503`, `:516`) and, through `convert_type_expr`, on `#sol_type`, `#sol_bytesn_size` and
+`#sol_array_size`, including a full `irept` inequality between source and destination types.
+`grep -c 'sol_type\|sol_bytesn_size\|sol_array_size' src/util/irep/migrate.cpp` returns **0**:
+none of those attributes crosses the seam.
+
+No program in the corpus shows a difference from that -- the GOTO is identical across 515 --
+but the mechanism is real and it is the reason the remaining Solidity writes cannot be swept.
+A write whose value reaches `:499` has to keep its `#sol_*` attributes, and `migrate_expr`
+does not.
+
+### 15.4 What this leaves
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Sixteen conversions across eight files, Phase 8's B-2\* at 65 and the total 144. Every one
+of the sixteen is exercised -- 5 823 executions between them -- and both the GOTO and the
+symbol table are identical for all 515 programs, so nothing can bite on them and nothing is
+owed.
+
+Three groups are deliberately left, each for a different reason: `:718`, which needs the
+constant's spelling carried across the seam; the four writes taking
+`gen_zero(get_complete_type(t, ns), true)`, which need the IREP2 `gen_zero(const type2tc &)`
+overload and, at `:367-369`, a `zero_initializer` attribute that `type2t` has no place for;
+and `solidity_convert_decl.cpp:615` with `solidity_convert_mapping.cpp:478`, `:559`, `:587`,
+which no test in the corpus reaches at all. The last of those is the cheapest thing Phase 8
+could fix next and the only one that is a test gap rather than a design question:
+`mapping.cpp:478` needs `S s = m[k];` -- reading a struct by value out of a mapping -- which
+no Solidity test in the tree does.
