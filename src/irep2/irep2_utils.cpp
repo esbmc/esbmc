@@ -687,8 +687,8 @@ std::string type_to_string(const irep_idt &theval, int)
 }
 
 // do_type_lt overloads. Trivial cases (bool, unsigned int, enums,
-// fixedbvt, ieee_floatt, irep_idt, std::vector<irep_idt>) use the
-// primary template in irep2_dispatch.h.
+// fixedbvt, irep_idt, std::vector<irep_idt>) use the primary template
+// in irep2_dispatch.h.
 
 int do_type_lt(const BigInt &side1, const BigInt &side2)
 {
