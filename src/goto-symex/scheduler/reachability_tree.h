@@ -473,6 +473,10 @@ protected:
    *  therefore can never be the target of a write through a pointer. */
   std::unordered_set<irep_idt, irep_id_hash> address_taken_globals;
 
+  /** Non-static locals whose address is taken anywhere. The pointer may reach
+   *  another thread, so MPOR keys their accesses as it does a global's. */
+  std::unordered_set<irep_idt, irep_id_hash> address_taken_locals;
+
   /** Set when the static scan sees a write through a pointer it cannot
    *  resolve. On its own this no longer disables the optimisation globally:
    *  an unresolved write can only land on a global whose address escaped, so
@@ -486,12 +490,22 @@ protected:
    *  that may be written. */
   void scan_program_writes();
 
+  /** Fill address_taken_globals and address_taken_locals from every body. */
+  void scan_address_taken();
+
 public:
+  /** Static or heap storage, or a local whose address may reach a thread. */
+  bool is_shared_storage(const symbolt &s) const
+  {
+    return s.static_lifetime || s.get_type().is_dynamic_set() ||
+           address_taken_locals.count(s.id) != 0;
+  }
+
   /** True if `name` may be written by some thread somewhere in the program.
    *  Conservatively returns true when the optimisation is disabled. */
   bool may_be_written(const irep_idt &name) const
   {
-    if (!readonly_global_opt)
+    if (!readonly_global_opt || address_taken_locals.count(name) != 0)
       return true;
     // A direct, named write somewhere in the program.
     if (ever_written_globals.count(name) != 0)

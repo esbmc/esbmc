@@ -954,7 +954,7 @@ expr2tc execution_statet::resolve_pointer_target(
     if (is_esbmc_internal_symbol(n))
       continue;
 
-    to_global = s->static_lifetime || s->get_type().is_dynamic_set();
+    to_global = art1->is_shared_storage(*s);
     found = to_object_descriptor2t(obj).object;
     /* Distinguish the elements of a lock array. Both `&m[0]` and `&m[1]`
      * resolve to the base symbol `m`, which makes MPOR treat every lock in the
@@ -1173,9 +1173,7 @@ void execution_statet::get_expr_globals(
     // MPOR limiters tracked in #4584 also need to be loosened before
     // assertion-based race tests like increment_race flip to FAILED.
     const bool python_global = symbol->mode == "Python" && !symbol->file_local;
-    if (
-      symbol->static_lifetime || symbol->get_type().is_dynamic_set() ||
-      point_to_global || python_global)
+    if (art1->is_shared_storage(*symbol) || point_to_global || python_global)
       record_access_key(p, globals_list, kind);
 
     // Objects further along the chain are shared on their own merit, so they
@@ -1206,9 +1204,7 @@ void execution_statet::get_expr_globals(
       expr2tc i = idx.index;
       cur_state->rename(i);
       simplify(i);
-      if (
-        s && (s->static_lifetime || s->get_type().is_dynamic_set()) &&
-        is_constant_int2t(i))
+      if (s && art1->is_shared_storage(*s) && is_constant_int2t(i))
       {
         src = idx.source_value;
         cur_state->top().level1.rename(src);
