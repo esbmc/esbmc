@@ -540,3 +540,154 @@ types stay legacy; give IREP2 a Solidity type kind, which the closed-type-system
 exists to prevent; or carry a `SolType` beside every expression in the frontend's own
 structures, which is the honest fix and a large refactor. Choosing among them is not a
 measurement, and Phase 8 should not spend more ticks pretending otherwise.
+
+## 14. Ten of Phase 8's writes, and the reader nobody had found (2026-09-15)
+
+§13 ended by saying Phase 8 should stop pretending the `#sol_type` question is a
+measurement. It is not, and the 91 remaining B-2 writes were left as though they all
+waited on it. Ten do not. `scope-clang-c-irep2.md` §148.4's question -- what is the write
+*for* -- converts them without touching a type, and answering it properly took two wrong
+answers first.
+
+### 14.1 The shape
+
+Every one looks like this (`solidity_convert_call.cpp`, the external-call and transfer
+wrappers):
+
+```cpp
+symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+code_declt old_sender_decl(symbol_expr(added_old_sender));
+added_old_sender.set_value(msg_sender);            // <- counted as B-2 debt
+old_sender_decl.operands().push_back(msg_sender);  // <- what goto_convert lowers
+```
+
+The value is written to the symbol and then written again as the declaration's operand.
+Three are `msg_sender` / `msg_value` save-and-restore pairs around an external call, three
+more are one half of that pair (`get_call_definition` and `get_staticcall_definition` save
+only the sender, `model_transaction` only the value), and the tenth is the `$dl_success$`
+flag's initial `false`.
+
+### 14.2 The write is not redundant, and the suite cannot see why
+
+It reads as a duplicate of the declaration's operand, and for *lowering* it is:
+`goto_convertt::convert_decl` (`goto_convert.cpp:846-866`) takes the initialiser from the
+decl's `op1` and never falls back to the symbol. Deleting the ten leaves
+`regression/esbmc-solidity` at 525 of 525, which is what a first pass concluded from.
+
+That conclusion was wrong. `mark_decl_as_non_det` (`mark_decl_as_non_det.cpp:31`) walks
+every `DECL` and uses the symbol's value as its oracle for "was this declaration
+initialised":
+
+```cpp
+    // Is the value initialized?
+    if (s->get_value().is_nil())
+      // Initialize it with nondet then
+```
+
+It is registered unconditionally (`esbmc/parseoptions/driver.cpp:407-409`), so with the
+write gone each of the ten decls gains an `ASSIGN sym = NONDET(...)` between its `DECL` and
+its real initialiser:
+
+```
+DECL unsigned _ExtInt(160) old_sender;
+ASSIGN old_sender=NONDET(unsigned _ExtInt(160));   <- only without the write
+ASSIGN old_sender=msg_sender;
+```
+
+The nondet is overwritten on the next instruction, which is exactly why 525 of 525 still
+pass. The suite is blind to it; `--goto-functions-only` is not.
+
+So the ten are **converted**, not deleted: `symbol_expr2tc` for the nine symbol
+expressions and `gen_false_expr()` for the flag. The value stays non-nil, the pass skips
+the decl as before, and B-2 is discharged with no change to the program. The flag's case is
+exact by construction rather than by measurement: `migrate_expr_back` of
+`constant_bool2t(false)` returns literally `false_exprt()` (`migrate.cpp:4436-4441`).
+
+The nine are exact in the only channel that is read, not in every byte. `symbol_expr`
+(`util/expr/expr_util.cpp:239-245`) sets the identifier *and* a cosmetic display name;
+`symbol2t` carries only the identifier, and the type makes a `migrate_type` round trip. That
+difference reaches no reader: the decl operand is untouched so the GOTO is unaffected, and
+the one rendered channel for a symbol's value -- `show_symbol_table_plain` through
+`c_expr2stringt::convert_symbol` -- resolves the symbol in the namespace by identifier and
+prints the symbol table's own `name`, never the expression's.
+
+### 14.3 What that costs, measured properly
+
+Over the 515 of `regression/esbmc-solidity`'s 525 directories whose `test.desc` names a
+source file that exists, the normalised `--goto-functions-only` dump is **identical for all
+515**, and the hashes are 501 distinct values, so the comparison has content:
+
+```sh
+for d in regression/esbmc-solidity/*/; do
+  src=$(sed -n 2p "$d/test.desc"); flags=$(sed -n 3p "$d/test.desc")
+  [ -f "$d/$src" ] || continue
+  h=$( (cd "$d" && esbmc "$src" $flags --goto-functions-only 2>&1) |
+    sed -e 's/\x1b\[[0-9;]*m//g' -e 's/0x[0-9a-f]\{4,\}/0xX/g' \
+        -e 's|esbmc_solidity_temp-[0-9a-f-]*|TMPDIR|g' |
+    grep -vE '^WARNING: |^ *[0-9.]+s$|time: ' | LC_ALL=C sort | md5sum | cut -d' ' -f1 )
+  echo "$h $d"
+done | sort -k2
+```
+
+`scripts/irep2/test_bars.py` covers the script's refinement, including the two IREP2-only
+builders this section needed it to recognise, and it now runs under ctest
+(`unit/CMakeLists.txt`) rather than only by hand -- reverting any one refinement fails a
+named case.
+
+Two traps are worth naming because both produced a false "identical" first:
+`--goto-functions-only` and `--symbol-table-only` write to **stderr** (stdout carries one
+line, the version banner), so a capture piped `2>/dev/null` hashes nothing -- the tell is
+that every program hashes the same, 1 distinct value across 515. And the Solidity frontend
+extracts to a randomly named `/tmp/esbmc_solidity_temp-*` which appears in source
+locations, so two runs of one binary disagree until it is normalised away.
+
+### 14.4 The contract this exposes, which is worth more than the ten
+
+A hand-built local declaration has to satisfy three readers, in three files, and no comment
+says so:
+
+| reader | applies to | reads |
+|---|---|---|
+| `goto_convert.cpp:846-866` (`convert_decl`) | non-static locals | the decl's operand |
+| `clang_c_main.cpp:12-55` (`init_variable` via `static_lifetime_init`, gated on `s.static_lifetime`) | statics | the symbol's `value` |
+| `mark_decl_as_non_det.cpp:31` | non-static locals | whether the symbol's `value` is nil |
+
+For a static, `convert_decl` returns early (`goto_convert.cpp:833-836`) and the `push_back`
+is the dead half; for a local, the `set_value` is not read for its content but is read for
+its nil-ness. That is why `clang_c_convert.cpp:655-660` writes both for every initialised C
+local, and why the pattern is a cross-frontend convention rather than Solidity debt.
+
+It also retracts the discriminator an earlier draft of this section proposed. Deleting a
+candidate group and running the suite does **not** sort live writes from dead ones here,
+because the consequence of deleting a live one is a dead store the suite cannot observe.
+The usable discriminator is the table above: a write whose symbol is `static_lifetime` is
+read for its content, and one whose symbol is not is read for its nil-ness. Both are read.
+On that reading none of this family is dead, and the family is convertible -- which is a
+better outcome for the remaining 81 than a deletion sweep would have been.
+
+With one caveat that does not apply to these ten and will apply to others. For a
+`static_lifetime` symbol `init_variable` reads the value's *content* and emits it as a
+`code_assignt` into `__ESBMC_main`, so there the display name dropped at the seam, and the
+type's round trip, land in a rendered artefact rather than nowhere. All ten here are
+non-static -- `old_sender` prints an empty `Flags` line and `$dl_success$` prints
+`lvalue file_local`, and nothing in `solidity_convert_call.cpp` sets `static_lifetime` --
+so the question does not arise yet. It arises at the first static one, and the answer has
+to be measured on the GOTO rather than assumed from these ten.
+
+### 14.5 What pins it
+
+Nothing new can bite, and this time for a checkable reason: the conversion is
+GOTO-identical over all 515 programs, and its one non-identity -- the display name dropped
+at the migrate seam -- is rendered by no output channel and read by no pass. The place it
+survives is the goto-binary irep (`symbolt::to_irep`), which no `test.desc` can reach,
+since the harness matches output regexes only. What pins
+it is that corpus comparison, `regression/esbmc-solidity` at 525 of 525, and the 49
+Solidity contracts that use `msg.sender` -- 29 of them expecting `VERIFICATION FAILED`,
+including `ext_call_state_track_2`, `reentrance_14` and `swc_107_2`, so the message context
+this touches is pinned in both directions. Ten of those contracts show the converted value
+directly: `--symbol-table-only` prints `Value.......: msg_sender` for each `old_sender`, and
+that field can only be non-empty because the write ran.
+
+Had the ten been deleted instead, a `--goto-functions-only` test pinning
+`ASSIGN old_sender=NONDET` would have been owed and would have bitten. That test is the
+reason to prefer the conversion, not a reason to add it.
