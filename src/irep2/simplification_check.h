@@ -18,7 +18,10 @@
  *  meaning, and checking whole expressions saw neither the peepholes nor the
  *  direct expr2t::simplify() callers that never reach the free simplify()
  *  below. Coverage is still not total, and three gaps are structural:
- *  simplify() returns nil for address_of and overflow before any rewrite site;
+ *  simplify() returns nil for address_of before any rewrite site (overflow
+ *  now reaches one narrow verified rewrite -- the widened-operand-multiply
+ *  overflow shortcut in overflow2t::do_simplify() -- but otherwise still
+ *  declines the same way);
  *  the driver cannot install a checker until it holds a namespace, so frontend
  *  parsing runs unchecked; and the rewrites the checker's own solver performs
  *  are skipped by the reentrancy guard below, counted in neither total. A

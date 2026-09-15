@@ -5262,6 +5262,16 @@ expr2tc overflow2t::do_simplify() const
   if (!is_typecast2t(mul.side_1) || !is_typecast2t(mul.side_2))
     return expr2tc();
 
+  // The cast target is what the multiply actually operates on; require it to
+  // match the multiply's own declared type. assert_arith_2ops_consistency
+  // (irep2_expr.cpp) only checks width, never signedness, and some
+  // constructions (e.g. migrate.cpp's `mul2tc(op0->type, op0, op1)` for
+  // "overflow-*") set a mul's type from one operand alone. Without this
+  // check, from1/from2's signedness could be read against a destination type
+  // that isn't actually the type the multiplication is evaluated at.
+  if (mul.side_1->type != operand->type || mul.side_2->type != operand->type)
+    return expr2tc();
+
   const expr2tc &from1 = to_typecast2t(mul.side_1).from;
   const expr2tc &from2 = to_typecast2t(mul.side_2).from;
 
