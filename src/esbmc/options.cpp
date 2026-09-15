@@ -591,6 +591,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "k-induction phase is selected. --check-vacuity applies to the whole run, "
      "so a program with no loop at all can still report UNKNOWN where it "
      "reported SUCCESSFUL; --no-vacuity-check turns it back off"},
+    {"houdini-loop-invariants",
+     NULL,
+     "Infer loop invariants by Houdini: guess a pool of candidate facts from "
+     "the program's own constants and delete the ones the solver refutes, "
+     "until the surviving set is inductive. Reaches loops with no affine "
+     "counter; implies --loop-invariant-check, --check-vacuity, and "
+     "--multi-property unless a k-induction phase is selected"},
     {"loop-frame-rule",
      NULL,
      "Enable frame rule for loop invariant checking "

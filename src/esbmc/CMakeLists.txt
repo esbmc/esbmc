@@ -51,6 +51,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
 
 add_executable(esbmc main.cpp
     parseoptions/bmc_strategy.cpp
+    parseoptions/houdini_strategy.cpp
     parseoptions/command_line_options.cpp
     parseoptions/driver.cpp
     parseoptions/function_contracts.cpp
