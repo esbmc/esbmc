@@ -11,7 +11,7 @@ new_unit_test(python_adjust_test "python_adjust_test.cpp" "pythonfrontend;clangc
 new_unit_test(function_call_cache_test "function_call_cache_test.cpp" "pythonfrontend")
 new_unit_test(json_utils_alias_test "json_utils_alias_test.cpp" "pythonfrontend")
 # pysrclib carries the operational-model goto binary this reads back.
-new_unit_test(model_goto_blob_test "model_goto_blob_test.cpp" "mode_table_obj;pysrclib;pythonfrontend;gotoprograms;langapi;util_esbmc;bigint")
+new_unit_test(model_goto_blob_test "model_goto_blob_test.cpp" "mode_table_obj;pysrclib;pythonfrontend;clibs;gotoprograms;langapi;util_esbmc;bigint")
 new_unit_test(element_type_registry_test "element_type_registry_test.cpp" "pythonfrontend;util_esbmc;bigint")
 if(NOT WIN32)
 new_unit_test(function_call_expr_error_test "function_call_expr_error_test.cpp" "pythonfrontend;util_esbmc;bigint")
