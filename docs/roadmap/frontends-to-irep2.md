@@ -2978,6 +2978,91 @@ Tests: `regression/esbmc-cpp/cpp/github_4715_vtable_thunk_irep2{,_fail}`, a
 two-base hierarchy dispatching through the second base. Both halves change verdict
 when either reader is restored; neither moves when the base names are dropped,
 which is the measurement above in test form.
+
+## 48. The thunk symbols, and §44's field gets an end-to-end gate (2026-09-14)
+
+Three of the vtable builder's remaining B-2 writes go together, because two of
+them were feeding the third.
+
+`add_thunk_method` wrote the component's legacy type into the symbol, read it
+straight back out, adjusted the `this` argument, and wrote it again through
+`migrate_type`. The first write was never observed: `set_thunk_name` touches only
+the symbol's name. It now builds the adjusted type from `component.type()`
+directly and writes once.
+
+`add_thunk_method_arguments` then had the same shape one level down -- legacy type
+out, `#identifier` written on each argument, legacy type back in. It reads
+`code_type2t` instead: the argument types come from `arguments`, the base name a
+symbol is named after from `argument_base_names`, and the new identifiers are
+assembled into a fresh `code_type2tc`. The legacy round trip goes with it.
+
+### 48.1 What the slice moves, and what §44's gate already was
+
+Making `migrate_type`'s code arm push an empty base name per argument takes
+`regression/esbmc-cpp/cpp` from 6 failures to **18**:
+
+```
+functional, functional_fail, functional_fail2,
+github_5868_function_signatures, github_5868_function_signatures_fail,
+github_7540_capacity_fail, github_7540_capacity_write_fail,
+github_7540_precision, ostringstream_str, ostringstream_str_fail,
+pmr_memory_resource, pmr_memory_resource_fail
+```
+
+An argument symbol is named `<thunk>::<base_name>`, so an empty base name collides
+every argument of a thunk onto one symbol id.
+
+**That gate is not new, and an earlier draft of this section claimed it was.** §44.4
+already converted the thunk's type write, after which the argument loop read the
+base name back off `migrate_type_back`'s restoration (`migrate.cpp:3160`) via
+`arg.get_base_name()` -- the line §44.1 calls "The reader". The 12 tests have gated
+the field since then.
+
+What this slice moves is the *shape* of the dependency, and that is measurable.
+Disabling the back arm's restoration alone now leaves all 12, plus
+`thunk_multi_tu{,_fail}` and `github_4715_vtable_thunk_irep2{,_fail}`, green -- 16
+of 16 -- where before it was the thunk path's only source of the name. The read is
+direct, so `argument_base_names` is consumed as an IREP2 field rather than
+recovered through a legacy attribute.
+
+### 48.2 What pins the slice, stated exactly
+
+The slice moves no verdict -- measured, not asserted: the `--symbol-table-only`
+output for `pmr_memory_resource` (four-argument thunks) and `thunk_multi_tu` (the
+duplicate-symbol path) is byte-identical to the previous commit's. So it adds no
+verdict pair, and the honest accounting of what pins each half is:
+
+- the base-name read is pinned by the 12 tests above, and now also directly by
+  `regression/esbmc-cpp/cpp/github_4715_thunk_arg_symbols`, which asserts the two
+  argument symbols `…::a::0` and `…::b::1` exist. It fails in 0.3s under the
+  empty-base-name mutation, against 12 verdict flips.
+- the identifier bookkeeping (`identifiers[i] = arg_symb.id` and the
+  `code_type2tc` that carries it) is **not** pinned end to end, and was equally
+  unpinned before: deleting it, or the legacy `arg.set("#identifier", …)` it
+  replaces, leaves all 16 green on either version. Without it a thunk's formals
+  alias the callee's own parameter symbols and values still flow.
+
+A code type's `argument_base_names` are also inert *downstream* of this function in
+the C++ path -- dropping them from the final `code_type2tc` changes no output -- so
+the field earns its place at the point of construction, not after it.
+
+### 48.3 A pre-existing false alarm this slice's probing found
+
+An override whose *declaration* leaves its parameters unnamed gets empty
+`#base_name`s from `clang_cpp_convert.cpp`, so all of them collapse onto one thunk
+argument symbol and the thunk forwards the last actual for every parameter:
+
+```cpp
+struct Base { virtual ~Base() {} virtual int f(int, int) { return 0; } };
+struct Derived : Base { int f(int, int) override; };
+int Derived::f(int a, int b) { return a - b; }
+int main() { Derived d; Base *b = &d; assert(b->f(5, 2) == 3); }
+```
+
+`VERIFICATION FAILED` on a program whose answer is 3; naming the parameters in the
+declaration gives SUCCESSFUL. It reproduces identically on the previous commit --
+`pmr_memory_resource`'s thunk prints `do_allocate((…)this, , )` on both -- so it is
+not this slice's doing. It wants its own issue and a KNOWNBUG pair.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured
