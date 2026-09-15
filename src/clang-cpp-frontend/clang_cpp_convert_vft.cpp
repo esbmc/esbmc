@@ -765,7 +765,14 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
       assert(value.type().id() == compo.type().id());
       values.operands().push_back(value);
     }
-    vt_symb_var.set_value(values);
+    // migrate_expr resolves each referenced method or thunk through this
+    // thread-local namespace; point it at the context being built, since the
+    // one language_ui installed does not see it (§53.2).
+    const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+    expr2tc values2;
+    migrate_expr(values, values2);
+    migrate_namespace_lookup = old_ns;
+    vt_symb_var.set_value(values2);
 
     if (context.move(vt_symb_var))
     {
