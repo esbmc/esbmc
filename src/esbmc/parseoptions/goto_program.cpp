@@ -43,6 +43,7 @@
 #include <goto-programs/read_cbmc_goto_object.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
+#include <c2goto/cprover_library.h>
 #ifdef ENABLE_PYTHON_FRONTEND
 #  include <python-frontend/python_library.h>
 #endif
@@ -663,6 +664,7 @@ bool esbmc_parseoptionst::parse_goto_program(
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
     link_python_model_bodies(goto_functions);
+    assert_no_pruned_calls(goto_functions);
   }
 
   catch (const char *e)
