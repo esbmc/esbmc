@@ -40,6 +40,7 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class ValueDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
@@ -227,6 +228,11 @@ protected:
    * Centralises the wrapping logic shared by struct-component construction,
    * member-expression lowering, and ctor member-initialiser-list lowering. */
   bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
+
+  /* If `vd` is a flexible array member, give its array type `t` size zero:
+   * C17 6.7.2.1p18 sizes the struct as if the member were omitted. Every site
+   * that lowers a field's type must agree, or members and components differ. */
+  void size_flexible_array_member(const clang::ValueDecl &vd, typet &t);
 
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
