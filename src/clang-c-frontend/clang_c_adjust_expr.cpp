@@ -1821,39 +1821,37 @@ void declare_argc_argv(contextt &context, const symbolt &main_symbol)
   if (main_symbol.name != "main")
     return;
 
-  const code_typet::argumentst &arguments =
-    to_code_type(main_symbol.get_type()).arguments();
-
-  if (arguments.size() == 0)
-    return;
+  // C11 5.1.2.2.1 fixes what is left: `int main(void)`, the two-argument form
+  // and the common `char **` third parameter. Clang rejects anything else
+  // before the frontend runs, so the pointer shape below is guaranteed.
+  const std::vector<type2tc> &arguments =
+    to_code_type(main_symbol.get_type2()).arguments;
 
   if (arguments.size() != 2 && arguments.size() != 3)
     return;
 
-  const exprt &op0 = arguments[0];
-  const exprt &op1 = arguments[1];
-
   symbolt argc_symbol;
   argc_symbol.name = "argc";
   argc_symbol.id = "argc'";
-  argc_symbol.set_type(op0.type());
+  argc_symbol.set_type(arguments[0]);
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
 
   symbolt *argc_new_symbol;
   context.move(argc_symbol, argc_new_symbol);
 
-  // need to add one to the size -- the array is terminated
-  // with NULL
-  exprt one_expr = from_integer(1, argc_new_symbol->get_type());
-
-  exprt size_expr("+", argc_new_symbol->get_type());
-  size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
+  const type2tc &argc_type = argc_new_symbol->get_type2();
+  // The array is NULL-terminated, hence argc + 1 elements.
+  const expr2tc argv_size = add2tc(
+    argc_type,
+    symbol_expr2tc(*argc_new_symbol),
+    constant_int2tc(argc_type, BigInt(1)));
 
   symbolt argv_symbol;
   argv_symbol.name = "argv";
   argv_symbol.id = "argv'";
-  argv_symbol.set_type(array_typet(op1.type().subtype(), size_expr));
+  argv_symbol.set_type(
+    array_type2tc(to_pointer_type(arguments[1]).subtype, argv_size, false));
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
 
@@ -1862,12 +1860,10 @@ void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 
   if (arguments.size() == 3)
   {
-    const exprt &op2 = arguments[2];
-
     symbolt envp_size_symbol;
     envp_size_symbol.name = "envp_size";
     envp_size_symbol.id = "envp_size'";
-    envp_size_symbol.set_type(op0.type()); // same type as argc!
+    envp_size_symbol.set_type(arguments[0]);
     envp_size_symbol.static_lifetime = true;
 
     symbolt *envp_new_size_symbol;
@@ -1876,11 +1872,11 @@ void declare_argc_argv(contextt &context, const symbolt &main_symbol)
     symbolt envp_symbol;
     envp_symbol.name = "envp";
     envp_symbol.id = "envp'";
-    envp_symbol.set_type(op2.type());
+    envp_symbol.set_type(array_type2tc(
+      to_pointer_type(arguments[2]).subtype,
+      symbol_expr2tc(*envp_new_size_symbol),
+      false));
     envp_symbol.static_lifetime = true;
-    exprt size_expr = symbol_expr(*envp_new_size_symbol);
-    envp_symbol.set_type(
-      array_typet(envp_symbol.get_type().subtype(), size_expr));
 
     symbolt *envp_new_symbol;
     context.move(envp_symbol, envp_new_symbol);

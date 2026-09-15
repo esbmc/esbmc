@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property
+^\s*FAILED\s+\[main\.array-bounds-violated\.1\]
+^VERIFICATION FAILED$
