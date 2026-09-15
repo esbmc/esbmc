@@ -48,6 +48,16 @@ PyRtObject *pyrt_long_from(int64_t v)
   return (PyRtObject *)o;
 }
 
+PyRtObject *pyrt_nondet_bool(void)
+{
+  return pyrt_bool_from(nondet_bool());
+}
+
+PyRtObject *pyrt_nondet_int(void)
+{
+  return pyrt_long_from(nondet_long());
+}
+
 PyRtObject *pyrt_long_add(PyRtObject *a, PyRtObject *b)
 {
   if (!pyrt_long_check(a) || !pyrt_long_check(b))

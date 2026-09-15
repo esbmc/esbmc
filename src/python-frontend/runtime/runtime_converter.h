@@ -29,10 +29,13 @@ private:
   const std::string file_;
   const typet object_type_;
 
-  std::string function_;
+  /// Symbol id of the function being converted; empty at module level.
+  std::string code_id_;
+  std::string function_name_;
   std::set<std::string> locals_;
   std::set<std::string> globals_;
   std::map<std::string, const json *> functions_;
+  std::map<std::string, const json *> classes_;
   code_blockt *block_ = nullptr;
   unsigned temporaries_ = 0;
 
@@ -42,16 +45,31 @@ private:
   symbolt &add_symbol(symbolt &symbol);
 
   std::string global_id(const std::string &name) const;
-  std::string function_id(const std::string &name) const;
-  std::string
-  local_id(const std::string &function, const std::string &name) const;
+  std::string code_id(const std::string &cls, const std::string &name) const;
+  std::string local_id(const std::string &name) const;
+  std::string function_object_id(const std::string &cls, const std::string &name)
+    const;
+  std::string type_object_id(const std::string &cls) const;
 
-  exprt runtime_object(const std::string &name) const;
+  exprt address(const std::string &id) const;
+  exprt type_pointer(const std::string &cls) const;
+  exprt name_pointer(const std::string &name);
+  exprt struct_value(const char *tag, const std::map<std::string, exprt> &fields)
+    const;
+  void add_static_object(
+    const std::string &id,
+    const char *tag,
+    const locationt &loc);
+
   exprt new_temporary(const typet &type, const locationt &loc);
   exprt call(
     const std::string &function,
     const std::vector<exprt> &arguments,
     const locationt &loc);
+  std::vector<exprt> arguments(const json &call_node);
+  exprt arguments_struct(
+    const std::vector<exprt> &arguments,
+    const json &call_node) const;
   void raise(const std::string &message, const locationt &loc);
   void emit_if(const exprt &cond, codet then_case, const locationt &loc);
 
@@ -60,7 +78,7 @@ private:
   exprt constant(const json &node);
   exprt int_constant(int64_t value, const locationt &loc);
   exprt name(const json &node);
-  exprt binop(const json &node);
+  exprt binop(const std::string &op, exprt left, exprt right, const json &node);
   exprt unaryop(const json &node);
   exprt compare(const json &node);
   exprt boolop(const json &node);
@@ -77,9 +95,11 @@ private:
   void statements(const json &body, code_blockt &block);
   void statement(const json &node);
   void store(const json &target, const exprt &value, const locationt &loc);
+  void aug_assign(const json &node);
   void if_statement(const json &node);
   void while_statement(const json &node);
   void assert_statement(const json &node);
+  void class_statement(const json &node);
 
   void collect_assigned(
     const json &body,
@@ -88,10 +108,13 @@ private:
   void declare_variable(
     const std::string &id,
     const std::string &name,
+    const typet &type,
     bool is_global,
     const locationt &loc);
-  void declare_function(const json &def);
-  void define_function(const json &def);
+  void check_signature(const json &def) const;
+  void declare_function(const json &def, const std::string &cls);
+  void define_function(const json &def, const std::string &cls);
+  void declare_class(const json &def);
   void add_c_intrinsics();
   void add_entry_points(code_blockt &user_code);
 };

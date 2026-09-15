@@ -142,6 +142,9 @@ int64_t pyrt_sequence_index(PyRtObject *o, PyRtObject *key)
 
 PyRtObject *pyrt_getitem(PyRtObject *o, PyRtObject *key)
 {
+  PyRtMappingMethods *mp = o->ob_type->tp_as_mapping;
+  if (mp && mp->mp_subscript)
+    return mp->mp_subscript(o, key);
   PyRtSequenceMethods *sq = o->ob_type->tp_as_sequence;
   if (!sq || !sq->sq_item)
     PYRT_RAISE("TypeError: object is not subscriptable");
@@ -150,6 +153,12 @@ PyRtObject *pyrt_getitem(PyRtObject *o, PyRtObject *key)
 
 void pyrt_setitem(PyRtObject *o, PyRtObject *key, PyRtObject *value)
 {
+  PyRtMappingMethods *mp = o->ob_type->tp_as_mapping;
+  if (mp && mp->mp_ass_subscript)
+  {
+    mp->mp_ass_subscript(o, key, value);
+    return;
+  }
   PyRtSequenceMethods *sq = o->ob_type->tp_as_sequence;
   if (!sq || !sq->sq_ass_item)
     PYRT_RAISE("TypeError: object does not support item assignment");
