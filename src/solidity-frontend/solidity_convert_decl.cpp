@@ -282,7 +282,6 @@ bool solidity_convertert::get_var_decl(
   // this will be used to decide if the var will be converted to this->var
   // when parsing function body.
   bool is_state_var = ast_node["stateVariable"].get<bool>();
-  set_sol_state_var(t, is_state_var);
 
   // For local storage reference variables (e.g. Wrapper storage ref = param),
   // register an alias so that uses of 'ref' resolve to the source symbol.
@@ -315,6 +314,10 @@ bool solidity_convertert::get_var_decl(
     if (get_var_decl_name(ast_node, name, id))
       return true;
   }
+
+  // The state flag is keyed by symbol id, so it is recorded here rather than
+  // beside the type: the id is not known until now (§10).
+  set_sol_state_var(id, is_state_var);
 
   // if we have already populated the var symbol, we do not need to re-parse
   // however, we need to return the symbol info

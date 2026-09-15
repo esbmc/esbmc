@@ -159,14 +159,23 @@ public:
   }
 
   // Set/get the Solidity "state variable" flag carried on a typet via the
-  // #sol_state_var irep attribute (stored as "1"/"0").
-  static void set_sol_state_var(typet &t, bool v)
+  /// Whether a declared variable is a contract state variable. Held here, keyed
+  /// by the variable's symbol id, rather than on its `typet`: IREP2 has no
+  /// field for it, and a symbol's id survives every migration by construction,
+  /// so the frontend keeps what is Solidity-level and the shared representation
+  /// stays closed (docs/roadmap/scope-solidity-irep2.md §10).
+  std::unordered_set<irep_idt> sol_state_vars;
+
+  void set_sol_state_var(const irep_idt &symbol_id, bool v)
   {
-    t.set("#sol_state_var", v ? "1" : "0");
+    if (v)
+      sol_state_vars.insert(symbol_id);
+    else
+      sol_state_vars.erase(symbol_id);
   }
-  static bool get_sol_state_var(const typet &t)
+  bool get_sol_state_var(const irep_idt &symbol_id) const
   {
-    return t.get("#sol_state_var") == "1";
+    return sol_state_vars.count(symbol_id) != 0;
   }
 
   // Set/get the Solidity builtin name carried on a typet via the #sol_name
