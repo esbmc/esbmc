@@ -112,10 +112,19 @@ public:
   bool detect_dynamic_return_type(const nlohmann::json &function_body) const;
 
   /**
-   * @brief Builds a tagged-object temporary from an already-converted
-   * value, for use as a RETURN value
+   * @brief True if some top-level `If` in `scope_body` (a function body or
+   * the module body) assigns `name` genuinely incompatible literal kinds
+   * across every branch
    */
-  exprt build_tagged_return_value(
+  bool scope_assigns_divergent_literal_types(
+    const std::string &name,
+    const nlohmann::json &scope_body) const;
+
+  /**
+   * @brief Builds a tagged-object temporary from an already-converted
+   * value, for use as either a RETURN value or a function-call ARGUMENT
+   */
+  exprt build_tagged_value(
     const exprt &value,
     const locationt &location,
     codet &target_block);

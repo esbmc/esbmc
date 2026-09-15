@@ -786,6 +786,17 @@ private:
     const nlohmann::json &arg,
     const nlohmann::json &module_body) const;
 
+  /**
+   * @brief True if some call site of @c func_name (positional at
+   * @c param_index, or keyword matching @c param_name) passes a bare `Name`
+   * that its enclosing scope assigns genuinely incompatible literal kinds
+   * across an if/else
+   */
+  bool try_infer_dynamic_param_type(
+    const std::string &func_name,
+    const std::string &param_name,
+    size_t param_index) const;
+
   void validate_return_paths(
     const nlohmann::json &function_node,
     const code_typet &type,

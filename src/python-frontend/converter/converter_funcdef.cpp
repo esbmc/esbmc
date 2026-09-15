@@ -1566,6 +1566,59 @@ void python_converter::track_numpy_param(
     numpy_array_symbols_.insert(arg_id);
 }
 
+bool python_converter::try_infer_dynamic_param_type(
+  const std::string &func_name,
+  const std::string &param_name,
+  size_t param_index) const
+{
+  const nlohmann::json &module_body = (*ast_json)["body"];
+
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+
+  auto scope_body_for =
+    [&](const numpy_param_call_site &site) -> const nlohmann::json * {
+    if (site.enclosing_function.empty())
+      return &module_body;
+    const nlohmann::json *enclosing_def =
+      find_function_def(module_body, site.enclosing_function);
+    return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
+  };
+
+  auto diverges_at_site =
+    [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
+      if (value_node.value("_type", "") != "Name")
+        return false;
+      const nlohmann::json *scope_body = scope_body_for(site);
+      return scope_body != nullptr &&
+             dynamic_type_handler_.scope_assigns_divergent_literal_types(
+               value_node.value("id", ""), *scope_body);
+    };
+
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (
+      call.value("func", nlohmann::json::object()).value("_type", "") !=
+        "Name" ||
+      call["func"].value("id", "") != func_name)
+      continue;
+
+    if (
+      call.contains("args") && call["args"].size() > param_index &&
+      diverges_at_site(call["args"][param_index], site))
+      return true;
+
+    if (call.contains("keywords") && call["keywords"].is_array())
+      for (const auto &kw : call["keywords"])
+        if (
+          kw.value("arg", "") == param_name && kw.contains("value") &&
+          diverges_at_site(kw["value"], site))
+          return true;
+  }
+  return false;
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -1619,6 +1672,16 @@ size_t python_converter::register_function_argument(
       arg_type = inferred_array_type;
       numpy_array_param = true;
     }
+  }
+
+  // Same idea, but for a parameter fed a dynamically-typed local variable.
+  if (
+    !numpy_array_param && arg_name != "self" && arg_name != "cls" &&
+    arg_type == any_type() &&
+    try_infer_dynamic_param_type(
+      id.get_function(), arg_name, type.arguments().size()))
+  {
+    arg_type = type_handler_.get_tagged_object_type();
   }
 
   // Arrays are converted to pointers so that the backend receives the same
@@ -1710,7 +1773,9 @@ size_t python_converter::register_function_argument(
   // If the parameter is class-typed (e.g. Foo), copy instance attributes from
   // the class’ synthetic `self` symbol so method bodies can access members via
   // this parameter.
-  if (arg_name != "self" && arg_name != "cls")
+  if (
+    arg_name != "self" && arg_name != "cls" &&
+    !type_handler_.is_tagged_scalar_type(arg_type))
   {
     typet base_type = arg_type.is_pointer() ? arg_type.subtype() : arg_type;
     if (base_type.id() == "symbol")
