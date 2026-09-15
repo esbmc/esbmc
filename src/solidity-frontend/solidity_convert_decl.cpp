@@ -875,12 +875,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       if (comp.is_code() && to_code(comp).statement() == "skip")
         break;
 
-      // set virtual / override
-      if ((*itr).contains("virtual") && (*itr)["virtual"] == true)
-        comp.set("#is_sol_virtual", true);
-      else if ((*itr).contains("overrides"))
-        comp.set("#is_sol_override", true);
-
       t.methods().push_back(comp);
       break;
     }
@@ -1058,12 +1052,6 @@ bool solidity_convertert::get_struct_class_method(
 
   if (get_access_from_decl(ast_node, comp))
     return true;
-
-  // set virtual / override
-  if (ast_node.contains("virtual") && ast_node["virtual"] == true)
-    comp.set("#is_sol_virtual", true);
-  else if (ast_node.contains("overrides"))
-    comp.set("#is_sol_override", true);
 
   type.methods().push_back(comp);
   return false;
