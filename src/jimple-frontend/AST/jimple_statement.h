@@ -63,7 +63,6 @@ public:
  */
 class jimple_return : public jimple_statement
 {
-
   virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
