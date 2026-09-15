@@ -3183,3 +3183,73 @@ Check ninja's exit status, not a filtered tail of its output. The bisect that
 followed -- reverting only the `migrate_type` call -- is what separated the clean
 part of the slice from the broken one, and it is the only reason §50.2's cause is
 attributed correctly.
+
+## 51. An adjust-pass value write that still cannot move, and the hole it was hiding (2026-09-15)
+
+§49.1 concluded that converter-time value writes are bounded by the namespace and
+that "the adjust passes are not bounded this way". The first adjust-pass value write
+tried says the second half of that is too strong.
+
+### 51.1 The attempt
+
+`clang_cpp_adjust::gen_implicit_union_copy_move_constructor` builds the body of an
+implicit union copy or move constructor and ends with
+`symbol.set_value(std::move(value))`. Converting it to `migrate_expr` leaves
+`regression/esbmc-cpp/cpp` at **6 of 1 061** -- its baseline -- and is nevertheless
+**wrong**. A twelve-line program shows it:
+
+```cpp
+union U { int i; float f; };
+int main() { U a; a.i = 7; U b = a; assert(b.i == 7); }
+```
+
+`VERIFICATION SUCCESSFUL` before, `VERIFICATION FAILED` after. The GOTO body says
+why:
+
+```
+legacy:  ASSIGN *this = *U::ref;
+IREP2:   ASSIGN *U#&1#0 = *U#&1#0;
+```
+
+Both operands collapse onto one symbol. The body is built from the argument
+identifiers `this` and `U::ref`, and neither is a symbol-table id: an implicit
+constructor gets no argument symbols. Legacy does not care -- the name is just a
+name -- but `migrate_expr` resolves a symbol through
+`migrate_namespace_lookup`, and both unresolvable names fall back to the enclosing
+function symbol, producing a self-assignment that silently drops the copy.
+
+So the bound is not "converter versus adjust". It is whether every symbol the
+expression names exists in the symbol table. Closing this one means giving the
+implicit constructor real argument symbols, the shape
+`add_thunk_method_arguments` already uses (`<function>::<base_name>`), and only then
+migrating the body.
+
+### 51.2 The hole: the whole path had no test
+
+The label was 6 before and after, because **nothing in the suite constructed a union
+from another union**. There is no `*union*` directory under
+`regression/esbmc-cpp/cpp` at all, and a probe on the path recorded zero
+observations across it -- while the program above reaches it twice, once for the copy
+constructor and once for the move constructor.
+
+That is the part worth landing now:
+`regression/esbmc-cpp/cpp/github_4715_union_implicit_copy_ctor{,_fail}`. The
+SUCCESSFUL half is the gate -- it fails under the conversion above. The FAILED half
+does not distinguish the mutant, since a corrupted copy leaves the assertion false
+either way; it is there to pin that the assertion is generated and reached, which is
+what makes the passing half meaningful.
+
+### 51.3 The ctor/dtor pseudo return type is a design-level item, not a slice
+
+§50.2 left `clang_cpp_convert.cpp:3160` blocked on `migrate_type` mapping the
+`constructor` and `destructor` return-type ids to `void`. Censusing the readers
+before planning a fix: `clang_cpp_adjust_code_gen.cpp:61,62`,
+`clang_cpp_adjust_expr.cpp:25,266,395`, `goto-programs/destructor.cpp:40`, and the
+writer at `clang_cpp_convert.cpp:3563-3564`. One of those is outside the frontend
+entirely.
+
+So retiring the encoding is not a one-write slice, and "is this function a
+constructor" is a property of the function rather than of its type -- which is why
+the legacy form parks it in the return type. The options are a flag on the symbol, a
+derivation from the symbol id, or leaving the encoding and this one write legacy with
+the reason stated. It wants deciding before more of `annotate_class_method` moves.
