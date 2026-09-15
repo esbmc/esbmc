@@ -494,11 +494,16 @@ protected:
   void scan_address_taken();
 
 public:
+  /** Static or heap storage: shared however it is reached. */
+  static bool has_shared_lifetime(const symbolt &s)
+  {
+    return s.static_lifetime || s.get_type().is_dynamic_set();
+  }
+
   /** Static or heap storage, or a local whose address may reach a thread. */
   bool is_shared_storage(const symbolt &s) const
   {
-    return s.static_lifetime || s.get_type().is_dynamic_set() ||
-           address_taken_locals.count(s.id) != 0;
+    return has_shared_lifetime(s) || address_taken_locals.count(s.id) != 0;
   }
 
   /** True if `name` may be written by some thread somewhere in the program.

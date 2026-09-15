@@ -126,7 +126,7 @@ static void collect_object_root(
   if (!is_symbol2t(e))
     return;
   const symbolt *s = ns.lookup(to_symbol2t(e).thename);
-  if (s && !s->static_lifetime && !s->get_type().is_dynamic_set())
+  if (s && !reachability_treet::has_shared_lifetime(*s))
     locals.insert(s->id);
   else
     add_if_global(to_symbol2t(e).thename, ns, globals);
