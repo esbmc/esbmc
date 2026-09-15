@@ -227,3 +227,48 @@ the C++ side has used twice -- derive the value from something IREP2 already hol
 recoverable from the contract symbol the variable belongs to, `#sol_bytesn_size` from
 an array type's size, and so on. Those are eleven small questions rather than one big
 one, and none of them has been asked yet.
+
+## 8. `#sol_contract` retired by derivation: one of the eleven, and the method (2026-09-15)
+
+§7.3 asked whether each of the eleven type attributes can be derived from something
+IREP2 already holds. Here is the first answer, and it is yes.
+
+### 8.1 The derivation
+
+`#sol_contract` is written in exactly one place, and the line above it says what the
+type is:
+
+```cpp
+new_type = pointer_typet(symbol_typet(prefix + cname));
+set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
+set_sol_contract(new_type, cname);          // removed
+```
+
+The contract name *is* the symbol-type identifier with `prefix` ("tag-") removed, and
+IREP2 keeps both the pointer and the symbol type's identifier. `prefix` is also used
+for structs, so the shape alone is not sufficient; the converter already holds every
+contract's name in `linearizedBaseList`, which supplies the rest. `get_sol_contract`
+now computes it and `has_sol_contract` asks it, the setter and the attribute are
+gone, and `esbmc-solidity` is **525 of 525**.
+
+### 8.2 What it unblocked, measured
+
+Converting all 23 type writes with the attribute still in place fails **151** of 525
+(§7.1). With it derived, the same 23 fail **132**. So this one attribute accounted
+for 19 tests, and the next failure is a different cause -- a `CONVERSION ERROR`
+naming a `tag-Base` subtype, i.e. one of the remaining ten.
+
+That is the shape of the rest of the phase: derive an attribute, re-run the
+all-23 experiment, see how far it gets, and keep the conversions that stay green. The
+number to watch is the failure count, not whether any single site converts.
+
+### 8.3 The membership test is unpinned, and probably unfalsifiable from source
+
+Dropping `linearizedBaseList.count(cname)` -- so that any pointer to a `tag-` symbol
+type reports a contract name -- leaves the suite at 525 of 525. The guard's own
+consumer is `get_contract_member_call_expr`, reached only for a *member call* on the
+base, and Solidity structs have no member functions, so a struct-typed base appears
+not to reach it at all. The test is kept because it is the precise condition rather
+than because a test pins it, and no test was invented to cover a case the language
+may not admit. `struct_3`'s `book.book_id` is a field access and does not go through
+that path.
