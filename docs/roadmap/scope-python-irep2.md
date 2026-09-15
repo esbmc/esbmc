@@ -88,10 +88,51 @@ So Phase 9's blocked set is `#cpp_type` (the type checker plus three presentatio
 consumers) and `bases` (the exception hierarchy). Still a far smaller surface than
 Phase 8's eleven, and both are single questions rather than families.
 
-## 4. Next
+## 4. The value writes: 7 of 48, and a bigger wall than the types (2026-09-15)
+
+§2.1 read the census as saying the value writes need only §52's namespace precondition.
+Two measurements say otherwise.
+
+### 4.1 The precondition is already satisfied, and is not the problem
+
+`migrate_namespace_lookup` is never pointed at the python frontend's context, so the
+first question was whether it should be. Instrumenting `sym_name_to_symbol` over 60
+tests: **750 449 hits and 177 472 misses**, a 19% miss rate. Pointing it at
+`python_converter::ns` changes the miss count by **zero** -- 60 160 before and after on
+a 20-test sample -- because that namespace and the one `language_ui` installed wrap the
+same context. Unlike the C++ adjust pass (§52), python's precondition already holds.
+
+The misses are genuine: `python_converter::<file>:N$list_size$N` and friends are
+internal temporaries never added to the table, and a smaller group are model-function
+parameters looked up before they are added. Python ids carry no `#` or `&`, so the
+renaming parser's mangling (§55) cannot bite here; a miss costs the symbol-table type,
+not the name.
+
+### 4.2 What converts
+
+`migrate_expr` had only an out-parameter form, which is why a value write is two
+statements. A returning overload in `util/irep/migrate.h` makes each one a one-liner,
+and is what the remaining conversions in every frontend will want.
+
+With it, of 48 value writes: six take a string literal and are not expressions at all,
+one in `python_adjust.cpp` already passed an `expr2tc` (another grep false positive),
+and of the remainder **7 convert cleanly** -- 400 of 400, 500 of 500, unit 876 of 876.
+The rest fail hard, and the failure is not subtle: converting
+`converter/converter_stmt.cpp`, `converter_funcdef.cpp`, `converter_symbols.cpp`,
+`python_converter.cpp` or `python2goto.cpp` takes the first slice to **389 failures of
+400**.
+
+That is a different kind of wall from the type writes. A type write drops an attribute
+and one consumer notices; these writes are the ones that build the program's bodies and
+`main`, and storing them IREP2-side at conversion time breaks nearly everything -- which
+is what §49.1 measured for C++ before §52 explained it, except here the namespace
+explanation is ruled out by §4.1. The cause is not yet known, and finding it is the next
+task rather than a guess to record.
+
+## 5. Next
 
 - The 22 type writes §3 identifies as blocked, once `#cpp_type` has a route.
-- The 48 value writes, which need §52's namespace precondition and nothing else so
-  far as this census can tell.
+- Why the converter's body and `main` value writes fail as hard as §4.2 measures --
+  34 sites, and the namespace explanation is already ruled out.
 - `#cpp_type`: census its readers the way `scope-solidity-irep2.md` §9 censused
   Solidity's, and pick a route from the four in that document's §11.1.
