@@ -51,7 +51,7 @@ void python_lambda::handle_lambda_assignment(
 
   // Create function pointer type
   typet func_ptr_type = gen_pointer_type(lambda_func_symbol->get_type());
-  lhs_symbol->set_type(migrate_type(func_ptr_type));
+  lhs_symbol->set_type(func_ptr_type);
   lhs.type() = func_ptr_type;
 
   // Convert lambda symbol to address
