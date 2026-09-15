@@ -13,16 +13,6 @@ void jimple_constant::from_json(const json &j)
   j.at("value").get_to(value);
 }
 
-exprt jimple_constant::to_exprt(
-  contextt &,
-  const std::string &,
-  const std::string &) const
-{
-  auto as_number = std::stoi(value);
-  return constant_exprt(
-    integer2binary(as_number, 10), integer2string(as_number), int_type());
-};
-
 // The leaf of this frontend's expression tree: a literal with no context and no
 // operands, so it converts with nothing left to migrate. Matches what
 // migrate_expr makes of the constant_exprt above -- int_type() is signedbv, so
@@ -39,22 +29,6 @@ void jimple_symbol::from_json(const json &j)
 {
   j.at("value").get_to(var_name);
 }
-
-exprt jimple_symbol::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // 1. Look over the local scope
-  auto symbol_name = get_symbol_name(class_name, function_name, var_name);
-  symbolt &s = *ctx.find_symbol(symbol_name);
-
-  // TODO:
-  // 2. Look over the class scope
-  // 3. Look over the global scope (possibly don't need)
-
-  return symbol_expr(s);
-};
 
 expr2tc jimple_symbol::to_expr2t(
   contextt &ctx,
@@ -305,70 +279,6 @@ void jimple_expr_invoke::from_json(const json &j)
   }
 }
 
-exprt jimple_expr_invoke::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Move intrinsics to backend
-  if (base_class == "kotlin.jvm.internal.Intrinsics")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Integer" && method == "valueOf_1")
-    // This would be called with valueOf(2), valueOf(42), etc...
-    return parameters[0]->to_exprt(ctx, class_name, function_name);
-
-  if (is_nondet_call())
-  {
-    jimple_nondet nondet(method);
-    return nondet.to_exprt(ctx, class_name, function_name);
-  }
-
-  code_blockt block;
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << base_class << ":" << method;
-
-  auto symbol = ctx.find_symbol(oss.str());
-  if (!symbol)
-  {
-    log_error("Could not find symbol {}", oss.str());
-    abort();
-  }
-  call.function() = symbol_expr(*symbol);
-  if (!lhs.is_nil())
-    call.lhs() = lhs;
-
-  for (long unsigned int i = 0; i < parameters.size(); i++)
-  {
-    // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr =
-      parameters[i]->to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters, this should be done at symex
-    std::ostringstream oss;
-    oss << "@parameter" << i;
-    auto temp = get_symbol_name(base_class, method, oss.str());
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
-    block.operands().push_back(assign);
-  }
-  block.operands().push_back(call);
-  return block;
-}
-
 expr2tc jimple_expr_invoke::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
@@ -413,86 +323,6 @@ expr2tc jimple_expr_invoke::to_expr2t(
   ops.push_back(code_function_call2tc(lhs2, symbol_expr2tc(*symbol), args));
   const locationt &nil = static_cast<const locationt &>(get_nil_irep());
   return code_block2tc(ops, nil, nil);
-}
-
-// Restored: PR #7844 measured this arm unreached over the 27 jimple tests and
-// deleted it, but jimple_assignment's virtual-invoke branch still delegates to
-// the migrating default, which reaches it. Nothing in the corpus builds that
-// shape, so the deletion was invisible and the branch silently produced a skip
-// (docs/roadmap/scope-jimple-irep2.md §43).
-exprt jimple_virtual_invoke::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Move intrinsics to backend
-  if (base_class == "kotlin.jvm.internal.Intrinsics")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Class")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  if (is_nondet_call())
-  {
-    jimple_nondet nondet(method);
-    return nondet.to_exprt(ctx, class_name, function_name);
-  }
-
-  code_blockt block;
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << base_class << ":" << method;
-
-  auto symbol = ctx.find_symbol(oss.str());
-  call.function() = symbol_expr(*symbol);
-  if (!lhs.is_nil())
-  {
-    call.lhs() = lhs;
-  }
-
-  if (variable != "")
-  {
-    // Let's add @THIS
-    auto this_expression =
-      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(this_expression);
-    auto temp = get_symbol_name(base_class, method, "@this");
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), this_expression);
-    block.operands().push_back(assign);
-  }
-
-  for (long unsigned int i = 0; i < parameters.size(); i++)
-  {
-    // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr =
-      parameters[i]->to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters, this should be done at symex
-    std::ostringstream oss;
-    oss << "@parameter" << i;
-    auto temp = get_symbol_name(base_class, method, oss.str());
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
-    block.operands().push_back(assign);
-  }
-  block.operands().push_back(call);
-  return block;
 }
 
 void jimple_virtual_invoke::from_json(const json &j)

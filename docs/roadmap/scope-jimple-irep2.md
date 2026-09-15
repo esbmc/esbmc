@@ -1777,3 +1777,34 @@ overrides the replacement. So the criterion is:
 That is checkable without running anything, it is what the table above applies, and it
 would have prevented all three over-deletions. B-1 is 124: the true figure once the three
 restorations are counted, against the 110 §42 claimed.
+
+## 45. The legacy expression tree retired (2026-09-15)
+
+§44.2's criterion -- an arm may be deleted only if its class declares the native
+replacement -- applied to what was left. Five arms qualify and are deleted:
+`jimple_assignment`, `jimple_constant`, `jimple_symbol`, `jimple_expr_invoke` and
+`jimple_virtual_invoke`. 227 lines, 29 of 29 jimple and 876 of 876 unit tests, B-1
+124 -> **103**.
+
+The deletion is safe by inspection rather than by the suite: every direct `to_exprt` call
+on an expression was inside one of those five arms, so they formed a closed cycle that the
+`to_code2t`/`to_expr2t` conversions had already routed around. Re-auditing afterwards, the
+only expression class still declaring a legacy arm is the base `jimple_expr` itself, whose
+arm is the default the whole scheme hangs off.
+
+### 45.1 What remains, and it is exactly two things
+
+| class | why it still has a legacy arm |
+|---|---|
+| `jimple_identity` | no native `to_code2t`; restored in §44.1 |
+| `jimple_assertion` | no native `to_code2t`; restored in §44.1 |
+
+Both need converting before their arms can go, and neither is exercised by any test --
+`regression/jimple` asserts through the `If`/`AssertionError` idiom rather than the
+`Assertion` object, and nothing in the corpus emits `Identity`. So the next slice is a test
+first, as §43.2 was for the virtual invoke, and only then the conversion. Converting them
+blind is how §40.3's deletions passed while breaking both.
+
+Jimple's B-1 over this run: **190 -> 103**, of which 87 is deleted dead code and three
+restorations are the correction for measuring reachability where reachability was not the
+question.
