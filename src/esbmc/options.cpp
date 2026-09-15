@@ -243,6 +243,10 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Use the IREP2-native Python adjuster instead of the legacy clang_cpp "
       "adjust pass (V.4 migration hop-off; experimental, default off)"},
+     {"python-runtime",
+      NULL,
+      "Model every Python value as a runtime object whose type is resolved "
+      "during symbolic execution, ignoring type annotations (experimental)"},
    }},
 #endif
 #ifdef ENABLE_LD_FRONTEND

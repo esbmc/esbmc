@@ -102,7 +102,7 @@ def _read_ast_from_file(filename: str) -> ast.Module:
         return ast.parse(source.read())
 
 
-_FLAGS = ("--deadlock-check", "--typecheck")
+_FLAGS = ("--deadlock-check", "--typecheck", "--runtime")
 
 
 def check_usage() -> None:
@@ -186,6 +186,12 @@ def main(*, deps: CliDeps) -> int | None:
     select_threading_model(output_dir, deadlock_check)
 
     tree = _read_ast_from_file(filename)
+
+    # --python-runtime lowers the source as written; the preprocessor's
+    # rewrites target the statically typed converter.
+    if "--runtime" in sys.argv[3:]:
+        deps.generate_ast_json_fn(tree, filename, None, output_dir)
+        return None
 
     preprocessor = deps.preprocessor_cls(filename)
     preprocessor.prepare_module(tree)
