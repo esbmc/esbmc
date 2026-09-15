@@ -2460,7 +2460,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.set_type(this_type);
+            new_symbol.set_type(migrate_type(this_type));
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
