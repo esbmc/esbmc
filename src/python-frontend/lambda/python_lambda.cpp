@@ -235,7 +235,7 @@ symbolt python_lambda::create_symbol(
   symbolt symbol;
   symbol.id = id;
   symbol.name = name;
-  symbol.set_type(type);
+  symbol.set_type(migrate_type(type));
   symbol.location = location;
   symbol.mode = "Python";
   symbol.module = module_name;

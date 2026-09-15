@@ -129,7 +129,7 @@ exprt python_list::compare(
       typet list_ptr = converter_.get_type_handler().get_list_type();
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
-      new_symbol.set_type(func_type);
+      new_symbol.set_type(migrate_type(func_type));
 
       converter_.symbol_table().add(new_symbol);
       set_eq_func =
@@ -474,7 +474,7 @@ exprt python_list::compare(
       func_type.arguments().push_back(code_typet::argumentt(list_ptr));
       func_type.arguments().push_back(code_typet::argumentt(int_type()));
       func_type.arguments().push_back(code_typet::argumentt(size_type()));
-      new_symbol.set_type(func_type);
+      new_symbol.set_type(migrate_type(func_type));
 
       converter_.symbol_table().add(new_symbol);
       list_lt_func_sym =

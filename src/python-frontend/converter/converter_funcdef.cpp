@@ -391,7 +391,7 @@ symbolt python_converter::create_return_temp_variable(
   symbolt temp_symbol;
   temp_symbol.id = temp_sid.to_string();
   temp_symbol.name = temp_sid.to_string();
-  temp_symbol.set_type(return_type);
+  temp_symbol.set_type(migrate_type(return_type));
   temp_symbol.lvalue = true;
   temp_symbol.static_lifetime = false;
   temp_symbol.location = location;
