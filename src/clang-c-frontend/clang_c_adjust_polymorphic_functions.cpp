@@ -453,7 +453,7 @@ result_symbol(const irep_idt &identifier, const typet &type, contextt &context)
   symbolt symbol;
   symbol.id = id2string(identifier) + "::1::result";
   symbol.name = "result";
-  symbol.set_type(type);
+  symbol.set_type(migrate_type(type));
 
   context.add(symbol);
 
@@ -1122,7 +1122,7 @@ exprt clang_c_adjust::declare_gcc_polymorphic_builtin(
       param_symbol.id = id2string(identifier_with_type) + "::" + param_name;
       param_symbol.name = param_name;
       param_symbol.location = callee.location();
-      param_symbol.set_type(poly_args[i].type());
+      param_symbol.set_type(migrate_type(poly_args[i].type()));
       param_symbol.lvalue = true;
       param_symbol.is_parameter = true;
       param_symbol.file_local = true;
@@ -1137,7 +1137,7 @@ exprt clang_c_adjust::declare_gcc_polymorphic_builtin(
     new_symbol.id = identifier_with_type;
     new_symbol.name = callee.name();
     new_symbol.location = call_location;
-    new_symbol.set_type(poly.type());
+    new_symbol.set_type(migrate_type(poly.type()));
     new_symbol.set_value(instantiate_gcc_polymorphic_builtin(
       identifier, to_symbol_expr(poly), context));
 
