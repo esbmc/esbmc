@@ -272,3 +272,58 @@ not to reach it at all. The test is kept because it is the precise condition rat
 than because a test pins it, and no test was invented to cover a case the language
 may not admit. `struct_3`'s `book.book_id` is a field access and does not go through
 that path.
+
+## 9. The eleven censused by reader count, and three of them are dead (2026-09-15)
+
+§8 derived one. Counting writes and reads per attribute -- across `src/` and `unit/`,
+not only the solidity frontend -- splits the rest into three groups rather than ten
+equal problems:
+
+| attribute | writes | reads |
+|---|---|---|
+| `#sol_type` | 60 | 51 |
+| `#sol_array_size` | 10 | 17 |
+| `#sol_bytesn_size` | 9 | 15 |
+| `#sol_mapping_array` | 4 | 9 |
+| `#sol_dynarray_state` | 3 | 8 |
+| `#sol_name` | 4 | 3 |
+| `#sol_state_var` | 4 | 3 |
+| `#sol_data_loc` | 5 | **0** |
+| `#is_sol_virtual` | 2 | **0** |
+| `#is_sol_override` | 2 | **0** |
+
+### 9.1 Three go away outright
+
+`#sol_data_loc`, `#is_sol_virtual` and `#is_sol_override` have **no reader anywhere
+in the tree**. `solidity_convert.h` even documented the first as "Set-only today (no
+readers)". Removed, with their setter and the two `if`/`else if` chains whose only
+bodies they were: `esbmc-solidity` 525 of 525, unit 876 of 876.
+
+The instrument for a removal like this is not a reachability proof -- the branches
+were reachable, their *effect* was unobservable -- so the argument is the grep: zero
+readers tree-wide means nothing can distinguish the write from its absence. Nothing is
+lost that cannot be recovered either: the data location is read straight off the
+AST's `storageLocation` at three other places in the frontend, and `virtual` /
+`overrides` off the AST node the write sat next to.
+
+### 9.2 `#sol_type` is not derivable, and that decides the phase's shape
+
+60 writes and 51 reads, holding a `SolidityGrammar::SolType` -- `ADDRESS` against
+`UINT160`, `BYTES` against an array, `CONTRACT` against a struct. Those are exactly
+the distinctions IREP2's type system normalises away, so there is nothing to derive
+it from. `#sol_contract` was derivable because the contract name was still spelled in
+the symbol type's identifier; a SolType is not spelled anywhere else.
+
+So the remaining seven live attributes do not all have §8's answer, and the phase
+needs one more option than "derive it" or "add a field". The one that fits the bars:
+a **frontend-owned side table** keyed by symbol id, holding what is Solidity-level
+rather than representation-level. It keeps IREP2 closed (B-4: no attribute escape
+hatch on the shared representation), keeps the information where its only readers
+are, and needs no seam carriage at all -- a symbol's id survives every migration by
+construction.
+
+That is a proposal, not a measurement, and it should be argued before it is built.
+The five attributes with few writes (`#sol_name`, `#sol_state_var`,
+`#sol_dynarray_state`, `#sol_mapping_array`, and the two size attributes) are worth
+trying §8's derivation on first, since each one that goes that way is one fewer entry
+the side table has to hold.
