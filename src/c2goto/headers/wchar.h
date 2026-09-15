@@ -12,9 +12,10 @@
 // the initial state -- they do not implement a shift encoding -- so a single
 // flag is the whole representation.
 //
-// C11 7.28 has <uchar.h> define mbstate_t too and ESBMC does not shadow that
-// header, so both can reach one translation unit. Honour every libc's guard
-// and set them all, so whichever header comes second stands down.
+// C11 7.28 has <uchar.h> define mbstate_t too, and the C++ model of <uchar.h>
+// forwards to the C library's copy, so both can reach one translation unit.
+// Honour every libc's guard and set them all, so whichever header comes
+// second stands down.
 //
 // The UCRT has no such guard: corecrt.h typedefs mbstate_t unconditionally,
 // and every unshadowed UCRT header drags corecrt.h in. There is no race to
