@@ -2,3 +2,4 @@ CORE
 main.cpp
 
 ^ERROR: PARSING ERROR$
+the host C\+\+ library headers are not on the include path
