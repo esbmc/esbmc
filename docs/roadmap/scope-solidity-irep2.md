@@ -171,3 +171,59 @@ The parent's §7 gates apply unchanged. Two are worth restating for this phase:
 ## 6. Next
 
 S.1 and S.2, in that order, each as its own change. Neither ports anything.
+
+## 7. B-2 censused by measurement, and the wall it hits (2026-09-15)
+
+`git grep 'set_type(\|set_value(' -- src/solidity-frontend | grep -vc 2tc` is **100**:
+**23** type writes and **77** value writes, spread over 13 files, with
+`solidity_convert_call.cpp` (31) and `solidity_convert_decl.cpp` (16) holding half.
+
+### 7.1 Converting all 23 type writes fails 151 of 525
+
+Measured, not predicted. The first failure names its own cause:
+
+```
+esbmc: solidity_convert_expr.cpp:1689:
+  get_contract_member_call_expr(...): Assertion `!base_cname.empty()' failed.
+```
+
+`base_cname` comes from `get_sol_contract(base.type())`, i.e. the `#sol_contract`
+attribute on a *variable's type*. `migrate_type` drops it, so every contract-member
+call through a variable loses the contract it belongs to.
+
+That is not one attribute. The frontend keeps eleven of them on legacy `typet`
+nodes, each with a getter beside the setter in `solidity_convert.h`:
+
+```
+#sol_array_size  #sol_bytesn_size  #sol_contract   #sol_data_loc
+#sol_dynarray_state  #sol_mapping_array  #sol_name  #sol_state_var
+#sol_type  #is_sol_virtual  #is_sol_override
+```
+
+All eleven are read only inside `src/solidity-frontend`, and none has an IREP2
+field. So Phase 8's B-2 is not a site-by-site job: a Solidity symbol's *type* is
+where the frontend keeps its Solidity-level meaning, and IREP2's closed type system
+models none of it. This is the same shape as §46's `member_base_names` and the C++
+exception specification, at eleven times the size.
+
+### 7.2 What did convert: the seven function types
+
+Seven of the 23 write a *function* type for a synthesised function -- the contract's
+`main`, a modifier's wrapper, a constructor, an auxiliary call helper -- and those
+carry no `#sol_*` attribute. With them on `migrate_type`, `esbmc-solidity` is
+**525 of 525** and the unit suite 876 of 876.
+
+That is the whole tractable subset of the 23 until the eleven attributes are decided.
+The remaining sixteen write a variable's, a mapping's or a contract's type, which is
+exactly where the attributes live.
+
+### 7.3 What this asks of the plan
+
+The decision is the same one Phase 7 now waits on, and Solidity makes it sharper: an
+unreflected field per attribute does not scale to eleven, and a generic
+leftover-`irept` carrier is the escape hatch B-4 forbids (§47.3). The third option
+the C++ side has used twice -- derive the value from something IREP2 already holds
+(§47, §50) -- needs checking per attribute: `#sol_contract` on a variable's type is
+recoverable from the contract symbol the variable belongs to, `#sol_bytesn_size` from
+an array type's size, and so on. Those are eleven small questions rather than one big
+one, and none of them has been asked yet.

@@ -104,7 +104,7 @@ bool solidity_convertert::add_implicit_constructor(
   get_function_this_pointer_param(
     contract_name, id, debug_modulename, location_begin, type);
 
-  sym.set_type(type);
+  sym.set_type(migrate_type(type));
   return false;
 }
 

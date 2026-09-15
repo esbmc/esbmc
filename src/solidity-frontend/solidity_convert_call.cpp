@@ -746,7 +746,7 @@ bool solidity_convertert::get_high_level_member_access(
   ft.arguments().push_back(base_param);
   exprt new_base = symbol_expr(*context.find_symbol(base_id));
 
-  added_fsymbol.set_type(ft);
+  added_fsymbol.set_type(migrate_type(ft));
   //! we need to move it to the struct symbol
   // this is because we use the member from the contract
   move_builtin_to_contract(cname, symbol_expr(added_fsymbol), true);
