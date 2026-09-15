@@ -1634,6 +1634,24 @@ count removed as dead code.
 
 What is left needs `jimple_throw` and `jimple_assignment` converted at their call sites
 first, which is the §32-§38 shape and the next slice.
+
+## 41. `jimple_throw` on a native arm (2026-09-15)
+
+The first of §40.3's two. `jimple_throw::to_exprt` built a bare `codet("cpp-throw")` --
+no operand and no exception list, because throw is not implemented -- so the native form
+is `code_cpp_throw2tc(expr2tc(), {}, loc)` and takes the location as a parameter rather
+than having it stamped afterwards, per K.2.
+
+27 of 27 jimple and 876 of 876 unit tests, B-1 160 -> **157**.
+
+Pinned rather than assumed: replacing the arm's body with a skip fails 7 of 27,
+`github_4715_legacy_body_throw_01_fail` among them, so the arm is load-bearing and the
+14 observations §40.3 measured are what exercises it.
+
+`jimple_assignment` is the remaining one, and it is the harder half: it already has a
+native `to_code2t` and its legacy arm is reached anyway, so the conversion is at the call
+site rather than in the class.
+
 ## 33. `jimple_newarray::to_expr2t` goes native, and two defects it exposes
 
 §32.5 named the width reader as the blocker on making the class symbol
