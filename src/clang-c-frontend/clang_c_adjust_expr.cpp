@@ -1813,6 +1813,14 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
 
 void declare_argc_argv(contextt &context, const symbolt &main_symbol)
 {
+  // Both call sites match a *prefix* of `main`, so `main_loop(int, int)` and a
+  // bodyless `mainq(double, char **)` arrive here too, and neither has the
+  // entry point's shape. clang_c_main reads argc'/argv' only for `name ==
+  // "main"`, so narrowing to that loses nothing and stops this building a
+  // symbol out of another function's parameters.
+  if (main_symbol.name != "main")
+    return;
+
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.get_type()).arguments();
 
