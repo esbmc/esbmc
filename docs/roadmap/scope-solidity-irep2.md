@@ -227,3 +227,193 @@ the C++ side has used twice -- derive the value from something IREP2 already hol
 recoverable from the contract symbol the variable belongs to, `#sol_bytesn_size` from
 an array type's size, and so on. Those are eleven small questions rather than one big
 one, and none of them has been asked yet.
+
+## 8. `#sol_contract` retired by derivation: one of the eleven, and the method (2026-09-15)
+
+§7.3 asked whether each of the eleven type attributes can be derived from something
+IREP2 already holds. Here is the first answer, and it is yes.
+
+### 8.1 The derivation
+
+`#sol_contract` is written in exactly one place, and the line above it says what the
+type is:
+
+```cpp
+new_type = pointer_typet(symbol_typet(prefix + cname));
+set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
+set_sol_contract(new_type, cname);          // removed
+```
+
+The contract name *is* the symbol-type identifier with `prefix` ("tag-") removed, and
+IREP2 keeps both the pointer and the symbol type's identifier. `prefix` is also used
+for structs, so the shape alone is not sufficient; the converter already holds every
+contract's name in `linearizedBaseList`, which supplies the rest. `get_sol_contract`
+now computes it and `has_sol_contract` asks it, the setter and the attribute are
+gone, and `esbmc-solidity` is **525 of 525**.
+
+### 8.2 What it unblocked, measured
+
+Converting all 23 type writes with the attribute still in place fails **151** of 525
+(§7.1). With it derived, the same 23 fail **132**. So this one attribute accounted
+for 19 tests, and the next failure is a different cause -- a `CONVERSION ERROR`
+naming a `tag-Base` subtype, i.e. one of the remaining ten.
+
+That is the shape of the rest of the phase: derive an attribute, re-run the
+all-23 experiment, see how far it gets, and keep the conversions that stay green. The
+number to watch is the failure count, not whether any single site converts.
+
+### 8.3 The membership test is unpinned, and probably unfalsifiable from source
+
+Dropping `linearizedBaseList.count(cname)` -- so that any pointer to a `tag-` symbol
+type reports a contract name -- leaves the suite at 525 of 525. The guard's own
+consumer is `get_contract_member_call_expr`, reached only for a *member call* on the
+base, and Solidity structs have no member functions, so a struct-typed base appears
+not to reach it at all. The test is kept because it is the precise condition rather
+than because a test pins it, and no test was invented to cover a case the language
+may not admit. `struct_3`'s `book.book_id` is a field access and does not go through
+that path.
+
+## 9. The eleven censused by reader count, and three of them are dead (2026-09-15)
+
+§8 derived one. Counting writes and reads per attribute -- across `src/` and `unit/`,
+not only the solidity frontend -- splits the rest into three groups rather than ten
+equal problems:
+
+| attribute | writes | reads |
+|---|---|---|
+| `#sol_type` | 60 | 51 |
+| `#sol_array_size` | 10 | 17 |
+| `#sol_bytesn_size` | 9 | 15 |
+| `#sol_mapping_array` | 4 | 9 |
+| `#sol_dynarray_state` | 3 | 8 |
+| `#sol_name` | 4 | 3 |
+| `#sol_state_var` | 4 | 3 |
+| `#sol_data_loc` | 5 | **0** |
+| `#is_sol_virtual` | 2 | **0** |
+| `#is_sol_override` | 2 | **0** |
+
+### 9.1 Three go away outright
+
+`#sol_data_loc`, `#is_sol_virtual` and `#is_sol_override` have **no reader anywhere
+in the tree**. `solidity_convert.h` even documented the first as "Set-only today (no
+readers)". Removed, with their setter and the two `if`/`else if` chains whose only
+bodies they were: `esbmc-solidity` 525 of 525, unit 876 of 876.
+
+The instrument for a removal like this is not a reachability proof -- the branches
+were reachable, their *effect* was unobservable -- so the argument is the grep: zero
+readers tree-wide means nothing can distinguish the write from its absence. Nothing is
+lost that cannot be recovered either: the data location is read straight off the
+AST's `storageLocation` at three other places in the frontend, and `virtual` /
+`overrides` off the AST node the write sat next to.
+
+### 9.2 `#sol_type` is not derivable, and that decides the phase's shape
+
+60 writes and 51 reads, holding a `SolidityGrammar::SolType` -- `ADDRESS` against
+`UINT160`, `BYTES` against an array, `CONTRACT` against a struct. Those are exactly
+the distinctions IREP2's type system normalises away, so there is nothing to derive
+it from. `#sol_contract` was derivable because the contract name was still spelled in
+the symbol type's identifier; a SolType is not spelled anywhere else.
+
+So the remaining seven live attributes do not all have §8's answer, and the phase
+needs one more option than "derive it" or "add a field". The one that fits the bars:
+a **frontend-owned side table** keyed by symbol id, holding what is Solidity-level
+rather than representation-level. It keeps IREP2 closed (B-4: no attribute escape
+hatch on the shared representation), keeps the information where its only readers
+are, and needs no seam carriage at all -- a symbol's id survives every migration by
+construction.
+
+That is a proposal, not a measurement, and it should be argued before it is built.
+The five attributes with few writes (`#sol_name`, `#sol_state_var`,
+`#sol_dynarray_state`, `#sol_mapping_array`, and the two size attributes) are worth
+trying §8's derivation on first, since each one that goes that way is one fewer entry
+the side table has to hold.
+
+## 10. §9.2's side table, built for one attribute (2026-09-15)
+
+§9.2 proposed a frontend-owned side table for the attributes that are not derivable,
+and said it should be argued before being built. Here it is built for the smallest
+live one, so the argument has something measured under it.
+
+`#sol_state_var` had one reader -- `solidity_convert_constructor.cpp:476`, asking per
+declaration whether a variable is a contract state variable -- and two writers. It is
+now a `std::unordered_set<irep_idt>` on the converter, keyed by the variable's symbol
+id:
+
+```cpp
+std::unordered_set<irep_idt> sol_state_vars;
+void set_sol_state_var(const irep_idt &symbol_id, bool v);
+bool get_sol_state_var(const irep_idt &symbol_id) const;
+```
+
+The reader already had the id in hand -- it calls `context.find_symbol(comp.identifier())`
+two lines further on -- and the writer needed moving 35 lines down `get_var_decl`, to
+after `get_var_decl_name` computes it. `esbmc-solidity` is **525 of 525**, unit 876 of
+876.
+
+### 10.1 What it costs and what it settles
+
+The key is a symbol id, which survives every migration by construction, so nothing has
+to be carried across the seam and IREP2 gains no field. That is the whole point: the
+information is Solidity-level, its only reader is in this frontend, and B-4 forbids
+parking it on the shared representation.
+
+The cost is that a reader must hold a symbol, not just a `typet`. For
+`#sol_state_var` that was already true. It will not be true for every attribute --
+`#sol_array_size` is read off `rt.subtype()` in places (`solidity_convert_util.cpp:710`),
+where there is no symbol to key on -- so the table is not a universal answer, and
+those readers would need the derivation of §8 instead, or a different key.
+
+### 10.2 The running measurement
+
+Converting all 23 of the phase's non-IREP2 type writes, at each stage:
+
+| state | failures of 525 |
+|---|---|
+| attributes as they were (§7.1) | 151 |
+| `#sol_contract` derived (§8) | 132 |
+| `#sol_state_var` in the side table | **117** |
+
+Each attribute retired is worth fifteen to twenty tests, and the three dead ones (§9.1)
+cost nothing to remove. The number to drive to zero is that failure count; when it is
+zero, all 23 type writes convert and Phase 8's B-2 is half done by count and most of
+the way by difficulty, since the 77 value writes then have only §52's namespace
+precondition between them and IREP2.
+
+## 11. A third answer: read it off the AST (2026-09-15)
+
+`#sol_name` fits neither §8's derivation nor §10's side table, and saying why is the
+useful part.
+
+It carries which Solidity spelling produced a call. `require`, `revert`,
+`__ESBMC_assume` and `__VERIFIER_assume` all lower to the symbol
+`c:@F@__ESBMC_assume` (`solidity_convert_ref.cpp:292-295`), so the symbol id does not
+distinguish them -- which rules out deriving the value from the expression *and* keying
+a side table by symbol, since the distinction is per call site rather than per symbol.
+
+The reader is inside `get_call_expr`, which still holds `callee_expr_json` -- the same
+AST node the writer read `blt_name` from one call deeper. So the name is read from the
+AST at the point of use, and the attribute, its setter and its getter are gone.
+
+`esbmc-solidity` is 525 of 525. Forcing the read to come back empty fails `error_1`
+and `error_3`, the two `revert` tests, so the read is covered rather than merely
+compiled. Only two of 525 move, which is itself worth knowing: 59 tests use
+`require`, and its arm only drops a second argument that almost none of them passes.
+
+The read sits in a one-line helper rather than inline, because `get_call_expr` is at
+CCN 79 and the complexity gate blocks any increase over the threshold -- a ternary in
+the function body took it to 80 and failed the gate.
+
+### 11.1 The three answers, and how to choose
+
+| when | answer | example |
+|---|---|---|
+| the value is still spelled in the IREP2 type | derive it | `#sol_contract` (§8) |
+| it is a property of a symbol | side table keyed by symbol id | `#sol_state_var` (§10) |
+| it is a property of a *syntactic site* | read the AST node at the point of use | `#sol_name` (§11) |
+| nothing reads it | delete it | §9.1's three |
+
+The third answer is the cheapest of the three when it applies, because the AST is
+already in scope wherever the frontend is still converting -- and it applies exactly
+when the attribute was a way of carrying AST information forward to a later point in
+the same conversion. That is worth checking first for each remaining attribute, before
+reaching for a table.

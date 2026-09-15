@@ -282,7 +282,6 @@ bool solidity_convertert::get_var_decl(
   // this will be used to decide if the var will be converted to this->var
   // when parsing function body.
   bool is_state_var = ast_node["stateVariable"].get<bool>();
-  set_sol_state_var(t, is_state_var);
 
   // For local storage reference variables (e.g. Wrapper storage ref = param),
   // register an alias so that uses of 'ref' resolve to the source symbol.
@@ -315,6 +314,10 @@ bool solidity_convertert::get_var_decl(
     if (get_var_decl_name(ast_node, name, id))
       return true;
   }
+
+  // The state flag is keyed by symbol id, so it is recorded here rather than
+  // beside the type: the id is not known until now (§10).
+  set_sol_state_var(id, is_state_var);
 
   // if we have already populated the var symbol, we do not need to re-parse
   // however, we need to return the symbol info
@@ -875,12 +878,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       if (comp.is_code() && to_code(comp).statement() == "skip")
         break;
 
-      // set virtual / override
-      if ((*itr).contains("virtual") && (*itr)["virtual"] == true)
-        comp.set("#is_sol_virtual", true);
-      else if ((*itr).contains("overrides"))
-        comp.set("#is_sol_override", true);
-
       t.methods().push_back(comp);
       break;
     }
@@ -1058,12 +1055,6 @@ bool solidity_convertert::get_struct_class_method(
 
   if (get_access_from_decl(ast_node, comp))
     return true;
-
-  // set virtual / override
-  if (ast_node.contains("virtual") && ast_node["virtual"] == true)
-    comp.set("#is_sol_virtual", true);
-  else if (ast_node.contains("overrides"))
-    comp.set("#is_sol_override", true);
 
   type.methods().push_back(comp);
   return false;
