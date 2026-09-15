@@ -175,3 +175,60 @@ pass, which runs after the link, not in the converter.
 - The two entry-body writes, in the adjust pass rather than the converter (§6.1).
 - `#cpp_type`: census its readers the way `scope-solidity-irep2.md` §9 censused
   Solidity's, and pick a route from the four in that document's §11.1.
+
+## 8. `#cpp_type` censused, and `irep.h` was wrong about its readers (2026-09-15)
+
+§7 asked for this census. The attribute has **five writers** and, across `src/` and
+`unit/`, these readers:
+
+| reader | kind |
+|---|---|
+| `util/lang/cpp_expr2string.cpp:138,140` | presentation (counterexample text) |
+| `goto2c/expr2c.cpp:174` | presentation (generated C) |
+| `clang-cpp-frontend/clang_cpp_exception_id.cpp:45` | exception-id strings |
+| `python-frontend/type/type_utils.h:207` | **verifier core** |
+
+`irep.h`'s own comment said "its three readers are all presentation consumers ...
+rather than verifier core". That is the first three. The fourth is
+`type_utils::is_char_type`:
+
+```cpp
+static bool is_char_type(const typet &t)
+{
+  return (t.is_signedbv() || t.is_unsignedbv()) && get_cpp_type(t) == "char";
+}
+```
+
+-- whether an 8-bit bitvector is a Python character or an `int8` -- and **seven
+conversion sites branch on it**, in `converter_binop.cpp` (three),
+`string_handler.cpp` (two), `tuple_handler.cpp` and `str_conv.cpp`. Dropping the
+spelling changes what is verified, not how it is printed. The comment is corrected in
+this change; a comment naming a reader set that is not the reader set is the trap
+`frontends-to-irep2.md` §56 removed four stores to avoid.
+
+### 8.1 Which route fits
+
+`is_char_type`'s question is a collision of exactly the shape
+`scope-solidity-irep2.md` §13.1 found for `ADDRESS` against `UINT160`: two Solidity --
+here Python -- kinds over one IREP2 type. So the derivation route (§8 of that document)
+does not apply.
+
+The side table (§10 there) does not apply either as written: `is_char_type` is asked of
+a subtype (`arr_type.subtype()` at `string_handler.cpp:2397`), where there is no symbol
+to key on.
+
+That leaves the AST route (§11 there) and one option those documents do not list,
+available here because the question is boolean and the domain is tiny: **give IREP2 the
+distinction**. A python character is not a spelling detail the way `long long` is -- it
+is a different type in the source language, and `unsignedbv` of width 8 is the wrong
+model for it. That is a type-system question for the python frontend rather than a
+migration one, and it is the last thing standing between Phase 9 and its 22 blocked
+type writes.
+
+### 8.2 What is left, and what is not a gap
+
+Two of Phase 9's remaining writes should **stay legacy**, and counting them as debt is a
+mistake B-2's spelling-based count invites. The program-entry body writes (§6) are
+correct as they are: `set_value(const exprt &)` defers migration until the symbol table
+is complete, which is exactly what a body needs. Converting them is not blocked work, it
+is work that must not be done.
