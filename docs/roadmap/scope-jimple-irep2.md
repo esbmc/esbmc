@@ -1808,3 +1808,50 @@ blind is how §40.3's deletions passed while breaking both.
 Jimple's B-1 over this run: **190 -> 103**, of which 87 is deleted dead code and three
 restorations are the correction for measuring reachability where reachability was not the
 question.
+
+## 46. `jimple_assertion` is parse-only, and the audit has to include `unit/` (2026-09-15)
+
+§45.1 named `jimple_identity` and `jimple_assertion` as the two classes still needing a
+native arm. One of them does not need one at all.
+
+There is no `statement::Assertion` enumerator (`jimple_method_body.h:108-122`) and no
+`"Assertion"` entry in the JSON dispatcher's `from_map`, so the body walk can never build a
+`jimple_assertion`. Its `to_exprt` has no production path, and §44.1's restoration of it was
+unnecessary -- harmless, but it was restoring something unreachable. The arm is deleted
+again, this time with the reason; the class stays. B-1 103 -> **97**.
+
+### 46.1 How that was nearly got wrong, again
+
+The first attempt deleted the whole class. The build failed:
+
+```
+unit/jimple-frontend/jimple_ast.test.cpp:165: 'jimple_assertion' was not declared
+```
+
+`unit/` constructs one and tests its `from_json`. So the class is live, only its lowering is
+not -- and §44.2's criterion, applied to `src/` alone, would have missed that. The criterion
+needs its scope stated:
+
+> an arm may be deleted only if its class declares the native replacement, and a class only
+> if nothing in `src/` **or `unit/`** names it.
+
+The compiler enforces the second half for free, which is why this attempt cost a build
+rather than a regression.
+
+### 46.2 `jimple_identity` is the last one, and its arm looks broken
+
+`Identity` *is* in the enum and the dispatcher, so that class is reachable and its arm has to
+stay until it is converted. Reading it first, though:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare jimple local (`$i0`), not a qualified symbol id, and every other
+lookup in this frontend goes through `get_symbol_name(class, function, name)`. So the arm
+dereferences the result of a lookup that looks certain to miss. No test builds an `Identity`
+statement, so nothing has exercised it either way.
+
+That makes the next slice a probe rather than a conversion: author a jimple input with an
+`Identity` statement and find out whether the existing arm works at all. Converting it first
+would port a defect into IREP2 and call it a migration.
