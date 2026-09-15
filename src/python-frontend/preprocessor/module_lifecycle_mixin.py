@@ -30,6 +30,20 @@ class ModuleLifecycleMixin:
                     continue
                 table.setdefault(key, value)
 
+        # These are sets, not signature tables, so they need their own pass.
+        # Without it a function's parameters cross the module boundary while
+        # the flag describing them does not: the importing module strips a real
+        # parameter as self (#7546), or drops the *args arity exemption and
+        # rejects a valid variadic call (#7543).
+        for flags, source in (
+            (self.static_methods, other.static_methods),
+            (self.functionVarargs, other.functionVarargs),
+        ):
+            for name in source:
+                owner, dot, _ = name.partition(".")
+                if owner in imported_names and (include_methods or not dot):
+                    flags.add(name)
+
     def finalize_module(self, node):
         """Run generic_visit and inject helper nodes requested during traversal."""
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)

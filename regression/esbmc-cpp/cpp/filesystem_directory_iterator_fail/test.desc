@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cpp
 --std c++17 --unwind 8
 ^Violated property:$

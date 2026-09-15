@@ -1,0 +1,797 @@
+#include <cassert>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/equation/slice.h>
+#include <goto-symex/equation/symex_target_equation.h>
+
+#include <langapi/language_ui.h>
+#include <solvers/smtlib/smtlib_conv.h>
+#include <util/expr/expr_util.h>
+#include <irep2/irep2.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_expr.h>
+
+/// A (possibly typecast) SSA symbol, or a pure bit operation over such
+/// leaves: neither changes meaning after its operands' assignments, so
+/// a copy chain built from one is a stable renaming of the same value.
+/// The computation form covers the operand-split idiom
+/// `m = (mn >> 4) & 0x0F` a caller and a callee both derive from one
+/// byte — without it their range checks never match and the callee's
+/// already-decided branches fork anyway. Computation nodes are
+/// restricted to bitvector types; symbol and constant leaves and the
+/// peeled typecasts stay accepted as in the bare-copy base. The
+/// restriction quarantines pointer-typed arithmetic in the chains —
+/// the leading suspect in the wrong FAILED verdicts the unrestricted
+/// form produced on the DebugOpt CI legs (cuda 003/024, python
+/// github_2937).
+static bool is_stable_value(const expr2tc &expr)
+{
+  const expr2tc *b = &expr;
+  while (is_typecast2t(*b))
+    b = &to_typecast2t(*b).from;
+  if (is_symbol2t(*b) || is_constant_expr(*b))
+    return true;
+  if (!is_bv_type((*b)->type))
+    return false;
+  switch ((*b)->expr_id)
+  {
+  case expr2t::bitand_id:
+  case expr2t::bitor_id:
+  case expr2t::bitxor_id:
+  case expr2t::shl_id:
+  case expr2t::lshr_id:
+  case expr2t::ashr_id:
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  {
+    bool ok = true;
+    (*b)->foreach_operand([&ok](const expr2tc &e) {
+      if (ok && !is_stable_value(e))
+        ok = false;
+    });
+    return ok;
+  }
+  default:
+    return false;
+  }
+}
+
+/// Flattened node count of @p expr, giving up once past @p limit.
+static size_t count_nodes_up_to(const expr2tc &expr, size_t limit)
+{
+  size_t n = 1;
+  expr->foreach_operand([&n, limit](const expr2tc &e) {
+    if (n <= limit)
+      n += count_nodes_up_to(e, limit);
+  });
+  return n;
+}
+
+bool goto_symext::chase_copies(expr2tc &expr) const
+{
+  if (is_nil_expr(expr))
+    return false;
+
+  if (is_symbol2t(expr))
+  {
+    auto it =
+      copy_definitions.find(irep_idt(to_symbol2t(expr).get_symbol_name()));
+    if (it == copy_definitions.end())
+      return false;
+    expr = it->second;
+    return true;
+  }
+
+  bool changed = false;
+  expr->Foreach_operand([this, &changed](expr2tc &e) {
+    if (chase_copies(e))
+      changed = true;
+  });
+  return changed;
+}
+
+void goto_symext::record_copy_definition(
+  const expr2tc &renamed_lhs,
+  const expr2tc &rhs)
+{
+  if (!is_symbol2t(renamed_lhs))
+    return;
+  const symbol2t &lhs_sym = to_symbol2t(renamed_lhs);
+  if (
+    lhs_sym.rlevel != symbol_renaming_level::level2 &&
+    lhs_sym.rlevel != symbol_renaming_level::level2_global)
+    return;
+
+  // A stable value only: a (possibly typecast) symbol, or a pure
+  // bitvector computation over such leaves. Anything else (an ite
+  // from a guarded assignment, a dereference chain) is not a stable
+  // renaming of one value and gets no entry. Bare constants are
+  // already inlined by constant propagation and need no chase.
+  if (!is_stable_value(rhs) || is_constant_expr(rhs))
+    return;
+  if (copy_definitions.size() >= subsumption_map_capacity)
+    return;
+
+  // Canonicalize so chains resolve in one substitution pass; drop
+  // oversized canonical forms (see max_copy_definition_nodes).
+  expr2tc value = rhs;
+  chase_copies(value);
+  if (
+    count_nodes_up_to(value, max_copy_definition_nodes) >
+    max_copy_definition_nodes)
+    return;
+  copy_definitions[irep_idt(to_symbol2t(renamed_lhs).get_symbol_name())] =
+    value;
+}
+
+/// Remember a guard generation's defining condition, up to the
+/// documented capacity.
+void goto_symext::record_guard_definition(
+  const expr2tc &guard_expr,
+  const expr2tc &new_rhs)
+{
+  if (guard_definitions.size() < subsumption_map_capacity)
+    guard_definitions[irep_idt(to_symbol2t(guard_expr).get_symbol_name())] =
+      new_rhs;
+}
+
+/// Whether the accumulated path guard already decides @p new_guard:
+/// TV_TRUE when a conjunct matches it, TV_FALSE when one matches its
+/// negation, TV_UNKNOWN otherwise. Conjuncts are usually guard SYMBOLS
+/// (possibly negated); level2 renaming never substitutes into an
+/// already-L2 symbol, so their defining conditions are looked up in
+/// guard_definitions instead. Both sides are rewritten onto the
+/// canonical copy-chain basis — conditions from different scopes name
+/// the same value through different symbol generations — and compared
+/// structurally; comparison negations are canonicalized by the
+/// simplifier. The rewritten forms are for matching only and never
+/// reach the SSA equation.
+tvt::tv_enumt goto_symext::path_guard_decides(
+  const expr2tc &new_guard,
+  bool already_false,
+  bool already_true)
+{
+  if (already_false || already_true)
+    return tvt::TV_UNKNOWN;
+
+  expr2tc cmp_guard = new_guard;
+  if (chase_copies(cmp_guard))
+    do_simplify(cmp_guard);
+  expr2tc neg_guard = not2tc(cmp_guard);
+  do_simplify(neg_guard);
+
+  for (const expr2tc &raw : cur_state->guard.guard_list)
+  {
+    bool negated = false;
+    expr2tc conjunct = raw;
+    if (is_not2t(conjunct))
+    {
+      negated = true;
+      conjunct = to_not2t(conjunct).value;
+    }
+    auto def = is_symbol2t(conjunct)
+                 ? guard_definitions.find(
+                     irep_idt(to_symbol2t(conjunct).get_symbol_name()))
+                 : guard_definitions.end();
+    if (def != guard_definitions.end())
+    {
+      conjunct = def->second;
+      if (negated)
+      {
+        conjunct = not2tc(conjunct);
+        do_simplify(conjunct);
+      }
+    }
+    else
+    {
+      conjunct = raw;
+      cur_state->rename(conjunct);
+      do_simplify(conjunct);
+    }
+    if (chase_copies(conjunct))
+      do_simplify(conjunct);
+    if (conjunct == cmp_guard)
+      return tvt::TV_TRUE;
+    if (conjunct == neg_guard)
+      return tvt::TV_FALSE;
+  }
+  return tvt::TV_UNKNOWN;
+}
+
+void goto_symext::symex_goto(const expr2tc &old_guard)
+{
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
+  expr2tc new_guard = old_guard;
+  cur_state->rename(new_guard);
+  do_simplify(new_guard);
+
+  /* Whether a branch is taken is control flow, not encoding, and the tests
+   * below are syntactic: a guard --no-simplify left unfolded reads as neither
+   * true nor false, so a bounded loop never exits and symex diverges (#6778).
+   * `new_guard` itself still honours the flag, so the equation is unchanged. */
+  const expr2tc decided = branch_decision_guard(new_guard);
+
+  bool new_guard_false = (is_false(decided) || cur_state->guard.is_false());
+  bool new_guard_true = is_true(decided);
+
+  // Path-guard subsumption: a branch condition the accumulated path
+  // guard already decides is not forked again. Without this, a
+  // callee's own `x < 0` check downstream of a caller's
+  // `if (x >= 0) return` leaves symex exploring the contradictory
+  // region — allocators, GC, memmove models — for nothing.
+  const tvt::tv_enumt path_decides =
+    path_guard_decides(new_guard, new_guard_false, new_guard_true);
+  new_guard_true |= path_decides == tvt::TV_TRUE;
+  new_guard_false |= path_decides == tvt::TV_FALSE;
+
+  // Self-check mode: each subsumption decision claims its own
+  // soundness — a wrong TV_TRUE/TV_FALSE becomes a failed claim with a
+  // trace, even where the final verdict would not flip.
+  if (
+    path_decides != tvt::TV_UNKNOWN &&
+    options.get_bool_option("check-guard-subsumption"))
+    claim(
+      path_decides == tvt::TV_TRUE ? new_guard : not2tc(new_guard),
+      "path-guard subsumption decision holds");
+
+  // new_guard_false: the branch is provably not taken (guard simplifies to
+  // false, or the current path is already dead). new_guard_true: the guard
+  // simplifies to true. When neither is known and --smt-symex-guard is on,
+  // ask the solver.
+  if (
+    !new_guard_false && !new_guard_true &&
+    options.get_bool_option("smt-symex-guard"))
+  {
+    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+
+    expr2tc question = equality2tc(gen_true_expr(), new_guard);
+    try
+    {
+      tvt res = rte->ask_solver_question(question);
+
+      if (res.is_false())
+        new_guard_false = true;
+      else if (res.is_true())
+        new_guard_true = true;
+    }
+    catch (runtime_encoded_equationt::dual_unsat_exception &e)
+    {
+      // If reach here it means both guard G and !G are unsatisfiable,
+      // basically means we can't prove the guard must be true or must be false.
+      new_guard_false = false;
+    }
+  }
+
+  goto_programt::const_targett goto_target = instruction.targets.front();
+
+  bool forward =
+    cur_state->source.pc->location_number < goto_target->location_number;
+
+  // Interval-based guard check (default, disabled by
+  // --no-interval-symex-guard). Only prune when the guard is provably TRUE
+  // (loop can be unwound no further). Never force-enter a loop
+  // (new_guard_false) via the interval domain: doing so omits the loop-entry
+  // guard from the path condition, which lets the SMT solver pick values
+  // outside the loop's feasible range and produce false positives. The flag
+  // check lets --interval-symex-assert keep the domain without pruning.
+  //
+  // Restrict to loop GOTOs (loop_number != 0): the interval domain is a single
+  // shared instance, so ASSIGN instructions inside branches contaminate it.
+  // Non-loop if-statement GOTOs would be incorrectly pruned by stale values.
+  //
+  // Note: eval_boolean_expression already returns TV_UNKNOWN for any guard
+  // containing floatbv-typed sub-expressions (via its contains_float check).
+  if (
+    !new_guard_false && !new_guard_true && interval_domain_state &&
+    options.get_bool_option("interval-symex-guard") &&
+    instruction.loop_number != 0)
+  {
+    tvt res = interval_domaint::eval_boolean_expression(
+      old_guard, *interval_domain_state);
+    if (res.is_true())
+      new_guard_true = true;
+  }
+
+  const not2t *old_not = try_to_not2t(old_guard);
+  if (
+    options.get_option("witness-output-yaml") != "" && forward &&
+    !is_constant(old_guard) && !(old_not && is_constant(old_not->value)))
+  {
+    // Normalize the branching condition so that cond=true always means
+    // "the branch body was reached". For standard GOTOs (IF !cond GOTO skip)
+    // new_guard already has this form. For flipped GOTOs produced by
+    // optimize_guarded_gotos (IF cond GOTO target), the guard sense is
+    // inverted, so we apply make_not to restore the canonical direction.
+    expr2tc branching_cond = new_guard;
+    if (instruction.flipped_guard)
+      make_not(branching_cond);
+    target->branching(
+      cur_state->guard.as_expr(),
+      branching_cond,
+      cur_state->source,
+      cur_state->top().hidden,
+      first_loop);
+  }
+
+  // Note: we intentionally do NOT call interval_domain_state->assume() here.
+  // The interval domain is a single shared instance (not forked per branch).
+  // Assuming the fall-through constraint would contaminate the taken path when
+  // it is explored later, causing unsound pruning.  The domain is still updated
+  // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
+  // tracking loop counters.
+
+  symex_witness_branching(
+    old_guard,
+    new_guard,
+    forward,
+    new_guard_true,
+    new_guard_false,
+    instruction);
+
+  if (new_guard_false)
+  {
+    // reset unwinding counter
+    if (instruction.is_backwards_goto())
+    {
+      cur_state->loop_iterations[instruction.loop_number] = 0;
+
+      // Reset loop counter
+      if (instruction.loop_number == first_loop)
+        first_loop = 0;
+    }
+
+    // next instruction
+    cur_state->source.pc++;
+    return; // nothing to do
+  }
+
+  assert(!instruction.targets.empty());
+
+  // we only do deterministic gotos for now
+  if (instruction.targets.size() != 1)
+    throw "no support for non-deterministic gotos";
+
+  // backwards?
+  if (!forward)
+  {
+    // A bare self-loop `A: IF cond GOTO A` / `A: GOTO A` is normally
+    // shortcut to assume(!cond) (assume(false) for the unconditional case):
+    // the guard's truth value never changes, so the loop either exits
+    // immediately or spins forever, and assuming the exit condition kills the
+    // non-terminating path. That is sound for reachability but masks
+    // non-termination, so under --termination fall through to the normal
+    // backwards-goto unwinding instead, letting loop_bound_exceeded raise the
+    // forward-condition signal that the loop never exits. See issue #4426.
+    if (
+      goto_target == cur_state->source.pc &&
+      !config.options.get_bool_option("termination"))
+    {
+      assert(
+        cur_state->source.pc->location_number == goto_target->location_number);
+
+      // generate assume(false) or a suitable negation if this
+      // instruction is a conditional goto
+      if (new_guard_true)
+        assume(gen_false_expr());
+      else
+      {
+        make_not(new_guard);
+        assume(new_guard);
+      }
+
+      // next instruction
+      cur_state->source.pc++;
+      return;
+    }
+
+    BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
+    ++unwind;
+
+    if (get_unwind(cur_state->source, unwind))
+    {
+      loop_bound_exceeded(new_guard);
+
+      // reset unwinding
+      unwind = 0;
+
+      // next instruction
+      cur_state->source.pc++;
+
+      // Reset loop counter
+      if (instruction.loop_number == first_loop)
+        first_loop = 0;
+
+      return;
+    }
+
+    if (new_guard_true)
+    {
+      cur_state->source.pc = goto_target;
+      return; // nothing else to do
+    }
+  }
+
+  goto_programt::const_targett new_state_pc, state_pc;
+
+  if (forward)
+  {
+    new_state_pc = goto_target; // goto target instruction
+    state_pc = cur_state->source.pc;
+    state_pc++; // next instruction
+  }
+  else
+  {
+    new_state_pc = cur_state->source.pc;
+    new_state_pc++;
+    state_pc = goto_target;
+  }
+
+  cur_state->source.pc = state_pc;
+
+  // put into state-queue
+  statet::merge_state_listt &merge_state_list =
+    cur_state->top().merge_state_map[new_state_pc];
+
+  merge_state_list.emplace_back(*cur_state);
+  record_parked_path(new_state_pc, std::prev(merge_state_list.end()));
+
+  // Capture the interval domain at the if-branch end so phi_function can JOIN
+  // both branches.  Deep-copy so subsequent else-branch writes don't corrupt
+  // it.
+  if (interval_domain_state)
+    merge_state_list.back().interval_snapshot =
+      std::make_shared<interval_domaint::interval_map>(
+        *interval_domain_state->intervals);
+
+  // adjust guards
+  if (new_guard_true)
+  {
+    cur_state->guard.make_false();
+  }
+  else
+  {
+    statet::merge_statet &new_state = merge_state_list.back();
+
+    // produce new guard symbol
+    expr2tc guard_expr;
+
+    const not2t *new_not = try_to_not2t(new_guard);
+    if (is_symbol2t(new_guard) || (new_not && is_symbol2t(new_not->value)))
+    {
+      guard_expr = new_guard;
+    }
+    else
+    {
+      guard_expr = guard_identifier();
+
+      expr2tc new_rhs = new_guard;
+      new_rhs = not2tc(new_rhs);
+      do_simplify(new_rhs);
+
+      cur_state->assignment(guard_expr, new_rhs);
+
+      // assignment() renamed guard_expr to its fresh L2 generation;
+      // remember what that generation stands for so later gotos can
+      // resolve path-guard conjuncts back to branch conditions.
+      record_guard_definition(guard_expr, new_rhs);
+
+      target->assignment(
+        gen_true_expr(),
+        guard_expr,
+        guard_expr,
+        new_rhs,
+        expr2tc(),
+        cur_state->source,
+        cur_state->gen_stack_trace(),
+        true,
+        first_loop);
+
+      if (is_constant_expr(new_rhs))
+        guard_expr = new_rhs;
+
+      guard_expr = not2tc(guard_expr);
+      do_simplify(guard_expr);
+    }
+
+    expr2tc not_guard_expr = not2tc(guard_expr);
+    do_simplify(not_guard_expr);
+
+    if (forward)
+    {
+      new_state.guard.add(guard_expr);
+      cur_state->guard.add(not_guard_expr);
+    }
+    else
+    {
+      cur_state->guard.add(guard_expr);
+      new_state.guard.add(not_guard_expr);
+    }
+  }
+}
+
+static inline guard2tc merge_state_guards(
+  goto_symext::statet::merge_statet &merge_state,
+  goto_symex_statet &state)
+{
+  // adjust guard, even using guards from unreachable states. This helps to
+  // shrink the state guard if the incoming edge is from a path that was
+  // truncated by config.unwind, config.depth or an assume-false instruction.
+
+  // Note when an unreachable state contributes its guard, merging it in is
+  // optional, since the formula already implies the unreachable guard is
+  // impossible. Therefore we only integrate it when to do so simplifies the
+  // state guard.
+
+  // In CBMC this function can trash either state's guards, since merge_state is
+  // dying and state's guard will shortly be overwritten. However, we still use
+  // either state's guard, so keep them intact.
+  if (
+    (!merge_state.guard.is_false() && !state.guard.is_false()) ||
+    state.guard.disjunction_may_simplify(merge_state.guard))
+  {
+    state.guard |= merge_state.guard;
+    return state.guard;
+  }
+  else if (state.guard.is_false() && !merge_state.guard.is_false())
+  {
+    return merge_state.guard;
+  }
+  else
+  {
+    return state.guard;
+  }
+}
+
+void goto_symext::merge_gotos()
+{
+  statet::framet &frame = cur_state->top();
+
+  // first, see if this is a target at all
+  statet::merge_state_mapt::iterator state_map_it =
+    frame.merge_state_map.find(cur_state->source.pc);
+
+  if (state_map_it == frame.merge_state_map.end())
+    return; // nothing to do
+
+  // we need to merge
+  statet::merge_state_listt &state_list = state_map_it->second;
+
+  for (auto list_it = state_list.rbegin(); list_it != state_list.rend();
+       list_it++)
+  {
+    statet::merge_statet &merge_state = *list_it;
+
+    // Merge guards. Don't write this to `state` yet because we might move
+    // merge_state over it below.
+    guard2tc new_guard = merge_state_guards(merge_state, *cur_state);
+
+    if (!merge_state.guard.is_false())
+    {
+      // do SSA phi functions
+      phi_function(merge_state);
+
+      merge_locality(merge_state);
+
+      merge_value_sets(merge_state);
+
+      // adjust depth
+      cur_state->num_instructions =
+        std::min(cur_state->num_instructions, merge_state.num_instructions);
+    }
+
+    cur_state->guard = std::move(new_guard);
+  }
+
+  // clean up to save some memory
+  frame.merge_state_map.erase(state_map_it);
+}
+
+void goto_symext::merge_locality(const statet::merge_statet &src)
+{
+  if (cur_state->guard.is_false())
+  {
+    cur_state->top().local_variables = src.local_variables;
+    return;
+  }
+
+  // Union the merged path's locals into this one. Both sets descend from the
+  // frame state at the branch, so the diff visits only the locals a path
+  // declared or retired since (O(divergence)); the names present in src but
+  // not here are the ones the union must add. Collect them first — mutating
+  // the set mid-diff would walk a container being reassigned underneath it.
+  auto &dst = cur_state->top().local_variables;
+  std::vector<renaming::level2t::name_record> added;
+  dst.diff(
+    src.local_variables,
+    [&](const renaming::level2t::name_record &k) { added.push_back(k); },
+    [](const renaming::level2t::name_record &) {});
+  for (const renaming::level2t::name_record &k : added)
+    dst.insert(k);
+}
+
+void goto_symext::merge_value_sets(const statet::merge_statet &src)
+{
+  if (cur_state->guard.is_false())
+  {
+    cur_state->value_set = src.value_set;
+    return;
+  }
+
+  cur_state->value_set.make_union(src.value_set, true);
+}
+
+void goto_symext::phi_function(const statet::merge_statet &merge_state)
+{
+  if (merge_state.guard.is_false() && cur_state->guard.is_false())
+    return;
+
+  const auto &variables = cur_state->level2.current_names;
+  const auto &merge_variables = merge_state.level2.current_names;
+
+  guard2tc tmp_guard;
+  if (
+    !variables.empty() && !cur_state->guard.is_false() &&
+    !merge_state.guard.is_false())
+  {
+    tmp_guard = merge_state.guard;
+
+    // this gets the diff between the guards
+    tmp_guard -= cur_state->guard;
+  }
+
+  // Only the names whose SSA record differs between the two paths need a
+  // phi. Structurally diff the two persistent maps to visit exactly those
+  // (O(divergence)) rather than every tracked name. A name on only one path
+  // — added() (merge only) or removed() (this path only) — gets no phi.
+  std::vector<renaming::level2t::name_record> changed;
+  variables.diff(
+    merge_variables,
+    [](const auto &) {},
+    [](const auto &) {},
+    [&](const auto &cur_kv, const auto &merge_kv) {
+      // A differing assignment counter marks a name as needing a phi.
+      if (cur_kv.second.count != merge_kv.second.count)
+        changed.push_back(cur_kv.first);
+    });
+
+  for (const renaming::level2t::name_record &variable : changed)
+  {
+    if (variable.base_name == guard_identifier_s)
+      continue; // just a guard
+
+    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
+      continue;
+
+    // changed!
+    const symbolt &symbol = *ns.lookup(variable.base_name);
+
+    type2tc type = migrate_symbol_type(symbol);
+
+    expr2tc cur_state_rhs = symbol2tc(type, symbol.id);
+    renaming::level2t::rename_to_record(cur_state_rhs, variable);
+
+    expr2tc merge_state_rhs = symbol2tc(type, symbol.id);
+    renaming::level2t::rename_to_record(merge_state_rhs, variable);
+
+    // Semi-manually rename these symbols: we may be referring to an l1
+    // variable not in the current scope, thus we need to directly specify
+    // which l1 variable we're dealing with.
+    merge_state.level2.rename(merge_state_rhs);
+    cur_state->level2.rename(cur_state_rhs);
+
+    expr2tc rhs;
+    if (cur_state->guard.is_false())
+      rhs = merge_state_rhs;
+    else if (merge_state.guard.is_false())
+      rhs = cur_state_rhs;
+    else
+    {
+      rhs = if2tc(type, tmp_guard.as_expr(), merge_state_rhs, cur_state_rhs);
+      simplify(rhs);
+    }
+
+    expr2tc lhs;
+    migrate_expr(symbol_expr(symbol), lhs);
+    expr2tc new_lhs = lhs;
+
+    // Again, specify which l1 data object we're going to make the assignment
+    // to.
+    renaming::level2t::rename_to_record(new_lhs, variable);
+
+    cur_state->rename_type(new_lhs);
+    cur_state->rename_type(rhs);
+    cur_state->assignment(new_lhs, rhs);
+
+    // process_instruction never sees synthetic phi assignments; update the
+    // interval domain here using the if-branch snapshot so the JOIN is correct
+    // (both SSA names share the same base-name key in the domain).
+    if (
+      interval_domain_state && merge_state.interval_snapshot &&
+      !cur_state->guard.is_false() && !merge_state.guard.is_false())
+    {
+      auto snap = std::static_pointer_cast<interval_domaint::interval_map>(
+        merge_state.interval_snapshot);
+      interval_domain_state->phi_join_with_snapshot(new_lhs, snap);
+    }
+
+    target->assignment(
+      gen_true_expr(),
+      new_lhs,
+      lhs,
+      rhs,
+      expr2tc(),
+      cur_state->source,
+      cur_state->gen_stack_trace(),
+      true,
+      first_loop);
+  }
+}
+
+void goto_symext::loop_bound_exceeded(const expr2tc &guard)
+{
+  if (partial_loops && !config.options.get_bool_option("termination"))
+    return;
+
+  unsigned loop_number = cur_state->source.pc->loop_number;
+
+  expr2tc negated_cond = guard;
+  make_not(negated_cond);
+
+  if (!no_unwinding_assertions)
+  {
+    // generate unwinding assertion
+    claim(negated_cond, "unwinding assertion loop " + i2string(loop_number));
+  }
+  else
+  {
+    // Nothing will flag this truncation to the user: the assumption below
+    // silently prunes the rest of the loop. Record it so a coverage run can
+    // say its percentages are lower bounds (issue #6387).
+    note_bounded_loop_truncation();
+
+    // generate unwinding assumption, unless we permit partial loops
+    expr2tc guarded_expr = negated_cond;
+    cur_state->guard.guard_expr(guarded_expr);
+    target->assumption(
+      cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
+  }
+
+  // add to state guard to prevent further assignments
+  cur_state->guard.add(negated_cond);
+}
+
+bool goto_symext::get_unwind(
+  const symex_targett::sourcet &source,
+  const BigInt &unwind)
+{
+  unsigned id = source.pc->loop_number;
+  BigInt this_loop_max_unwind = max_unwind;
+
+  // Check for function-specific unwind bound
+  if (loop_id_to_func_index.count(id) != 0)
+  {
+    const auto &[func_name, loop_index] = loop_id_to_func_index[id];
+    auto unwind_key = std::make_pair(func_name, loop_index);
+    if (unwind_func_set.count(unwind_key) != 0)
+      this_loop_max_unwind = unwind_func_set[unwind_key];
+  }
+
+  // Loop-specific bound overrides function-specific bound
+  if (unwind_set.count(id) != 0)
+    this_loop_max_unwind = unwind_set[id];
+
+  bool stop_unwind =
+    this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
+  if (!options.get_bool_option("quiet"))
+  {
+    log_status(
+      "{} loop {} iteration {}   {}",
+      stop_unwind ? "Not unwinding" : "Unwinding",
+      i2string(cur_state->source.pc->loop_number),
+      integer2string(unwind),
+      cur_state->source.pc->location);
+  }
+
+  return stop_unwind;
+}

@@ -1,9 +1,7 @@
-# The value pointer a generator-expression `extend` hands to
-# __ESBMC_values_equal is not a valid object, so this program still fails --
-# that residual defect is what keeps quixbugs/breadth_first_search KNOWNBUG
-# (#4780). What this test pins is the claim that is no longer raised: an
-# alignment-1 packed read cannot be misaligned, where the old uint64_t cast was
-# flagged first and hid the pointer defect behind it.
+# A generator expression passed straight to `extend` used to reach the C++
+# frontend unlowered, so __ESBMC_values_equal compared against an invalid
+# pointer. Lowering it like any other generator expression (matching
+# bytes(genexp), etc.) gives extend a real list, and this now verifies.
 from collections import deque
 
 

@@ -128,7 +128,9 @@ expr2tc gen_zero(const type2tc &type, bool array_as_array_of)
   {
     auto union_type = to_union_type(type);
 
-    assert(!union_type.members.empty());
+    if (union_type.members.empty())
+      return constant_union2tc(type, irep_idt{}, std::vector<expr2tc>{});
+
     std::vector<expr2tc> members = {
       gen_zero(union_type.members.front(), array_as_array_of)};
 
@@ -521,6 +523,21 @@ std::string type_to_string(const constant_string_kindt &theval, int)
     return "unicode";
   }
   assert(0 && "Unrecognized constant_string_kindt enum value");
+  abort();
+}
+
+std::string type_to_string(const pointer_ref_kindt &theval, int)
+{
+  switch (theval)
+  {
+  case pointer_ref_kindt::NONE:
+    return "none";
+  case pointer_ref_kindt::LVALUE:
+    return "lvalue_reference";
+  case pointer_ref_kindt::RVALUE:
+    return "rvalue_reference";
+  }
+  assert(0 && "Unrecognized pointer_ref_kindt enum value");
   abort();
 }
 

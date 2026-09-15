@@ -2,8 +2,7 @@
 #include <iomanip>
 #include <cstring>
 #include <cassert>
-// [ios.base]: a negative width is well-formed and means "no padding". The
-// model's streamsize is unsigned, so it has to clamp rather than wrap.
+// [ios.base]: a negative width is well-formed and means "no padding".
 int main()
 {
   std::ostringstream s;

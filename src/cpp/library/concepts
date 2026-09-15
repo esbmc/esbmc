@@ -1,0 +1,142 @@
+#ifndef ESBMC_CONCEPTS
+#define ESBMC_CONCEPTS
+
+#include "type_traits"
+#include "utility"
+
+// C++20 header. libstdc++ and libc++ both expand it to nothing in an older
+// language mode rather than erroring, so a translation unit that includes it
+// unconditionally still compiles (github #3387).
+#if __cplusplus >= 202002L
+
+// [concepts.syn], partially. Only the concepts whose definition follows
+// exactly from the type traits this tree already provides are declared. The
+// rest -- common_with, common_reference_with, swappable_with,
+// equality_comparable_with, totally_ordered_with, and the invocable family
+// (invocable, regular_invocable, predicate, relation, equivalence_relation,
+// strict_weak_order) -- need common_reference, is_swappable or std::invoke,
+// none of which are modelled here. They are deliberately left undeclared:
+// naming one stays the compile error it already is, whereas an approximate
+// definition would reject well-formed code (an invocable spelled as a direct
+// call rejects a pointer-to-member callable, which std::invoke accepts).
+
+namespace std
+{
+
+template <class T, class U>
+concept same_as = is_same<T, U>::value &&is_same<U, T>::value;
+
+template <class Derived, class Base>
+concept derived_from = is_base_of<Base, Derived>::value
+  &&is_convertible<const volatile Derived *, const volatile Base *>::value;
+
+template <class From, class To>
+concept convertible_to = is_convertible<From, To>::value &&requires
+{
+  static_cast<To>(declval<From>());
+};
+
+template <class T>
+concept integral = is_integral<T>::value;
+
+template <class T>
+concept signed_integral = integral<T> && is_signed<T>::value;
+
+template <class T>
+concept unsigned_integral = integral<T> && !signed_integral<T>;
+
+template <class T>
+concept floating_point = is_floating_point<T>::value;
+
+template <class T>
+concept destructible = is_nothrow_destructible<T>::value;
+
+template <class T, class... Args>
+concept constructible_from =
+  destructible<T> && is_constructible<T, Args...>::value;
+
+template <class T>
+concept default_initializable = constructible_from<T> && requires
+{
+  T{};
+};
+
+template <class T>
+concept move_constructible = constructible_from<T, T> && convertible_to<T, T>;
+
+template <class T>
+concept copy_constructible =
+  move_constructible<T> && constructible_from<T, T &> && convertible_to<T &, T>
+    &&constructible_from<T, const T &> && convertible_to<const T &, T>;
+
+template <class LHS, class RHS>
+concept assignable_from =
+  is_lvalue_reference<LHS>::value &&requires(LHS lhs, RHS &&rhs)
+{
+  {
+    lhs = static_cast<RHS &&>(rhs)
+  }
+  ->same_as<LHS>;
+};
+
+template <class T>
+concept swappable = requires(T &a, T &b)
+{
+  swap(a, b);
+};
+
+template <class T>
+concept equality_comparable = requires(const T &a, const T &b)
+{
+  {
+    a == b
+  }
+  ->convertible_to<bool>;
+  {
+    a != b
+  }
+  ->convertible_to<bool>;
+};
+
+template <class T>
+concept totally_ordered = equality_comparable<T> && requires(
+  const T &a, const T &b)
+{
+  {
+    a < b
+  }
+  ->convertible_to<bool>;
+  {
+    a > b
+  }
+  ->convertible_to<bool>;
+  {
+    a <= b
+  }
+  ->convertible_to<bool>;
+  {
+    a >= b
+  }
+  ->convertible_to<bool>;
+};
+
+template <class T>
+concept movable = is_object<T>::value &&move_constructible<T>
+  &&assignable_from<T &, T> && swappable<T>;
+
+template <class T>
+concept copyable = copy_constructible<T> && movable<T> &&
+  assignable_from<T &, T &> && assignable_from<T &, const T &> &&
+  assignable_from<T &, const T>;
+
+template <class T>
+concept semiregular = copyable<T> && default_initializable<T>;
+
+template <class T>
+concept regular = semiregular<T> && equality_comparable<T>;
+
+} // namespace std
+
+#endif // __cplusplus >= 202002L
+
+#endif

@@ -31,8 +31,8 @@
 #include <string>
 #include <vector>
 
-#include <goto-symex/reachability_tree.h>
-#include <goto-symex/symex_target_equation.h>
+#include <goto-symex/scheduler/reachability_tree.h>
+#include <goto-symex/equation/symex_target_equation.h>
 #include <util/symtab/namespace.h>
 
 #include "../testing-utils/goto_factory.h"

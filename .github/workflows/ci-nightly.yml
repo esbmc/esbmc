@@ -1,0 +1,37 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 23 * * *'
+  workflow_dispatch:
+
+jobs:
+  repostats:
+    name: repostats-for-robota-core
+    # ubuntu-slim is itself a container with no Docker daemon to build it against.
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The repositories to generate reports for.
+        statsRepo:
+          - esbmc/esbmc
+      fail-fast: false
+    steps:
+      # The traffic API needs a token with Administration(read), which
+      # GITHUB_TOKEN cannot be granted
+      - name: mint app token
+        id: tok
+        uses: actions/create-github-app-token@v3.2.0
+        with:
+          app-id: ${{ vars.GHRS_APP_ID }}
+          private-key: ${{ secrets.GHRS_APP_PRIVATE_KEY }}
+          owner: esbmc
+          repositories: esbmc
+
+      - name: run-ghrs
+        uses: jgehrcke/github-repo-stats@v1.4.2
+        with:
+          # Define the stats repository (the repo to fetch
+          # stats for and to generate the report for).
+          repository: ${{ matrix.statsRepo }}
+          ghtoken: ${{ steps.tok.outputs.token }}

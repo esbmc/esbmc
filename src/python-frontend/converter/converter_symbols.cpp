@@ -519,7 +519,33 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
 
   if (symbolt *symbol = find_symbol_in_global_scope(sym_id))
     return symbol;
+
+  if (symbolt *symbol = find_model_symbol(sym_id))
+    return symbol;
+
   return find_imported_symbol(sym_id);
+}
+
+/// A model-provided name referenced from user code forms an id under the
+/// caller's file; the model defining it lives in its own namespace. Retried
+/// only for an id that names a file: an unresolved reference carries an empty
+/// filename -- `random.random()` without `import random` forms `py:@F@random`
+/// -- and resolving that would accept a module the program never imported.
+symbolt *python_converter::find_model_symbol(const std::string &sym_id) const
+{
+  if (is_loading_models || sym_id.rfind("py:", 0) != 0)
+    return nullptr;
+
+  const std::size_t at = sym_id.find('@');
+  if (at == std::string::npos || at <= 3)
+    return nullptr;
+
+  const std::string suffix = sym_id.substr(at);
+  for (const std::string &ns : model_namespaces_)
+    if (symbolt *symbol = symbol_table_.find_symbol("py:" + ns + suffix))
+      return symbol;
+
+  return nullptr;
 }
 
 symbolt *python_converter::find_symbol_in_global_scope(

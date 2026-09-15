@@ -813,9 +813,9 @@ GOTO IR and verify under both k-induction and bounded BMC.
 
 ### CI status
 
-`.github/workflows/plcplus-linux-binary.yml` carries two jobs and fires on pull
-requests as well as pushes touching `src/ld-frontend/`, `tools/ld-verify/`,
-`regression/ld/` or `unit/ld-frontend/`:
+`.github/workflows/ci-pull-request.yml` carries two LD jobs, gated by its
+`changes` job on `src/ld-frontend/`, `tools/ld-verify/`, `regression/ld/`,
+`unit/ld-frontend/` or `src/esbmc/options.cpp`:
 
 - `regression-ld` builds with `BUILD_TESTING=On` / `ENABLE_REGRESSION=On` and
   runs `regression/ld/` (37 cases), the `ld-verify` runner suite (10 cases) and

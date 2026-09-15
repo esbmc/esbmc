@@ -11,6 +11,7 @@
 #include <util/irep/migrate.h>
 #include <util/symtab/namespace.h>
 #include <util/base/prefix.h>
+#include <util/irep/pad_names.h>
 #include <util/expr/string_constant.h>
 #include <util/expr/type_byte_size.h>
 #include <unordered_map>
@@ -67,6 +68,18 @@ inline expr2tc invoke_intrinsic(
 // down.
 thread_local const namespacet *migrate_namespace_lookup = nullptr;
 
+/* struct_type2t/union_type2t have no per-member padding flag, so is_padding is
+ * lost on the way back and a pad reads as a declared member. Re-derive it from
+ * the name: every name add_padding reserves contains '#', which no C or C++
+ * identifier may (pad_names.h). Partial by construction -- the #bitfield and
+ * #extint type attributes are dropped with it and no name carries them, so a
+ * round-tripped bit-field pad still reaches the wrong add_padding arm. */
+static void restore_padding_flag(struct_union_typet::componentt &component)
+{
+  if (is_padding_name(component.get_name().as_string()))
+    component.set_is_padding(true);
+}
+
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 static std::mutex bin2int_map_signed_mutex, bin2int_map_unsigned_mutex;
 
@@ -118,6 +131,15 @@ static unsigned get_pragma_unroll(const exprt &expr)
 {
   const irep_idt &p = expr.get("#pragma_unroll");
   return p.empty() ? 0 : std::stoul(p.as_string());
+}
+
+static pointer_ref_kindt pointer_ref_kind(const typet &type)
+{
+  if (type.get_bool("#rvalue_reference"))
+    return pointer_ref_kindt::RVALUE;
+  if (type.reference())
+    return pointer_ref_kindt::LVALUE;
+  return pointer_ref_kindt::NONE;
 }
 
 static type2tc migrate_type0(const typet &type)
@@ -202,7 +224,8 @@ static type2tc migrate_type0(const typet &type)
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
 
-    return pointer_type2tc(subtype, type.can_carry_provenance());
+    return pointer_type2tc(
+      subtype, type.can_carry_provenance(), pointer_ref_kind(type));
   }
 
   if (type.id() == typet::t_empty)
@@ -1009,6 +1032,54 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
     lessthanequal2tc(last, coerce_to_type(extent, offs_type)));
 }
 
+/// cpp_new[] hides the array size in a size field. The frontend stores it under
+/// "size" (size_irep); the pipeline later mirrors it into "#size" (cmt_size).
+/// Under --irep2-bodies the body is migrated before that mirroring runs, so
+/// "#size" is still empty -- read "size" then, or the size is silently dropped.
+/// A present-but-empty irep is a third state is_not_nil() reports as present,
+/// so the choice is made on the id.
+static const exprt &cpp_new_size(const exprt &expr)
+{
+  static const exprt none = nil_exprt();
+  const auto carries_size = [](const irept &i) {
+    return !i.id().empty() && !i.is_nil();
+  };
+  if (carries_size(expr.cmt_size()))
+    return static_cast<const exprt &>(expr.cmt_size());
+  if (carries_size(expr.size_irep()))
+    return static_cast<const exprt &>(expr.size_irep());
+  return none;
+}
+
+/// The two forms recognised before the id dispatch below: a nil expression,
+/// and a node carrying a #derived_to_base marker.
+///
+/// That marker names whichever node is being converted, and that is almost
+/// never a cast: over regression/esbmc-cpp it lands on a symbol 32474 times and
+/// on a typecast 58. IREP2 has nowhere to hang a flag on an arbitrary node, so
+/// it becomes a same-type typecast2t around it -- the identity -- which
+/// back_typecast unwraps. Dropping it loses the base displacement and silently
+/// proves false assertions (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
+{
+  if (expr.id() == "nil")
+  {
+    new_expr_ref = expr2tc();
+    return true;
+  }
+
+  const irep_idt base = expr.get("#derived_to_base");
+  if (base.empty() || expr.id() == exprt::typecast)
+    return false;
+
+  exprt unmarked = expr;
+  unmarked.remove("#derived_to_base");
+  expr2tc inner;
+  migrate_expr(unmarked, inner);
+  new_expr_ref = typecast2tc(inner->type, inner, base);
+  return true;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -1016,11 +1087,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   type2tc type;
 
-  if (expr.id() == "nil")
-  {
-    new_expr_ref = expr2tc();
+  if (migrate_before_dispatch(expr, new_expr_ref))
     return;
-  }
 
   if (expr.id() == irept::id_symbol)
   {
@@ -1128,7 +1196,16 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     const expr2tc rounding_mode = migrate_rounding_mode(expr);
 
-    new_expr_ref = typecast2tc(type, old_expr, rounding_mode);
+    // The base-conversion markers the adjust passes dispatch on. They are set
+    // by the converter and consumed by clang_c_adjust; an IREP2 pass reading
+    // the cast has no other way to know a displacement is owed
+    // (docs/roadmap/scope-clang-cpp-irep2.md §3.12).
+    new_expr_ref = typecast2tc(
+      type,
+      old_expr,
+      rounding_mode,
+      expr.get("#derived_to_base"),
+      expr.get_bool("#base_to_derived"));
     return;
   }
 
@@ -1687,7 +1764,11 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = address_of2tc(type, theval, expr.implicit());
+    /* The pointer is built from the pointee, so without carrying the spelling
+     * across an `&x` typed `T&` migrates to a plain pointer even when
+     * migrate_type0()'s pointer arm is doing its job. */
+    new_expr_ref = address_of2tc(
+      type, theval, expr.implicit(), pointer_ref_kind(expr.type()));
     return;
   }
 
@@ -2068,7 +2149,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), lhs);
       migrate_expr(expr.op1(), rhs);
       new_expr_ref = sideeffect_assign2tc(
-        migrate_type(expr.type()), stmt, lhs, rhs, expr.location());
+        migrate_type(expr.type()),
+        stmt,
+        lhs,
+        rhs,
+        expr.location(),
+        expr.op0().get_bool("#member_init"));
       return;
     }
 
@@ -2082,15 +2168,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
     {
-      // cpp_new[] hides the array size in a size field. The frontend stores it
-      // under "size" (size_irep); the conversion pipeline later mirrors it into
-      // "#size" (cmt_size). Under --irep2-bodies the body is migrated before
-      // that mirroring runs, so "#size" is still empty — read "size" in that
-      // case, otherwise the whole size operand is silently dropped.
-      const exprt &sz = expr.cmt_size().is_not_nil()
-                          ? static_cast<const exprt &>(expr.cmt_size())
-                          : static_cast<const exprt &>(expr.size_irep());
-      migrate_expr(sz, thesize);
+      if (const exprt &sz = cpp_new_size(expr); sz.is_not_nil())
+        migrate_expr(sz, thesize);
 
       // The new-expression's initializer lives in the "initializer" sub, not
       // in the operands. Carry it through `arguments` so the round-trip back
@@ -2306,8 +2385,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         id2string(expr.statement());
     }
 
-    new_expr_ref =
-      sideeffect2tc(plaintype, operand, thesize, args, cmt_type, t);
+    new_expr_ref = sideeffect2tc(
+      plaintype, operand, thesize, args, cmt_type, t, expr.location());
     return;
   }
 
@@ -3022,6 +3101,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      restore_padding_flag(component);
       comps.push_back(component);
       idx++;
     }
@@ -3047,6 +3127,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
+      restore_padding_flag(component);
       comps.push_back(component);
       idx++;
     }
@@ -3116,6 +3197,10 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     pointer_typet thetype(subtype);
     if (ref2.carry_provenance)
       thetype.can_carry_provenance(true);
+    if (ref2.ref_kind == pointer_ref_kindt::RVALUE)
+      thetype.set("#rvalue_reference", true);
+    else if (ref2.ref_kind == pointer_ref_kindt::LVALUE)
+      thetype.set("#reference", true);
     return thetype;
   }
   case type2t::unsignedbv_id:
@@ -3367,7 +3452,11 @@ static exprt back_sideeffect(const expr2tc &ref)
   typet thetype = migrate_type_back(ref->type);
   exprt theexpr("sideeffect", thetype);
   typet cmttype;
-  exprt size;
+  // Nil, not default-constructed: an empty irep is a third state that
+  // is_not_nil() reports as present, and cmt_size() below writes it
+  // unconditionally. A reader then picks the empty sub over a real size and
+  // migrating it aborts.
+  exprt size = nil_exprt();
 
   if (!is_nil_type(ref2.alloctype))
     cmttype = migrate_type_back(ref2.alloctype);
@@ -3389,6 +3478,15 @@ static exprt back_sideeffect(const expr2tc &ref)
     size.is_not_nil())
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
+
+  // ref2.location is deliberately *not* restored onto the legacy node.
+  // goto_convert falls back to the enclosing statement's location for a side
+  // effect carrying none, so writing this one back moves the instruction's
+  // column on the default path -- measured at 126 of 131 goto programs over a
+  // stride-16 sample of regression/esbmc. That is very likely the more
+  // faithful column, but it is a user-visible change to counterexamples and
+  // witnesses, so it needs its own PR and an SV-COMP run
+  // (scope-clang-c-irep2.md §136.3).
   return theexpr;
 }
 
@@ -3408,6 +3506,33 @@ exprt migrate_expr_back(const expr2tc &ref)
 
   exprt result = migrate_expr_back_dispatch(ref);
   return expr_back_cache.emplace(key, std::move(result)).first->second;
+}
+
+/// A cast's legacy form, with the base-conversion markers the adjust passes
+/// dispatch on. A same-type cast carrying #derived_to_base is the wrapper
+/// migrate_expr builds for a marker on a node that is not a cast, so the marker
+/// goes back on the node itself rather than leaving an identity cast behind.
+static exprt back_typecast(const typecast2t &ref2)
+{
+  if (!ref2.derived_to_base.empty() && ref2.type == ref2.from->type)
+  {
+    exprt marked = migrate_expr_back(ref2.from);
+    marked.set("#derived_to_base", ref2.derived_to_base);
+    // A dynamic_cast's typecast carries both markers at once
+    // (clang_cpp_convert_vft.cpp), so the other one travels with it.
+    if (ref2.base_to_derived)
+      marked.set("#base_to_derived", true);
+    return marked;
+  }
+
+  typecast_exprt new_expr(
+    migrate_expr_back(ref2.from), migrate_type_back(ref2.type));
+  new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+  if (!ref2.derived_to_base.empty())
+    new_expr.set("#derived_to_base", ref2.derived_to_base);
+  if (ref2.base_to_derived)
+    new_expr.set("#base_to_derived", true);
+  return new_expr;
 }
 
 /* The dispatch is a 122-arm jump table whose arms carry the decision points;
@@ -3457,8 +3582,10 @@ static exprt migrate_expr_back_rest6(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt theexpr("sideeffect", thetype);
     theexpr.statement(ref2.op);
-    theexpr.copy_to_operands(
-      migrate_expr_back(ref2.lhs), migrate_expr_back(ref2.rhs));
+    exprt back_lhs = migrate_expr_back(ref2.lhs);
+    if (ref2.member_init)
+      back_lhs.set("#member_init", 1);
+    theexpr.copy_to_operands(back_lhs, migrate_expr_back(ref2.rhs));
     if (ref2.location.is_not_nil())
       theexpr.location() = ref2.location;
     return theexpr;
@@ -4397,14 +4524,7 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
     }
   }
   case expr2t::typecast_id:
-  {
-    const typecast2t &ref2 = to_typecast2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-
-    typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
-    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
-    return new_expr;
-  }
+    return back_typecast(to_typecast2t(ref));
   case expr2t::nearbyint_id:
   {
     const nearbyint2t &ref2 = to_nearbyint2t(ref);

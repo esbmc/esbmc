@@ -11,11 +11,13 @@ bool goto_binary_reader::read_goto_binary_array(
   const void *data,
   size_t size,
   contextt &context,
-  contextt &ignored)
+  contextt &ignored,
+  goto_functionst *goto_functions)
 {
   using namespace boost::iostreams;
   stream<array_source> src(static_cast<const char *>(data), size);
-  return read_bin_goto_object(src, "", context, ignored, function_set, nullptr);
+  return read_bin_goto_object(
+    src, "", context, ignored, function_set, goto_functions);
 }
 
 bool goto_binary_reader::read_goto_binary(

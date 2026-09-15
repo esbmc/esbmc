@@ -22,6 +22,41 @@ import subprocess
 # set_tests_properties(ENVIRONMENT).
 _TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
 _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
+# Narrows the budget for one run, so a slowdown fails instead of passing under
+# the 1200s default. CMake bakes _TIMEOUT_ENVVAR into each test's ctest
+# ENVIRONMENT property, which overrides the caller's value, and `ctest
+# --timeout` only supplies a default for tests carrying no TIMEOUT property --
+# so tightening the budget needs a name ctest does not set (#7628).
+_TIMEOUT_CAP_ENVVAR = "ESBMC_REGRESS_TIMEOUT_MAX"
+
+
+# CMake grants the long_timeout capability at configure time, from a budget the
+# cap has not been applied to yet (ESBMC_REGRESS_TIMEOUT GREATER_EQUAL 600 in
+# regression/CMakeLists.txt). A narrowed run still receives it on the command
+# line, and would fail the very tests it exists to skip.
+_LONG_TIMEOUT_SECONDS = 600
+
+
+def _timeout_cap():
+    raw = os.environ.get(_TIMEOUT_CAP_ENVVAR, "").strip()
+    if not raw:
+        return None
+    # Rejected rather than ignored: a run that silently kept the 1200s budget
+    # after a typo would report every test as comfortably within it.
+    if not raw.isdigit() or int(raw) == 0:
+        sys.exit(
+            "{}={!r}: expected a positive whole number of seconds".format(
+                _TIMEOUT_CAP_ENVVAR, raw))
+    return int(raw)
+
+
+def _capped_timeout(budget):
+    cap = _timeout_cap()
+    if cap is None:
+        return budget
+    return budget if budget is not None and budget <= cap else cap
+
+
 #####################
 # Testing Tool
 #####################
@@ -624,8 +659,8 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    # The env var set by CMake.
-    TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
+    # The env var set by CMake, narrowed by _TIMEOUT_CAP_ENVVAR when set.
+    TIMEOUT = _capped_timeout(int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None)
     _mem_mb = int(os.environ.get(_MEMORY_LIMIT_ENVVAR, 0))
     MEMORY_LIMIT = _mem_mb * 1024 * 1024 if _mem_mb else None
 
@@ -669,8 +704,12 @@ def _add_test(test_case, executor):
                         )
                     )
                     return
-                timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
-                    test_case.test_dir, executor.timeout or "none")
+                cap = _timeout_cap()
+                capped = (", capped by " + _TIMEOUT_CAP_ENVVAR
+                          if cap is not None and executor.timeout == cap
+                          else "")
+                timeout_message = "\nTIMEOUT TEST: {} (limit {}s{})".format(
+                    test_case.test_dir, executor.timeout or "none", capped)
                 if stderr:
                     timeout_message += "\n" + stderr.decode(errors="replace")
                 self.fail(timeout_message)
@@ -827,7 +866,7 @@ def _arg_parsing():
 
     main_args = parser.parse_args()
     if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
+        RegressionBase.TIMEOUT = _capped_timeout(int(main_args.timeout))
     if main_args.memory_limit:
         RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
@@ -858,6 +897,9 @@ def _arg_parsing():
             f"{', '.join(sorted(unknown))}; known names are "
             f"{', '.join(sorted(STATIC_CAPABILITIES))}"
         )
+        if (RegressionBase.TIMEOUT is not None
+                and RegressionBase.TIMEOUT < _LONG_TIMEOUT_SECONDS):
+            capabilities.discard("long_timeout")
 
     gen_one_test(
         regression_path,

@@ -2643,7 +2643,7 @@ expr2tc code_contractst::replace_is_fresh_temps(
         // from __ESBMC_alloc, which is written for the heap alone. VALID_OBJECT
         // of an automatic or static object is a free boolean a solver may pick
         // false, so a caller passing `&v` could not discharge the precondition
-        // at all (#6542); goto-symex/dynamic_allocation.cpp guards
+        // at all (#6542); goto-symex/engine/dynamic_allocation.cpp guards
         // invalid_pointer the same way, for the same reason. Dropping the
         // conjunct is not "assume valid": an object is valid for as long as its
         // name is in scope, and this expression was written at the call site.

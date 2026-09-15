@@ -1,0 +1,18 @@
+name: Feature request
+description: Something ESBMC should support or report that it does not today
+labels: [enhancement]
+body:
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A small program or command that shows what you want ESBMC to do.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: One paragraph. Link related issues, papers, or tools that already do this.
+    validations:
+      required: true

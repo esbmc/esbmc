@@ -14,6 +14,11 @@
 
 namespace std
 {
+// [iosfwd.syn], spelled as libstdc++ spells streamoff. streampos stays an
+// offset rather than fpos<mbstate_t>, which the model does not have.
+typedef __INT64_TYPE__ streamoff;
+typedef streamoff streampos;
+
 class ios_base;
 class ios;
 class istream;
@@ -35,6 +40,19 @@ class allocator;
 template <class CharT, class Traits>
 class basic_streambuf;
 typedef basic_streambuf<char, char_traits<char> > streambuf;
+
+/* libstdc++ declares basic_string from <iosfwd> (via <bits/stringfwd.h>), so
+ * `#include <iosfwd>` alone is enough to name std::basic_string<char> there.
+ * Rejecting that is a false PARSING ERROR on code the host toolchain accepts,
+ * so follow the implementation. Unlike basic_streambuf above, the default
+ * arguments live here rather than with the definition: naming
+ * basic_string<char> needs them, and clang rejects a second declaration that
+ * repeats them, so <string> declares its definition without. */
+template <
+  class CharT,
+  class Traits = char_traits<CharT>,
+  class Alloc = allocator<CharT> >
+class basic_string;
 
 template <
   class CharT,

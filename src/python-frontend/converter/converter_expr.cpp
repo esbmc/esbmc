@@ -569,6 +569,51 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   return std::nullopt;
 }
 
+std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  const auto it = numpy_param_shapes_.find(symbol.id.as_string());
+  if (it == numpy_param_shapes_.end())
+    return std::nullopt;
+
+  const std::vector<std::size_t> &shape = it->second;
+
+  if (attr_name == "shape")
+  {
+    std::vector<exprt> dim_exprs;
+    dim_exprs.reserve(shape.size());
+    for (std::size_t dim : shape)
+      dim_exprs.push_back(from_integer(dim, int_type()));
+    return build_shape_tuple_expr(*this, dim_exprs);
+  }
+  if (attr_name == "ndim")
+    return from_integer(shape.size(), int_type());
+  if (attr_name == "size")
+  {
+    std::size_t total = 1;
+    for (std::size_t dim : shape)
+      total *= dim;
+    return from_integer(total, int_type());
+  }
+  return std::nullopt;
+}
+
+// Tries both tracked-shape sources for a `.shape`/`.ndim`/`.size` attribute
+// access: a pointer-view symbol, then a numpy array parameter. One combined
+// check so get_expr's own Attribute dispatch needs a single `if` for both,
+// instead of growing its own decision count by one per source.
+std::optional<exprt> python_converter::try_get_numpy_shape_attr(
+  const symbolt &symbol,
+  const std::string &attr_name)
+{
+  if (
+    std::optional<exprt> view_attr =
+      try_get_numpy_pointer_view_shape_attr(symbol, attr_name))
+    return view_attr;
+  return try_get_numpy_param_shape_attr(symbol, attr_name);
+}
+
 std::optional<exprt> python_converter::resolve_subscript_base(
   const nlohmann::json &element,
   exprt &array)
@@ -1670,7 +1715,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           // modelled, and two same-named classes in different modules compare
           // equal. This is reached only after symbol lookup fails, so a name
           // rebound to a value still resolves to that value.
-          if (is_class(var_name, *ast_json))
+          // A builtin exception is a class too, but it is declared by the
+          // exceptions model rather than by this AST, so is_class does not
+          // see it (esbmc/esbmc#7549).
+          if (
+            is_class(var_name, *ast_json) ||
+            type_utils::is_python_exceptions(var_name))
           {
             typet str_type =
               type_handler_.build_array(char_type(), var_name.size() + 1);
@@ -1735,10 +1785,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       const std::string &attr_name = element["attr"].get<std::string>();
 
       if (
-        std::optional<exprt> view_attr =
-          try_get_numpy_pointer_view_shape_attr(*symbol, attr_name))
+        std::optional<exprt> shape_attr =
+          try_get_numpy_shape_attr(*symbol, attr_name))
       {
-        expr = *view_attr;
+        expr = *shape_attr;
         break;
       }
 

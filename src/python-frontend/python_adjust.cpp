@@ -1204,7 +1204,7 @@ void python_adjust::adjust_type(type2tc &type)
     // and without it add_padding aligns an existing pad member as if it were
     // a regular field (padding.cpp:262 vs :276), double-padding the struct.
     // Re-derive it from the four reserved pad-member names add_padding
-    // assigns: they all contain `$`, which cannot appear in a Python
+    // assigns: they all contain `#`, which cannot appear in a Python
     // identifier, so only add_padding's own members match. (The #bitfield/
     // #extint type flags are likewise dropped by the round-trip, but the
     // Python frontend never emits either, so only #is_padding needs

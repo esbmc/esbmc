@@ -3,4 +3,4 @@ main.cpp
 --mix-cpp-host-headers
 REQUIRES host_cxx_headers
 ^ERROR: PARSING ERROR$
-no member named '__bit_width'
+include/c\+\+/

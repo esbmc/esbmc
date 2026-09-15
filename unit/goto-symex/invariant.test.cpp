@@ -22,8 +22,8 @@
 #  include <unistd.h>
 #endif
 
-#include <goto-symex/reachability_tree.h>
-#include <goto-symex/renaming.h>
+#include <goto-symex/scheduler/reachability_tree.h>
+#include <goto-symex/state/renaming.h>
 #include <irep2/irep2_expr.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/namespace.h>

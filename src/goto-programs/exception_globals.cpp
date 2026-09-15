@@ -66,6 +66,7 @@ void create_exception_state_symbols(contextt &context)
   add_global(
     context, exception_globals::value_id, pointer_typet(empty_typet()));
   add_global(context, exception_globals::uncaught_count_id, size_type());
+  add_global(context, exception_globals::site_id, size_type());
   add_global(context, exception_globals::terminate_reason_id, size_type());
 
   code_typet void_fn;

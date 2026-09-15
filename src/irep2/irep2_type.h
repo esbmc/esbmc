@@ -394,15 +394,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** How the source spelled a pointer. The irept form keeps this in the
+ *  `#reference` / `#rvalue_reference` attributes, which have no equivalent
+ *  here, so a round trip used to erase it. */
+enum class pointer_ref_kindt
+{
+  NONE,
+  LVALUE,
+  RVALUE
+};
+
 /** Pointer type.
- *  Simply has a subtype, of what it points to. No other attributes.
+ *  Simply has a subtype, of what it points to, and how the source spelled it.
  */
 class pointer_type2t : public type2t
 {
 public:
   /** Primary constructor. @param subtype Subtype of this pointer */
-  pointer_type2t(const type2tc &st, const bool &p = false)
-    : type2t(pointer_id), subtype(st), carry_provenance(p)
+  pointer_type2t(
+    const type2tc &st,
+    const bool &p = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : type2t(pointer_id), subtype(st), carry_provenance(p), ref_kind(rk)
   {
   }
   pointer_type2t(const pointer_type2t &ref) = default;
@@ -410,10 +423,12 @@ public:
 
   type2tc subtype;
   bool carry_provenance;
+  pointer_ref_kindt ref_kind;
 
   static constexpr auto fields = std::make_tuple(
     &pointer_type2t::subtype,
-    &pointer_type2t::carry_provenance);
+    &pointer_type2t::carry_provenance,
+    &pointer_type2t::ref_kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
