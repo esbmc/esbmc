@@ -172,11 +172,17 @@ expr2tc jimple_assignment::to_code2t(
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
   auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
 
-  if (
-    (dyn_expr && !dyn_expr->is_nondet_call() &&
-     !dyn_expr->is_intrinsic_method) ||
-    (dyn2_expr && !dyn2_expr->is_nondet_call()))
+  // jimple_virtual_invoke has no native arm yet, so it stays on the migrating
+  // default; jimple_expr_invoke builds the call itself once told where to put
+  // the result.
+  if (dyn2_expr && !dyn2_expr->is_nondet_call())
     return jimple_method_field::to_code2t(ctx, class_name, function_name, loc);
+
+  if (dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
+  {
+    dyn_expr->set_lhs2(lhs->to_expr2t(ctx, class_name, function_name));
+    return rhs->to_expr2t(ctx, class_name, function_name);
+  }
 
   expr2tc target = lhs->to_expr2t(ctx, class_name, function_name);
   expr2tc source = rhs->to_expr2t(ctx, class_name, function_name);

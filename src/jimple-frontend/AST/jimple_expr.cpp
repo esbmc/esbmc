@@ -375,13 +375,124 @@ expr2tc jimple_expr_invoke::to_expr2t(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  // valueOf(n) is the identity on its argument. This is the only arm reachable
-  // here: jimple_assignment routes an invoke right-hand side to the migrating
-  // default unless it is nondet or intrinsic, and valueOf_1 is the intrinsic.
+  if (base_class == "java.lang.Runtime")
+    return code_skip2tc(get_empty_type());
+
+  // TODO: Move intrinsics to backend
+  // valueOf(n) is the identity on its argument.
   if (base_class == "java.lang.Integer" && method == "valueOf_1")
     return parameters[0]->to_expr2t(ctx, class_name, function_name);
 
-  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+  if (is_nondet_call())
+    return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
+
+  const std::string callee = base_class + ":" + method;
+  const symbolt *symbol = ctx.find_symbol(callee);
+  if (!symbol)
+  {
+    log_error("Could not find symbol {}", callee);
+    abort();
+  }
+
+  // The legacy arm returns a block of the parameter assignments followed by the
+  // call, and the assignments are its own note's "hack, manually adding
+  // parameters, this should be done at symex".
+  std::vector<expr2tc> ops;
+  std::vector<expr2tc> args;
+  args.reserve(parameters.size());
+  for (std::size_t i = 0; i < parameters.size(); i++)
+  {
+    expr2tc arg = parameters[i]->to_expr2t(ctx, class_name, function_name);
+    args.push_back(arg);
+
+    const std::string param =
+      get_symbol_name(base_class, method, "@parameter" + std::to_string(i));
+    ops.push_back(code_assign2tc(symbol_expr2tc(*ctx.find_symbol(param)), arg));
+  }
+
+  ops.push_back(code_function_call2tc(lhs2, symbol_expr2tc(*symbol), args));
+  const locationt &nil = static_cast<const locationt &>(get_nil_irep());
+  return code_block2tc(ops, nil, nil);
+}
+
+// Restored: PR #7844 measured this arm unreached over the 27 jimple tests and
+// deleted it, but jimple_assignment's virtual-invoke branch still delegates to
+// the migrating default, which reaches it. Nothing in the corpus builds that
+// shape, so the deletion was invisible and the branch silently produced a skip
+// (docs/roadmap/scope-jimple-irep2.md §43).
+exprt jimple_virtual_invoke::to_exprt(
+  contextt &ctx,
+  const std::string &class_name,
+  const std::string &function_name) const
+{
+  // TODO: Move intrinsics to backend
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  // TODO: Move intrinsics to backend
+  if (base_class == "java.lang.Runtime")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  // TODO: Move intrinsics to backend
+  if (base_class == "java.lang.Class")
+  {
+    code_skipt skip;
+    return skip;
+  }
+
+  if (is_nondet_call())
+  {
+    jimple_nondet nondet(method);
+    return nondet.to_exprt(ctx, class_name, function_name);
+  }
+
+  code_blockt block;
+  code_function_callt call;
+
+  std::ostringstream oss;
+  oss << base_class << ":" << method;
+
+  auto symbol = ctx.find_symbol(oss.str());
+  call.function() = symbol_expr(*symbol);
+  if (!lhs.is_nil())
+  {
+    call.lhs() = lhs;
+  }
+
+  if (variable != "")
+  {
+    // Let's add @THIS
+    auto this_expression =
+      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
+    call.arguments().push_back(this_expression);
+    auto temp = get_symbol_name(base_class, method, "@this");
+    symbolt &added_symbol = *ctx.find_symbol(temp);
+    code_assignt assign(symbol_expr(added_symbol), this_expression);
+    block.operands().push_back(assign);
+  }
+
+  for (long unsigned int i = 0; i < parameters.size(); i++)
+  {
+    // Just adding the arguments should be enough to set the parameters
+    auto parameter_expr =
+      parameters[i]->to_exprt(ctx, class_name, function_name);
+    call.arguments().push_back(parameter_expr);
+    // Hack, manually adding parameters, this should be done at symex
+    std::ostringstream oss;
+    oss << "@parameter" << i;
+    auto temp = get_symbol_name(base_class, method, oss.str());
+    symbolt &added_symbol = *ctx.find_symbol(temp);
+    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
+    block.operands().push_back(assign);
+  }
+  block.operands().push_back(call);
+  return block;
 }
 
 void jimple_virtual_invoke::from_json(const json &j)

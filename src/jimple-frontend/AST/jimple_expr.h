@@ -267,11 +267,19 @@ public:
   std::string base_class;
   std::string method;
   exprt lhs;
+  /// The IREP2 return target, for the native arm. Parallel to `lhs` rather than
+  /// replacing it while jimple_virtual_invoke is still on the legacy path.
+  expr2tc lhs2;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 
   void set_lhs(exprt expr)
   {
     lhs = expr;
+  }
+
+  void set_lhs2(const expr2tc &expr)
+  {
+    lhs2 = expr;
   }
 
   bool is_nondet_call() const
@@ -304,6 +312,10 @@ public:
     return "Jimple Virtual Invoke";
   }
 
+  virtual exprt to_exprt(
+    contextt &ctx,
+    const std::string &class_name,
+    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,

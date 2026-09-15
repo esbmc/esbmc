@@ -1687,3 +1687,40 @@ because `jimple_expr_invoke`'s native arm cannot build the call, and the invoke'
 a legacy `exprt` set by `set_lhs`. Converting it means giving both invoke classes an IREP2
 `lhs` and a native arm that builds `code_function_call2t` -- three classes, in that
 order, and the only remaining B-1 work in this frontend that is not a one-liner.
+
+## 43. The invoke cluster, and an over-deletion §42 hid (2026-09-15)
+
+§42.1 called `jimple_symbol` and `jimple_constant` "ordinary conversions". They are not:
+both already have native `to_expr2t` arms, and their legacy arms were reached only from
+inside the two remaining legacy consumers -- `jimple_assignment::to_exprt` and
+`jimple_expr_invoke::to_exprt`. Grepping every direct `to_exprt` call confirms it: the
+only ones left on expressions are at `jimple_statement.cpp:136,142,149,152` and
+`jimple_expr.cpp:330,335,358`, all inside those two.
+
+So the three live arms were one cluster rooted at the invoke lowering.
+`jimple_expr_invoke` now builds the call natively -- a `code_block2tc` of the
+`@parameter<i>` assignments followed by `code_function_call2tc`, with an `lhs2` the
+assignment sets -- and `jimple_assignment::to_code2t` routes the non-virtual invoke there
+instead of to the migrating default. Re-probing all four remaining legacy arms over the 27
+tests gives **0 observations**: the cluster is retired.
+
+### 43.1 What that probe also exposed
+
+`jimple_virtual_invoke::to_exprt` was in the nine §42 deleted as unreached, and deleting
+it was wrong. `jimple_assignment`'s virtual-invoke branch still delegates to the migrating
+default, which reaches that arm; with the arm gone the base's `code_skipt` was returned
+instead, so **a virtual-invoke assignment silently became a skip**.
+
+Nothing in the corpus builds that shape -- which is why the deletion passed 27 of 27 and
+why the probe read zero. The arm is restored here with a comment saying so. Two things
+follow:
+
+- the probe answers "is this reached by the corpus", not "is this dead". For a deletion
+  the second question is the one that matters, and only a caller audit answers it. §42's
+  other eight deletions are safe on that stricter test -- each class has a native
+  `to_expr2t` and no remaining caller -- but that was luck rather than method;
+- `regression/jimple` has no test for an assignment whose right-hand side is a virtual
+  invoke. That gap let a silent semantic change through, and it is worth closing before
+  `jimple_virtual_invoke` is converted for real.
+
+B-1 is 115 rather than the 110 §42 reported, the difference being the restored arm.
