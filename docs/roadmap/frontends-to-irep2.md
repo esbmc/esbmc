@@ -3819,3 +3819,44 @@ script exactly: clang-cpp's three are §56.1's three (the ctor/dtor pseudo retur
 three rows.
 
 `--list` prints the sites it counted, so a disagreement is checkable rather than arguable.
+
+## 59. Phase 6's residue audited, and the third frontend to agree (2026-09-15)
+
+§58.3 trusted the three unaudited rows because the two audited ones agreed with the script.
+clang-c is now the third audited row: `scope-clang-c-irep2.md` §147 classifies each of its
+26 sites, six of which converted.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1139     1226     1191       33     20
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9809    10809    10508      264    171
+```
+
+The audit also found four measurement defects in the script. Three had the same effect
+§58.3 describes -- a converted site going on counting, four rows between them -- and the
+fourth made `--list` name a line that does not hold the write, in 10 of the 171 rows.
+`scope-clang-c-irep2.md` §147.3 has them individually. Running the corrected script over
+the pre-audit source reproduces §58.3's 26 and 177 exactly, so none of the four moves a
+baseline, and `scripts/irep2/test_bars.py` now pins all four: the bar is quoted in this
+document, so a script that over-counts silently is the one failure mode reading the table
+cannot catch.
+
+The audit's most consequential finding was not in the script or in the residue. Converting
+`declare_argc_argv` made it abort on `int main_loop(int, int)`, because both its call sites
+gate on a *prefix* of `main` and the IREP2 constructors validate where the legacy builders
+returned a nil type -- §147.5. The conversion's output was byte-identical on every `main`
+shape and still wrong, because the inputs the function receives are wider than its contract
+claimed. For the remaining 171 that is a second question to ask of each site, alongside
+§57's: not only whether it produces the same thing, but on what it runs at all.
+
+The residue itself splits the way §57 predicts and then some. Twelve of clang-c's twenty
+are converter-time writes handing on what a legacy builder produced, six are
+read-modify-write inside the legacy adjuster and go when it does, and two are §57.1's
+question in Phase 6's dialect: an incompleteness flag and a padding algorithm, neither of
+which `type2t` has a place for. So in the row audited here, the part that needs a
+decision rather than a conversion is 2 of 20 -- smaller again than §58.2 suggested, though
+the proportion does not carry over: clang-cpp's three are all §56.1's design questions.

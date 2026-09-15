@@ -1639,9 +1639,9 @@ void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
   sym.id = id;
   sym.name = get_pretty_name(id2string(id));
   sym.location = loc;
-  // The IREP2 form is in hand, so store it: symbolt derives the legacy type
-  // with the same migrate_type_back on the first read, and storing that instead
-  // would make get_type2() migrate it straight back again.
+  // The callee's type is already IREP2 here, so store it: the back-migration
+  // this replaced discarded it and the lazy legacy derivation reproduces the
+  // same typet on demand (docs/roadmap/scope-clang-c-irep2.md §147).
   sym.set_type(callee->type);
   sym.mode = "C";
   context.add(sym);
