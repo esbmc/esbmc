@@ -1805,6 +1805,19 @@ static bool json_literal_contains_boolean(const nlohmann::json &node)
   return false;
 }
 
+// `.shape[i]` indexes the plain int tuple `.shape` returns, never the
+// array's own data -- it must never be tracked as a numpy view/alias
+// (root_name_from_subscript drills through any Attribute to its base Name,
+// so without this guard `shape_0 = a.shape[0]` registers shape_0 as a view
+// copy of `a` itself). Split out of is_basic_numpy_view_subscript to keep
+// that function's own decision count down.
+static bool is_shape_attribute_value(const nlohmann::json &subscript_value)
+{
+  return subscript_value.is_object() &&
+         subscript_value.value("_type", "") == "Attribute" &&
+         subscript_value.value("attr", "") == "shape";
+}
+
 bool python_converter::is_basic_numpy_view_subscript(
   const nlohmann::json &node) const
 {
@@ -1852,6 +1865,14 @@ bool python_converter::is_basic_numpy_view_subscript(
   }
 
   return is_basic_index(slice);
+}
+
+bool python_converter::is_tracked_numpy_view_subscript(
+  const nlohmann::json &node) const
+{
+  return node.is_object() && node.contains("value") &&
+         !is_shape_attribute_value(node["value"]) &&
+         is_basic_numpy_view_subscript(node);
 }
 
 bool python_converter::is_numpy_array_constructor_expr(
@@ -2058,7 +2079,7 @@ bool python_converter::is_numpy_view_copy_expr(const nlohmann::json &node) const
   if (!node.is_object())
     return false;
 
-  if (is_basic_numpy_view_subscript(node))
+  if (is_tracked_numpy_view_subscript(node))
     return true;
 
   if (
@@ -2082,7 +2103,7 @@ std::string python_converter::root_name_from_numpy_view_copy_expr(
   if (!node.is_object())
     return "";
 
-  if (is_basic_numpy_view_subscript(node))
+  if (is_tracked_numpy_view_subscript(node))
     return root_name_from_subscript(node["value"]);
 
   if (
@@ -2116,7 +2137,7 @@ bool python_converter::is_tracked_numpy_view_name_node(
 bool python_converter::is_basic_numpy_view_subscript_escape(
   const nlohmann::json &node)
 {
-  if (!is_basic_numpy_view_subscript(node))
+  if (!is_tracked_numpy_view_subscript(node))
     return false;
 
   const std::string root_name = root_name_from_subscript(node["value"]);
@@ -2445,6 +2466,14 @@ std::optional<std::vector<std::size_t>>
 python_converter::get_numpy_nditer_logical_shape(
   const std::string &root_id) const
 {
+  // A 2-D+ numpy array parameter: its own symbol type lost the outer
+  // dimension to the C-ABI row-pointer decay (register_function_argument),
+  // so the full shape must come from here rather than the fallback below,
+  // which would otherwise read the decayed (1-D) type instead.
+  if (auto param_it = numpy_param_shapes_.find(root_id);
+      param_it != numpy_param_shapes_.end())
+    return param_it->second;
+
   if (auto pointer_it = numpy_pointer_view_info_.find(root_id);
       pointer_it != numpy_pointer_view_info_.end())
     return std::vector<std::size_t>{pointer_it->second.length};
