@@ -235,6 +235,8 @@ symbolt python_lambda::create_symbol(
   symbolt symbol;
   symbol.id = id;
   symbol.name = name;
+  // Left legacy: migrate_type drops #cpp_type, and the python type checker
+  // reads it -- a bool default otherwise lowers as double (#4715).
   symbol.set_type(type);
   symbol.location = location;
   symbol.mode = "Python";
