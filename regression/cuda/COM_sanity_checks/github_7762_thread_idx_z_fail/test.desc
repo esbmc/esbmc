@@ -1,0 +1,5 @@
+CORE
+main.cu
+--unwind 10 --force-malloc-success --context-bound 2
+^VERIFICATION FAILED$
+^  assertion dev_a\[1\] == 2$
