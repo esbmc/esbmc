@@ -108,14 +108,18 @@ public:
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
     const irep_idt &_name,
-    bool _packed = false)
+    bool _packed = false,
+    const std::vector<irep_idt> &memb_base_names = {})
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
       member_pretty_names(memb_pretty_names),
+      member_base_names(memb_base_names),
       name(_name),
       packed(_packed)
   {
+    assert(
+      memb_base_names.empty() || memb_base_names.size() == _members.size());
   }
   struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const;
@@ -123,6 +127,12 @@ public:
   std::vector<type2tc> members;
   std::vector<irep_idt> member_names;
   std::vector<irep_idt> member_pretty_names;
+  /// The components' plain `base_name`s -- a different field from the
+  /// `#base_name` that code_type2t::argument_base_names carries. Unreflected: a
+  /// member's spelling is no part of the struct's identity, so two otherwise
+  /// identical structs must still compare equal
+  /// (docs/roadmap/frontends-to-irep2.md §46).
+  std::vector<irep_idt> member_base_names;
   irep_idt name;
   bool packed;
 
@@ -132,6 +142,8 @@ public:
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(std::vector<irep_idt>);
   static std::string field_names[esbmct::num_type_fields];
 };
 

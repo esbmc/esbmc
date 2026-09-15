@@ -143,22 +143,21 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
 // compare equal. Both halves are asserted, because a consumer reads the base
 // name back: clang_cpp_convert_vft.cpp's thunk argument loop
 // (docs/roadmap/frontends-to-irep2.md §44).
-// The struct counterpart of the code-argument case below, and the reason a
-// struct-typed symbol cannot yet be stored IREP2-side. struct_type2t carries
-// `member_names` and `member_pretty_names` and nothing else per component, so a
-// component's `#base_name` -- and any other attribute on it -- is dropped.
-//
-// Measured consequence: converting the two vtable struct-type writes in
-// clang_cpp_convert_vft.cpp to store IREP2 fails 653 of 1058 esbmc-cpp/cpp
-// tests, because the thunk builder takes its symbol name from
-// `component.base_name()` and every vtable component arrives with an empty one
+// The struct counterpart of the code-argument case below. `member_base_names`
+// carries the components' plain `base_name` -- a different field from the
+// `#base_name` a function parameter spells -- and is likewise unreflected.
+// Without it, converting the two vtable struct-type writes in
+// clang_cpp_convert_vft.cpp failed 653 of 1058 esbmc-cpp/cpp tests: the thunk
+// builder names its symbol from `component.base_name()`
 // (docs/roadmap/frontends-to-irep2.md §45).
-TEST_CASE("a struct component loses its base name", "[migrate]")
+TEST_CASE("a struct component keeps its base name", "[migrate]")
 {
   struct_typet st;
   st.tag("S");
-  struct_typet::componentt c("S::f", "f", int_type());
-  c.cmt_base_name("f");
+  // Spell the three names differently: with `pretty_name` equal to the base
+  // name, writing one into the other's vector passes every assertion.
+  struct_typet::componentt c("S::f", "pretty_f", int_type());
+  c.set_base_name("f");
   c.set("#member_attr", "keepme");
   st.components().push_back(c);
 
@@ -168,11 +167,32 @@ TEST_CASE("a struct component loses its base name", "[migrate]")
 
   // Carried, because struct_type2t reflects both.
   REQUIRE(back.components().at(0).get_name() == irep_idt("S::f"));
-  REQUIRE(back.components().at(0).pretty_name() == irep_idt("f"));
+  REQUIRE(back.components().at(0).pretty_name() == irep_idt("pretty_f"));
 
-  // Not carried: nothing holds them.
-  REQUIRE(back.components().at(0).cmt_base_name().empty());
+  // Carried by the unreflected member_base_names (§45).
+  REQUIRE(back.components().at(0).get_base_name() == irep_idt("f"));
+
+  // Unreflected, so a member's spelling is not part of the struct's identity:
+  // two structs differing only there are the same type.
+  struct_typet other = st;
+  other.components().at(0).set_base_name("g");
+  REQUIRE(migrate_type(other) == migrate_type(st));
+
+  // An arbitrary component attribute is still dropped; only the base name has a
+  // field. Recorded rather than fixed -- no consumer reads one back.
   REQUIRE(back.components().at(0).get("#member_attr").empty());
+
+  // A component that had no base name must not gain an empty one. `base_name`
+  // is not a comment field, so an inserted empty key would take part in
+  // irept::operator== and the round trip would stop being the identity.
+  struct_typet plain;
+  plain.tag("P");
+  plain.components().push_back(
+    struct_typet::componentt("P::g", "pretty_g", int_type()));
+  const typet plain_back = migrate_type_back(migrate_type(plain));
+  REQUIRE(
+    to_struct_type(plain_back).components().at(0).find("base_name").is_nil());
+  REQUIRE(plain_back == plain);
 }
 
 TEST_CASE("a code argument keeps its identifier and its base name", "[migrate]")

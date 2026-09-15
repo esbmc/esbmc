@@ -2781,3 +2781,107 @@ used, `union_type2t` shares its data base, and the field has to thread through
 `fields_cover_class` -- so it wants its own PR and its own gate rather than riding
 this one. With it, `pad_type_symbol`, the two vtable struct types, and
 `scope-jimple-irep2.md` §32.5's two completion sites all become tractable.
+
+## 46. `member_base_names` landed -- and §45 named the wrong field (2026-09-14)
+
+§45.3's field exists: `struct_type2t::member_base_names`, populated by `migrate_type`'s
+struct arm and written back by `migrate_type_back`'s, and left out of `fields` so a
+member's spelling is no part of the struct's identity. `union_type2t` needed no
+change -- it is a sibling of `struct_type2t`, not a subclass, and no union component
+in the tree carries a base name. `fields_cover_class` is satisfied by
+`excluded_field_bytes = sizeof(std::vector<irep_idt>)`, the field placed next to
+`member_pretty_names` so it packs against a same-size neighbour rather than into
+padding.
+
+### 46.1 The field §45 named does not exist on a component
+
+§45 says the dropped attribute is `#base_name`. It is not. Two different fields
+share one accessor name:
+
+| class | accessor | reads |
+|---|---|---|
+| `struct_union_typet::componentt` | `get_base_name()` | `base_name` (`std_types.h:121`) |
+| `code_typet::argumentt` | `get_base_name()` | `#base_name` (`std_types.h:337`) |
+
+The vtable writer and the thunk builder both use the plain one --
+`vt_entry.set("base_name", comp.base_name())` and
+`thunk_func_symb.name = component.base_name()`
+(`clang_cpp_convert_vft.cpp:311,375`) -- and every `cmt_base_name` writer in the
+tree is on a function parameter, never on a struct component. So
+`member_base_names` carries `base_name`, and §44's `argument_base_names` carries
+`#base_name`; they are not the same field under two names.
+
+This is the second consecutive section whose first diagnosis came from an
+accessor's name rather than its body (§44.3 was the first). Read the accessor.
+
+### 46.2 What it does not unblock, measured
+
+The two vtable struct-type writes still cannot flip, and the base name was not the
+only reason. The same builder puts `virtual_name`, `access`, `is_rtti_name` and
+`is_vtptr` on components, and reads three of them back: `virtual_name` at
+`clang_cpp_convert_vft.cpp:737` (the override switch map),
+`clang_cpp_destructor_call.cpp:35` (matching a destructor entry) and
+`is_rtti_name`/`is_vtptr` in the value builder and the destructor walk. None has a
+field on `struct_type2t`.
+
+So the base name is one of a family. Censusing what the five frontends write on a
+component,
+
+```sh
+grep -rnoE '(component|comp|vt_entry|new_compo|base_comp|c)\.(set|set_)[a-z_]*\("[^"]+"' \
+  src/clang-cpp-frontend src/clang-c-frontend src/solidity-frontend \
+  src/python-frontend src/jimple-frontend | grep -oE '"[^"]+"' | sort | uniq -c
+```
+
+gives thirteen attributes beyond `name` and `pretty_name`: `access`, `base_name`,
+`from_base`, `internal`, `is_base_subobject`, `is_pure_virtual`, `is_rtti_name`,
+`is_virtual`, `is_vtptr`, `virtual_name`, `#base_owner`, `#is_sol_virtual` and
+`#is_sol_override`. Nine of them, `base_name` included, have a reader somewhere in
+the tree; only `from_base`, `internal` and the two `#is_sol_*` have none.
+
+That changes what the next slice should be. Adding a vector per attribute does not
+scale past the second one, and each addition costs another `excluded_field_bytes`
+adjustment. The alternative is one unreflected carrier holding each component's
+leftover `irept` -- everything the reflected fields do not already describe -- which
+`migrate_type_back` uses as the component's starting value before overwriting
+`type`, `name` and `pretty_name`. That closes the whole family at once, including
+the `#member_attr` the unit test still records as dropped, and is what the vtable
+types and `scope-jimple-irep2.md` §32.5 need. It wants its own measurement: the cost
+is an `irept` per component on every struct type in the program.
+
+It would not reach `pad_type_symbol`, and §45.3 was wrong to list it. What blocks
+that one is `#bitfield` and `#extint`, which sit on the member's *type*, not on the
+component: `migrate_type_back` rebuilds an `unsignedbv_typet(width)` bare, so a
+round-tripped bit-field pad changes arm in `add_padding` (`padding.cpp:193` ->
+`:218` -> `:225`). A per-component carrier cannot see them.
+
+### 46.3 A note for whoever writes that slice
+
+`migrate_type_back_uncached` reached 15 on the complexity gate's `core > 15`
+threshold with this section's single `if` added, so the next per-component field
+would have blocked the gate. The struct and union back arms were copies of one
+component loop differing only in that line; they are now one
+`migrate_components_back` helper, which takes the function back under the ceiling.
+Extend the helper, not the arms.
+
+Two more things that slice has to get right, both found by review of this one.
+
+`base_name` is not a comment field: no leading `#`, so `irept::is_comment` routes
+it to `named_sub`, which `irept::operator==` compares. Writing it unconditionally
+would insert an empty key on every C struct component and stop the round trip being
+the identity on the legacy side. The carrier must write only what it has --
+`migrate_components_back` now guards on `!empty()`, and the unit test pins a
+component that had no base name gaining none.
+
+The round trip is **not length-preserving** on an unreflected member vector: zero
+entries in, `members.size()` entries out. That is safe only while the field is
+unreflected. `migrate_symbol_type`'s round-trip assertion (`migrate.cpp:475`)
+compares with `==`, so today it cannot see the asymmetry; reflect the carrier and it
+fires on every struct symbol in every DebugOpt build.
+
+Finally, a test note. The first cut of this section's unit test gave the component
+the same spelling for `pretty_name` and `base_name`, and two mutants that write one
+vector into the other's slot survived the whole 50-case suite -- the three vectors
+are pushed on consecutive lines and passed to the helper in a row, so crossing them
+is the likely edit. Spell every name differently in a test over per-component
+metadata.
