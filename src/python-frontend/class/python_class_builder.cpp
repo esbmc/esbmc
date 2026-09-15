@@ -312,7 +312,7 @@ void python_class_builder::gen_ctor(bool has_ud_base, struct_typet &st)
 
   symbolt ctor = conv_.create_symbol(
     mod, conv_.current_class_name_, sid.to_string(), loc, f);
-  ctor.set_value(body);
+  ctor.set_value(migrate_expr(body));
   ctor.lvalue = true;
 
   conv_.symbol_table_.add(ctor);

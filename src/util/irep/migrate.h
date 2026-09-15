@@ -19,6 +19,16 @@ extern thread_local const namespacet *migrate_namespace_lookup;
 type2tc migrate_type(const typet &type);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
 
+/// Returning form, for call sites that want an expression rather than an
+/// out-parameter -- `symbol.set_value(migrate_expr(v))` instead of two
+/// statements and a named temporary.
+inline expr2tc migrate_expr(const exprt &expr)
+{
+  expr2tc out;
+  migrate_expr(expr, out);
+  return out;
+}
+
 // IREP2 form of a symbol's type. Named chokepoint for symbol type reads in
 // the migration layer (esbmc/esbmc#4715, B2): returns `sym.get_type2()` which
 // is the IREP2 source of truth after the B2 storage flip. In debug builds it
