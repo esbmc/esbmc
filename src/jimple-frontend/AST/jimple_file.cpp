@@ -138,7 +138,6 @@ exprt jimple_file::to_exprt(contextt &ctx) const
   symbolt *added_symbol = ctx.find_symbol(symbol_name);
 
   // Add class/interface members
-  auto total_size = 0;
   for (auto const &field : body)
   {
     if (std::dynamic_pointer_cast<jimple_class_field>(field))
@@ -148,15 +147,15 @@ exprt jimple_file::to_exprt(contextt &ctx) const
       tmp = field->to_exprt(ctx, name, name);
       comp.swap(tmp);
       t.components().push_back(comp);
-      total_size += std::stoi(comp.type().width().as_string());
     }
   }
 
   // Here is where we add the inherited fields
 
-  // Finally, the structure is ready. Lets add it
-  t.set("width", total_size);
-  added_symbol->set_type(t);
+  // Finally, the structure is ready. Lets add it. struct_type2t derives its
+  // width from the members, so the legacy `width` attribute the symbol used to
+  // carry had no reader left once both newarray arms stopped reading it.
+  added_symbol->set_type(migrate_type(t));
 
   // Add the methods and definitions
   for (auto const &field : body)
