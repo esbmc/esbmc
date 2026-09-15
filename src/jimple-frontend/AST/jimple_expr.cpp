@@ -288,7 +288,7 @@ void jimple_new::from_json(const json &j)
 
 void jimple_expr_invoke::from_json(const json &j)
 {
-  lhs = nil_exprt();
+  lhs = expr2tc();
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
   for (auto x : j.at("parameters"))
@@ -303,6 +303,68 @@ void jimple_expr_invoke::from_json(const json &j)
     log_debug("jimple", "Got an intrinsic call to valueOf int");
     is_intrinsic_method = true;
   }
+}
+
+// The legacy arms built their statements without a location, and migrate_expr
+// read that absent `#location` through the const accessor, i.e. as nil -- which
+// goto_programt prints as "no location", where a default-constructed locationt
+// is empty-but-not-nil and prints blank. goto_convert_functions'
+// emitted_location documents the same distinction from the other side.
+static locationt no_location()
+{
+  locationt l;
+  l.make_nil();
+  return l;
+}
+
+static expr2tc skip2t_without_location()
+{
+  return code_skip2tc(get_empty_type(), no_location());
+}
+
+expr2tc jimple_expr::lower_invoke2t(
+  contextt &ctx,
+  const std::string &base_class,
+  const std::string &method,
+  const std::string &this_variable,
+  const std::vector<std::shared_ptr<jimple_expr>> &parameters,
+  const expr2tc &lhs,
+  const std::string &class_name,
+  const std::string &function_name)
+{
+  const std::string callee_id = base_class + ":" + method;
+  const symbolt *callee = ctx.find_symbol(callee_id);
+  if (callee == nullptr)
+  {
+    log_error("Could not find symbol {}", callee_id);
+    abort();
+  }
+
+  const locationt none = no_location();
+
+  std::vector<expr2tc> stmts;
+  std::vector<expr2tc> args;
+
+  auto bind = [&](const std::string &bound_name, const expr2tc &value) {
+    args.push_back(value);
+    const symbolt &bound =
+      *ctx.find_symbol(get_symbol_name(base_class, method, bound_name));
+    stmts.push_back(code_assign2tc(symbol_expr2tc(bound), value, none));
+  };
+
+  if (!this_variable.empty())
+    bind(
+      "@this",
+      jimple_symbol(this_variable).to_expr2t(ctx, class_name, function_name));
+
+  for (std::size_t i = 0; i < parameters.size(); i++)
+    bind(
+      "@parameter" + std::to_string(i),
+      parameters[i]->to_expr2t(ctx, class_name, function_name));
+
+  stmts.push_back(
+    code_function_call2tc(lhs, symbol_expr2tc(*callee), args, none));
+  return code_block2tc(stmts, none, none);
 }
 
 exprt jimple_expr_invoke::to_exprt(
@@ -348,8 +410,8 @@ exprt jimple_expr_invoke::to_exprt(
     abort();
   }
   call.function() = symbol_expr(*symbol);
-  if (!lhs.is_nil())
-    call.lhs() = lhs;
+  if (!is_nil_expr(lhs))
+    call.lhs() = migrate_expr_back(lhs);
 
   for (long unsigned int i = 0; i < parameters.size(); i++)
   {
@@ -375,8 +437,10 @@ expr2tc jimple_expr_invoke::to_expr2t(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-    return code_skip2tc(get_empty_type());
+  if (
+    base_class == "kotlin.jvm.internal.Intrinsics" ||
+    base_class == "java.lang.Runtime")
+    return skip2t_without_location();
 
   // TODO: Move intrinsics to backend
   // valueOf(n) is the identity on its argument.
@@ -386,118 +450,13 @@ expr2tc jimple_expr_invoke::to_expr2t(
   if (is_nondet_call())
     return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
 
-  const std::string callee = base_class + ":" + method;
-  const symbolt *symbol = ctx.find_symbol(callee);
-  if (!symbol)
-  {
-    log_error("Could not find symbol {}", callee);
-    abort();
-  }
-
-  // The legacy arm returns a block of the parameter assignments followed by the
-  // call, and the assignments are its own note's "hack, manually adding
-  // parameters, this should be done at symex".
-  std::vector<expr2tc> ops;
-  std::vector<expr2tc> args;
-  args.reserve(parameters.size());
-  for (std::size_t i = 0; i < parameters.size(); i++)
-  {
-    expr2tc arg = parameters[i]->to_expr2t(ctx, class_name, function_name);
-    args.push_back(arg);
-
-    const std::string param =
-      get_symbol_name(base_class, method, "@parameter" + std::to_string(i));
-    ops.push_back(code_assign2tc(symbol_expr2tc(*ctx.find_symbol(param)), arg));
-  }
-
-  ops.push_back(code_function_call2tc(lhs2, symbol_expr2tc(*symbol), args));
-  const locationt &nil = static_cast<const locationt &>(get_nil_irep());
-  return code_block2tc(ops, nil, nil);
-}
-
-// Restored: PR #7844 measured this arm unreached over the 27 jimple tests and
-// deleted it, but jimple_assignment's virtual-invoke branch still delegates to
-// the migrating default, which reaches it. Nothing in the corpus builds that
-// shape, so the deletion was invisible and the branch silently produced a skip
-// (docs/roadmap/scope-jimple-irep2.md §43).
-exprt jimple_virtual_invoke::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Move intrinsics to backend
-  if (base_class == "kotlin.jvm.internal.Intrinsics")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Class")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  if (is_nondet_call())
-  {
-    jimple_nondet nondet(method);
-    return nondet.to_exprt(ctx, class_name, function_name);
-  }
-
-  code_blockt block;
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << base_class << ":" << method;
-
-  auto symbol = ctx.find_symbol(oss.str());
-  call.function() = symbol_expr(*symbol);
-  if (!lhs.is_nil())
-  {
-    call.lhs() = lhs;
-  }
-
-  if (variable != "")
-  {
-    // Let's add @THIS
-    auto this_expression =
-      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(this_expression);
-    auto temp = get_symbol_name(base_class, method, "@this");
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), this_expression);
-    block.operands().push_back(assign);
-  }
-
-  for (long unsigned int i = 0; i < parameters.size(); i++)
-  {
-    // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr =
-      parameters[i]->to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters, this should be done at symex
-    std::ostringstream oss;
-    oss << "@parameter" << i;
-    auto temp = get_symbol_name(base_class, method, oss.str());
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
-    block.operands().push_back(assign);
-  }
-  block.operands().push_back(call);
-  return block;
+  return lower_invoke2t(
+    ctx, base_class, method, "", parameters, lhs, class_name, function_name);
 }
 
 void jimple_virtual_invoke::from_json(const json &j)
 {
-  lhs = nil_exprt();
+  lhs = expr2tc();
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
   j.at("name").get_to(variable);
@@ -513,13 +472,24 @@ expr2tc jimple_virtual_invoke::to_expr2t(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  // The only arm reachable here: jimple_assignment sends an invoke right-hand
-  // side to the migrating default unless it is nondet. The three skip arms and
-  // the main path all produce statements, so they belong there in any case.
+  // TODO: Move intrinsics to backend
+  if (
+    base_class == "kotlin.jvm.internal.Intrinsics" ||
+    base_class == "java.lang.Runtime" || base_class == "java.lang.Class")
+    return skip2t_without_location();
+
   if (is_nondet_call())
     return jimple_nondet(method).to_expr2t(ctx, class_name, function_name);
 
-  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+  return lower_invoke2t(
+    ctx,
+    base_class,
+    method,
+    variable,
+    parameters,
+    lhs,
+    class_name,
+    function_name);
 }
 
 expr2tc jimple_newarray::to_expr2t(
@@ -527,15 +497,15 @@ expr2tc jimple_newarray::to_expr2t(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  typet base_type = type->to_typet(ctx);
+  const type2tc base_type = type->to_type2t(ctx);
 
   // to_exprt's temp symbol only ever becomes the lhs of a call it then
   // discards, but it is still entered into the context; keep that side effect.
-  symbolt tmp_symbol = get_temp_symbol(
-    pointer_type2tc(migrate_type(base_type)), class_name, function_name);
+  symbolt tmp_symbol =
+    get_temp_symbol(pointer_type2tc(base_type), class_name, function_name);
   ctx.move_symbol_to_context(tmp_symbol);
 
-  const type2tc uint2 = migrate_type(uint_type());
+  const type2tc uint2 = uint_type2();
 
   expr2tc alloc_size = size->to_expr2t(ctx, class_name, function_name);
   if (is_nil_expr(alloc_size))
@@ -544,18 +514,19 @@ expr2tc jimple_newarray::to_expr2t(
   symbolt alloca = get_allocation_function();
   symbolt &alloca_symbol = *ctx.move_symbol_to_context(alloca);
 
-  int type_width = 64;
-  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
-    type_width = std::stoi(
-      (base_type.is_pointer() ? base_type.subtype().width() : base_type.width())
-        .as_string());
+  // A row of a multi-dimensional array is a pointer. Keep the literal 64 the
+  // legacy arm used rather than the pointer type's own width, which would
+  // change the allocation on a 32-bit target.
+  const type2tc &element =
+    is_pointer_type(base_type) ? to_pointer_type(base_type).subtype : base_type;
+  unsigned int type_width =
+    is_pointer_type(element) ? 64 : element->get_width();
 
   expr2tc bytes =
     mul2tc(uint2, alloc_size, constant_int2tc(uint2, BigInt(type_width)));
 
   return side_effect_function_call2tc(
-    migrate_type(
-      static_cast<const typet &>(alloca_symbol.get_type().return_type())),
+    to_code_type(alloca_symbol.get_type2()).ret_type,
     symbol_expr2tc(alloca_symbol),
     {bytes});
 }

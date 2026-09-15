@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^VERIFICATION FAILED$
+^  assertion std::min\(0\.5, 2\.0\) == 0$
