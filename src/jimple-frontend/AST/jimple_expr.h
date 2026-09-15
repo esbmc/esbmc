@@ -57,6 +57,25 @@ public:
    * @return std::shared_ptr<jimple_expr>
    */
   static std::shared_ptr<jimple_expr> get_expression(const json &j);
+
+protected:
+  /**
+   * @brief Lower an invoke to the block both invoke forms produce.
+   *
+   * One assignment per bound argument into the callee's own @this/@parameterN
+   * symbol -- the frontend's stand-in for the parameter binding that belongs at
+   * symex -- followed by the call. @p this_variable is empty for a static
+   * invoke, and @p lhs is nil when the result is discarded.
+   */
+  static expr2tc lower_invoke2t(
+    contextt &ctx,
+    const std::string &base_class,
+    const std::string &method,
+    const std::string &this_variable,
+    const std::vector<std::shared_ptr<jimple_expr>> &parameters,
+    const expr2tc &lhs,
+    const std::string &class_name,
+    const std::string &function_name);
 };
 
 /**
@@ -266,20 +285,12 @@ public:
 
   std::string base_class;
   std::string method;
-  exprt lhs;
-  /// The IREP2 return target, for the native arm. Parallel to `lhs` rather than
-  /// replacing it while jimple_virtual_invoke is still on the legacy path.
-  expr2tc lhs2;
+  expr2tc lhs;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 
-  void set_lhs(exprt expr)
+  void set_lhs(const expr2tc &expr)
   {
     lhs = expr;
-  }
-
-  void set_lhs2(const expr2tc &expr)
-  {
-    lhs2 = expr;
   }
 
   bool is_nondet_call() const
@@ -312,10 +323,6 @@ public:
     return "Jimple Virtual Invoke";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -324,20 +331,13 @@ public:
 
   std::string base_class;
   std::string method;
-  exprt lhs;
-  /// The IREP2 return target, as in jimple_expr_invoke.
-  expr2tc lhs2;
+  expr2tc lhs;
   std::string variable;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 
-  void set_lhs(exprt expr)
+  void set_lhs(const expr2tc &expr)
   {
     lhs = expr;
-  }
-
-  void set_lhs2(const expr2tc &expr)
-  {
-    lhs2 = expr;
   }
 
   bool is_nondet_call() const

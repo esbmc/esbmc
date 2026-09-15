@@ -146,7 +146,6 @@ exprt jimple_assignment::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  fprintf(stderr, "PROBE3 jimple_assignment\n");
   //TODO: Remove this hack
   if (is_skip)
   {
@@ -159,14 +158,18 @@ exprt jimple_assignment::to_exprt(
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
   if (dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
   {
-    dyn_expr->set_lhs(lhs_handle);
+    expr2tc lhs2;
+    migrate_expr(lhs_handle, lhs2);
+    dyn_expr->set_lhs(lhs2);
     return rhs->to_exprt(ctx, class_name, function_name);
   }
 
   auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
   if (dyn2_expr && !dyn2_expr->is_nondet_call())
   {
-    dyn2_expr->set_lhs(lhs_handle);
+    expr2tc lhs2;
+    migrate_expr(lhs_handle, lhs2);
+    dyn2_expr->set_lhs(lhs2);
     return rhs->to_exprt(ctx, class_name, function_name);
   }
 
@@ -188,26 +191,26 @@ expr2tc jimple_assignment::to_code2t(
   // and assigned nowhere in the tree, so that arm is unreachable in both
   // copies. Reproducing it here would be dead instrumentation.
 
-  // Both invoke forms rewrite their own left-hand side and lower to a call
-  // rather than to an assignment, so they stay on the migrating default.
+  expr2tc target = lhs->to_expr2t(ctx, class_name, function_name);
+
+  // Both invoke forms lower to a call with an injected left-hand side rather
+  // than to an assignment, so the target is handed to them instead of being
+  // assigned to.
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
   auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
 
-  // Both invoke forms build the call themselves once told where to put the
-  // result.
   if (dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
   {
-    dyn_expr->set_lhs2(lhs->to_expr2t(ctx, class_name, function_name));
+    dyn_expr->set_lhs(target);
     return rhs->to_expr2t(ctx, class_name, function_name);
   }
 
   if (dyn2_expr && !dyn2_expr->is_nondet_call())
   {
-    dyn2_expr->set_lhs2(lhs->to_expr2t(ctx, class_name, function_name));
+    dyn2_expr->set_lhs(target);
     return rhs->to_expr2t(ctx, class_name, function_name);
   }
 
-  expr2tc target = lhs->to_expr2t(ctx, class_name, function_name);
   expr2tc source = rhs->to_expr2t(ctx, class_name, function_name);
 
   // The two c_typecast copies agreed on the conversions jimple can produce
