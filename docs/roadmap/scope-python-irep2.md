@@ -37,6 +37,19 @@ Bisecting names one site for all three: `python_converter::create_symbol`
 left alone and the other 23 converted, the suite is **400 of 400 and 500 of 500** over
 the two slices the ten-minute cap allows, and the unit suite is 876 of 876.
 
+### 2.0 A second blocked site, and what the slices could not see
+
+The full suite then failed `lambda_default_arg` on the llvm-22 job. The cause is the
+same attribute at a second site: `python_lambda::create_symbol`
+(`lambda/python_lambda.cpp:238`) shares only a name with the factory above, and was
+converted because the two slices never reached it -- the test is #12255, and the slices
+stop at 500. Without `#cpp_type`, a `bool` default lowers as `double`, so
+`lambda x, flag=True: flag` yields `return_value$ == (double)1`.
+
+So the batch is **22**, not 23, and the sampling is the lesson: a slice bounded by the
+ten-minute cap is a smoke test, not a bisect. A site the slices do not reach cannot be
+called clean on their evidence.
+
 ### 2.1 Why that one site is blocked
 
 `#cpp_type` is the source-level spelling of a type, and `migrate_type` drops it. The
@@ -54,7 +67,7 @@ it is a much smaller question than Phase 8's.
 
 ## 3. Next
 
-- The 33 multi-line type writes, mechanically the same as the 23 done here.
+- The 33 multi-line type writes, mechanically the same as the 22 done here.
 - The 48 value writes, which need §52's namespace precondition and nothing else so
   far as this census can tell.
 - `#cpp_type`: census its readers the way `scope-solidity-irep2.md` §9 censused
