@@ -3060,14 +3060,12 @@ bool clang_cpp_convertert::annotate_class_field(
   const struct_union_typet &type,
   struct_typet::componentt &comp)
 {
-  // set parent in component's type
+  // A field of a tagless class type has no parent to attach it to.
   if (type.tag().empty())
   {
     log_error("Goto empty tag in parent class type in {}", __func__);
     return true;
   }
-  std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().member_name(parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -3131,12 +3129,11 @@ bool clang_cpp_convertert::annotate_class_method(
   /*
    * The order of annotations matters.
    */
-  // annotate parent — derive the id via get_decl_name so it matches the
-  // record's symbol id exactly (Clang 22+ prepends the kind name; older
-  // versions don't).
+  // The multi-TU vptr-init fallback below needs the class id; derive it via
+  // get_decl_name so it matches the record's symbol id exactly (Clang 22+
+  // prepends the kind name; older versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.member_name(parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
@@ -3149,9 +3146,8 @@ bool clang_cpp_convertert::annotate_class_method(
     /*
      * We also have a `component` in class type representing the ctor/dtor.
      * Need to sync the type of this function symbol and its corresponding type
-     * of the component inside the class' symbol
-     * We just need "#member_name" and "return_type" fields to be synced for later use
-     * in the adjuster.
+     * of the component inside the class' symbol: the adjuster reads the return
+     * type back to tell a ctor from a dtor.
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
