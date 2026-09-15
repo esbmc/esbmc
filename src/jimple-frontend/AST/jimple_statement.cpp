@@ -17,6 +17,12 @@ exprt jimple_identity::to_exprt(
   const std::string &) const
 {
   // TODO: Symbol-table / Typecast
+  // This arm crashes: find_symbol is given the bare jimple local, where every
+  // other lookup in this frontend qualifies it through get_symbol_name, so the
+  // lookup misses and the dereference below is on null. Reproducer and the
+  // reason it was never noticed:
+  // regression/jimple/github_4715_identity_crash_01 and
+  // docs/roadmap/scope-jimple-irep2.md §47.
   exprt val("at_identifier");
   symbolt &added_symbol = *ctx.find_symbol(local_name);
   symbolt rhs;
