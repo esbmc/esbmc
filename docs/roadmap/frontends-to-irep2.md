@@ -2654,6 +2654,242 @@ There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
 whole instrument — one binary A/B'd against itself — does not exist here. A
 census by verdict waits on it.
 
+## 44. A code type loses its arguments' base names (2026-09-14)
+
+`scope-jimple-irep2.md` §34.1 states that a code type round-trips: that
+`migrate_type_back` restores the argument identifiers and the ellipsis, and that
+"the argument `#base_name` it does not restore has no reader". The first half is
+right. The second half is wrong, and it cost twelve broken tests to find.
+
+`code_type2t` reflects `arguments`, `ret_type`, `argument_names` and `ellipsis` --
+nothing else per argument. So an argument's `#base_name` has nowhere to live, and
+`migrate_type_back` cannot restore what was never carried. The identifier does
+survive, because `code_typet::argumentt::set_identifier` writes `#identifier`
+(`std_types.h`), which is the field `cmt_identifier` and `get_identifier` both read.
+
+Pinned in `unit/util/migrate.test.cpp` ("a code argument keeps its identifier and
+loses its base name"), so the distinction is checkable rather than re-derived.
+
+### 44.1 The reader
+
+`clang_cpp_convert_vft.cpp:471`, in the loop that adds a thunk's argument symbols:
+
+```cpp
+irep_idt base_name = arg.get_base_name();
+```
+
+Converting three writes in that file to store IREP2 -- two thunk code types and one
+symbol type -- broke **12 of 1 058** `esbmc-cpp/cpp` tests:
+`functional{,_fail,_fail2}`, `github_5868_function_signatures{,_fail}`,
+`github_7540_{capacity_fail,capacity_write_fail,precision}`,
+`ostringstream_str{,_fail}` and `pmr_memory_resource{,_fail}` -- all
+standard-library models, which is where thunks are generated. The change is
+reverted; the suite returns to the 6 failures master has anyway.
+
+### 44.2 The rule, and why jimple did not show it
+
+§34.1's claim was measured, and on jimple it holds: jimple writes its argument
+base names and never reads one back off a round-tripped type. The generalisation
+from that to code types in general is what failed.
+
+**A code-type symbol may be stored IREP2-side only where no consumer reads an
+argument's `#base_name`** -- until there is a field to restore it from. §44.4 adds
+one.
+
+### 44.3 The diagnosis this section first shipped was wrong
+
+It named `#identifier` rather than `#base_name`, on the reasoning that
+`migrate_type_back` calls `set_identifier` while the thunk builder reads
+`cmt_identifier`, and that those are different fields. They are different *fields*
+-- `irep.cpp` maps `cmt_identifier` to `#identifier` and `a_identifier` is plain
+`identifier` -- but `argumentt` overrides `set_identifier` to write the comment one,
+so the round trip preserves it. A four-line unit probe printing both fields after a
+round trip settled it in one build. It should have been written before the
+section, not after.
+
+### 44.4 The field, and the slice it unblocks
+
+`code_type2t` now carries `argument_base_names`, **unreflected**. Unreflected is
+the point rather than an economy: a parameter's spelling is no part of the function
+type (C11 6.7.6.3p15, the same clause §144 turned on), so two signatures differing
+only there must still hash and compare equal. A reflected field would have made
+them distinct and re-opened exactly the divergence §144 closed.
+
+It rides the pattern `struct_type2t::alignment` already uses -- a defaulted
+trailing constructor argument plus `excluded_field_bytes` -- so
+`fields_cover_class` passes and no `with_type` specialisation is needed. Both
+migrate arms carry it, and the back arm tolerates its absence, since a frontend
+that builds a `code_type2tc` directly supplies no base names.
+
+The unit case that pinned the loss now pins the carriage, and asserts the
+equality property alongside it: changing one argument's base name leaves
+`migrate_type` returning the same type.
+
+With that, the §44.1 slice works. The three writes in
+`clang_cpp_convert_vft.cpp` -- two thunk code types and one symbol type -- are
+converted, and `esbmc-cpp/cpp` is back to **6 failures out of 1 058**, the six
+master fails anyway (`ch8_5`, `github_7433*`). The 26 C++ probes of
+`scope-clang-cpp-irep2.md` §9-§10 abort nowhere, the Solidity suite is 525/525, and
+the unit suite is 874/874.
+
+## 45. A struct component loses its base name, and that blocks the rest of B-2
+
+§44.4 closed the code-type half of this. The struct half is the same defect with a
+larger blast radius, and it is what stops the remaining struct-typed symbol writes
+from moving.
+
+`struct_type2t` carries `members`, `member_names` and `member_pretty_names` --
+nothing else per component. So a component's `#base_name`, and any other attribute
+on it, is dropped by `migrate_type`. `unit/util/migrate.test.cpp` ("a struct
+component loses its base name") pins exactly that: `name` and `pretty_name` survive,
+`#base_name` and an arbitrary `#member_attr` do not.
+
+### 45.1 The measurement
+
+Converting the two vtable struct-type writes in `clang_cpp_convert_vft.cpp` to store
+IREP2 fails **653 of 1 058** `esbmc-cpp/cpp` tests. Not a subtle regression: the
+thunk builder takes its symbol name straight from the component,
+
+```cpp
+thunk_func_symb.name = component.base_name();
+```
+
+so every vtable component arrives with an empty base name and every thunk symbol is
+misnamed. Reverted; the suite returns to master's 6 failures.
+
+### 45.2 Why the earlier caution was right for the wrong reason
+
+`scope-clang-c-irep2.md` §139.3 declined to convert `pad_type_symbol` on the
+grounds that a padded struct's derived legacy form "loses what `migrate_type_back`
+does not restore", naming the `width` attribute and `#bitfield`. The conclusion
+holds; the reason given does not.
+
+A struct's legacy `width` is set in exactly one place in the tree --
+`jimple_file.cpp:158` -- and read only by jimple's own `newarray` arms. No C or C++
+struct symbol carries one, so losing it could not have been the blocker there. The
+blocker is the component base name, which every C++ vtable depends on.
+
+That distinction matters for the next attempt: it is not padding or bitfields that
+make a struct symbol unsafe to store IREP2-side, it is per-component metadata, and
+the fix is the §44.4 one applied to components rather than arguments.
+
+### 45.3 What closing it would take
+
+An unreflected `member_base_names` on `struct_type2t`, carried by both migrate
+arms, exactly as `argument_base_names` now is for code types. Unreflected for the
+same reason: a member's spelling is not part of the struct's identity, and making
+two otherwise-identical structs compare unequal would be a worse defect than the
+one being fixed.
+
+It is a wider change than the code-type one -- `struct_type2t` is far more heavily
+used, `union_type2t` shares its data base, and the field has to thread through
+`fields_cover_class` -- so it wants its own PR and its own gate rather than riding
+this one. With it, `pad_type_symbol`, the two vtable struct types, and
+`scope-jimple-irep2.md` §32.5's two completion sites all become tractable.
+
+## 46. `member_base_names` landed -- and §45 named the wrong field (2026-09-14)
+
+§45.3's field exists: `struct_type2t::member_base_names`, populated by `migrate_type`'s
+struct arm and written back by `migrate_type_back`'s, and left out of `fields` so a
+member's spelling is no part of the struct's identity. `union_type2t` needed no
+change -- it is a sibling of `struct_type2t`, not a subclass, and no union component
+in the tree carries a base name. `fields_cover_class` is satisfied by
+`excluded_field_bytes = sizeof(std::vector<irep_idt>)`, the field placed next to
+`member_pretty_names` so it packs against a same-size neighbour rather than into
+padding.
+
+### 46.1 The field §45 named does not exist on a component
+
+§45 says the dropped attribute is `#base_name`. It is not. Two different fields
+share one accessor name:
+
+| class | accessor | reads |
+|---|---|---|
+| `struct_union_typet::componentt` | `get_base_name()` | `base_name` (`std_types.h:121`) |
+| `code_typet::argumentt` | `get_base_name()` | `#base_name` (`std_types.h:337`) |
+
+The vtable writer and the thunk builder both use the plain one --
+`vt_entry.set("base_name", comp.base_name())` and
+`thunk_func_symb.name = component.base_name()`
+(`clang_cpp_convert_vft.cpp:311,375`) -- and every `cmt_base_name` writer in the
+tree is on a function parameter, never on a struct component. So
+`member_base_names` carries `base_name`, and §44's `argument_base_names` carries
+`#base_name`; they are not the same field under two names.
+
+This is the second consecutive section whose first diagnosis came from an
+accessor's name rather than its body (§44.3 was the first). Read the accessor.
+
+### 46.2 What it does not unblock, measured
+
+The two vtable struct-type writes still cannot flip, and the base name was not the
+only reason. The same builder puts `virtual_name`, `access`, `is_rtti_name` and
+`is_vtptr` on components, and reads three of them back: `virtual_name` at
+`clang_cpp_convert_vft.cpp:737` (the override switch map),
+`clang_cpp_destructor_call.cpp:35` (matching a destructor entry) and
+`is_rtti_name`/`is_vtptr` in the value builder and the destructor walk. None has a
+field on `struct_type2t`.
+
+So the base name is one of a family. Censusing what the five frontends write on a
+component,
+
+```sh
+grep -rnoE '(component|comp|vt_entry|new_compo|base_comp|c)\.(set|set_)[a-z_]*\("[^"]+"' \
+  src/clang-cpp-frontend src/clang-c-frontend src/solidity-frontend \
+  src/python-frontend src/jimple-frontend | grep -oE '"[^"]+"' | sort | uniq -c
+```
+
+gives thirteen attributes beyond `name` and `pretty_name`: `access`, `base_name`,
+`from_base`, `internal`, `is_base_subobject`, `is_pure_virtual`, `is_rtti_name`,
+`is_virtual`, `is_vtptr`, `virtual_name`, `#base_owner`, `#is_sol_virtual` and
+`#is_sol_override`. Nine of them, `base_name` included, have a reader somewhere in
+the tree; only `from_base`, `internal` and the two `#is_sol_*` have none.
+
+That changes what the next slice should be. Adding a vector per attribute does not
+scale past the second one, and each addition costs another `excluded_field_bytes`
+adjustment. The alternative is one unreflected carrier holding each component's
+leftover `irept` -- everything the reflected fields do not already describe -- which
+`migrate_type_back` uses as the component's starting value before overwriting
+`type`, `name` and `pretty_name`. That closes the whole family at once, including
+the `#member_attr` the unit test still records as dropped, and is what the vtable
+types and `scope-jimple-irep2.md` §32.5 need. It wants its own measurement: the cost
+is an `irept` per component on every struct type in the program.
+
+It would not reach `pad_type_symbol`, and §45.3 was wrong to list it. What blocks
+that one is `#bitfield` and `#extint`, which sit on the member's *type*, not on the
+component: `migrate_type_back` rebuilds an `unsignedbv_typet(width)` bare, so a
+round-tripped bit-field pad changes arm in `add_padding` (`padding.cpp:193` ->
+`:218` -> `:225`). A per-component carrier cannot see them.
+
+### 46.3 A note for whoever writes that slice
+
+`migrate_type_back_uncached` reached 15 on the complexity gate's `core > 15`
+threshold with this section's single `if` added, so the next per-component field
+would have blocked the gate. The struct and union back arms were copies of one
+component loop differing only in that line; they are now one
+`migrate_components_back` helper, which takes the function back under the ceiling.
+Extend the helper, not the arms.
+
+Two more things that slice has to get right, both found by review of this one.
+
+`base_name` is not a comment field: no leading `#`, so `irept::is_comment` routes
+it to `named_sub`, which `irept::operator==` compares. Writing it unconditionally
+would insert an empty key on every C struct component and stop the round trip being
+the identity on the legacy side. The carrier must write only what it has --
+`migrate_components_back` now guards on `!empty()`, and the unit test pins a
+component that had no base name gaining none.
+
+The round trip is **not length-preserving** on an unreflected member vector: zero
+entries in, `members.size()` entries out. That is safe only while the field is
+unreflected. `migrate_symbol_type`'s round-trip assertion (`migrate.cpp:475`)
+compares with `==`, so today it cannot see the asymmetry; reflect the carrier and it
+fires on every struct symbol in every DebugOpt build.
+
+Finally, a test note. The first cut of this section's unit test gave the component
+the same spelling for `pretty_name` and `base_name`, and two mutants that write one
+vector into the other's slot survived the whole 50-case suite -- the three vectors
+are pushed on consecutive lines and passed to the helper in a row, so crossing them
+is the likely edit. Spell every name differently in a test over per-component
+metadata.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured
