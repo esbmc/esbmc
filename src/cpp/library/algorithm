@@ -2330,7 +2330,7 @@ const int min(const int left, const int right)
     return right;
 }
 
-const int min(const double left, const double right)
+const double min(const double left, const double right)
 {
   if (left < right)
     return left;
