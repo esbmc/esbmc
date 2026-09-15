@@ -315,6 +315,9 @@ public:
    *  model rather than materialising the whole array. Nullopt where the
    *  case falls through to get()'s generic tail. */
   std::optional<expr2tc> get_index_value(const expr2tc &expr, expr2tc &res);
+  /** get_index_value(), returning the element it read from the model, if any,
+   *  rather than leaving it in @p res for get()'s generic tail. */
+  std::optional<expr2tc> get_index(const expr2tc &expr, expr2tc &res);
 
   virtual expr2tc get(const expr2tc &expr);
 

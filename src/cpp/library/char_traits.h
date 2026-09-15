@@ -16,6 +16,7 @@
 #include <cstring> /* memcpy, memmove */
 
 #include "OM_compiler_defs.h"
+#include "min_max.h"
 
 namespace std
 {
