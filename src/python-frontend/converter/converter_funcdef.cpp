@@ -1566,12 +1566,79 @@ void python_converter::track_numpy_param(
     numpy_array_symbols_.insert(arg_id);
 }
 
+// True if 'param_name' is referenced anywhere within 'node'.
+static bool
+references_name(const nlohmann::json &node, const std::string &param_name)
+{
+  if (node.is_object())
+  {
+    if (
+      node.value("_type", std::string()) == "Name" &&
+      node.value("id", std::string()) == param_name)
+      return true;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if (references_name(it.value(), param_name))
+        return true;
+  }
+  else if (node.is_array())
+  {
+    for (const auto &elem : node)
+      if (references_name(elem, param_name))
+        return true;
+  }
+  return false;
+}
+
+// Safe only as a `Compare` (always bool); anything else, e.g. `v + v`, may
+// itself evaluate to a tagged value the fixed return type can't hold.
+static bool return_value_safe_for_tagged_param(
+  const nlohmann::json &value,
+  const std::string &param_name)
+{
+  return !references_name(value, param_name) ||
+         value.value("_type", std::string()) == "Compare";
+}
+
+// True if some `return` statement anywhere in 'body' would be unsafe once
+// 'param_name' becomes a tagged parameter.
+static bool any_return_unsafe_for_tagged_param(
+  const nlohmann::json &body,
+  const std::string &param_name)
+{
+  if (!body.is_array())
+    return false;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+    if (
+      stmt.value("_type", std::string()) == "Return" &&
+      stmt.contains("value") && !stmt["value"].is_null() &&
+      !return_value_safe_for_tagged_param(stmt["value"], param_name))
+      return true;
+    for (const char *key : {"body", "orelse"})
+      if (
+        stmt.contains(key) &&
+        any_return_unsafe_for_tagged_param(stmt[key], param_name))
+        return true;
+  }
+  return false;
+}
+
 bool python_converter::try_infer_dynamic_param_type(
   const std::string &func_name,
   const std::string &param_name,
   size_t param_index) const
 {
   const nlohmann::json &module_body = (*ast_json)["body"];
+
+  // Refuse when tagging this param could leak into an already-fixed
+  // return type (e.g. `return v + v`).
+  const nlohmann::json *func_def = find_function_def(module_body, func_name);
+  if (
+    func_def != nullptr && func_def->contains("body") &&
+    any_return_unsafe_for_tagged_param((*func_def)["body"], param_name))
+    return false;
 
   std::vector<numpy_param_call_site> call_sites;
   collect_call_sites(*ast_json, "", call_sites);
