@@ -3,20 +3,27 @@
 
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
+#include <unordered_map>
 #include <util/symtab/namespace.h>
 
 class smt_tuple_concat_flattener;
 
-/** A struct held as one bitvector, members at constant bit offsets.
+/** A struct, or an array of structs, under the concat encoding.
  *
- *  The point of this encoding is what it does one level up: an array of
- *  structs becomes a native SMT array whose range is that bitvector, so the
- *  solver's array theory still applies. The node flattener instead hands such
- *  an array to array_convt, which expands it to one variable per slot and an
- *  N-way ite per symbolic access, emitting no array operations at all.
+ *  Only array elements are concatenated. An array of structs becomes a native
+ *  SMT array whose range is one bitvector per element, which keeps the solver's
+ *  array theory in play where the node flattener hands the array to
+ *  array_convt and enumerates every slot (#37). A struct that is not an array
+ *  element gains nothing from being one wide word -- every field write would
+ *  rebuild the word -- so it is kept as one term per member.
  *
- *  Unions already use exactly this representation (smt_solver.cpp, union_id in
- *  convert_sort); this extends it to structs. Suggested for structs in #37. */
+ *  Exactly one representation is used:
+ *   - `inner` set: a packed struct, i.e. an array element, or an array of them.
+ *     The layout is the SMT representation's, not C's: members are contiguous
+ *     from bit 0, a pointer member takes pointer_struct's width, a bool one
+ *     bit.
+ *   - `inner` null: an unpacked struct, `members` holding one term per member.
+ */
 class concat_smt_ast : public smt_ast
 {
 public:
@@ -24,9 +31,22 @@ public:
     smt_tuple_concat_flattener &_flat,
     smt_solver_baset *ctx,
     smt_sortt s,
-    smt_astt _inner,
-    const type2tc &_thetype)
-    : smt_ast(ctx, s), flat(_flat), inner(_inner), thetype(_thetype)
+    const type2tc &_thetype,
+    smt_astt _inner)
+    : smt_ast(ctx, s), flat(_flat), thetype(_thetype), inner(_inner)
+  {
+  }
+
+  concat_smt_ast(
+    smt_tuple_concat_flattener &_flat,
+    smt_solver_baset *ctx,
+    smt_sortt s,
+    const type2tc &_thetype,
+    std::vector<smt_astt> _members)
+    : smt_ast(ctx, s),
+      flat(_flat),
+      thetype(_thetype),
+      members(std::move(_members))
   {
   }
 
@@ -40,22 +60,17 @@ public:
     const expr2tc &idx_expr) const override;
   smt_astt select(smt_solver_baset *ctx, const expr2tc &idx) const override;
   smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
+  void dump() const override;
 
-  void dump() const override
+  bool packed() const
   {
-    inner->dump();
+    return inner != nullptr;
   }
 
   smt_tuple_concat_flattener &flat;
-
-  /** The bitvector holding the struct, or the native array of such
-   *  bitvectors when thetype is an array of structs. */
-  smt_astt inner;
-
-  /** Struct type, or array-of-struct type. Held here rather than read back
-   *  from the sort: the array sort's range is the bitvector sort, which has
-   *  forgotten which struct it came from. */
   type2tc thetype;
+  smt_astt inner = nullptr;
+  std::vector<smt_astt> members;
 };
 
 typedef const concat_smt_ast *concat_smt_astt;
@@ -96,23 +111,37 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
-  /** Width in bits of the bitvector representing @p type. */
-  std::size_t bv_width(const type2tc &type) const;
+  /** Members of @p type as the SMT layer sees them: pointers and function
+   *  pointers are pointer_struct. */
+  std::vector<type2tc> members_of(const type2tc &type) const;
 
-  /** The bitvector sort a struct of @p type is held in. */
-  smt_sortt bv_sort(const type2tc &type) const;
+  /** Bits @p type occupies in the packed layout; may be zero. */
+  std::size_t width(const type2tc &type);
 
-  /** Reinterpret a raw bitvector as a value of @p type, undoing to_bv(). */
-  smt_astt from_bv(smt_astt raw, const type2tc &type);
+  /** Bit offset of member @p idx of @p type in the packed layout. */
+  std::size_t offset(const type2tc &type, unsigned idx);
 
-  /** The bitvector holding @p a, whose ESBMC type is @p type. */
+  /** Width of the bitvector a packed @p type is held in: never zero, since
+   *  SMT has no zero-width sort. */
+  std::size_t packed_width(const type2tc &type);
+
+  /** @p a, a term of ESBMC type @p type, as packed_width(type) bits. */
   smt_astt to_bv(smt_astt a, const type2tc &type);
 
-  /** Wrap a bitvector as a struct-typed AST. */
-  smt_astt wrap(smt_astt raw, const type2tc &type);
+  /** The term of ESBMC type @p type whose packed bits are @p raw. */
+  smt_astt from_bv(smt_astt raw, const type2tc &type);
+
+  /** A value of @p type from fresh symbols named after @p name: unpacked for a
+   *  struct, packed for an array of structs. */
+  smt_astt build(const std::string &name, const type2tc &type);
 
   smt_solver_baset *ctx;
   const namespacet &ns;
+
+private:
+  /** Linux-driver structs nest deeply and every member access asks for an
+   *  offset, so widths are computed once per type. */
+  std::unordered_map<type2tc, std::size_t, type2_hash> width_cache;
 };
 
 #endif /* SOLVERS_SMT_TUPLE_SMT_TUPLE_CONCAT_H_ */
