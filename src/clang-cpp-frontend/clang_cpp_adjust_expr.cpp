@@ -64,7 +64,18 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   adjust_assign(copy_ctor_assign);
   ctor_body.operands().push_back(copy_ctor_assign);
 
-  symbol.set_value(std::move(value));
+  // migrate_expr resolves a symbol through this thread-local namespace, and the
+  // one language_ui installed does not see this pass's context: a miss falls
+  // through to sym_name_to_symbol's renaming parser, which mangles a clang USR
+  // because the id legitimately contains `#` and `&`, collapsing both operands
+  // onto one name. Point it at the context being adjusted, as
+  // clang_c_adjust_irep2 does for the same reason (§52).
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+  expr2tc value2;
+  migrate_expr(value, value2);
+  migrate_namespace_lookup = old_ns;
+
+  symbol.set_value(value2);
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)

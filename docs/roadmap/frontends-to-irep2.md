@@ -3188,6 +3188,128 @@ Check ninja's exit status, not a filtered tail of its output. The bisect that
 followed -- reverting only the `migrate_type` call -- is what separated the clean
 part of the slice from the broken one, and it is the only reason §50.2's cause is
 attributed correctly.
+
+## 51. An adjust-pass value write that still cannot move, and the hole it was hiding (2026-09-15)
+
+§49.1 concluded that converter-time value writes are bounded by the namespace and
+that "the adjust passes are not bounded this way". The first adjust-pass value write
+tried says the second half of that is too strong.
+
+### 51.1 The attempt
+
+`clang_cpp_adjust::gen_implicit_union_copy_move_constructor` builds the body of an
+implicit union copy or move constructor and ends with
+`symbol.set_value(std::move(value))`. Converting it to `migrate_expr` leaves
+`regression/esbmc-cpp/cpp` at **6 of 1 061** -- its baseline -- and is nevertheless
+**wrong**. A twelve-line program shows it:
+
+```cpp
+union U { int i; float f; };
+int main() { U a; a.i = 7; U b = a; assert(b.i == 7); }
+```
+
+`VERIFICATION SUCCESSFUL` before, `VERIFICATION FAILED` after. The GOTO body says
+why:
+
+```
+legacy:  ASSIGN *this = *U::ref;
+IREP2:   ASSIGN *U#&1#0 = *U#&1#0;
+```
+
+Both operands collapse onto one symbol. The body is built from the argument
+identifiers `this` and `U::ref`, and neither is a symbol-table id: an implicit
+constructor gets no argument symbols. Legacy does not care -- the name is just a
+name -- but `migrate_expr` resolves a symbol through
+`migrate_namespace_lookup`, and both unresolvable names fall back to the enclosing
+function symbol, producing a self-assignment that silently drops the copy.
+
+So the bound is not "converter versus adjust". It is whether every symbol the
+expression names exists in the symbol table. Closing this one means giving the
+implicit constructor real argument symbols, the shape
+`add_thunk_method_arguments` already uses (`<function>::<base_name>`), and only then
+migrating the body.
+
+### 51.2 The hole: the whole path had no test
+
+The label was 6 before and after, because **nothing in the suite constructed a union
+from another union**. There is no `*union*` directory under
+`regression/esbmc-cpp/cpp` at all, and a probe on the path recorded zero
+observations across it -- while the program above reaches it twice, once for the copy
+constructor and once for the move constructor.
+
+That is the part worth landing now:
+`regression/esbmc-cpp/cpp/github_4715_union_implicit_copy_ctor{,_fail}`. The
+SUCCESSFUL half is the gate -- it fails under the conversion above. The FAILED half
+does not distinguish the mutant, since a corrupted copy leaves the assertion false
+either way; it is there to pin that the assertion is generated and reached, which is
+what makes the passing half meaningful.
+
+### 51.3 The ctor/dtor pseudo return type is a design-level item, not a slice
+
+§50.2 left `clang_cpp_convert.cpp:3160` blocked on `migrate_type` mapping the
+`constructor` and `destructor` return-type ids to `void`. Censusing the readers
+before planning a fix: `clang_cpp_adjust_code_gen.cpp:61,62`,
+`clang_cpp_adjust_expr.cpp:25,266,395`, `goto-programs/destructor.cpp:40`, and the
+writer at `clang_cpp_convert.cpp:3563-3564`. One of those is outside the frontend
+entirely.
+
+So retiring the encoding is not a one-write slice, and "is this function a
+constructor" is a property of the function rather than of its type -- which is why
+the legacy form parks it in the return type. The options are a flag on the symbol, a
+derivation from the symbol id, or leaving the encoding and this one write legacy with
+the reason stated. It wants deciding before more of `annotate_class_method` moves.
+
+## 52. The real bound on migrating a body: the namespace the pass is not pointed at (2026-09-15)
+
+§51.1 blamed the implicit union constructor's missing argument symbols for the
+self-assignment its migrated body became. That was wrong, and applying the two
+candidate patches one at a time is what showed it.
+
+### 52.1 What the instrument said
+
+Declaring the two parameters as real symbols -- `<function>::this` and
+`<function>::ref`, the shape `add_thunk_method_arguments` uses -- did **not** fix it.
+Instrumenting the lookup at the point of use explains why:
+
+```
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::this found_in_context=1 found_in_migrate_ns=0
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::ref  found_in_context=1 found_in_migrate_ns=0
+```
+
+The symbols are in the context the pass writes to and invisible through
+`migrate_namespace_lookup`, which still points at what `language_ui` installed. A
+miss there does not fail loudly: `sym_name_to_symbol` (`migrate.cpp:715`) treats an
+unresolvable name as an SSA-renamed one and parses it for `?`, `!`, `&` and `#`. A
+clang USR contains `#` and `&`, so the id is truncated at the first `&` -- and both
+of this body's operands truncate to the same prefix, which is the self-assignment.
+
+### 52.2 The fix is the one the IREP2 adjust pass already documents
+
+`clang_c_adjust_irep2.cpp:20-27` has this exact comment and the exact fix:
+`std::exchange(migrate_namespace_lookup, &ns)` around the walk. The legacy C++
+adjust pass never did it. With the exchange in place the body migrates correctly --
+`ASSIGN *this = *U::ref`, `VERIFICATION SUCCESSFUL` -- and the argument-symbol patch
+turns out to be unnecessary and is not part of this change.
+
+So the bound is not "converter versus adjust" (§49.1) and not "the symbols do not
+exist" (§51.1). It is **whether the pass doing the migrating has pointed
+`migrate_namespace_lookup` at its own context**. Any pass that writes an IREP2 value
+must do that first, and the failure mode when it does not is silent name mangling
+rather than an error.
+
+### 52.3 Why this took three sections to get right
+
+Each earlier reading was consistent with the evidence available and wrong:
+
+- §49.1 measured a converter-time value write failing and generalised "before
+  `c_link` the symbols are absent" into a converter/adjust distinction.
+- §51.1 measured an adjust-time value write failing, found the identifiers were not
+  symbol-table ids, and stopped there.
+- §52.1 measured the lookup itself and found the namespace, not the symbols.
+
+The step that separated them was applying the two candidate patches **one at a
+time** -- the repo's own rule -- rather than together. Applied together they pass,
+and the argument-symbol half would have shipped as though it were load-bearing.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured
