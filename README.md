@@ -4,6 +4,7 @@
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 [![GitHub All Releases](https://img.shields.io/github/downloads/esbmc/esbmc/total.svg)](https://github.com/esbmc/esbmc/releases)
+[![Open VSX](https://img.shields.io/open-vsx/v/esbmc/vscode-esbmc?label=Open%20VSX)](https://open-vsx.org/extension/esbmc/vscode-esbmc)
 
 ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker that automatically detects or proves the absence of runtime errors in single- and multi-threaded C, C++, CUDA, CHERI, Kotlin, Python, Rust, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. 
 
@@ -95,7 +96,7 @@ You can also download the latest ESBMC binary for Ubuntu and Windows from the [r
 
 Three companion front-ends run ESBMC outside the terminal:
 
-- **Visual Studio Code** — the [ESBMC extension](https://github.com/esbmc/vscode-esbmc) verifies the file you are editing and reports results in the integrated terminal.
+- **Visual Studio Code** — the [ESBMC extension](https://open-vsx.org/extension/esbmc/vscode-esbmc) verifies the file you are editing and reports results in the integrated terminal.
 - **Web interface** — [ESBMC-Web](https://github.com/esbmc/esbmc-web) is a self-hosted browser GUI for C, C++ and Python, with a flag picker and an interactive dashboard for violations and counterexamples.
 - **Claude Code** — the [ESBMC plugin](https://github.com/esbmc/agent-marketplace) provides `/verify` and `/audit` commands, a verification skill, reference documentation, and examples.
 
