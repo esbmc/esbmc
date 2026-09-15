@@ -417,3 +417,66 @@ already in scope wherever the frontend is still converting -- and it applies exa
 when the attribute was a way of carrying AST information forward to a later point in
 the same conversion. That is worth checking first for each remaining attribute, before
 reaching for a table.
+
+## 12. The seven are not independent: `#sol_type` is the root (2026-09-15)
+
+§11.1 gave four routes and implied the remaining attributes could be taken in any
+order. Taking the smallest next -- `#sol_dynarray_state`, three writes -- shows they
+cannot.
+
+### 12.1 What `#sol_dynarray_state` actually is
+
+One writer, and it says so in one line:
+
+```cpp
+bool is_dynarray_state = get_sol_type(t) == SolType::DYNARRAY &&
+                         is_state_var_check && !is_new_expr &&
+                         !get_sol_mapping_array(t);
+```
+
+So the flag is a conjunction of three other facts. Two of them are now cheap: the
+state-variable half is §10's side table, and `#sol_type == DYNARRAY` is the attribute
+itself. The third, `!is_new_expr`, is a property of the declaration site and is gone
+by the time any reader asks.
+
+Its four readers pair it with the same companions -- `solt == DYNARRAY &&
+base.is_symbol() && get_sol_dynarray_state(base.type())` at
+`solidity_convert_ref.cpp:484` -- so the flag is largely re-deriving what its context
+already establishes. But "largely" is not "exactly", and the missing piece is
+`#sol_type`.
+
+### 12.2 Every remaining attribute sits next to a `set_sol_type`
+
+Walking each writer and looking three lines either side:
+
+| attribute | writers | writers with a `set_sol_type` beside them |
+|---|---|---|
+| `#sol_array_size` | 8 | 6 (ARRAY, ARRAY_LITERAL) |
+| `#sol_bytesn_size` | 5 | 2 (BYTES_STATIC) |
+| `#sol_mapping_array` | 2 | 2 (DYNARRAY) |
+| `#sol_dynarray_state` | 1 | 1 (DYNARRAY) |
+
+They are refinements of a SolType, not independent facts: a size *of an array*, a size
+*of a bytesN*, a flag *on a dynarray*. Which means whatever answer `#sol_type` gets
+decides the shape of the answer for the other four, and doing them first would be
+building on a foundation not yet chosen.
+
+### 12.3 So the order is forced, and `#sol_type` needs a fifth answer
+
+`#sol_type` resists all four routes of §11.1: it is not spelled in the IREP2 type
+(§9.2), it is read off subtypes and expression types where there is no symbol to key a
+table by (§10.1), it is read long after the AST node is gone, and 51 readers mean it is
+not dead.
+
+The option not yet tried is that it is *mostly* shape-derivable and only partly not.
+`ARRAY` is an array type, `DYNARRAY` an infinite array, `CONTRACT` a pointer to a
+contract tag (§8 already relies on that), `BOOL` a bool, and every `UINT<n>` / `INT<n>`
+is a bitvector of width n. The kinds that genuinely collide are few -- `ADDRESS`
+against `UINT160`, `BYTES_STATIC` against an array of bytes, `ARRAY` against
+`ARRAY_LITERAL`.
+
+That is a measurable claim rather than a hope: write a shape-based
+`sol_type_from_type(const typet &)`, have `get_sol_type` compute both and log
+disagreements, and run the 525-test suite. The disagreement set is then the real
+residue, and only it needs a table or a field. That measurement is the next task, and
+it should be done before any more of the four refinements are touched.
