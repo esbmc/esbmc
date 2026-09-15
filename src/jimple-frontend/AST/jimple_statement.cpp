@@ -324,17 +324,15 @@ void jimple_throw::from_json(const json &j)
   expr = jimple_expr::get_expression(j.at("expr"));
 }
 
-exprt jimple_throw::to_exprt(
+expr2tc jimple_throw::to_code2t(
   contextt &,
   const std::string &,
-  const std::string &) const
+  const std::string &,
+  const locationt &loc) const
 {
-  codet p = codet("cpp-throw");
   // TODO: throw
-  // Since the implementation of Throw isn't complete,
-  // the expression shouldn't be used.
-
-  // auto to_add = expr->to_exprt(ctx, class_name, function_name);
-  // p.move_to_operands(to_add);
-  return p;
+  // Since the implementation of Throw isn't complete, neither the thrown
+  // operand nor the exception list is populated -- the legacy arm this replaces
+  // built a bare codet("cpp-throw") for the same reason.
+  return code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>(), loc);
 }
