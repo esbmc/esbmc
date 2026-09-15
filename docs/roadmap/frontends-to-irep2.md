@@ -3546,3 +3546,47 @@ that is the genuinely irreducible part, and it is small enough to enumerate -- w
 what §57.1 does.
 
 This is a design decision, not a measurement, and the measuring is done.
+
+## 58. The bars measured properly, and what that changes (2026-09-15)
+
+Both bars are defined in §23 as greps, and across Phases 5-9 both were repeatedly found to
+over-count. `scripts/irep2/bars.py` reports them with the false positives removed, so future
+figures are comparable with each other rather than with whichever grep was typed that day.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1147     1234     1200       34     27
+clang-cpp-frontend          631      683      669       15      9
+solidity-frontend          1414     1626     1588       98     91
+python-frontend            6528     7156     6964      108     57
+jimple-frontend              97      118       96       10      8
+total                      9817    10817    10517      265    192
+```
+
+### 58.1 Three ways the quoted numbers differ from the bars' wording
+
+**B-1 counts lines, not mentions.** Every figure this document has quoted comes from
+`git grep -c`, which reports *matching lines*; the bar's wording is about legacy type
+mentions. The two differ by 10% overall and by 28% in jimple, whose remaining mentions cluster
+several to a line. Both columns are printed so a historical figure can still be reproduced --
+the `B-1 ln` column matches every number this document has used.
+
+**B-1 counts comments.** 300 of the 10 817 mentions are inside `//` and `/* */` blocks, much
+of it this migration's own documentation: explaining why a `typet` is still there adds to the
+count of `typet`s still there.
+
+**B-2 counts the argument's spelling.** This is the one that mattered most in practice. Of 265
+reported symbol-table writes, **73 already write IREP2** -- `set_type(migrate_type(t))`, a
+`*2tc` constructor, a `type2tc` variable. Per frontend the error is not uniform: python is
+108 reported against 57 real (47% false), clang-cpp 15 against 9, solidity 98 against 91.
+Every phase in this document hit that and each re-derived it by hand.
+
+### 58.2 What the refined figures say about the plan
+
+B-2's real total is 192, not 265. That is the number §57 should be read against: of it, the
+type-system question (§57.1) accounts for the great majority, two classes of write must stay
+legacy by design (§57.2), and what is left after those is small.
+
+The refinement is syntactic and the script says so: it does not resolve types, so a write
+passing an IREP2 value under an ordinary name still counts. `B-2*` is therefore an upper
+bound -- a tighter one than the grep, and honest about which.
