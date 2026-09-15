@@ -1646,7 +1646,10 @@ void clang_c_adjust_irep2::declare_implicit_callee(
   sym.id = id;
   sym.name = get_pretty_name(id2string(id));
   sym.location = loc;
-  sym.set_type(migrate_type_back(callee->type));
+  // The callee's type is already IREP2 here, so store it: the back-migration
+  // this replaced discarded it and the lazy legacy derivation reproduces the
+  // same typet on demand (docs/roadmap/scope-clang-c-irep2.md §147).
+  sym.set_type(callee->type);
   sym.mode = "C";
   context.add(sym);
 }
