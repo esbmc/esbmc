@@ -796,7 +796,7 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
       lambda_body = closure_body;
     }
 
-    added_symbol->set_value(lambda_body);
+    added_symbol->set_value(migrate_expr(lambda_body));
   }
 
   // Restore context only if we changed it (top-level lambda only)

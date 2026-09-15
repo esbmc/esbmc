@@ -52,7 +52,7 @@ exprt python_converter::make_enum_member_struct_expr(
     str_sym.id = str_id;
     str_sym.name = "_name_" + member_name;
     str_sym.set_type(migrate_type(str_val.type()));
-    str_sym.set_value(str_val);
+    str_sym.set_value(migrate_expr(str_val));
     str_sym.static_lifetime = true;
     str_sym.is_extern = false;
     str_sym.file_local = true;
