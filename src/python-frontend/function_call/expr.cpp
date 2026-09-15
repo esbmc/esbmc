@@ -5510,8 +5510,6 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
       for (const auto &arg_node : call_["args"])
       {
         exprt arg = converter_.get_expr(arg_node);
-        // get_function_call's own indirect-call handling claims a pointer
-        // variable before this is reached; kept for any other `!is_code()`.
         if (type_handler_.is_tagged_scalar_type(arg.type()))
           converter_.dynamic_type_handler_.refuse_tagged_argument();
         if (arg.type().is_code() && arg.is_symbol())
@@ -5625,8 +5623,6 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
-    // Same as try_indirect_variable_call's check above: kept though no
-    // reproducer reaches this forward reference with a tagged argument.
     if (type_handler_.is_tagged_scalar_type(arg.type()))
       converter_.dynamic_type_handler_.refuse_tagged_argument();
     call.arguments().push_back(
