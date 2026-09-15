@@ -2877,6 +2877,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
             init_union_field->getName().str());
       }
     }
+    else if (t.id() == typet::t_complex && init_stmt.getNumInits() == 2)
+    {
+      // Clang extension: `_Complex T z = {re, im}`; excess parts are dropped.
+      const typet &elem_type = to_complex_type(t).base_type();
+      inits = struct_exprt(t);
+      for (unsigned int i = 0; i < 2; ++i)
+      {
+        exprt part;
+        if (get_expr(*init_stmt.getInit(i), part))
+          return true;
+        gen_typecast(ns, part, elem_type);
+        inits.copy_to_operands(part);
+      }
+    }
     else if (init_stmt.getNumInits() == 0)
     {
       /* We have a list initializer with no elements.
