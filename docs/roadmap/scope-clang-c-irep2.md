@@ -8103,3 +8103,184 @@ GOTO on every `main` shape -- and was still wrong, because the *inputs* the func
 actually receives were wider than its comment claimed. A conversion to IREP2 turns silent
 tolerance into a hard failure, so the question to ask of each remaining site is not only
 "does it produce the same thing" but "on what does it run at all".
+
+## 148. The guard audit §147.5 asked for, and a write that was dead (2026-09-15)
+
+§147.5 ended with a second question to ask of every converted site: not only whether it
+produces the same thing, but on what it runs at all. This section answers it for
+everything this migration has added, and the answer turned up one more site to remove --
+in the residue rather than in the conversions.
+
+### 148.1 The whole added surface is nine casts
+
+A conversion turns a lax legacy builder into a validating IREP2 constructor, so the
+surface to audit is where the migration introduced one. Over the whole chain:
+
+```sh
+# 3677420343 is where this chain left master; `master...HEAD` is the same range
+# until master advances, and nothing once the chain is merged.
+git diff 3677420343..HEAD -U0 -- 'src/*frontend*' | grep '^+' |
+  grep -oE "\bto_[a-z_]+_type\(|\bto_[a-z_0-9]+2t\(|\bconstant_int2tc\(|\badd2tc\(|\barray_type2tc\("
+```
+
+Twenty-five occurrences, of which sixteen -- `to_expr2t` twelve times, `to_type2t` and
+`to_code2t` twice each -- are jimple's own AST virtuals rather than IREP2 casts. Nine are
+casts. Seven are `declare_argc_argv`, which is §147.5 -- including the
+`to_code_type(main_symbol.get_type2())` that reads `main`'s arguments, the cast whose
+comment claimed a shape the wider inputs did not have. The other two are in
+`clang_cpp_convert_vft.cpp`, and both hold:
+
+- `to_struct_type(vtable_type_symbol->get_type2())` (`:316`). The lookup that feeds it,
+  `check_vtable_type_symbol_existence` (`:166-170`), is `find_symbol` on the exact string
+  `virtual_table::tag-<tag>`, and the only writer of that exact id is
+  `add_vtable_type_symbol` (`:232`), which writes a `struct_typet`. Being
+  `virtual_table::`-prefixed is not the reason: the vtable *variable* symbols
+  (`:1013-1014`) share that prefix and even the `tag-` after it, and are not struct types.
+- `to_code_type(thunk_func_symb.get_type2())` (`:470`). The symbol is local to
+  `add_vtable_variable_symbols`, given a code type four lines earlier, and
+  `add_thunk_method_arguments` has no other caller.
+
+
+### 148.2 The other shape of §147.5, probed and absent
+
+`declare_argc_argv`'s defect was a `has_prefix` guard, and
+`clang_c_adjust_polymorphic_functions.cpp` is built almost entirely out of them. Four
+declarations that each match one of its prefixes but are not the builtin:
+
+```c
+int __atomic_load_nx(int *p, int m);          /* matches c:@F@__atomic_load_n */
+int __builtin_add_overflow_x(int a, int b);   /* matches c:@F@__builtin_add_overflow */
+int __c11_atomic_load_x(int *p);              /* matches c:@F@__c11_atomic_load */
+void __sync_lock_release_x(int *p);           /* matches c:@F@__sync_lock_release */
+```
+
+Called from `main` and run, all four verify and none aborts. The matchers select an arm and
+then read the *clang* builtin's arguments rather than the symbol's, so a name that merely
+shares a prefix does not reach a typed read. They are not added as tests: nothing in the
+patch touches those arms, and a test that passes before and after pins nothing.
+
+### 148.3 An incompleteness write that was inert, for none of the reasons first given
+
+§147.2 put `clang_c_convert.cpp:382` in the group that needs a decision: it read the
+symbol's type, removed `#incomplete`, and wrote the result back -- a B-2 write and a B-4
+attribute manipulation in four lines. The comment above it said the flag was cleared "to
+avoid infinite recursion if the type we're defining refers to itself (via pointers)".
+
+The first draft of this section said no such recursion arrives, and gave a caller analysis
+to prove it. That was wrong, and it was wrong the same way the comment it replaced was
+wrong: by reasoning about each call edge on its own. Re-entry uses their composition. A
+field of `X` has type `Y*`, so `get_type`'s Record arm calls in for `Y` on a `find_symbol`
+miss (`:1203-1208`); `Y`'s bases then reach `get_base_map`, which calls
+`get_struct_union_class` **unguarded** (`clang_cpp_convert.cpp:3390`); and if `Y`'s base is
+`X`, that is a re-entrant call into `X`'s open window. `clang_cpp_convert.cpp:1529` is the
+same shape for a lambda closure type.
+
+It is not hypothetical. Instrumenting the site to report a re-entry and running every
+`test.desc` under `regression/` whose source is C or C++:
+
+```
+programs measured: 8682
+reach the site:    5599
+with a re-entry:      7
+```
+
+Four are `esbmc-cpp11/lambda/{github_2155,lambda_02}{,_fail}` and three are
+`esbmc-cpp/bug_fixes/github_2323{,_1,_2}` -- the tests added by the commit that made this
+arrival work. §147.3's corpus figure of 3 360 came from a glob capped at three path
+components, which silently dropped every suite nested one level deeper, `bug_fixes`
+included. That is the second measurement this audit has had to redo for scope rather than
+for method.
+
+### 148.3.1 Why the write was inert anyway
+
+The two versions differ only in a flag the guard below reads, and only on a re-entrant
+call. Split on the record kind, because the guard names `incomplete_struct` literally while
+the symbol is built as `"incomplete_" + c_tag` (`:331`) and `typet::t_union` is `"union"`
+(`util/irep/type.cpp:31`):
+
+- **struct or class** (`incomplete_struct`): with the write, `!incomplete()` is true but
+  `id != "incomplete_struct"` is false, so the guard falls through. Without it,
+  `!incomplete()` is false, so the guard falls through. Identical, re-entrant call
+  included.
+- **union** (`incomplete_union`): with the write both conjuncts hold and the guard bails;
+  without it, it falls through. They differ -- and the state is unreachable, because the
+  only unguarded in-window edges take a base class or a lambda closure type, and clang
+  rejects both halves of the union case: `union U : B` is "unions cannot have base
+  classes" and `struct D : U` is "unions cannot be base classes".
+
+That is exhaustive over states rather than over a corpus, which is what the first draft
+was missing. The corpus then confirms it where it matters: the seven programs that do
+re-enter produce a byte-identical `--symbol-table-only` table with and without the write.
+
+### 148.3.2 The history, which is the opposite of the comment
+
+`26e2cbd752` (2023-07-27) introduced the guard with a single conjunct --
+`if (!sym->type.incomplete()) return false;` followed by the flag clear -- and there the
+sentinel worked exactly as the comment described. `de9158daeb` (2025-03-05, #2333, fixing
+#2323) added `&& sym->type.id() != "incomplete_struct"` so that the re-entrant arrival
+above would fall through instead of leaving the base incomplete, and added the three
+`github_2323*` tests. That change disabled the sentinel; nobody removed what it had been
+guarding with.
+
+So the write was not born dead. It was killed by a later fix, and the comment kept
+describing the world before it.
+
+### 148.3.3 What the deletion leaves behind
+
+The id conjunct is now itself unreachable in the sense that mattered: the only producer of
+an `incomplete_*` type sets `#incomplete` with it (`:331-333`), the only code that ever
+cleared the flag is what this change deletes, and each translation unit gets a fresh
+context (`clang_c_language.cpp`), so `id == "incomplete_struct" && !incomplete()` cannot
+arise. It stays regardless -- removing it *and* reintroducing any flag clear would reopen
+#2323, and leaving a defensive conjunct costs nothing next to that.
+
+The check as a whole is load-bearing, which is worth separating from the write. Deleting
+the `if` leaves `regression/esbmc` at the same 2 of 2 301 but takes `esbmc-cpp/cpp` from
+225 s to over 560 s on this machine at `-j8`, because a base class is then re-converted
+once per derived class that names it. Its first conjunct is what does that work. And it is
+pinned by nothing but run time: a later patch could remove it and no verdict would move.
+A timing pin needs `ESBMC_REGRESS_TIMEOUT_MAX`, which is a per-run environment variable
+rather than a property of a test, so the honest thing is to record that the gate is missing
+rather than ship a weak one.
+
+Phase 6's B-2\* is 19 and the total 170; of the two sites §147.2 called design questions,
+one has turned out not to be a question.
+
+### 148.3.4 What pins it
+
+Nothing new can bite. The change is observationally neutral, so a test over the construct
+would pass before and after. What pins it, in the repository:
+
+- `regression/esbmc-cpp/bug_fixes/github_2323{,_1,_2}` and
+  `regression/esbmc-cpp11/lambda/{github_2155,lambda_02}{,_fail}` exercise the re-entrant
+  path this section turns on -- the seven programs of the count above.
+- `regression/esbmc/self_referential_union{,_fail}` are new here, because the corpus
+  contained no union whose own tag appears under a pointer in its body, and the union is
+  the one kind the guard does not name. They read a member other than the one written, so
+  building the tag as a struct instead of a union fails the passing half.
+- `regression/esbmc` is 2 of 2 301 (the two THOROUGH load artifacts), `esbmc-cpp/cpp` 6 of
+  1 065, `esbmc-cpp/bug_fixes` 132 of 132, the versioned C++ suites 286 of 286 and unit
+  876 of 876 -- the branch's baseline.
+
+The build for all of the above is `DebugOpt` (`-O2 -g`, no `-DNDEBUG`), so
+`padding.cpp:110`'s and `:343`'s `assert(!type.incomplete())` and
+`clang_c_adjust_expr.cpp:230`'s were armed throughout.
+
+### 148.4 What this says about the other four phases' residue
+
+§147.2's second group -- twelve writes handing on what a legacy builder produced -- was
+classified by what the *argument* is. This site was in the third group, classified by what
+the type cannot model, and that classification was wrong because nobody had asked what the
+write was *for*. A recursion sentinel encoded in a type reads as a type write to the grep
+and to the reader, and is neither.
+
+The 170 remaining should be read with that in mind. A site whose argument is a legacy
+builder's output is genuinely blocked on that builder; a site that exists to mark
+construction state is not blocked on anything.
+
+There is a second lesson, and it is about this document rather than the code. Two drafts of
+§148.3 gave a caller-by-caller argument that recursion cannot happen, and the code's own
+comment six lines below the site said it can (`:405-411`, on the `sym` refresh). Both drafts
+were refuted by a five-line probe. A per-edge argument about a call graph is worth what a
+measurement of the composition is worth, which is nothing until the measurement is run --
+and the measurement has to cover the suites, not a glob.
