@@ -3385,3 +3385,52 @@ than a conclusion.
 No `test.desc` in the tree regexes a vptr-init line or a qualified `#this`, which is
 why the change is invisible to the suite -- and why it is worth a reader's attention:
 ESBMC's printed output is an interface.
+
+## 55. The renaming parser claims C++ symbol ids, and §54.1's open question (2026-09-15)
+
+§52 made the union constructor's body migrate by pointing
+`migrate_namespace_lookup` at the right context. That was the right fix for that
+site and it left the underlying defect in place: what `sym_name_to_symbol` does with
+an id it cannot resolve.
+
+### 55.1 Two ids, measured out of the frontend
+
+A unit case migrates two real C++ ids through a namespace that does not contain
+them:
+
+| id | before | after |
+|---|---|---|
+| `c:@S@B@F@~B#this` | `level2_global`, whole name kept, and `migrate_expr_back` returns `c:@S@B@F@~B#this&0#0` | `level0`, round-trips unchanged |
+| `c:@U@U@F@U#&1$@U@U#::ref` | truncated to `c:@U@U@F@U#` | `level0`, whole name |
+
+The first corrupts the id on the way back; the second is §52's collapse, since every
+id sharing that prefix becomes the same symbol. Both are silent.
+
+The discriminator is in the shape a renamed name actually has: the node counter is
+spelled between `&` and `#`, so `&` comes first. A clang USR has them the other way
+round -- it is full of `#`, and a reference parameter's mangling contains `&` -- or
+has no `&` at all. `sym_name_to_symbol` now requires `&` before `#` before claiming
+a name as `level2_global`, and otherwise returns `level0` with the whole name: not
+renamed, just not shown to this namespace.
+
+`migrate.cpp`'s own comment already said a miss is "ordinary while a context is
+still being built", so the fallback has to be lossless. Pointing the namespace
+correctly (§52, §53, §54) is still worth doing -- a hit carries the symbol-table type
+-- but a miss no longer changes the name.
+
+### 55.2 §54.1 closed: the printer, not the binding
+
+The `this` shortening §54.1 could not explain is a display difference. The parameter
+symbol's entry reads
+
+```
+Symbol......: c:@S@A@F@~A#this
+Base name...: this
+```
+
+and after migration the expression resolves well enough for the printer to use the
+base name, where the unmigrated body left it printing the raw identifier. Nothing
+about which object `this` denotes changes, which is what the unchanged verdicts and
+`vptr_cdtor_dispatch` were already saying. Recorded here because §54.1 promised an
+answer, and because the same shape -- output that improves and therefore differs --
+is what a `test.desc` regex would trip over.
