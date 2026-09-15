@@ -7946,3 +7946,160 @@ not exist yet (`scope-python-irep2.md` §6.1) and a namespace that cannot see th
 symbol is where it shows.** `set_value(const exprt &)`'s laziness is load-bearing there
 for performance rather than for semantics, which is worth knowing before anyone counts
 that site as debt.
+
+## 147. The 26 B-2 sites, one by one (2026-09-15)
+
+§145 bisected Phase 6's type writes by file. This is the exhaustive pass over what
+`scripts/irep2/bars.py --list` reports, the method that closed clang-cpp and jimple.
+Of the 26 sites the tool named, six were convertible and twenty are blocked for reasons
+that fall into three groups.
+
+### 147.1 Convertible, and converted
+
+`declare_argc_argv` (`clang_c_adjust_expr.cpp`) builds `argc'`, `argv'`, `envp_size'`
+and `envp'` from `main`'s argument types. Five of the 26 sites are in it, and none of
+them was blocked: it constructs symbols from scratch rather than reading a legacy one
+back, and it is called from both adjusters (`clang_c_adjust_expr.cpp:87` and
+`clang_c_adjust_irep2.cpp:49`), so the conversion survives the legacy adjuster's
+removal. `array_type2tc` and `add2tc` say what `array_typet` and `exprt("+")` said;
+`--symbol-table-only` output is byte-identical for both `main` shapes.
+
+The pointer shape the conversion relies on is guaranteed rather than assumed. Legacy
+wrote `op1.type().subtype()`, which yields a nil type on a non-pointer; `to_pointer_type`
+asserts instead. Both invalid signatures are rejected before the frontend runs -- clang
+emits `second parameter of 'main' (argument array) must be of type 'char **'` and
+`third parameter of 'main' (environment) must be of type 'char **'`, and ESBMC reports
+`PARSING ERROR` -- so the argument types are those of C11 5.1.2.2.1 by the time
+`declare_argc_argv` sees them.
+
+The sixth was the back-hop at `clang_c_adjust_irep2.cpp`'s
+`declare_implicit_callee`: `sym.set_type(migrate_type_back(callee->type))` inside the
+IREP2 pass, where `callee->type` is already a `type2tc`. `symbolt` keeps both forms
+(`util/symtab/symbol.h`) with IREP2 as the source of truth and the legacy `typet` derived
+on demand, so the back-migration only pre-computed the cache the reader would have built
+anyway -- and it discarded whatever the round trip does not carry. For an implicitly
+declared callee that is nothing: the symbol's type is `signed int ()`, with no arguments,
+so the one known code-type round-trip loss (argument base names, esbmc/esbmc#7798) cannot
+apply. `regression/esbmc/irep2_only_implicit_callee_location_assign` shows the type. The write is therefore observationally neutral, which is
+also why no test can bite on it.
+
+### 147.2 What the remaining 20 are blocked by
+
+Three groups, and only the third is a design question:
+
+- **Read-modify-write inside the legacy adjuster** -- `clang_c_adjust_expr.cpp:59`,
+  `:81`, `:92`, `:1220`, `:1227`, `:1942`. Each reads the legacy side, hands it to
+  `adjust_type` / `adjust_expr` or to a legacy builder, and writes it back. They are
+  not separable from the legacy adjuster: they go when it does.
+- **The write hands on what a legacy builder produced** -- `clang_c_convert.cpp:417`,
+  `:424`, `:427`, `:545`, `:632`, `:659`, `:771`, `:783`, `:786`, `:2573`, `:4878` and
+  `clang_c_main.cpp:444`. The argument comes out of
+  `get_struct_union_class_methods_decls`, `gen_zero`, `gen_typecast`,
+  `get_function_body`, `get_expr`, `get_default_symbol` or the `__ESBMC_main` body
+  `clang_c_main` assembles. Converting the write means converting the builder, and
+  §53's precondition applies: at converter time the clang AST is the only source, so
+  there is no IREP2 form to hand over yet.
+- **A legacy irep attribute or layout algorithm with no `type2t` field** --
+  `clang_c_convert.cpp:382` removes `irept::a_incomplete` from a completed record, and
+  `clang_c_adjust_irep2.cpp:85` (`pad_type_symbol`) calls the shared `add_padding`,
+  which is an algorithm over `typet`. This is §57.3's wall seen from Phase 6: what a C
+  type has to say -- incompleteness, `restrict`, `volatile`, alignment, packing -- is
+  wider than `type2t` models.
+
+### 147.3 Four converted sites the tool went on counting
+
+Run the pre-audit script over the patched source and clang-c reads 24, not 20: four of the
+six converted writes still counted. Three separate defects, each of them the §58.3 failure
+mode -- a conversion that the grep keeps matching:
+
+- `set_type(arguments[0])`, twice, needed two fixes at once. `IREP2_DECL` stopped before
+  the `>` of `std::vector<type2tc>`, so `arguments` was not a recognised declaration, and
+  the base-name extraction split on `.` and `->` but not `[`, so `arguments[0]` was not
+  reduced to `arguments`.
+- `argv_symbol.set_type(` with its argument on the next line read as an *empty* argument,
+  because the scan was line-oriented. Fixed by joining statements first.
+- `set_type(callee->type)` needed the base-name split applied to declared names and not
+  only to `*2t &` references; `callee` is declared `const expr2tc &`.
+
+A fourth defect over-reported lines rather than counts. `--list` printed positions in the
+comment-stripped text, and joining statements then made it print the line a join *began*
+on -- so a write inside a brace-less `if` body, or after an unbalanced parenthesis in a
+character literal, named a line that does not contain it. 10 of the 171 rows were wrong,
+including `clang_c_convert.cpp:632` above, which read as `:631`. `statements` now carries
+an offset-to-line map. Every one of the 171 rows now names a line holding its write, which
+is checkable in one command:
+
+```sh
+python3 scripts/irep2/bars.py --list | grep -oE "^  src/[^:]+:[0-9]+" | sed 's/^  //' |
+  while IFS=: read -r f n; do sed -n "${n}p" "$f" | grep -q 'set_\(type\|value\)(' ||
+    echo "MISREPORT $f:$n"; done
+```
+
+`scripts/irep2/test_bars.py` pins all four shapes. Reverting any one fails a named case,
+which is the point: the bar is quoted in this document and in §59, and a script that
+over-counts silently is the one error reading the table cannot catch.
+
+Running the corrected tool over the pre-patch source reproduces 26 and a total of 177
+exactly, so none of the four moves a baseline -- they only stop converted sites from still
+counting. Phase 6's B-2\* is 20 after this section, and the total 171.
+
+### 147.4 What pins it
+
+`regression/esbmc/irep2_only_argc_argv` already pinned `signed char * [argc + 1]` and
+`irep2_only_argc_argv_envp` pinned `signed char * [envp_size]`; dropping the `+ 1`
+fails the first, and giving `envp'` the pointer rather than its subtype fails the
+second. Neither covered the default path, where `main`'s type was written legacy by
+`clang_c_convert` and the converted function reads it back through the symbol's lazy
+forward migration -- a path that did not exist before. `argc_argv_type` and
+`argc_argv_envp_type` cover it, one per `main` shape.
+
+Those four pin the type as the symbol-table printer renders it, which is not the same as
+pinning it as symex consumes it. `array_type2tc` takes a third argument the legacy
+spelling did not, and `goto_check` skips bounds checking entirely on an array whose
+`size_is_infinite` is set, so a wrong `true` there would drop every bounds check on
+`argv`. `argc_argv_bounds` and `argc_argv_bounds_fail` close that: `argv[argc]` is the
+last valid index and `argv[argc + 1]` the first invalid one, and both pin the named claim
+row rather than the verdict alone -- under `size_is_infinite` the row is never generated,
+so a bare `VERIFICATION SUCCESSFUL` would have passed vacuously.
+
+### 147.5 The conversion found a live defect, and it was not in the conversion
+
+Both `declare_argc_argv` call sites gate on `has_prefix(symbol.id.as_string(),
+"c:@F@main")`. That is a prefix, so `main_loop`, `mainq` and `mainmenu` reach it too, and
+the entry point's shape is guaranteed for none of them. Legacy tolerated that:
+`typet::subtype()` is `find(f_subtype)`, which returns nil on a non-pointer, so a
+two-`int` `main_loop` produced a junk `argv'` of nil element type and nothing read it. The
+IREP2 constructors validate instead, so the same input now stops the run:
+
+```
+$ cat mainloop.c
+int main_loop(int a, int b) { return a + b; }
+int main(void) { return main_loop(1, 2) == 3 ? 0 : 1; }
+$ esbmc mainloop.c
+ERROR: irep2: to_pointer_type() called on type whose type_id is signedbv (target pointer)
+```
+
+A bodyless declaration is enough -- `int mainq(double a, char **b);` and nothing else
+reaches `array_type2t`'s assertion on the size type and aborts. Four sites fire between
+them (`to_pointer_type`, `add2tc`'s pointer-arithmetic consistency check, `array_type2tc`'s
+size-type assertion, `constant_int2tc` on a struct type), and two of the four are plain
+`assert`, so a `-DNDEBUG` build builds an ill-typed node instead of stopping.
+
+The regression suite could not see it: every `main`-prefixed function in the tree takes
+zero or one parameter, so none reaches the two-or-three-argument branch.
+
+The fix is not a wider contract but a narrower guard -- `declare_argc_argv` returns unless
+`main_symbol.name == "main"`, which is the criterion `clang_c_main` already uses to decide
+whether to read `argc'`/`argv'` at all, so nothing that was read before stops being
+written. It also closes a pre-existing bug the audit found on the way: with
+`int mainq(long, char **)` beside a real `main`, the last one adjusted won, and `argc'`
+could end up `signed long int`. `regression/esbmc/main_prefixed_not_entry{,_fail}` pin all
+three shapes in one file; they fail on the conversion without the guard, so they need no
+mutation to show they bite.
+
+**What generalises.** The three earlier phases treated a legacy-to-IREP2 conversion as
+lossless when the output matched. This one did match -- byte-identical symbol tables and
+GOTO on every `main` shape -- and was still wrong, because the *inputs* the function
+actually receives were wider than its comment claimed. A conversion to IREP2 turns silent
+tolerance into a hard failure, so the question to ask of each remaining site is not only
+"does it produce the same thing" but "on what does it run at all".
