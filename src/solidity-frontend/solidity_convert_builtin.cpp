@@ -307,7 +307,7 @@ void solidity_convertert::get_builtin_symbol(
   sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
-  added_sym.set_value(val);
+  added_sym.set_value(migrate_expr(val));
   decl.operands().push_back(val);
   move_to_initializer(decl);
 
