@@ -389,6 +389,15 @@ void goto_symext::symex_step(reachability_treet &art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
+        // These read through a pointer argument inside symex, so no
+        // dereference reaches the MPOR access analysis (#7826).
+        if (
+          id == "c:@F@__ESBMC_memcpy" || id == "c:@F@__ESBMC_memmove" ||
+          id == "c:@F@__ESBMC_memcmp" || id == "c:@F@__ESBMC_memchr")
+          for (const expr2tc &operand : call.operands)
+            if (is_pointer_type(operand))
+              analyze_args(dereference2tc(get_uint_type(8), operand));
+
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
         return;
