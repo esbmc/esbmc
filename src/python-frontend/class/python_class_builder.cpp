@@ -348,7 +348,36 @@ void python_class_builder::build(codet &out)
     bool is_model_stub = sym->get_type().id() == "struct" &&
                          to_struct_type(sym->get_type()).components().empty();
     if (!is_model_stub)
+    {
+      // A class tag is keyed by name alone, so a same-named class in another
+      // module never gets its own symbol: whichever was converted first wins
+      // and this definition's methods and fields are never emitted, binding
+      // every unqualified use to the other class and answering wrongly
+      // (#7397). Refuse instead, as the function-scope collision does (#7541).
+      const std::string here =
+        conv_.get_location_from_decl(cls_).file().as_string();
+      const std::string there = sym->module.as_string();
+      // An always-loaded model's classes carry the program file as their
+      // module, so they are exempted by the here == there test below rather
+      // than by anything model-specific; only a class being built *from* a
+      // model file needs excluding here.
+      const bool models_involved = conv_.is_model_file(cls_);
+      // Only when the file under verification is one of the two. Two imported
+      // modules that each define the name are left alone: the unused one being
+      // dropped is unobservable, and refusing would reject a program ESBMC
+      // answers correctly today.
+      const bool involves_program_file =
+        conv_.is_program_file(here) || conv_.is_program_file(there);
+      if (
+        !models_involved && involves_program_file && !here.empty() &&
+        !there.empty() && here != there)
+        throw std::runtime_error(
+          "class '" + pc_.name() + "' is defined in both '" + there +
+          "' and '" + here +
+          "'; ESBMC keys a class symbol by name alone, so the definitions "
+          "would share one symbol. Rename one of them.");
       return;
+    }
   }
 
   {

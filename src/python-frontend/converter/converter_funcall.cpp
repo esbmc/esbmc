@@ -764,12 +764,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // return the keys member as a placeholder — same size as the dict,
           // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
           // Full (key, value) tuple semantics are not modelled.
-          return migrate_expr_back(
+          exprt items_view = migrate_expr_back(
             member2tc(migrate_type(list_type), dict2, "keys"));
+          items_view.set(PYTHON_ITEMS_VIEW_ATTR, true);
+          return items_view;
         }
-        // Return the keys or values member directly
-        return migrate_expr_back(
+        exprt view = migrate_expr_back(
           member2tc(migrate_type(list_type), dict2, method_name));
+        if (method_name == "keys")
+          view.set(PYTHON_KEYS_VIEW_ATTR, true);
+        return view;
       }
     }
   }

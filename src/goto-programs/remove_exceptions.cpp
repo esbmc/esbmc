@@ -19,6 +19,7 @@
 #include <irep2/irep2_utils.h>
 
 #include <optional>
+#include <tuple>
 
 #include <algorithm>
 
@@ -114,7 +115,8 @@ public:
       type_id(mk_global(exception_globals::typeid_id)),
       value(mk_global(exception_globals::value_id)),
       uncaught_count(mk_global(exception_globals::uncaught_count_id)),
-      terminate_reason(mk_global(exception_globals::terminate_reason_id))
+      terminate_reason(mk_global(exception_globals::terminate_reason_id)),
+      site(mk_global(exception_globals::site_id))
   {
   }
 
@@ -199,7 +201,7 @@ public:
               thrown_dynamic_types_.push_back(dyn);
             const locationt loc = raise_location(body, it);
             raise_location_[&*it] = loc;
-            record_throw_site(
+            raise_site_id_[&*it] = record_throw_site(
               fn.first,
               fn.second.body.hide,
               dyn,
@@ -212,7 +214,7 @@ public:
           const code_function_call2t &c = to_code_function_call2t(it->code);
           if (is_symbol2t(c.function))
             direct_call_targets.insert(to_symbol2t(c.function).thename);
-          collect_thread_entry(c);
+          collect_thread_entry(fn.first, c);
         }
       }
     }
@@ -434,7 +436,7 @@ private:
   contextt &context;
   const namespacet &ns;
   exception_typeidt registry;
-  expr2tc thrown, type_id, value, uncaught_count, terminate_reason;
+  expr2tc thrown, type_id, value, uncaught_count, terminate_reason, site;
   std::set<irep_idt> may_throw;
   // Handled-stack OM helpers whose body is linked (set in run()); a call is
   // emitted only for these, else the lowering uses its inline fallback.
@@ -463,11 +465,27 @@ private:
   // name_to_id, which the exception_typeidt constructor seeds from *every* type
   // symbol, not just exception types.
   std::vector<irep_idt> thrown_dynamic_types_;
-  // Where each dynamic type is raised, when its entry-reachable raises all name
-  // one statement: the location the uncaught-exception property is reported at
-  // (issue #7433). Cleared once two of them disagree — there is then no single
-  // statement to blame, so the property falls back to the entry epilogue.
-  std::map<irep_idt, locationt> type_throw_location_;
+  /// One statement a type is raised from, and the id the lowering stamps on the
+  /// exception state there.
+  struct throw_sitet
+  {
+    unsigned id;
+    locationt loc;
+  };
+
+  /// Per exception type, the distinct statements its attributable raises come
+  /// from, in first-seen order and deduplicated by file:line. One entry means
+  /// the type has a single raise site and the property can name it outright;
+  /// several mean the property is partitioned per site (issue #7769).
+  std::map<irep_idt, std::vector<throw_sitet>> type_throw_sites_;
+  /// Site id assigned to each accepted (type, file:line), so a second raise on
+  /// the same statement reuses it. Ids start at 1; 0 is unattributed.
+  std::map<std::tuple<irep_idt, irep_idt, irep_idt>, unsigned> site_ids_;
+  unsigned next_site_id_ = exception_globals::unattributed_site + 1;
+  /// Site id to assign at each throw, resolved by the pre-lowering scan.
+  /// A throw the scan rejected is absent and assigns the unattributed id, which
+  /// only the residual check matches.
+  std::map<const goto_programt::instructiont *, unsigned> raise_site_id_;
   // Functions reachable from the whole-program entry; a raise anywhere else
   // cannot happen, so it must not name the property (see record_throw_site).
   std::set<irep_idt> entry_reachable_;
@@ -499,11 +517,10 @@ private:
     return body.begin()->location;
   }
 
-  /// Records the raise of \p type at \p loc, in function \p fn, narrowing that
-  /// type's location towards the one statement all its raises share: the first
-  /// site seeds it, a later site at another file:line clears it, and one in
-  /// another function drops just the function name (the Python frontend copies
-  /// a callee's guard into its caller).
+  /// Records the raise of \p type at \p loc, in function \p fn, and returns the
+  /// site id the lowering must stamp on the exception state there. Raises that
+  /// share a file:line share an id, so a statement raising the same type twice
+  /// yields one property rather than two identical ones.
   ///
   /// Only a raise that can run and that the user can act on may name the
   /// property. A raise in an unreachable function never happens (the Python
@@ -517,10 +534,11 @@ private:
   /// \p caught marks a raise an enclosing handler in the same function takes,
   /// which therefore cannot be the escaping one (see \ref locally_caught).
   ///
-  /// An unlocated raise is recorded rather than skipped: it is a site the
-  /// property must account for, and letting it clear the anchor is what stops
-  /// the located sites from naming a raise that may not be the escaping one.
-  void record_throw_site(
+  /// A rejected raise gets \ref exception_globals::unattributed_site, which no
+  /// per-site property matches; the per-type residual in \ref
+  /// emit_uncaught_checks is what covers it. Dropping it from the partition
+  /// without that residual would let such an exception escape unchecked.
+  unsigned record_throw_site(
     const irep_idt &fn,
     bool hidden,
     const irep_idt &type,
@@ -528,37 +546,49 @@ private:
     bool caught)
   {
     if (
-      hidden || caught || !entry_reachable_.count(fn) ||
+      hidden || caught || !entry_reachable_.count(fn) || !is_located(loc) ||
       file_operations::is_bundled_source(loc.get_file().as_string()))
-      return;
-    auto [it, fresh] = type_throw_location_.emplace(type, loc);
+      return exception_globals::unattributed_site;
+
+    auto key = std::make_tuple(type, loc.get_file(), loc.get_line());
+    auto [it, fresh] = site_ids_.emplace(key, next_site_id_);
+    std::vector<throw_sitet> &sites = type_throw_sites_[type];
     if (fresh)
-      return;
-    locationt &agreed = it->second;
-    if (
-      agreed.get_file() != loc.get_file() ||
-      agreed.get_line() != loc.get_line())
     {
-      agreed.make_nil();
-      return;
+      ++next_site_id_;
+      sites.push_back({it->second, loc});
+      return it->second;
     }
-    // Keep only what the sites agree on, so the anchor never asserts a
-    // position that belongs to just one of them.
-    if (agreed.get_column() != loc.get_column())
-      agreed.set_column(irep_idt());
-    if (agreed.get_function() != loc.get_function())
-      agreed.set_function(irep_idt());
+    // Keep only what the raises on this statement agree on, so the location
+    // never asserts a position that belongs to just one of them (the Python
+    // frontend copies a callee's guard into its caller).
+    for (throw_sitet &site : sites)
+      if (site.id == it->second)
+      {
+        if (site.loc.get_column() != loc.get_column())
+          site.loc.set_column(irep_idt());
+        if (site.loc.get_function() != loc.get_function())
+          site.loc.set_function(irep_idt());
+      }
+    return it->second;
   }
 
-  /// Where the uncaught-exception property for \p type belongs: the statement
-  /// its reachable raises share, else \p fallback (the entry epilogue).
-  locationt
-  uncaught_location(const irep_idt &type, const locationt &fallback) const
+  /// The statements \p type is raised from that a property may name, empty when
+  /// none qualified (every raise hidden, unreachable or locally caught).
+  const std::vector<throw_sitet> &throw_sites(const irep_idt &type) const
   {
-    auto it = type_throw_location_.find(type);
-    return it != type_throw_location_.end() && is_located(it->second)
-             ? it->second
-             : fallback;
+    static const std::vector<throw_sitet> none;
+    auto it = type_throw_sites_.find(type);
+    return it != type_throw_sites_.end() ? it->second : none;
+  }
+
+  /// The site id recorded for the throw at \p thr. A throw this pass
+  /// synthesized was never scanned, so it is unattributed.
+  unsigned resolved_site_id(goto_programt::const_targett thr) const
+  {
+    auto it = raise_site_id_.find(&*thr);
+    return it != raise_site_id_.end() ? it->second
+                                      : exception_globals::unattributed_site;
   }
 
   /// The location recorded for the throw at \p thr by the pre-lowering scan.
@@ -605,16 +635,22 @@ private:
     return call;
   }
 
-  /// If @p call is a pthread_create, record its start-routine argument (the 3rd)
-  /// as a thread entry, so lower_ip enforces the uncaught-escape terminate at
-  /// that function's epilogue. The argument is `&worker`, possibly under
+  /// If @p call is a pthread_create, record its start-routine argument (the
+  /// 3rd) as a thread entry, so lower_ip enforces the uncaught-escape terminate
+  /// at that function's epilogue. The argument is `&worker`, possibly under
   /// typecasts; peel them to the underlying function symbol. A computed
   /// (unresolvable) routine sets thread_entry_unresolved so run() declines the
   /// program rather than silently miss its uncaught-escape check.
-  void collect_thread_entry(const code_function_call2t &call)
+  ///
+  /// Only a call the entry can reach starts a thread, so @p caller gates the
+  /// scan: std::thread's operational model hands pthread_create its own `f`
+  /// parameter, and scanning unreachable bodies reported an unresolved routine
+  /// for any program that merely includes <thread> and uses exceptions (#7644).
+  void
+  collect_thread_entry(const irep_idt &caller, const code_function_call2t &call)
   {
     if (
-      !is_symbol2t(call.function) ||
+      !entry_reachable_.count(caller) || !is_symbol2t(call.function) ||
       id2string(to_symbol2t(call.function).thename).find("pthread_create") ==
         std::string::npos ||
       call.operands.size() < 3)
@@ -1548,25 +1584,56 @@ private:
     expr2tc known_disj;
     goto_programt::targett head = before;
     bool have_head = false;
+    auto emit =
+      [&](const expr2tc &escapes, const locationt &at, const irep_idt &name) {
+        auto t = emit_terminate(
+          body,
+          before,
+          not2tc(escapes),
+          at,
+          fn,
+          exception_globals::terminate_reason_uncaught,
+          "uncaught exception: " + name.as_string());
+        if (!have_head)
+        {
+          head = t;
+          have_head = true;
+        }
+      };
+
     for (const irep_idt &name : thrown_dynamic_types_)
     {
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+      const expr2tc t_escapes = and2tc(thrown, eq);
+      const std::vector<throw_sitet> &sites = throw_sites(name);
 
-      // assert(!(thrown && typeid == id(T))) — fires iff T escapes uncaught.
-      auto t = emit_terminate(
-        body,
-        before,
-        not2tc(and2tc(thrown, eq)),
-        uncaught_location(name, loc),
-        fn,
-        exception_globals::terminate_reason_uncaught,
-        "uncaught exception: " + name.as_string());
-      if (!have_head)
+      // With at most one site there is one statement to name, so no split is
+      // needed, and the check must not depend on the site id: a C/C++ rethrow
+      // through the handled-exception helper restores typeid and value but
+      // leaves the site id of whatever was raised last.
+      if (sites.size() <= 1)
       {
-        head = t;
-        have_head = true;
+        emit(t_escapes, sites.empty() ? loc : sites.front().loc, name);
+        continue;
       }
+
+      // Several sites: one property per raise, each at its own statement
+      // (issue #7769), then a residual for a site id matching none of them --
+      // an unattributable raise or a stale id left by a rethrow. The site
+      // conditions are exhaustive by construction, so the conjunction of these
+      // skip conditions is exactly !(thrown && typeid == id(T)), the single
+      // check they replace.
+      expr2tc site_disj;
+      for (const throw_sitet &st : sites)
+      {
+        expr2tc at_site =
+          equality2tc(site, constant_int2tc(site->type, BigInt(st.id)));
+        site_disj =
+          is_nil_expr(site_disj) ? at_site : or2tc(site_disj, at_site);
+        emit(and2tc(t_escapes, at_site), st.loc, name);
+      }
+      emit(and2tc(t_escapes, not2tc(site_disj)), loc, name);
     }
 
     // Residual: assert(thrown == false || typeid ∈ known). With no known types
@@ -1799,6 +1866,15 @@ private:
       a_tid->make_assignment();
       a_tid->code =
         code_assign2tc(type_id, constant_int2tc(type_id->type, BigInt(tid)));
+
+      // Which statement raised, for the uncaught-exception property to name
+      // (issue #7769). Written at every real throw, the unattributable ones
+      // included: a stale id left over from a caught exception would otherwise
+      // attribute this raise to the wrong statement.
+      auto a_site = add();
+      a_site->make_assignment();
+      a_site->code = code_assign2tc(
+        site, constant_int2tc(site->type, BigInt(resolved_site_id(thr))));
 
       // Copy the thrown object into a stable static slot, then point the global
       // at the copy — the operand is a temporary whose frame may be gone by the

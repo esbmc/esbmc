@@ -114,6 +114,9 @@ extern std::atomic<unsigned long> declined;
  *  elsewhere in ESBMC rather than a limit of the check, so a nonzero count is
  *  something to go and look at. */
 extern std::atomic<unsigned long> ill_sorted;
+/** Rewrites the check rejected. Reported as they are found rather than on the
+ *  first one, so a run surfaces the whole set (esbmc/esbmc#7326). */
+extern std::atomic<unsigned long> violations;
 
 void report();
 } // namespace simplification_check_stats

@@ -9,6 +9,8 @@ CC_DIAGNOSTIC_POP()
 #include <c2goto/cprover_library.h>
 #include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_adjust_irep2.h>
+#include <set>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
 #include <util/lang/cpp_expr2string.h>
@@ -145,6 +147,53 @@ void clang_cpp_languaget::set_language_version()
     config.language.cpp_std = cxx_stdt::cpp98;
 }
 
+/// Phase 7 census: force migrate_type/migrate_expr over every symbol this TU
+/// contributed and discard the result, to find what the C++ frontend emits that
+/// IREP2 cannot represent. Runs after c_link so migrate_namespace_lookup can
+/// resolve the TU's own symbols: before the link they are all absent from it,
+/// and sym_name_to_symbol then substitutes the expression's own type for
+/// migrate_symbol_type's, which is the case migrate.cpp warns hashes wrongly.
+///
+/// Migration reports failure by throwing a std::string, so each symbol is
+/// wrapped: one unrepresentable construct names itself and the walk continues,
+/// which is what makes this a census rather than a bisection.
+///
+/// Walks the whole linked context, operational models included, which is the
+/// set goto_convert migrates anyway. On a multi-TU run the later counts
+/// therefore include the earlier TUs' symbols.
+/// Rejected alternatives, and what it measured: scope-clang-cpp-irep2.md §4.
+static void migrate_census(const contextt &context)
+{
+  unsigned long symbols = 0, values = 0, failures = 0;
+  // The kind tally is what stops the census being vacuous: a count of symbols
+  // or values is identical on either representation, so swapping get_type2()
+  // for get_type() would migrate nothing and print the same line. A type_id
+  // exists only on the IREP2 side.
+  std::set<unsigned> kinds;
+  context.foreach_operand_in_order(
+    [&symbols, &values, &failures, &kinds](const symbolt &s) {
+      ++symbols;
+      try
+      {
+        kinds.insert(static_cast<unsigned>(s.get_type2()->type_id));
+        if (!is_nil_expr(s.get_value2()))
+          ++values;
+      }
+      catch (const std::string &e)
+      {
+        ++failures;
+        log_error("IREP2 migrate census: {} on symbol {}", e, s.id);
+      }
+    });
+  log_status(
+    "IREP2 migrate census: {} symbols, {} values migrated, {} type kinds, {} "
+    "failures",
+    symbols,
+    values,
+    kinds.size(),
+    failures);
+}
+
 bool clang_cpp_languaget::typecheck(
   contextt &context,
   const std::string &module)
@@ -161,11 +210,31 @@ bool clang_cpp_languaget::typecheck(
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(new_context);
-  if (adjuster.adjust())
+  // Phase 7 hop-off, mirroring clang_c_language's: the IREP2 pass *replaces*
+  // the legacy one so the divergence count under the flag measures how much of
+  // it has moved. Its table lists only inherited C arms so far, so the
+  // divergences are the list of C++ arms still to write
+  // (docs/roadmap/scope-clang-cpp-irep2.md §3.1).
+  if (config.options.get_bool_option("clang-cpp-irep2-adjust-only"))
+  {
+    clang_cpp_adjust_irep2 irep2_adjuster(new_context, true, false);
+    if (irep2_adjuster.adjust())
+      return true;
+  }
+  else
+  {
+    clang_cpp_adjust adjuster(new_context);
+    if (adjuster.adjust())
+      return true;
+  }
+
+  if (c_link(context, new_context, module))
     return true;
 
-  return c_link(context, new_context, module);
+  if (config.options.get_bool_option("clang-cpp-irep2-migrate-census"))
+    migrate_census(context);
+
+  return false;
 }
 
 bool clang_cpp_languaget::final(contextt &context)

@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
 #include <util/irep/std_code.h>
@@ -255,6 +256,18 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    /* A lambda's operator(), __invoke and conversion-operator USRs name the
+     * enclosing specialisation but not the closure, so siblings in one
+     * instantiation share an id and the last body converted wins (#7499); the
+     * closure's own id is already unique (#6976). Constructors take the case
+     * above and need none -- their USR spells the class "(lambda at f:l:c)". */
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd);
+        md && md->getParent()->isLambda())
+    {
+      std::string closure_name, closure_id;
+      get_decl_name(*md->getParent(), closure_name, closure_id);
+      id += "@" + closure_id;
+    }
     return;
   }
 
@@ -672,6 +685,39 @@ static bool zero_initialises(const clang::Expr &init)
     return ce->requiresZeroInitialization();
 
   return false;
+}
+
+/// The id a catch handler matches a throw on. The catch type rides on the
+/// handler block's own type and is read off it exactly once -- here.
+/// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
+/// code_block2t has no type to carry it across the seam
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
+static void set_handler_exception_id(const namespacet &ns, exprt &handler)
+{
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, handler.type(), "", ids);
+  if (!ids.empty())
+    handler.set("exception_id", ids.front());
+}
+
+/// A pseudo-destructor call does nothing but evaluate its base
+/// ([expr.pseudo]/1) -- there is nothing to call. Reduce it where it is built,
+/// so the node never reaches the goto program: IREP2 has no kind for it, and an
+/// adjust pass that migrates first therefore cannot see it at all
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.15). Applied at get_expr's exit so
+/// it covers every call spelling, as clang_cpp_adjust's arm did.
+static void reduce_pseudo_destructor_call(exprt &expr)
+{
+  // The legacy arm only ever saw a side_effect_expr_function_callt. Say so,
+  // rather than leaning on "two operands whose first carries this id" -- true
+  // of nothing else today, but it states no precondition.
+  if (
+    expr.id() != "sideeffect" || expr.operands().size() != 2 ||
+    expr.op0().id() != "cpp-pseudo-destructor")
+    return;
+
+  assert(expr.op0().operands().size() == 1);
+  expr = expr.op0().op0();
 }
 
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
@@ -1346,6 +1392,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*cxxtry.getHandler(i), handler))
         return true;
 
+      set_handler_exception_id(namespacet(context), handler);
       new_expr.move_to_operands(handler);
     }
 
@@ -1770,6 +1817,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
     break;
   }
+
+  reduce_pseudo_destructor_call(new_expr);
 
   new_expr.location() = location;
   return false;
@@ -2334,10 +2383,14 @@ bool clang_cpp_convertert::get_function_body(
         initializers.push_back(initializer);
         init_sym_uptodate = false;
       }
-      else if (init->isMemberInitializer())
+      else if (
+        init->isMemberInitializer() || init->isIndirectMemberInitializer())
       {
-        // parsing non-static member initializer
-        const clang::FieldDecl *member_decl = init->getMember();
+        // parsing non-static member initializer. A member reached through an
+        // anonymous union or struct is an IndirectFieldDecl, for which clang
+        // sets isIndirectMemberInitializer instead; getAnyMember() yields the
+        // underlying FieldDecl for both (#7560).
+        const clang::FieldDecl *member_decl = init->getAnyMember();
 
         exprt member;
         member.set("#member_init", 1);
@@ -2352,7 +2405,37 @@ bool clang_cpp_convertert::get_function_body(
         if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
-        build_member_from_component(fd, member);
+        // A member of an anonymous union/struct is not a component of the
+        // enclosing class: the anonymous field is, and the member sits inside
+        // it. IndirectFieldDecl::chain() runs outermost-first and ends at the
+        // member itself, so walking it yields this-><anon>.m; building
+        // this->m directly reads at the wrong offset (#7560).
+        if (init->isIndirectMemberInitializer())
+        {
+          exprt path;
+          bool rooted = false;
+          for (const clang::NamedDecl *nd : init->getIndirectMember()->chain())
+          {
+            const auto *link = llvm::dyn_cast<clang::FieldDecl>(nd);
+            if (!link)
+              return true;
+            exprt hop;
+            if (get_decl_ref(*link, hop))
+              return true;
+            if (!rooted)
+            {
+              build_member_from_component(fd, hop);
+              path = hop;
+              rooted = true;
+            }
+            else
+              path = member_exprt(path, hop.name(), hop.type());
+          }
+          member = path;
+        }
+        else
+          build_member_from_component(fd, member);
+
         // set #member_init flag again, as it has been cleared between the first call...
         member.set("#member_init", 1);
 
@@ -3243,8 +3326,9 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
       derived_struct.is_struct() &&
       to_struct_type(derived_struct).has_component(base_comp))
     {
-      dereference_exprt deref(
-        implicit_this_symb, implicit_this_symb.type().subtype());
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(implicit_this_symb, implicit_this_symb.type());
       member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
       implicit_this_symb = address_of_exprt(m);
       routed = true;

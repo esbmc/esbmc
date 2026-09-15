@@ -1,0 +1,509 @@
+#ifndef REACHABILITY_TREE_H_
+#define REACHABILITY_TREE_H_
+
+#include <deque>
+#include <map>
+#include <goto-programs/goto_program.h>
+#include <goto-symex/scheduler/execution_state.h>
+#include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/state/renaming.h>
+#include <goto-symex/equation/symex_target_equation.h>
+
+#include <unordered_map>
+#include <unordered_set>
+#include <util/message/message.h>
+#include <util/config/options.h>
+
+/** White-list of ESBMC internal symbol names that must never be treated as
+ *  race-eligible user globals. */
+inline bool is_esbmc_internal_symbol(const std::string &n)
+{
+  return n == "c:@__ESBMC_alloc" || n == "c:@__ESBMC_alloc_size" ||
+         n == "c:@__ESBMC_is_dynamic" ||
+         n == "c:@__ESBMC_blocked_threads_count" ||
+         n == "c:@__ESBMC_rounding_mode" ||
+         n.find("c:pthread_lib") != std::string::npos;
+}
+
+/**
+ *  Class to explore states reachable through threading.
+ *  Runs an execution_statet that explores code containing threading functions,
+ *  and when notified of context-switch generating operations, attempts to
+ *  interleave threads in all possible ways.
+ *
+ *  The primary piece of state is an ordered sequence of
+ *  exploration_framet (a std::list, intentionally — we hand out
+ *  iterators that must stay stable across pushes/erases elsewhere in
+ *  the sequence), each pairing one execution_statet (the program state
+ *  at a context-switch point) with a scheduler_framet that tracks
+ *  which switches from that point have already been explored.
+ *
+ *  The algorithm is to run until the program completes and feed the trace
+ *  to the caller. From then on, when asked to generate a new trace we:
+ *
+ *    -# Pop the final exploration frame.
+ *    -# Move to the new final frame on the stack.
+ *    -# Inspect whether we've explored all switches from this state.
+ *       If yes, goto 1.
+ *    -# Pick a context switch to take from the current state and mark it
+ *       explored on the frame's scheduler.
+ *    -# Push a fresh exploration frame: a clone of the execution state
+ *       paired with a default scheduler_framet sized to the new thread
+ *       count.
+ *    -# In the new top frame, switch to the chosen thread and continue
+ *       symbolic execution from there. Fin.
+ *
+ *  There are various scheduling possibilities. The default is depth-first
+ *  search, where we just follow the algorithm above and return all the
+ *  traces to the caller. The "schedule" way combines all paths into one
+ *  trace, which is then solved once.
+ *
+ *  Some kind of scheduling interface/api would be good for the future.
+ */
+
+class reachability_treet
+{
+public:
+  /**
+   *  Default constructor.
+   *  Requires a list of functions, and the namespace/context that we'll be
+   *  working it, as well as the list of options to work with.
+   *  The symex_targett pointer exists to allow the creator of this RT to
+   *  feed a subclass of symex_targett into the RT, performing some additional
+   *  actions than just collecting assignments/etc.
+   *  @param goto_functions GOTO functions to operate over. Must contain main.
+   *  @param ns Namespace to operate in
+   *  @param target Target to listen in on assigns/asserts/assumes. Is cloned.
+   *  @param context Context to operate in.
+   */
+  reachability_treet(
+    goto_functionst &goto_functions,
+    const namespacet &ns,
+    optionst &opts,
+    std::shared_ptr<symex_targett> target,
+    contextt &context);
+
+  /**
+   *  Default destructor.
+   */
+  virtual ~reachability_treet() = default;
+
+  /** Reinitialize for making new exploration of given functions.
+   *  Sets up the flags and fields of the object to start a new exploration of
+   *  the goto functions we're operating over. To be called when the previous
+   *  exploration using this object has been completed. */
+  void setup_for_new_explore();
+
+  /**
+   *  Return current execution_statet being explored / symex'd.
+   *  @return Current execution_statet being explored.
+   *  Only valid while exploration_frames is non-empty.
+   * generate_schedule_formula() drains exploration_frames completely before
+   * returning, leaving cur_frame_it at exploration_frames.end() — do not call
+   * this (or get_cur_scheduler_frame()) after that point without first
+   * re-establishing a frame via setup_for_new_explore().
+   */
+  execution_statet &get_cur_state();
+  const execution_statet &get_cur_state() const;
+
+  /**
+   *  Walks back to an unexplored context switch.
+   *  Follows the algorithm described in reachability_treet, and walk back up
+   *  the stack of current exploration_frames to find a context-switch that
+   *  hasn't yet been explored.
+   *  @return True if there are more states to be explored
+   */
+  bool reset_to_unexplored_state();
+
+  /**
+   *  Are there more execution_statet s to explore.
+   *  @return True if there are more execution_statet s to explore
+   */
+  bool has_more_states();
+
+  /**
+   *  Permitted number of context switches to take.
+   *  Set with --context-bound <integer> on the command line. Paths where more
+   *  than this many context switches occur will not be explored.
+   */
+  int get_CS_bound() const;
+
+  /**
+   *  Ask user for context switch to take.
+   *  Enabled with --interactive-ileaves. Prints out a list of current thread
+   *  states, their stack traces and the current instruction being executed.
+   *  Then ask the user what thread to switch to; giving feedback and asking
+   *  again if that switch is blocked somehow.
+   *  @return Thread ID user desires us to switch to
+   */
+  int get_ileave_direction_from_user() const;
+
+  /**
+   *  Determine if a thread can be run.
+   *  Checks that the thread has not already been explored from this frame,
+   *  has not ended, has a non-empty call stack, and is not the monitor
+   *  thread. Potentially prints a comment as to why the thread is blocked,
+   *  for user feedback from get_ileave_direction_from_user
+   *  @param tid Thread ID to switch to
+   *  @param quiet If false, will print to stdout why this thread is blocked
+   *  @return True if thread is viable; false otherwise.
+   */
+  bool check_thread_viable(unsigned int tid, bool quiet) const;
+
+  /** Mark the active thread as already explored in the current scheduler frame.
+   */
+  void mark_active_thread_explored();
+
+  /**
+   *  Check whether current ex_state is a state hash collision.
+   *  @return True if this state has already been visited
+   */
+  bool check_for_hash_collision() const;
+
+  /**
+   *  Perform various pieces of accounting after a hash collision - primarily,
+   *  ensuring that no further paths from this cswitch are explored.
+   */
+  void post_hash_collision_cleanup();
+
+  /**
+   *  Update seen state hashes to contain current state.
+   */
+  void update_hash_collision_set();
+
+  /**
+   *  Remove the current state's hash from the seen set. Used when a transition
+   *  is pruned by MPOR after its state hash has already been recorded, so that
+   *  the seen set reflects the state explored before the pruned transition
+   *  rather than the pruned state itself.
+   */
+  void remove_hash_collision_entry();
+
+  /**
+   *  Perform context switch operation triggered elsewhere.
+   *  The analyse_* functions make a decision on whether or not to take a
+   *  context switch, but defer the actual taking of this switch until later,
+   *  to prevent switching with inconsistent state. This method causes that
+   *  context switch, which has been decided upon, to actually be taken.
+   *  As referred to in the reachability_treet algorithm, this makes up steps
+   *  five and six.
+   */
+  void create_next_state();
+
+  /**
+   *  Force a context switch, and take it.
+   *  Calls decide_ileave_direction, then create_next_state. The upshot of
+   *  this is that if there is a context switch that could be taken, we find
+   *  and take it. This implements steps 4-6 of the reachability_treet
+   *  algorithm.
+   *  @return True if context switch was generated and taken
+   */
+  bool step_next_state();
+
+  /**
+   *  Pick a context switch to take.
+   *  Determines which thread to switch to now, according to whatever
+   *  scheduling method/option is enabled. Called internally by various
+   *  analysis routines.
+   *  @param ex_state Execution state to analyse for switch direction
+   *  @return Thread ID of what thread to switch to next.
+   */
+  unsigned int decide_ileave_direction(execution_statet &ex_state);
+
+  /**
+   *  Prints state of execution_statet stack.
+   *  Primarily for debugging; takes the current stack of execution_statet s
+   *  and prints a stack trace from the thread executing where the context
+   *  switch was caused in each state. Gives you a good idea of how the current
+   *  interleaving of ex_state shas been reached.
+   */
+  void print_ileave_trace() const;
+
+  /**
+   *  Have we generated a full program trace.
+   *  @return True if all threads have run to completion
+   */
+  bool is_has_complete_formula();
+
+  /**
+   *  Advance to the next exploration frame, draining if we're at the top.
+   *  If there's already an exploration frame after the current one (we're
+   *  in the middle of an existing interleaving), step onto it. Otherwise
+   *  we're at the top of the stack: drain fully-explored frames via
+   *  drain_to_unexplored, adding memory-leak checks on the very last
+   *  frame before erasing it. Used by --schedule exploration.
+   */
+  void go_next_state();
+
+  /**
+   *  Switch into just-generated execution state.
+   *  Run after a context switch has just been generated, switches current
+   *  state to the newest one. Optionally generates more states if we were
+   *  already on the last one (this may be un-needed).
+   */
+  void switch_to_next_execution_state();
+
+  // Interface for bmc operation goes here
+
+  /**
+   *  Run threads to generate new trace.
+   *  Explores a new thread interleaving and returns its trace.
+   *  @return A symex_resultt recording the trace that we just generated.
+   */
+  goto_symext::symex_resultt get_next_formula();
+
+  /**
+   *  Run threads in --schedule manner.
+   *  Run all threads to explore all interleavings, and encode it into a single
+   *  trace.
+   *  @return Symex result representing all interleavings
+   */
+  goto_symext::symex_resultt generate_schedule_formula();
+
+  /**
+   *  Reset ex_state stack to unexplored state.
+   *  This is just a wrapper around reset_to_unexplored_state
+   *  @return True if there is another state to be explored
+   */
+  bool setup_next_formula();
+
+  /** GOTO functions we're operating over. */
+  goto_functionst &goto_functions;
+  /** Context we're operating upon */
+  contextt &permanent_context;
+  /** Flag indicating we've executed all threads to exhaustion.
+   *  That is; for this particular interleaving. There may still be other
+   *  interleavings to explore */
+  bool has_complete_formula;
+  /** State hashing is enabled */
+  bool state_hashing;
+  /** Functions dictate interleavings; perform no exploration.
+   *  Used by --directed-interleavings */
+  bool directed_interleavings;
+  /** Namespace we're operating in */
+  const namespacet &ns;
+  /** Options that are enabled */
+  optionst &options;
+  /** --context-bound cut an available switch: the schedule space was truncated
+   *  rather than exhausted (issue #6480). */
+  bool cs_bound_pruned;
+
+  /** Why the schedule space shrank. Without these, the contribution of each
+   *  reduction can only be obtained by toggling its flag and re-running the
+   *  whole verification, which does not scale to a benchmark set (issue #6831,
+   *  cause 1). */
+  struct reduction_statst
+  {
+    /** Largest thread count any explored state reached, main included. Also
+     *  what decides whether the run is worth reporting on at all. */
+    unsigned long peak_threads = 1;
+    /** Formulas handed to the caller. One per schedule under the default DFS;
+     *  --schedule folds every interleaving into one, so it reports 1.
+     *
+     *  Not all of them ran to the end of a schedule: an MPOR or hash prune cuts
+     *  the prefix and get_next_formula still returns a formula for it, so under
+     *  DFS the complete schedules are
+     *  `schedules_explored - pruned_by_mpor - pruned_by_hash`. Comparing this
+     *  figure across configurations without that subtraction reads a reduction
+     *  that is working as one that made the search bigger (issue #6831 W1.4).
+     */
+    unsigned long schedules_explored = 0;
+    /** These three prune counters share a unit: context-switch points at which
+     *  that reduction stopped the search from branching further. */
+    unsigned long pruned_by_mpor = 0;
+    unsigned long pruned_by_hash = 0;
+    /** Switch targets a sleep set removed. Not the same unit as the others:
+     *  each node decides its next thread twice (get_next_formula and again
+     *  via step_next_state on backtracking), so one skip can count twice.
+     *  Read it as "did sleep sets fire, and roughly how hard", not as a count
+     *  of nodes. */
+    unsigned long pruned_by_sleep = 0;
+    /** Only counts points where a switch was still available, i.e. where the
+     *  bound truncated rather than the program simply terminating. */
+    unsigned long pruned_by_cs_bound = 0;
+
+    bool is_concurrent() const
+    {
+      return peak_threads > 1;
+    }
+  };
+  reduction_statst reduction_stats;
+
+  /** Log the reduction counters. Silent on a single-threaded run, which has
+   *  no schedule space to report on. */
+  void report_reduction_stats() const;
+
+  /**
+   *  Record that the subtree below the frame being explored was cut short --
+   *  by the context bound, by MPOR, by a state-hash collision, by an unwind
+   *  bound truncating a loop, or by __ESBMC_switch_away_from -- rather than
+   *  exhausted. Sleep sets are sound only over an exhausted subtree:
+   *  skipping thread t at a node claims an already-explored schedule covers
+   *  the interleaving, which a truncated search may never have produced. The
+   *  two orders also differ in cost, so under --context-bound the covering
+   *  schedule can need one context switch more than the budget allows.
+   *
+   *  Two cuts are knowingly excluded, both because marking them makes the
+   *  reduction inert rather than merely weaker; see get_next_formula for why
+   *  an unviable interleaving still loses no coverage, and note that the
+   *  argument is about the active thread's guard, not the whole state's.
+   *  check_if_ileaves_blocked's main-thread-ended rule is excluded because it
+   *  fires on a property of the state rather than of the search order (#4584),
+   *  so it cuts every branch alike: past that node no switch is honoured, each
+   *  surviving thread runs as one transition, and a recorded footprint covers
+   *  that thread's whole remaining access set -- coarse enough that a
+   *  conflicting thread wakes.
+   */
+  void mark_search_truncated();
+
+protected:
+  struct scheduler_framet
+  {
+    std::vector<bool> explored_threads;
+    /** Sleep set (--sleep-sets): threads whose exploration from this node would
+     *  revisit an equivalent interleaving, each mapped to the footprint of the
+     *  transition it took when it was put to sleep -- which is the transition
+     *  it would take from here, for as long as it stays asleep. Empty unless
+     *  the flag is on. */
+    std::map<unsigned int, execution_statet::transition_footprintt> sleeping;
+
+    void ensure_thread_count(unsigned int count);
+    void reset(unsigned int count);
+    void mark_all_explored(unsigned int count);
+    bool is_explored(unsigned int tid) const;
+    void mark_explored(unsigned int tid);
+    bool is_sleeping(unsigned int tid) const;
+  };
+
+  struct exploration_framet
+  {
+    std::shared_ptr<execution_statet> state;
+    scheduler_framet scheduler;
+    /** Thread whose switch created this frame; on backtracking it goes into
+     *  the parent's sleep set. UINT_MAX for the root. */
+    unsigned int entered_via = UINT_MAX;
+    /** Whether everything below this frame was actually explored. Cleared by
+     *  any reduction that cut the subtree short, and propagated to the parent
+     *  on backtracking. A sleep set may only record a thread whose subtree was
+     *  exhausted -- see mark_search_truncated. */
+    bool exhaustive = true;
+  };
+
+  scheduler_framet &get_cur_scheduler_frame();
+  const scheduler_framet &get_cur_scheduler_frame() const;
+
+  /** Wake any sleeping thread the transition just taken is dependent on.
+   *  A no-op unless --sleep-sets is set. */
+  void wake_dependent_sleepers();
+
+  bool dfs_explore_thread(unsigned int tid);
+  void erase_current_frame();
+
+  /** Drain fully-explored frames from the top of exploration_frames
+   *  until step_next_state finds an unexplored switch (or the stack
+   *  empties). If add_leak_checks is true, add memory-leak checks on
+   *  the very last remaining frame before erasing it. On return,
+   *  cur_frame_it points at the newly pushed top frame (the unexplored
+   *  switch) when exploration_frames is non-empty. */
+  void drain_to_unexplored(bool add_leak_checks);
+
+  /** Stack of exploration frames representing the current interleaving.
+   *  Each frame owns one execution state plus the scheduler bookkeeping for
+   *  the context-switch point that led to it. The stack is initialized with a
+   *  single frame containing the "main" state. During exploration it contains
+   *  various numbers of frames; at the end it is empty.
+   *  @see print_ileave_trace
+   */
+  std::list<exploration_framet> exploration_frames;
+  /** Iterator recording the exploration frame we're operating on. */
+  std::list<exploration_framet>::iterator cur_frame_it;
+  /** "Global" symex target for output from --schedule exploration */
+  std::shared_ptr<symex_targett> schedule_target;
+  /** Target template; from which all targets are cloned.
+   *  This allows for the use of a non-concrete target class throughout
+   *  exploration */
+  std::shared_ptr<symex_targett> target_template;
+  /** Limit on context switches; -1 for no limit */
+  int CS_bound;
+  /** Timeslice limit read from the "time-slice" option; currently unused. */
+  int TS_slice;
+  /** Number of claims in current --schedule exploration */
+  unsigned int schedule_total_claims;
+  /** Number of remaining claims in current --schedule exploration */
+  unsigned int schedule_remaining_claims;
+  /** Number of trivial claims in current --schedule exploration */
+  unsigned int schedule_simplified_claims;
+  /** Loops cut off at the unwinding bound in current --schedule exploration */
+  unsigned int schedule_bounded_loop_truncations;
+  /** Next thread ID to switch to, decided by analyse_* routines */
+  unsigned int next_thread_id;
+  /** Whether partial-order-reduction is enabled */
+  bool por;
+  /** Whether sleep sets prune the search (--sleep-sets). */
+  bool sleep_sets;
+  /** State hashes discovered, mapped to the smallest context-switch count at
+   *  which each was seen. A collision prunes only when the recorded cswitch is
+   *  no greater than the current state's; pruning a state with more remaining
+   *  budget would be unsound under --context-bound. */
+  std::unordered_map<std::size_t, int> hit_hashes;
+  /** Flag as to whether we're picking interleaving directions explicitly.
+   *  Corresponds to the --interactive-ileaves option. */
+  bool interactive_ileaves;
+  /** Are we using the --schedule scheduling method? */
+  bool schedule;
+  /** Are we using the --smt-during-symex method? */
+  bool smt_during_symex;
+
+  /* Map to store the expression and thread ID,
+   * which that expression belongs to. */
+  std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map;
+  /* associative container that contains global writes in */
+  std::unordered_set<expr2tc, irep2_hash> is_global;
+
+  /** Static over-approximation of globals that may be written anywhere in
+   *  the program. Populated once at construction by scan_program_writes().
+   *  Used to skip context switches on variables that are only read across
+   *  all threads. */
+  std::unordered_set<irep_idt, irep_id_hash> ever_written_globals;
+
+  /** Globals whose address is taken anywhere in the program (including the
+   *  global initialisers in __ESBMC_main). ESBMC normalises every array/
+   *  function decay into an explicit address_of, so a global that never
+   *  appears under an address_of can never enter any pointer's value set and
+   *  therefore can never be the target of a write through a pointer. */
+  std::unordered_set<irep_idt, irep_id_hash> address_taken_globals;
+
+  /** Set when the static scan sees a write through a pointer it cannot
+   *  resolve. On its own this no longer disables the optimisation globally:
+   *  an unresolved write can only land on a global whose address escaped, so
+   *  may_be_written() gates this flag on address_taken_globals. */
+  bool any_indirect_write = false;
+
+  /** Master switch; wired to --cswitch-skip-readonly-globals. */
+  bool readonly_global_opt = false;
+
+  /** Walk all goto instructions once and collect the names of every global
+   *  that may be written. */
+  void scan_program_writes();
+
+public:
+  /** True if `name` may be written by some thread somewhere in the program.
+   *  Conservatively returns true when the optimisation is disabled. */
+  bool may_be_written(const irep_idt &name) const
+  {
+    if (!readonly_global_opt)
+      return true;
+    // A direct, named write somewhere in the program.
+    if (ever_written_globals.count(name) != 0)
+      return true;
+    // A write through an unresolved pointer can only target a global whose
+    // address has escaped; a never-address-taken global stays read-only.
+    return any_indirect_write && address_taken_globals.count(name) != 0;
+  }
+
+protected:
+  friend class execution_statet;
+  friend void build_goto_symex_classes();
+};
+
+#endif /* REACHABILITY_TREE_H_ */

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <goto-symex/witnesses.h>
+#include <goto-symex/witness/witnesses.h>
 #include <string>
 #include <vector>
 #include <yaml-cpp/yaml.h>

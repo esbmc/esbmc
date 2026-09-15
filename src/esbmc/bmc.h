@@ -4,12 +4,12 @@
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
 #include <goto-programs/property_verdict.h>
-#include <goto-symex/slice.h>
-#include <goto-symex/reachability_tree.h>
-#include <goto-symex/symex_target_equation.h>
-#include <goto-symex/witnesses.h>
-#include <goto-symex/pytest.h>
-#include <goto-symex/ctest.h>
+#include <goto-symex/equation/slice.h>
+#include <goto-symex/scheduler/reachability_tree.h>
+#include <goto-symex/equation/symex_target_equation.h>
+#include <goto-symex/witness/witnesses.h>
+#include <goto-symex/testgen/pytest.h>
+#include <goto-symex/testgen/ctest.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
@@ -85,6 +85,12 @@ protected:
   // whether the path to each kept claim is reachable. UNSAT means the
   // discharge was vacuous: the path assumptions alone are unsatisfiable.
   smt_resultt check_vacuity(symex_target_equationt &local_eq) const;
+
+  /// Whether the kept claim can hold at all on a feasible path.
+  smt_resultt check_claim_unsatisfiable(symex_target_equationt &local_eq) const;
+
+  /// Whether the invariant leaves one claim no way to hold (issue #7585).
+  bool invariant_refutes(const symex_target_equationt &eq, size_t claim_index);
 
   // Set by the vacuity probe when at least one kept claim discharged
   // vacuously; consulted by report_result to map the final verdict from
@@ -231,7 +237,8 @@ private:
   void record_satisfiable_claim(
     const claim_slicer &claim,
     const property_locationt &loc,
-    bool inductive_step);
+    bool inductive_step,
+    symex_target_equationt &local_eq);
 
   /// Record a verdict for every assertion in \p eq that \p smt_conv's model
   /// falsifies, so the report names them even when the counterexample itself

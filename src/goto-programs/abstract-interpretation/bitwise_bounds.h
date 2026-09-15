@@ -1053,6 +1053,25 @@ GET_BIT_INTERVALS(
   signed_min_right_shift,
   signed_max_right_shift)
 
+template <>
+interval_templatet<BigInt>
+interval_templatet<BigInt>::interval_arithmetic_right_shift(
+  const interval_templatet<BigInt> &lhs,
+  const interval_templatet<BigInt> &rhs) const
+{
+  interval_templatet<BigInt> result;
+  if (!lhs.lower || !lhs.upper || !rhs.lower || !rhs.upper)
+    return result;
+  if (!is_signedbv_type(lhs.type) || !is_signedbv_type(rhs.type))
+    return result;
+
+  if (rhs.get_lower() < 0 || rhs.get_upper() >= BigInt(lhs.type->get_width()))
+    return result;
+  result.set_lower(INT_FUNC(signed_min_right_shift, lhs, rhs));
+  result.set_upper(INT_FUNC(signed_max_right_shift, lhs, rhs));
+  return result;
+}
+
 GET_BIT_INTERVALS(
   interval_left_shift,
   unsigned_min_left_shift,

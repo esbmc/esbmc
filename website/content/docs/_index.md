@@ -4,7 +4,7 @@ next: /docs/setup
 ---
 
 ESBMC is an SMT-based bounded model checker for C, C++, CUDA, CHERI, Python,
-Solidity, Java and Kotlin. It detects — or proves the absence of — runtime
+Solidity, Java and Kotlin. It detects or proves the absence of runtime
 errors and verifies user-defined assertions, without requiring pre- or
 post-conditions.
 

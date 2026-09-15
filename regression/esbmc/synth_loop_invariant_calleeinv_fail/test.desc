@@ -1,0 +1,6 @@
+CORE
+main.c
+--synthesise-loop-invariants --unwind 6 --multi-property --result-only
+\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
+^  FAILED       \[main\.assertion\.1\]  line 25  loop invariant base case$
+^VERIFICATION FAILED$

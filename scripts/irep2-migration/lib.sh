@@ -49,8 +49,12 @@ irep2_canon() {
 # building the goto program. Goto-affecting flags (--data-races-check,
 # --k-induction, --no-pointer-check, ...) are thus honoured exactly as the
 # real suite passes them.
+# $4 (optional) is an extra flag added to the run, e.g. the hop-off under test,
+# matching irep2_symtab_dump. It used to be accepted and silently dropped, so an
+# A/B built on this helper compared the default path with itself and scored
+# every test SAME (scope-clang-c-irep2.md §134.1).
 irep2_goto_dump() {
-  local esbmc="$1" desc="$2" repo="$3"
+  local esbmc="$1" desc="$2" repo="$3" extra="${4:-}"
   local dir src args tok
   dir="$(dirname "$desc")"
   src="$(sed -n '2p' "$desc" | tr -d '[:space:]')"
@@ -62,10 +66,12 @@ irep2_goto_dump() {
     if [ -f "$dir/$tok" ]; then argv+=("$dir/$tok"); else argv+=("$tok"); fi
   done
 
+  [ -n "$extra" ] && argv+=("$extra")
+
   # esbmc's exit status is intentionally ignored: --goto-functions-only can exit
   # non-zero on some inputs, but the (deterministic) dumped text is what we diff.
-  ( "$esbmc" "${argv[@]}" --goto-functions-only "$dir/$src" 2>&1 || true ) \
-    | irep2_canon "$repo"
+  ( "$esbmc" ${argv[@]+"${argv[@]}"} --goto-functions-only "$dir/$src" 2>&1 \
+    || true ) | irep2_canon "$repo"
 }
 
 # Produce the canonical *symbol table* dump for one test.desc into stdout.

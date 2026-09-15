@@ -1,0 +1,395 @@
+name: Weekly
+
+on:
+  schedule:
+    - cron: '23 3 * * 6'   # coverage
+    - cron: '41 3 * * 0'   # oracles, sanitizers
+    - cron: '17 4 * * 1'   # equivalence, sv-comp graph, portability builds
+
+jobs:
+  oracles:
+    if: github.event.schedule == '41 3 * * 0'
+    uses: ./.github/workflows/aux-symex-oracles.yml
+
+  equivalence:
+    name: Simplifier equivalence
+    if: github.event.schedule == '17 4 * * 1'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build
+        run: ./scripts/build.sh -b Debug
+
+      - name: Re-enable with the equivalence check
+        run: |
+          cd build
+          cmake -DENABLE_SIMPLIFIER_EQUIVALENCE_CHECK=On .
+          cmake --build . -j2
+
+      - name: Unit tests
+        run: ctest --test-dir build -j2 -LE regression --output-on-failure
+
+      # The slice below passes just as happily when the check proves nothing,
+      # which is the state esbmc/esbmc#7260 found it in. So break the simplifier
+      # on purpose and require the check to say so -- before the slice, which is
+      # what the job's time budget cuts off first.
+      - name: Prove the check would catch an unsound fold
+        run: |
+          set -eu
+          python3 scripts/plant_unsound_fold.py plant src/util/expr/expr_simplifier.cpp
+          cmake --build build -j2
+          set +e
+          ./build/src/esbmc/esbmc regression/esbmc/simplifier_unsound_fold_probe/main.c \
+            > mutation.log 2>&1
+          status=$?
+          set -e
+          python3 scripts/plant_unsound_fold.py remove src/util/expr/expr_simplifier.cpp
+          # Before the rebuild, which runs under set -e: this log is the whole
+          # output of the step and a failing rebuild must not swallow it.
+          cat mutation.log
+          # Removing the fold from the source leaves it in the binary, and every
+          # later step uses that binary. The slice below reported 23 mul
+          # rewrites as unsound when this rebuild was missing, all of them the
+          # planted fold (esbmc/esbmc#7327).
+          cmake --build build -j2
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the planted unsound fold did not fail the run"
+            exit 1
+          fi
+          grep -q 'simplifier changed the meaning of an expression' mutation.log \
+            || { echo "::error::run failed, but not via the equivalence check"; exit 1; }
+
+      - name: Regression slice under the equivalence check
+        run: |
+          cd build
+          # Bounded, and the bound is a finding rather than a budget. Shortly
+          # past it github_1210-2-array reports a disagreement the check cannot
+          # arbitrate -- a `member` over a bitcast/byte_update chain -- and
+          # github_1600 further on costs 1201s against 8s uninstrumented. Both
+          # are esbmc/esbmc#7326; raise this when they close, one test at a
+          # time: the three between the bound and -2-array (github_1210-1-struct
+          # and -1-union, then -2-array itself) have not been measured under the
+          # check. A violation exits the run, so one unscreened shape would end
+          # the job before it reached anything after it.
+          # 12_lms_new, inside the slice, is that same cost finding: 0.3s
+          # uninstrumented, and past the 1200s per-test cap once every peephole
+          # costs a query. Excluding it and dropping the bound to 499 leaves the
+          # slice ending exactly where it did.
+          ctest -j2 --output-on-failure -L '^esbmc/$' \
+            -E 'regression/esbmc/12_lms_new$' -I 1,499
+
+      # Not run here either: regression/floats/ and regression/floats-regression/.
+      # The check finds a real simplifier bug there -- isnormal(+INFINITY)
+      # folding to true (esbmc/esbmc#7320). Add both suites when it closes;
+      # until then the bug is tracked rather than watched, and this comment is
+      # the record of it. Its sibling esbmc/esbmc#7321 is fixed, but only its
+      # if2t half is watched here: the with2t half rewrites an aggregate, and
+      # is_checkable_type() declines every aggregate-typed rewrite, so
+      # regression/esbmc/github_7321 is what pins it rather than this job.
+
+  sanitizer:
+    name: ${{ matrix.sanitizer }}
+    if: github.event.schedule == '41 3 * * 0'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [asan, ubsan, tsan]
+    env:
+      ESBMC_SANITIZER_LOG_DIR: ${{ github.workspace }}/sanitizer-logs
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Prepare log directory
+        run: mkdir -p "$ESBMC_SANITIZER_LOG_DIR"
+
+      - name: Build ESBMC (${{ matrix.sanitizer }})
+        run: |
+          case "${{ matrix.sanitizer }}" in
+            asan)
+              STYPE=ASAN
+              # c2goto is invoked at build time to generate the .goto library
+              # models and embeds clang/LLVM.  Under ASan the bundled clang
+              # trips a use-after-poison (LLVM BumpPtrAllocator region
+              # poisoning) and a diagnostic-printer leak — noise that lives in
+              # clang, not ESBMC.  With the default options those abort the
+              # build tool and stop ninja.  Let the build tools continue past
+              # the report (needs -fsanitize-recover=address, set in
+              # Sanitizers.cmake), skip LSan for the build, and exit 0 so the
+              # .goto outputs are produced.  The regression step keeps its own
+              # options from common-options.sh.
+              export ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:abort_on_error=0:exitcode=0"
+              ;;
+            ubsan) STYPE=UBSAN ;;
+            tsan)
+              STYPE=TSAN
+              # As with ASan, the build-time c2goto invocations embed clang; do
+              # not let a bundled-clang report abort the build tool so the .goto
+              # models are still produced. The regression step sets its own
+              # TSAN_OPTIONS from common-options.sh.
+              export TSAN_OPTIONS="halt_on_error=0:exitcode=0"
+              ;;
+            *) echo "unknown sanitizer ${{ matrix.sanitizer }}"; exit 1 ;;
+          esac
+          ./scripts/build.sh -b Sanitizer -s "$STYPE"
+
+      - name: Run CORE regression under ${{ matrix.sanitizer }}
+        run: |
+          source scripts/sanitizers/common-options.sh
+          cd build
+          # ESBMC_REGRESS_TIMEOUT defaults to 1200s but is overridden to 120s
+          # by the standard PR workflow; restore 600s explicitly so we are not
+          # at the mercy of a stale cache. -DENABLE_SANITIZER_CI=ON forces
+          # MODES=CORE inside regression/CMakeLists.txt.
+          cmake -DESBMC_REGRESS_TIMEOUT=600 -DENABLE_SANITIZER_CI=ON .
+          # -j2 keeps memory pressure manageable — ASan inflates RSS several
+          # fold and the ubuntu-24.04 runner has 16 GB.
+          # `|| true` lets a failing test still feed collect_findings.py;
+          # the script's own exit code drives the step's success bit.
+          ctest -j2 --output-on-failure -L '^esbmc/$' || true
+
+      - name: Collect findings
+        if: always()
+        run: python3 scripts/sanitizers/collect_findings.py
+
+      - name: Upload sanitizer logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sanitizer-${{ matrix.sanitizer }}-logs
+          path: ${{ env.ESBMC_SANITIZER_LOG_DIR }}
+          retention-days: 30
+          if-no-files-found: warn
+
+  regen:
+    name: Regenerate the SV-COMP history graph
+    if: github.event.schedule == '17 4 * * 1'
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: sv-comp-history-graph
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install 'matplotlib==3.9.*'
+      - name: Regenerate combined graph
+        run: |
+          python scripts/sv-comp-graph/sv_comp_history.py \
+            --output-dir website/content/images \
+            --budgets 30s 100s 300s 600s
+      - uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: '[docs] refresh SV-COMP history graph'
+          title: '[docs] refresh SV-COMP history graph'
+          body: 'Auto-regenerated from changes to scripts/competitions/svcomp/stats-*.'
+          branch: auto/sv-comp-history-graph
+          add-paths: website/content/images/sv-comp-hist-combined.png
+          delete-branch: true
+          labels: automation
+
+  coverage:
+    name: Build and upload coverage to Codecov
+    if: github.event.schedule == '23 3 * * 6'
+    runs-on: ['self-hosted', 'Linux', 'x64', 'cov']
+    timeout-minutes: 300
+    steps:
+      - name: Clean stale tmp files
+        run: rm -rf /tmp/esbmc*
+      - uses: actions/checkout@v6
+      - name: Install dependencies and build with coverage
+        env:
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
+        run: ./scripts/build.sh -b Debug -k ON
+      # The cov-regression manifest is a curated list, so mode filtering must
+      # not second-guess it: build.sh -k ON turns CORE_REGRESSION_ONLY on, which
+      # would silently drop the 56 selected tests that are THOROUGH.
+      - name: Register every test mode for the coverage suite
+        run: cmake -DCORE_REGRESSION_ONLY=Off build
+
+      - name: Run tests
+        env:
+          LLVM_PROFILE_FILE: "/tmp/esbmc-coverage/coverage-%m_%p.profraw"
+        # Minimal coverage suite (cov-regression) + all non-regression tests
+        # (unit + other). Together they cover exactly the lines the full
+        # regression suite covers (100% parity, line-level verified).
+        run: |
+          mkdir -p build/coverage && cd build/ && \
+          { ctest -j32 --progress -LE regression || true; } && \
+          { ctest -j32 --progress -L cov-regression || true; }
+      - name: Map coverage files to instrumented binaries
+        # Raw files are named coverage-<sig>_<n>_<pid>.profraw: %m gives the
+        # binary's signature, %p one file per process. Re-run each
+        # instrumented executable once with a hash-revealing template so the
+        # signature can be matched back to its binary for per-binary export
+        # (unit-test binaries count toward the total, fixing the old
+        # esbmc-only counting gap).
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/esbmc-coverage/hashmap
+          bins="build/src/esbmc/esbmc"
+          bins+=" $(find build/unit -type f -executable -not -name '*.so*' -not -name '*.a' | tr '\n' ' ')"
+          for b in $bins; do
+            name=$(echo "$b" | tr '/' '~')
+            ( cd "$(dirname "$b")" && \
+              LLVM_PROFILE_FILE="/tmp/esbmc-coverage/hashmap/${name}-%m.profraw" \
+              timeout 15 "./$(basename "$b")" --cov-hash-probe >/dev/null 2>&1 || true )
+          done
+      - name: Merge per-binary coverage data
+        # Group the per-process raws by binary signature and merge each
+        # group in a single hop: re-merging an already-merged profile from
+        # raws drops counters. --failure-mode=warn keeps one corrupt input
+        # (a forked test child SIGKILLed mid-flush) from aborting its whole
+        # group, which is the failure that voided the run in #7136.
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/esbmc-coverage/groups
+          for raw in /tmp/esbmc-coverage/coverage-*.profraw; do
+            [ -e "$raw" ] || continue
+            h=$(basename "$raw" .profraw)
+            h=${h#coverage-}
+            h=${h%_*} # drop the %p suffix, leaving the %m signature
+            ls /tmp/esbmc-coverage/hashmap/*"-${h}"*.profraw >/dev/null 2>&1 || continue
+            echo "$raw" >> "/tmp/esbmc-coverage/groups/${h}.list"
+          done
+          ok=0; empty=0
+          for list in /tmp/esbmc-coverage/groups/*.list; do
+            h=$(basename "$list" .list)
+            pd="/tmp/esbmc-coverage/${h}.profdata"
+            llvm-profdata merge -sparse --failure-mode=warn \
+              --input-files="$list" -o "$pd" || { rm -f "$pd"; continue; }
+            # Every input corrupt still exits 0, with an empty profile.
+            if llvm-profdata show "$pd" 2>/dev/null |
+                 grep -q '^Total functions: [1-9]'; then
+              echo "$h: $(wc -l < "$list") raws"
+              ok=$((ok+1))
+            else
+              echo "$h: no usable profile from $(wc -l < "$list") raws"
+              rm -f "$pd"
+              empty=$((empty+1))
+            fi
+          done
+          echo "merged $ok binaries, $empty with no usable profile"
+          [ "$ok" -gt 0 ]
+      - name: Generate lcov coverage report
+        # One llvm-cov export per binary (unit-test binaries included, fixing
+        # the old esbmc-only counting gap), then a union of the DA records.
+        # The union is plain text, not `lcov -a`: lcov sums counts in
+        # doubles and mangles hot counters (>= 2^53) into exponential
+        # notation, which Codecov rejects.
+        run: |
+          set -uo pipefail
+          for pd in /tmp/esbmc-coverage/*.profdata; do
+            h=$(basename "$pd" .profdata)
+            m=$(ls /tmp/esbmc-coverage/hashmap/*"-${h}"*.profraw 2>/dev/null | head -1) || continue
+            binpath=$(basename "$m" | sed "s/-${h}.*\.profraw//")
+            binpath=$(echo "$binpath" | tr '~' '/')
+            [ -x "$binpath" ] || { echo "binary missing: $binpath"; continue; }
+            llvm-cov export -format=lcov -instr-profile="$pd" "$binpath" \
+              > "/tmp/esbmc-coverage/${h}.lcov"
+          done
+          python3 - /tmp/esbmc-coverage/*.lcov > coverage.info <<'PYEOF'
+          import sys
+          covered = {}
+          for path in sys.argv[1:]:
+              sf = None
+              for ln in open(path):
+                  if ln.startswith("SF:"):
+                      sf = ln[3:].strip()
+                  elif ln.startswith("DA:") and sf:
+                      line, _, count = ln[3:].strip().partition(",")
+                      try:
+                          hit = int(count) > 0
+                      except ValueError:
+                          hit = float(count) > 0
+                      covered[(sf, line)] = covered.get((sf, line), False) or hit
+          cur = None
+          for (sf, line), hit in sorted(covered.items(),
+                                         key=lambda kv: (kv[0][0], int(kv[0][1]))):
+              if sf != cur:
+                  if cur is not None:
+                      print("end_of_record")
+                  print(f"SF:{sf}")
+                  cur = sf
+              print(f"DA:{line},{1 if hit else 0}")
+          if cur is not None:
+              print("end_of_record")
+          PYEOF
+      - name: Filter out uninteresting paths
+        run: |
+          lcov --ignore-errors inconsistent --ignore-errors corrupt \
+               --ignore-errors unused --remove coverage.info \
+               '/usr/*' \
+               '*/build/*' \
+               --output-file coverage.info
+      - name: Report line total
+        run: lcov --summary coverage.info
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.info
+      - name: Save coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report-master
+          path: coverage.info
+          retention-days: 5
+      - name: Clean tmp files
+        # Also on failure: a cancelled or failed run otherwise leaves its
+        # profraw directory behind, and this runner's /tmp fills up.
+        if: always()
+        run: rm -rf /tmp/esbmc*
+
+  build-windows:
+    if: github.event.schedule == '17 4 * * 1'
+    uses: ./.github/workflows/aux-build-windows.yml
+    name: static llvm-22 DebugOpt
+    with:
+      operating-system: windows-latest
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+
+  build-ubuntu-armv8:
+    if: github.event.schedule == '17 4 * * 1'
+    uses: ./.github/workflows/aux-build.yml
+    name: static armv8 DebugOpt
+    with:
+      operating-system: ubuntu-24.04
+      architecture: armv8
+      build-flags: '-b DebugOpt -e ON'
+      testing: true
+
+  build-macos-arm:
+    if: github.event.schedule == '17 4 * * 1'
+    uses: ./.github/workflows/aux-build-unix.yml
+    name: arm64 darwin build
+    with:
+      operating-system: macos-latest
+      build-flags: '-b DebugOpt -c 21 -e ON'
+      testing: true
+
+  # Fail when a goto-symex verification harness no longer matches the source it
+  # transcribes (docs/roadmap/goto-symex-verification-plan.md §11.5).
+  symex-harness-drift:
+    name: Check goto-symex harness drift
+    if: github.event.schedule == '17 4 * * 1'
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - name: Run drift check
+        run: python3 scripts/verification/symex/drift_check.py

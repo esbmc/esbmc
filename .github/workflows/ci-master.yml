@@ -1,0 +1,18 @@
+name: Master
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    name: Trigger esbmc.github.io deploy
+    runs-on: ubuntu-slim
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          repository: esbmc/esbmc.github.io
+          event-type: deploy-site
