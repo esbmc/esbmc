@@ -3344,3 +3344,44 @@ variable's initialiser (§49.1). Both are converter-time, so §52's precondition
 necessary but not sufficient there: the converter is mid-population, and the
 namespace can only see what it has already added. Whether pointing it at the
 converter's own context is enough for those two is the next thing to measure.
+
+## 54. §49.1's blocker was the same precondition (2026-09-15)
+
+The vtable variable's initialiser -- the write §49.1 measured SIGSEGVing
+`pmr_memory_resource` and concluded was bounded by conversion order -- converts
+cleanly once `migrate_namespace_lookup` points at the context being built.
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 875 of 875.
+
+So §49.1's "converter-time value writes cannot be migrated eagerly" was the right
+observation with the wrong cause, and the exchange belongs at the site until someone
+decides where the converter's own entry point is. `clang_c_convert.cpp:2338-2344`
+already carried a TODO saying a related improvement "would require the
+migrate_namespace_lookup to be setup correctly"; this is that setup, for one write.
+
+### 54.1 An unexplained rendering change, recorded rather than waved past
+
+Comparing `--symbol-table-only` before §53 and after, every vptr-init statement
+renders its `this` unqualified where it used to carry the function prefix:
+
+```
+- ~A(&c:@S@B@F@~B#this->@base@tag-A)
++ ~A(&this->@base@tag-A)
+```
+
+What is measured: no verdict moves, across `esbmc-cpp/cpp` (1 065), the rest of
+`esbmc-cpp` (2 097), `regression/esbmc` (2 293) and the unit suite; and
+`vptr_cdtor_dispatch`, whose whole point is that a virtual call during destruction
+resolves to the declaring class's override, still passes -- which it could not if
+`this` were bound to the wrong object.
+
+What is **not** explained: why the name shortens. `sym_name_to_symbol`
+(`migrate.cpp:715-830`) should return the full id whether the lookup hits (level0,
+name = the id) or misses (level2_global, name = the id), since `c:@S@B@F@~B#this`
+contains no `&` for `end_of_name_pos` to cut at. Reading the function did not settle
+it and neither did the verdicts, so it is written down as an open question rather
+than a conclusion.
+
+No `test.desc` in the tree regexes a vptr-init line or a qualified `#this`, which is
+why the change is invisible to the suite -- and why it is worth a reader's attention:
+ESBMC's printed output is an interface.
