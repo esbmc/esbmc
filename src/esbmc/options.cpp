@@ -729,6 +729,11 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Encode tuples using our tuple to symbol API"},
     {"array-flattener", NULL, "Encode arrays using our array API"},
+    {"array-implication-select",
+     NULL,
+     "Encode symbolic reads of bounded arrays as implications on a free "
+     "variable rather than a nested ite chain; implies --array-flattener, so "
+     "the solver's native array theory is not used"},
     {"no-return-value-opt",
      NULL,
      "Disable return value optimization to compute the stack size"}}},

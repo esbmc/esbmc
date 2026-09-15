@@ -722,6 +722,31 @@ public:
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
+  /** Encode an N-way guarded choice as a free variable constrained by flat
+   *  implications, rather than as a nested ite chain (esbmc/esbmc#82).
+   *
+   *  Unlike the other mk_* members this does not just build a term: it
+   *  asserts into the current context, so the result is invalid once that
+   *  level is popped.
+   *
+   *  Guards must be mutually exclusive: overlapping guards selecting different
+   *  values make the formula unsatisfiable, where the equivalent ite chain
+   *  would silently take the last match. A null \p default_value leaves the
+   *  result unconstrained when no guard holds, modelling a nondeterministic
+   *  fallback; anything else pins it, and the caller owns the guards being
+   *  exhaustive or the fallback being the intended one.
+   *
+   *  @param sort sort of the resulting value.
+   *  @param tag name prefix for the free variable.
+   *  @param cases (guard, value) pairs; every value must have sort \p sort.
+   *  @param default_value value taken when no guard holds, or null for nondet.
+   *  @return AST of the free variable denoting the selected value. */
+  smt_astt mk_guarded_choice(
+    smt_sortt sort,
+    const std::string &tag,
+    const std::vector<std::pair<smt_astt, smt_astt>> &cases,
+    smt_astt default_value = nullptr);
+
   void renumber_symbol_address(
     const expr2tc &guard,
     const expr2tc &addr_symbol,

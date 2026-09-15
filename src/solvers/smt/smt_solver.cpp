@@ -2598,6 +2598,30 @@ smt_astt smt_solver_baset::make_n_ary_or(const ast_vec &v)
                    : make_n_ary(this, &smt_solver_baset::mk_or, v);
 }
 
+smt_astt smt_solver_baset::mk_guarded_choice(
+  smt_sortt sort,
+  const std::string &tag,
+  const std::vector<std::pair<smt_astt, smt_astt>> &cases,
+  smt_astt default_value)
+{
+  smt_astt out = mk_fresh(sort, tag);
+
+  for (const auto &[guard, value] : cases)
+    assert_ast(mk_implies(guard, value->eq(this, out)));
+
+  if (default_value)
+  {
+    ast_vec guards;
+    guards.reserve(cases.size());
+    for (const auto &c : cases)
+      guards.push_back(c.first);
+    assert_ast(
+      mk_implies(mk_not(make_n_ary_or(guards)), default_value->eq(this, out)));
+  }
+
+  return out;
+}
+
 expr2tc
 smt_solver_baset::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 {

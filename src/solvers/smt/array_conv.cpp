@@ -20,8 +20,8 @@ static inline bool array_indexes_are_same(
   return true;
 }
 
-array_convt::array_convt(smt_solver_baset *_ctx)
-  : array_iface(true, true), ctx(_ctx)
+array_convt::array_convt(smt_solver_baset *_ctx, bool _implication_select)
+  : array_iface(true, true), ctx(_ctx), implication_select(_implication_select)
 {
 }
 
@@ -167,18 +167,26 @@ smt_astt array_convt::mk_select(
   }
 
   // For undetermined indexes, create a large case switch across all values.
-  smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
   size_t dom_width = ma->sort->get_domain_width();
 
   assert(ma->array_fields.size() >= 1);
-  smt_astt theval = fresh; // Failed-to-look-up value
+
+  std::vector<std::pair<smt_astt, smt_astt>> cases;
+  cases.reserve(ma->array_fields.size());
   for (unsigned long i = 0; i < ma->array_fields.size(); i++)
-  {
-    smt_astt tmp_idx = ctx->mk_smt_bv(BigInt(i), dom_width);
-    smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
-    theval = ma->array_fields[i]->ite(ctx, idx_eq, theval);
-  }
+    cases.emplace_back(
+      real_idx->eq(ctx, ctx->mk_smt_bv(BigInt(i), dom_width)),
+      ma->array_fields[i]);
+
+  // Null default: an index matching no field leaves the result unconstrained,
+  // which is what the ite chain's free-variable base case denotes.
+  if (implication_select)
+    return ctx->mk_guarded_choice(ressort, "array_mk_select::", cases);
+
+  smt_astt theval = ctx->mk_fresh(ressort, "array_mk_select::");
+  for (const auto &[guard, value] : cases)
+    theval = value->ite(ctx, guard, theval);
 
   return theval;
 }

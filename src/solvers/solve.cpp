@@ -206,6 +206,7 @@ smt_convt *create_solver(
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
+  bool impl_select = options.get_bool_option("array-implication-select");
   bool array_flat = options.get_bool_option("array-flattener");
   bool fp_to_bv = options.get_bool_option("fp2bv");
 
@@ -215,23 +216,21 @@ smt_convt *create_solver(
     ctx->set_tuple_iface(tuple_api);
   // Use the node flattener if specified
   else if (node_flat)
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns, impl_select));
   // Use the symbol flattener if specified
   else if (sym_flat)
     ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
   // Default: node flattener
   else
-    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns, impl_select));
 
   // Pick an array flattener to use. Again, pick the solver native one by
   // default, or the one specified, or if none of the above then use the built
   // in arrays -> to BV flattener.
   if (array_api != nullptr && !array_flat)
     ctx->set_array_iface(array_api);
-  else if (array_flat)
-    ctx->set_array_iface(new array_convt(ctx));
   else
-    ctx->set_array_iface(new array_convt(ctx));
+    ctx->set_array_iface(new array_convt(ctx, impl_select));
 
   if (fp_api == nullptr || fp_to_bv)
     ctx->set_fp_conv(new fp_convt(ctx));
