@@ -436,7 +436,6 @@ bool solidity_convertert::get_type_description(
 
     new_type = pointer_typet(symbol_typet(id));
     set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
-    set_sol_contract(new_type, cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:

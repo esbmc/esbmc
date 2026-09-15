@@ -111,19 +111,29 @@ public:
     return !t.get("#sol_bytesn_size").empty();
   }
 
-  // Set/get/test the Solidity contract name carried on a typet via the
-  // #sol_contract irep attribute (the declaring contract of a contract type).
-  static void set_sol_contract(typet &t, const irep_idt &cname)
+  // The declaring contract of a contract type. No longer carried on the typet:
+  // see get_sol_contract below.
+  /// Derived rather than read back from `#sol_contract`: a contract type is a
+  /// pointer to the contract's own `tag-<name>` symbol type, and the converter
+  /// already knows every contract's name, so the name need not ride on the type
+  /// -- which matters because IREP2 has no field for it
+  /// (docs/roadmap/scope-solidity-irep2.md §8).
+  std::string get_sol_contract(const typet &t) const
   {
-    t.set("#sol_contract", cname);
+    const typet &sub = t.is_pointer() ? t.subtype() : t;
+    if (sub.id() != typet::t_symbol)
+      return "";
+
+    const std::string id = sub.identifier().as_string();
+    if (id.compare(0, prefix.size(), prefix) != 0)
+      return "";
+
+    const std::string cname = id.substr(prefix.size());
+    return linearizedBaseList.count(cname) ? cname : "";
   }
-  static std::string get_sol_contract(const typet &t)
+  bool has_sol_contract(const typet &t) const
   {
-    return t.get("#sol_contract").as_string();
-  }
-  static bool has_sol_contract(const typet &t)
-  {
-    return !t.get("#sol_contract").empty();
+    return !get_sol_contract(t).empty();
   }
 
   // Set/get the Solidity "mapping-backed array" flag carried on a typet via
