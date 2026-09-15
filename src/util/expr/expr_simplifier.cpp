@@ -44,10 +44,20 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
     if (expr_id == address_of_id) // unlikely
       return expr2tc();
 
-    // And overflows too. We don't wish an add to distribute itself, for example,
-    // when we're trying to work out whether or not it's going to overflow.
+    // And overflows too. We don't wish an add to distribute itself, for
+    // example, when we're trying to work out whether or not it's going to
+    // overflow. do_simplify() gets one shot first, on the still-unsimplified
+    // operand: it only recognises a structural pattern (widened-operand
+    // multiply) where the result is provably decisive, so it can't be fooled by
+    // the arithmetic reassociation this gate exists to block.
     if (expr_id == overflow_id)
-      return expr2tc();
+    {
+      expr2tc shortcut = do_simplify();
+      if (is_nil_expr(shortcut))
+        return expr2tc();
+      simplification_check::verify_node_rewrite(*this, shortcut);
+      return shortcut;
+    }
 
     // Short-circuit pre-pass for and/or/if. do_simplify() runs only the
     // node-local peepholes — it never recurses into operands — so calling
@@ -5239,12 +5249,46 @@ expr2tc overflow_cast2t::do_simplify() const
 
 expr2tc overflow2t::do_simplify() const
 {
-  // expr2t::simplify gates `overflow_id` and never reaches this method via
-  // the operands-first walker (see expr_simplifier.cpp around line 34) — the
-  // inner arith op must keep its un-simplified shape so the SMT layer can
-  // see whether the operation itself overflows. This do_simplify is therefore
-  // only reachable through direct try_simplification calls. No callers do
-  // that today; leave as a stub rather than add code that would not run.
+  // `(wideT)a * (wideT)b`: a same-signedness w1-bit and w2-bit value always
+  // produce a product that fits in w1+w2 bits of that signedness, so a
+  // destination at least that wide can never overflow. Without this, the SMT
+  // encoding (smt_overflow.cpp, mul_id) doubles the destination width and
+  // asks the solver to prove UNSAT over that wide a multiplier — a classic
+  // hard case for bit-blasting solvers (#7840).
+  if (!is_mul2t(operand))
+    return expr2tc();
+
+  const mul2t &mul = to_mul2t(operand);
+  if (!is_typecast2t(mul.side_1) || !is_typecast2t(mul.side_2))
+    return expr2tc();
+
+  // The cast target is what the multiply actually operates on; require it to
+  // match the multiply's own declared type. assert_arith_2ops_consistency
+  // (irep2_expr.cpp) only checks width, never signedness, and some
+  // constructions (e.g. migrate.cpp's `mul2tc(op0->type, op0, op1)` for
+  // "overflow-*") set a mul's type from one operand alone. Without this
+  // check, from1/from2's signedness could be read against a destination type
+  // that isn't actually the type the multiplication is evaluated at.
+  if (mul.side_1->type != operand->type || mul.side_2->type != operand->type)
+    return expr2tc();
+
+  const expr2tc &from1 = to_typecast2t(mul.side_1).from;
+  const expr2tc &from2 = to_typecast2t(mul.side_2).from;
+
+  const bool both_signed = is_signedbv_type(from1) && is_signedbv_type(from2) &&
+                           is_signedbv_type(operand->type);
+  const bool both_unsigned = is_unsignedbv_type(from1) &&
+                             is_unsignedbv_type(from2) &&
+                             is_unsignedbv_type(operand->type);
+  if (!both_signed && !both_unsigned)
+    return expr2tc();
+
+  unsigned int w1 = from1->type->get_width();
+  unsigned int w2 = from2->type->get_width();
+  unsigned int dest_width = operand->type->get_width();
+  if (w1 + w2 <= dest_width)
+    return gen_false_expr();
+
   return expr2tc();
 }
 
