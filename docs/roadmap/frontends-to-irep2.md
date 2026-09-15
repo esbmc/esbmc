@@ -3698,3 +3698,44 @@ them. And twice now a claim in these documents has been refuted by widening the 
 set rather than by a better argument: §147.3's 26 sites needed the script's own false
 positives removed, and §148.3's first draft claimed 0 re-entries from a corpus glob that
 had quietly dropped every suite nested one level deeper. The real figure is 7 of 8 682.
+
+## 61. Phase 8's first ten, and a third reader of a symbol's value (2026-09-15)
+
+§60 said a site that exists to mark state during construction is not blocked on anything,
+and that nothing in the census distinguishes it from one that is. Phase 8's first ten are
+that shape -- a local symbol's value written and then pushed onto the `code_declt` beside
+it -- and they are **not** dead. `mark_decl_as_non_det` (`mark_decl_as_non_det.cpp:31`)
+reads the symbol's value as its oracle for "was this declaration initialised", so removing
+the write inserts `ASSIGN sym = NONDET(...)` ahead of the real initialiser. The store is
+immediately overwritten, which is why deleting all ten still passes 525 of 525 -- the suite
+cannot see it and `--goto-functions-only` can.
+
+So they are converted rather than deleted, and the conversion is GOTO-identical across all
+515 measurable programs in `regression/esbmc-solidity` (501 distinct hashes, so the
+comparison has content). `scope-solidity-irep2.md` §14.4 has the three-reader table this
+turns on: `convert_decl` takes a local's initialiser from the decl operand,
+`static_lifetime_init` reads a static's symbol value, and `mark_decl_as_non_det` reads a
+local's value for its nil-ness. A frontend must satisfy all three, which is why
+`clang_c_convert.cpp:655-660` writes both channels for every initialised C local.
+
+```
+frontend                 B-1 ln      B-1     B-1*      B-2   B-2*
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     81
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    160
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+This retracts, rather than refines, the discriminator §60 was reaching for. "Delete a
+candidate group and run the suite" cannot sort live writes from dead ones when deleting a
+live one leaves a dead store, and that is the normal case here. The replacement is not a
+sweep but a rule: a duplicated initialiser is read for its content when the symbol is
+`static_lifetime` and for its nil-ness when it is not, so the whole family is live and the
+family is convertible -- with the caveat in §14.4 that a static one emits its value into
+`__ESBMC_main`, where what the migrate seam drops is rendered rather than ignored. That is better news for the remaining 160 than a deletion
+sweep, and it is the second time in three ticks that a residue classified by what a write
+*looked* like turned out to be classified wrongly.
