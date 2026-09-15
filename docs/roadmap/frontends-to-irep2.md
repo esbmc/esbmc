@@ -3111,3 +3111,75 @@ rather than widen the type. That is the next slice.
 class struct type, so it was worth measuring rather than assuming after §47 showed
 per-component metadata mattering: nothing reads this temporary's components, and
 `regression/esbmc-cpp/cpp` stays at 6 of 1 061.
+
+## 50. `#member_name` retired, and what actually blocks the ctor/dtor write (2026-09-15)
+
+§49.2 proposed deriving a ctor's class from the `this` argument's pointee so that
+`clang_cpp_convert.cpp:3160` could store IREP2. The derivation is right and has
+landed; the *reason* §49.2 gave for the write being blocked was wrong, and
+measuring it is what showed that.
+
+### 50.1 The derivation
+
+A ctor's or dtor's first argument is `this`, so `arguments().front()`'s pointee
+identifier names the declaring class -- the same id `#member_name` held. Both
+readers (`clang_cpp_adjust_code_gen.cpp:66` and `:159`) now go through one
+`ctor_class_id` helper.
+
+Measured before changing them, by printing the derived id against
+`ctor_type.member_name()` at the reader: **420 observations over
+`regression/esbmc-cpp/{cpp,inheritance,polymorphism_bringup,polymorphism_bringup_overload,destructors}`,
+19 distinct pairs, no divergence.** The probe prints on *agreement* as well, which
+is what makes the zero meaningful: an earlier version printed only on divergence and
+its silence was indistinguishable from never running. Three named tests give 4, 6
+and 27 observations.
+
+The same probe over 40 `regression/python/class*` and `*inherit*` tests gives **0**
+observations, so `gen_vptr_initializations` never runs on Python input and the
+change cannot affect it.
+
+The derivation is pinned by the corpus, not only by the probe: taking
+`arguments().back()` instead of `front()` -- the plausible wrong edit, identical on
+a one-argument ctor -- fails **610 of 1 061**.
+
+With those two sites converted, `irept::member_name()` has **no reader left in the
+tree**. The two clang-cpp writes go with it -- the one on a ctor/dtor code type and
+the one `annotate_class_field` put on every field's type. The Solidity and Python
+writes are now dead too; they belong to those frontends' own slices, and the
+accessor's doc comment says so rather than continuing to name a reader that no
+longer exists.
+
+### 50.2 The write is blocked by the ctor/dtor pseudo return type, not by the name
+
+`fd_symb->set_type(migrate_type(component_type))` fails **254 of 1 061**
+`esbmc-cpp/cpp` tests. The cause is not `#member_name`:
+
+```cpp
+// src/util/irep/migrate.cpp:406-418
+if (type.id() == "destructor")   return get_empty_type();
+if (type.id() == "constructor")  return get_empty_type();
+```
+
+A ctor's or dtor's return type is a legacy pseudo-type, and `migrate_type` maps both
+to `void`. `gen_vptr_initializations` opens by testing exactly those two ids, so
+after migration every ctor and dtor looks like an ordinary void function, the pass
+returns early, and no vptr is ever initialised. Nothing to do with the class name.
+
+Closing it needs the ctor/dtor distinction to survive the seam: a flag on
+`code_type2t`, or a derivation from the symbol id as in §50.1, or leaving this one
+write legacy and saying why. That is the decision the next slice has to make, and it
+is the same question `scope-clang-cpp-irep2.md` will need for `annotate_ctor_dtor_rtn_type`.
+
+### 50.3 Method note: two readings came from a stale binary
+
+The first two measurements of this slice said 6 of 1 061 and were worthless. The
+build had failed -- `parent_class_id` was still used by the multi-TU vptr-init
+fallback below the line that declared it -- and the failure was invisible because
+the build command piped ninja through `grep -E 'error:|warning: unused' | head -5`,
+which filled all five lines with LLVM header warnings. `ctest` then ran the previous
+binary and reported the baseline.
+
+Check ninja's exit status, not a filtered tail of its output. The bisect that
+followed -- reverting only the `migrate_type` call -- is what separated the clean
+part of the slice from the broken one, and it is the only reason §50.2's cause is
+attributed correctly.
