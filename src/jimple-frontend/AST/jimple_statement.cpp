@@ -146,7 +146,7 @@ exprt jimple_assignment::to_exprt(
   const std::string &class_name,
   const std::string &function_name) const
 {
-  //TODO: Remove this hack
+  // TODO: Remove this hack
   if (is_skip)
   {
     code_skipt skip;
