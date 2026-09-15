@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <util/arith/arith_tools.h>
+#include <util/base/prefix.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_reassociate.h>
@@ -4444,6 +4445,43 @@ fold_odd_multiple_of_zero(const expr2tc &side_1, const expr2tc &side_2)
   return expr2tc();
 }
 
+/// True if the pointers address the start of two different variables (`&x`
+/// or `&x[0]`). Distinct objects compare equal only when one pointer is one
+/// past the end of an array (C11 6.5.9p6), which neither form is. Failed
+/// symbols stand for unknown objects that may coincide, so they never qualify.
+static bool addresses_distinct_variables(expr2tc a, expr2tc b)
+{
+  auto variable = [](expr2tc e) -> const symbol2t * {
+    while (is_typecast2t(e) && is_pointer_type(e) &&
+           is_pointer_type(to_typecast2t(e).from))
+      e = to_typecast2t(e).from;
+    if (!is_address_of2t(e))
+      return nullptr;
+    const expr2tc &object = to_address_of2t(e).ptr_obj;
+    if (is_symbol2t(object))
+      return &to_symbol2t(object);
+    if (!is_index2t(object))
+      return nullptr;
+    const index2t &element = to_index2t(object);
+    if (
+      is_symbol2t(element.source_value) && is_constant_int2t(element.index) &&
+      to_constant_int2t(element.index).value.is_zero())
+      return &to_symbol2t(element.source_value);
+    return nullptr;
+  };
+  const symbol2t *x = variable(a);
+  const symbol2t *y = variable(b);
+  if (!x || !y)
+    return false;
+  const std::string &nx = x->thename.as_string();
+  const std::string &ny = y->thename.as_string();
+  auto failed = [](const std::string &name) {
+    return has_prefix(name, "symex::invalid_object") ||
+           name.find("$object") != std::string::npos;
+  };
+  return nx != ny && !failed(nx) && !failed(ny);
+}
+
 expr2tc equality2t::do_simplify() const
 {
   // Self-comparison: x == x is always true (except for floats with NaN)
@@ -4452,6 +4490,9 @@ expr2tc equality2t::do_simplify() const
 
   if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, true))
     return r;
+
+  if (addresses_distinct_variables(side_1, side_2))
+    return gen_false_expr();
 
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
@@ -4543,6 +4584,9 @@ expr2tc notequal2t::do_simplify() const
 
   if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, false))
     return r;
+
+  if (addresses_distinct_variables(side_1, side_2))
+    return gen_true_expr();
 
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
