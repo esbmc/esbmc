@@ -3058,3 +3058,56 @@ int main() { Derived d; Base *b = &d; assert(b->f(5, 2) == 3); }
 declaration gives SUCCESSFUL. It reproduces identically on the previous commit --
 `pmr_memory_resource`'s thunk prints `do_allocate((…)this, , )` on both -- so it is
 not this slice's doing. It wants its own issue and a KNOWNBUG pair.
+
+## 49. Which converter-time writes can move, and which cannot (2026-09-15)
+
+Phase 7's remaining B-2 sites split on a line that was not visible until a value
+write was actually attempted.
+
+### 49.1 A value write at conversion time cannot be migrated eagerly
+
+`add_vtable_variable_symbols` ends with `vt_symb_var.set_value(values)`, a legacy
+struct `exprt`. Converting it to `migrate_expr` **breaks**
+`pmr_memory_resource{,_fail}` with a SIGSEGV inside BMC; the rest of
+`regression/esbmc-cpp/cpp` is unchanged at 6.
+
+The A/B of `--symbol-table-only` over five polymorphic tests says it is not a
+rendering difference. Every function pointer in every vtable initialiser gains a
+level-1 SSA suffix:
+
+```
+-    .c:@N@std@S@exception@F@~exception#=&~exception,
++    .c:@N@std@S@exception@F@~exception#=&~exception#&0#0,
+```
+
+so the migrated symbols are not at `level0`. The mechanism is already recorded, for
+a different purpose, at `clang_cpp_language.cpp:152`: before `c_link` a translation
+unit's own symbols are absent from what `migrate_namespace_lookup` resolves, and
+`sym_name_to_symbol` then substitutes the expression's own type for the symbol's.
+Type writes never met this because `migrate_type` needs no namespace -- which is
+why every site converted so far, here and in §47 and §48, has been a type.
+
+So the laziness of `symbolt::set_value(const exprt &)` is load-bearing at
+conversion time, and converter-side B-2 is bounded to type writes until the
+frontend stops naming symbols it has not yet linked. The adjust passes are not
+bounded this way: they run after the link, which re-orders what is left.
+
+### 49.2 `#member_name` blocks one more type write, and is derivable
+
+`clang_cpp_convert.cpp:3160` writes `component_type`, a ctor/dtor code type
+carrying `#member_name` (set at `:3139`) and read back at
+`clang_cpp_adjust_code_gen.cpp:57` and `:150`. `code_type2t` has no field for it and
+`migrate.cpp` carries none, so converting that write drops the class a vptr
+initialisation belongs to.
+
+It does not need a field. A ctor or dtor's first argument is `this`, so the class id
+is the pointee identifier of `arguments[0]` -- the same move §47 made for the vtable
+readers, and the same conclusion: derive from what the IREP2 type already holds
+rather than widen the type. That is the next slice.
+
+### 49.3 What did move
+
+`clang_cpp_convert.cpp:2463`, the `array_init$` temporary's struct type. It is a
+class struct type, so it was worth measuring rather than assuming after §47 showed
+per-component metadata mattering: nothing reads this temporary's components, and
+`regression/esbmc-cpp/cpp` stays at 6 of 1 061.
