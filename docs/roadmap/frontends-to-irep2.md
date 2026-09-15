@@ -3310,6 +3310,135 @@ Each earlier reading was consistent with the evidence available and wrong:
 The step that separated them was applying the two candidate patches **one at a
 time** -- the repo's own rule -- rather than together. Applied together they pass,
 and the argument-symbol half would have shipped as though it were load-bearing.
+
+## 53. §52's precondition made a property of the pass (2026-09-15)
+
+§52 fixed one call site. The precondition it found is not site-specific: any pass
+that migrates an expression has to point `migrate_namespace_lookup` at its own
+context first, and a pass that forgets gets silent name mangling rather than an
+error. So the exchange moves up to `clang_c_adjust::adjust()`, which both the C and
+C++ legacy adjust passes run through, and the per-site version in §52 goes away.
+
+Measured on the shared entry point, not just the C++ one: `regression/esbmc` is 2 of
+2 293 -- the two THOROUGH tests that pass when re-run serially -- and
+`regression/esbmc-cpp/cpp` stays at 6.
+
+### 53.1 The vptr-init body moves too
+
+With the precondition holding for the pass, `gen_vptr_initializations` stores the
+constructor body it rewrites IREP2-side. Two things had to be checked rather than
+assumed:
+
+`need_vptr_init` is the flag that pass consumes, and `migrate_expr` carries nothing
+like it -- but the write being converted is the one that *clears* it, and absent
+reads as false, so dropping it is what the line already meant.
+
+The body is the whole constructor, so it can contain a `new` whose initialiser is a
+constructor call, and that `constructor` flag is read after adjust
+(`goto-programs/builtin_functions.cpp:679`). `migrate_expr` does not carry it
+either. A probe with a nondet field value -- so the claim cannot be folded away --
+verifies: `PASSED ... assertion b->get() == v`. Landed as
+`regression/esbmc-cpp/cpp/github_4715_vptr_init_body_irep2{,_fail}`; both halves fail
+if the conversion is applied without the namespace fix, which is the combination
+this slice is.
+
+### 53.2 Two C++ frontend value writes remain, both converter-time
+
+`clang_cpp_convert.cpp:3189` (the `need_vptr_init` flag being *set*) and the vtable
+variable's initialiser (§49.1). Both are converter-time, so §52's precondition is
+necessary but not sufficient there: the converter is mid-population, and the
+namespace can only see what it has already added. Whether pointing it at the
+converter's own context is enough for those two is the next thing to measure.
+
+## 54. §49.1's blocker was the same precondition (2026-09-15)
+
+The vtable variable's initialiser -- the write §49.1 measured SIGSEGVing
+`pmr_memory_resource` and concluded was bounded by conversion order -- converts
+cleanly once `migrate_namespace_lookup` points at the context being built.
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 875 of 875.
+
+So §49.1's "converter-time value writes cannot be migrated eagerly" was the right
+observation with the wrong cause, and the exchange belongs at the site until someone
+decides where the converter's own entry point is. `clang_c_convert.cpp:2338-2344`
+already carried a TODO saying a related improvement "would require the
+migrate_namespace_lookup to be setup correctly"; this is that setup, for one write.
+
+### 54.1 An unexplained rendering change, recorded rather than waved past
+
+Comparing `--symbol-table-only` before §53 and after, every vptr-init statement
+renders its `this` unqualified where it used to carry the function prefix:
+
+```
+- ~A(&c:@S@B@F@~B#this->@base@tag-A)
++ ~A(&this->@base@tag-A)
+```
+
+What is measured: no verdict moves, across `esbmc-cpp/cpp` (1 065), the rest of
+`esbmc-cpp` (2 097), `regression/esbmc` (2 293) and the unit suite; and
+`vptr_cdtor_dispatch`, whose whole point is that a virtual call during destruction
+resolves to the declaring class's override, still passes -- which it could not if
+`this` were bound to the wrong object.
+
+What is **not** explained: why the name shortens. `sym_name_to_symbol`
+(`migrate.cpp:715-830`) should return the full id whether the lookup hits (level0,
+name = the id) or misses (level2_global, name = the id), since `c:@S@B@F@~B#this`
+contains no `&` for `end_of_name_pos` to cut at. Reading the function did not settle
+it and neither did the verdicts, so it is written down as an open question rather
+than a conclusion.
+
+No `test.desc` in the tree regexes a vptr-init line or a qualified `#this`, which is
+why the change is invisible to the suite -- and why it is worth a reader's attention:
+ESBMC's printed output is an interface.
+
+## 55. The renaming parser claims C++ symbol ids, and §54.1's open question (2026-09-15)
+
+§52 made the union constructor's body migrate by pointing
+`migrate_namespace_lookup` at the right context. That was the right fix for that
+site and it left the underlying defect in place: what `sym_name_to_symbol` does with
+an id it cannot resolve.
+
+### 55.1 Two ids, measured out of the frontend
+
+A unit case migrates two real C++ ids through a namespace that does not contain
+them:
+
+| id | before | after |
+|---|---|---|
+| `c:@S@B@F@~B#this` | `level2_global`, whole name kept, and `migrate_expr_back` returns `c:@S@B@F@~B#this&0#0` | `level0`, round-trips unchanged |
+| `c:@U@U@F@U#&1$@U@U#::ref` | truncated to `c:@U@U@F@U#` | `level0`, whole name |
+
+The first corrupts the id on the way back; the second is §52's collapse, since every
+id sharing that prefix becomes the same symbol. Both are silent.
+
+The discriminator is in the shape a renamed name actually has: the node counter is
+spelled between `&` and `#`, so `&` comes first. A clang USR has them the other way
+round -- it is full of `#`, and a reference parameter's mangling contains `&` -- or
+has no `&` at all. `sym_name_to_symbol` now requires `&` before `#` before claiming
+a name as `level2_global`, and otherwise returns `level0` with the whole name: not
+renamed, just not shown to this namespace.
+
+`migrate.cpp`'s own comment already said a miss is "ordinary while a context is
+still being built", so the fallback has to be lossless. Pointing the namespace
+correctly (§52, §53, §54) is still worth doing -- a hit carries the symbol-table type
+-- but a miss no longer changes the name.
+
+### 55.2 §54.1 closed: the printer, not the binding
+
+The `this` shortening §54.1 could not explain is a display difference. The parameter
+symbol's entry reads
+
+```
+Symbol......: c:@S@A@F@~A#this
+Base name...: this
+```
+
+and after migration the expression resolves well enough for the printer to use the
+base name, where the unmigrated body left it printing the raw identifier. Nothing
+about which object `this` denotes changes, which is what the unchanged verdicts and
+`vptr_cdtor_dispatch` were already saying. Recorded here because §54.1 promised an
+answer, and because the same shape -- output that improves and therefore differs --
+is what a `test.desc` regex would trip over.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured

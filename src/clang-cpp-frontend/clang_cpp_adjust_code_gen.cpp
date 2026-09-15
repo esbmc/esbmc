@@ -139,7 +139,9 @@ void gen_vptr_initializations(contextt &context, symbolt &symbol)
   (void)components;
 
   value.need_vptr_init(false);
-  symbol.set_value(std::move(value));
+  expr2tc value2;
+  migrate_expr(value, value2);
+  symbol.set_value(value2);
 }
 
 static exprt gen_vptr_init_rhs(
