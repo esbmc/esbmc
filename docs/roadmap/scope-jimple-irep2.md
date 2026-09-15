@@ -1900,3 +1900,33 @@ IREP2.
 
 So jimple's B-1 stops at 97 with one legacy statement arm left, and that arm is blocked on a
 question about the frontend rather than about the migration.
+
+## 48. B-2's residue, and two more spelling false positives (2026-09-15)
+
+§39 recorded jimple's B-2 as met. `scripts/irep2/bars.py` reports 10 raw and 8 refined, so
+the two disagree, and taking the eight one at a time explains why.
+
+**Three convert**: `jimple_method.cpp:92` (a method's code type),
+`jimple-language.cpp:97` and `:193` (a post-processed symbol's type and `main`'s). 30 of 30
+jimple and 876 of 876 unit tests; B-2* 8 -> **5**.
+
+**Two were never debt**, and both are cases the script's own caveat names:
+
+- `jimple_ast.h:69` -- `create_jimple_symbolt` takes a `const type2tc &`, so
+  `symbol.set_type(t)` already writes IREP2. The grep matched the spelling `set_type(t)` and
+  the refinement could not tell, because the argument is a plain name.
+- `jimple_method.cpp:93` -- `set_value(body->to_code2t(...))` passes an `expr2tc` returned by
+  a method call, which is neither a `migrate_*` call nor a `*2tc` constructor.
+
+Wrapping the first in `migrate_type` does not compile, which is how it was caught. §58's
+`B-2*` is an upper bound for exactly this reason, and jimple is the frontend where the
+remaining count is small enough for the residue to matter: 5 of the 8 are real.
+
+**Three stay legacy, each for a reason already recorded**: `jimple_file.cpp:159` sets a
+`width` attribute on the class struct type immediately before writing it, and that attribute
+is read by this frontend's own `newarray` arms (§45.2 of the parent document);
+`jimple-language.cpp:108` and `:194` are body writes, which §6.1 of
+`scope-python-irep2.md` established must stay lazy until every symbol they name exists.
+
+So jimple's B-2 residue is 5 reported, 3 of which are by design and 2 of which are miscounts.
+That is what "met" in §39 meant, stated in numbers.

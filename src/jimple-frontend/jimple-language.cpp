@@ -94,7 +94,7 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
   std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
-  symbol.set_type(std::move(t));
+  symbol.set_type(migrate_type(t));
   symbol.name = name;
   symbol.id = id;
 
@@ -190,7 +190,7 @@ void jimple_languaget::setup_main(contextt &context)
 
   new_symbol.id = "__ESBMC_main";
   new_symbol.name = "__ESBMC_main";
-  new_symbol.set_type(std::move(main_type));
+  new_symbol.set_type(migrate_type(main_type));
   new_symbol.set_value(std::move(init_code));
 
   if (context.move(new_symbol))
