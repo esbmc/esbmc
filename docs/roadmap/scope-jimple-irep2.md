@@ -1610,3 +1610,27 @@ converted the expression arms -- not deleting the arm and seeing what breaks.
 
 B-1 for jimple is therefore 186 of which the statements' share is real work, not dead
 code. That is worth knowing before anyone reads the count as slack.
+
+### 40.3 Which arms, measured instead of inferred
+
+§40.2 drew a conclusion from two deletion failures. Instrumenting all nine arms with an
+`fprintf` naming the class and sweeping the 27 tests replaces it with the answer:
+
+```
+14 jimple_throw
+ 8 jimple_assignment
+```
+
+**Two** of the nine are reached; the other seven never run. Both earlier attempts failed
+because each deleted one of those two -- attempt 1 both, attempt 2 `jimple_assignment`,
+which has a native `to_code2t` and is reached through its legacy arm anyway. That is the
+fact neither inference could supply: a native IREP2 arm existing does not mean the legacy
+one is unused.
+
+The seven are deleted: `jimple_identity`, `jimple_invoke`, `jimple_return`,
+`jimple_label`, `jimple_goto`, `jimple_if`, `jimple_assertion`. 27 of 27 jimple tests and
+876 of 876 unit tests pass, and B-1 goes 186 -> **160**, a sixth of the phase's remaining
+count removed as dead code.
+
+What is left needs `jimple_throw` and `jimple_assignment` converted at their call sites
+first, which is the §32-§38 shape and the next slice.
