@@ -129,6 +129,9 @@ public:
     const locationt &location,
     codet &target_block);
 
+  /// Throws the shared "tagged argument, no known parameter type" refusal.
+  [[noreturn]] void refuse_tagged_argument() const;
+
   /**
    * @brief Whole-struct copy: fills `name`'s tagged-object symbol from a
    * value that is already tagged-object-typed

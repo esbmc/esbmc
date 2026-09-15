@@ -879,6 +879,13 @@ exprt dynamic_type_handler::build_tagged_value(
   return build_symbol(tag_symbol);
 }
 
+void dynamic_type_handler::refuse_tagged_argument() const
+{
+  throw std::runtime_error(
+    "passing a dynamically-typed variable to a function is not yet "
+    "supported");
+}
+
 void dynamic_type_handler::assign_tagged_object(
   const exprt &rhs,
   const locationt &location,

@@ -5510,10 +5510,10 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
       for (const auto &arg_node : call_["args"])
       {
         exprt arg = converter_.get_expr(arg_node);
+        // get_function_call's own indirect-call handling claims a pointer
+        // variable before this is reached; kept for any other `!is_code()`.
         if (type_handler_.is_tagged_scalar_type(arg.type()))
-          throw std::runtime_error(
-            "passing a dynamically-typed variable to a function is not yet "
-            "supported");
+          converter_.dynamic_type_handler_.refuse_tagged_argument();
         if (arg.type().is_code() && arg.is_symbol())
           arg = build_address_of(arg);
         call.arguments().push_back(arg);
@@ -5625,10 +5625,10 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
+    // Same as try_indirect_variable_call's check above: kept though no
+    // reproducer reaches this forward reference with a tagged argument.
     if (type_handler_.is_tagged_scalar_type(arg.type()))
-      throw std::runtime_error(
-        "passing a dynamically-typed variable to a function is not yet "
-        "supported");
+      converter_.dynamic_type_handler_.refuse_tagged_argument();
     call.arguments().push_back(
       arg.type().is_array() ? build_address_of(arg) : arg);
   }
@@ -5819,9 +5819,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         {
           exprt arg = converter_.get_expr(arg_node);
           if (type_handler_.is_tagged_scalar_type(arg.type()))
-            throw std::runtime_error(
-              "passing a dynamically-typed variable to a function is not "
-              "yet supported");
+            converter_.dynamic_type_handler_.refuse_tagged_argument();
           if (arg.type().is_array())
           {
             if (
@@ -5922,9 +5920,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         {
           exprt arg = converter_.get_expr(arg_node);
           if (type_handler_.is_tagged_scalar_type(arg.type()))
-            throw std::runtime_error(
-              "passing a dynamically-typed variable to a function is not "
-              "yet supported");
+            converter_.dynamic_type_handler_.refuse_tagged_argument();
           if (arg.type().is_array())
           {
             if (
@@ -6285,17 +6281,17 @@ exprt function_call_expr::coerce_tagged_argument(
   if (type_handler_.is_tagged_scalar_type(arg.type()))
   {
     if (!param_is_tagged)
-      throw std::runtime_error(
-        "passing a dynamically-typed variable to a function is not yet "
-        "supported");
+      converter_.dynamic_type_handler_.refuse_tagged_argument();
     return arg;
   }
 
   if (!param_is_tagged)
     return arg;
 
+  // Excludes floatbv: tagged comparisons mishandle float vs int type_id.
   if (
-    type_handler_.is_numeric_scalar_type(arg.type()) ||
+    (type_handler_.is_numeric_scalar_type(arg.type()) &&
+     !arg.type().is_floatbv()) ||
     type_handler_.is_string_type(arg.type()))
     return converter_.dynamic_type_handler_.build_tagged_value(
       arg, location, *converter_.current_block);
@@ -6331,9 +6327,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     if (param_idx < params.size())
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
     else if (type_handler_.is_tagged_scalar_type(arg.type()))
-      throw std::runtime_error(
-        "passing a dynamically-typed variable to a function is not yet "
-        "supported");
+      converter_.dynamic_type_handler_.refuse_tagged_argument();
 
     // A list passed to a callee may be mutated there (e.g. appended to), which
     // the caller's static length tracking does not observe. Mark the symbol so

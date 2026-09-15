@@ -930,9 +930,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         exprt arg_expr = get_expr(arg);
         // No parameter types to check against here, so refuse cleanly.
         if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
-          throw std::runtime_error(
-            "passing a dynamically-typed variable to a function is not yet "
-            "supported");
+          dynamic_type_handler_.refuse_tagged_argument();
         call.arguments().push_back(arg_expr);
       }
 
@@ -1012,9 +1010,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           // The pointer target only carries a return type, no parameter
           // types, so refuse cleanly instead of passing a mistyped arg.
           if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
-            throw std::runtime_error(
-              "passing a dynamically-typed variable to a function is not "
-              "yet supported");
+            dynamic_type_handler_.refuse_tagged_argument();
           // A function name used as an argument decays to a function pointer.
           if (arg_expr.type().is_code() && arg_expr.is_symbol())
             arg_expr = address_of_exprt(arg_expr);
