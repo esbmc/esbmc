@@ -3253,3 +3253,55 @@ constructor" is a property of the function rather than of its type -- which is w
 the legacy form parks it in the return type. The options are a flag on the symbol, a
 derivation from the symbol id, or leaving the encoding and this one write legacy with
 the reason stated. It wants deciding before more of `annotate_class_method` moves.
+
+## 52. The real bound on migrating a body: the namespace the pass is not pointed at (2026-09-15)
+
+§51.1 blamed the implicit union constructor's missing argument symbols for the
+self-assignment its migrated body became. That was wrong, and applying the two
+candidate patches one at a time is what showed it.
+
+### 52.1 What the instrument said
+
+Declaring the two parameters as real symbols -- `<function>::this` and
+`<function>::ref`, the shape `add_thunk_method_arguments` uses -- did **not** fix it.
+Instrumenting the lookup at the point of use explains why:
+
+```
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::this found_in_context=1 found_in_migrate_ns=0
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::ref  found_in_context=1 found_in_migrate_ns=0
+```
+
+The symbols are in the context the pass writes to and invisible through
+`migrate_namespace_lookup`, which still points at what `language_ui` installed. A
+miss there does not fail loudly: `sym_name_to_symbol` (`migrate.cpp:715`) treats an
+unresolvable name as an SSA-renamed one and parses it for `?`, `!`, `&` and `#`. A
+clang USR contains `#` and `&`, so the id is truncated at the first `&` -- and both
+of this body's operands truncate to the same prefix, which is the self-assignment.
+
+### 52.2 The fix is the one the IREP2 adjust pass already documents
+
+`clang_c_adjust_irep2.cpp:20-27` has this exact comment and the exact fix:
+`std::exchange(migrate_namespace_lookup, &ns)` around the walk. The legacy C++
+adjust pass never did it. With the exchange in place the body migrates correctly --
+`ASSIGN *this = *U::ref`, `VERIFICATION SUCCESSFUL` -- and the argument-symbol patch
+turns out to be unnecessary and is not part of this change.
+
+So the bound is not "converter versus adjust" (§49.1) and not "the symbols do not
+exist" (§51.1). It is **whether the pass doing the migrating has pointed
+`migrate_namespace_lookup` at its own context**. Any pass that writes an IREP2 value
+must do that first, and the failure mode when it does not is silent name mangling
+rather than an error.
+
+### 52.3 Why this took three sections to get right
+
+Each earlier reading was consistent with the evidence available and wrong:
+
+- §49.1 measured a converter-time value write failing and generalised "before
+  `c_link` the symbols are absent" into a converter/adjust distinction.
+- §51.1 measured an adjust-time value write failing, found the identifiers were not
+  symbol-table ids, and stopped there.
+- §52.1 measured the lookup itself and found the namespace, not the symbols.
+
+The step that separated them was applying the two candidate patches **one at a
+time** -- the repo's own rule -- rather than together. Applied together they pass,
+and the argument-symbol half would have shipped as though it were load-bearing.
