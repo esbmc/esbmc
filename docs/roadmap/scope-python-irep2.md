@@ -129,10 +129,49 @@ is what §49.1 measured for C++ before §52 explained it, except here the namesp
 explanation is ruled out by §4.1. The cause is not yet known, and finding it is the next
 task rather than a guess to record.
 
-## 5. Next
+## 6. The wall diagnosed: a body cannot be migrated before its symbols exist (2026-09-15)
+
+§4.2 left the hard failure unexplained. Narrowing it one site at a time gives the
+answer, and it is not the 34 sites the earlier batch implicated.
+
+Eight more value writes convert cleanly -- all three in
+`converter/converter_symbols.cpp`, both in `python2goto.cpp`, and three of
+`python_converter.cpp`'s five. The two that do not are the **program-entry bodies**:
+
+```cpp
+user_main_symbol.set_value(user_code);   // python_converter.cpp:1057
+main_symbol.set_value(std::move(v));     // :1179
+```
+
+Converting `user_main` alone takes the first slice to **53 failures of 400**, and the
+failure is a SIGSEGV during GOTO creation rather than a wrong verdict.
+
+### 6.1 Why, and the rule it gives
+
+§4.1 measured a 19% symbol-lookup miss rate in this frontend, and called the misses
+harmless because python ids cannot be mangled. They are harmless *while values stay
+legacy*: a legacy value is migrated later, by which time the symbol table is complete
+and every lookup hits. Migrating a body **at conversion time** freezes those misses
+into the stored expression -- each missed symbol keeps the expression's own type
+instead of the symbol-table type, which `migrate.cpp` warns hashes wrongly -- and a
+body references every symbol the module declares, so the 19% is spread across the whole
+program.
+
+`user_code` is the entire user program. That is why a small initialiser converts and a
+body does not, and it is the same shape as `frontends-to-irep2.md` §49.1's C++ finding
+with a different cause: there the namespace was wrong, here the namespace is right
+(§4.1) and the symbols genuinely are not there yet.
+
+So the rule for the rest of Phase 9, and for any frontend: **a symbol's value may be
+stored IREP2-side at conversion time only if every symbol it names is already in the
+table.** For bodies that is false by construction, and the laziness of
+`set_value(const exprt &)` is what makes the legacy path correct -- migration happens
+after the table is complete. Moving a body to IREP2 therefore belongs in the adjust
+pass, which runs after the link, not in the converter.
+
+## 7. Next
 
 - The 22 type writes §3 identifies as blocked, once `#cpp_type` has a route.
-- Why the converter's body and `main` value writes fail as hard as §4.2 measures --
-  34 sites, and the namespace explanation is already ruled out.
+- The two entry-body writes, in the adjust pass rather than the converter (§6.1).
 - `#cpp_type`: census its readers the way `scope-solidity-irep2.md` §9 censused
   Solidity's, and pick a route from the four in that document's §11.1.
