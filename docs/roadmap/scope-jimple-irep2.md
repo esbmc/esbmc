@@ -2104,4 +2104,17 @@ follow:
   invoke. That gap let a silent semantic change through, and it is worth closing before
   `jimple_virtual_invoke` is converted for real.
 
+### 43.2 The gap closed
+
+`github_4715_virtual_invoke_assign_01{,_fail}` is that test. The jimple input is JSON, so
+it is hand-authored rather than compiled: `kt-func-call-true`'s structure with its callee
+made an instance method, a receiver local allocated with `new`, and the assignment's
+right-hand side changed from `static_invoke` to `virtual_invoke`. The failing half changes
+the callee's return value rather than the assertion, so both halves exercise the same
+lowering.
+
+It bites on exactly the over-deletion it exists to catch: delete
+`jimple_virtual_invoke::to_exprt` again and **both halves fail**, where the 27 tests before
+it all passed. `jimple` is 29 of 29 with it added.
+
 B-1 is 115 rather than the 110 §42 reported, the difference being the restored arm.
