@@ -660,6 +660,20 @@ std::optional<BigInt> function_call_expr::try_fold_constant_arith_json(
   return std::nullopt;
 }
 
+// Retype `expr` to `target`. Relabeling (not casting) a floatbv expr onto a
+// non-floatbv target keeps its ieee_* expr id while its type says non-float,
+// so a later simplify_floatbv_2ops assert aborts -- hits `%` over a symbolic
+// `**` exponent (kept double via libm) reaching bool()/a consensus-type
+// cast. Typecast in that case; a plain relabel is fine otherwise, matching
+// every other builtin/consensus-type cast here.
+static exprt retype_or_typecast(exprt expr, const typet &target)
+{
+  if (expr.type().is_floatbv() && !target.is_floatbv())
+    return build_typecast(expr, target);
+  expr.type() = target;
+  return expr;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1162,8 +1176,8 @@ exprt function_call_expr::build_constant_from_arg() const
     if (is_complex_type(value_expr.type()))
       return complex_to_bool_expr(value_expr);
 
-    value_expr.type() = type_handler_.get_typet(func_name, arg_size);
-    return value_expr;
+    const typet bool_t = type_handler_.get_typet(func_name, arg_size);
+    return retype_or_typecast(value_expr, bool_t);
   }
 
   else if (func_name == "str")
@@ -1238,7 +1252,7 @@ exprt function_call_expr::build_constant_from_arg() const
     return build_typecast(expr, t);
 
   if (func_name != "str")
-    expr.type() = t;
+    expr = retype_or_typecast(expr, t);
 
   return expr;
 }
