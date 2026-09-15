@@ -80,14 +80,14 @@ public:
 
     context.Foreach_operand([&is_model](symbolt &s) {
       if (!s.is_type && s.get_type().is_code() && !is_model(s))
-        s.set_value(nil_exprt());
+        s.set_value(migrate_expr(nil_exprt()));
     });
 
     goto_convert(context, config.options, goto_functions);
 
     context.Foreach_operand([&is_model](symbolt &s) {
       if (!s.is_type && s.get_type().is_code() && is_model(s))
-        s.set_value(nil_exprt());
+        s.set_value(migrate_expr(nil_exprt()));
     });
 
     std::ofstream out(
