@@ -42,37 +42,6 @@ expr2tc jimple_full_method_body::to_code2t(
   return code_block2tc(ops, nil, nil);
 }
 
-exprt jimple_full_method_body::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  /* This is a function body, so we create a `code_blockt` and
-     * populate it with all its statements (`this->members`) */
-  code_blockt block;
-
-  // For each Jimple Statement
-  for (auto const &stmt : this->members)
-  {
-    // Generate the equivalent exprt of the jimple statement
-    auto expression = stmt->to_exprt(ctx, class_name, function_name);
-
-    // Get a location for the class and this function
-    auto l = jimple_ast::get_location(class_name, function_name);
-
-    // If the original line is known, then we set it
-    if (stmt->line_location != -1)
-      l.set_line(stmt->line_location);
-
-    expression.location() = l;
-
-    // Add the expression into the block
-    block.operands().push_back(expression);
-  }
-
-  return block;
-}
-
 void jimple_full_method_body::from_json(const json &stmts)
 {
   /* In Jimple, locations are set through attributes and it
