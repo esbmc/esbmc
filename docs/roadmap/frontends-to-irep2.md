@@ -3739,3 +3739,47 @@ family is convertible -- with the caveat in §14.4 that a static one emits its v
 `__ESBMC_main`, where what the migrate seam drops is rendered rather than ignored. That is better news for the remaining 160 than a deletion
 sweep, and it is the second time in three ticks that a residue classified by what a write
 *looked* like turned out to be classified wrongly.
+
+## 62. The static case measured, and a fourth reader (2026-09-15)
+
+§61 converted ten writes and flagged one thing it could not settle: a `static_lifetime`
+symbol has its value's *content* emitted into `__ESBMC_main` by `init_variable`, so there the
+display name the migrate seam drops is rendered rather than ignored. Settling it needed a
+site reached by both kinds of symbol, and the obvious candidate was not one -- the
+dynarray-state arm is reached by 6 of 515 programs and by no static symbol at all, so the
+clean comparison it produced measured the case that was never in doubt. Counting every write
+in `solidity_convert_decl.cpp` by flag found the site that does: `:718`, 845 runs, 12 static.
+
+The answer splits. At `:718` the `--goto-functions-only` dump is identical for all 515
+programs, so `init_variable` emits the same assignment. The `--symbol-table-only` dump is not:
+12 programs render a state variable's address literal as `0x1F98...` instead of
+`180374...` -- the same number, differently written, because `migrate_expr_back` rebuilds a
+constant through `integer2binary` (`migrate.cpp:4408-4416`) and `a_hex_or_oct` does not cross
+the seam. So `:718` is left for the change that carries the spelling, the §44
+`argument_base_names` pattern, and the other sixteen sites land here with both artefacts
+identical.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+§61's three-reader table needs a fourth row, and it is the row that makes attribute loss
+observable: `solidity_convert_constructor.cpp:499` reads a state variable's value and
+branches on `#zero_initializer` and, through `convert_type_expr`, on `#sol_type`,
+`#sol_bytesn_size` and `#sol_array_size` -- none of which appears anywhere in `migrate.cpp`.
+No program in the corpus shows a difference from it, but it is why the rest of Solidity's
+writes cannot be swept: a value that reaches `:499` has to keep attributes `migrate_expr`
+drops.
+
+The habit worth keeping is the one that caught both of these. Three ticks running, the error
+has not been a wrong argument but a measurement over the wrong set or the wrong artefact:
+a glob that dropped nested suites, a capture piped to `/dev/null`, a site no static symbol
+reaches, and a GOTO comparison that could not see a symbol table change. Instrument the site
+and count before reading a green comparison as an answer, and compare more than one artefact.
