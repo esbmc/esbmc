@@ -152,10 +152,6 @@ public:
     return "Jimple BinOP";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -181,10 +177,6 @@ public:
     return "Jimple Cast";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -211,10 +203,6 @@ public:
     return "Jimple Lengthof";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -241,10 +229,6 @@ public:
     return "Jimple New array";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -320,10 +304,6 @@ public:
     return "Jimple Virtual Invoke";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -407,10 +387,6 @@ public:
     return "Jimple Deref";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -443,10 +419,6 @@ public:
   }
 
   const std::string mode; // Int, char, long, etc... e.g. Random().nextInt()
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -471,10 +443,6 @@ public:
     return "Jimple Static Member";
   }
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -503,10 +471,6 @@ public:
     return "Jimple Virtual Member";
   }
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,

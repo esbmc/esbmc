@@ -195,19 +195,6 @@ void jimple_binop::from_json(const json &j)
   rhs = get_expression(j.at("rhs"));
 }
 
-exprt jimple_binop::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto lhs_expr = lhs->to_exprt(ctx, class_name, function_name);
-  return gen_binary(
-    binop,
-    lhs_expr.type(),
-    lhs_expr,
-    rhs->to_exprt(ctx, class_name, function_name));
-};
-
 // The operator reaches to_exprt as a legacy irep id -- gen_binary builds
 // exprt(binop, ...) -- so the usable set is whatever migrate_expr maps, not
 // whatever the Jimple producer emits. The corpus uses six: ==, +, notequal, -,
@@ -250,18 +237,6 @@ void jimple_cast::from_json(const json &j)
   from = get_expression(j.at("from"));
 }
 
-exprt jimple_cast::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto from_expr = from->to_exprt(ctx, class_name, function_name);
-  c_typecastt c_typecast(ctx);
-
-  c_typecast.implicit_typecast(from_expr, to->to_typet(ctx));
-  return from_expr;
-};
-
 expr2tc jimple_cast::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
@@ -277,33 +252,6 @@ void jimple_lengthof::from_json(const json &j)
 {
   from = get_expression(j.at("expression"));
 }
-
-exprt jimple_lengthof::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto expr = from->to_exprt(ctx, class_name, function_name);
-
-  // Create a function call for allocation
-  code_function_callt call;
-  auto alloca_symbol = get_lengthof_function();
-
-  symbolt &added_symbol = *ctx.move_symbol_to_context(alloca_symbol);
-
-  call.function() = symbol_expr(added_symbol);
-
-  call.arguments().push_back(expr);
-
-  // Create a sideffect call to represent the allocation
-  side_effect_expr_function_callt sideeffect;
-  sideeffect.function() = call.function();
-  sideeffect.arguments() = call.arguments();
-  sideeffect.location() = call.location();
-  sideeffect.type() =
-    static_cast<const typet &>(call.function().type().return_type());
-  return sideeffect;
-};
 
 expr2tc jimple_lengthof::to_expr2t(
   contextt &ctx,
@@ -449,81 +397,6 @@ void jimple_virtual_invoke::from_json(const json &j)
   method += "_" + get_hash_name();
 }
 
-exprt jimple_virtual_invoke::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Move intrinsics to backend
-  if (base_class == "kotlin.jvm.internal.Intrinsics")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Class")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  if (is_nondet_call())
-  {
-    jimple_nondet nondet(method);
-    return nondet.to_exprt(ctx, class_name, function_name);
-  }
-
-  code_blockt block;
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << base_class << ":" << method;
-
-  auto symbol = ctx.find_symbol(oss.str());
-  call.function() = symbol_expr(*symbol);
-  if (!lhs.is_nil())
-  {
-    call.lhs() = lhs;
-  }
-
-  if (variable != "")
-  {
-    // Let's add @THIS
-    auto this_expression =
-      jimple_symbol(variable).to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(this_expression);
-    auto temp = get_symbol_name(base_class, method, "@this");
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), this_expression);
-    block.operands().push_back(assign);
-  }
-
-  for (long unsigned int i = 0; i < parameters.size(); i++)
-  {
-    // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr =
-      parameters[i]->to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters, this should be done at symex
-    std::ostringstream oss;
-    oss << "@parameter" << i;
-    auto temp = get_symbol_name(base_class, method, oss.str());
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
-    block.operands().push_back(assign);
-  }
-  block.operands().push_back(call);
-  return block;
-}
-
 expr2tc jimple_virtual_invoke::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
@@ -537,62 +410,6 @@ expr2tc jimple_virtual_invoke::to_expr2t(
 
   return jimple_expr::to_expr2t(ctx, class_name, function_name);
 }
-
-exprt jimple_newarray::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto base_type = type->to_typet(ctx);
-  auto tmp_symbol = get_temp_symbol(
-    pointer_type2tc(migrate_type(base_type)), class_name, function_name);
-  symbolt &tmp_added_symbol = *ctx.move_symbol_to_context(tmp_symbol);
-
-  // get alloc type and size
-  typet alloc_type = base_type.is_pointer() ? base_type.subtype() : base_type;
-  exprt alloc_size = size->to_exprt(ctx, class_name, function_name);
-
-  if (alloc_size.is_nil())
-    alloc_size = from_integer(1, uint_type());
-
-  if (alloc_type.is_nil())
-    alloc_type = char_type();
-
-  // Create a function call for allocation
-  code_function_callt call;
-  auto alloca_symbol = get_allocation_function();
-
-  symbolt &added_symbol = *ctx.move_symbol_to_context(alloca_symbol);
-
-  call.function() = symbol_expr(added_symbol);
-
-  // LHS of call is the tmp var
-  call.lhs() = symbol_expr(tmp_added_symbol);
-  int type_width = 64;
-  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
-  {
-    auto to_convert =
-      base_type.is_pointer() ? base_type.subtype().width() : base_type.width();
-
-    type_width = std::stoi(to_convert.as_string()); // we want bytes
-  }
-
-  auto new_expr = exprt("*", uint_type());
-  auto base_size = constant_exprt(
-    integer2binary(type_width, 10), integer2string(type_width), uint_type());
-  new_expr.move_to_operands(alloc_size, base_size);
-
-  call.arguments().push_back(new_expr);
-
-  // Create a sideffect call to represent the allocation
-  side_effect_expr_function_callt sideeffect;
-  sideeffect.function() = call.function();
-  sideeffect.arguments() = call.arguments();
-  sideeffect.location() = call.location();
-  sideeffect.type() =
-    static_cast<const typet &>(call.function().type().return_type());
-  return sideeffect;
-};
 
 expr2tc jimple_newarray::to_expr2t(
   contextt &ctx,
@@ -638,26 +455,6 @@ void jimple_deref::from_json(const json &j)
   index = get_expression(j.at("index"));
 }
 
-exprt jimple_deref::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto arr = base->to_exprt(ctx, class_name, function_name);
-  auto i = index->to_exprt(ctx, class_name, function_name);
-  auto index = index_exprt(arr, i, arr.type().subtype());
-  exprt &array_expr = index.op0();
-
-  exprt addition("+", array_expr.type());
-  addition.operands().swap(index.operands());
-
-  index.move_to_operands(addition);
-  index.id("dereference");
-  index.type() = array_expr.type().subtype();
-
-  return index;
-};
-
 expr2tc jimple_deref::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
@@ -671,18 +468,6 @@ expr2tc jimple_deref::to_expr2t(
   const type2tc &element = to_pointer_type(arr->type).subtype;
   return dereference2tc(element, add2tc(arr->type, arr, offset));
 }
-
-exprt jimple_nondet::to_exprt(
-  contextt &,
-  const std::string &,
-  const std::string &) const
-{
-  auto type = int_type(); // TODO: hashmap here!
-  exprt rhs = exprt("sideeffect", type);
-  rhs.statement("nondet");
-
-  return rhs;
-};
 
 // gen_nondet builds exactly the sideeffect2t that migrate_expr makes of the
 // legacy sideeffect("nondet") above: nil operand, size and alloc type, kind
@@ -703,42 +488,6 @@ void jimple_static_member::from_json(const json &j)
   j.at("type").get_to(t);
   type = std::make_shared<jimple_type>(t);
 }
-
-exprt jimple_static_member::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto result = gen_zero(type->to_typet(ctx));
-  // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
-  if (from == "kotlin._Assertions" && field == "ENABLED")
-  {
-    result.make_true();
-    return result;
-  }
-
-  if (from == "Main" && field == "$assertionsDisabled")
-  {
-    result.make_false();
-    return result;
-  }
-
-  // TODO: Needs OOP members
-
-  // 1. Look over the local scope
-  auto symbol_name = get_symbol_name(class_name, function_name, from);
-  symbolt &s = *ctx.find_symbol(symbol_name);
-  member_exprt op(symbol_expr(s), "tag-" + field, s.get_type());
-  exprt &base = op.struct_op();
-  if (base.type().is_pointer())
-  {
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-  return op;
-};
 
 expr2tc jimple_virtual_member::to_expr2t(
   contextt &ctx,
@@ -784,26 +533,3 @@ void jimple_virtual_member::from_json(const json &j)
   type = std::make_shared<jimple_type>(t);
 }
 
-exprt jimple_virtual_member::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  auto result = gen_zero(type->to_typet(ctx));
-  auto struct_type = (*ctx.find_symbol("tag-" + from)).get_type();
-
-  // 1. Look over the local scope
-  auto symbol_name = get_symbol_name(class_name, function_name, variable);
-  symbolt &s = *ctx.find_symbol(symbol_name);
-  member_exprt op(symbol_expr(s), "tag-" + field, type->to_typet(ctx));
-  exprt &base = op.struct_op();
-  if (base.type().is_pointer())
-  {
-    exprt deref("dereference");
-    deref.type() = base.type().subtype();
-    deref.move_to_operands(base);
-    base.swap(deref);
-  }
-
-  return op;
-};
