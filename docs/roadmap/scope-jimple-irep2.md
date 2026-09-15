@@ -1652,3 +1652,383 @@ Pinned rather than assumed: replacing the arm's body with a skip fails 7 of 27,
 native `to_code2t` and its legacy arm is reached anyway, so the conversion is at the call
 site rather than in the class.
 
+## 33. `jimple_newarray::to_expr2t` goes native, and two defects it exposes
+
+§32.5 named the width reader as the blocker on making the class symbol
+IREP2-authoritative, so this slice takes it. `to_expr2t` now builds no legacy
+type at all: the element type comes from `jimple_type::to_type2t`, the size type
+from `uint_type2()`, and the callee's return type from
+`to_code_type(alloca_symbol.get_type2()).ret_type` instead of a round trip
+through the symbol's derived legacy signature.
+
+The width itself comes from `type2t::get_width()`. That is sound here without
+any new arithmetic: `struct_type2t::get_width()` sums its members' widths
+(`irep2_type.cpp:199-209`), which is exactly what `jimple_file.cpp:158`
+accumulates into the legacy `width` attribute the old code read. The IREP2 form
+already carried the number.
+
+### 33.1 The campaign's gate was never in the repository
+
+No `test.desc` under `regression/jimple` had ever passed
+`--goto-functions-only`. Twenty-two slices were gated on a byte-identical GOTO
+comparison run out of a scratch directory, which is exactly the kind of claim the
+PR conventions ask not to rely on: nobody else can reproduce it, and it vanishes
+with the shell that produced it.
+
+`github_4715_newarray_alloc_size_01` puts one construct's worth of it in the
+repository, pinning both arms of the element-width choice from the dump itself:
+`MALLOC(signed char, 2 * 32)` for an `int[]` and `MALLOC(signed char, 3 * 64)`
+for a row of an `int[][]`. Two mutations, each rebuilt and measured, fail it and
+nothing else:
+
+| Mutation | New test | 27 other jimple tests |
+|---|---|---|
+| element width halved | FAILED | pass |
+| pointer-row width 64 → 32 | FAILED | pass |
+
+A trap on the way: the first version of the regex ended at `\)` and the dump
+line ends `);`, so it could not match on *any* tree. It "failed under mutation"
+and would have failed identically without one. A mutation check only means
+something once the test is known to pass on the unmutated tree — run that
+direction first.
+
+### 33.2 Why halving the width changed no verdict: the allocation is 8x too big
+
+The first mutation tried was the element width halved, and all 27 tests passed.
+The reason is a pre-existing defect. `jimple_newarray` multiplies the element
+count by the width **in bits** and hands that to `malloc`, whose argument is
+bytes — the legacy arm even carries the comment `// we want bytes` next to the
+bit width (`jimple_expr.cpp:577`). `new int[20]` allocates
+`MALLOC(signed char, 20 * 32)`, 640 bytes for 80 bytes of array. The heap bounds
+claim (`heap-array-bounds-violated`) is generated and passes, so nothing is
+unsound; the object is simply 8x oversized, which is why the width can be halved
+and even quartered without any access going out of bounds.
+
+Not fixed here: it changes every allocation size in the frontend, so it needs
+its own change, its own pair, and §33.3 settled first.
+
+### 33.3 `lengthof` returns bytes, not elements
+
+`jimple_lengthof` lowers to `__ESBMC_get_object_size`, which answers in bytes.
+With §33.2's inflation, `new int[5]` followed by `arr.length` yields 160 where
+Java and Kotlin both specify 5. `github_4715_lengthof_01` asserts only
+`^VERIFICATION SUCCESSFUL$` and never reads the value, so it passes without
+observing any of this.
+
+The two defects interact, which is why neither should be fixed alone: correcting
+the allocation to bytes alone would make `lengthof` answer 20 instead of 160,
+still not 5. The lowering wants `get_object_size(p)` divided by the element
+size, and a test that asserts the count rather than a verdict.
+
+### 33.4 Status
+
+Twenty-three PRs. `jimple_newarray::to_expr2t` builds no legacy type; the
+remaining legacy surface is §32.5's two completion sites (still blocked on the
+*legacy* `to_exprt` arm reading the `width` attribute, though that arm is
+measured unreachable), `jimple_throw`, and the items in §32.7.
+
+## 34. The symbol table's truth moves to IREP2
+
+§32.5 recorded the blocker on the two completion sites and §33 removed half of
+it. This slice removes the rest and takes both sites, in four measured steps.
+
+1. `jimple_newarray::to_exprt` — the legacy arm, and the last reader of a class
+   struct's legacy `width` attribute — takes the width off the IREP2 form the
+   same way `to_expr2t` does.
+2. `jimple_file.cpp` writes the completed class struct with
+   `set_type(migrate_type(t))`, so the class symbol's IREP2 side is the one last
+   written.
+3. The `width` attribute and the `total_size` accumulation that fed it are
+   removed: with step 1 done and step 2 storing IREP2, nothing reads it, and
+   `migrate_type`'s struct arm never did.
+4. `jimple_method.cpp` writes the completed method signature the same way.
+
+### 34.1 The gate a slice like this needs, and the one it does not
+
+A GOTO dump cannot see this change at all — it shows bodies, and §32.3 measured
+that it prints no function signature and no parameter symbol's type. Nothing
+about steps 2 and 4 is observable there, and indeed all 27 dumps are unchanged.
+
+The instrument that can see it is the whole symbol table. Captured for all 28
+tests before and after, `--symbol-table-only` output is byte-identical, which is
+the claim this slice actually needs: after it, each symbol's legacy type is
+*derived* through `migrate_type_back` rather than stored, and the question is
+whether anything the pipeline renders differs. It does not, including the method
+signatures — `migrate_type_back`'s code arm restores argument identifiers and the
+ellipsis flag, and the argument `#base_name` it does not restore has no reader.
+
+One gap in that instrument, found by probing for it: the rendered type does not
+show a signature's ellipsis. Forcing `make_ellipsis()` unconditionally leaves
+`signed int (signed int, signed int)` unchanged and passes all 28 tests. So the
+symbol-table comparison covers argument and return types but not that flag; what
+covers the flag is `migrate_type_back` restoring it, and
+`unit/util/migrate.test.cpp`'s round-trip case over `make_func_type()`.
+
+The class struct that step 2 now writes IREP2-side *is* pinned: dropping a
+component fails both `github_4715_symbol_table_types_01` and
+`github_4715_local_member_01`.
+
+### 34.2 Status
+
+Twenty-four PRs. Every symbol the jimple frontend creates now carries an IREP2
+type, written IREP2-side. B-2 still counts 8 lines, and four of those are now
+false positives — `jimple_ast.h:69`, `jimple_file.cpp:158`,
+`jimple_method.cpp:92` and `:93` all pass an IREP2 argument, the first written as
+a bare `t` and the rest through `migrate_type`/`to_code2t`, none of which spells
+`2tc` on the call. B-1 is 189, from 202 before §32.
+
+Remaining: `jimple-language.cpp`'s four `set_type`/`set_value` calls (the module
+and `__ESBMC_main` symbols), `jimple_throw` (§31.1), §33.2's 8x over-allocation
+and §33.3's `lengthof`, and the four items in §32.7.
+
+## 35. B-2 is met: `jimple-language.cpp`, and a grep that cannot say so
+
+§34.2 left four legacy symbol writes, all in `jimple-language.cpp`: the four
+intrinsic globals `add_global_static_variable` creates, and `__ESBMC_main`'s type
+and value. All four are converted here, in three measured steps -- the globals,
+then `__ESBMC_main`'s type, then its value -- each gated on both the GOTO dumps
+and the full symbol table over all 28 tests, each 0 of 28.
+
+The globals build their type natively: `array_type2tc(get_bool_type(), expr2tc(),
+true)` is the infinite array `migrate_type` produced from
+`array_typet(bool_type(), exprt("infinity"))`, and `irep2_utils.h`'s
+`gen_zero(const type2tc &, bool)` mirrors the legacy overload arm for arm --
+`array_as_array_of` yields `constant_array_of2tc`, exactly what an
+`array_of_exprt` migrates to.
+
+### 35.1 A marker with no reader, checked rather than assumed
+
+The legacy value carried `#zero_initializer`, and no IREP2 node models it, so the
+conversion drops it. Markers dropped at this seam have bitten this campaign
+before, so it was checked rather than assumed: the only readers of the attribute
+in the tree are `solidity_convert_constructor.cpp:503` and `:516`, in Solidity's
+own converter, which never sees a jimple symbol. Everything else only ever writes
+it.
+
+`__ESBMC_main`'s value was the one step expected to be awkward, because
+`setup_main` resizes the call's arguments with *nil* ireps before migrating. It
+is not: the symbol table has always migrated that value lazily on the first
+`get_value2()`, so doing it eagerly reaches the same code.
+
+### 35.2 B-2 is met, and its command reports 7
+
+Every symbol-table write in the jimple frontend now carries an IREP2 argument,
+which is what bar B-2 in `frontends-to-irep2.md` §1 asks for. Its command still
+prints 7 lines, and all 7 are false positives:
+
+| Line | Argument |
+|---|---|
+| `jimple_ast.h:69` | the `type2tc` parameter, as a bare `t` |
+| `jimple_file.cpp:158`, `jimple_method.cpp:92` | `migrate_type(...)` |
+| `jimple_method.cpp:93` | `to_code2t(...)`, a `code_block2t` |
+| `jimple-language.cpp:99` | a `type2tc` local |
+| `jimple-language.cpp:110` | `gen_zero(const type2tc &, bool)` |
+| `jimple-language.cpp:198` | an `expr2tc` filled by `migrate_expr` |
+
+A bar whose command cannot distinguish a met state from an unmet one is not a
+bar. Either it needs the argument's type rather than its spelling -- which a grep
+cannot get -- or B-2 should be restated as "no `set_type`/`set_value` call whose
+argument is a `typet`/`exprt`", verified by inspection and recorded per frontend.
+Jimple is the first frontend to reach it either way.
+
+### 35.3 Status
+
+Twenty-five PRs. B-1 is 183, from 202 at the start of §32. Remaining in this
+frontend: `jimple_throw` (§31.1), the four items in §32.7, and §33.2/§33.3's two
+defects -- none of which is a symbol-table write.
+
+## 36. Retiring the dead legacy arms, and why most of them are not dead
+
+B-2 is met (§35), and B-1 sits at 183 mentions. Three quarters of those are in
+the legacy `to_exprt` overrides and their declarations, so the question this
+slice answers is which of the 26 overrides the pipeline can still reach.
+
+A reachability census answers the first half. Instrumenting every override with a
+one-line print and running all 28 tests (breakpoints slide on inlined code; a
+`fprintf` does not) gives 8 reached and 18 not:
+
+| Reached | Hits | Not reached |
+|---|---|---|
+| `jimple_method` | 64 | `jimple_full_method_body`, `jimple_declaration` |
+| `jimple_file` | 28 | `jimple_return`, `jimple_label`, `jimple_goto`, `jimple_if`, `jimple_invoke` |
+| `jimple_throw` | 14 | `jimple_identity`, `jimple_assertion` |
+| `jimple_symbol` | 10 | `jimple_binop`, `jimple_cast`, `jimple_lengthof` |
+| `jimple_expr_invoke` | 8 | `jimple_virtual_invoke`, `jimple_newarray`, `jimple_deref` |
+| `jimple_assignment` | 8 | `jimple_nondet`, `jimple_static_member` |
+| `jimple_constant` | 4 | `jimple_virtual_member` |
+| `jimple_class_field` | 2 | |
+
+### 36.1 Not reached is not dead, and for the expression arms it is not even close
+
+Eleven of the 18 are *expression* kinds, and they are reachable — the corpus
+simply has no test that reaches them. `jimple_expr_invoke::to_exprt` converts
+each of its parameters with `parameters[i]->to_exprt`, and
+`jimple_assignment::to_exprt` converts its right-hand side the same way; both are
+live (8 hits each, entered through the migrating default). An invoke parameter or
+an assignment right-hand side can be any expression kind, so every expression
+arm is one test away from being exercised. Deleting them would be deleting live
+code on the evidence of an incomplete corpus.
+
+That is the difference this section exists to record: a zero hit count is a
+statement about the corpus. It becomes a statement about the program only with a
+caller argument on top.
+
+### 36.2 The statement arms do have that argument
+
+Nothing calls `to_exprt` on a `jimple_method_body`. `jimple_method.cpp` calls
+`to_code2t`, whose only other implementation is the base default, and that
+default is reached solely by `jimple_empty_method_body`, which overrides neither.
+So `jimple_full_method_body::to_exprt` is callerless — and it is the only caller
+of a statement's `to_exprt` other than `jimple_method_field::to_code2t`'s
+default, which a kind reaches only if it does not override `to_code2t`.
+
+Three kinds do not override it, so their `to_exprt` stays: `jimple_identity` and
+`jimple_assertion` (both unconstructible, §19) and `jimple_throw`, whose 14 hits
+are real. `jimple_assignment` overrides `to_code2t` but its invoke arms delegate
+to the default (§22), which is why it is reached.
+
+That leaves seven provably callerless overrides, removed here:
+`jimple_full_method_body`, `jimple_return`, `jimple_label`, `jimple_goto`,
+`jimple_if`, `jimple_invoke` and `jimple_declaration` -- 234 lines, and B-1 from
+183 to 160.
+
+### 36.3 What discharges the removal
+
+The obligation on removing a branch is that it was unreachable before. Here the
+enclosing *function* has no caller, which is a compile-time fact rather than a
+path condition, so a reachability query inside it would be answering a question
+that cannot arise: there is no execution that reaches the function to reach a
+branch within it. What discharges the removal is the caller argument in §36.2,
+the census confirming 0 hits over 28 tests, and one property of the deletion
+itself -- a statement that silently fell through to `jimple_method_field`'s base
+`to_exprt` would become a `code_skipt` and change the GOTO. All 28 GOTO dumps and
+all 28 symbol tables are byte-identical, so nothing did.
+
+### 36.4 Status
+
+Twenty-six PRs. B-1 is 160, from 202 at the start of §32; B-2 is met. §32 had
+converted `jimple_declaration::to_exprt`, one of the sites deleted here — the
+seam's signature was the point of that slice and this one does not undo it, but
+the conversion at that particular site was incidental and is now gone.
+
+### 36.5 What keeps the eleven expression arms alive, and how to kill it
+
+B-1 cannot approach zero while the expression arms remain, and tracing why they
+remain gives one concrete obstacle rather than the five separate design questions
+§31.1 implies.
+
+Exactly two live `to_exprt` bodies call an expression's `to_exprt`:
+`jimple_assignment::to_exprt` (its left-hand side and right-hand side) and
+`jimple_expr_invoke::to_exprt` (each parameter). Both are entered the same way:
+`jimple_assignment::to_code2t` delegates to `jimple_method_field::to_code2t`'s
+migrating default whenever the right-hand side is a non-nondet, non-intrinsic
+invoke. `jimple_throw::to_exprt` is live too but is a dead end -- its operand
+conversion is commented out upstream, so it reaches nothing.
+
+The reason that delegation is still there is a single pattern:
+`jimple_assignment::to_exprt` converts its left-hand side, calls `set_lhs` on the
+right-hand side *invoke object* with the resulting legacy `exprt`, and then asks
+that object to convert itself -- so the invoke lowers to a call with an already
+built left-hand side rather than to an assignment. Porting it needs three things,
+all mechanical:
+
+1. `jimple_expr_invoke` and `jimple_virtual_invoke` to carry their injected
+   left-hand side as an `expr2tc`.
+2. Their `to_expr2t` to build the remaining arms: two `code_skip2t`s for the
+   `Intrinsics` and `Runtime` skips, the nondet arm, and the main path's
+   `code_block2t` of `@parameterN` assignments followed by the call.
+3. `jimple_assignment::to_code2t` to stop delegating, setting the IREP2
+   left-hand side and calling `to_expr2t`.
+
+The payoff is the whole of `jimple_expr.cpp`: with those two callers gone, every
+expression `to_exprt` becomes callerless -- the eleven untested arms plus
+`jimple_symbol` and `jimple_constant`, which are only reached through them.
+
+The corpus cannot verify steps 1-3 on its own: §19's census found the
+`Intrinsics`, `Runtime` and nondet arms unreachable from any test in it, so each
+needs a Jimple source written to reach it, the same way nine tests in this suite
+already were.
+
+## 37. The invoke expression forms, and the expression subtree goes quiet
+
+§36.5 named one obstacle: `jimple_assignment::to_code2t` delegated to the
+migrating default whenever its right-hand side was a non-nondet, non-intrinsic
+invoke, because `jimple_assignment::to_exprt` converts its left-hand side, injects
+it into the right-hand side *invoke object* with `set_lhs`, and lets that object
+lower itself to a call rather than to an assignment. Both invoke forms now carry
+that injected left-hand side as an `expr2tc`, both `to_expr2t`s cover every arm,
+and the delegation is gone.
+
+The block both forms produce -- one assignment per bound argument into the
+callee's own `@this`/`@parameterN` symbol, then the call -- is now built once, in
+`jimple_expr::lower_invoke2t`. The two legacy twins differ only in that the
+virtual form binds `@this` and skips one more base class, so the helper takes the
+`this` variable as a parameter and each caller keeps its own skip list.
+
+### 37.1 The location tri-state, and a convention nothing pinned
+
+The first version diverged on 8 of 28 dumps, all of the same shape: an instruction
+the legacy path rendered `// 10 no location` came out as `// 10 ` instead.
+
+`migrate_expr` reads a legacy statement's absent `#location` through the *const*
+accessor, i.e. as nil, and `goto_programt::output_instruction` prints a nil
+location as "no location". A default-constructed `locationt` is empty but **not**
+nil, so it prints blank. `goto_convert_functions.cpp`'s `emitted_location`
+documents the same distinction from the other side, where the legacy path
+materialises the empty one. Building these statements natively therefore means
+passing an explicitly nil location, which is what `no_location()` is for.
+
+No test in the repository pinned that convention: the 8 dumps that caught it are
+compared out of a scratch directory (§33.1). `github_4715_invoke_intrinsic_skip_01`
+pins it now, together with the four arms the corpus could not reach.
+
+### 37.2 One test, five things, four mutations
+
+§19 found the `Intrinsics`, `Runtime`, `java.lang.Class` and nondet arms
+unreachable from the corpus, so converting them needed a source written to reach
+them. One `SetVariable` per arm, plus a real static invoke so the block path is
+in the same dump, and a single regex over the instruction sequence pins all of
+it: that nothing is emitted between the constant assignment and the nondet (the
+three skips), the nondet itself, and the binding assignment and call with their
+nil locations.
+
+| Mutation | This test | 28 other jimple tests |
+|---|---|---|
+| block path takes a default `locationt` | **FAILED** | pass |
+| `Runtime` dropped from the expression form's skips | **FAILED** | pass |
+| `java.lang.Class` dropped from the virtual form's skips | **FAILED** | pass |
+| nondet arm removed from the expression form | **FAILED** | pass |
+
+A note on the third: reverting the second mutation with a one-shot text
+replacement patched the *wrong function*, because both `to_expr2t`s contain the
+same `base_class == "java.lang.Runtime")` line and the expression form comes
+first in the file. The gate caught it immediately -- `java.lang.Class:getName_1`
+is not a symbol, so the virtual form fell through to the block path and aborted.
+When two functions differ only in a list, anchor an edit by line rather than by a
+shared string.
+
+### 37.3 The expression subtree is now callerless
+
+Re-running §36's census: 4 of the remaining 19 `to_exprt` overrides are reached,
+down from 8. `jimple_expr_invoke`, `jimple_assignment`, `jimple_symbol` and
+`jimple_constant` are all at zero, and with them the eleven arms §36.1 had to keep
+because those two could carry any expression.
+
+What is left live, and what it reaches:
+
+| Arm | Reaches |
+|---|---|
+| `jimple_method` | `body->to_code2t`, which is native |
+| `jimple_file` | `field->to_exprt`, i.e. `jimple_class_field` |
+| `jimple_class_field` | nothing -- it builds a struct component from a type |
+| `jimple_throw` | nothing -- its operand conversion is commented out upstream |
+
+So every expression `to_exprt` is callerless, as is `jimple_assignment`'s. That
+is the next slice, and it is the §36.2 shape rather than the §36.1 one: a caller
+argument exists for all of them, so they can go the way the seven in #7786 did.
+
+### 37.4 Status
+
+Twenty-seven PRs. B-1 is 154, from 160 -- the drop is the two `exprt lhs`
+members and their setters. The slice mostly adds native code rather than removing
+legacy code; the removal it unlocks is worth most of `jimple_expr.cpp`.
