@@ -378,3 +378,42 @@ cost nothing to remove. The number to drive to zero is that failure count; when 
 zero, all 23 type writes convert and Phase 8's B-2 is half done by count and most of
 the way by difficulty, since the 77 value writes then have only §52's namespace
 precondition between them and IREP2.
+
+## 11. A third answer: read it off the AST (2026-09-15)
+
+`#sol_name` fits neither §8's derivation nor §10's side table, and saying why is the
+useful part.
+
+It carries which Solidity spelling produced a call. `require`, `revert`,
+`__ESBMC_assume` and `__VERIFIER_assume` all lower to the symbol
+`c:@F@__ESBMC_assume` (`solidity_convert_ref.cpp:292-295`), so the symbol id does not
+distinguish them -- which rules out deriving the value from the expression *and* keying
+a side table by symbol, since the distinction is per call site rather than per symbol.
+
+The reader is inside `get_call_expr`, which still holds `callee_expr_json` -- the same
+AST node the writer read `blt_name` from one call deeper. So the name is read from the
+AST at the point of use, and the attribute, its setter and its getter are gone.
+
+`esbmc-solidity` is 525 of 525. Forcing the read to come back empty fails `error_1`
+and `error_3`, the two `revert` tests, so the read is covered rather than merely
+compiled. Only two of 525 move, which is itself worth knowing: 59 tests use
+`require`, and its arm only drops a second argument that almost none of them passes.
+
+The read sits in a one-line helper rather than inline, because `get_call_expr` is at
+CCN 79 and the complexity gate blocks any increase over the threshold -- a ternary in
+the function body took it to 80 and failed the gate.
+
+### 11.1 The three answers, and how to choose
+
+| when | answer | example |
+|---|---|---|
+| the value is still spelled in the IREP2 type | derive it | `#sol_contract` (§8) |
+| it is a property of a symbol | side table keyed by symbol id | `#sol_state_var` (§10) |
+| it is a property of a *syntactic site* | read the AST node at the point of use | `#sol_name` (§11) |
+| nothing reads it | delete it | §9.1's three |
+
+The third answer is the cheapest of the three when it applies, because the AST is
+already in scope wherever the frontend is still converting -- and it applies exactly
+when the attribute was a way of carrying AST information forward to a later point in
+the same conversion. That is worth checking first for each remaining attribute, before
+reaching for a table.

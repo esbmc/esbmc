@@ -307,7 +307,6 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   {
     assert(context.find_symbol(id) != nullptr);
     new_expr = symbol_expr(*context.find_symbol(id));
-    set_sol_name(new_expr.type(), blt_name);
   }
   else
   {
@@ -318,7 +317,6 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     return_type = bool_t;
     convert_type.return_type() = return_type;
     type = convert_type;
-    set_sol_name(type, blt_name);
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);

@@ -178,16 +178,6 @@ public:
     return sol_state_vars.count(symbol_id) != 0;
   }
 
-  // Set/get the Solidity builtin name carried on a typet via the #sol_name
-  // irep attribute.
-  static void set_sol_name(typet &t, const irep_idt &name)
-  {
-    t.set("#sol_name", name);
-  }
-  static std::string get_sol_name(const typet &t)
-  {
-    return t.get("#sol_name").as_string();
-  }
 
 
   // json nodes that always empty
