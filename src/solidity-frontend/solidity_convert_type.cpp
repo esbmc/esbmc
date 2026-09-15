@@ -571,14 +571,6 @@ bool solidity_convertert::get_type_description(
   //    - Volatile
   //    - isRestrict
 
-  // set data location
-  if (typeIdentifier.find("_memory_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "memory");
-  else if (typeIdentifier.find("_storage_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "storage");
-  else if (typeIdentifier.find("_calldata_ptr") != std::string::npos)
-    set_sol_data_loc(new_type, "calldata");
-
   return false;
 }
 
