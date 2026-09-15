@@ -3434,3 +3434,54 @@ about which object `this` denotes changes, which is what the unchanged verdicts 
 `vptr_cdtor_dispatch` were already saying. Recorded here because §54.1 promised an
 answer, and because the same shape -- output that improves and therefore differs --
 is what a `test.desc` regex would trip over.
+
+## 56. The vtable builder is out of non-IREP2 symbol writes (2026-09-15)
+
+The two thunk bodies were the last ones left in `clang_cpp_convert_vft.cpp`, and with
+§53's precondition available they need nothing else: the exchange goes around the
+dispatch in `add_thunk_method_body`, and both arms store `migrate_expr`'s result.
+
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 876 of 876.
+
+The marker that had to survive is `#base_to_derived`, set on the `this` typecast and
+read by `adjust_base_to_derived` after the converter. `typecast2t` reflects it
+(`irep2_expr.h:726`), and the GOTO dump confirms the adjustment is still applied
+rather than merely that the suite is green:
+
+```
+tag-B::thunk::to::c:@S@C@F@b#:
+  FUNCTION_CALL: return_value$_b$1 = b(this == 0 ? 0 : (C *)((signed char *)this - 8))
+```
+
+The `- 8` is the second base's displacement; without the marker the thunk would call
+`C::b` on an unadjusted `this`.
+
+### 56.1 What B-2 leaves in the C++ frontend, and why each is stuck
+
+The grep reports 12 sites in `src/clang-cpp-frontend`; seven are false positives that
+already write IREP2 (`migrate_type(...)`, a migrated `expr2tc`, a `type2tc` taken
+straight off a `code_type2t`), which is the same spelling-not-type property the bar
+has had since §39. Three real ones remain, each waiting on a decision rather than on
+work:
+
+| site | blocked on |
+|---|---|
+| `clang_cpp_convert.cpp:3156` | the `constructor`/`destructor` pseudo return type (§50.2, §51.3) |
+| `clang_cpp_convert.cpp:3185` | `need_vptr_init`, *set* here and consumed in the adjuster, carried by nothing |
+| `clang_cpp_adjust_expr.cpp:85` | `exception_specificationt::types_attribute()` on a code type (§49) |
+
+Two of the three are markers on a code type, which is the same shape §44 and §46
+solved by adding an unreflected field. Whether that is right here is exactly the
+question §51.3 poses for the ctor/dtor encoding: a constructor-ness and a
+vptr-init-needed flag are properties of the *function*, not of its type, so the field
+would be carrying a thing that does not belong to the type it rides on.
+
+### 56.2 A dead condition left in place, deliberately
+
+`add_thunk_method_body` still tests `return_type().id() != "destructor"`. Since §44
+made the thunk's type IREP2, `get_type()` derives it through `migrate_type_back`, and
+`migrate_type` maps the `destructor` pseudo-type to `empty` (`migrate.cpp:406`), so
+the second test can never add anything to the first. Removing it is a branch removal
+and owes a C-Dead proof; it is recorded here rather than done in passing, and it
+disappears on its own if §51.3 retires the encoding.
