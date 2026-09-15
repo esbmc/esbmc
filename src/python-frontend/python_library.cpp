@@ -3,6 +3,7 @@
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
 #include <util/symtab/context.h>
+#include <c2goto/cprover_library.h>
 #include <cstdlib>
 
 extern "C"
@@ -28,6 +29,7 @@ void add_cpython_library(contextt &context)
     abort();
 
   models_ctx.foreach_operand([&context](const symbolt &s) {
+    record_library_symbol(s.id);
     if (context.find_symbol(s.id) == nullptr)
       context.add(const_cast<symbolt &>(s));
   });
@@ -48,4 +50,9 @@ void link_cpython_library_bodies(goto_functionst &dest)
     it->second.body.swap(named.second.body);
     it->second.body_available = true;
   }
+}
+
+const goto_functionst &cpython_library_bodies()
+{
+  return model_bodies;
 }
