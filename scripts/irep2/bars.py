@@ -56,6 +56,11 @@ IREP2_NODE = re.compile(r"\b(?:const\s+)?[A-Za-z_]\w*2t\s*&\s*([A-Za-z_]\w*)\s*[
 # The root of a field, element or member access, so `arguments[0]`, `x->type`
 # and `code_type.arguments` are all tested against the name they start from.
 BASE_NAME = re.compile(r"[.\[(>-]")
+# IREP2 builders whose names do not end in `2t`/`2tc`. Only the ones with no
+# legacy namesake: `gen_zero`, `gen_one` and `gen_nondet` are declared for both
+# `typet` and `type2tc` (util/expr/expr_util.h, irep2/irep2_utils.h), so their
+# spelling cannot say which was called and they keep counting.
+IREP2_HELPER = re.compile(r"^(?:gen_true_expr|gen_false_expr|gen_long|gen_ulong)\s*\(")
 
 
 def strip_noise(text):
@@ -127,7 +132,7 @@ def files(frontend):
 
 def is_irep2(arg, irep2_names):
     """Whether the argument of a symbol-table write is already IREP2."""
-    if IREP2_ARG.search(arg) or IREP2_CALL.match(arg):
+    if IREP2_ARG.search(arg) or IREP2_CALL.match(arg) or IREP2_HELPER.match(arg):
         return True
     return BASE_NAME.split(arg)[0] in irep2_names
 
