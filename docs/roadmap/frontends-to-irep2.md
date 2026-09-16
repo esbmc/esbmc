@@ -4290,3 +4290,31 @@ and peeling them one per tick is the wrong shape of work. The two questions that
 at once are both open since §57: a `bit_field2t` for the static arm (§67), and whether `type2t`
 carries C qualifiers -- the fourth cause above, measured at 3 428 on its own in §64. The second is
 the better next move: bigger share, known shape, three precedents, and no new type kind.
+
+## 72. Four carries, 345 of 3 348, and a question about the criterion (2026-09-16)
+
+§71 recommended carrying C qualifiers next, because §64 had measured them at 3 428 programs on
+their own. Carried -- an unreflected `bool constant_qualified` on `unsignedbv_type2t` and
+`signedbv_type2t`, restored only when set, with a unit section pinning that it is no part of the
+type's identity -- and it removes **345** of the local arm's 3 348.
+
+```
+3 341  before any of it
+3 343  empty comment keys guarded (§69)
+3 348  side-effect location restored (§70)
+3 003  const carried (§72)
+```
+
+Four correct, verified fixes; 10% of the difference; no floor in sight. The rest includes §71's
+dropped empty `operands` list and its undiagnosed `constructor` key.
+
+The useful thing this tick produced is not the 345 but a doubt about what has been measured all
+along. Every one of those figures is a **symbol-table** difference, and the symbol table is a debug
+dump -- the GOTO program is what gets verified. If the local arm's GOTO is identical with these
+fixes in place and the suites stay green, then the conversion is safe and nine sections of
+symbol-table accounting have been holding it back for a cosmetic reason.
+
+So the next measurement is the local arm's GOTO cost, with all four fixes, against a base from the
+same commit. §63's 2 112 does not answer it -- that was both arms converted and none of the fixes.
+If the GOTO is clean the arm converts and Phase 6 moves; if not, §71's recommendation stands and
+the choice is a `type2t` base-class qualifier field against accepting the rendering difference.

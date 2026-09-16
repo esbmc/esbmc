@@ -200,7 +200,8 @@ class unsignedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  unsignedbv_type2t(unsigned int w) : type2t(unsignedbv_id), width(w)
+  unsignedbv_type2t(unsigned int w, bool qualified = false)
+    : type2t(unsignedbv_id), width(w), constant_qualified(qualified)
   {
     // assert(w != 0 && "Must have nonzero width for integer type");
     // XXX -- zero sized bitfields are permissible. Oh my.
@@ -209,8 +210,14 @@ public:
   unsigned int get_width() const;
 
   unsigned int width;
+  /// Whether the source qualified this `const`, as `#constant` records it.
+  /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
+  /// integers of the same width are the same type whether or not one was
+  /// qualified (docs/roadmap/scope-clang-c-irep2.md §158).
+  bool constant_qualified;
 
   static constexpr auto fields = std::make_tuple(&unsignedbv_type2t::width);
+  static constexpr std::size_t excluded_field_bytes = sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -222,15 +229,22 @@ class signedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  signedbv_type2t(signed int w) : type2t(signedbv_id), width(w)
+  signedbv_type2t(signed int w, bool qualified = false)
+    : type2t(signedbv_id), width(w), constant_qualified(qualified)
   {
   }
   signedbv_type2t(const signedbv_type2t &ref) = default;
   unsigned int get_width() const;
 
   unsigned int width;
+  /// Whether the source qualified this `const`, as `#constant` records it.
+  /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
+  /// integers of the same width are the same type whether or not one was
+  /// qualified (docs/roadmap/scope-clang-c-irep2.md §158).
+  bool constant_qualified;
 
   static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
+  static constexpr std::size_t excluded_field_bytes = sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 
