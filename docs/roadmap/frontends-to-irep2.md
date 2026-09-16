@@ -4199,3 +4199,37 @@ only visible once the comparison used a base from the same commit.
 be built from the commit the change is applied to, and a residual must be characterised from a
 sample drawn out of the differing set rather than picked. Five figures in this stack were wrong
 for one of those two reasons.
+
+## 69. Two fewer keys the seam invents, and the arm is waiting on §136.3 (2026-09-16)
+
+§68 identified four shapes in a converted C++ value write's symbol-table difference, two of them
+`back_sideeffect` writing `#type: empty` and `#size: nil` onto nodes that had neither. Those are
+now written only when there is something to write, keyed off `ref2.alloctype` and `ref2.size`
+rather than off the locals -- a first attempt guarded on `cmttype.is_not_nil()` and failed,
+because a default-constructed `typet` has an empty id and `is_not_nil()` calls that present. A
+unit case pins it and fails on the unguarded version.
+
+The fix changes the printed symbol table of **2 059 of 8 682** programs on the default path, all
+of them losing `* #size: nil`. Disclosed because that is a quarter of the corpus; safe because
+comments are not compared by `irept::operator==`, both getters return nil either way, and no
+`test.desc` mentions either key.
+
+It does **not** help the value write it came from. Converting `clang_c_convert.cpp:659` costs
+3 341 differing symbol tables without this fix and 3 343 with it -- unchanged. §68's sample
+showed the empty keys because they were in the diff, not because they were the diff; the same
+program also loses an empty `operands` list and a `#location`, and either alone keeps it
+differing.
+
+So the local arm is blocked behind `scope-clang-c-irep2.md` §136.3 -- the deliberate decision not
+to restore a side effect's location, held for its own PR and an SV-COMP run because it moves
+instruction columns on 126 of 131 sampled goto programs. Not behind the type system, which is
+where §67 and §68 put it. The static arm remains blocked on IREP2 having no bitfield type.
+
+```
+:632 static   no bitfield type          needs a new type2t kind
+:659 local    #location (§136.3)        scheduled, SV-COMP run attached
+```
+
+Phase 6 stays at B-2\* 19. Three ticks of measurement have moved the blocker from "the type
+system" to two specific, named, already-documented items -- which is the useful outcome even
+though the count did not move.
