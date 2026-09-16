@@ -1,3 +1,11 @@
+/* The contract's requires constrains only `time`, while the body reads and
+ * writes six message globals and current_time. Enforcement havocs those in
+ * entry-harness mode (#7356), so a state with a message already pending at
+ * `time` refutes the ensures. FAILED is the right verdict for a requires this
+ * weak; the run passed before only because the globals still held their static
+ * initialisers. Strengthening it needs a pipeline invariant, which would change
+ * what this test covers, so it pins the verdict the contract earns as written.
+ */
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>

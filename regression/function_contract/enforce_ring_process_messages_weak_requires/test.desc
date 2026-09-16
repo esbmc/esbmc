@@ -1,4 +1,5 @@
 CORE
 main.c
 --function process_messages_at_time --enforce-contract process_messages_at_time --replace-call-with-contract "*" --no-align-check --unwind 2
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
+^ +FAILED.*contract ensures$
