@@ -1577,6 +1577,116 @@ Reviewed and deliberately not done here, each its own change:
   because the temp symbol is never referenced (§26). A one-line fix, and
   `--symbol-table-only` can now pin it.
 
+## 40. B-1's other half: one dead arm, and why the rest are not (2026-09-15)
+
+B-2 for jimple has been met since §39. B-1 was 190 legacy mentions. This measures how
+much of that is dead code rather than work.
+
+### 40.1 The body's legacy builder is unreachable
+
+`jimple_method.cpp:93` calls `body->to_code2t(...)`, so the IREP2 path is the live one
+and `jimple_full_method_body::to_exprt` should never run. Instrumented with an
+unconditional `fprintf` and swept over all 27 jimple tests: **0 observations**, the suite
+green, so the runs happened. Deleted, with its override declaration -- the base's
+`jimple_method_field::to_exprt` has a default body, so the class stays concrete.
+B-1 190 -> 186.
+
+### 40.2 The nine statement arms are *not* dead, measured twice
+
+The obvious next step -- if the only entry is the body's `to_exprt`, the statements'
+arms are unreachable too -- is wrong, and the suite says so twice:
+
+- deleting all nine statement `to_exprt` overrides: **7 of 27 fail**, including
+  `github_4715_irep2_bodies_jimple_01_fail` and `github_4715_legacy_body_throw_01_fail`,
+  the two tests that exist to pin exactly this;
+- deleting only the six whose class also declares a native `to_code2t`: **5 of 27
+  fail**, the same two plus `kt-func-call-true` and `kt-func-call2-true`.
+
+So a native `to_code2t` does not imply its class's `to_exprt` is unused: the arms are
+reached from the statement builders themselves (`jimple_statement.cpp:197`, `:432`,
+`:444` and others), where one statement's construction calls another node's legacy form.
+Retiring them means converting those call sites first, one at a time, the way §32-§38
+converted the expression arms -- not deleting the arm and seeing what breaks.
+
+B-1 for jimple is therefore 186 of which the statements' share is real work, not dead
+code. That is worth knowing before anyone reads the count as slack.
+
+### 40.3 Which arms, measured instead of inferred
+
+§40.2 drew a conclusion from two deletion failures. Instrumenting all nine arms with an
+`fprintf` naming the class and sweeping the 27 tests replaces it with the answer:
+
+```
+14 jimple_throw
+ 8 jimple_assignment
+```
+
+**Two** of the nine are reached; the other seven never run. Both earlier attempts failed
+because each deleted one of those two -- attempt 1 both, attempt 2 `jimple_assignment`,
+which has a native `to_code2t` and is reached through its legacy arm anyway. That is the
+fact neither inference could supply: a native IREP2 arm existing does not mean the legacy
+one is unused.
+
+The seven are deleted: `jimple_identity`, `jimple_invoke`, `jimple_return`,
+`jimple_label`, `jimple_goto`, `jimple_if`, `jimple_assertion`. 27 of 27 jimple tests and
+876 of 876 unit tests pass, and B-1 goes 186 -> **160**, a sixth of the phase's remaining
+count removed as dead code.
+
+What is left needs `jimple_throw` and `jimple_assignment` converted at their call sites
+first, which is the §32-§38 shape and the next slice.
+
+## 41. `jimple_throw` on a native arm (2026-09-15)
+
+The first of §40.3's two. `jimple_throw::to_exprt` built a bare `codet("cpp-throw")` --
+no operand and no exception list, because throw is not implemented -- so the native form
+is `code_cpp_throw2tc(expr2tc(), {}, loc)` and takes the location as a parameter rather
+than having it stamped afterwards, per K.2.
+
+27 of 27 jimple and 876 of 876 unit tests, B-1 160 -> **157**.
+
+Pinned rather than assumed: replacing the arm's body with a skip fails 7 of 27,
+`github_4715_legacy_body_throw_01_fail` among them, so the arm is load-bearing and the
+14 observations §40.3 measured are what exercises it.
+
+`jimple_assignment` is the remaining one, and it is the harder half: it already has a
+native `to_code2t` and its legacy arm is reached anyway, so the conversion is at the call
+site rather than in the class.
+
+
+## 42. The expression arms, probed the same way (2026-09-15)
+
+§40.3's probe worked on the statements, so the same instrument was pointed at the twelve
+`jimple_expr` legacy arms. Over the 27 tests:
+
+```
+10 jimple_symbol
+ 8 jimple_expr_invoke
+ 4 jimple_constant
+```
+
+**Three** of the twelve are reached. The nine that are not -- `jimple_binop`,
+`jimple_cast`, `jimple_lengthof`, `jimple_virtual_invoke`, `jimple_newarray`,
+`jimple_deref`, `jimple_nondet`, `jimple_static_member`, `jimple_virtual_member` -- are
+deleted. 27 of 27 jimple and 876 of 876 unit tests, and B-1 157 -> **110**.
+
+That is 310 lines of unreachable code, and §32-§38 had already converted each of those
+nine to a native `to_expr2t`; what was left behind was the arm the conversion superseded.
+Deleting them was never risky -- it only needed the measurement to say which.
+
+### 42.1 What the three live arms need
+
+| arm | why it is still reached |
+|---|---|
+| `jimple_symbol` | no native `to_expr2t`; the default migrates it |
+| `jimple_constant` | same |
+| `jimple_expr_invoke` | has a native arm, but it handles only the `valueOf_1` intrinsic and falls back for a real call |
+
+The first two are ordinary conversions. The third is the chain §41 flagged:
+`jimple_assignment::to_code2t` routes an invoke right-hand side to the migrating default
+because `jimple_expr_invoke`'s native arm cannot build the call, and the invoke's `lhs` is
+a legacy `exprt` set by `set_lhs`. Converting it means giving both invoke classes an IREP2
+`lhs` and a native arm that builds `code_function_call2t` -- three classes, in that
+order, and the only remaining B-1 work in this frontend that is not a one-liner.
 ## 33. `jimple_newarray::to_expr2t` goes native, and two defects it exposes
 
 §32.5 named the width reader as the blocker on making the class symbol
