@@ -1,7 +1,32 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/tuple/smt_tuple_concat.h>
+#include <util/config/config.h>
 #include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
+
+/* convert_sort and tuple_array_create_despatch hand array-of-struct types over
+ * with every pointer rewritten to pointer_struct -- pointers inside a union
+ * too, which widens the union. Terms built elsewhere from the untouched type
+ * keep the C width, so undo the rewrite where types enter this flattener. */
+static type2tc unrewrite(smt_solver_baset *ctx, type2tc type)
+{
+  struct
+  {
+    const type2tc &pointer_struct;
+
+    void operator()(type2tc &e) const
+    {
+      if (e == pointer_struct)
+        e = pointer_type2tc(get_empty_type());
+      else
+        e->Foreach_subtype(*this);
+    }
+  } delegate = {ctx->pointer_struct};
+
+  type->Foreach_subtype(delegate);
+  return type;
+}
 
 std::vector<type2tc>
 smt_tuple_concat_flattener::members_of(const type2tc &type) const
@@ -205,13 +230,14 @@ smt_sortt smt_tuple_concat_flattener::mk_struct_sort(const type2tc &type)
 {
   if (is_array_type(type))
   {
-    const array_type2t &arrtype = to_array_type(type);
+    type2tc t = unrewrite(ctx, type);
+    const array_type2t &arrtype = to_array_type(t);
     assert(
       !is_array_type(arrtype.subtype) &&
       "Array dimensions should be flattened before the tuple interface");
     return new smt_sort(
       SMT_SORT_ARRAY,
-      type,
+      t,
       array_domain_width_or_word_size(arrtype),
       ctx->mk_int_bv_sort(packed_width(arrtype.subtype)));
   }
@@ -262,8 +288,14 @@ smt_astt smt_tuple_concat_flattener::tuple_array_of(
   const expr2tc &init_value,
   unsigned long domain_width)
 {
+  /* The caller passes the real array's domain width. An array of 2^(dw-1)
+   * elements is one ESBMC gives exactly that width (size_to_bit_width); at the
+   * word size the real array is one without a constant size. */
   type2tc array_type =
-    array_type2tc(init_value->type, gen_ulong(1ULL << domain_width), false);
+    domain_width >= config.ansi_c.word_size
+      ? array_type2tc(init_value->type, expr2tc(), true)
+      : array_type2tc(
+          init_value->type, gen_ulong(1ULL << (domain_width - 1)), false);
   smt_astt elem = to_bv(ctx->convert_ast(init_value), init_value->type);
   return new concat_smt_ast(
     *this,
@@ -279,15 +311,16 @@ smt_astt smt_tuple_concat_flattener::tuple_array_create(
   bool const_array,
   smt_sortt domain)
 {
-  smt_sortt s = ctx->convert_sort(array_type);
-  const array_type2t &arr_type = to_array_type(array_type);
+  type2tc type = unrewrite(ctx, array_type);
+  smt_sortt s = ctx->convert_sort(type);
+  const array_type2t &arr_type = to_array_type(type);
 
   if (const_array)
     return new concat_smt_ast(
       *this,
       ctx,
       s,
-      array_type,
+      type,
       ctx->array_api->convert_array_of(
         to_bv(inputargs[0], arr_type.subtype), domain->get_data_width()));
 
@@ -307,7 +340,7 @@ smt_astt smt_tuple_concat_flattener::tuple_array_create(
         to_bv(inputargs[i], arr_type.subtype));
   }
 
-  return new concat_smt_ast(*this, ctx, s, array_type, acc);
+  return new concat_smt_ast(*this, ctx, s, type, acc);
 }
 
 expr2tc
