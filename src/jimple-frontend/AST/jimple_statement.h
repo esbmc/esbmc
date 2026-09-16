@@ -147,14 +147,14 @@ public:
 // For debug
 class jimple_assertion : public jimple_statement
 {
+  /// Parse-only: no `statement` enumerator maps to this class, so the body
+  /// dispatcher can never build one and there is no production path to lower.
+  /// The only construction site is unit/jimple-frontend/jimple_ast.test.cpp,
+  /// which exercises from_json alone (docs/roadmap/scope-jimple-irep2.md §46).
 public:
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   std::string variable;
   std::string value;

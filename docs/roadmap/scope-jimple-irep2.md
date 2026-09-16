@@ -2189,3 +2189,95 @@ blind is how §40.3's deletions passed while breaking both.
 Jimple's B-1 over this run: **190 -> 103**, of which 87 is deleted dead code and three
 restorations are the correction for measuring reachability where reachability was not the
 question.
+
+## 46. `jimple_assertion` is parse-only, and the audit has to include `unit/` (2026-09-15)
+
+§45.1 named `jimple_identity` and `jimple_assertion` as the two classes still needing a
+native arm. One of them does not need one at all.
+
+There is no `statement::Assertion` enumerator (`jimple_method_body.h:108-122`) and no
+`"Assertion"` entry in the JSON dispatcher's `from_map`, so the body walk can never build a
+`jimple_assertion`. Its `to_exprt` has no production path, and §44.1's restoration of it was
+unnecessary -- harmless, but it was restoring something unreachable. The arm is deleted
+again, this time with the reason; the class stays. B-1 103 -> **97**.
+
+### 46.1 How that was nearly got wrong, again
+
+The first attempt deleted the whole class. The build failed:
+
+```
+unit/jimple-frontend/jimple_ast.test.cpp:165: 'jimple_assertion' was not declared
+```
+
+`unit/` constructs one and tests its `from_json`. So the class is live, only its lowering is
+not -- and §44.2's criterion, applied to `src/` alone, would have missed that. The criterion
+needs its scope stated:
+
+> an arm may be deleted only if its class declares the native replacement, and a class only
+> if nothing in `src/` **or `unit/`** names it.
+
+The compiler enforces the second half for free, which is why this attempt cost a build
+rather than a regression.
+
+### 46.2 `jimple_identity` is the last one, and its arm looks broken
+
+`Identity` *is* in the enum and the dispatcher, so that class is reachable and its arm has to
+stay until it is converted. Reading it first, though:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare jimple local (`$i0`), not a qualified symbol id, and every other
+lookup in this frontend goes through `get_symbol_name(class, function, name)`. So the arm
+dereferences the result of a lookup that looks certain to miss. No test builds an `Identity`
+statement, so nothing has exercised it either way.
+
+That makes the next slice a probe rather than a conversion: author a jimple input with an
+`Identity` statement and find out whether the existing arm works at all. Converting it first
+would port a defect into IREP2 and call it a migration.
+
+## 47. The identity statement crashes, and that is why it could not be converted (2026-09-15)
+
+§46.2 suspected `jimple_identity::to_exprt` was broken and said to probe before converting.
+Probing it took two attempts and both were informative.
+
+The first used `"object": "Identity"` and got `ERROR: Unknown type`. The dispatcher's
+`from_map` spells it **lowercase** -- `{"identity", statement::Identity}`
+(`jimple_method_body.h:129`) -- while `to_map`, which is only used for printing, spells it
+`"Identity"`. Reading the wrong one of the two is how the tag was got wrong.
+
+With `"object": "identity"`, a three-statement method -- declare `$i0`, identify it as
+`@parameter0`, return -- **SIGSEGVs during GOTO conversion**. The cause is the one §46.2
+read off the source:
+
+```cpp
+symbolt &added_symbol = *ctx.find_symbol(local_name);
+```
+
+`local_name` is the bare local (`$i0`); every other lookup in this frontend goes through
+`get_symbol_name(class, function, name)`. The lookup misses and the dereference is on null.
+
+### 47.1 Pinned, not fixed, and why
+
+`regression/jimple/github_4715_identity_crash_01` is the reproducer, as `KNOWNBUG`. It
+passes ctest, which in this repo means the bug is still live.
+
+It is not fixed here because the fix is not mechanical. The arm's right-hand side is a
+`symbolt` that is never added to the context:
+
+```cpp
+symbolt rhs;
+rhs.name = "@" + at_identifier;
+rhs.id = "@" + at_identifier;
+code_assignt assign(symbol_expr(added_symbol), symbol_expr(rhs));
+```
+
+so the statement was meant to assign from a symbol nothing declares. Since the arm has never
+run -- it crashes first -- there is no observed behaviour to preserve, and choosing what
+`$i0 = @parameter0` should lower to is a design decision about how this frontend binds
+parameters, not a migration step. Converting it would be inventing semantics and calling it
+IREP2.
+
+So jimple's B-1 stops at 97 with one legacy statement arm left, and that arm is blocked on a
+question about the frontend rather than about the migration.
