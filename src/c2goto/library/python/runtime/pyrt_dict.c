@@ -22,9 +22,6 @@ PyRtObject *pyrt_dict_new(void)
   PyRtDictObject *d = __ESBMC_alloca(sizeof(PyRtDictObject));
   d->ob_type = &PyRtDict_Type;
   d->size = 0;
-  d->hashes = __ESBMC_alloca(PYRT_DICT_CAPACITY * sizeof(int64_t));
-  d->keys = __ESBMC_alloca(PYRT_DICT_CAPACITY * sizeof(PyRtObject *));
-  d->values = __ESBMC_alloca(PYRT_DICT_CAPACITY * sizeof(PyRtObject *));
   return (PyRtObject *)d;
 }
 

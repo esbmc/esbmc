@@ -88,14 +88,19 @@ typedef struct __pyrt_method
   PyRtObject *function;
 } PyRtMethodObject;
 
-/* Insertion-ordered, with keys compared by == rather than hashed. */
+#define PYRT_DICT_CAPACITY 16
+
+/* Insertion-ordered, each entry carrying its key's hash. The entry arrays are
+ * members rather than separate allocations: an element access is then one
+ * dereference of the dict instead of two, and every dereference carries its
+ * own bounds and alignment claims. */
 typedef struct __pyrt_dict
 {
   PyRt_HEAD;
   int64_t size;
-  int64_t *hashes;
-  PyRtObject **keys;
-  PyRtObject **values;
+  int64_t hashes[PYRT_DICT_CAPACITY];
+  PyRtObject *keys[PYRT_DICT_CAPACITY];
+  PyRtObject *values[PYRT_DICT_CAPACITY];
 } PyRtDictObject;
 
 typedef PyRtObject *(*unaryfunc)(PyRtObject *);
@@ -171,7 +176,6 @@ struct __pyrt_type
 #define PYRT_LIST_CAPACITY 64
 #define PYRT_MAX_CLASSES 16
 #define PYRT_STR_CAPACITY 64
-#define PYRT_DICT_CAPACITY 16
 #define PYRT_POW_BOUND 64
 
 extern PyRtTypeObject PyRtType_Type;
