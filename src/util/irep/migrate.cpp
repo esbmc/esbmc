@@ -794,6 +794,16 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
 
     if (at_pos == std::string::npos)
     {
+      // A renamed name spells the node counter between '&' and '#', so '&'
+      // comes first. A C++ symbol id has them the other way round or not at
+      // all: a clang USR is full of '#', and a reference parameter's mangling
+      // contains '&'. Claiming one as renamed either truncates it at the '&' --
+      // collapsing two ids that share a prefix onto one symbol -- or appends
+      // `&0#0` to it on the way back (frontends-to-irep2.md §55). It is not
+      // renamed; it is a name this namespace has not been shown.
+      if (and_pos == std::string::npos || hash_pos < and_pos)
+        return symbol2tc(type, init, symbol_renaming_level::level0, 0, 0, 0, 0);
+
       // However, it's L2 global.
       target_level = symbol_renaming_level::level2_global;
       end_of_name_pos = and_pos;

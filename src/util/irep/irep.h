@@ -481,10 +481,11 @@ public:
   }
 
   /// Owning class tag of a member function type, e.g. `tag-MyClass`.
-  /// Written by the clang-cpp, Solidity and Python frontends; read by
-  /// clang_cpp_adjust_code_gen to locate a constructor's class symbol.
-  /// Carriage stays on the legacy irep — see
-  /// docs/roadmap/scope-v2-w3-attribute-carriage.md.
+  /// Written by the Solidity and Python frontends; **no reader left in the
+  /// tree**. clang_cpp_adjust_code_gen used to locate a constructor's class
+  /// symbol through it and now derives that from the `this` argument's pointee
+  /// instead (docs/roadmap/frontends-to-irep2.md §50), so the remaining writes
+  /// are dead and can go with their frontends' own slices.
   inline const irep_idt &member_name() const
   {
     return get(a_member_name);

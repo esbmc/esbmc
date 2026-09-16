@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
@@ -78,7 +79,8 @@ public:
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>
       &param_types,
-    const std::set<std::string> &top_level_funcs);
+    const std::set<std::string> &top_level_funcs,
+    std::set<std::pair<std::string, size_t>> &dynamically_typed_params);
   void add_type_annotation();
   void add_type_annotation(const std::string &func_name);
 

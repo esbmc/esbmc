@@ -145,11 +145,9 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
 // (docs/roadmap/frontends-to-irep2.md §44).
 // The struct counterpart of the code-argument case below. `member_base_names`
 // carries the components' plain `base_name` -- a different field from the
-// `#base_name` a function parameter spells -- and is likewise unreflected.
-// Without it, converting the two vtable struct-type writes in
-// clang_cpp_convert_vft.cpp failed 653 of 1058 esbmc-cpp/cpp tests: the thunk
-// builder names its symbol from `component.base_name()`
-// (docs/roadmap/frontends-to-irep2.md §45).
+// `#base_name` a function parameter spells -- and is likewise unreflected. This
+// test is what pins its value: no consumer reads a struct component's base name
+// back across the seam (docs/roadmap/frontends-to-irep2.md §46, §47.4).
 TEST_CASE("a struct component keeps its base name", "[migrate]")
 {
   struct_typet st;
@@ -1230,4 +1228,35 @@ TEST_CASE("migrate preserves the constructor marker", "[migrate][v4-cf]")
   REQUIRE(is_sideeffect2t(mp));
   REQUIRE_FALSE(to_sideeffect2t(mp).constructor);
   REQUIRE_FALSE(migrate_expr_back(mp).get_bool("constructor"));
+}
+
+// What migrate_expr makes of a C++ symbol id, which contains characters
+// sym_name_to_symbol's renaming parser also uses. A clang USR is full of '#',
+// and '&' appears in the mangling of a reference parameter, so a name that was
+// never SSA-renamed can still look renamed (frontends-to-irep2.md §54.1).
+TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
+{
+  use_test_ns();
+  const type2tc t = pointer_type2tc(get_int_type(32));
+
+  SECTION("a '#'-bearing id keeps its whole name")
+  {
+    expr2tc e;
+    migrate_expr(symbol_exprt("c:@S@B@F@~B#this", migrate_type_back(t)), e);
+    REQUIRE(is_symbol2t(e));
+    REQUIRE(to_symbol2t(e).thename == irep_idt("c:@S@B@F@~B#this"));
+    INFO("level = " << (int)to_symbol2t(e).rlevel);
+    INFO("back  = " << migrate_expr_back(e).identifier());
+    REQUIRE(migrate_expr_back(e).identifier() == irep_idt("c:@S@B@F@~B#this"));
+  }
+
+  SECTION("an id bearing both '#' and '&' keeps its whole name")
+  {
+    expr2tc e;
+    migrate_expr(
+      symbol_exprt("c:@U@U@F@U#&1$@U@U#::ref", migrate_type_back(t)), e);
+    REQUIRE(is_symbol2t(e));
+    INFO("thename = " << to_symbol2t(e).thename);
+    REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
+  }
 }
