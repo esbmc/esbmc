@@ -3936,3 +3936,37 @@ about and the more expensive to implement; the half that only renders is the rev
 
 `scope-clang-c-irep2.md` §152 has the table. Phase 6 stays at B-2\* 19, and what it is waiting
 for is now specific enough to build rather than to flag.
+
+## 67. IREP2 has no bitfield, and that is what aborts (2026-09-16)
+
+§66 said the static arm wanted a reflected `alignment` field on `struct_type2t`. Carried it --
+forward from `type.find("alignment")`, back through `thetype.add("alignment")` -- and the abort
+is unchanged at exit 134. The fourth hypothesis on this question, refuted the same way as the
+first three, by one build.
+
+The cause is visible once the failing struct's components are dumped rather than reasoned
+about, and it reduces to nine lines:
+
+```c
+struct S0 { signed int f0 : 26; unsigned int f1 : 9; unsigned int f2; };
+struct S0 g = {1, 2, 3};
+int main(void) { return g.f2 == 3 ? 0 : 1; }
+```
+
+`VERIFICATION SUCCESSFUL` on master, exit 134 with `clang_c_convert.cpp:632` converted. The
+components come back as plain `signedbv` width 26 and `unsignedbv` width 9 -- the `c_bit_field`
+wrapper that made them bitfields is gone, `add_padding` cannot pack them, and 83 bits becomes a
+byte size of 11 against an alignment of 4.
+
+`grep -n c_bit_field src/util/irep/migrate.cpp` returns a single comment line;
+`grep -rn bit_field src/irep2/*.h` returns nothing. **IREP2 has no bitfield type.** So the
+static arm is not blocked on an attribute at all -- it wants a new `type2t` kind, with a width,
+a migration in both directions, and every switch over `type2t::type_ids` to answer for. That is
+§57's widen-the-type-system option in its strongest form, and it is now the one thing standing
+between Phase 6 and its last two value writes.
+
+`scope-clang-c-irep2.md` §153 has the dump and the corrections it forces to §152. The pattern
+across §63, §151, §152 and this section is one worth naming: each blamed the most visible
+difference -- an empty operands list, an assertion mixing two representations, a missing
+alignment attribute -- and each was refuted by the next measurement. What settled it was
+dumping the object under test instead of diffing artefacts around it.
