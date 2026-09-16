@@ -6,52 +6,13 @@
 #include "cstdint"
 #include "ctime"
 #include "limits"
+#include "ratio"
 #include "type_traits"
 
 extern long long __esbmc_nondet_clock_step();
 
 namespace std
 {
-
-namespace detail
-{
-// A class template, not a recursive constexpr function: the latter is also
-// emitted as a callable body, and symex then unwinds it (and can trip a
-// recursion unwinding assertion) even though every use here is compile-time.
-template <intmax_t A, intmax_t B>
-struct static_gcd
-{
-  static constexpr intmax_t value = static_gcd<B, A % B>::value;
-};
-template <intmax_t A>
-struct static_gcd<A, 0>
-{
-  static constexpr intmax_t value = A < 0 ? -A : A;
-};
-} // namespace detail
-
-template <intmax_t Num, intmax_t Den = 1>
-struct ratio
-{
-  static_assert(Den != 0, "ratio denominator must not be zero");
-  // [ratio.ratio] p1: num/den are reduced and the sign lives on num.
-  static constexpr intmax_t num =
-    (Den < 0 ? -Num : Num) / detail::static_gcd<Num, Den>::value;
-  static constexpr intmax_t den =
-    (Den < 0 ? -Den : Den) / detail::static_gcd<Num, Den>::value;
-  using type = ratio<num, den>;
-};
-
-template <class R1, class R2>
-using ratio_multiply =
-  typename ratio<R1::num * R2::num, R1::den * R2::den>::type;
-template <class R1, class R2>
-using ratio_divide =
-  typename ratio<R1::num * R2::den, R1::den * R2::num>::type;
-
-using nano = ratio<1, 1000000000>;
-using micro = ratio<1, 1000000>;
-using milli = ratio<1, 1000>;
 
 namespace chrono
 {
