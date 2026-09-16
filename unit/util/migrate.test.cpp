@@ -1230,3 +1230,70 @@ TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
     REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
   }
 }
+
+// A literal's `#cformat` is how the source wrote it, and c_expr2string prefers
+// it over deriving the text from the type -- so losing it re-renders every
+// printed constant (docs/roadmap/frontends-to-irep2.md §63). The field is
+// unreflected, so this also pins that two constants differing only in spelling
+// stay equal.
+TEST_CASE("a constant keeps its source spelling across the seam", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("an integer's spelling survives the round trip")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+    c.cformat("0xFF");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_int2t(e));
+    REQUIRE(to_constant_int2t(e).cformat == irep_idt("0xFF"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0xFF"));
+  }
+
+  SECTION("a float's spelling survives the round trip")
+  {
+    ieee_floatt f;
+    f.spec = ieee_float_spect::single_precision();
+    f.from_double(0.1);
+    exprt c = f.to_expr();
+    c.cformat("0.1f");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_floatbv2t(e));
+    REQUIRE(to_constant_floatbv2t(e).cformat == irep_idt("0.1f"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0.1f"));
+  }
+
+  SECTION("no spelling means no key, not an empty one")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(to_constant_int2t(e).cformat.empty());
+    // An empty `#cformat` would make c_expr2string print nothing at all rather
+    // than derive the text, so the key must be absent (§46's lesson).
+    REQUIRE(migrate_expr_back(e).find(irept::a_cformat).is_nil());
+  }
+
+  SECTION("the spelling is no part of a constant's identity")
+  {
+    constant_exprt hex(unsignedbv_typet(32));
+    hex.set_value(integer2binary(BigInt(255), 32));
+    hex.cformat("0xFF");
+    constant_exprt dec(unsignedbv_typet(32));
+    dec.set_value(integer2binary(BigInt(255), 32));
+    dec.cformat("255");
+
+    expr2tc a, b;
+    migrate_expr(hex, a);
+    migrate_expr(dec, b);
+    REQUIRE(a == b);
+    REQUIRE(a->crc() == b->crc());
+  }
+}
