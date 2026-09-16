@@ -47,8 +47,11 @@ void python_converter::update_symbol(const exprt &expr) const
   sym->set_type(migrate_type(expr_type));
   {
     exprt v = sym->get_value();
+    // Stays legacy: this retypes the root only, so migrating eagerly would build
+    // an arith node over operands of the old type and trip
+    // assert_arith_2ops_consistency (docs/roadmap/scope-python-irep2.md §6.2).
     v.type() = expr_type;
-    sym->set_value(migrate_expr(v));
+    sym->set_value(std::move(v));
   }
 
   // Check if the symbol has a constant or bitvector value.
