@@ -8887,3 +8887,54 @@ now with an abort behind it rather than a rendering difference. That is not a me
 question any more. Either `type2t` carries C qualifiers, or the frontends stop routing values
 that carry them through the seam, or `adjust_type`'s assertion is wrong to compare an IREP2
 size with a legacy alignment -- and only the third is cheap enough to test speculatively.
+
+## 152. The blocker is two attributes, one per arm (2026-09-16)
+
+§151 concluded that Phase 6's value writes had one blocker, §57.1's type-system question, with
+an abort behind it. Splitting the two sites shows it is one question with two distinct
+instances, and that the abort belongs to only one of them.
+
+### 152.1 The abort is the static arm, and the missing field has a name
+
+Converting `:659` alone -- the local arm, 138 735 executions -- `regression/csmith/csmith01`
+exits 0 and the padding assertion never fires. Adding `:632`, the static arm, reproduces the
+abort. Instrumenting the assertion at the point of failure:
+
+```
+[PADQ] sz=11 a=4 align_attr=set packed=0 tag=struct S0 ncomp=4
+```
+
+A four-component struct, not packed, carrying an **explicit alignment attribute**, whose size
+after `add_padding` is 11 -- not a multiple of the 4 that `alignment()` reports. And that
+attribute cannot survive the round trip: `struct_type2t` carries `packed`
+(`irep2_type.h:137`) but has no alignment field, and
+`grep -c '"alignment"' src/util/irep/migrate.cpp` returns **0**.
+
+So the static arm routes a struct through the seam before `adjust_type` pads it, and what
+comes back has lost the `__attribute__((aligned(N)))` the padding arithmetic needs. What is
+*not* established here is the arithmetic itself -- why `add_padding` yields 11 rather than 12
+-- and this section does not guess at it; the measured facts are the exit codes, those six
+numbers, and the missing field.
+
+### 152.2 The local arm does not abort, and still cannot ship
+
+With `:659` converted and `#cformat` carried, the `--symbol-table-only` dump differs in
+**3 378 of 8 682** programs. That is §150.3's qualifier loss, undiminished: a local's value
+prints its type too, so `(const unsigned char *)p1` renders without the `const` whether the
+symbol is static or not.
+
+### 152.3 One question, two instances
+
+| arm | executions | fails how | missing |
+|---|---|---|---|
+| `:632` static | 86 244 | **aborts** `adjust_type`'s padding assertion | the explicit `alignment` attribute |
+| `:659` local | 138 735 | re-renders 3 378 symbol tables | the C qualifiers (`#constant`) |
+
+Both are §57.1. Neither is a measurement question any more, and the two differ in what an
+answer would have to look like: an explicit alignment is part of a type's identity, so
+carrying it means a **reflected** field on `struct_type2t` and `union_type2t` -- every struct
+type's hash changes -- whereas a qualifier on a pointee affects how a value prints and not
+what it is, which is the unreflected `#cformat` shape §150.1 already used.
+
+That distinction is worth having before anyone starts: the two halves of §57.1 do not have the
+same answer, and the cheaper half is the one that aborts.

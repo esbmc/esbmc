@@ -4111,3 +4111,31 @@ carries C qualifiers; or the frontends stop routing qualifier-bearing values thr
 or that assertion is wrong to compare an IREP2 size against a legacy alignment. The first is
 the §44 unreflected-field pattern applied to types rather than constants, and it is the one
 the other four phases have been waiting on since §57.
+
+## 66. One question, two instances, and the cheap half is the one that aborts (2026-09-16)
+
+§65 said Phase 6's value writes had a single blocker. Splitting the two sites shows it is one
+question with two instances that want different answers, and that only one of them aborts.
+
+Converting the local arm alone (`clang_c_convert.cpp:659`, 138 735 executions) does not abort
+-- `regression/csmith/csmith01` exits 0 -- but still re-renders **3 378 of 8 682** symbol
+tables, because a local's value prints its type and the `const` is gone. Converting the static
+arm (`:632`, 86 244 executions) aborts `adjust_type`'s padding assertion, and the instrumented
+failure names what is missing:
+
+```
+[PADQ] sz=11 a=4 align_attr=set packed=0 tag=struct S0 ncomp=4
+```
+
+An explicit `__attribute__((aligned(N)))`. `struct_type2t` carries `packed` but no alignment
+field, and `grep -c '"alignment"' src/util/irep/migrate.cpp` is 0.
+
+So §57.1 is two questions wearing one coat, and they do not have the same answer. An explicit
+alignment is part of a type's identity -- two structs differing only in it are different types
+-- so carrying it means a **reflected** field and a changed hash for every struct type. A
+qualifier on a pointee changes how a value prints, not what it is, so it is the unreflected
+shape §64 already used for `#cformat`. The half that aborts is the cheaper half to reason
+about and the more expensive to implement; the half that only renders is the reverse.
+
+`scope-clang-c-irep2.md` §152 has the table. Phase 6 stays at B-2\* 19, and what it is waiting
+for is now specific enough to build rather than to flag.
