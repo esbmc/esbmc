@@ -3986,3 +3986,49 @@ has not been a wrong argument but a measurement over the wrong set or the wrong 
 a glob that dropped nested suites, a capture piped to `/dev/null`, a site no static symbol
 reaches, and a GOTO comparison that could not see a symbol table change. Instrument the site
 and count before reading a green comparison as an answer, and compare more than one artefact.
+
+## 63. The seam drops two things, and one of them is not cosmetic (2026-09-16)
+
+§62 converted sixteen Solidity writes of the duplicated-initialiser shape and left the
+seventeenth because it re-rendered a hex literal -- a difference §15.2 called cosmetic and
+set aside. Taking the same shape to clang-c, where the corpus is 8 682 programs rather than
+515, shows that was the wrong call twice over: the rendering loss is general, and there is a
+second loss underneath it that changes the program.
+
+`clang_c_convert.cpp:632` and `:659` are the two sites, and they split perfectly -- `:632`
+runs 86 244 times and only ever on a `static_lifetime` symbol, `:659` 138 735 times and only
+ever on a local -- so one diff exercises both readers of a symbol's value. Converting both:
+
+- the normalised `--goto-functions-only` dump differs in **2 112 of 8 682** programs. In the
+  inspected case a zero-initialised operational-model global becomes a nondeterministic
+  temporary, because `std::cin`'s value is a C++ `sideeffect` with
+  `statement: temporary_object` and the round trip drops its **empty operands list**. That is
+  §46's empty-key defect from the other side: there, writing a key empty made two types
+  unequal; here, dropping an empty key changes goto conversion.
+- the `--symbol-table-only` dump differs in **3 892 of 8 682** with `:659` alone. `#cformat`
+  (`irep.h:478`) holds a literal's source spelling, `c_expr2string.cpp:1120-1125` prefers it
+  over deriving text from the type, and `grep -c cformat src/util/irep/migrate.cpp` is **0**.
+  Solidity's hex address and clang-c's `1.000000e-1f` are one mechanism.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So Phase 6 stays at 19 and nothing is converted here. What this tick produces instead is the
+prerequisite for most of the 144 that remain: carry `#cformat` across the seam, the §44
+`argument_base_names` pattern with two precedents already in this migration, and decide
+whether `sideeffect2t` distinguishes an empty operand list from an absent one. 139 of the
+144 are value writes or the types behind them, python and jimple write the same shapes, and
+no amount of per-site auditing gets past either loss.
+
+It is also the fourth tick in a row where the finding came from measuring more than I had
+been: a wider corpus (8 682 against 515) and a second artefact (the GOTO, which §15 never
+compared for the site it left behind). §15.2's "cosmetic" verdict survived exactly as long
+as the evidence behind it was one frontend and one dump.
