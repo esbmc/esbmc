@@ -176,6 +176,7 @@ extern const char pyrt_str___ne__[];
 extern const char pyrt_str___gt__[];
 extern const char pyrt_str___ge__[];
 extern const char pyrt_str_append[];
+extern const char pyrt_str___class__[];
 
 PyRtObject *pyrt_bool_from(bool b);
 bool pyrt_long_check(PyRtObject *o);
@@ -212,6 +213,9 @@ PyRtObject *pyrt_call_method(
   PyRtArgs args,
   int64_t nargs);
 PyRtObject *pyrt_getattr(PyRtObject *o, const char *name);
+PyRtObject *pyrt_type_of(PyRtObject *o);
+bool pyrt_isinstance(PyRtObject *o, PyRtObject *cls);
+bool pyrt_hasattr(PyRtObject *o, const char *name);
 void pyrt_setattr(PyRtObject *o, const char *name, PyRtObject *value);
 
 #endif

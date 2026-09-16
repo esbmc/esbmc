@@ -17,6 +17,7 @@ PyRtNumberMethods pyrt_long_as_number = {
 PyRtTypeObject PyRtLong_Type = {
   .ob_type = &PyRtType_Type,
   .tp_name = "int",
+  .tp_base = &PyRtObject_Type,
   .tp_as_number = &pyrt_long_as_number,
   .tp_richcompare = pyrt_long_richcompare};
 

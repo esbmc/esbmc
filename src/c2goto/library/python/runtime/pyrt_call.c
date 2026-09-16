@@ -2,9 +2,13 @@
 
 PyRtTypeObject PyRtFunction_Type = {
   .ob_type = &PyRtType_Type,
-  .tp_name = "function"};
+  .tp_name = "function",
+  .tp_base = &PyRtObject_Type};
 
-PyRtTypeObject PyRtMethod_Type = {.ob_type = &PyRtType_Type, .tp_name = "method"};
+PyRtTypeObject PyRtMethod_Type = {
+  .ob_type = &PyRtType_Type,
+  .tp_name = "method",
+  .tp_base = &PyRtObject_Type};
 
 PyRtObject *pyrt_method_new(PyRtObject *self, PyRtObject *function)
 {
@@ -80,6 +84,8 @@ PyRtObject *pyrt_call(PyRtObject *callable, PyRtArgs args, int64_t nargs)
  * instance's own attributes shadow the class's. */
 PyRtObject *pyrt_getattr(PyRtObject *o, const char *name)
 {
+  if (name == pyrt_str___class__)
+    return (PyRtObject *)o->ob_type;
   if (o->ob_type == &PyRtType_Type)
   {
     PyRtObject *value = pyrt_type_lookup((PyRtTypeObject *)o, name);

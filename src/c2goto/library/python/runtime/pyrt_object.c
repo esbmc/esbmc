@@ -1,8 +1,14 @@
 #include "pyrt.h"
 
 PyRtTypeObject PyRtType_Type = {&PyRtType_Type, "type"};
-PyRtTypeObject PyRtNone_Type = {&PyRtType_Type, "NoneType"};
-PyRtTypeObject PyRtNotImplemented_Type = {&PyRtType_Type, "NotImplementedType"};
+PyRtTypeObject PyRtNone_Type = {
+  .ob_type = &PyRtType_Type,
+  .tp_name = "NoneType",
+  .tp_base = &PyRtObject_Type};
+PyRtTypeObject PyRtNotImplemented_Type = {
+  .ob_type = &PyRtType_Type,
+  .tp_name = "NotImplementedType",
+  .tp_base = &PyRtObject_Type};
 
 PyRtObject pyrt_None = {&PyRtNone_Type};
 PyRtObject pyrt_NotImplemented = {&PyRtNotImplemented_Type};

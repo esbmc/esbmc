@@ -19,3 +19,4 @@ const char pyrt_str___ne__[] = "__ne__";
 const char pyrt_str___gt__[] = "__gt__";
 const char pyrt_str___ge__[] = "__ge__";
 const char pyrt_str_append[] = "append";
+const char pyrt_str___class__[] = "__class__";

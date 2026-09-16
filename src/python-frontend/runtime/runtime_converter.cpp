@@ -366,6 +366,15 @@ exprt python_runtime_converter::name(const json &node)
     return symbol_expr(lookup(global_id(id)));
   if (functions_.count(id))
     return address(function_object_id("", id));
+  static const std::map<std::string, std::string> builtin_types = {
+    {"int", "c:@PyRtLong_Type"},
+    {"bool", "c:@PyRtBool_Type"},
+    {"list", "c:@PyRtList_Type"},
+    {"object", "c:@PyRtObject_Type"},
+    {"type", "c:@PyRtType_Type"}};
+  auto builtin = builtin_types.find(id);
+  if (builtin != builtin_types.end())
+    return address(builtin->second);
   raise("NameError: name '" + id + "' is not defined", location(node));
   return gen_zero(object_type_);
 }
@@ -497,6 +506,38 @@ exprt python_runtime_converter::call_expr(const json &node)
         direct.location() = loc;
         block_->copy_to_operands(direct);
         return result;
+      }
+      if (callee == "type" && node["args"].size() == 1)
+        return call("pyrt_type_of", {expr(node["args"][0])}, loc);
+      if (callee == "isinstance" && node["args"].size() == 2)
+      {
+        exprt object = expr(node["args"][0]);
+        exprt cls = expr(node["args"][1]);
+        return call(
+          "pyrt_bool_from", {call("pyrt_isinstance", {object, cls}, loc)}, loc);
+      }
+      if (
+        (callee == "getattr" || callee == "hasattr" || callee == "setattr") &&
+        node["args"].size() >= 2)
+      {
+        const json &attribute = node["args"][1];
+        if (!(is_type(attribute, "Constant") && attribute["value"].is_string()))
+          unsupported(node);
+        exprt object = expr(node["args"][0]);
+        exprt name = name_pointer(attribute["value"].get<std::string>());
+        if (callee == "getattr" && node["args"].size() == 2)
+          return call("pyrt_getattr", {object, name}, loc);
+        if (callee == "hasattr" && node["args"].size() == 2)
+          return call(
+            "pyrt_bool_from",
+            {call("pyrt_hasattr", {object, name}, loc)},
+            loc);
+        if (callee == "setattr" && node["args"].size() == 3)
+        {
+          call("pyrt_setattr", {object, name, expr(node["args"][2])}, loc);
+          return address("c:@pyrt_None");
+        }
+        unsupported(node);
       }
       if (callee == "nondet_bool" || callee == "nondet_int")
         return call("pyrt_" + callee, {}, loc);

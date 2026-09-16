@@ -12,6 +12,7 @@ PyRtSequenceMethods pyrt_list_as_sequence = {
 PyRtTypeObject PyRtList_Type = {
   .ob_type = &PyRtType_Type,
   .tp_name = "list",
+  .tp_base = &PyRtObject_Type,
   .tp_as_sequence = &pyrt_list_as_sequence};
 
 PyRtObject *pyrt_list_new(void)
