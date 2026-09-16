@@ -3970,3 +3970,29 @@ across §63, §151, §152 and this section is one worth naming: each blamed the 
 difference -- an empty operands list, an assertion mixing two representations, a missing
 alignment attribute -- and each was refuted by the next measurement. What settled it was
 dumping the object under test instead of diffing artefacts around it.
+
+## 68. The local arm's cost, measured against the right base (2026-09-16)
+
+§66 and §67 put clang-c's local value-write arm at 3 378 differing symbol tables and attributed
+them to C qualifiers. Both were measured against a base predating the `#cformat` carry that is
+now merged in this stack. Measured correctly -- HEAD against HEAD plus the one line -- the cost
+is **3 341 of 8 682**, and the attribution was wrong: 2 571 of them are C++ programs whose
+difference is the side-effect round trip, not a qualifier.
+
+A C++ case differs in four ways, all from `back_sideeffect` (`migrate.cpp:3468`): it writes
+`cmt_type` and `cmt_size` unconditionally, so a node that had neither gains `#type: empty` and
+`#size: nil`; it drops the empty `operands` list §65 investigated; and it does not restore
+`#location`, which the code explains is deliberate -- restoring it moves instruction columns on
+126 of 131 sampled goto programs and so needs its own PR and an SV-COMP run
+(`scope-clang-c-irep2.md` §136.3). Only the C remainder is the qualifier, as
+`(const signed char *)src` losing its `const`.
+
+So the arm is not blocked on widening `type2t` after all. Two of its three causes are ordinary
+bugs in the back-migration -- stop writing empty comment keys, restore the empty operands list
+-- and the third is already scheduled. That is a better position than §67 left it in, and it was
+only visible once the comparison used a base from the same commit.
+
+`scope-clang-c-irep2.md` §154.3 records the method rule this keeps violating: the base arm must
+be built from the commit the change is applied to, and a residual must be characterised from a
+sample drawn out of the differing set rather than picked. Five figures in this stack were wrong
+for one of those two reasons.

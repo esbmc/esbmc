@@ -8642,3 +8642,64 @@ pattern of this whole investigation: §63 blamed an empty operands list, §151 a
 comparing two representations, §152 a lost alignment attribute, and each was the most visible
 difference rather than the cause. The reproducer above is nine lines and settles it in one run,
 which is what the previous three should have been.
+
+## 154. The local arm costs 3 341, and it is not the qualifier (2026-09-16)
+
+§152.2 put the local arm's cost at 3 378 differing symbol tables and §153.3 filed it under "C
+qualifiers on a pointee". Both numbers were measured against the pre-`#cformat` base, so they
+credited this one line with differences already merged in the stack. Measured properly -- this
+branch's HEAD against HEAD plus `clang_c_convert.cpp:659` -- the cost is **3 341 of 8 682**, and
+the cause is mostly not the qualifier.
+
+### 154.1 The split
+
+```
+esbmc-cpp*   2 571        esbmc          286
+other          770        ir-ra           99
+```
+
+C++ dominates at 2 571 of 3 341, and a C++ case does not differ the way the C one does. For
+`regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy`, 50 diff lines, all of one shape:
+
+```
+>   * #size: nil                  added by the round trip
+>   * #type: empty                added
+<   * operands:                   dropped
+<   * #location:  * function: main dropped
+```
+
+That is `back_sideeffect` (`migrate.cpp:3468`), not a type qualifier. It writes `cmt_type` and
+`cmt_size` **unconditionally** -- with `size` a deliberate `nil_exprt` and `cmttype` a
+default-constructed `typet` when there is nothing to restore -- so a node that had neither
+comes back with both. It drops the empty `operands` list (§151.1). And it deliberately does not
+restore `#location`, which `:3501-3508` explains at length: writing it back moves instruction
+columns on the default path, measured at 126 of 131 goto programs, so it is held for its own PR
+and an SV-COMP run (§136.3).
+
+The C side is the qualifier: `regression/bitwuzla/buf-overflow` differs only as
+`(const signed char *)src` losing its `const`.
+
+### 154.2 What that means for the arm
+
+Three causes, not one, and one of them is a documented deliberate omission:
+
+| cause | where | share |
+|---|---|---|
+| `back_sideeffect` writing `#size`/`#type` unconditionally | `migrate.cpp:3487-3488` | the C++ bulk |
+| the empty `operands` list | `migrate.cpp:3441` (§151.1) | with the above |
+| `#location` not restored, on purpose | `migrate.cpp:3501-3508`, §136.3 | with the above |
+| C qualifiers on a pointee | no `type2t` field | the C remainder |
+
+So §153.3's table is wrong about the local arm: it is not waiting on an unreflected qualifier
+attribute, it is waiting mostly on the side-effect round trip -- two parts of which are
+tractable (stop writing empty comment keys; restore the empty operands list) and one of which is
+already scheduled elsewhere (§136.3's location, which needs an SV-COMP run because it changes
+counterexample columns).
+
+### 154.3 A method note, because this is the fifth correction on one question
+
+Every figure in §150.2, §152.2 and §153.3 came from comparing against a base that predated part
+of the stack. The rule that would have caught all of them: **the base arm must be built from the
+same commit the change is applied to**, and the sample used to characterise a residual must be
+drawn from the differing set rather than picked. This section's first attempt sampled three
+programs, found two identical, and inferred the cost had collapsed -- the full run says 3 341.
