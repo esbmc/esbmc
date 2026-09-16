@@ -1171,7 +1171,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     BigInt val = binary2bigint(expr.value(), is_signed);
 
-    new_expr_ref = constant_int2tc(type, val);
+    new_expr_ref = constant_int2tc(type, val, expr.cformat());
     return;
   }
 
@@ -1181,7 +1181,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     uint64_t enumval = atoi(expr.value().as_string().c_str());
 
-    new_expr_ref = constant_int2tc(type, BigInt(enumval));
+    new_expr_ref = constant_int2tc(type, BigInt(enumval), expr.cformat());
     return;
   }
 
@@ -1222,7 +1222,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     ieee_floatt bv(to_constant_expr(expr));
 
-    new_expr_ref = constant_floatbv2tc(bv);
+    new_expr_ref = constant_floatbv2tc(bv, expr.cformat());
     return;
   }
 
@@ -4412,6 +4412,11 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
+    // Only when there is one to restore: `#cformat` is a comment field, but an
+    // empty one still makes c_expr2string prefer it over deriving the text, and
+    // would print nothing at all (§63).
+    if (!ref2.cformat.empty())
+      theexpr.cformat(ref2.cformat);
     return theexpr;
   }
   case expr2t::sizeof_id:
@@ -4430,7 +4435,11 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   }
   case expr2t::constant_floatbv_id:
   {
-    return to_constant_floatbv2t(ref).value.to_expr();
+    const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
+    exprt theexpr = ref2.value.to_expr();
+    if (!ref2.cformat.empty())
+      theexpr.cformat(ref2.cformat);
+    return theexpr;
   }
   case expr2t::constant_bool_id:
   {
