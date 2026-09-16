@@ -1375,3 +1375,43 @@ TEST_CASE("a const-qualified integer keeps its qualifier", "[migrate]")
     REQUIRE(migrate_type(q)->crc() == migrate_type(unsignedbv_typet(8))->crc());
   }
 }
+
+// A code-typed member names a method, which is no part of a struct_type2t, so
+// member2t's component assertion has nothing to check it against. In-tree
+// sources are by-name and covered by the `symbol_id` disjunct; a *resolved*
+// source is what the clang-c local value write produces
+// (docs/roadmap/frontends-to-irep2.md §76).
+TEST_CASE("migrating a member access naming a method keeps it", "[migrate]")
+{
+  use_test_ns();
+
+  struct_typet st;
+  st.tag("slice");
+  st.components().push_back(
+    struct_typet::componentt("slice::_start", "_start", int_type()));
+
+  code_typet mt;
+  mt.return_type() = int_type();
+  mt.arguments().push_back(code_typet::argumentt(pointer_typet(st)));
+  st.methods().push_back(struct_typet::componentt("slice::size", "size", mt));
+
+  symbolt obj;
+  obj.id = obj.name = "sl";
+  obj.set_type(st);
+  obj.lvalue = true;
+  test_context().add(obj);
+
+  expr2tc out;
+  migrate_expr(member_exprt(symbol_exprt("sl", st), "slice::size", mt), out);
+
+  REQUIRE(is_member2t(out));
+  REQUIRE(to_member2t(out).member == irep_idt("slice::size"));
+  REQUIRE(is_code_type(to_member2t(out).type));
+  // The source is resolved, which is what makes the lookup applicable at all.
+  REQUIRE(is_struct_type(to_member2t(out).source_value->type));
+  // And the method is genuinely absent from it: the assertion is relaxed, not
+  // satisfied by the seam having started to carry methods().
+  REQUIRE_FALSE(struct_union_get_component_number(
+                  to_member2t(out).source_value->type, "slice::size")
+                  .has_value());
+}
