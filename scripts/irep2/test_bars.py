@@ -66,6 +66,12 @@ class TestRefinement(unittest.TestCase):
             count("const code_type2t &ct = to_code_type(t);\n"
                   "sym.set_type(ct.return_type);"), (1, 0))
 
+    def test_an_irep2_only_helper_does_not_count(self):
+        self.assertEqual(count("sym.set_value(gen_false_expr());"), (1, 0))
+
+    def test_a_helper_with_a_legacy_namesake_still_counts(self):
+        self.assertEqual(count("sym.set_value(gen_zero(t, true));"), (1, 1))
+
     def test_write_split_over_lines_sees_its_argument(self):
         self.assertEqual(count("sym.set_type(\n  array_type2tc(s, n, false));"), (1, 0))
 
