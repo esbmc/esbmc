@@ -7298,6 +7298,45 @@ exprt function_call_expr::generate_attribute_error(
   return nondet_fallback;
 }
 
+/// A parameter accepts an argument of its declared type. A union parameter
+/// with no representative type is opaque, and accepts any type its annotation
+/// names -- the list --is-instance-check asserts over (#7876).
+bool function_call_expr::argument_matches_parameter(
+  const code_typet::argumentt &param,
+  const typet &actual) const
+{
+  auto matches = [&](const typet &expected) {
+    // A tagged parameter also accepts a concrete scalar that gets auto-boxed
+    // later; base_type_eq alone wouldn't recognise either as a match.
+    if (type_handler_.is_tagged_scalar_type(expected))
+      return type_handler_.is_tagged_scalar_type(actual) ||
+             type_handler_.is_numeric_scalar_type(actual) ||
+             type_handler_.is_string_type(actual);
+
+    return base_type_eq(expected, actual, converter_.ns) ||
+           (type_utils::is_string_type(expected) &&
+            type_utils::is_string_type(actual));
+  };
+
+  if (matches(param.type()))
+    return true;
+
+  // Only an opaque parameter can hold every member of its annotation; a typed
+  // one would reinterpret a member it cannot represent.
+  if (param.type() != any_type())
+    return false;
+
+  // Python parameters are registered as symbols alongside their identifier.
+  const symbolt *param_symbol = converter_.ns.lookup(param.get_identifier());
+  assert(param_symbol != nullptr);
+
+  for (const typet &alternative : param_symbol->python_annotation_types)
+    if (matches(alternative))
+      return true;
+
+  return false;
+}
+
 exprt function_call_expr::check_argument_types(
   const symbolt *func_symbol,
   const nlohmann::json &args,
@@ -7331,19 +7370,6 @@ exprt function_call_expr::check_argument_types(
     }
   }
 
-  auto types_match = [&](const typet &expected, const typet &actual) {
-    // A tagged parameter also accepts a concrete scalar that gets auto-boxed
-    // later; base_type_eq alone wouldn't recognise either as a match.
-    if (type_handler_.is_tagged_scalar_type(expected))
-      return type_handler_.is_tagged_scalar_type(actual) ||
-             type_handler_.is_numeric_scalar_type(actual) ||
-             type_handler_.is_string_type(actual);
-
-    return base_type_eq(expected, actual, converter_.ns) ||
-           (type_utils::is_string_type(expected) &&
-            type_utils::is_string_type(actual));
-  };
-
   for (size_t i = 0; i < args.size(); ++i)
   {
     size_t param_idx = i + param_offset;
@@ -7355,7 +7381,7 @@ exprt function_call_expr::check_argument_types(
     const typet &actual_type = arg.type();
 
     // Check for type mismatch
-    if (!types_match(expected_type, actual_type))
+    if (!argument_matches_parameter(params[param_idx], actual_type))
     {
       std::string expected_str = type_handler_.type_to_string(expected_type);
       std::string actual_str = type_handler_.type_to_string(actual_type);
@@ -7402,7 +7428,7 @@ exprt function_call_expr::check_argument_types(
       const typet &expected_type = params[param_idx].type();
       const typet &actual_type = arg.type();
 
-      if (!types_match(expected_type, actual_type))
+      if (!argument_matches_parameter(params[param_idx], actual_type))
       {
         std::string expected_str = type_handler_.type_to_string(expected_type);
         std::string actual_str = type_handler_.type_to_string(actual_type);

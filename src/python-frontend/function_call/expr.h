@@ -86,6 +86,12 @@ private:
     const nlohmann::json &args,
     const nlohmann::json &keywords) const;
 
+  /// Whether `actual` satisfies `param`, counting every type the parameter's
+  /// annotation names -- a union's members are not all its declared type.
+  bool argument_matches_parameter(
+    const code_typet::argumentt &param,
+    const typet &actual) const;
+
   // Helper methods for AttributeError detection
   std::vector<std::string>
   find_possible_class_types(const symbolt *obj_symbol) const;
