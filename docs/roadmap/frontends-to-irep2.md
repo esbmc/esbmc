@@ -4074,3 +4074,40 @@ zero-initialised operational-model global becoming a nondeterministic temporary)
 next despite being the smaller of the two remaining. The qualifier decision is bigger but it
 is rendering, and it wants an answer about what `type2t` models rather than another
 measurement -- it now has all the measurement it needs.
+
+## 65. The blocker is one assertion, not three losses (2026-09-16)
+
+§64 ordered the three things the value seam drops and said the `sideeffect` empty-operands
+list should go next because it was the only one that changed the GOTO program. Measured, that
+was wrong twice: the fix for it changes nothing, and what does change the GOTO is the
+qualifier loss §64 had filed as rendering.
+
+Adding the missing `exprt::operands()` call to `back_sideeffect_operands` and converting the
+two clang-c sites still leaves **2 109 of 8 682** GOTO dumps differing, against 2 112 for the
+conversions alone. So the empty list was the most visible difference in a printed value, not
+the cause -- and it is not shipped, because a change whose effect cannot be stated should not
+land. `scope-clang-c-irep2.md` §151.1 also records how the first attempt at that measurement
+produced a meaningless 3 387 by moving three variables at once against a base that predated
+all of them.
+
+What actually happens is an abort:
+
+```
+esbmc: clang_c_adjust_expr.cpp:1081: clang_c_adjust::adjust_type(typet&):
+  Assertion `sz % a == 0' failed.
+```
+
+`adjust_type`'s post-`add_padding` check is the one place in the frontend that compares an
+IREP2-computed `type_byte_size` against a legacy-computed `alignment`. Converting a value
+write makes the symbol's legacy type derived on demand, the derivation drops the C qualifiers
+§64 measured at 3 428 programs, and a struct then reaches the check with a size and alignment
+that disagree. `regression/csmith/csmith01` aborts with the conversions and passes without
+them; 1 of 30 sampled differing programs aborts, the rest differ only in dump text.
+
+So Phase 6's value writes have exactly one blocker and it is §57.1's type-system question --
+no longer the largest of several measurements, but the only one, and with an abort behind it
+instead of a rendering diff. Three ways out, and only the last is cheap to try: `type2t`
+carries C qualifiers; or the frontends stop routing qualifier-bearing values through the seam;
+or that assertion is wrong to compare an IREP2 size against a legacy alignment. The first is
+the §44 unreflected-field pattern applied to types rather than constants, and it is the one
+the other four phases have been waiting on since §57.

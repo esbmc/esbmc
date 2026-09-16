@@ -8815,3 +8815,75 @@ The GOTO one is the only one that changes what is verified, so it is the one to 
 even though it is smaller: §149.2's zero-initialised operational-model global becoming a
 nondeterministic temporary is a soundness-shaped difference, while the other two are
 rendering. Phase 6 stays at B-2\* 19 until at least the third row is settled.
+
+## 151. §63's second cause was wrong, and the real one aborts (2026-09-16)
+
+§150.4 ordered the three remaining losses and put the `sideeffect` empty-operands list first,
+because §63 attributed the 2 112 differing GOTO programs to it and that was the only one of
+the three that changed what gets verified. Both halves of that turn out to be wrong.
+
+### 151.1 The empty operands list is not the cause
+
+`back_sideeffect_operands` (`migrate.cpp:3419`) does set `initializer()` in the
+`temporary_object` initializer form without ever touching the operands list, so the rebuilt
+node really does lack the empty `operands` sub the frontend's own node carries, and
+`exprt::operands()` (`expr.h:57`) materialises it in one call. That much §63 got right.
+
+It changes nothing that matters. With the call added *and* the two clang-c sites converted,
+the normalised `--goto-functions-only` dump still differs in **2 109 of 8 682** programs
+against the proper base for this branch -- against 2 112 for the conversions alone. The fix
+is not the cure, and §63's diagnosis rested on it being the only visible difference in a
+printed value, which is an inference, not a measurement.
+
+It is also worth recording how §63's 2 112 came to be misread a second time: the first
+attempt at this measurement compared a build carrying the `#cformat` work *and* the fix *and*
+the conversions against a base that predated all three, and reported 3 387 -- a number that
+means nothing, because carrying `#cformat` changes the GOTO *dump* too. Instructions print
+their expressions through the same `c_expr2string` that prefers the attribute, so restoring a
+literal's spelling turns `ASSIGN x=255` into `ASSIGN x=0xFF` in the text being hashed. One
+variable at a time, against a base from the same branch.
+
+### 151.2 The real cause is an assertion, and it fires
+
+With the conversions in place -- with or without the operands fix -- `regression/csmith/csmith01`
+does not merely render differently. It aborts:
+
+```
+esbmc: src/clang-c-frontend/clang_c_adjust_expr.cpp:1081:
+  void clang_c_adjust::adjust_type(typet&): Assertion `sz % a == 0' failed.
+```
+
+Attributed by exit code: conversions without the fix, 134; conversions with it, 134; HEAD
+without the conversions, 0. The assertion is `adjust_type`'s post-`add_padding` check
+(`:1075-1082`), and it is the one place in the frontend that compares an **IREP2-computed
+byte size** against a **legacy-computed alignment**:
+
+```cpp
+    type2tc t2 = migrate_type(type);
+    BigInt sz = type_byte_size(t2, &ns);
+    BigInt a = alignment(type, ns);
+    assert(sz % a == 0);
+```
+
+Converting the value write makes the symbol's legacy type a *derived* one -- `get_value()`
+migrates back on demand -- and what `migrate_type` does not carry is exactly what §150.3
+measured dropping: the C qualifiers. A struct then reaches this check with a size and an
+alignment that no longer agree. Of 30 sampled programs from the 2 109, one aborts and the
+rest differ only in dump text, so this is not the majority of the difference -- but it is the
+part that stops a run.
+
+### 151.3 What this does to the ordering
+
+§150.4's table stands, with its last two rows swapped in significance:
+
+| lost | effect | scale | status |
+|---|---|---|---|
+| `#cformat` | printed literal | 539 of 8 682 | carried (§150.1) |
+| C qualifiers | **an assertion in `adjust_type`**, and the printed type | 3 428 render, at least 1 in 30 abort | **the blocker** |
+| a `sideeffect`'s empty operands list | nothing measurable | 3 of 8 682 at most | not shipped, premise refuted |
+
+So there is one blocker left in Phase 6's value writes and it is §57.1's type-system question,
+now with an abort behind it rather than a rendering difference. That is not a measurement
+question any more. Either `type2t` carries C qualifiers, or the frontends stop routing values
+that carry them through the seam, or `adjust_type`'s assertion is wrong to compare an IREP2
+size with a legacy alignment -- and only the third is cheap enough to test speculatively.
