@@ -153,9 +153,10 @@ task rather than a guess to record.
 §4.2 left the hard failure unexplained. Narrowing it one site at a time gives the
 answer, and it is not the 34 sites the earlier batch implicated.
 
-Eight more value writes convert cleanly -- all three in
+Seven more value writes convert cleanly -- two of the three in
 `converter/converter_symbols.cpp`, both in `python2goto.cpp`, and three of
-`python_converter.cpp`'s five. The two that do not are the **program-entry bodies**:
+`python_converter.cpp`'s five. The third `converter_symbols.cpp` write has its own
+cause, recorded in §6.2. The two that do not are the **program-entry bodies**:
 
 ```cpp
 user_main_symbol.set_value(user_code);   // python_converter.cpp:1057
@@ -164,6 +165,41 @@ main_symbol.set_value(std::move(v));     // :1179
 
 Converting `user_main` alone takes the first slice to **53 failures of 400**, and the
 failure is a SIGSEGV during GOTO creation rather than a wrong verdict.
+
+### 6.2 A retyped value cannot be migrated either (2026-09-16)
+
+`update_symbol`'s first write is the third site that has to stay legacy, and the reason
+is not §6.1's:
+
+```cpp
+const typet &expr_type = expr.type();
+sym->set_type(migrate_type(expr_type));
+exprt v = sym->get_value();
+v.type() = expr_type;          // retypes the root only
+sym->set_value(v);             // must stay legacy
+```
+
+The assignment retypes the value's **root node** and leaves its operands alone. A legacy
+`exprt` tolerates that; IREP2 does not. Migrating eagerly builds an arithmetic node whose
+result type is `expr_type` while operand 1 keeps the type it had, and
+`assert_arith_2ops_consistency` (`irep2_expr.cpp:698`) rejects it:
+
+```
+Assertion `p2 || (is_bv_type(t) == is_bv_type(v1->type)
+                  && t->get_width() == v1->type->get_width())' failed.
+```
+
+`regression/numpy/div1` reaches it: `np.divide(1, 2)` has no inferable return type, the
+frontend defaults it to `double` (`converter_funcdef.cpp:1933`), and the retyped root
+then sits over integer operands. Six numpy division tests abort this way, and because it
+is an assertion it is invisible in any build with `NDEBUG` -- it surfaced on the llvm-22
+DebugOpt job, not in the 400/500 slices.
+
+The rule this adds to §6.1's: a value write can be converted only if the expression is
+*already* consistent. Retyping the root is a legacy idiom that the storage flip turns
+into a hard error, so a site that does it needs the retype pushed through the operands
+before the write can move -- which is a change to what the frontend builds, not to where
+it stores it.
 
 ### 6.1 Why, and the rule it gives
 
