@@ -8886,3 +8886,57 @@ since §57 without a decision:
 Recommending the second first: it is the larger share of what is left, the shape is known (§44's
 unreflected-field pattern, three precedents in this migration), and unlike the bitfield it does
 not require a new kind with a width and a migration and every `type_ids` switch answered for.
+
+## 158. The qualifier carried: 345 of 3 348 (2026-09-16)
+
+§157.2 recommended carrying C qualifiers next, on the grounds that §150.3 had measured them at
+3 428 programs on their own -- the largest single share of what the local arm's difference is made
+of. Carried, and measured: it removes **345**.
+
+### 158.1 The carry
+
+`unsignedbv_type2t` and `signedbv_type2t` each gain an unreflected `bool constant_qualified`.
+The qualifier belongs to the *pointee*, not the pointer -- `(const unsigned char *)` is a pointer
+to a qualified `unsigned char` -- so the flag sits on the bitvector kinds where the `const`
+actually is, not on `pointer_type2t`. `migrate_type` reads `type.cmt_constant()` on both arms and
+`migrate_type_back` restores it **only when set**: `#constant` is a comment field, and writing it
+false still inserts the key, which the printer reads as a qualifier. That is the same empty-key
+trap as `#cformat` (§150.1) and `#size` (§155.1), third instance.
+
+Unreflected because nothing but `c_expr2string` reads it: two integers of the same width are the
+same type whether or not one was qualified, and a unit section pins that (`migrate_type(q) ==
+migrate_type(unqualified)`, equal `crc()`). `fields_cover_class` accepted the `bool` without
+repositioning.
+
+Deliberately **not** on the `type2t` base. Two type kinds in the tree declare
+`excluded_field_bytes`; a base member would need it added to some thirty-eight, each with its own
+padding arithmetic. Starting at the two kinds the corpus shows qualified answers whether the
+narrow version suffices -- and the answer below is that it does not.
+
+### 158.2 The running total, and what it says
+
+```
+3 341   the local arm, before any of this
+3 343   §155, empty comment keys guarded on nil
+3 348   §156, side-effect location restored
+3 003   §158, const carried on the bitvector kinds      -345
+```
+
+Four fixes across five sections have removed **345 of 3 348**, about 10%. Each was correct, each
+was verified, and none exposed the floor. The remaining 3 003 includes §157.1's dropped empty
+`operands` list and its undiagnosed `constructor` key, and whatever else a larger sample would
+show.
+
+At this rate the arm is nine more sections away, with no guarantee the strata are finite.
+
+### 158.3 The question this raises about the acceptance criterion
+
+Every figure in §154-§158 is a **symbol-table** difference. The symbol table is a debug dump;
+the GOTO program is what gets verified. If converting the local arm leaves the GOTO identical and
+the suites green, the conversion is safe and the printed-table differences are cosmetic -- in
+which case the arm has been held back for nine sections by the wrong measurement.
+
+That is the next thing to measure and it is cheap: the local arm's GOTO cost, with all four fixes
+in place, against a base from the same commit. §149.2's 2 112 was measured with **both** arms
+converted and none of the fixes, so it does not answer this. If the local arm's GOTO is clean, it
+converts; if it is not, the strata matter and §157.2's structural recommendation stands.

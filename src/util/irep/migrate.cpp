@@ -183,14 +183,14 @@ static type2tc migrate_type0(const typet &type)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return signedbv_type2tc(iwidth);
+    return signedbv_type2tc(iwidth, type.cmt_constant());
   }
 
   if (type.id() == typet::t_unsignedbv)
   {
     irep_idt width = type.width();
     unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
-    return unsignedbv_type2tc(iwidth);
+    return unsignedbv_type2tc(iwidth, type.cmt_constant());
   }
 
   if (type.id() == "c_enum" || type.id() == "incomplete_c_enum")
@@ -3226,13 +3226,21 @@ static typet migrate_type_back_uncached(const type2tc &ref)
   {
     const unsignedbv_type2t &ref2 = to_unsignedbv_type(ref);
 
-    return unsignedbv_typet(ref2.width);
+    unsignedbv_typet t(ref2.width);
+    // Only when set: `#constant` is a comment field, and writing it false still
+    // inserts the key, which the printer then reads as a qualifier (§158).
+    if (ref2.constant_qualified)
+      t.cmt_constant(true);
+    return t;
   }
   case type2t::signedbv_id:
   {
     const signedbv_type2t &ref2 = to_signedbv_type(ref);
 
-    return signedbv_typet(ref2.width);
+    signedbv_typet t(ref2.width);
+    if (ref2.constant_qualified)
+      t.cmt_constant(true);
+    return t;
   }
   case type2t::fixedbv_id:
   {
