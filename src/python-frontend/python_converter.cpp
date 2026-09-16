@@ -139,7 +139,7 @@ static void add_global_static_variable(
   {
     exprt v = gen_zero(t, true);
     v.zero_initializer(true);
-    symbol.set_value(std::move(v));
+    symbol.set_value(migrate_expr(v));
   }
 
   [[maybe_unused]] symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
@@ -200,7 +200,7 @@ void python_converter::create_builtin_symbols()
         integer2binary(BigInt(0), bv_width(char_type_ref)),
         integer2string(BigInt(0)),
         char_type_ref);
-      sym.set_value(value_expr);
+      sym.set_value(migrate_expr(value_expr));
 
       symbol_table_.add(sym);
     };
@@ -1030,7 +1030,7 @@ void python_converter::convert()
     {
       exprt v = init_symbol.get_value();
       v.swap(init_body);
-      init_symbol.set_value(std::move(v));
+      init_symbol.set_value(migrate_expr(v));
     }
 
     if (symbol_table_.move(init_symbol))
