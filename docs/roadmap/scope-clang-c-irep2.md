@@ -9049,3 +9049,68 @@ type kind that needs building, the other a precondition that says this particula
 converted at all. Neither is a rendering difference, and neither is helped by another attribute
 carry -- which retires the approach §155 through §158 took, on evidence rather than on my
 impatience with it.
+
+## 161. The last four: a resolved struct has no methods (2026-09-16)
+
+§159.2's third abort group, diagnosed. All fifteen of the local arm's hard failures now have a
+cause.
+
+### 161.1 What the failure says
+
+All four are `valarray` tests and all four fail identically. Instrumenting `member2t`'s constructor
+assertion (`irep2_expr.h:1659`) to print the member and the source type's component list:
+
+```
+[MEMB]  member=c:@N@std@S@slice@F@size#1  source_type_id=3
+[MEMBC]   _start
+[MEMBC]   _length
+[MEMBC]   _stride
+```
+
+Type id 3 is `struct` (`type_kinds.inc`), so the source type is a **resolved** struct. Its three
+components are `std::slice`'s data members. The member being looked up,
+`c:@N@std@S@slice@F@size#1`, is a **method** -- `@F@` and the overload suffix say so -- and it is
+not among them.
+
+### 161.2 Why it is not among them
+
+Legacy `struct_union_typet` keeps methods in a **separate list** from components:
+`methods()` at `std_types.h:204-211`, stored under the irep key `"methods"`
+(`typet::a_methods`, `type.cpp:47`). And `grep -c methods src/util/irep/migrate.cpp` returns
+**0** -- the seam migrates `components()` and never touches `methods()`, so an IREP2
+`struct_type2t` has data members and nothing else.
+
+That does not normally bite, because `member2t`'s assertion is *skipped* when the source type is a
+`symbol_id` -- the unresolved case -- and the comment at `:1656` says exactly that: the check is
+"only checkable once the source type is resolved". A method access ordinarily carries an
+unresolved source type, the assert is skipped, and resolution later happens through the legacy
+type where `methods()` exists.
+
+Converting the value write changes that: the source type arrives **resolved**, the assertion now
+applies, and the method is not in a resolved IREP2 struct because it never was.
+
+### 161.3 All fifteen, accounted for
+
+| assertion | count | cause | kind of answer |
+|---|---|---|---|
+| `symbol' failed | 7 | the tag symbol is not in the table yet (§160) | a precondition: this site cannot convert |
+| `sz % a == 0' | 4 | no `bit_field2t` (§153) | a new `type2t` kind |
+| component lookup | 4 | a resolved `struct_type2t` has no methods | `methods()` must cross the seam, or the access must stay unresolved |
+
+Three causes, three different kinds of answer, and none of them an attribute carry. The list is
+complete, which is what §147 through §158 were missing: the arm was never 3 341 differences away,
+it was three structural questions away, and the differences were mostly a debug dump.
+
+### 161.4 What this says about Phase 6's remaining two writes
+
+Both arms are blocked, and now by named things:
+
+```
+:632 static   the bitfield assertion, corpus-wide           §153
+:659 local    three causes above, 15 programs               §160, §153, §161
+```
+
+Neither is a measurement question any more. The cheapest of the three is arguably the method one --
+carrying `methods()` across the seam is the §44 pattern applied to a list that already exists on
+both sides -- but it is the one that most obviously affects C++ class layout, so it wants its own
+measurement rather than an assumption that it is cheap.

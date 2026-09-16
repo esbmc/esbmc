@@ -4164,3 +4164,34 @@ type through the namespace is asking the symbol table a question it cannot answe
 Two causes known, of two different kinds: one wants a type kind built, the other says this site
 cannot be converted at all. Neither is a rendering difference and neither yields to another
 attribute carry -- which retires the §69-§72 approach on evidence.
+
+## 75. All fifteen accounted for (2026-09-16)
+
+§74 left one abort group undiagnosed on clang-c's local value-write arm. It is diagnosed, and the
+list is now complete.
+
+All four are `valarray` tests, and dumping the source type's components at the failure gives the
+answer directly:
+
+```
+member=c:@N@std@S@slice@F@size#1  source_type_id=3 (struct)
+components: _start, _length, _stride
+```
+
+The member is a **method**; the resolved struct has only data members. Legacy
+`struct_union_typet` keeps methods in a separate `methods()` list (`std_types.h:204-211`, irep key
+`"methods"`), and `grep -c methods src/util/irep/migrate.cpp` is **0** -- the seam migrates
+components and never methods. It does not normally bite because `member2t`'s assertion is skipped
+for an unresolved source type, which is what a method access usually carries; converting the value
+write makes the source type resolved, so the check applies and the method is not there.
+
+```
+7  the tag symbol is not in the table yet   §53's precondition  → this site cannot convert
+4  no bit_field2t                                               → a new type2t kind
+4  a resolved struct has no methods                              → methods() must cross the seam
+```
+
+Three causes, three kinds of answer, none an attribute carry. That is the point worth keeping: the
+arm was never 3 341 differences away from converting -- it was three structural questions away, and
+97% of the differences were a debug dump. §69 through §72 removed real losses and none of them was
+on this list.
