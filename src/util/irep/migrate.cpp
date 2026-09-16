@@ -3491,7 +3491,11 @@ static exprt back_sideeffect(const expr2tc &ref)
   // fields rather than off the locals: a default-constructed `typet` has an
   // empty id, and `is_not_nil()` reports that as present, which is the same
   // third state the `size` comment above warns about.
-  if (!is_nil_type(ref2.alloctype))
+  // Nil *and* empty: `side_effect_function_call2tc` stores `get_empty_type()`
+  // as the canonical alloctype because that is what round-trips (:533), but the
+  // legacy node it came from carries no `#type` at all, so writing the empty
+  // type back invents one (§157.1).
+  if (!is_nil_type(ref2.alloctype) && !is_empty_type(ref2.alloctype))
     theexpr.cmt_type(cmttype);
   if (!is_nil_expr(ref2.size))
     theexpr.cmt_size(size);

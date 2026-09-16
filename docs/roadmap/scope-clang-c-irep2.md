@@ -8826,3 +8826,63 @@ Hence `needs-svcomp-run`, and hence this section rather than a sentence in a con
 programs -- differed in 3 341 symbol tables with the location withheld, of which §154.1 traced
 the C++ bulk to this and to the empty `operands` list. Whether that residue collapses is the
 next thing to measure, and it is measurable only once this lands.
+
+## 157. Four causes, one fixed, and the arm still does not move (2026-09-16)
+
+§155.2 measured the local arm at 3 343 with the empty comment keys guarded. §156 restored the
+side-effect location, which §154.1 had named as the other half of the C++ bulk. Re-measured on
+top of it, both arms from the same commit:
+
+```
+3 341  before either fix
+3 343  with the comment-key guard (§155)
+3 348  with the location restored as well (§156)
+```
+
+No movement. §154.1's attribution was wrong on both counts, and it was wrong for a reason worth
+naming: it generalised from **one** program's diff.
+
+### 157.1 What a five-program sample says
+
+Sampled from the current differing list rather than picked, and aggregated:
+
+```
+16 ×   > * #type: empty                         still added
+16 ×   < * operands:                            the empty list, still dropped
+16 ×   < * constructor: N                       a key not previously identified
+10 ×   < (const unsigned char *) → (unsigned char *)   the qualifier
+```
+
+Four independent causes, two of them new to this section. The first is a bug in §155's own
+guard: `side_effect_function_call2tc` stores `get_empty_type()` as its alloctype -- `migrate.cpp`
+`:533` explains that empty, not nil, is the round-trip-stable form -- so guarding the `#type`
+write on `!is_nil_type` alone lets it through for every call, which is precisely why §155 moved
+2 059 programs and still changed nothing about the arm. Guarding on nil **and** empty removes it.
+
+That fix is here, with a unit case (`a call side effect gains no #type key`) that fails on the
+nil-only guard. On the default path it changes **2 061 of 8 682** symbol tables, all of them
+losing `#type: empty`; suites hold at baseline (`regression/esbmc` 2 of 2 303, `esbmc-cpp/cpp` 6
+of 1 065, unit 880 of 880).
+
+The dropped `constructor` key is not diagnosed here. It is recorded, not explained, because the
+last four sections each explained a symptom and each was refuted by the next measurement.
+
+### 157.2 The shape of the remaining work
+
+Four ticks have produced four correct small fixes -- `#cformat` carried, empty comment keys
+guarded twice, the location restored -- and the arm's cost has not moved by more than seven
+programs. The reason is structural rather than accidental: the local arm's 3 341 is not one cause
+with a tail but several independent losses at the same seam, and each fix removes one stratum
+without exposing the floor.
+
+Two questions would settle more at once than the remaining strata will, and both have been open
+since §57 without a decision:
+
+- **a `bit_field2t`**, which is what the *static* arm needs (§153) and which no amount of
+  attribute-carrying reaches;
+- **whether `type2t` carries C qualifiers**, which is the last of the four causes above and the
+  one §150.3 measured at 3 428 on its own.
+
+Recommending the second first: it is the larger share of what is left, the shape is known (§44's
+unreflected-field pattern, three precedents in this migration), and unlike the bitfield it does
+not require a new kind with a width and a migration and every `type_ids` switch answered for.

@@ -1320,3 +1320,24 @@ TEST_CASE("a nondet side effect gains no empty comment keys", "[migrate]")
   REQUIRE(back.find(irept::a_cmt_size).is_nil());
   REQUIRE(back.find(irept::a_cmt_type).is_nil());
 }
+
+// side_effect_function_call2tc stores get_empty_type() as its alloctype because
+// that is what round-trips, so guarding the `#type` write on nil alone still
+// invents the key for every call -- which is why §155's guard moved nothing
+// (docs/roadmap/scope-clang-c-irep2.md §157.1).
+TEST_CASE("a call side effect gains no #type key", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    symbol2tc(get_uint32_type(), "c:@F@f"),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}

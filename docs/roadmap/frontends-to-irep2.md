@@ -4055,3 +4055,35 @@ held this for a competition run rather than letting it ride along.
 
 What it unblocks is measurable only once it lands: the local arm's 3 341 differing symbol tables,
 whose C++ bulk §69 traced to this location and to the empty `operands` list.
+
+## 71. The arm has four causes, not one (2026-09-16)
+
+§70 restored the side-effect location, the last of the two shapes §68 blamed for clang-c's local
+value write differing in 3 341 symbol tables. Measured on top of it: **3 348**. Three fixes across
+four ticks and the figure has moved by seven programs.
+
+A five-program sample drawn from the differing list -- rather than the single program §68
+generalised from -- shows four independent causes:
+
+```
+> * #type: empty                       still added
+< * operands:                          still dropped
+< * constructor: N                     not previously identified
+< (const unsigned char *) → (unsigned char *)
+```
+
+The first is a bug in §69's own guard, fixed here. `side_effect_function_call2tc` stores
+`get_empty_type()` as its alloctype because empty, not nil, is what round-trips
+(`migrate.cpp:533`), so guarding the `#type` write on `!is_nil_type` alone let it through for
+every call -- which is exactly why §69 changed 2 059 programs and nothing about the arm. Guarding
+on both removes it: 2 061 more symbol tables on the default path, suites at baseline, and a unit
+case that fails on the nil-only guard.
+
+The dropped `constructor` key is recorded and not explained. Four sections in a row have
+explained a symptom and been refuted by the next measurement; this one stops at the observation.
+
+What the pattern says is that the arm is not one loss with a tail but several strata at one seam,
+and peeling them one per tick is the wrong shape of work. The two questions that would settle more
+at once are both open since §57: a `bit_field2t` for the static arm (§67), and whether `type2t`
+carries C qualifiers -- the fourth cause above, measured at 3 428 on its own in §64. The second is
+the better next move: bigger share, known shape, three precedents, and no new type kind.
