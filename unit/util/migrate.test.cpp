@@ -1415,3 +1415,38 @@ TEST_CASE("migrating a member access naming a method keeps it", "[migrate]")
                   to_member2t(out).source_value->type, "slice::size")
                   .has_value());
 }
+
+// The two Solidity delegate-shadow sites that store a zero return value now
+// build it with the IREP2 gen_zero over a migrated type, where they built a
+// legacy zero and let the setter migrate it. Those are different functions, so
+// this pins that they agree on the types reaching those sites. The sites are
+// verification-inert -- the GOTO takes the value from the code_declt operand on
+// the next line -- so no regression test can bite, and this is the pin
+// (docs/roadmap/scope-solidity-irep2.md §16.1).
+TEST_CASE(
+  "the two gen_zero overloads agree on Solidity return types",
+  "[migrate]")
+{
+  use_test_ns();
+
+  auto agree = [](const typet &t) {
+    const type2tc t2 = migrate_type(t);
+    expr2tc via_legacy;
+    migrate_expr(gen_zero(t, true), via_legacy);
+    const expr2tc via_irep2 = gen_zero(t2, true);
+    INFO("type kind id = " << get_type_id(t2));
+    REQUIRE(via_irep2 == via_legacy);
+  };
+
+  // uint256 and address: every corpus test reaching those sites returns one of
+  // these, `address` being an unsignedbv(160) carrying #sol_type.
+  agree(unsignedbv_typet(256));
+  agree(unsignedbv_typet(160));
+  agree(bool_typet());
+  agree(signedbv_typet(32));
+
+  SECTION("a Solidity string is a pointer, and agrees too")
+  {
+    agree(pointer_typet(signed_char_type()));
+  }
+}
