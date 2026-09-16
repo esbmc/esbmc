@@ -9358,3 +9358,59 @@ investigation that the remaining work has been a list rather than a slope.
 The bitfield is still the one with a name and no cheap answer -- `bit_field2t` needs a width, a
 migration in both directions, and every `type_ids` switch answered for. The other two need
 diagnosing before anyone can say what they need.
+
+## 160. The seven null-symbol aborts are §53's precondition (2026-09-16)
+
+§159.2 left three abort causes on the local arm, two undiagnosed. This diagnoses the largest.
+
+### 160.1 Which programs, and what is missing
+
+Six of the seven are variadic, which is the whole clue:
+
+```
+regression/esbmc/va_binds_by_reference
+regression/esbmc/irep2_only_va_binds_by_reference
+regression/esbmc/irep2_only_va_binds_by_reference_c23
+regression/esbmc/irep2_only_va_copy_binds_by_reference
+regression/esbmc/vasprintf_valist_consumed_no_recovery_fail
+regression/nonz3/variadic_function
+regression/esbmc-cpp/cpp/github_2254_fail
+```
+
+The assertion is `namespacet::follow`'s `assert(symbol)` (`util/symtab/namespace.cpp:60`) -- a
+`symbol_typet` naming something the namespace cannot find. Instrumented to print the identifier
+rather than guessed at:
+
+```
+[FOLLOW] missing identifier=tag-struct __va_list_tag
+```
+
+### 160.2 The identifier is right; the timing is not
+
+`tag-struct __va_list_tag` **is** in the symbol table -- `--symbol-table-only` on the same program
+without the conversion shows it, with its four members. So this is not a naming mismatch of the
+kind §44 and §46 were: the name is correct and the symbol exists by the end of conversion. It does
+not exist *yet* when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`.
+
+That is the blocker §146 listed third -- "a symbol that does not exist yet"
+(`scope-python-irep2.md` §6.1) -- and §53's precondition in its original form: at converter time
+the clang AST is the only complete source, and a migration that has to resolve a type through the
+namespace is asking the symbol table a question it cannot answer yet.
+
+So seven of the fifteen hard failures are one known class, and the class already has a stated
+answer: do not migrate eagerly at converter time. That is a constraint on *where* a value write
+can be converted, not a defect to fix.
+
+### 160.3 What the fifteen look like now
+
+| assertion | count | cause |
+|---|---|---|
+| `symbol' failed | 7 | §53's precondition -- the type's tag symbol is not in the table yet |
+| `sz % a == 0' | 4 | no `bit_field2t` in IREP2 (§153) |
+| `...get_component_number(...).has_value()` | 4 | undiagnosed |
+
+Two of the three groups now have causes, and they are different kinds of thing: one is a missing
+type kind that needs building, the other a precondition that says this particular site cannot be
+converted at all. Neither is a rendering difference, and neither is helped by another attribute
+carry -- which retires the approach §155 through §158 took, on evidence rather than on my
+impatience with it.
