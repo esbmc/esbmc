@@ -60,7 +60,8 @@ struct TypeFlags
   bool has_none = false;
   /// A union member this tracker cannot represent -- a list, dict, class or any
   /// other non-scalar. Set by update_type_flags_from_node for anything it does
-  /// not recognise, so select_widest_type can decline to narrow (esbmc/esbmc#7872).
+  /// not recognise, so select_widest_type can decline to narrow
+  /// (esbmc/esbmc#7872).
   bool has_other = false;
 };
 
@@ -275,7 +276,8 @@ public:
     TypeFlags flags;
 
     // Extract from left operand. `|` is left-associative, so a chained union
-    // nests on the left: `int | bool | float` is BinOp(BinOp(int, bool), float).
+    // nests on the left: `int | bool | float` is
+    // BinOp(BinOp(int, bool), float).
     if (binop_node.contains("left"))
     {
       const auto &left = binop_node["left"];
