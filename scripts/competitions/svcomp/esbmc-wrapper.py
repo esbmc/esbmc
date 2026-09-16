@@ -283,6 +283,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
   else:
     command_line += "--64 "
 
+  command_line += "--z3 "
+
   concurrency = ((prop in (Property.reach, Property.datarace, Property.overflow, Property.memory)) and
                  check_if_benchmark_contains_pthread(benchmark))
 
@@ -290,7 +292,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # --smt-symex-guard also turns on --smt-during-symex, which is what makes
     # sibling schedules share a solver context (issue #6831, W3.3); do not add
     # it separately, and do not drop the guard without re-measuring.
-    command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
+    command_line += " --smt-symex-guard --cswitch-skip-readonly-globals "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
