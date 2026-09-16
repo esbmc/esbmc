@@ -8703,3 +8703,67 @@ of the stack. The rule that would have caught all of them: **the base arm must b
 same commit the change is applied to**, and the sample used to characterise a residual must be
 drawn from the differing set rather than picked. This section's first attempt sampled three
 programs, found two identical, and inferred the cost had collapsed -- the full run says 3 341.
+
+## 155. Empty comment keys, fixed; and they were not what the arm was waiting on (2026-09-16)
+
+§154.1 found that a C++ value write's symbol-table difference had four shapes, two of which
+were `back_sideeffect` writing comment keys it had nothing to put in: `#type: empty` and
+`#size: nil` on a node that had neither. This section fixes that and reports that it does not
+help the arm at all.
+
+### 155.1 The fix, and a third state inside it
+
+```cpp
+  if (!is_nil_type(ref2.alloctype))
+    theexpr.cmt_type(cmttype);
+  if (!is_nil_expr(ref2.size))
+    theexpr.cmt_size(size);
+```
+
+Keyed off the source fields, not off the locals, and that distinction is the whole difficulty.
+A first attempt guarded on `cmttype.is_not_nil()`, which does not work: a default-constructed
+`typet` has an **empty id**, and `is_not_nil()` reports empty as present. That is the same third
+state the comment above `size` in this function has warned about since it was written -- an empty
+irep is neither nil nor real -- and the first guard walked into it. The unit case
+`a nondet side effect gains no empty comment keys` fails on that version and passes on this one.
+
+Safe because nothing can observe the difference except a printer: comments live in `comments`,
+which `irept::operator==` does not compare; both getters return nil whether the key is absent or
+nil-valued; and no `test.desc` in the tree mentions `#size` or `#type`
+(`grep -rl '#size\|#type' regression --include=test.desc` returns 0 files).
+
+It is not free, though. On the **default path** -- no conversion anywhere -- it changes the
+printed symbol table of **2 059 of 8 682** programs, all of them losing `* #size: nil` lines.
+That is disclosed rather than buried: it is the same shape of change as §136.3's held-back
+`#location` restoration, differing in that this one removes vacuous comment subs that no
+counterexample renders, where §136.3 moves instruction columns that counterexamples do.
+
+### 155.2 It does not reduce the local arm's cost
+
+Measured from the same commit each side, converting `clang_c_convert.cpp:659`:
+
+```
+without this fix   3 341 of 8 682
+with this fix      3 343 of 8 682
+```
+
+Unchanged. §154.1's sample showed the empty comment keys because they were *in* the diff, not
+because they were the diff -- the same program also drops an empty `operands` list and a
+`#location`, and those two alone keep it differing. So the C++ bulk of the arm's 3 341 is the
+other two shapes, and of those, `#location` is deliberately unrestored and scheduled under
+§136.3 with an SV-COMP run attached.
+
+That is worth stating plainly: **clang-c's local value-write arm is blocked behind §136.3**, not
+behind the type system. §153.3 put it under "C qualifiers, an unreflected attribute"; the
+qualifier is only the C remainder of 770 programs, and the C++ 2 571 are waiting on a location
+decision already taken and deferred.
+
+### 155.3 Where Phase 6's two value writes now stand
+
+| arm | blocked on | scheduled? |
+|---|---|---|
+| `:632` static | no bitfield type in IREP2 (§153) | no -- needs a new `type2t` kind |
+| `:659` local | `#location` not restored (§136.3) + empty `operands` (§151.1) | §136.3 is, with an SV-COMP run |
+
+Neither is a measurement question. Phase 6 stays at B-2\* 19, and this fix ships on its own
+merits -- one fewer thing the seam invents -- rather than as a step toward either.

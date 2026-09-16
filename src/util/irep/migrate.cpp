@@ -3484,8 +3484,17 @@ static exprt back_sideeffect(const expr2tc &ref)
     size = migrate_expr_back(ref2.size);
   back_sideeffect_operands(ref2, theexpr);
 
-  theexpr.cmt_type(cmttype);
-  theexpr.cmt_size(size);
+  // Only when there is something to say. Writing these unconditionally gives a
+  // node that never had them a `#type: empty` and a `#size: nil`, which is
+  // invisible to irept::operator== -- comments are not compared -- but shows up
+  // in every printed symbol table and goto program (§155). Keyed off the source
+  // fields rather than off the locals: a default-constructed `typet` has an
+  // empty id, and `is_not_nil()` reports that as present, which is the same
+  // third state the `size` comment above warns about.
+  if (!is_nil_type(ref2.alloctype))
+    theexpr.cmt_type(cmttype);
+  if (!is_nil_expr(ref2.size))
+    theexpr.cmt_size(size);
 
   // For cpp_new[] also restore the "size" field the frontend uses. Under
   // --irep2-bodies this back-migration feeds the legacy conversion pipeline,
