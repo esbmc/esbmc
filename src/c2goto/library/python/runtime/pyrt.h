@@ -23,6 +23,21 @@ typedef struct __pyrt_long
   int64_t value;
 } PyRtLongObject;
 
+/* Immutable; `data` points at a literal emitted by the frontend or at a
+ * buffer this model allocated. */
+typedef struct __pyrt_str
+{
+  PyRt_HEAD;
+  int64_t length;
+  const char *data;
+} PyRtStrObject;
+
+typedef struct __pyrt_float
+{
+  PyRt_HEAD;
+  double value;
+} PyRtFloatObject;
+
 typedef struct __pyrt_list
 {
   PyRt_HEAD;
@@ -141,6 +156,7 @@ struct __pyrt_type
 
 #define PYRT_LIST_CAPACITY 64
 #define PYRT_MAX_CLASSES 16
+#define PYRT_STR_CAPACITY 64
 
 extern PyRtTypeObject PyRtType_Type;
 extern PyRtTypeObject PyRtObject_Type;
@@ -149,6 +165,8 @@ extern PyRtTypeObject PyRtNotImplemented_Type;
 extern PyRtTypeObject PyRtLong_Type;
 extern PyRtTypeObject PyRtBool_Type;
 extern PyRtTypeObject PyRtList_Type;
+extern PyRtTypeObject PyRtStr_Type;
+extern PyRtTypeObject PyRtFloat_Type;
 extern PyRtTypeObject PyRtFunction_Type;
 extern PyRtTypeObject PyRtMethod_Type;
 
@@ -182,6 +200,10 @@ PyRtObject *pyrt_bool_from(bool b);
 bool pyrt_long_check(PyRtObject *o);
 PyRtObject *pyrt_long_from(int64_t v);
 PyRtObject *pyrt_list_new(void);
+PyRtObject *pyrt_str_new(const char *data, int64_t length);
+bool pyrt_float_check(PyRtObject *o);
+PyRtObject *pyrt_float_from(double v);
+double pyrt_number_as_double(PyRtObject *o);
 PyRtObject *pyrt_nondet_bool(void);
 PyRtObject *pyrt_nondet_int(void);
 

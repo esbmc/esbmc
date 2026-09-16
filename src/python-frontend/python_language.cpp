@@ -275,6 +275,11 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
     // Generate symbol table
     if (runtime)
     {
+      // Floats live in a double field of an allocated object, which --ir
+      // stores byte-wise and truncates. Wait for the mixed encoding rather
+      // than answer with a silently rounded value.
+      if (config.options.get_bool_option("int-encoding"))
+        throw std::runtime_error("--python-runtime does not support --ir yet");
       if (!extra_asts.empty())
         throw std::runtime_error("--python-runtime takes a single Python file");
       python_runtime_converter(context, ast).convert();

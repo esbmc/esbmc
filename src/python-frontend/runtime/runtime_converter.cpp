@@ -2,6 +2,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
 #include <util/lang/c_types.h>
 
 #include <algorithm>
@@ -14,6 +15,8 @@ const char *const long_tag = "tag-struct __pyrt_long";
 const char *const type_tag = "tag-struct __pyrt_type";
 const char *const attrs_tag = "tag-struct __pyrt_attrs";
 const char *const function_tag = "tag-struct __pyrt_function";
+const char *const str_tag = "tag-struct __pyrt_str";
+const char *const float_tag = "tag-struct __pyrt_float";
 const char *const args_tag = "tag-struct __pyrt_args";
 const size_t max_args = 6;
 const unsigned heaptype_flag = 1;
@@ -331,6 +334,10 @@ exprt python_runtime_converter::constant(const json &node)
     return address("c:@pyrt_None");
   if (value.is_boolean())
     return address(value.get<bool>() ? "c:@pyrt_True" : "c:@pyrt_False");
+  if (value.is_string())
+    return str_constant(value.get<std::string>(), location(node));
+  if (value.is_number_float() && !node.contains("value_nonfinite"))
+    return float_constant(value.get<double>(), location(node));
   if (
     value.is_number_integer() && !node.contains("_bigint") &&
     (!value.is_number_unsigned() ||
@@ -357,6 +364,64 @@ exprt python_runtime_converter::int_constant(
   return address(id);
 }
 
+/// One static object per distinct literal, with its characters in a static
+/// array beside it, so evaluating a literal allocates nothing.
+exprt python_runtime_converter::str_constant(
+  const std::string &value,
+  const locationt &loc)
+{
+  auto existing = string_literals_.find(value);
+  if (existing != string_literals_.end())
+    return address(existing->second);
+
+  const std::string index = std::to_string(string_literals_.size());
+  const std::string data_id = global_id("$pyrt_strdata$" + index);
+  const std::string object_id = global_id("$pyrt_strlit$" + index);
+
+  string_constantt characters(value);
+  symbolt data;
+  data.id = data_id;
+  data.name = data_id;
+  data.set_type(characters.type());
+  data.set_value(characters);
+  data.location = loc;
+  data.lvalue = true;
+  data.static_lifetime = true;
+  add_symbol(data);
+
+  exprt first(exprt::index, char_type());
+  first.copy_to_operands(
+    symbol_expr(lookup(data_id)), from_integer(0, index_type()));
+
+  add_static_object(object_id, str_tag, loc);
+  context_.find_symbol(object_id)->set_value(struct_value(
+    str_tag,
+    {{"ob_type", address_of_exprt(symbol_expr(lookup("c:@PyRtStr_Type")))},
+     {"length", from_integer(value.size(), long_long_int_type())},
+     {"data", address_of_exprt(first)}}));
+  string_literals_[value] = object_id;
+  return address(object_id);
+}
+
+exprt python_runtime_converter::float_constant(
+  double value,
+  const locationt &loc)
+{
+  auto existing = float_literals_.find(value);
+  if (existing != float_literals_.end())
+    return address(existing->second);
+
+  const std::string id =
+    global_id("$pyrt_floatlit$" + std::to_string(float_literals_.size()));
+  add_static_object(id, float_tag, loc);
+  context_.find_symbol(id)->set_value(struct_value(
+    float_tag,
+    {{"ob_type", address_of_exprt(symbol_expr(lookup("c:@PyRtFloat_Type")))},
+     {"value", from_double(value, double_type())}}));
+  float_literals_[value] = id;
+  return address(id);
+}
+
 exprt python_runtime_converter::name(const json &node)
 {
   const std::string id = node["id"];
@@ -370,6 +435,8 @@ exprt python_runtime_converter::name(const json &node)
     {"int", "c:@PyRtLong_Type"},
     {"bool", "c:@PyRtBool_Type"},
     {"list", "c:@PyRtList_Type"},
+    {"str", "c:@PyRtStr_Type"},
+    {"float", "c:@PyRtFloat_Type"},
     {"object", "c:@PyRtObject_Type"},
     {"type", "c:@PyRtType_Type"}};
   auto builtin = builtin_types.find(id);

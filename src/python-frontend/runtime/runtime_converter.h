@@ -36,6 +36,8 @@ private:
   std::set<std::string> globals_;
   std::map<std::string, const json *> functions_;
   std::map<std::string, const json *> classes_;
+  std::map<std::string, std::string> string_literals_;
+  std::map<double, std::string> float_literals_;
   code_blockt *block_ = nullptr;
   unsigned temporaries_ = 0;
 
@@ -77,6 +79,8 @@ private:
   exprt truth(const json &node);
   exprt constant(const json &node);
   exprt int_constant(int64_t value, const locationt &loc);
+  exprt str_constant(const std::string &value, const locationt &loc);
+  exprt float_constant(double value, const locationt &loc);
   exprt name(const json &node);
   exprt binop(const std::string &op, exprt left, exprt right, const json &node);
   exprt unaryop(const json &node);
