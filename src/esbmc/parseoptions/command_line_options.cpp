@@ -415,6 +415,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // that are used by ESBMC at later stages but which are not available
   // through CMD, setting groups of options based depending on
   // particular CMD flags)
+  // Every callable in runtime mode comes from the models or from a function
+  // the frontend emitted, and anything else is refused at conversion time. A
+  // slot call with no target is therefore unreachable rather than external,
+  // and havocing its result reports failures that cannot happen.
+  if (cmdline.isset("python-runtime"))
+    options.set_option("closed-world-fnptr", true);
+
   if (cmdline.isset("bv"))
     options.set_option("int-encoding", false);
 
