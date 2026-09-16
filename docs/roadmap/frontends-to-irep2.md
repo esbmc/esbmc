@@ -4307,3 +4307,22 @@ the field (§44, §46, §69). This one should not be, and nor should it be fixed
 whether or not the seam preserves spelling. Before adding a field to carry a marker across, it is
 worth asking whether the reader's use of it is defensible -- here it was not, and the fix is a line in
 the reader rather than storage in the hottest node in the tool.
+
+## 79. Zero in solidity_convert_call.cpp, and what the detour cost (2026-09-16)
+
+The ten writes §78 deferred are in, and inert: base against change over all 526 Solidity tests,
+`--goto-functions-only` and `--symbol-table-only` both byte-identical, 0 of 526 on either, against 523
+of 525 symbol tables before the printer was fixed. The file is at zero B-2* residue, 19 of 19.
+Solidity 56 -> 46; the repo total 135 -> 125.
+
+The eight body writes are gated differently from the type writes of §77. `migrate_symbol_value`'s
+round-trip assertion skips function bodies by design (`migrate.cpp:496`), so what pins them is the
+byte-identical GOTO -- which for a function body is the stronger instrument, not a weaker one, because
+goto-convert builds the GOTO *from* the value written. The two local-symbol writes are covered by that
+assertion on an asserts build.
+
+Worth keeping from the detour: §78 priced these ten at reconstructing `name` in `migrate_expr_back`,
+i.e. adding a derivation to the most-constructed node's back-migration to satisfy a consumer that was
+wrong. The consumer's test turned out to be a tautology, and fixing it cost one line and repaired a
+live defect in all three printers. The general form: when a marker appears not to survive the seam,
+price fixing the reader before paying to carry the marker.
