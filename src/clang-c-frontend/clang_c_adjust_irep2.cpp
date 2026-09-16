@@ -1311,7 +1311,6 @@ void clang_c_adjust_irep2::adjust_call_signature(expr2tc &expr)
   align_call_return_type(expr, *callee_symbol);
 }
 
-
 void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
 {
   const std::optional<call_view> call = as_call(expr);
