@@ -2890,6 +2890,555 @@ vector into the other's slot survived the whole 50-case suite -- the three vecto
 are pushed on consecutive lines and passed to the helper in a row, so crossing them
 is the likely edit. Spell every name differently in a test over per-component
 metadata.
+
+## 47. The vtable struct types need no new field after all (2026-09-14)
+
+§46.2 proposed one unreflected carrier for the whole per-component attribute
+family. Reading what the two vtable readers actually need says otherwise: every
+attribute they read is already recoverable from a *reflected* field, so the slice
+is to stop reading the unreflected one rather than to carry it.
+
+### 47.1 What the vtable type's components carry
+
+| attribute | set at | recoverable from |
+|---|---|---|
+| `name` | `:308`, `rtti_name_component` | reflected |
+| `pretty_name` | `:318`, `rtti_name_component` | reflected |
+| `base_name` | `:311`, `rtti_name_component` | §46's `member_base_names` |
+| `virtual_name` | `:319` | **its own `pretty_name`** -- `:318` and `:319` are set from the same expression, `comp.get("virtual_name")` |
+| `is_rtti_name` | `rtti_name_component` | **the component name**, which is exactly `rtti_name_component_id(vt_name)` |
+| `access` | both | nothing reads it (below) |
+
+So both readers can be rewritten against reflected data:
+`clang_cpp_convert_vft.cpp:737`'s override switch map keys on
+`compo.get("virtual_name")`, which equals `compo.pretty_name()` for every entry it
+walks; `clang_cpp_destructor_call.cpp:35` compares a vtable entry's `virtual_name`
+against a class method component's, and only the vtable side needs to change.
+`is_rtti_name` is a name test against the same helper that produced the name.
+
+`is_vtptr` is not in the table because `add_vptr` puts it on the *class* type, not
+the vtable type, so it is out of this slice; when the class types move, note that a
+class method component's `virtual_name` is the *ultimate overridden* method's id
+(`annotate_virtual_overriding_methods`), which is genuinely extra information and
+not derivable from that component's own names.
+
+### 47.2 `access` on a component is write-only
+
+`struct_union_typet::componentt::get_access()` (`util/irep/std_types.h:131`) has
+**no caller** in `src/` or `unit/`. `set_access` has five, plus three `set("access",
+…)` in the vtable builder. The field is written and never read, so the seam need not
+carry it and a later PR can delete the writes.
+
+### 47.3 Consequence for §46.2
+
+The leftover-`irept` carrier is not needed for this slice and should not be built
+for it. It would also work against the bars: a generic legacy-attribute carrier is
+exactly the escape hatch B-4 forbids, and it would let a frontend keep depending on
+legacy component metadata indefinitely. Derive from reflected data, or from the name
+as `restore_padding_flag` does (§137); carry a field only where the information
+exists nowhere else.
+
+### 47.4 Both writes now store IREP2 -- and §45.1's cause was wrong
+
+With the two readers rewritten, `add_vtable_type_symbol` stores
+`migrate_type(st)` and `add_vtable_type_entry` appends to the IREP2 type
+directly. `regression/esbmc-cpp/cpp` is **6 failures of 1 060**, master's
+baseline, and the whole `esbmc-cpp` tree is 8 of 3 155 -- the two extra pass when
+re-run serially.
+
+Three measurements on that state, each a rebuild plus the full label:
+
+| change | failures |
+|---|---|
+| both readers rewritten | 6 |
+| forward arm pushes an empty base name per component | **6** |
+| `is_rtti_name` reader restored | 655 |
+| `virtual_name` reader restored | 655 |
+
+The second row keeps the vector's length -- dropping the pushes altogether would
+trip `struct_type2t`'s length assertion on the first appended entry -- so it
+isolates the base names' *content*, which is what a reader would need. Nothing
+does. So §46's `member_base_names` is **not** what unblocks this, and §45.1 named
+the wrong consumer. The thunk builder's `component.base_name()` reads the component
+passed at `clang_cpp_convert_vft.cpp:104`, which is the **class** type's method
+component, not the vtable type's -- and class types still store IREP1, so that
+read never crosses this seam. §46 inherited the error.
+
+The real cause is either lost attribute on its own: the rtti entry is the first
+component of every vtable, so failing to recognise it sends `@rtti_name` into
+`switch_map.find`, which misses, and the assertion at
+`clang_cpp_convert_vft.cpp:753` fires on every polymorphic program. `virtual_name`
+does the same for every other entry.
+
+§46's field stays correct on its own terms -- a component's base name now survives
+the round trip, pinned by a unit test -- but it is not on this slice's critical
+path, and the 653-failure figure belongs to `virtual_name`.
+
+Tests: `regression/esbmc-cpp/cpp/github_4715_vtable_thunk_irep2{,_fail}`, a
+two-base hierarchy dispatching through the second base. Both halves change verdict
+when either reader is restored; neither moves when the base names are dropped,
+which is the measurement above in test form.
+
+## 48. The thunk symbols, and §44's field gets an end-to-end gate (2026-09-14)
+
+Three of the vtable builder's remaining B-2 writes go together, because two of
+them were feeding the third.
+
+`add_thunk_method` wrote the component's legacy type into the symbol, read it
+straight back out, adjusted the `this` argument, and wrote it again through
+`migrate_type`. The first write was never observed: `set_thunk_name` touches only
+the symbol's name. It now builds the adjusted type from `component.type()`
+directly and writes once.
+
+`add_thunk_method_arguments` then had the same shape one level down -- legacy type
+out, `#identifier` written on each argument, legacy type back in. It reads
+`code_type2t` instead: the argument types come from `arguments`, the base name a
+symbol is named after from `argument_base_names`, and the new identifiers are
+assembled into a fresh `code_type2tc`. The legacy round trip goes with it.
+
+### 48.1 What the slice moves, and what §44's gate already was
+
+Making `migrate_type`'s code arm push an empty base name per argument takes
+`regression/esbmc-cpp/cpp` from 6 failures to **18**:
+
+```
+functional, functional_fail, functional_fail2,
+github_5868_function_signatures, github_5868_function_signatures_fail,
+github_7540_capacity_fail, github_7540_capacity_write_fail,
+github_7540_precision, ostringstream_str, ostringstream_str_fail,
+pmr_memory_resource, pmr_memory_resource_fail
+```
+
+An argument symbol is named `<thunk>::<base_name>`, so an empty base name collides
+every argument of a thunk onto one symbol id.
+
+**That gate is not new, and an earlier draft of this section claimed it was.** §44.4
+already converted the thunk's type write, after which the argument loop read the
+base name back off `migrate_type_back`'s restoration (`migrate.cpp:3160`) via
+`arg.get_base_name()` -- the line §44.1 calls "The reader". The 12 tests have gated
+the field since then.
+
+What this slice moves is the *shape* of the dependency, and that is measurable.
+Disabling the back arm's restoration alone now leaves all 12, plus
+`thunk_multi_tu{,_fail}` and `github_4715_vtable_thunk_irep2{,_fail}`, green -- 16
+of 16 -- where before it was the thunk path's only source of the name. The read is
+direct, so `argument_base_names` is consumed as an IREP2 field rather than
+recovered through a legacy attribute.
+
+### 48.2 What pins the slice, stated exactly
+
+The slice moves no verdict -- measured, not asserted: the `--symbol-table-only`
+output for `pmr_memory_resource` (four-argument thunks) and `thunk_multi_tu` (the
+duplicate-symbol path) is byte-identical to the previous commit's. So it adds no
+verdict pair, and the honest accounting of what pins each half is:
+
+- the base-name read is pinned by the 12 tests above, and now also directly by
+  `regression/esbmc-cpp/cpp/github_4715_thunk_arg_symbols`, which asserts the two
+  argument symbols `…::a::0` and `…::b::1` exist. It fails in 0.3s under the
+  empty-base-name mutation, against 12 verdict flips.
+- the identifier bookkeeping (`identifiers[i] = arg_symb.id` and the
+  `code_type2tc` that carries it) is **not** pinned end to end, and was equally
+  unpinned before: deleting it, or the legacy `arg.set("#identifier", …)` it
+  replaces, leaves all 16 green on either version. Without it a thunk's formals
+  alias the callee's own parameter symbols and values still flow.
+
+A code type's `argument_base_names` are also inert *downstream* of this function in
+the C++ path -- dropping them from the final `code_type2tc` changes no output -- so
+the field earns its place at the point of construction, not after it.
+
+### 48.3 A pre-existing false alarm this slice's probing found
+
+An override whose *declaration* leaves its parameters unnamed gets empty
+`#base_name`s from `clang_cpp_convert.cpp`, so all of them collapse onto one thunk
+argument symbol and the thunk forwards the last actual for every parameter:
+
+```cpp
+struct Base { virtual ~Base() {} virtual int f(int, int) { return 0; } };
+struct Derived : Base { int f(int, int) override; };
+int Derived::f(int a, int b) { return a - b; }
+int main() { Derived d; Base *b = &d; assert(b->f(5, 2) == 3); }
+```
+
+`VERIFICATION FAILED` on a program whose answer is 3; naming the parameters in the
+declaration gives SUCCESSFUL. It reproduces identically on the previous commit --
+`pmr_memory_resource`'s thunk prints `do_allocate((…)this, , )` on both -- so it is
+not this slice's doing. It wants its own issue and a KNOWNBUG pair.
+
+## 49. Which converter-time writes can move, and which cannot (2026-09-15)
+
+Phase 7's remaining B-2 sites split on a line that was not visible until a value
+write was actually attempted.
+
+### 49.1 A value write at conversion time cannot be migrated eagerly
+
+`add_vtable_variable_symbols` ends with `vt_symb_var.set_value(values)`, a legacy
+struct `exprt`. Converting it to `migrate_expr` **breaks**
+`pmr_memory_resource{,_fail}` with a SIGSEGV inside BMC; the rest of
+`regression/esbmc-cpp/cpp` is unchanged at 6.
+
+The A/B of `--symbol-table-only` over five polymorphic tests says it is not a
+rendering difference. Every function pointer in every vtable initialiser gains a
+level-1 SSA suffix:
+
+```
+-    .c:@N@std@S@exception@F@~exception#=&~exception,
++    .c:@N@std@S@exception@F@~exception#=&~exception#&0#0,
+```
+
+so the migrated symbols are not at `level0`. The mechanism is already recorded, for
+a different purpose, at `clang_cpp_language.cpp:152`: before `c_link` a translation
+unit's own symbols are absent from what `migrate_namespace_lookup` resolves, and
+`sym_name_to_symbol` then substitutes the expression's own type for the symbol's.
+Type writes never met this because `migrate_type` needs no namespace -- which is
+why every site converted so far, here and in §47 and §48, has been a type.
+
+So the laziness of `symbolt::set_value(const exprt &)` is load-bearing at
+conversion time, and converter-side B-2 is bounded to type writes until the
+frontend stops naming symbols it has not yet linked. The adjust passes are not
+bounded this way: they run after the link, which re-orders what is left.
+
+### 49.2 `#member_name` blocks one more type write, and is derivable
+
+`clang_cpp_convert.cpp:3160` writes `component_type`, a ctor/dtor code type
+carrying `#member_name` (set at `:3139`) and read back at
+`clang_cpp_adjust_code_gen.cpp:57` and `:150`. `code_type2t` has no field for it and
+`migrate.cpp` carries none, so converting that write drops the class a vptr
+initialisation belongs to.
+
+It does not need a field. A ctor or dtor's first argument is `this`, so the class id
+is the pointee identifier of `arguments[0]` -- the same move §47 made for the vtable
+readers, and the same conclusion: derive from what the IREP2 type already holds
+rather than widen the type. That is the next slice.
+
+### 49.3 What did move
+
+`clang_cpp_convert.cpp:2463`, the `array_init$` temporary's struct type. It is a
+class struct type, so it was worth measuring rather than assuming after §47 showed
+per-component metadata mattering: nothing reads this temporary's components, and
+`regression/esbmc-cpp/cpp` stays at 6 of 1 061.
+
+## 50. `#member_name` retired, and what actually blocks the ctor/dtor write (2026-09-15)
+
+§49.2 proposed deriving a ctor's class from the `this` argument's pointee so that
+`clang_cpp_convert.cpp:3160` could store IREP2. The derivation is right and has
+landed; the *reason* §49.2 gave for the write being blocked was wrong, and
+measuring it is what showed that.
+
+### 50.1 The derivation
+
+A ctor's or dtor's first argument is `this`, so `arguments().front()`'s pointee
+identifier names the declaring class -- the same id `#member_name` held. Both
+readers (`clang_cpp_adjust_code_gen.cpp:66` and `:159`) now go through one
+`ctor_class_id` helper.
+
+Measured before changing them, by printing the derived id against
+`ctor_type.member_name()` at the reader: **420 observations over
+`regression/esbmc-cpp/{cpp,inheritance,polymorphism_bringup,polymorphism_bringup_overload,destructors}`,
+19 distinct pairs, no divergence.** The probe prints on *agreement* as well, which
+is what makes the zero meaningful: an earlier version printed only on divergence and
+its silence was indistinguishable from never running. Three named tests give 4, 6
+and 27 observations.
+
+The same probe over 40 `regression/python/class*` and `*inherit*` tests gives **0**
+observations, so `gen_vptr_initializations` never runs on Python input and the
+change cannot affect it.
+
+The derivation is pinned by the corpus, not only by the probe: taking
+`arguments().back()` instead of `front()` -- the plausible wrong edit, identical on
+a one-argument ctor -- fails **610 of 1 061**.
+
+With those two sites converted, `irept::member_name()` has **no reader left in the
+tree**. The two clang-cpp writes go with it -- the one on a ctor/dtor code type and
+the one `annotate_class_field` put on every field's type. The Solidity and Python
+writes are now dead too; they belong to those frontends' own slices, and the
+accessor's doc comment says so rather than continuing to name a reader that no
+longer exists.
+
+### 50.2 The write is blocked by the ctor/dtor pseudo return type, not by the name
+
+`fd_symb->set_type(migrate_type(component_type))` fails **254 of 1 061**
+`esbmc-cpp/cpp` tests. The cause is not `#member_name`:
+
+```cpp
+// src/util/irep/migrate.cpp:406-418
+if (type.id() == "destructor")   return get_empty_type();
+if (type.id() == "constructor")  return get_empty_type();
+```
+
+A ctor's or dtor's return type is a legacy pseudo-type, and `migrate_type` maps both
+to `void`. `gen_vptr_initializations` opens by testing exactly those two ids, so
+after migration every ctor and dtor looks like an ordinary void function, the pass
+returns early, and no vptr is ever initialised. Nothing to do with the class name.
+
+Closing it needs the ctor/dtor distinction to survive the seam: a flag on
+`code_type2t`, or a derivation from the symbol id as in §50.1, or leaving this one
+write legacy and saying why. That is the decision the next slice has to make, and it
+is the same question `scope-clang-cpp-irep2.md` will need for `annotate_ctor_dtor_rtn_type`.
+
+### 50.3 Method note: two readings came from a stale binary
+
+The first two measurements of this slice said 6 of 1 061 and were worthless. The
+build had failed -- `parent_class_id` was still used by the multi-TU vptr-init
+fallback below the line that declared it -- and the failure was invisible because
+the build command piped ninja through `grep -E 'error:|warning: unused' | head -5`,
+which filled all five lines with LLVM header warnings. `ctest` then ran the previous
+binary and reported the baseline.
+
+Check ninja's exit status, not a filtered tail of its output. The bisect that
+followed -- reverting only the `migrate_type` call -- is what separated the clean
+part of the slice from the broken one, and it is the only reason §50.2's cause is
+attributed correctly.
+
+## 51. An adjust-pass value write that still cannot move, and the hole it was hiding (2026-09-15)
+
+§49.1 concluded that converter-time value writes are bounded by the namespace and
+that "the adjust passes are not bounded this way". The first adjust-pass value write
+tried says the second half of that is too strong.
+
+### 51.1 The attempt
+
+`clang_cpp_adjust::gen_implicit_union_copy_move_constructor` builds the body of an
+implicit union copy or move constructor and ends with
+`symbol.set_value(std::move(value))`. Converting it to `migrate_expr` leaves
+`regression/esbmc-cpp/cpp` at **6 of 1 061** -- its baseline -- and is nevertheless
+**wrong**. A twelve-line program shows it:
+
+```cpp
+union U { int i; float f; };
+int main() { U a; a.i = 7; U b = a; assert(b.i == 7); }
+```
+
+`VERIFICATION SUCCESSFUL` before, `VERIFICATION FAILED` after. The GOTO body says
+why:
+
+```
+legacy:  ASSIGN *this = *U::ref;
+IREP2:   ASSIGN *U#&1#0 = *U#&1#0;
+```
+
+Both operands collapse onto one symbol. The body is built from the argument
+identifiers `this` and `U::ref`, and neither is a symbol-table id: an implicit
+constructor gets no argument symbols. Legacy does not care -- the name is just a
+name -- but `migrate_expr` resolves a symbol through
+`migrate_namespace_lookup`, and both unresolvable names fall back to the enclosing
+function symbol, producing a self-assignment that silently drops the copy.
+
+So the bound is not "converter versus adjust". It is whether every symbol the
+expression names exists in the symbol table. Closing this one means giving the
+implicit constructor real argument symbols, the shape
+`add_thunk_method_arguments` already uses (`<function>::<base_name>`), and only then
+migrating the body.
+
+### 51.2 The hole: the whole path had no test
+
+The label was 6 before and after, because **nothing in the suite constructed a union
+from another union**. There is no `*union*` directory under
+`regression/esbmc-cpp/cpp` at all, and a probe on the path recorded zero
+observations across it -- while the program above reaches it twice, once for the copy
+constructor and once for the move constructor.
+
+That is the part worth landing now:
+`regression/esbmc-cpp/cpp/github_4715_union_implicit_copy_ctor{,_fail}`. The
+SUCCESSFUL half is the gate -- it fails under the conversion above. The FAILED half
+does not distinguish the mutant, since a corrupted copy leaves the assertion false
+either way; it is there to pin that the assertion is generated and reached, which is
+what makes the passing half meaningful.
+
+### 51.3 The ctor/dtor pseudo return type is a design-level item, not a slice
+
+§50.2 left `clang_cpp_convert.cpp:3160` blocked on `migrate_type` mapping the
+`constructor` and `destructor` return-type ids to `void`. Censusing the readers
+before planning a fix: `clang_cpp_adjust_code_gen.cpp:61,62`,
+`clang_cpp_adjust_expr.cpp:25,266,395`, `goto-programs/destructor.cpp:40`, and the
+writer at `clang_cpp_convert.cpp:3563-3564`. One of those is outside the frontend
+entirely.
+
+So retiring the encoding is not a one-write slice, and "is this function a
+constructor" is a property of the function rather than of its type -- which is why
+the legacy form parks it in the return type. The options are a flag on the symbol, a
+derivation from the symbol id, or leaving the encoding and this one write legacy with
+the reason stated. It wants deciding before more of `annotate_class_method` moves.
+
+## 52. The real bound on migrating a body: the namespace the pass is not pointed at (2026-09-15)
+
+§51.1 blamed the implicit union constructor's missing argument symbols for the
+self-assignment its migrated body became. That was wrong, and applying the two
+candidate patches one at a time is what showed it.
+
+### 52.1 What the instrument said
+
+Declaring the two parameters as real symbols -- `<function>::this` and
+`<function>::ref`, the shape `add_thunk_method_arguments` uses -- did **not** fix it.
+Instrumenting the lookup at the point of use explains why:
+
+```
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::this found_in_context=1 found_in_migrate_ns=0
+PROBE_ARG id=c:@U@U@F@U#&1$@U@U#::ref  found_in_context=1 found_in_migrate_ns=0
+```
+
+The symbols are in the context the pass writes to and invisible through
+`migrate_namespace_lookup`, which still points at what `language_ui` installed. A
+miss there does not fail loudly: `sym_name_to_symbol` (`migrate.cpp:715`) treats an
+unresolvable name as an SSA-renamed one and parses it for `?`, `!`, `&` and `#`. A
+clang USR contains `#` and `&`, so the id is truncated at the first `&` -- and both
+of this body's operands truncate to the same prefix, which is the self-assignment.
+
+### 52.2 The fix is the one the IREP2 adjust pass already documents
+
+`clang_c_adjust_irep2.cpp:20-27` has this exact comment and the exact fix:
+`std::exchange(migrate_namespace_lookup, &ns)` around the walk. The legacy C++
+adjust pass never did it. With the exchange in place the body migrates correctly --
+`ASSIGN *this = *U::ref`, `VERIFICATION SUCCESSFUL` -- and the argument-symbol patch
+turns out to be unnecessary and is not part of this change.
+
+So the bound is not "converter versus adjust" (§49.1) and not "the symbols do not
+exist" (§51.1). It is **whether the pass doing the migrating has pointed
+`migrate_namespace_lookup` at its own context**. Any pass that writes an IREP2 value
+must do that first, and the failure mode when it does not is silent name mangling
+rather than an error.
+
+### 52.3 Why this took three sections to get right
+
+Each earlier reading was consistent with the evidence available and wrong:
+
+- §49.1 measured a converter-time value write failing and generalised "before
+  `c_link` the symbols are absent" into a converter/adjust distinction.
+- §51.1 measured an adjust-time value write failing, found the identifiers were not
+  symbol-table ids, and stopped there.
+- §52.1 measured the lookup itself and found the namespace, not the symbols.
+
+The step that separated them was applying the two candidate patches **one at a
+time** -- the repo's own rule -- rather than together. Applied together they pass,
+and the argument-symbol half would have shipped as though it were load-bearing.
+
+## 53. §52's precondition made a property of the pass (2026-09-15)
+
+§52 fixed one call site. The precondition it found is not site-specific: any pass
+that migrates an expression has to point `migrate_namespace_lookup` at its own
+context first, and a pass that forgets gets silent name mangling rather than an
+error. So the exchange moves up to `clang_c_adjust::adjust()`, which both the C and
+C++ legacy adjust passes run through, and the per-site version in §52 goes away.
+
+Measured on the shared entry point, not just the C++ one: `regression/esbmc` is 2 of
+2 293 -- the two THOROUGH tests that pass when re-run serially -- and
+`regression/esbmc-cpp/cpp` stays at 6.
+
+### 53.1 The vptr-init body moves too
+
+With the precondition holding for the pass, `gen_vptr_initializations` stores the
+constructor body it rewrites IREP2-side. Two things had to be checked rather than
+assumed:
+
+`need_vptr_init` is the flag that pass consumes, and `migrate_expr` carries nothing
+like it -- but the write being converted is the one that *clears* it, and absent
+reads as false, so dropping it is what the line already meant.
+
+The body is the whole constructor, so it can contain a `new` whose initialiser is a
+constructor call, and that `constructor` flag is read after adjust
+(`goto-programs/builtin_functions.cpp:679`). `migrate_expr` does not carry it
+either. A probe with a nondet field value -- so the claim cannot be folded away --
+verifies: `PASSED ... assertion b->get() == v`. Landed as
+`regression/esbmc-cpp/cpp/github_4715_vptr_init_body_irep2{,_fail}`; both halves fail
+if the conversion is applied without the namespace fix, which is the combination
+this slice is.
+
+### 53.2 Two C++ frontend value writes remain, both converter-time
+
+`clang_cpp_convert.cpp:3189` (the `need_vptr_init` flag being *set*) and the vtable
+variable's initialiser (§49.1). Both are converter-time, so §52's precondition is
+necessary but not sufficient there: the converter is mid-population, and the
+namespace can only see what it has already added. Whether pointing it at the
+converter's own context is enough for those two is the next thing to measure.
+
+## 54. §49.1's blocker was the same precondition (2026-09-15)
+
+The vtable variable's initialiser -- the write §49.1 measured SIGSEGVing
+`pmr_memory_resource` and concluded was bounded by conversion order -- converts
+cleanly once `migrate_namespace_lookup` points at the context being built.
+`regression/esbmc-cpp/cpp` is 6 of 1 065, the rest of the `esbmc-cpp` tree 2 097 of
+2 097, the unit suite 875 of 875.
+
+So §49.1's "converter-time value writes cannot be migrated eagerly" was the right
+observation with the wrong cause, and the exchange belongs at the site until someone
+decides where the converter's own entry point is. `clang_c_convert.cpp:2338-2344`
+already carried a TODO saying a related improvement "would require the
+migrate_namespace_lookup to be setup correctly"; this is that setup, for one write.
+
+### 54.1 An unexplained rendering change, recorded rather than waved past
+
+Comparing `--symbol-table-only` before §53 and after, every vptr-init statement
+renders its `this` unqualified where it used to carry the function prefix:
+
+```
+- ~A(&c:@S@B@F@~B#this->@base@tag-A)
++ ~A(&this->@base@tag-A)
+```
+
+What is measured: no verdict moves, across `esbmc-cpp/cpp` (1 065), the rest of
+`esbmc-cpp` (2 097), `regression/esbmc` (2 293) and the unit suite; and
+`vptr_cdtor_dispatch`, whose whole point is that a virtual call during destruction
+resolves to the declaring class's override, still passes -- which it could not if
+`this` were bound to the wrong object.
+
+What is **not** explained: why the name shortens. `sym_name_to_symbol`
+(`migrate.cpp:715-830`) should return the full id whether the lookup hits (level0,
+name = the id) or misses (level2_global, name = the id), since `c:@S@B@F@~B#this`
+contains no `&` for `end_of_name_pos` to cut at. Reading the function did not settle
+it and neither did the verdicts, so it is written down as an open question rather
+than a conclusion.
+
+No `test.desc` in the tree regexes a vptr-init line or a qualified `#this`, which is
+why the change is invisible to the suite -- and why it is worth a reader's attention:
+ESBMC's printed output is an interface.
+
+## 55. The renaming parser claims C++ symbol ids, and §54.1's open question (2026-09-15)
+
+§52 made the union constructor's body migrate by pointing
+`migrate_namespace_lookup` at the right context. That was the right fix for that
+site and it left the underlying defect in place: what `sym_name_to_symbol` does with
+an id it cannot resolve.
+
+### 55.1 Two ids, measured out of the frontend
+
+A unit case migrates two real C++ ids through a namespace that does not contain
+them:
+
+| id | before | after |
+|---|---|---|
+| `c:@S@B@F@~B#this` | `level2_global`, whole name kept, and `migrate_expr_back` returns `c:@S@B@F@~B#this&0#0` | `level0`, round-trips unchanged |
+| `c:@U@U@F@U#&1$@U@U#::ref` | truncated to `c:@U@U@F@U#` | `level0`, whole name |
+
+The first corrupts the id on the way back; the second is §52's collapse, since every
+id sharing that prefix becomes the same symbol. Both are silent.
+
+The discriminator is in the shape a renamed name actually has: the node counter is
+spelled between `&` and `#`, so `&` comes first. A clang USR has them the other way
+round -- it is full of `#`, and a reference parameter's mangling contains `&` -- or
+has no `&` at all. `sym_name_to_symbol` now requires `&` before `#` before claiming
+a name as `level2_global`, and otherwise returns `level0` with the whole name: not
+renamed, just not shown to this namespace.
+
+`migrate.cpp`'s own comment already said a miss is "ordinary while a context is
+still being built", so the fallback has to be lossless. Pointing the namespace
+correctly (§52, §53, §54) is still worth doing -- a hit carries the symbol-table type
+-- but a miss no longer changes the name.
+
+### 55.2 §54.1 closed: the printer, not the binding
+
+The `this` shortening §54.1 could not explain is a display difference. The parameter
+symbol's entry reads
+
+```
+Symbol......: c:@S@A@F@~A#this
+Base name...: this
+```
+
+and after migration the expression resolves well enough for the printer to use the
+base name, where the unmigrated body left it printing the raw identifier. Nothing
+about which object `this` denotes changes, which is what the unchanged verdicts and
+`vptr_cdtor_dispatch` were already saying. Recorded here because §54.1 promised an
+answer, and because the same shape -- output that improves and therefore differs --
+is what a `test.desc` regex would trip over.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured
