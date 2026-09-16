@@ -44,7 +44,7 @@ void python_converter::update_symbol(const exprt &expr) const
 
   // Update the type of the symbol and its value.
   const typet &expr_type = expr.type();
-  sym->set_type(expr_type);
+  sym->set_type(migrate_type(expr_type));
   {
     exprt v = sym->get_value();
     v.type() = expr_type;

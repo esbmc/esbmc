@@ -383,7 +383,7 @@ void python_class_builder::build(codet &out)
   {
     typet t = sym->get_type();
     t.remove(irept::a_incomplete);
-    sym->set_type(std::move(t));
+    sym->set_type(migrate_type(t));
   }
 
   // Handle TypedDict classes: they should be treated as dict types
@@ -394,7 +394,7 @@ void python_class_builder::build(codet &out)
     // Create a dict type alias for this TypedDict class
     // The dict handler provides the canonical dict struct type
     typet dict_type = conv_.get_dict_handler()->get_dict_struct_type();
-    sym->set_type(dict_type);
+    sym->set_type(migrate_type(dict_type));
     conv_.current_class_name_.clear();
     return;
   }

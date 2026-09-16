@@ -65,9 +65,51 @@ consumers plus the type checker rather than the whole frontend
 derived, side-tabled or read from the AST is the question Phase 9 has to answer, and
 it is a much smaller question than Phase 8's.
 
-## 3. Next
+## 3. The arrow-form writes: 6 of 33 (2026-09-15)
 
-- The 33 multi-line type writes, mechanically the same as the 22 done here.
+The 33 writes §2 left were not multi-line -- they spell `sym->set_type(...)`, which the
+first pass's pattern did not match. Converting them measures as follows.
+
+**Two of the 33 were false positives of the B-2 grep itself**: `python_adjust.cpp:65`
+and `:97` pass a `type2tc`, so they already wrote IREP2 and only matched because the
+grep counts the argument's spelling. That is the bar's known property (§39 of the parent
+doc) showing up in the tooling used to survey it.
+
+Of the remaining 31, **6 land clean** -- unit 876 of 876. Five sets do not:
+
+| site | symptom | cause |
+|---|---|---|
+| `converter/converter_stmt.cpp` (11 writes) | `casting14` fails | most write `rhs.type()`, which carries `#cpp_type` |
+| `converter/converter_funcdef.cpp` (10 writes) | `class_var_param_augassign{,_fail}` fail | same shape, parameter and return types |
+| `python_adjust.cpp:70` | the unit case `python_adjust pre-pass write-back preserves bases for the throw chain` fails | the write exists to re-attach the legacy-only `bases` sub-irep, and storing IREP2 drops it again |
+| `class/python_class_builder.cpp` (the two `set_type(st)` writes) | 13 exception tests, `is-instance`, `shedskin` and `mopsa/try_super_raise` fail | `get_bases(st)` has just attached `bases` to the struct type; this is `python_adjust.cpp:70`'s cause at the site that produces it rather than the one that repairs it |
+| `lambda/python_lambda.cpp:54` | `lambda_default_arg` fails | `#cpp_type` again, on the function-pointer type a lambda binding takes |
+
+The two added rows are the reason the slice numbers are gone from this section. The
+first pass reported "400 of 400 and 500 of 500", and every one of these 15 tests sits
+past 500 -- §2.0's lesson, arrived at twice. What the section can claim is the unit
+suite and the named tests, so that is what it claims.
+
+The `python_adjust.cpp:70` row is worth its own line: that write's own comment says what
+it is for, and the repo already had a unit test pinning it. A scripted conversion walked into it and the
+test caught it immediately -- which is the argument for the test, not against the
+script.
+
+### 3.1 Two attributes, not one
+
+§2.1 called `#cpp_type` python's single exposure. The `bases` case adds a second, and it
+differs in kind: it has no `#`, so it lives in `named_sub` and takes part in `typet`
+equality, and it is a *struct* attribute rather than a scalar's spelling. Its consumers
+are named in the code -- `derive_exception_ids`, `exception_typeid.cpp`,
+`base_type.cpp`.
+
+So Phase 9's blocked set is `#cpp_type` (the type checker plus three presentation
+consumers) and `bases` (the exception hierarchy). Still a far smaller surface than
+Phase 8's eleven, and both are single questions rather than families.
+
+## 4. Next
+
+- The 22 type writes §3 identifies as blocked, once `#cpp_type` has a route.
 - The 48 value writes, which need §52's namespace precondition and nothing else so
   far as this census can tell.
 - `#cpp_type`: census its readers the way `scope-solidity-irep2.md` §9 censused
