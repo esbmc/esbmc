@@ -182,10 +182,11 @@ public:
  */
 class jimple_throw : public jimple_statement
 {
-  virtual exprt to_exprt(
+  virtual expr2tc to_code2t(
     contextt &ctx,
     const std::string &class_name,
-    const std::string &function_name) const override;
+    const std::string &function_name,
+    const locationt &loc) const override;
   virtual std::string to_string() const override;
   virtual void from_json(const json &j) override;
 
