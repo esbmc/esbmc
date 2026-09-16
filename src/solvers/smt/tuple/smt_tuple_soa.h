@@ -8,24 +8,24 @@
 class smt_tuple_soa_flattener;
 
 /** Struct-of-arrays: an array of structs is stored as one native SMT array per
- *  scalar leaf, and an array nested inside a struct is hoisted out to its own
- *  array with the index linearised to `outer * extent + inner`.
+ *  scalar leaf, and an array nested inside it is flattened into its leaf with
+ *  the index linearised to `outer * extent + inner`.
  *
  *  What this buys over the node flattener is that every array in the formula
  *  is an array of scalars, so the solver's own array theory applies to all of
  *  it; the node flattener instead hands an array of structs to array_convt,
- *  which enumerates one variable per slot. It differs from the concat encoding
- *  in keeping a nested array as an array rather than burying it in a bitvector,
- *  where indexing it would need a variable shift. See #37.
+ *  which enumerates one variable per slot. See #37.
  *
- *  Representation. `thetype` is always the logical ESBMC type of the value.
- *   - struct, or array whose element is a struct: `members` holds one child per
- *     struct member. A child of an array node has type "array of that member",
- *     so the decomposition pushes arrays inward through structs.
- *   - array whose flattened element is a scalar: `arr` is the fully flattened
- *     native array and `base` the element offset of this slice within it.
- *     `base` null means zero.
- *   - scalar: `arr` holds the value itself. */
+ *  `thetype` is the logical ESBMC type of the value. A soa_ast is one of:
+ *   - a struct: `members` holds one term per member;
+ *   - a node, an array whose element is a struct: `members` holds one term per
+ *     member, each an array of that member with the node's dimensions;
+ *   - a leaf: a member of array type inside a node, whose dimensions no ESBMC
+ *     type spells. `arr` is its flattened native array. A row taken out of it
+ *     is materialised as a plain backend array, so a leaf never reaches code
+ *     outside this flattener -- which calls array_api directly on array terms.
+ *  Every other array, including a struct's array member, is the plain backend
+ *  array convert_sort describes. */
 class soa_ast : public smt_ast
 {
 public:
@@ -49,15 +49,17 @@ public:
     const expr2tc &idx_expr) const override;
   smt_astt select(smt_solver_baset *ctx, const expr2tc &idx) const override;
   smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
-
   void dump() const override;
+
+  bool leaf() const
+  {
+    return arr != nullptr;
+  }
 
   smt_tuple_soa_flattener &flat;
   type2tc thetype;
-
   std::vector<smt_astt> members;
   smt_astt arr = nullptr;
-  smt_astt base = nullptr;
 };
 
 typedef const soa_ast *soa_astt;
@@ -98,24 +100,31 @@ public:
     uint64_t index,
     const type2tc &subtype) override;
 
-  /** Build a value of @p type out of fresh symbols named after @p name. */
-  smt_astt build(const std::string &name, const type2tc &type);
+  /** A value of @p type from fresh symbols named after @p name. @p in_node
+   *  says it is a member of a node, the only place a leaf is needed. */
+  smt_astt build(const std::string &name, const type2tc &type, bool in_node);
+
+  /** Members of @p type as the SMT layer sees them: pointers and function
+   *  pointers are pointer_struct, as in convert_sort. */
+  std::vector<type2tc> members_of(const type2tc &type) const;
 
   /** Number of scalar slots a value of @p type occupies once its array
-   *  dimensions are flattened; 1 for anything that is not an array. */
+   *  dimensions are flattened; 1 for anything that is not an array, 0 for an
+   *  array without a constant size. */
   uint64_t extent(const type2tc &type) const;
 
-  /** Index sort used for the flattened leaf arrays of @p arrtype. */
-  smt_sortt index_sort(const type2tc &arrtype) const;
-
-  /** base + off, both widened to @p w -- which must be the *leaf* array's
-   *  domain width. Deriving it from the logical type instead is wrong on a
-   *  slice, whose type names only the inner dimension while its base counts
-   *  in the flattened array. */
-  smt_astt offset(smt_astt base, smt_astt off, std::size_t w) const;
+  /** Sort of the flattened native array holding the array type @p type. */
+  smt_sortt flat_sort(const type2tc &type) const;
 
   /** @p a resized to @p w bits. */
   smt_astt resize(smt_astt a, std::size_t w) const;
+
+  /** The backend array of type @p rowtype holding the slots of @p arr from
+   *  position @p start. */
+  smt_astt row(smt_astt arr, smt_astt start, const type2tc &rowtype);
+
+  /** Constrain every slot of @p node, an array of @p type, to hold @p value. */
+  void fill_const(smt_astt node, smt_astt value, const type2tc &type);
 
   smt_solver_baset *ctx;
   const namespacet &ns;

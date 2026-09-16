@@ -1,15 +1,9 @@
 #include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/tuple/smt_tuple_soa.h>
+#include <util/config/config.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>
-
-/* Pointers reach the tuple interface as their synthetic (object, offset)
- * struct; everything else describes its own members. */
-static type2tc struct_view(smt_solver_baset *ctx, const type2tc &t)
-{
-  return is_pointer_type(t) ? ctx->pointer_struct : t;
-}
 
 /** @p arrt with its innermost element type replaced by @p newelem, keeping
  *  every dimension. Used to turn "array of struct" into "array of member". */
@@ -22,25 +16,57 @@ static type2tc rebuild_array(const type2tc &arrt, const type2tc &newelem)
   return array_type2tc(newelem, a.array_size, a.size_is_infinite);
 }
 
+/* convert_sort and tuple_array_create_despatch hand array-of-struct types over
+ * with every pointer rewritten to pointer_struct -- pointers inside a union
+ * too, which widens the union. Terms built elsewhere from the untouched type
+ * keep the C width, so undo the rewrite where types enter this flattener. */
+static type2tc unrewrite(smt_solver_baset *ctx, type2tc type)
+{
+  struct
+  {
+    const type2tc &pointer_struct;
+
+    void operator()(type2tc &e) const
+    {
+      if (e == pointer_struct)
+        e = pointer_type2tc(get_empty_type());
+      else
+        e->Foreach_subtype(*this);
+    }
+  } delegate = {ctx->pointer_struct};
+
+  type->Foreach_subtype(delegate);
+  return type;
+}
+
+std::vector<type2tc>
+smt_tuple_soa_flattener::members_of(const type2tc &type) const
+{
+  bool as_pointer = is_pointer_type(type) || is_code_type(type);
+  return struct_union_members(as_pointer ? ctx->pointer_struct : type);
+}
+
 uint64_t smt_tuple_soa_flattener::extent(const type2tc &type) const
 {
   if (!is_array_type(type))
     return 1;
 
   const array_type2t &a = to_array_type(type);
-  if (a.size_is_infinite || is_nil_expr(a.array_size))
-    return 0;
-  if (!is_constant_int2t(a.array_size))
+  if (
+    a.size_is_infinite || is_nil_expr(a.array_size) ||
+    !is_constant_int2t(a.array_size))
     return 0;
 
   return to_constant_int2t(a.array_size).value.to_uint64() * extent(a.subtype);
 }
 
-smt_sortt smt_tuple_soa_flattener::index_sort(const type2tc &arrtype) const
+smt_sortt smt_tuple_soa_flattener::flat_sort(const type2tc &type) const
 {
-  type2tc flat = ctx->flatten_array_type(arrtype);
-  return ctx->mk_int_bv_sort(
-    make_array_domain_type(to_array_type(flat))->get_width());
+  type2tc flat = ctx->flatten_array_type(type);
+  return ctx->mk_array_sort(
+    ctx->mk_int_bv_sort(
+      make_array_domain_type(to_array_type(flat))->get_width()),
+    ctx->convert_sort(ctx->get_flattened_array_subtype(type)));
 }
 
 smt_astt smt_tuple_soa_flattener::resize(smt_astt a, std::size_t w) const
@@ -53,20 +79,30 @@ smt_astt smt_tuple_soa_flattener::resize(smt_astt a, std::size_t w) const
   return a;
 }
 
-smt_astt smt_tuple_soa_flattener::offset(
-  smt_astt base,
-  smt_astt off,
-  std::size_t w) const
+smt_astt smt_tuple_soa_flattener::row(
+  smt_astt arr,
+  smt_astt start,
+  const type2tc &rowtype)
 {
-  /* The index arrives in the logical array's domain, which is narrower than
-   * the flattened leaf array's whenever dimensions were collapsed. */
-  off = resize(off, w);
-  return base == nullptr ? off : ctx->mk_bvadd(resize(base, w), off);
+  smt_sortt s = flat_sort(rowtype);
+  smt_astt out = ctx->mk_smt_symbol(ctx->mk_fresh_name("soa_row::"), s);
+
+  uint64_t n = extent(rowtype);
+  assert(n != 0 && "SoA row of an array without a constant size");
+  std::size_t w = arr->sort->get_domain_width();
+  for (uint64_t j = 0; j < n; j++)
+    out = ctx->mk_store(
+      out,
+      ctx->mk_smt_bv(BigInt(j), s->get_domain_width()),
+      ctx->mk_select(arr, ctx->mk_bvadd(start, ctx->mk_smt_bv(BigInt(j), w))));
+
+  return out;
 }
 
 smt_astt smt_tuple_soa_flattener::build(
   const std::string &name,
-  const type2tc &type)
+  const type2tc &type,
+  bool in_node)
 {
   smt_sortt s = ctx->convert_sort(type);
 
@@ -76,42 +112,41 @@ smt_astt smt_tuple_soa_flattener::build(
 
     if (is_tuple_ast_type(elem))
     {
-      /* One child array per member: this is where the arrays get pushed
-       * inward through the struct. */
+      /* One array per member: this is where arrays are pushed inward through
+       * the struct. */
       soa_ast *r = new soa_ast(*this, ctx, s, type);
-      const type2tc view = struct_view(ctx, elem);
-      const std::vector<type2tc> &members = struct_union_members(view);
-      const std::vector<irep_idt> &names = struct_union_member_names(view);
-
-      for (size_t i = 0; i < members.size(); i++)
+      std::vector<type2tc> ms = members_of(elem);
+      std::vector<irep_idt> names = struct_union_member_names(
+        is_pointer_type(elem) || is_code_type(elem) ? ctx->pointer_struct
+                                                    : elem);
+      for (size_t i = 0; i < ms.size(); i++)
         r->members.push_back(build(
-          name + "." + names[i].as_string(), rebuild_array(type, members[i])));
-
+          name + "." + names[i].as_string(), rebuild_array(type, ms[i]), true));
       return r;
     }
 
-    soa_ast *r = new soa_ast(*this, ctx, s, type);
-    r->arr = ctx->mk_smt_symbol(
-      name, ctx->mk_array_sort(index_sort(type), ctx->convert_sort(elem)));
-    return r;
+    if (in_node && is_array_type(to_array_type(type).subtype))
+    {
+      soa_ast *r = new soa_ast(*this, ctx, s, type);
+      r->arr = ctx->mk_smt_symbol(name, flat_sort(type));
+      return r;
+    }
+
+    return ctx->mk_smt_symbol(name, s);
   }
 
   if (is_tuple_ast_type(type))
   {
     soa_ast *r = new soa_ast(*this, ctx, s, type);
-    const type2tc view = struct_view(ctx, type);
-    const std::vector<type2tc> &members = struct_union_members(view);
-    const std::vector<irep_idt> &names = struct_union_member_names(view);
-
-    for (size_t i = 0; i < members.size(); i++)
+    std::vector<type2tc> ms = members_of(type);
+    std::vector<irep_idt> names = struct_union_member_names(
+      is_pointer_type(type) || is_code_type(type) ? ctx->pointer_struct : type);
+    for (size_t i = 0; i < ms.size(); i++)
       r->members.push_back(
-        build(name + "." + names[i].as_string(), members[i]));
-
+        build(name + "." + names[i].as_string(), ms[i], false));
     return r;
   }
 
-  /* Scalars stay bare: they are handed straight to arithmetic and comparison
-   * elsewhere, which would not know what to do with a wrapper. */
   return ctx->mk_smt_symbol(name, s);
 }
 
@@ -119,10 +154,13 @@ smt_sortt smt_tuple_soa_flattener::mk_struct_sort(const type2tc &type)
 {
   if (is_array_type(type))
   {
-    const array_type2t &arrtype = to_array_type(type);
-    unsigned int dom_width = array_domain_width_or_word_size(arrtype);
+    type2tc t = unrewrite(ctx, type);
+    const array_type2t &arrtype = to_array_type(t);
     return new smt_sort(
-      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));
+      SMT_SORT_ARRAY,
+      t,
+      array_domain_width_or_word_size(arrtype),
+      ctx->convert_sort(arrtype.subtype));
   }
 
   return new smt_sort(SMT_SORT_STRUCT, type);
@@ -143,7 +181,7 @@ smt_astt smt_tuple_soa_flattener::tuple_fresh(smt_sortt s, std::string name)
 {
   if (name == "")
     name = ctx->mk_fresh_name("soa_fresh::");
-  return build(name, s->get_tuple_type());
+  return build(name, s->get_tuple_type(), false);
 }
 
 smt_astt
@@ -156,67 +194,67 @@ smt_tuple_soa_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
     return ctx->invalid_ptr_ast;
 
   assert(s->id != SMT_SORT_ARRAY);
-  return build(name, s->get_tuple_type());
+  return build(name, s->get_tuple_type(), false);
 }
 
 smt_astt smt_tuple_soa_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
-  return build(sym.get_symbol_name() + "[]", sym.type);
+  return build(sym.get_symbol_name() + "[]", sym.type, false);
 }
 
-/** Constrain every leaf array of @p node to hold @p value at every index. */
-static void fill_const(smt_solver_baset *ctx, smt_astt node, smt_astt value)
+void smt_tuple_soa_flattener::fill_const(
+  smt_astt node,
+  smt_astt value,
+  const type2tc &type)
 {
-  soa_astt n = to_soa_ast(node);
+  type2tc elem = ctx->get_flattened_array_subtype(type);
 
-  if (!n->members.empty())
+  if (is_tuple_ast_type(elem))
   {
+    soa_astt n = to_soa_ast(node);
     soa_astt v = to_soa_ast(value);
-    for (size_t i = 0; i < n->members.size(); i++)
-      fill_const(ctx, n->members[i], v->members[i]);
+    std::vector<type2tc> ms = members_of(elem);
+    for (size_t i = 0; i < ms.size(); i++)
+      fill_const(n->members[i], v->members[i], rebuild_array(type, ms[i]));
     return;
   }
 
-  /* A leaf holds scalars, so an initialiser that is still array-shaped -- a
-   * member that is itself an array, whose dimensions this leaf has absorbed --
-   * has to be peeled down to its element. Every index of a constant array
-   * carries the same value, so index zero is representative. */
+  /* The initialiser of a member that is itself an array is array-shaped. Every
+   * index of a constant array holds the same value, so index zero stands for
+   * all of them. */
   while (value->sort->id == SMT_SORT_ARRAY)
   {
-    /* The initialiser may be one of our own leaf nodes rather than a backend
-     * array -- a member that is an array of structs decomposes to leaves on
-     * both sides -- so index through its flattened array, not through it. */
-    if (const soa_ast *v = dynamic_cast<const soa_ast *>(value))
-    {
-      assert(v->members.empty() && "struct-shaped initialiser at a leaf");
-      std::size_t vw = v->arr->sort->get_domain_width();
-      value = ctx->mk_select(
-        v->arr, v->base != nullptr ? v->base : ctx->mk_smt_bv(BigInt(0), vw));
-      continue;
-    }
-
+    const soa_ast *l = dynamic_cast<const soa_ast *>(value);
+    smt_astt a = l != nullptr ? l->arr : value;
     value = ctx->mk_select(
-      value, ctx->mk_smt_bv(BigInt(0), value->sort->get_domain_width()));
+      a, ctx->mk_smt_bv(BigInt(0), a->sort->get_domain_width()));
   }
 
-  /* Each leaf's domain is its own: a member that absorbed inner dimensions is
-   * wider than the array being created. */
-  ctx->assert_ast(n->arr->eq(
-    ctx,
+  const soa_ast *l = dynamic_cast<const soa_ast *>(node);
+  smt_astt target = l != nullptr ? l->arr : node;
+  ctx->assert_ast(ctx->mk_eq(
+    target,
     ctx->array_api->convert_array_of(
-      value, n->arr->sort->get_domain_width())));
+      value, target->sort->get_domain_width())));
 }
 
 smt_astt smt_tuple_soa_flattener::tuple_array_of(
   const expr2tc &init_value,
   unsigned long domain_width)
 {
+  /* The caller passes the real array's domain width. An array of 2^(dw-1)
+   * elements is one ESBMC gives exactly that width (size_to_bit_width); at the
+   * word size the real array is one without a constant size. */
   type2tc array_type =
-    array_type2tc(init_value->type, gen_ulong(1ULL << domain_width), false);
+    domain_width >= config.ansi_c.word_size
+      ? array_type2tc(init_value->type, expr2tc(), true)
+      : array_type2tc(
+          init_value->type, gen_ulong(1ULL << (domain_width - 1)), false);
 
-  smt_astt fresh = build(ctx->mk_fresh_name("soa_array_of::"), array_type);
-  fill_const(ctx, fresh, ctx->convert_ast(init_value));
+  smt_astt fresh =
+    build(ctx->mk_fresh_name("soa_array_of::"), array_type, false);
+  fill_const(fresh, ctx->convert_ast(init_value), array_type);
   return fresh;
 }
 
@@ -226,17 +264,16 @@ smt_astt smt_tuple_soa_flattener::tuple_array_create(
   bool const_array,
   smt_sortt)
 {
+  type2tc type = unrewrite(ctx, array_type);
+  smt_astt acc = build(ctx->mk_fresh_name("soa_array_create::"), type, false);
+
   if (const_array)
   {
-    smt_astt fresh =
-      build(ctx->mk_fresh_name("soa_array_create::"), array_type);
-    fill_const(ctx, fresh, inputargs[0]);
-    return fresh;
+    fill_const(acc, inputargs[0], type);
+    return acc;
   }
 
-  smt_astt acc = build(ctx->mk_fresh_name("soa_array_create::"), array_type);
-
-  const array_type2t &arr_type = to_array_type(array_type);
+  const array_type2t &arr_type = to_array_type(type);
   if (arr_type.size_is_infinite)
     return acc;
 
@@ -254,45 +291,25 @@ smt_astt smt_tuple_soa_flattener::tuple_array_create(
 expr2tc
 smt_tuple_soa_flattener::tuple_get(const type2tc &type, smt_astt a)
 {
-  const type2tc view = struct_view(ctx, type);
-  const std::vector<type2tc> &members = struct_union_members(view);
+  std::vector<type2tc> ms = members_of(type);
   soa_astt s = to_soa_ast(a);
 
   std::vector<expr2tc> fields;
-  fields.reserve(members.size());
+  fields.reserve(ms.size());
+  for (size_t i = 0; i < ms.size(); i++)
+    fields.push_back(
+      is_tuple_ast_type(ms[i]) ? tuple_get(ms[i], s->members[i])
+                               : ctx->get_by_ast(ms[i], s->members[i]));
 
-  for (size_t i = 0; i < members.size(); i++)
-  {
-    const type2tc &mt = members[i];
-    smt_astt m = s->members[i];
-
-    if (is_tuple_ast_type(mt))
-      fields.push_back(tuple_get(mt, m));
-    else if (is_bool_type(mt))
-    {
-      /* A null expr2tc is the "solver produced no value" signal (#6191). */
-      tvt val = ctx->get_bool(m);
-      if (val.is_unknown())
-        fields.push_back(expr2tc());
-      else
-        fields.push_back(
-          val.is_true() ? gen_true_expr() : gen_false_expr());
-    }
-    else if (is_bv_type(mt))
-      fields.push_back(
-        constant_int2tc(mt, ctx->get_bv(m, is_signedbv_type(mt))));
-    else
-      fields.push_back(expr2tc());
-  }
-
-  if (is_pointer_type(type))
+  if (is_pointer_type(type) || is_code_type(type))
   {
     if (is_nil_expr(fields[0]) || is_nil_expr(fields[1]))
       return expr2tc();
-    pointer_logict::pointert p(
-      to_constant_int2t(fields[0]).value.to_uint64(),
-      to_constant_int2t(fields[1]).value);
-    return ctx->pointer_logic.back().pointer_expr(p, type);
+    return ctx->pointer_logic.back().pointer_expr(
+      pointer_logict::pointert(
+        to_constant_int2t(fields[0]).value.to_uint64(),
+        to_constant_int2t(fields[1]).value),
+      type);
   }
 
   return constant_struct2tc(type, std::move(fields));
@@ -316,7 +333,7 @@ expr2tc smt_tuple_soa_flattener::tuple_get_array_elem(
 
 smt_astt soa_ast::project(smt_solver_baset *, unsigned int elem) const
 {
-  assert(elem < members.size() && "Out-of-bounds tuple element accessed");
+  assert(!leaf() && elem < members.size() && "Bad tuple element accessed");
   return members[elem];
 }
 
@@ -325,37 +342,19 @@ smt_astt soa_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
   assert(is_array_type(thetype) && "select on a non-array SoA ast");
   const type2tc &sub = to_array_type(thetype).subtype;
 
-  if (!members.empty())
+  if (!leaf())
   {
-    /* Array of structs: index each member's array, giving the struct. */
     soa_ast *r = new soa_ast(flat, ctx, ctx->convert_sort(sub), sub);
     for (smt_astt m : members)
       r->members.push_back(m->select(ctx, idx));
     return r;
   }
 
-  smt_astt i = ctx->convert_ast(idx);
-
-  if (is_array_type(sub))
-  {
-    /* A nested dimension: narrow to the sub-array that starts `idx` rows in.
-     * This is the view that lets grid[i].cells[j] become one select at
-     * i*extent + j rather than a shift or an ite chain. */
-    uint64_t stride = flat.extent(sub);
-    assert(stride != 0 && "SoA slice of an unbounded array");
-
-    std::size_t w = arr->sort->get_domain_width();
-    smt_astt off =
-      ctx->mk_bvmul(flat.resize(i, w), ctx->mk_smt_bv(BigInt(stride), w));
-
-    soa_ast *r = new soa_ast(flat, ctx, ctx->convert_sort(sub), sub);
-    r->arr = arr;
-    r->base = base == nullptr ? off : ctx->mk_bvadd(base, off);
-    return r;
-  }
-
-  return ctx->mk_select(
-    arr, flat.offset(base, i, arr->sort->get_domain_width()));
+  std::size_t w = arr->sort->get_domain_width();
+  smt_astt start = ctx->mk_bvmul(
+    flat.resize(ctx->convert_ast(idx), w),
+    ctx->mk_smt_bv(BigInt(flat.extent(sub)), w));
+  return flat.row(arr, start, sub);
 }
 
 smt_astt soa_ast::update(
@@ -366,7 +365,6 @@ smt_astt soa_ast::update(
 {
   if (!is_array_type(thetype))
   {
-    /* Struct field update: replace one member, share the rest. */
     soa_ast *r = new soa_ast(flat, ctx, sort, thetype);
     r->members = members;
     assert(idx < r->members.size());
@@ -380,82 +378,47 @@ smt_astt soa_ast::update(
                         BigInt(idx))
                     : idx_expr;
 
-  if (!members.empty())
+  soa_ast *r = new soa_ast(flat, ctx, sort, thetype);
+
+  if (!leaf())
   {
-    /* Array of structs: push the store into each member's array. */
     soa_astt v = to_soa_ast(value);
-    soa_ast *r = new soa_ast(flat, ctx, sort, thetype);
     for (size_t i = 0; i < members.size(); i++)
       r->members.push_back(members[i]->update(ctx, v->members[i], idx, index));
     return r;
   }
 
-  smt_astt i = ctx->convert_ast(index);
-
+  /* Storing a whole row, a backend array: copy its slots into place. */
   const type2tc &sub = to_array_type(thetype).subtype;
-  if (is_array_type(sub))
-  {
-    soa_ast *r = new soa_ast(flat, ctx, sort, thetype);
-    r->base = base;
+  uint64_t n = flat.extent(sub);
+  assert(n != 0 && "SoA row store into an array without a constant size");
 
-    /* A row that came from select()ing this array already shares the leaf, so
-     * the store it carries is the answer -- adopt it. */
-    if (const soa_ast *v = dynamic_cast<const soa_ast *>(value))
-    {
-      r->arr = v->arr;
-      return r;
-    }
+  std::size_t w = arr->sort->get_domain_width();
+  std::size_t vw = value->sort->get_domain_width();
+  smt_astt start = ctx->mk_bvmul(
+    flat.resize(ctx->convert_ast(index), w), ctx->mk_smt_bv(BigInt(n), w));
 
-    /* A row built standalone -- a constant struct's array member, say -- has
-     * its own array, and its elements have to be copied into this leaf at the
-     * slice's offset. Bounded by the row length, not the array's. */
-    uint64_t stride = flat.extent(sub);
-    assert(stride != 0 && "SoA row copy into an unbounded array");
-
-    /* Do the index arithmetic in the leaf array's width throughout: `i`
-     * arrives in the logical array's narrower domain. */
-    std::size_t w = arr->sort->get_domain_width();
-    smt_astt row =
-      ctx->mk_bvmul(flat.resize(i, w), ctx->mk_smt_bv(BigInt(stride), w));
-    smt_astt acc = arr;
-    std::size_t vw = value->sort->get_domain_width();
-
-    for (uint64_t j = 0; j < stride; j++)
-    {
-      smt_astt src = ctx->mk_select(value, ctx->mk_smt_bv(BigInt(j), vw));
-      smt_astt at =
-        ctx->mk_bvadd(row, ctx->mk_smt_bv(BigInt(j), w));
-      if (base != nullptr)
-        at = ctx->mk_bvadd(flat.resize(base, w), at);
-      acc = ctx->mk_store(acc, at, src);
-    }
-
-    r->arr = acc;
-    return r;
-  }
-
-  soa_ast *r = new soa_ast(flat, ctx, sort, thetype);
-  r->arr = ctx->mk_store(
-    arr, flat.offset(base, i, arr->sort->get_domain_width()), value);
-  r->base = base;
+  r->arr = arr;
+  for (uint64_t j = 0; j < n; j++)
+    r->arr = ctx->mk_store(
+      r->arr,
+      ctx->mk_bvadd(start, ctx->mk_smt_bv(BigInt(j), w)),
+      ctx->mk_select(value, ctx->mk_smt_bv(BigInt(j), vw)));
   return r;
 }
 
-smt_astt
-soa_ast::eq(smt_solver_baset *ctx, smt_astt other) const
+smt_astt soa_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   soa_astt o = to_soa_ast(other);
 
-  if (!members.empty())
-  {
-    smt_solver_baset::ast_vec eqs;
-    eqs.reserve(members.size());
-    for (size_t i = 0; i < members.size(); i++)
-      eqs.push_back(members[i]->eq(ctx, o->members[i]));
-    return ctx->make_n_ary_and(eqs);
-  }
+  if (leaf())
+    return ctx->mk_eq(arr, o->arr);
 
-  return arr->eq(ctx, o->arr);
+  smt_solver_baset::ast_vec eqs;
+  eqs.reserve(members.size());
+  for (size_t i = 0; i < members.size(); i++)
+    eqs.push_back(members[i]->eq(ctx, o->members[i]));
+  return ctx->make_n_ary_and(eqs);
 }
 
 smt_astt
@@ -464,28 +427,27 @@ soa_ast::ite(smt_solver_baset *ctx, smt_astt cond, smt_astt falseop) const
   soa_astt f = to_soa_ast(falseop);
   soa_ast *r = new soa_ast(flat, ctx, sort, thetype);
 
-  if (!members.empty())
+  if (leaf())
   {
-    for (size_t i = 0; i < members.size(); i++)
-      r->members.push_back(members[i]->ite(ctx, cond, f->members[i]));
+    r->arr = ctx->mk_ite(cond, arr, f->arr);
     return r;
   }
 
-  r->arr = arr->ite(ctx, cond, f->arr);
-  r->base = base;
+  for (size_t i = 0; i < members.size(); i++)
+    r->members.push_back(members[i]->ite(ctx, cond, f->members[i]));
   return r;
 }
 
 void soa_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 {
-  ctx->assert_ast(sym->eq(ctx, this));
+  ctx->assert_ast(eq(ctx, sym));
 }
 
 void soa_ast::dump() const
 {
-  if (!members.empty())
+  if (leaf())
+    arr->dump();
+  else
     for (smt_astt m : members)
       m->dump();
-  else
-    arr->dump();
 }
