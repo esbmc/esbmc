@@ -94,6 +94,7 @@ private:
     const locationt &loc);
   exprt call_expr(const json &node);
   exprt list(const json &node);
+  exprt dict_literal(const json &node);
   exprt subscript(const json &node);
 
   void statements(const json &body, code_blockt &block);
@@ -102,6 +103,7 @@ private:
   void aug_assign(const json &node);
   void if_statement(const json &node);
   void while_statement(const json &node);
+  void for_statement(const json &node);
   void assert_statement(const json &node);
   void class_statement(const json &node);
 

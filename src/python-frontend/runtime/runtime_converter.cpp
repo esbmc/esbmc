@@ -6,6 +6,7 @@
 #include <util/lang/c_types.h>
 
 #include <algorithm>
+#include <optional>
 #include <stdexcept>
 
 namespace
@@ -33,6 +34,18 @@ int richcompare_op(const std::string &op)
     {"Lt", 0}, {"LtE", 1}, {"Eq", 2}, {"NotEq", 3}, {"Gt", 4}, {"GtE", 5}};
   auto it = ops.find(op);
   return it == ops.end() ? -1 : it->second;
+}
+
+std::optional<int64_t> literal_int(const nlohmann::json &node)
+{
+  if (
+    is_type(node, "Constant") && node["value"].is_number_integer() &&
+    !node.contains("_bigint"))
+    return node["value"].get<int64_t>();
+  if (is_type(node, "UnaryOp") && node["op"]["_type"] == "USub")
+    if (auto inner = literal_int(node["operand"]))
+      return -*inner;
+  return std::nullopt;
 }
 
 std::string binop_function(const std::string &op)
@@ -311,6 +324,8 @@ exprt python_runtime_converter::expr(const json &node)
     return call_expr(node);
   if (type == "List")
     return list(node);
+  if (type == "Dict")
+    return dict_literal(node);
   if (type == "Subscript")
     return subscript(node);
   if (type == "Attribute")
@@ -435,6 +450,7 @@ exprt python_runtime_converter::name(const json &node)
     {"int", "c:@PyRtLong_Type"},
     {"bool", "c:@PyRtBool_Type"},
     {"list", "c:@PyRtList_Type"},
+    {"dict", "c:@PyRtDict_Type"},
     {"str", "c:@PyRtStr_Type"},
     {"float", "c:@PyRtFloat_Type"},
     {"object", "c:@PyRtObject_Type"},
@@ -482,6 +498,16 @@ exprt python_runtime_converter::compare(const json &node)
   {
     exprt same = equality_exprt(left, right);
     return call("pyrt_bool_from", {op == "Is" ? same : not_exprt(same)}, loc);
+  }
+  if (op == "In" || op == "NotIn")
+  {
+    exprt contains = call("pyrt_contains", {right, left}, loc);
+    if (op == "In")
+      return contains;
+    return call(
+      "pyrt_bool_from",
+      {not_exprt(call("pyrt_is_true", {contains}, loc))},
+      loc);
   }
   int richcompare = richcompare_op(op);
   if (richcompare < 0)
@@ -640,6 +666,22 @@ exprt python_runtime_converter::list(const json &node)
   return result;
 }
 
+exprt python_runtime_converter::dict_literal(const json &node)
+{
+  const locationt loc = location(node);
+  exprt result = call("pyrt_dict_new", {}, loc);
+  const json &keys = node["keys"];
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (keys[i].is_null())
+      unsupported(node);
+    exprt key = expr(keys[i]);
+    exprt value = expr(node["values"][i]);
+    call("pyrt_setitem", {result, key, value}, loc);
+  }
+  return result;
+}
+
 exprt python_runtime_converter::subscript(const json &node)
 {
   if (is_type(node["slice"], "Slice"))
@@ -681,6 +723,8 @@ void python_runtime_converter::statement(const json &node)
     if_statement(node);
   else if (type == "While")
     while_statement(node);
+  else if (type == "For")
+    for_statement(node);
   else if (type == "Assert")
     assert_statement(node);
   else if (type == "Return")
@@ -796,6 +840,92 @@ void python_runtime_converter::while_statement(const json &node)
   block_->copy_to_operands(loop);
 }
 
+/// `for i in range(...)` counts on an unboxed integer; anything else walks
+/// indices over the length taken once, which matches CPython for the
+/// containers this runtime has. The loop is emitted as init/condition/step so
+/// `continue` still advances it.
+void python_runtime_converter::for_statement(const json &node)
+{
+  if (!node["orelse"].empty())
+    unsupported(node);
+  const json &target = node["target"];
+  if (!is_type(target, "Name"))
+    unsupported(node);
+
+  const locationt loc = location(node);
+  const json &iterable = node["iter"];
+  const bool over_range = is_type(iterable, "Call") &&
+                          is_type(iterable["func"], "Name") &&
+                          iterable["func"]["id"] == "range" &&
+                          !locals_.count("range") && !globals_.count("range") &&
+                          !functions_.count("range");
+
+  const typet counter = long_long_int_type();
+  exprt index = new_temporary(counter, loc);
+  exprt limit = new_temporary(counter, loc);
+  exprt container;
+  exprt start = from_integer(0, counter);
+  int64_t stride = 1;
+
+  if (over_range)
+  {
+    const json &args = iterable["args"];
+    if (args.empty() || args.size() > 3 || !iterable["keywords"].empty())
+      unsupported(iterable);
+    exprt stop;
+    if (args.size() == 1)
+      stop = call("pyrt_as_index", {expr(args[0])}, loc);
+    else
+    {
+      start = call("pyrt_as_index", {expr(args[0])}, loc);
+      stop = call("pyrt_as_index", {expr(args[1])}, loc);
+    }
+    if (args.size() == 3)
+    {
+      // The direction decides the loop condition, so the step has to be known
+      // here rather than computed.
+      auto literal = literal_int(args[2]);
+      if (!literal || *literal == 0)
+        unsupported(iterable);
+      stride = *literal;
+    }
+    block_->copy_to_operands(code_assignt(limit, stop));
+  }
+  else
+  {
+    container = new_temporary(object_type_, loc);
+    block_->copy_to_operands(code_assignt(container, expr(iterable)));
+    block_->copy_to_operands(
+      code_assignt(limit, call("pyrt_iter_length", {container}, loc)));
+  }
+
+  exprt condition(stride > 0 ? "<" : ">", bool_typet());
+  condition.copy_to_operands(index, limit);
+
+  code_blockt body;
+  code_blockt *outer = block_;
+  block_ = &body;
+  store(
+    target,
+    over_range ? call("pyrt_long_from", {index}, loc)
+               : call("pyrt_iter_item", {container, index}, loc),
+    loc);
+  block_ = outer;
+  statements(node["body"], body);
+
+  exprt next = plus_exprt(index, from_integer(stride, counter));
+  next.type() = counter;
+
+  codet loop;
+  loop.set_statement("for");
+  loop.copy_to_operands(code_assignt(index, start));
+  loop.copy_to_operands(condition);
+  loop.copy_to_operands(code_assignt(index, next));
+  loop.copy_to_operands(body);
+  loop.location() = loc;
+  block_->copy_to_operands(loop);
+}
+
 void python_runtime_converter::assert_statement(const json &node)
 {
   code_assertt assertion;
@@ -875,6 +1005,13 @@ void python_runtime_converter::collect_assigned(
         declared_global.insert(global.get<std::string>());
     else if (is_type(node, "If") || is_type(node, "While"))
     {
+      collect_assigned(node["body"], assigned, declared_global);
+      collect_assigned(node["orelse"], assigned, declared_global);
+    }
+    else if (is_type(node, "For"))
+    {
+      if (is_type(node["target"], "Name"))
+        assigned.insert(node["target"]["id"].get<std::string>());
       collect_assigned(node["body"], assigned, declared_global);
       collect_assigned(node["orelse"], assigned, declared_global);
     }

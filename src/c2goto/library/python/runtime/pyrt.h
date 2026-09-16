@@ -88,6 +88,16 @@ typedef struct __pyrt_method
   PyRtObject *function;
 } PyRtMethodObject;
 
+/* Insertion-ordered, with keys compared by == rather than hashed. */
+typedef struct __pyrt_dict
+{
+  PyRt_HEAD;
+  int64_t size;
+  int64_t *hashes;
+  PyRtObject **keys;
+  PyRtObject **values;
+} PyRtDictObject;
+
 typedef PyRtObject *(*unaryfunc)(PyRtObject *);
 typedef PyRtObject *(*binaryfunc)(PyRtObject *, PyRtObject *);
 typedef int64_t (*lenfunc)(PyRtObject *);
@@ -157,6 +167,7 @@ struct __pyrt_type
 #define PYRT_LIST_CAPACITY 64
 #define PYRT_MAX_CLASSES 16
 #define PYRT_STR_CAPACITY 64
+#define PYRT_DICT_CAPACITY 16
 
 extern PyRtTypeObject PyRtType_Type;
 extern PyRtTypeObject PyRtObject_Type;
@@ -167,6 +178,7 @@ extern PyRtTypeObject PyRtBool_Type;
 extern PyRtTypeObject PyRtList_Type;
 extern PyRtTypeObject PyRtStr_Type;
 extern PyRtTypeObject PyRtFloat_Type;
+extern PyRtTypeObject PyRtDict_Type;
 extern PyRtTypeObject PyRtFunction_Type;
 extern PyRtTypeObject PyRtMethod_Type;
 
@@ -204,6 +216,15 @@ PyRtObject *pyrt_str_new(const char *data, int64_t length);
 bool pyrt_float_check(PyRtObject *o);
 PyRtObject *pyrt_float_from(double v);
 double pyrt_number_as_double(PyRtObject *o);
+PyRtObject *pyrt_dict_new(void);
+bool pyrt_key_equal(PyRtObject *a, PyRtObject *b);
+int64_t pyrt_key_hash(PyRtObject *key);
+int64_t pyrt_dict_find(PyRtDictObject *d, PyRtObject *key);
+PyRtObject *pyrt_dict_key_at(PyRtObject *o, int64_t i);
+int64_t pyrt_iter_length(PyRtObject *o);
+PyRtObject *pyrt_iter_item(PyRtObject *o, int64_t i);
+PyRtObject *pyrt_contains(PyRtObject *container, PyRtObject *item);
+int64_t pyrt_as_index(PyRtObject *o);
 PyRtObject *pyrt_nondet_bool(void);
 PyRtObject *pyrt_nondet_int(void);
 
