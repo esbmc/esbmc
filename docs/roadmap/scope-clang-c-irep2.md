@@ -8378,3 +8378,75 @@ about what `sideeffect2t` models, and it is the one that actually gates the C++ 
 models. Neither is Solidity-specific, python and jimple both write values of the same
 shapes, and 139 of the remaining 142 B-2 writes are value writes or types behind them --
 so this is the prerequisite for most of what is left, not a detour.
+
+## 150. `#cformat` carried, and the residual named (2026-09-16)
+
+§149.4 proposed carrying `#cformat` across the seam as the first of two prerequisites for
+Phase 6's last value writes. It is carried now, and the acceptance measurement says it was
+worth less than §149.3 implied and pointed at something bigger.
+
+### 150.1 The carry
+
+`constant_int2t` and `constant_floatbv2t` each gain an unreflected `irep_idt cformat`, the
+`argument_base_names` pattern of `frontends-to-irep2.md` §44 for the third time in this
+migration: a defaulted trailing constructor argument, `excluded_field_bytes =
+sizeof(irep_idt)`, and no entry in `fields`. Unreflected is the point -- two constants of
+the same value and type are the same constant however they were spelled, so the field must
+not reach hashing or equality, and a unit case pins that (`a == b` and equal `crc()` for
+`0xFF` against `255`).
+
+`migrate_expr` reads `expr.cformat()` on all three constant arms (plain integer, `c_enum`,
+floatbv) and `migrate_expr_back` restores it, guarded on non-empty. The guard is §46's
+lesson in a new place: an empty `#cformat` is worse than an absent one, because
+`c_expr2string.cpp:1124` prefers whatever is there and would print nothing at all rather
+than fall back to deriving the text. A unit case pins the absence too.
+
+### 150.2 What it bought, measured
+
+Converting `clang_c_convert.cpp:632` and `:659` and diffing the normalised
+`--symbol-table-only` dump over the 8 682 C and C++ programs:
+
+```
+without the carry   3 967 of 8 682 differ
+with the carry      3 428 of 8 682 differ
+```
+
+So `#cformat` accounts for **539** programs, not the 3 892 §149.3 attributed to it. That
+section was right about the mechanism and wrong to imply it was the whole of the difference;
+it measured one example (`1.000000e-1f`) and generalised.
+
+### 150.3 The residual is the qualifier question, measured for the first time
+
+The remaining 3 428 differ like this:
+
+```
+- Value.......: (const unsigned char *)p1
++ Value.......: (unsigned char *)p1
+```
+
+`const` is gone. `a_cmt_constant` is declared at `irep.h:1296` with its accessors at `:525`
+and `:800`, and `grep -cE 'cmt_constant|#constant' src/util/irep/migrate.cpp` returns **0**:
+C qualifiers do not cross the seam. §147.2's third group -- "a legacy irep attribute or
+layout algorithm with no `type2t` field ... `restrict`, `volatile`, alignment, packing" --
+and §57.1's type-system question are the same thing as this, and this is the first time
+either has a number against it: **3 428 of 8 682 C and C++ programs**, for value writes
+alone.
+
+That reorders the four decisions §57.3 said were one question seen four ways. It is not four
+ways; it is one blocker with a measured cost, and it is larger than everything else left in
+Phase 6 put together.
+
+### 150.4 What is left, and in what order
+
+Three losses, three scales, three different kinds of answer:
+
+| lost | effect | scale | answer |
+|---|---|---|---|
+| `#cformat` | printed literal | 539 of 8 682 | done, this section |
+| C qualifiers (`#constant`, `restrict`, `volatile`) | printed type in a value; §57.1 | 3 428 of 8 682 | a `type2t` decision |
+| a `sideeffect`'s empty operands list | **the GOTO program** | 2 112 of 8 682 | a `sideeffect2t` decision |
+
+The GOTO one is the only one that changes what is verified, so it is the one to take next
+even though it is smaller: §149.2's zero-initialised operational-model global becoming a
+nondeterministic temporary is a soundness-shaped difference, while the other two are
+rendering. Phase 6 stays at B-2\* 19 until at least the third row is settled.

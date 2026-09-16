@@ -3829,3 +3829,45 @@ It is also the fourth tick in a row where the finding came from measuring more t
 been: a wider corpus (8 682 against 515) and a second artefact (the GOTO, which §15 never
 compared for the site it left behind). §15.2's "cosmetic" verdict survived exactly as long
 as the evidence behind it was one frontend and one dump.
+
+## 64. One prerequisite done, and the big one finally has a number (2026-09-16)
+
+§63 named two things the value seam drops and called them the prerequisite for most of the
+remaining 144 writes. The first is now carried: `constant_int2t` and `constant_floatbv2t`
+hold an unreflected `cformat`, `migrate_expr` reads `#cformat` and `migrate_expr_back`
+restores it when non-empty, and `unit/util/migrate.test.cpp` pins the round trip in both
+directions, the absent-key case, and that spelling is no part of a constant's identity.
+
+The acceptance measurement is the useful part. Re-running §63's comparison with the carry in
+place, the symbol-table difference over the 8 682 C and C++ programs goes from 3 967 to
+**3 428** -- so `#cformat` was worth 539 programs and §63 was wrong to imply it accounted for
+3 892 of them. What the remaining 3 428 show is this:
+
+```
+- Value.......: (const unsigned char *)p1
++ Value.......: (unsigned char *)p1
+```
+
+`a_cmt_constant` is declared in `irep.h` and `grep -cE 'cmt_constant|#constant'
+src/util/irep/migrate.cpp` returns 0. C qualifiers do not cross the seam, and that is
+§57.1's type-system question -- the one §57.3 said the four phases had converged on without
+ever putting a number to it. The number is **3 428 of 8 682 C and C++ programs**, for value
+writes alone, which makes it larger than everything else outstanding in Phase 6 combined.
+
+```
+clang-c-frontend           1137     1224     1189       32     19
+clang-cpp-frontend          631      683      669       15      3
+solidity-frontend          1413     1625     1587       98     65
+python-frontend            6528     7156     6964      108     54
+jimple-frontend              97      118       96       10      3
+total                      9806    10806    10505      263    144
+```
+
+Reproduce with `python3 scripts/irep2/bars.py`.
+
+So the ordering for what is left is no longer a matter of taste. Of the three losses, only
+the `sideeffect` empty-operands one changes the GOTO program (2 112 programs, and §63's
+zero-initialised operational-model global becoming a nondeterministic temporary), so it goes
+next despite being the smaller of the two remaining. The qualifier decision is bigger but it
+is rendering, and it wants an answer about what `type2t` models rather than another
+measurement -- it now has all the measurement it needs.
