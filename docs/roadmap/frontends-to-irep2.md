@@ -4232,3 +4232,46 @@ three consumers read the list back through `symbolt::get_type()` --
 and is the worst of the three: it would not abort on an empty list, it would silently give the
 derived class no inherited methods. So the carry costs destructor lowering *and* C++ method
 inheritance -- not the value write this sequence was chasing.
+
+## 77. Solidity's builtin cluster, and the fourth name loss (2026-09-16)
+
+`solidity_convert_call.cpp` was the densest convertible cluster left anywhere -- 19 of 144 remaining
+B-2* writes, one repeated idiom across the synthesised low-level-call builtins. Nine landed: seven
+`code_typet` writes and two `gen_zero` writes hoisted into a typed local so a silent fall back to the
+legacy overload cannot compile. Every converted line is exercised -- the six unconditional builtins in
+523 of 525 tests each, the thinnest site in one (`delegate_shadow_8`) -- proven by sweeping for the
+symbol each builtin synthesises.
+
+The oracle is worth stating precisely, because the obvious one is vacuous. Over all 525 tests both
+`-only` dumps are byte-identical, but that is blind to exactly the field at risk: clearing the
+argument identifiers before the store leaves the suite green *and* the dumps identical, because
+`from_type` prints argument types only. What pins the seven type writes is
+`migrate_symbol_type`'s round-trip assertion (`migrate.cpp:477`), read on every symbol type via
+`goto_convert_functions.cpp:1819` -- delete the `argument_names` carry and the build itself stops. The
+two value writes are verification-inert (the GOTO reads the `code_declt` operand on the next line), so
+nothing end-to-end can pin them; a unit test does, asserting the two `gen_zero` overloads agree on
+every type reachable there, since they demonstrably disagree elsewhere.
+
+The remaining ten are GOTO-neutral too but move 523 of 525 symbol-table dumps, and the cause is
+generic rather than Solidity's: `symbol_expr` sets both `identifier` and `name`
+(`util/expr/expr_util.cpp:239-245`), `symbol2t` carries only `thename`, so a back-migrated symbol
+expression is a second, inequivalent spelling of the same symbol. `get_shorthands` compares whole
+`exprt`s in a `std::set`, so the two spellings register a namespace collision and the printer emits
+full mangled ids. That is the fourth name the seam has dropped, after `argument_base_names` (§44),
+`member_base_names` (§46) and `#cformat` (§69).
+
+It is also the one with a semantic precedent rather than a cosmetic one.
+`clang_c_adjust::do_special_functions` (`clang_c_adjust_expr.cpp:1406`) dispatches every builtin
+lowering on `to_symbol_expr(f_op).name()`, so a callee missing it stops matching -- §90.2 records the
+result, an `assert` left as a plain `FUNCTION_CALL` -- and `clang_c_adjust_irep2` already patches
+around it twice by hand (`:1597`, `:1647`) with
+`name(get_pretty_name(id2string(id)))`.
+
+So the fix is a *derivation*, not a new field: `get_pretty_name` (`util/symtab/pretty.h:9`) is a pure
+string function, needing no symbol table and no growth in `symbol2t`, which is the most-constructed
+node in the tool. Doing it once in `migrate_expr_back` would retire both workarounds, the §90.2 class,
+and these ten writes together. It still needs its own corpus-wide A/B, because setting `name` changes
+`irept::operator==` for every back-migrated symbol expression -- which is simultaneously the point and
+the risk.
+
+Solidity B-2* 65 -> 56; repo total 144 -> 135.
