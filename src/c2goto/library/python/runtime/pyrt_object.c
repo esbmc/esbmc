@@ -17,6 +17,12 @@ bool pyrt_is_true(PyRtObject *o)
 {
   if (o == &pyrt_None)
     return false;
+  /* A built-in type refuses slot assignment (pyrt_setattr), so int and bool
+   * truthiness is fixed for the whole program and can be read directly. Each
+   * slot read this skips carries its own dereference claims, and where the
+   * type is known the guard folds away entirely. */
+  if (pyrt_long_check(o))
+    return ((PyRtLongObject *)o)->value != 0;
   PyRtNumberMethods *nb = o->ob_type->tp_as_number;
   if (nb && nb->nb_bool)
     return nb->nb_bool(o);
@@ -65,6 +71,28 @@ binaryfunc pyrt_number_slot(PyRtTypeObject *t, pyrt_binop op)
  * the only subclass here is bool, which shares int's slots. */
 PyRtObject *pyrt_binary_op1(PyRtObject *a, PyRtObject *b, pyrt_binop op)
 {
+  /* int and bool share one fixed slot table, so two integer operands reach
+   * the implementation without a lookup. `op` is a literal at every call
+   * site, so this switch folds; where the operand types are known the guard
+   * folds too and the slot reads and indirect call disappear. */
+  if (pyrt_long_check(a) && pyrt_long_check(b))
+    switch (op)
+    {
+    case PYRT_ADD:
+      return pyrt_long_add(a, b);
+    case PYRT_SUBTRACT:
+      return pyrt_long_subtract(a, b);
+    case PYRT_MULTIPLY:
+      return pyrt_long_multiply(a, b);
+    case PYRT_TRUE_DIVIDE:
+      return pyrt_long_true_divide(a, b);
+    case PYRT_FLOOR_DIVIDE:
+      return pyrt_long_floor_divide(a, b);
+    case PYRT_REMAINDER:
+      return pyrt_long_remainder(a, b);
+    default:
+      return pyrt_long_power(a, b);
+    }
   binaryfunc slotv = pyrt_number_slot(a->ob_type, op);
   binaryfunc slotw =
     a->ob_type != b->ob_type ? pyrt_number_slot(b->ob_type, op) : 0;
@@ -154,6 +182,10 @@ PyRtObject *pyrt_number_negative(PyRtObject *o)
 PyRtObject *pyrt_richcompare(PyRtObject *a, PyRtObject *b, int op)
 {
   static const int swapped_op[] = {Py_GT, Py_GE, Py_EQ, Py_NE, Py_LT, Py_LE};
+  /* Two integers never reach the reflected operand: pyrt_long_richcompare
+   * answers every op, and int's slots cannot be reassigned. */
+  if (pyrt_long_check(a) && pyrt_long_check(b))
+    return pyrt_long_richcompare(a, b, op);
   richcmpfunc f = a->ob_type->tp_richcompare;
   if (f)
   {

@@ -1,4 +1,4 @@
 CORE
 main.py
 --python-runtime --k-induction --max-k-step 3
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
