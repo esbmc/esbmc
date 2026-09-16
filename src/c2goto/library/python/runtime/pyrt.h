@@ -248,6 +248,7 @@ PyRtObject *pyrt_builtin_abs(PyRtObject *o);
 PyRtObject *pyrt_builtin_all(PyRtObject *o);
 PyRtObject *pyrt_builtin_any(PyRtObject *o);
 PyRtObject *pyrt_builtin_sum(PyRtObject *o);
+PyRtObject *pyrt_builtin_sum_start(PyRtObject *o, PyRtObject *start);
 PyRtObject *pyrt_builtin_min2(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_builtin_max2(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_builtin_min_iter(PyRtObject *o);

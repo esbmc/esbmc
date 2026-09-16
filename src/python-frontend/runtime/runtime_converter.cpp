@@ -351,6 +351,15 @@ exprt python_runtime_converter::truth(const json &node)
 exprt python_runtime_converter::constant(const json &node)
 {
   const json &value = node["value"];
+  /* JSON has no bytes or complex, so ast2json spells both as plain strings
+   * indistinguishable from str: b"ab" arrives as "ab" and 0j as "0j", which
+   * would box as a non-empty -- hence truthy -- str. The parser tags them. */
+  if (node.contains("esbmc_type_annotation"))
+  {
+    const std::string kind = node["esbmc_type_annotation"];
+    if (kind == "bytes" || kind == "complex")
+      unsupported(node);
+  }
   if (value.is_null())
     return address("c:@pyrt_None");
   if (value.is_boolean())
@@ -692,12 +701,21 @@ exprt python_runtime_converter::call_expr(const json &node)
         std::vector<exprt> values = arguments(node);
         if (values.size() == 1)
           return call(builtin->second, values, loc);
-        if ((callee == "min" || callee == "max") && values.size() == 2)
-          return call(
-            callee == "min" ? "pyrt_builtin_min2" : "pyrt_builtin_max2",
-            values,
-            loc);
-        unsupported(node);
+        if ((callee == "min" || callee == "max") && values.size() >= 2)
+        {
+          const std::string fold =
+            callee == "min" ? "pyrt_builtin_min2" : "pyrt_builtin_max2";
+          exprt result = values[0];
+          for (size_t i = 1; i < values.size(); ++i)
+            result = call(fold, {result, values[i]}, loc);
+          return result;
+        }
+        if (callee == "sum" && values.size() == 2)
+          return call("pyrt_builtin_sum_start", values, loc);
+        /* A bad arity is a TypeError in Python, so it stays a claim. Refusing
+         * the conversion here would reject the whole program instead. */
+        raise("TypeError: bad argument count for " + callee + "()", loc);
+        return address("c:@pyrt_None");
       }
     }
   }

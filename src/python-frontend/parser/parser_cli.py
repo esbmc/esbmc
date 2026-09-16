@@ -190,6 +190,11 @@ def main(*, deps: CliDeps) -> int | None:
     # --python-runtime lowers the source as written; the preprocessor's
     # rewrites target the statically typed converter.
     if "--runtime" in sys.argv[3:]:
+        # JSON has no bytes or complex, so both reach the converter as plain
+        # strings indistinguishable from str. Tag the literals -- the one
+        # preprocessor step the runtime path does need.
+        for node in ast.walk(tree):
+            deps.annotate_constant_node(node)
         deps.generate_ast_json_fn(tree, filename, None, output_dir)
         return None
 

@@ -43,6 +43,16 @@ PyRtObject *pyrt_builtin_sum(PyRtObject *o)
   return total;
 }
 
+/* sum(iterable, start) begins the fold at `start` rather than 0. */
+PyRtObject *pyrt_builtin_sum_start(PyRtObject *o, PyRtObject *start)
+{
+  int64_t length = pyrt_iter_length(o);
+  PyRtObject *total = start;
+  for (int64_t i = 0; i < PYRT_LIST_CAPACITY && i < length; ++i)
+    total = pyrt_number_add(total, pyrt_iter_item(o, i));
+  return total;
+}
+
 PyRtObject *pyrt_builtin_min2(PyRtObject *a, PyRtObject *b)
 {
   return pyrt_is_true(pyrt_richcompare(b, a, Py_LT)) ? b : a;
