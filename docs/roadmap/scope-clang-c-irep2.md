@@ -8938,3 +8938,72 @@ what it is, which is the unreflected `#cformat` shape §150.1 already used.
 
 That distinction is worth having before anyone starts: the two halves of §57.1 do not have the
 same answer, and the cheaper half is the one that aborts.
+
+## 153. The abort is a missing type kind: IREP2 has no bitfield (2026-09-16)
+
+§152.1 said the static arm's abort came from a lost `alignment` attribute. That was wrong, and
+so were the two guesses before it. Carrying the attribute across the seam -- an unreflected
+`expr2tc` on `struct_type2t`, read from `type.find("alignment")` forward and written back with
+`thetype.add("alignment")` -- leaves `regression/csmith/csmith01` aborting at exit 134, byte for
+byte the same assertion. The experiment cost one build and settled it; the field is reverted.
+
+Two corrections to §152.1 while I am here. The probe reported `align_attr=set`, so the
+attribute is *present* on the type at the assertion -- §152.1's "what comes back has lost the
+attribute" was already contradicted by its own evidence. And this section's first probe printed
+`pad=0` for a padding member, which was a wrong-key artefact: the flag is
+`componentt::get_is_padding()`, not `#padding`, and `migrate_components_back` does restore it
+through `restore_padding_flag` (`migrate.cpp:77`).
+
+### 153.1 A nine-line reproducer
+
+```c
+struct S0 {
+  signed int f0 : 26;
+  unsigned int f1 : 9;
+  unsigned int f2;
+};
+struct S0 g = {1, 2, 3};
+int main(void) { return g.f2 == 3 ? 0 : 1; }
+```
+
+`VERIFICATION SUCCESSFUL` on master. With `clang_c_convert.cpp:632` converted to
+`migrate_expr`, exit 134 and the same numbers csmith01 produces:
+
+```
+[PADQ] tag=struct S0 sz=11 a=4
+[PADC]   f0          signedbv    width=26
+[PADC]   f1          unsignedbv  width=9
+[PADC]   anon_pad#2  unsignedbv  width=16
+[PADC]   f2          unsignedbv  width=32
+```
+
+### 153.2 What those widths mean
+
+`f0` is 26 bits and `f1` is 9 bits, as plain `signedbv` and `unsignedbv`. They are **C
+bitfields**, and their legacy type is `c_bit_field` -- a wrapper carrying the underlying type
+and the field width. After the round trip the wrapper is gone and only a bv of the field's
+width remains, so `add_padding` can no longer pack them: 26 + 9 + 16 + 32 = 83 bits, a byte
+size of 11, against the struct's alignment of 4.
+
+The seam has no bitfield at all. `grep -n c_bit_field src/util/irep/migrate.cpp` returns one
+line and it is a comment (`:446`); `grep -rn bit_field src/irep2/*.h` returns nothing. There is
+no `bit_field2t`, so `migrate_type` has nothing to map `c_bit_field` onto and flattens it.
+
+### 153.3 This is a different and larger question than §152.3 posed
+
+§152.3 framed the static arm as wanting a reflected `alignment` field and the local arm an
+unreflected qualifier. The static arm's blocker is neither: it is a **missing type kind**, which
+is §57's "widen `type2t`" option in its strongest form -- not a field on an existing kind but a
+new one, with a `get_width`, a migration both ways, and every consumer that switches on
+`type2t::type_ids` to consider.
+
+| arm | blocker | kind of answer |
+|---|---|---|
+| `:632` static | `c_bit_field` has no IREP2 counterpart | a new `type2t` kind |
+| `:659` local | C qualifiers on a pointee (3 378 tables) | an unreflected attribute, §150.1's shape |
+
+That the smaller-looking arm turned out to need the larger change is worth recording as the
+pattern of this whole investigation: §63 blamed an empty operands list, §151 an assertion
+comparing two representations, §152 a lost alignment attribute, and each was the most visible
+difference rather than the cause. The reproducer above is nine lines and settles it in one run,
+which is what the previous three should have been.
