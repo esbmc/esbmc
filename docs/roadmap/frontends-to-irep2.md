@@ -4030,3 +4030,28 @@ where §67 and §68 put it. The static arm remains blocked on IREP2 having no bi
 Phase 6 stays at B-2\* 19. Three ticks of measurement have moved the blocker from "the type
 system" to two specific, named, already-documented items -- which is the useful outcome even
 though the count did not move.
+
+## 70. The location decision, taken (2026-09-16)
+
+§136.3 of `scope-clang-c-irep2.md` measured what restoring a side effect's location costs and
+deferred it; §69 established it is the one thing clang-c's local value write is waiting on. It is
+done here, with the number the deferral asked for.
+
+`back_sideeffect` restores the location when it is not nil, so a call's instruction carries the
+call's column instead of the enclosing statement's. Measured over the 8 682 C and C++ programs
+under `regression/`, both arms built from this branch: **8 283 change** -- 95% of the corpus,
+where §136.3's stride-16 sample of one suite had suggested 96%.
+
+Two tests pinned a column incidentally and both moved to the more precise one: `M_z = Foo(...)`
+from column 3 to the call at 9, and `while (t--)` from the `while` at 3 to the decrement at 10.
+Expectations updated; everything else at baseline.
+
+This is the first change in this stack that alters what a user sees. Counterexamples and
+witnesses now name the call's column, so it carries `needs-svcomp-run`: `parse_result()` in
+`esbmc-wrapper.py` classifies tasks by matching ESBMC's output, and #7250 is the precedent for
+changing output without checking it there. The wrapper reads verdict lines, not columns, so the
+expectation is no effect -- an expectation, not a measurement, which is exactly why the roadmap
+held this for a competition run rather than letting it ride along.
+
+What it unblocks is measurable only once it lands: the local arm's 3 341 differing symbol tables,
+whose C++ bulk §69 traced to this location and to the empty `operands` list.

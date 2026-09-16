@@ -8767,3 +8767,62 @@ decision already taken and deferred.
 
 Neither is a measurement question. Phase 6 stays at B-2\* 19, and this fix ships on its own
 merits -- one fewer thing the seam invents -- rather than as a step toward either.
+
+## 156. §136.3, done: a side effect carries its own location (2026-09-16)
+
+§136.3 measured what restoring a side effect's location does and then declined to do it,
+holding it for "its own PR and an SV-COMP run". §155.2 established that this is the one thing
+clang-c's local value write is waiting on. This is that PR.
+
+### 156.1 The change
+
+`back_sideeffect` restores `ref2.location` when it is not nil. Before, it did not, and
+`goto_convert` fell back to the enclosing statement's location for a side effect carrying
+none -- so a call's instruction took the column of the statement it sat in rather than its own.
+
+### 156.2 The scale, measured over the corpus rather than a sample
+
+§136.3's figure was 126 of 131 goto programs, from a stride-16 sample of one suite. Measured
+over every C and C++ program under `regression/` whose `test.desc` names a source that exists,
+both arms built from this branch:
+
+```
+8 283 of 8 682 goto programs change   (8 109 and 8 108 distinct hashes, so both
+                                       captures have content)
+```
+
+That is 95% of the corpus. Proportionally §136.3's sample was right; in absolute terms this is
+a change to almost every program ESBMC's own suite covers.
+
+### 156.3 What moves, and why it is the better column
+
+Two tests pinned a column and both moved to the more precise one:
+
+| test | source line | was | now | what is at the new column |
+|---|---|---|---|---|
+| `function_return_location` | `M_z = Foo(M_x, M_y);` | 3 | 9 | the call, not `M_z` |
+| `github_4715_irep2_native_body_while_cond_loc_01` | `while (t--)` | 3 | 10 | `t--`, not `while` |
+
+Neither pinned the column deliberately. The first exists to check that `M_z`'s value is
+attributed to `main`'s line 10 rather than to `Foo`'s line 4 -- its negative lookahead says so
+-- and that still holds; only the column within line 10 moved. Both expectations are updated.
+
+Everything else holds at this branch's baseline: `regression/esbmc` 1 of 2303, `esbmc-cpp/cpp`
+6 of 1065, unit 879 of 879.
+
+### 156.4 Why this still needs a competition run
+
+The change is user-visible on the **default** path: counterexample and witness lines now name
+the call's column. `scripts/competitions/svcomp/esbmc-wrapper.py`'s `parse_result()` classifies
+a task by matching substrings of ESBMC's output, and #7250 is what happens when output changes
+in a way nobody checked against it -- PR #7064 added a per-property table and turned ~2 600
+correct-false verdicts into `Unknown`. The wrapper matches verdict lines rather than source
+columns, so the expectation is no effect, but that is an expectation and not a measurement.
+Hence `needs-svcomp-run`, and hence this section rather than a sentence in a conversion PR.
+
+### 156.5 What it unblocks
+
+`clang_c_convert.cpp:659`, the local value-write arm -- 138 735 executions across 6 553
+programs -- differed in 3 341 symbol tables with the location withheld, of which §154.1 traced
+the C++ bulk to this and to the empty `operands` list. Whether that residue collapses is the
+next thing to measure, and it is measurable only once this lands.

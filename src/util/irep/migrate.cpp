@@ -3507,14 +3507,12 @@ static exprt back_sideeffect(const expr2tc &ref)
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
 
-  // ref2.location is deliberately *not* restored onto the legacy node.
-  // goto_convert falls back to the enclosing statement's location for a side
-  // effect carrying none, so writing this one back moves the instruction's
-  // column on the default path -- measured at 126 of 131 goto programs over a
-  // stride-16 sample of regression/esbmc. That is very likely the more
-  // faithful column, but it is a user-visible change to counterexamples and
-  // witnesses, so it needs its own PR and an SV-COMP run
-  // (scope-clang-c-irep2.md §136.3).
+  // Restored. goto_convert falls back to the enclosing statement's location for
+  // a side effect carrying none, so a call's instruction took the statement's
+  // column rather than its own; carrying the location back gives it the call's
+  // (scope-clang-c-irep2.md §156).
+  if (ref2.location.is_not_nil())
+    theexpr.location() = ref2.location;
   return theexpr;
 }
 
