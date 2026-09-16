@@ -20,7 +20,6 @@ PyRtObject *pyrt_list_new(void)
   PyRtListObject *l = __ESBMC_alloca(sizeof(PyRtListObject));
   l->ob_type = &PyRtList_Type;
   l->size = 0;
-  l->items = __ESBMC_alloca(PYRT_LIST_CAPACITY * sizeof(PyRtObject *));
   return (PyRtObject *)l;
 }
 

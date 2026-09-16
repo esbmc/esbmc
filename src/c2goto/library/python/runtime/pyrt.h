@@ -38,11 +38,16 @@ typedef struct __pyrt_float
   double value;
 } PyRtFloatObject;
 
+#define PYRT_LIST_CAPACITY 64
+
+/* items is a member rather than a separate allocation: an element access is
+ * then one dereference of the list instead of two, and an index reached
+ * through a tracked pointer stays symbolic where a member access folds. */
 typedef struct __pyrt_list
 {
   PyRt_HEAD;
   int64_t size;
-  PyRtObject **items;
+  PyRtObject *items[PYRT_LIST_CAPACITY];
 } PyRtListObject;
 
 #define PYRT_ATTRS_CAPACITY 16
@@ -173,7 +178,6 @@ struct __pyrt_type
     __ESBMC_assume(0);                                                         \
   } while (0)
 
-#define PYRT_LIST_CAPACITY 64
 #define PYRT_MAX_CLASSES 16
 #define PYRT_STR_CAPACITY 64
 #define PYRT_POW_BOUND 64
