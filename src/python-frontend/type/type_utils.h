@@ -58,6 +58,10 @@ struct TypeFlags
   bool has_int = false;
   bool has_bool = false;
   bool has_none = false;
+  /// A union member this tracker cannot represent -- a list, dict, class or any
+  /// other non-scalar. Set by update_type_flags_from_node for anything it does
+  /// not recognise, so select_widest_type can decline to narrow (esbmc/esbmc#7872).
+  bool has_other = false;
 };
 
 class type_utils
@@ -236,6 +240,11 @@ public:
   static typet
   select_widest_type(const TypeFlags &flags, const typet &default_type)
   {
+    // A member outside the float/int/bool hierarchy has no place in it, so
+    // widening would pick a scalar for a union that is not one (#7872).
+    if (flags.has_other)
+      return default_type;
+
     if (flags.has_float)
       return double_type();
     if (flags.has_int)
@@ -265,9 +274,16 @@ public:
   {
     TypeFlags flags;
 
-    // Extract from left operand
+    // Extract from left operand. `|` is left-associative, so a chained union
+    // nests on the left: `int | bool | float` is BinOp(BinOp(int, bool), float).
     if (binop_node.contains("left"))
-      update_type_flags_from_node(binop_node["left"], flags);
+    {
+      const auto &left = binop_node["left"];
+      if (left["_type"] == "BinOp")
+        merge_type_flags(flags, extract_binop_union_types(left));
+      else
+        update_type_flags_from_node(left, flags);
+    }
 
     // Extract from right operand (may be nested BinOp for chained unions)
     if (binop_node.contains("right"))
@@ -374,6 +390,8 @@ private:
         flags.has_bool = true;
       else if (type_str == "None" || type_str == "NoneType")
         flags.has_none = true;
+      else
+        flags.has_other = true;
     }
     else if (
       node["_type"] == "Constant" && node.contains("value") &&
@@ -381,6 +399,8 @@ private:
     {
       flags.has_none = true;
     }
+    else
+      flags.has_other = true;
   }
 
   static void merge_type_flags(TypeFlags &dest, const TypeFlags &src)
@@ -389,6 +409,7 @@ private:
     dest.has_int = dest.has_int || src.has_int;
     dest.has_bool = dest.has_bool || src.has_bool;
     dest.has_none = dest.has_none || src.has_none;
+    dest.has_other = dest.has_other || src.has_other;
   }
 
   static const std::map<std::string, std::string> &consensus_func_to_type()
