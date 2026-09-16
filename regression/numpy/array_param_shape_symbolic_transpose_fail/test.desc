@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+ERROR: TypeError: numpy.transpose() requires a numpy array parameter with a concrete shape
