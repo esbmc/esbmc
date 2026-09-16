@@ -952,3 +952,116 @@ What it still needs is its own measurement, because setting `name` changes `irep
 every back-migrated symbol expression -- which is the point (it is what removes the spurious
 collision) and also the risk. That is a corpus-wide A/B across every frontend, not a rider on a
 nine-site Solidity change.
+
+## 17. The blocker was the printer, not the seam (2026-09-16)
+
+§16.3 left the ten deferred writes behind one question -- whether `migrate_expr_back` should
+reconstruct a level0 symbol's `name` -- and noted a narrower candidate. The narrower one is the right
+one, and it is a defect in its own right rather than a migration concession.
+
+### 17.1 The wrong question, asked for years
+
+`c_expr2stringt::get_shorthands` decides whether a shorthand is ambiguous by comparing whole
+expressions:
+
+```cpp
+// c_expr2string.cpp:52 (before)
+if (result.first->second != symbol)
+{
+  ns_collision.insert(symbol.identifier());
+  ns_collision.insert(result.first->second.identifier());
+}
+```
+
+It is worse than an imprecise test: it is a **tautology**. `symbols` is a `std::set<exprt>`, ordered
+by `compare()`, and `compare()` and `operator==` ignore exactly the same thing -- comments
+(`irep.cpp:186-205`, "comments are NOT checked", and `:322-375`). So the set deduplicates precisely
+the pairs for which `operator==` holds, every pair of *distinct* elements is unequal, and the guard
+was true wherever it was evaluated. The pre-fix code marked a collision on every shorthand clash and
+decided nothing.
+
+That also settles the question the change invites -- whether it can lose real disambiguation. There
+was no decision being made to lose. And in the one case the fix alters, the old output carried no
+information either: when two spellings share an identifier, `ns_collision` holds that single
+identifier, so `convert_symbol` prints the mangled form for *both* occurrences. `x … x` became
+`c:@F@f@x … c:@F@f@x` -- the same string twice, only longer.
+
+Comparing identifiers is the first version of this code that can express the intended distinction.
+Differing identifiers mean two distinct symbols competing for one shorthand, a real collision;
+equal ones mean **one** symbol wearing two spellings, which is not.
+
+Comparing identifiers instead is sound because the identifier is the unique key for storage:
+`symbol2t::get_symbol_name` is "a pure function of the symbol's (thename, rlevel, l1, thread, node,
+l2) identity fields" (`irep2_expr.cpp:130-145`), so SSA renaming is *inside* the name and two
+instances never share one. `get_symbols` collects only `id() == "symbol"`
+(`c_expr2string.cpp:31-38`), so `next_symbol` and `nondet_symbol` -- which could share an identifier
+while denoting different values -- never enter the map.
+
+### 17.2 It is live, not latent
+
+The old code flagged all 5864 clashes. Instrumenting it with the identifier comparison the fix
+introduces splits them: **5852 where the identifiers differ and 12 where they do not**, the latter in
+twelve named tests
+(`address_bind_3/4/5/7`, `array_1/2`, `import_10`, `modifier_8`, `reentrance_12`, `tuple_6`,
+`unbound_5/7`). So this was never only a migration blocker. In `array_1`:
+
+```
+before:   sol:@x#4=1;   y=sol:@x#4;
+after:    x=1;          y=x;
+```
+
+### 17.3 Why it needed more care than a one-line diff suggests
+
+Two invariants sit on this function, and neither is obvious from the call site.
+
+`from_expr` is a documented interface surface: `goto_coverage.cpp:818-828` states that any change
+altering its formatting "must preserve this 1:1 mapping or the percentage will silently deflate",
+because a k-path claim's idf string is built from printed text and `ns_collision` is per-printer-
+instance. Printing more short names is exactly the direction that could collapse two claims. And
+`witnesses.cpp:949-980` builds witness assignments through `from_expr`, which SV-COMP validates --
+hence `needs-svcomp-run` on the change. `parse_result` in `esbmc-wrapper.py` matches verdict lines and
+violated-property text only, never variable names, so classification cannot move.
+
+That suite is genuinely sensitive rather than incidentally green: 67 of its 144 descriptors pin a
+coverage percentage, 19 exercise k-path and 8 pin a `Spanning Set` line. All 144 pass.
+
+The third consumer matters most and is the least obvious. `goto2c::expr2ct` inherits this same
+`get_shorthands` and overrides `convert_symbol` to sanitise a mangled id into `c__F__f__x`
+(`goto2c/expr2c.cpp:484-505`), and goto2c emits C that has to compile -- with declarations printed per
+symbol in separate calls, so a declaration always took the short name while a use containing a double
+spelling took the mangled one, naming an identifier the generated program never declared. The fix
+removes that mismatch: `goto-transcoder` 268/268.
+
+Measured: `goto-transcoder` 268/268, `goto-coverage` 144/144, `witnesses` 163/163, unit 883/883,
+`esbmc-solidity` 526/526, `esbmc-cpp/cpp` 1065 with only its six known pre-existing failures.
+
+One thing the witness figure does *not* establish: those descriptors pin verdicts, and the 124 under
+`witnesses_validate/` consume a witness rather than produce one, so 163/163 says no verdict moved --
+not that produced witness text is unchanged. What argues the direction is safe is that
+`get_formated_assignment` (`witnesses.cpp:939-959`) calls `from_expr` once for the lhs and once for a
+`is_constant_expr`-guarded value, and a single-symbol call cannot clash; and that when the old code did
+fire it emitted `c:@F@main@x`, which is not a valid C identifier for a validator to parse at all.
+
+The whole C suite exceeds the ten-minute cap, so rather than sample it the at-risk set was selected by
+what a change to name printing can actually break -- a `test.desc` whose *expected* output embeds a
+mangled or qualified name:
+
+```sh
+awk 'FNR>3 && /@|::/ {print FILENAME}' $(find regression -name test.desc -not -path "*/disabled/*")
+```
+
+That is 188 tests, 129 of them `ir-ra`, spread over ten suites. All 188 pass apart from `ch8_5` and
+`github_7433_library_fail`, both in the six pre-existing failures above. A suite-level cap forces a
+choice of subset; choosing it by the property under test beats choosing it by index.
+
+### 17.4 The pin is two directions, not two verdicts
+
+No verdict moves, so a `SUCCESSFUL`/`FAILED` pair would pin nothing. What can go wrong here is
+one-sided in each direction, so `regression/esbmc-solidity/shorthand_spurious` asserts both in a
+single dump: `^x=1;$` and `^y=x;$` (the spurious collision must not fire) alongside
+`^sol:@Base=&"Base"\[0\];$` (a genuine one must still fire). Mutation-checked twice -- reverting the
+condition fails it, and replacing it with `if (false)`, which suppresses every collision, also fails
+it. The test cannot pass with the fix absent or over-applied.
+
+With this in, the ten writes §16.2 deferred lose their only objection, and re-attempting them is the
+next step.
