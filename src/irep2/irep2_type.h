@@ -109,15 +109,19 @@ public:
     const std::vector<irep_idt> &memb_pretty_names,
     const irep_idt &_name,
     bool _packed = false,
+    const std::vector<irep_idt> &memb_base_names = {},
     const BigInt &_alignment = 0)
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
       member_pretty_names(memb_pretty_names),
+      member_base_names(memb_base_names),
       name(_name),
       packed(_packed),
       alignment(_alignment)
   {
+    assert(
+      memb_base_names.empty() || memb_base_names.size() == _members.size());
   }
   struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const;
@@ -125,6 +129,12 @@ public:
   std::vector<type2tc> members;
   std::vector<irep_idt> member_names;
   std::vector<irep_idt> member_pretty_names;
+  /// The components' plain `base_name`s -- a different field from the
+  /// `#base_name` that code_type2t::argument_base_names carries. Unreflected: a
+  /// member's spelling is no part of the struct's identity, so two otherwise
+  /// identical structs must still compare equal
+  /// (docs/roadmap/frontends-to-irep2.md §46).
+  std::vector<irep_idt> member_base_names;
   irep_idt name;
   bool packed;
 
@@ -136,7 +146,6 @@ public:
   /// differ only here would otherwise stop comparing equal, which is a wider
   /// change than this repair.
   BigInt alignment;
-  static constexpr std::size_t excluded_field_bytes = sizeof(BigInt);
 
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,
@@ -144,6 +153,11 @@ public:
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
+  /// Covers the two deliberately unreflected members: `member_base_names` (a
+  /// member's spelling is no part of the struct's identity) and `alignment`
+  /// (two records differing only in `alignas` must still compare equal).
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(std::vector<irep_idt>) + sizeof(BigInt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -242,14 +256,17 @@ public:
     const std::vector<type2tc> &args,
     const type2tc &ret,
     const std::vector<irep_idt> &names,
-    bool e)
+    bool e,
+    const std::vector<irep_idt> &base_names = {})
     : type2t(code_id),
       arguments(args),
       ret_type(ret),
       argument_names(names),
+      argument_base_names(base_names),
       ellipsis(e)
   {
     assert(args.size() == names.size());
+    assert(base_names.empty() || base_names.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
   unsigned int get_width() const;
@@ -257,6 +274,13 @@ public:
   std::vector<type2tc> arguments;
   type2tc ret_type;
   std::vector<irep_idt> argument_names;
+  /// The arguments' `#base_name`s, carried across the migrate seam but *not*
+  /// reflected: C11 6.7.6.3p15 makes a parameter's spelling no part of the
+  /// function type, so two signatures differing only here are the same type and
+  /// must hash and compare equal. Kept because a consumer reads it back --
+  /// clang_cpp_convert_vft.cpp's thunk argument loop does
+  /// (docs/roadmap/frontends-to-irep2.md §44).
+  std::vector<irep_idt> argument_base_names;
   bool ellipsis;
 
   static constexpr auto fields = std::make_tuple(
@@ -264,6 +288,8 @@ public:
     &code_type2t::ret_type,
     &code_type2t::argument_names,
     &code_type2t::ellipsis);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(std::vector<irep_idt>);
   static std::string field_names[esbmct::num_type_fields];
 };
 

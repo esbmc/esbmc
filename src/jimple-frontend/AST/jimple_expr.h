@@ -57,6 +57,25 @@ public:
    * @return std::shared_ptr<jimple_expr>
    */
   static std::shared_ptr<jimple_expr> get_expression(const json &j);
+
+protected:
+  /**
+   * @brief Lower an invoke to the block both invoke forms produce.
+   *
+   * One assignment per bound argument into the callee's own @this/@parameterN
+   * symbol -- the frontend's stand-in for the parameter binding that belongs at
+   * symex -- followed by the call. @p this_variable is empty for a static
+   * invoke, and @p lhs is nil when the result is discarded.
+   */
+  static expr2tc lower_invoke2t(
+    contextt &ctx,
+    const std::string &base_class,
+    const std::string &method,
+    const std::string &this_variable,
+    const std::vector<std::shared_ptr<jimple_expr>> &parameters,
+    const expr2tc &lhs,
+    const std::string &class_name,
+    const std::string &function_name);
 };
 
 /**
@@ -82,11 +101,6 @@ public:
   {
     value = v;
   }
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -118,11 +132,6 @@ public:
   {
     return var_name;
   }
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -152,11 +161,6 @@ public:
     return "Jimple BinOP";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -180,11 +184,6 @@ public:
   {
     return "Jimple Cast";
   }
-
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -211,11 +210,6 @@ public:
     return "Jimple Lengthof";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -241,11 +235,6 @@ public:
     return "Jimple New array";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -270,11 +259,6 @@ public:
     return "Jimple Invoke";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -282,10 +266,10 @@ public:
 
   std::string base_class;
   std::string method;
-  exprt lhs;
+  expr2tc lhs;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 
-  void set_lhs(exprt expr)
+  void set_lhs(const expr2tc &expr)
   {
     lhs = expr;
   }
@@ -320,11 +304,6 @@ public:
     return "Jimple Virtual Invoke";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -332,11 +311,11 @@ public:
 
   std::string base_class;
   std::string method;
-  exprt lhs;
+  expr2tc lhs;
   std::string variable;
   std::vector<std::shared_ptr<jimple_expr>> parameters;
 
-  void set_lhs(exprt expr)
+  void set_lhs(const expr2tc &expr)
   {
     lhs = expr;
   }
@@ -407,11 +386,6 @@ public:
     return "Jimple Deref";
   }
 
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -443,11 +417,6 @@ public:
   }
 
   const std::string mode; // Int, char, long, etc... e.g. Random().nextInt()
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -503,11 +472,6 @@ public:
     return "Jimple Virtual Member";
   }
   virtual void from_json(const json &j) override;
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,

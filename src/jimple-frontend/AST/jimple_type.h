@@ -18,10 +18,12 @@ public:
   virtual typet to_typet(const contextt &ctx) const;
 
   /**
-   * @brief IREP2 form of to_typet, for the natively-built expressions.
+   * @brief IREP2 form of to_typet, for the natively-built expressions and for
+   * the declaration sites.
    *
    * Kept parallel rather than replacing to_typet: the legacy one still feeds
-   * create_jimple_symbolt, which takes a typet.
+   * jimple_newarray's allocation arithmetic, which reads a width off the
+   * pointed-to type.
    */
   virtual type2tc to_type2t(const contextt &ctx) const;
 

@@ -853,6 +853,35 @@ static bool pointer_subtypes_compatible(
 /// The pointer-destination arm. Returns true when the conversion is complete
 /// -- the irept copy's `return; // ok` -- and false to fall through to the
 /// tail.
+/// Whether two types are the same C type, treating a function's parameter
+/// *names* as not part of it -- C11 6.7.6.3p15 requires compatible return types
+/// and agreeing parameter type lists, and says nothing of their names.
+/// code_type2t reflects argument_names, so `int (*)(int x)` and `int (*)(int)`
+/// compare unequal as IREP2 nodes; inserting a cast between them is a
+/// divergence from the irept copy, which inserts none
+/// (docs/roadmap/scope-clang-c-irep2.md §143.1).
+static bool same_c_type(const type2tc &a, const type2tc &b)
+{
+  if (a == b)
+    return true;
+
+  if (!is_pointer_type(a) || !is_pointer_type(b))
+    return false;
+
+  const type2tc &sa = to_pointer_type(a).subtype;
+  const type2tc &sb = to_pointer_type(b).subtype;
+  if (!is_code_type(sa) || !is_code_type(sb))
+    return false;
+
+  const code_type2t &ca = to_code_type(sa);
+  const code_type2t &cb = to_code_type(sb);
+  return to_pointer_type(a).carry_provenance ==
+           to_pointer_type(b).carry_provenance &&
+         to_pointer_type(a).ref_kind == to_pointer_type(b).ref_kind &&
+         ca.ret_type == cb.ret_type && ca.arguments == cb.arguments &&
+         ca.ellipsis == cb.ellipsis;
+}
+
 bool c_typecastt::convert_to_pointer(
   expr2tc &expr,
   const type2tc &src_type,
@@ -879,7 +908,7 @@ bool c_typecastt::convert_to_pointer(
     if (!pointer_subtypes_compatible(src_subtype, dest_ptr_type.subtype, ns))
       warnings.push_back("incompatible pointer types");
 
-    if (src_type == dest_type)
+    if (same_c_type(src_type, dest_type))
       // Re-attach the source type so any qualifier differences are discarded
       // (the types compare equal but may not be identical).
       expr = expr->with_type(src_type);
@@ -923,7 +952,7 @@ void c_typecastt::implicit_typecast_followed(
 
   if (check_c_implicit_typecast(src_type, dest_type))
     errors.push_back("implicit conversion not permitted");
-  else if (src_type != dest_type)
+  else if (!same_c_type(src_type, dest_type))
     do_typecast(expr, dest_type);
 }
 

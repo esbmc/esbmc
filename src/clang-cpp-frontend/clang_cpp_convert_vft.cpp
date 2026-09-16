@@ -386,7 +386,9 @@ void clang_cpp_convertert::add_thunk_method(
   {
     typet t = thunk_func_symb.get_type();
     update_thunk_this_type(t, base_class_id);
-    thunk_func_symb.set_type(std::move(t));
+    // A code type now carries its arguments' base names across the seam, which
+    // the argument loop below reads back (frontends-to-irep2.md §44).
+    thunk_func_symb.set_type(migrate_type(t));
   }
 
   // add symbols for arguments of this thunk function
@@ -501,7 +503,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
       abort();
     }
   }
-  thunk_func_symb.set_type(std::move(thunk_type));
+  thunk_func_symb.set_type(migrate_type(thunk_type));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
@@ -712,7 +714,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     vt_symb_var.module =
       get_modulename_from_path(type.location().file().as_string());
     vt_symb_var.location = vt_symb_type->location;
-    vt_symb_var.set_type(symbol_typet(vt_symb_type->id));
+    vt_symb_var.set_type(symbol_type2tc(vt_symb_type->id));
     vt_symb_var.lvalue = true;
     vt_symb_var.static_lifetime = true;
 

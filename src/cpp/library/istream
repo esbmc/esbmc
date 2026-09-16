@@ -92,7 +92,7 @@ public:
 
   istream(const istream &);            // disabled
   istream &operator=(const istream &); // disabled
-  streamsize _filesize;
+  unsigned int _filesize; // as in ostream (#7540)
   static streampos _filepos;
 };
 } // namespace std

@@ -1,0 +1,33 @@
+#pragma once
+
+#include <wctype.h>
+
+// [cwctype.syn]: <cwctype> declares the C wide-character classification
+// functions in namespace std.
+namespace std
+{
+using ::wctrans_t;
+using ::wctype_t;
+using ::wint_t;
+
+using ::iswalnum;
+using ::iswalpha;
+using ::iswblank;
+using ::iswcntrl;
+using ::iswctype;
+using ::iswdigit;
+using ::iswgraph;
+using ::iswlower;
+using ::iswprint;
+using ::iswpunct;
+using ::iswspace;
+using ::iswupper;
+using ::iswxdigit;
+
+using ::towctrans;
+using ::towlower;
+using ::towupper;
+
+using ::wctrans;
+using ::wctype;
+} // namespace std

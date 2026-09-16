@@ -159,6 +159,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     typet t;
     if (get_type(fd.getType(), t))
       return true;
+    size_flexible_array_member(fd, t);
 
     std::string id, name;
     get_decl_name(fd, name, id);
@@ -1938,6 +1939,14 @@ bool clang_c_convertert::wrap_bitfield_type_if_needed(
   return false;
 }
 
+void clang_c_convertert::size_flexible_array_member(
+  const clang::ValueDecl &vd,
+  typet &t)
+{
+  if (llvm::isa<clang::FieldDecl>(vd) && vd.getType()->isIncompleteArrayType())
+    to_array_type(t).size() = gen_zero(size_type());
+}
+
 bool clang_c_convertert::get_bitfield_type(
   const clang::FieldDecl &fd,
   const typet &orig_type,
@@ -2875,6 +2884,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         if (init_union_field)
           to_union_expr(inits).set_component_name(
             init_union_field->getName().str());
+      }
+    }
+    else if (t.id() == typet::t_complex && init_stmt.getNumInits() == 2)
+    {
+      // Clang extension: `_Complex T z = {re, im}`; excess parts are dropped.
+      const typet &elem_type = to_complex_type(t).base_type();
+      inits = struct_exprt(t);
+      for (unsigned int i = 0; i < 2; ++i)
+      {
+        exprt part;
+        if (get_expr(*init_stmt.getInit(i), part))
+          return true;
+        gen_typecast(ns, part, elem_type);
+        inits.copy_to_operands(part);
       }
     }
     else if (init_stmt.getNumInits() == 0)
@@ -4832,6 +4855,7 @@ bool clang_c_convertert::get_member_expr(
   typet comp_type;
   if (get_type(*memb.getMemberDecl()->getType(), comp_type))
     return true;
+  size_flexible_array_member(*memb.getMemberDecl(), comp_type);
 
   if (const auto *bitfield = memb.getSourceBitField())
   {

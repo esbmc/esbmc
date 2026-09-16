@@ -1,0 +1,5 @@
+CORE
+main.c
+--64
+^\s*FAILED\s+\[.*\]\s+line\s+[0-9]+\s+assertion buf\[i \+ 1\] == 5$
+^VERIFICATION FAILED$

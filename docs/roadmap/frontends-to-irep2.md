@@ -24,6 +24,17 @@ Per frontend `F` in {clang-c, clang-cpp, python, solidity, jimple}:
 | B-3 | Bodies reach `goto_convert` with no `migrate_*` back-hop | native dispatcher coverage = 100 %, round-trip deleted |
 | B-4 | No `#`-attribute escape hatch into a shared pass | W3 removed, not merely seamed |
 
+B-2's command counts the spelling of the argument, not its type: a
+`symbol.set_type(t)` whose `t` is a `type2tc` still matches, because the `2tc`
+token is at the declaration and not at the call. Measuring jimple's declaration
+sites found this (`scope-jimple-irep2.md` §32.3) — read B-2 as an upper bound
+whose lines each need inspecting, not as a count.
+
+**jimple has met B-2** (2026-09-14), by inspection rather than by the command:
+every `set_type`/`set_value` call in `src/jimple-frontend` passes an IREP2
+argument, and the command still prints 7 (`scope-jimple-irep2.md` §35.2 lists
+them).
+
 B-1/B-2 are frontend-local. **B-3 and B-4 are shared** — they are one repo-wide
 job each, not five. That asymmetry is the whole shape of this program: do the
 two shared jobs once, then the five frontends become largely mechanical.
@@ -2642,3 +2653,438 @@ re-doing Phase 6 inside Phase 7.
 There is also no `--clang-cpp-irep2-adjust-only` counterpart yet, so Phase 6's
 whole instrument — one binary A/B'd against itself — does not exist here. A
 census by verdict waits on it.
+
+## 44. A code type loses its arguments' base names (2026-09-14)
+
+`scope-jimple-irep2.md` §34.1 states that a code type round-trips: that
+`migrate_type_back` restores the argument identifiers and the ellipsis, and that
+"the argument `#base_name` it does not restore has no reader". The first half is
+right. The second half is wrong, and it cost twelve broken tests to find.
+
+`code_type2t` reflects `arguments`, `ret_type`, `argument_names` and `ellipsis` --
+nothing else per argument. So an argument's `#base_name` has nowhere to live, and
+`migrate_type_back` cannot restore what was never carried. The identifier does
+survive, because `code_typet::argumentt::set_identifier` writes `#identifier`
+(`std_types.h`), which is the field `cmt_identifier` and `get_identifier` both read.
+
+Pinned in `unit/util/migrate.test.cpp` ("a code argument keeps its identifier and
+loses its base name"), so the distinction is checkable rather than re-derived.
+
+### 44.1 The reader
+
+`clang_cpp_convert_vft.cpp:471`, in the loop that adds a thunk's argument symbols:
+
+```cpp
+irep_idt base_name = arg.get_base_name();
+```
+
+Converting three writes in that file to store IREP2 -- two thunk code types and one
+symbol type -- broke **12 of 1 058** `esbmc-cpp/cpp` tests:
+`functional{,_fail,_fail2}`, `github_5868_function_signatures{,_fail}`,
+`github_7540_{capacity_fail,capacity_write_fail,precision}`,
+`ostringstream_str{,_fail}` and `pmr_memory_resource{,_fail}` -- all
+standard-library models, which is where thunks are generated. The change is
+reverted; the suite returns to the 6 failures master has anyway.
+
+### 44.2 The rule, and why jimple did not show it
+
+§34.1's claim was measured, and on jimple it holds: jimple writes its argument
+base names and never reads one back off a round-tripped type. The generalisation
+from that to code types in general is what failed.
+
+**A code-type symbol may be stored IREP2-side only where no consumer reads an
+argument's `#base_name`** -- until there is a field to restore it from. §44.4 adds
+one.
+
+### 44.3 The diagnosis this section first shipped was wrong
+
+It named `#identifier` rather than `#base_name`, on the reasoning that
+`migrate_type_back` calls `set_identifier` while the thunk builder reads
+`cmt_identifier`, and that those are different fields. They are different *fields*
+-- `irep.cpp` maps `cmt_identifier` to `#identifier` and `a_identifier` is plain
+`identifier` -- but `argumentt` overrides `set_identifier` to write the comment one,
+so the round trip preserves it. A four-line unit probe printing both fields after a
+round trip settled it in one build. It should have been written before the
+section, not after.
+
+### 44.4 The field, and the slice it unblocks
+
+`code_type2t` now carries `argument_base_names`, **unreflected**. Unreflected is
+the point rather than an economy: a parameter's spelling is no part of the function
+type (C11 6.7.6.3p15, the same clause §144 turned on), so two signatures differing
+only there must still hash and compare equal. A reflected field would have made
+them distinct and re-opened exactly the divergence §144 closed.
+
+It rides the pattern `struct_type2t::alignment` already uses -- a defaulted
+trailing constructor argument plus `excluded_field_bytes` -- so
+`fields_cover_class` passes and no `with_type` specialisation is needed. Both
+migrate arms carry it, and the back arm tolerates its absence, since a frontend
+that builds a `code_type2tc` directly supplies no base names.
+
+The unit case that pinned the loss now pins the carriage, and asserts the
+equality property alongside it: changing one argument's base name leaves
+`migrate_type` returning the same type.
+
+With that, the §44.1 slice works. The three writes in
+`clang_cpp_convert_vft.cpp` -- two thunk code types and one symbol type -- are
+converted, and `esbmc-cpp/cpp` is back to **6 failures out of 1 058**, the six
+master fails anyway (`ch8_5`, `github_7433*`). The 26 C++ probes of
+`scope-clang-cpp-irep2.md` §9-§10 abort nowhere, the Solidity suite is 525/525, and
+the unit suite is 874/874.
+
+## 45. A struct component loses its base name, and that blocks the rest of B-2
+
+§44.4 closed the code-type half of this. The struct half is the same defect with a
+larger blast radius, and it is what stops the remaining struct-typed symbol writes
+from moving.
+
+`struct_type2t` carries `members`, `member_names` and `member_pretty_names` --
+nothing else per component. So a component's `#base_name`, and any other attribute
+on it, is dropped by `migrate_type`. `unit/util/migrate.test.cpp` ("a struct
+component loses its base name") pins exactly that: `name` and `pretty_name` survive,
+`#base_name` and an arbitrary `#member_attr` do not.
+
+### 45.1 The measurement
+
+Converting the two vtable struct-type writes in `clang_cpp_convert_vft.cpp` to store
+IREP2 fails **653 of 1 058** `esbmc-cpp/cpp` tests. Not a subtle regression: the
+thunk builder takes its symbol name straight from the component,
+
+```cpp
+thunk_func_symb.name = component.base_name();
+```
+
+so every vtable component arrives with an empty base name and every thunk symbol is
+misnamed. Reverted; the suite returns to master's 6 failures.
+
+### 45.2 Why the earlier caution was right for the wrong reason
+
+`scope-clang-c-irep2.md` §139.3 declined to convert `pad_type_symbol` on the
+grounds that a padded struct's derived legacy form "loses what `migrate_type_back`
+does not restore", naming the `width` attribute and `#bitfield`. The conclusion
+holds; the reason given does not.
+
+A struct's legacy `width` is set in exactly one place in the tree --
+`jimple_file.cpp:158` -- and read only by jimple's own `newarray` arms. No C or C++
+struct symbol carries one, so losing it could not have been the blocker there. The
+blocker is the component base name, which every C++ vtable depends on.
+
+That distinction matters for the next attempt: it is not padding or bitfields that
+make a struct symbol unsafe to store IREP2-side, it is per-component metadata, and
+the fix is the §44.4 one applied to components rather than arguments.
+
+### 45.3 What closing it would take
+
+An unreflected `member_base_names` on `struct_type2t`, carried by both migrate
+arms, exactly as `argument_base_names` now is for code types. Unreflected for the
+same reason: a member's spelling is not part of the struct's identity, and making
+two otherwise-identical structs compare unequal would be a worse defect than the
+one being fixed.
+
+It is a wider change than the code-type one -- `struct_type2t` is far more heavily
+used, `union_type2t` shares its data base, and the field has to thread through
+`fields_cover_class` -- so it wants its own PR and its own gate rather than riding
+this one. With it, `pad_type_symbol`, the two vtable struct types, and
+`scope-jimple-irep2.md` §32.5's two completion sites all become tractable.
+
+## 46. `member_base_names` landed -- and §45 named the wrong field (2026-09-14)
+
+§45.3's field exists: `struct_type2t::member_base_names`, populated by `migrate_type`'s
+struct arm and written back by `migrate_type_back`'s, and left out of `fields` so a
+member's spelling is no part of the struct's identity. `union_type2t` needed no
+change -- it is a sibling of `struct_type2t`, not a subclass, and no union component
+in the tree carries a base name. `fields_cover_class` is satisfied by
+`excluded_field_bytes = sizeof(std::vector<irep_idt>)`, the field placed next to
+`member_pretty_names` so it packs against a same-size neighbour rather than into
+padding.
+
+### 46.1 The field §45 named does not exist on a component
+
+§45 says the dropped attribute is `#base_name`. It is not. Two different fields
+share one accessor name:
+
+| class | accessor | reads |
+|---|---|---|
+| `struct_union_typet::componentt` | `get_base_name()` | `base_name` (`std_types.h:121`) |
+| `code_typet::argumentt` | `get_base_name()` | `#base_name` (`std_types.h:337`) |
+
+The vtable writer and the thunk builder both use the plain one --
+`vt_entry.set("base_name", comp.base_name())` and
+`thunk_func_symb.name = component.base_name()`
+(`clang_cpp_convert_vft.cpp:311,375`) -- and every `cmt_base_name` writer in the
+tree is on a function parameter, never on a struct component. So
+`member_base_names` carries `base_name`, and §44's `argument_base_names` carries
+`#base_name`; they are not the same field under two names.
+
+This is the second consecutive section whose first diagnosis came from an
+accessor's name rather than its body (§44.3 was the first). Read the accessor.
+
+### 46.2 What it does not unblock, measured
+
+The two vtable struct-type writes still cannot flip, and the base name was not the
+only reason. The same builder puts `virtual_name`, `access`, `is_rtti_name` and
+`is_vtptr` on components, and reads three of them back: `virtual_name` at
+`clang_cpp_convert_vft.cpp:737` (the override switch map),
+`clang_cpp_destructor_call.cpp:35` (matching a destructor entry) and
+`is_rtti_name`/`is_vtptr` in the value builder and the destructor walk. None has a
+field on `struct_type2t`.
+
+So the base name is one of a family. Censusing what the five frontends write on a
+component,
+
+```sh
+grep -rnoE '(component|comp|vt_entry|new_compo|base_comp|c)\.(set|set_)[a-z_]*\("[^"]+"' \
+  src/clang-cpp-frontend src/clang-c-frontend src/solidity-frontend \
+  src/python-frontend src/jimple-frontend | grep -oE '"[^"]+"' | sort | uniq -c
+```
+
+gives thirteen attributes beyond `name` and `pretty_name`: `access`, `base_name`,
+`from_base`, `internal`, `is_base_subobject`, `is_pure_virtual`, `is_rtti_name`,
+`is_virtual`, `is_vtptr`, `virtual_name`, `#base_owner`, `#is_sol_virtual` and
+`#is_sol_override`. Nine of them, `base_name` included, have a reader somewhere in
+the tree; only `from_base`, `internal` and the two `#is_sol_*` have none.
+
+That changes what the next slice should be. Adding a vector per attribute does not
+scale past the second one, and each addition costs another `excluded_field_bytes`
+adjustment. The alternative is one unreflected carrier holding each component's
+leftover `irept` -- everything the reflected fields do not already describe -- which
+`migrate_type_back` uses as the component's starting value before overwriting
+`type`, `name` and `pretty_name`. That closes the whole family at once, including
+the `#member_attr` the unit test still records as dropped, and is what the vtable
+types and `scope-jimple-irep2.md` §32.5 need. It wants its own measurement: the cost
+is an `irept` per component on every struct type in the program.
+
+It would not reach `pad_type_symbol`, and §45.3 was wrong to list it. What blocks
+that one is `#bitfield` and `#extint`, which sit on the member's *type*, not on the
+component: `migrate_type_back` rebuilds an `unsignedbv_typet(width)` bare, so a
+round-tripped bit-field pad changes arm in `add_padding` (`padding.cpp:193` ->
+`:218` -> `:225`). A per-component carrier cannot see them.
+
+### 46.3 A note for whoever writes that slice
+
+`migrate_type_back_uncached` reached 15 on the complexity gate's `core > 15`
+threshold with this section's single `if` added, so the next per-component field
+would have blocked the gate. The struct and union back arms were copies of one
+component loop differing only in that line; they are now one
+`migrate_components_back` helper, which takes the function back under the ceiling.
+Extend the helper, not the arms.
+
+Two more things that slice has to get right, both found by review of this one.
+
+`base_name` is not a comment field: no leading `#`, so `irept::is_comment` routes
+it to `named_sub`, which `irept::operator==` compares. Writing it unconditionally
+would insert an empty key on every C struct component and stop the round trip being
+the identity on the legacy side. The carrier must write only what it has --
+`migrate_components_back` now guards on `!empty()`, and the unit test pins a
+component that had no base name gaining none.
+
+The round trip is **not length-preserving** on an unreflected member vector: zero
+entries in, `members.size()` entries out. That is safe only while the field is
+unreflected. `migrate_symbol_type`'s round-trip assertion (`migrate.cpp:475`)
+compares with `==`, so today it cannot see the asymmetry; reflect the carrier and it
+fires on every struct symbol in every DebugOpt build.
+
+Finally, a test note. The first cut of this section's unit test gave the component
+the same spelling for `pretty_name` and `base_name`, and two mutants that write one
+vector into the other's slot survived the whole 50-case suite -- the three vectors
+are pushed on consecutive lines and passed to the helper in a row, so crossing them
+is the likely edit. Spell every name differently in a test over per-component
+metadata.
+## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
+
+A hop-off flag's divergence count is only as good as the inputs it is measured
+over. `scope-clang-c-irep2.md` §143 probed 22 constructs chosen for being
+unlikely to appear in the 112 tests that use `--clang-c-irep2-adjust-only`, and
+found one real defect (§144). This section records the next two batches and what
+they say about the two frontends that have a flag.
+
+### 40.1 clang-c: 15 more constructs, all agreeing
+
+Nested designated initialisers over an array of structs, a flexible array
+member, `__builtin_offsetof`, a pointer to an array, a round trip through
+`long`, `const`/`volatile` assignment, a compound assignment mixing `int` and
+`double`, pointer increment, a mixed-arithmetic conditional, `switch` on an
+enum, a bitfield inside a union, a struct return, whole-struct assignment, a call
+through a function-pointer struct member, and a variadic struct argument.
+
+All 15 agree, which puts the clang-c probe total at 37 of 38 over three batches.
+The one failure was §144's.
+
+### 40.2 python: every program diverges, at one site
+
+Twelve python probes -- mixed arithmetic, floor division and modulo, augmented
+assignment, boolean operators, `while`, `for ... range`, list append and
+indexing, a class with an attribute and a method, unary minus, a comparison
+chain, a nested function, float comparison -- **all diverge** under
+`--python-irep2-adjust-only`, and each by exactly 64 lines.
+
+That constant is the tell: it is one site, not twelve defects. Every diff line is
+inside the operational model `src/python-frontend/models/nondet.py` at the
+`list[str]` literal on line 283, and every one has the same shape:
+
+```
+- FUNCTION_CALL: list_push(..., &...$list_elem$281, ...)
++ FUNCTION_CALL: list_push(..., &...$list_elem$281[0], ...)
+```
+
+So the model is pulled in by every python program, and one argument in it is
+spelled `&a` on the default path and `&a[0]` under the flag.
+
+### 40.3 Which side is the outlier, measured
+
+The C frontend settles it. `sink(&buf)` and `sink(buf)` for a `char buf[4]` both
+emit `sink((void *)(&buf[0]))`, and they do so identically with and without
+`--clang-c-irep2-adjust-only`. The C path always decays, and agrees with itself.
+
+So the IREP2 python pass produces what the C frontend produces, and the *legacy*
+python pass is the one that skips the decay. It is not `restore_array_lvalue`
+either -- that undo exists in `clang_c_adjust` but is gated to
+`__ESBMC_assigns_impl` (#7010), so it cannot reach a `list_push` argument.
+
+### 40.4 The Phase 9 question, answered
+
+§40.3 first left this as a judgement about whether a model relies on receiving a
+pointer-to-array. It does not, and three measurements settle it:
+
+- `__ESBMC_list_push`'s parameter is `const void *value`
+  (`src/c2goto/library/python/list.c:190`), and it copies `type_size` bytes from
+  it. `&a` and `&a[0]` are the same address, so the callee cannot tell them apart.
+- No operational model under `src/c2goto/library/python/` declares a
+  pointer-to-array parameter at all.
+- All 12 probes give the same verdict with the flag and without it.
+
+So the IREP2 python pass is sound here, and the row is a **legacy inconsistency
+rather than a porting gap**: the default python path skips a decay its own C
+frontend always performs. The consequence for the phase is that this row should
+not be counted against the IREP2 pass when the python flag's divergence is
+measured -- it is one site, address-equivalent, verdict-neutral, and the flag-on
+side is the one that matches C.
+
+Changing the default path to match is still a behaviour change for every python
+program, so it stays its own PR; what is no longer open is which side is right.
+
+The 49 tests using the python flag all pass, before and after this measurement.
+They assert verdicts, and the divergence changes none -- which is exactly why it
+took a probe to see it.
+
+## 41. The python flag's divergence, filtered down to two known rows
+
+§40.2 found every python probe diverging and traced it to one model site. With
+that site filtered out, the same 12 probes show **zero** user-program divergence,
+so a second batch went after harder constructs: dict, tuple unpacking, string
+indexing, `try`/`except`/`raise`, a module global, default arguments, a list
+comprehension, inheritance with an override, simultaneous swap, `for`/`else`,
+`abs`/`max`/`min`, and nested loops with `continue`.
+
+Ten of the twelve agree. The two that do not are both already-known rows, and
+neither is an unported arm:
+
+| Probe | Shape | Status |
+|---|---|---|
+| `u01_dict` | `&a` against `&a[0]` on a `list_push` argument | §40.2/§40.4 -- address-equivalent, and the *legacy* side is the outlier |
+| `u01_dict`, `u03_string` | `(signed int)((signed char)x) == ...` against `(signed char)x == ...` | deliberate: `python_adjust.cpp` mirrors the usual arithmetic conversions only for shapes the SMT layer cannot encode |
+
+The second is worth quoting rather than re-deriving, because the code already
+says it: running `gen_typecast_arithmetic` on every relational node "was tried and
+rejected ... because it diverges corpus-wide from clang's promotions over the OM
+bodies", and the gate that replaced it admits a signedness mismatch and a
+float/integer mix while "a same-signedness width promotion (char vs int) is
+encodable and stays untouched". That is exactly the shape these two probes hit.
+
+### 41.1 What that means for Phase 9
+
+Twenty-four probes over two batches reduce to two characterised rows. Neither is
+a gap in the IREP2 pass: one is a legacy inconsistency (§40.4) and the other is a
+deliberate non-mirror with a prior failed attempt behind it. So the python flag's
+remaining divergence is a pair of *decisions*, not a backlog of porting work --
+and the next python step is to settle them, not to look for more gaps.
+
+Recorded because a raw diff count says the opposite. Every python program diverges
+under the flag, at 64 lines plus a handful more for a dict or a string, and none
+of it is an unported arm.
+
+## 42. Phase 8 is not an adjust-pass phase (2026-09-14)
+
+§1's four bars are written per frontend, which reads as five comparable jobs.
+Measuring solidity shows one of them is a different shape, and it changes what
+Phase 8 costs.
+
+| | B-1 legacy type mentions | B-2 non-IREP2 symbol writes | IREP2 nodes built | LOC | Owns an adjust pass |
+|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | many | 3 259 | no |
+| clang-c | 1 147 | 34, 33 real | some | 17 595 | yes |
+| solidity | 1 420 | **100, all real** | **0** | 23 599 | **no** |
+
+`grep -c '2tc('` over every `.cpp` in `src/solidity-frontend` is zero: the
+frontend constructs no IREP2 node anywhere, so all 100 symbol-table writes are
+genuinely legacy. And it owns no adjust pass -- `solidity_language.cpp:370`
+instantiates `clang_cpp_adjust`, the C++ one.
+
+### 42.1 What that means
+
+Phase 8 has no adjust pass to port. Its hop-off is Phase 7's pass measured over
+Solidity input, which is what PR #7753 wires up -- so Phase 8 inherits its metric
+rather than building one, and the arms it would otherwise have to write are
+already Phase 7's work.
+
+What is left for Phase 8 alone is the converter: 1 420 mentions, concentrated in
+`solidity_convert_call.cpp` (306), `solidity_convert_expr.cpp` (219) and
+`solidity_convert.h` (216). That is the same shape as clang-c's remainder (§139.1),
+where `clang_c_convert.cpp`'s 389 are also deliberately last.
+
+Two consequences for the phase list in §"Phases 5-9":
+
+- Solidity cannot reach B-3 or B-4 ahead of clang-cpp, because it does not own the
+  pass those bars are about. Sequencing it after Phase 7 is not a preference; it
+  is a dependency.
+- Its B-1 is the largest of the three measured so far, and every mention is
+  converter-side. A frontend that builds zero IREP2 nodes has no partial state to
+  preserve, so the converter work can be sliced by construct without the
+  round-trip gates the other phases needed.
+
+jimple owns no adjust pass either and reached B-2 regardless (§35), which is the
+evidence that the converter half is separable.
+
+## 43. All five frontends, measured and normalised (2026-09-14)
+
+§2's table is from 2026-08 and counts only legacy type mentions. §139 and §42
+re-measured clang-c and solidity; this completes the set, adds the two columns
+that change how the numbers read, and normalises by size as §2 asked for and
+nobody had.
+
+| Frontend | B-1 mentions | B-2 writes | IREP2 nodes built | LOC | B-1 per KLOC | Owns an adjust pass |
+|---|---|---|---|---|---|---|
+| jimple | 97 | 7, all false positives | 3 | 3 428 | **28** | no |
+| clang-cpp | 639 | 16 | 8 | 8 011 | 80 | yes |
+| clang-c | 1 147 | 34, 33 real | 143 | 17 595 | 65 | yes |
+| solidity | 1 420 | 100, all real | 0 | 23 599 | 60 | no |
+| python | 6 457 | 106 | 84 | 92 366 | 70 | yes |
+
+### 43.1 What the normalisation says
+
+jimple is the only frontend whose expression and statement migrations are
+complete (`scope-jimple-irep2.md` §39), and it sits at **28 mentions per KLOC**
+against 60-80 for the other four. So the residue a finished frontend carries is
+roughly a third of an unstarted one's density, not zero -- and §1's "~0, modulo
+enumerated boundary glue" is worth reading as that ratio rather than as a target
+of zero. jimple's remaining 97 are the boundary: `jimple_type`'s two converters,
+the class and method builders, and `jimple-language.cpp`'s module symbols.
+
+The four unfinished ones sit within 20 of each other per KLOC, which is the
+useful negative result: there is no frontend where the legacy density is
+anomalous, so the ordering in §"Phases 5-9" cannot be improved by picking the
+"most legacy" one first. Absolute size is what differs, and python is 5× the next
+largest.
+
+### 43.2 The two columns §2 did not have
+
+**IREP2 nodes built** separates a frontend that has started from one that has
+not, which a mention count cannot. solidity builds **zero** -- so it has no
+partial state, and §42 draws the consequence. clang-cpp builds 8 against
+clang-c's 143, which is the measured form of §2's remark that clang-c "has a
+partial head start".
+
+**Owns an adjust pass** is the column that reorders the work. Two frontends do
+not: jimple reached B-2 without one, and solidity cannot reach B-3 or B-4 without
+Phase 7 (§42.1). A phase list written per frontend hides that dependency; the
+column makes it explicit.

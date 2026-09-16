@@ -2476,6 +2476,7 @@ bool clang_cpp_convertert::get_function_body(
         }
         else
           build_member_from_component(fd, member);
+        size_flexible_array_member(*member_decl, member.type());
 
         // set #member_init flag again, as it has been cleared between the first call...
         member.set("#member_init", 1);

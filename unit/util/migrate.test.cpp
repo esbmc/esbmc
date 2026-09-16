@@ -136,6 +136,114 @@ TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
     /*ellipsis=*/false));
 }
 
+// What a code type's arguments carry across the seam. The identifier is
+// reflected; the base name rides `argument_base_names`, which is deliberately
+// *not* reflected -- a parameter's spelling is no part of the function type
+// (C11 6.7.6.3p15), so two signatures differing only there must still hash and
+// compare equal. Both halves are asserted, because a consumer reads the base
+// name back: clang_cpp_convert_vft.cpp's thunk argument loop
+// (docs/roadmap/frontends-to-irep2.md §44).
+// The struct counterpart of the code-argument case below. `member_base_names`
+// carries the components' plain `base_name` -- a different field from the
+// `#base_name` a function parameter spells -- and is likewise unreflected.
+// Without it, converting the two vtable struct-type writes in
+// clang_cpp_convert_vft.cpp failed 653 of 1058 esbmc-cpp/cpp tests: the thunk
+// builder names its symbol from `component.base_name()`
+// (docs/roadmap/frontends-to-irep2.md §45).
+TEST_CASE("a struct component keeps its base name", "[migrate]")
+{
+  struct_typet st;
+  st.tag("S");
+  // Spell the three names differently: with `pretty_name` equal to the base
+  // name, writing one into the other's vector passes every assertion.
+  struct_typet::componentt c("S::f", "pretty_f", int_type());
+  c.set_base_name("f");
+  c.set("#member_attr", "keepme");
+  st.components().push_back(c);
+
+  const typet back_t = migrate_type_back(migrate_type(st));
+  const struct_typet &back = to_struct_type(back_t);
+  REQUIRE(back.components().size() == 1);
+
+  // Carried, because struct_type2t reflects both.
+  REQUIRE(back.components().at(0).get_name() == irep_idt("S::f"));
+  REQUIRE(back.components().at(0).pretty_name() == irep_idt("pretty_f"));
+
+  // Carried by the unreflected member_base_names (§45).
+  REQUIRE(back.components().at(0).get_base_name() == irep_idt("f"));
+
+  // Unreflected, so a member's spelling is not part of the struct's identity:
+  // two structs differing only there are the same type.
+  struct_typet other = st;
+  other.components().at(0).set_base_name("g");
+  REQUIRE(migrate_type(other) == migrate_type(st));
+
+  // An arbitrary component attribute is still dropped; only the base name has a
+  // field. Recorded rather than fixed -- no consumer reads one back.
+  REQUIRE(back.components().at(0).get("#member_attr").empty());
+
+  // A component that had no base name must not gain an empty one. `base_name`
+  // is not a comment field, so an inserted empty key would take part in
+  // irept::operator== and the round trip would stop being the identity.
+  struct_typet plain;
+  plain.tag("P");
+  plain.components().push_back(
+    struct_typet::componentt("P::g", "pretty_g", int_type()));
+  const typet plain_back = migrate_type_back(migrate_type(plain));
+  REQUIRE(
+    to_struct_type(plain_back).components().at(0).find("base_name").is_nil());
+  REQUIRE(plain_back == plain);
+}
+
+TEST_CASE("a code argument keeps its identifier and its base name", "[migrate]")
+{
+  code_typet t;
+  t.return_type() = int_type();
+  code_typet::argumentt a(int_type());
+  a.cmt_identifier("f::p");
+  a.cmt_base_name("p");
+  t.arguments().push_back(a);
+
+  const type2tc t2 = migrate_type(t);
+  REQUIRE(to_code_type(t2).argument_names.at(0) == irep_idt("f::p"));
+
+  const typet back_t = migrate_type_back(t2);
+  const code_typet &back = to_code_type(back_t);
+  REQUIRE(back.arguments().size() == 1);
+  // argumentt::set_identifier writes `#identifier`, which is what
+  // get_identifier and cmt_identifier both read, so this survives.
+  REQUIRE(back.arguments().at(0).cmt_identifier() == irep_idt("f::p"));
+  // And the base name, carried by the unreflected argument_base_names (§44).
+  REQUIRE(back.arguments().at(0).cmt_base_name() == irep_idt("p"));
+
+  // Unreflected means two signatures differing only in a parameter's spelling
+  // are the same type, which is what C11 6.7.6.3p15 says and what the hash and
+  // equality must agree on.
+  code_typet other = t;
+  other.arguments().at(0).cmt_base_name("q");
+  REQUIRE(migrate_type(other) == t2);
+}
+
+TEST_CASE("a default code_typet migrates to a void signature", "[migrate]")
+{
+  // The forward direction, which the round-trip cases above do not reach: a
+  // default-constructed code_typet has no "return_type" sub-irep, so the code
+  // arm migrates an id-less typet as the return type, and migrate_type maps
+  // that to the empty type. A frontend spelling such a signature natively must
+  // write the empty type to stay equal to the legacy path
+  // (jimple_statement.cpp, scope-jimple-irep2.md 32.1).
+  const code_typet fresh;
+  REQUIRE(fresh.find("return_type").is_nil());
+  REQUIRE(fresh.arguments().empty());
+  REQUIRE_FALSE(fresh.has_ellipsis());
+  REQUIRE(
+    migrate_type(fresh) == code_type2tc(
+                             std::vector<type2tc>{},
+                             get_empty_type(),
+                             std::vector<irep_idt>{},
+                             /*ellipsis=*/false));
+}
+
 TEST_CASE("migrate expr round-trips for constant kinds", "[migrate]")
 {
   require_expr_roundtrip(constant_int2tc(get_int_type(32), BigInt(42)));

@@ -212,14 +212,6 @@ void clang_c_adjust_irep2::adjust_expr(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  // Before the recursion, so the located spelling wins over the unlocated one
-  // the walk would otherwise reach first.
-  if (sole_adjuster && is_code_expression2t(expr))
-  {
-    const code_expression2t &stmt = to_code_expression2t(expr);
-    declare_implicit_callee(stmt.operand, stmt.location);
-  }
-
   // A call reached below a statement takes that statement's location; a
   // sideeffect2t has none of its own.
   const locationt saved_location = enclosing_location;
@@ -678,6 +670,9 @@ void clang_c_adjust_irep2::adjust_derived_to_base(expr2tc &expr)
   const type2tc derived =
     ptr_mode ? to_pointer_type(expr->type).subtype : expr->type;
 
+  // A symbol-name conversion, not a body migration: `derived` is a
+  // symbol_type2t at every observed site (§140), and the layout walk reads
+  // #base_owner from the namespace, which no IREP2 type models.
   BigInt offset = 0;
   if (
     !base_displacement(ns, migrate_type_back(derived), base_id, offset) ||
@@ -740,6 +735,7 @@ void clang_c_adjust_irep2::adjust_base_to_derived(expr2tc &expr)
   const irep_idt base_id = to_symbol_type(base_t).symbol_name;
   const type2tc derived = to_pointer_type(cast.type).subtype;
 
+  // As in adjust_derived_to_base: a symbol-name conversion (§140).
   BigInt offset = 0;
   if (!base_displacement(ns, migrate_type_back(derived), base_id, offset))
   {
@@ -1315,6 +1311,7 @@ void clang_c_adjust_irep2::adjust_call_signature(expr2tc &expr)
   align_call_return_type(expr, *callee_symbol);
 }
 
+
 void clang_c_adjust_irep2::adjust_call_arguments(expr2tc &expr)
 {
   const std::optional<call_view> call = as_call(expr);
@@ -1754,9 +1751,7 @@ void clang_c_adjust_irep2::declare_polymorphic_builtin(expr2tc &expr)
   *call->callee = target;
 }
 
-void clang_c_adjust_irep2::declare_implicit_callee(
-  const expr2tc &expr,
-  const locationt &stmt_location)
+void clang_c_adjust_irep2::declare_implicit_callee(const expr2tc &expr)
 {
   // A bare `f(x);` statement is a sideeffect2t of kind function_call, not a
   // code_function_call2t; both spellings reach here. The const overload keeps
@@ -1769,12 +1764,11 @@ void clang_c_adjust_irep2::declare_implicit_callee(
   if (is_nil_expr(callee) || !is_symbol2t(callee))
     return;
 
-  // Location stays per site. Both spellings now carry one of their own, so the
-  // caller's stmt_location is only a fallback for a sideeffect2t built without
-  // it -- and it is a lossy one: the statement names the statement, not the
-  // callee, so `int x = f(1);` would report the column of `int`, not of `f`
-  // (§110.3, §136).
-  locationt loc = stmt_location;
+  // Location stays per site: both spellings carry one of their own since §136,
+  // which is what made the caller's statement-location fallback redundant
+  // (§141). A statement location would name the statement rather than the
+  // callee -- `int x = f(1);` would report the column of `int`.
+  locationt loc;
   if (is_code_function_call2t(expr))
     loc = to_code_function_call2t(expr).location;
   else if (const locationt &l = to_sideeffect2t(expr).location; l.is_not_nil())
@@ -1793,7 +1787,10 @@ void clang_c_adjust_irep2::declare_implicit_callee(
   sym.id = id;
   sym.name = get_pretty_name(id2string(id));
   sym.location = loc;
-  sym.set_type(migrate_type_back(callee->type));
+  // The IREP2 form is in hand, so store it: symbolt derives the legacy type
+  // with the same migrate_type_back on the first read, and storing that instead
+  // would make get_type2() migrate it straight back again.
+  sym.set_type(callee->type);
   sym.mode = "C";
   context.add(sym);
 }

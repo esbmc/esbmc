@@ -1,4 +1,5 @@
 #include <python-frontend/python_language.h>
+#include <python-frontend/python_library.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation/python_annotation.h>
 #include <python-frontend/module/global_scope.h>
@@ -81,6 +82,21 @@ languaget *new_python_language()
   return new python_languaget;
 }
 
+// Options the forked parser needs to know about. ``--deadlock-check`` makes it
+// load the deadlock-aware threading model (models/threading_deadlock.py); the
+// C frontend handles the analogous swap via preprocessor #defines
+// (clang-c-frontend/c_preprocess.cpp).
+static void append_parser_flags(std::vector<std::string> &args)
+{
+  static const std::pair<const char *, const char *> flags[] = {
+    {"deadlock-check", "--deadlock-check"},
+    {"python-typecheck", "--typecheck"}};
+
+  for (const auto &[option, flag] : flags)
+    if (config.options.get_bool_option(option))
+      args.push_back(flag);
+}
+
 bool python_languaget::parse(const std::string &path)
 {
   log_debug("python", "Parsing: {}", path);
@@ -98,13 +114,7 @@ bool python_languaget::parse(const std::string &path)
 
   // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
-
-  // Propagate ``--deadlock-check`` to the parser so it loads the
-  // deadlock-aware threading model (models/threading_deadlock.py). The
-  // C frontend handles the analogous swap via preprocessor #defines
-  // (clang-c-frontend/c_preprocess.cpp).
-  if (config.options.get_bool_option("deadlock-check"))
-    args.push_back("--deadlock-check");
+  append_parser_flags(args);
 
   // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
@@ -126,48 +136,10 @@ bool python_languaget::parse(const std::string &path)
     exit(1);
   }
 
-  // Verify the interpreter is Python 3 — parser/__main__.py uses f-strings, which
-  // Python 2.x cannot parse, surfacing a cryptic SyntaxError (issue #1967).
-  // The check prints just the major version so a single getline suffices.
-  {
-    bp::ipstream version_out;
-    try
-    {
-      bp::child version_proc(
-        python_exec_path,
-        std::vector<std::string>{
-          "-c", "import sys; print(sys.version_info[0])"},
-        bp::std_out > version_out,
-        bp::std_err > bp::null);
-      std::string major;
-      std::getline(version_out, major);
-      version_proc.wait();
-      while (!major.empty() && (major.back() == '\r' || major.back() == '\n' ||
-                                major.back() == ' '))
-        major.pop_back();
-      if (major != "3")
-      {
-        log_error(
-          "ESBMC's Python frontend requires Python 3 (interpreter at "
-          "'{}' reports major version '{}'). Re-run with "
-          "--python <path-to-python3>.\n",
-          python_exec_path.string(),
-          major.empty() ? std::string("?") : major);
-        exit(1);
-      }
-    }
-    catch (const std::exception &e)
-    {
-      log_error(
-        "Failed to determine Python version for '{}': {}. "
-        "Re-run with --python <path-to-python3>.\n",
-        python_exec_path.string(),
-        e.what());
-      exit(1);
-    }
-  }
-
-  // Create a child process to execute Python
+  // parser/__main__.py reports the version itself and exits non-zero on
+  // Python 2 (issue #1967); it is kept Python-2-parseable so that it can.
+  // Spawning a second interpreter here to ask the same question cost one
+  // process per run.
   bp::child process(python_exec_path, args);
 
   // Wait for execution
@@ -280,6 +252,12 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // bare `raise` without that OM.
   add_cprover_library(context, this);
 
+  if (
+    !config.options.get_bool_option("building-python-library") &&
+    !config.options.get_bool_option("no-library") &&
+    !config.options.get_bool_option("int-encoding"))
+    add_cpython_library(context);
+
   try
   {
     // Generate symbol table
@@ -305,6 +283,12 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
     python_adjust py_adjuster(context);
     return py_adjuster.adjust();
   }
+
+  /* The models were linked wholesale before the converter ran, because the
+   * converter resolves their calls by name. Now that the program is in the
+   * context, drop the ones it cannot reach; assert_no_pruned_calls checks
+   * after goto_convert that nothing since has referenced one. */
+  prune_unreferenced_library_functions(context, &cpython_library_bodies());
 
   clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())

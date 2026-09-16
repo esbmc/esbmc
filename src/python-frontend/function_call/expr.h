@@ -149,6 +149,13 @@ private:
    * module's body does not hold it, from the module that defines it (#7546).
    */
   nlohmann::json find_class_node(const std::string &name) const;
+  bool resolves_to_staticmethod(
+    const nlohmann::json &class_node,
+    const std::string &method) const;
+  const symbolt *
+  find_inherited_classmethod(const std::string &func_symbol_id) const;
+  std::optional<exprt>
+  build_post_init_forward_call(const std::string &func_symbol_id);
 
   /*
    * Retrieves the object (caller) name from the AST.
@@ -613,6 +620,11 @@ private:
   // an unrelated (e.g. list) receiver falls through to its own handler
   // unchanged.
   std::optional<exprt> try_numpy_inplace_sort();
+
+  // a.sort()'s own axis= keyword scan: a literal integer or throws. Split
+  // out of try_numpy_inplace_sort to keep that function's own decision
+  // count down.
+  long long extract_numpy_inplace_sort_axis() const;
 
   // reject_numpy_view_mutating_method_call (called from
   // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
