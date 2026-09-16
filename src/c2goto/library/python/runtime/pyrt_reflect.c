@@ -24,7 +24,7 @@ bool pyrt_hasattr(PyRtObject *o, const char *name)
     return pyrt_type_lookup((PyRtTypeObject *)o, name) != 0;
   if (
     (o->ob_type->tp_flags & PYRT_TPFLAGS_HEAPTYPE) &&
-    pyrt_attrs_find(((PyRtInstanceObject *)o)->attrs, name))
+    pyrt_attrs_find(&((PyRtInstanceObject *)o)->attrs, name))
     return true;
   return pyrt_type_lookup(o->ob_type, name) != 0;
 }

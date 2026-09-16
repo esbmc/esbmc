@@ -61,10 +61,14 @@ typedef struct __pyrt_attrs
   PyRtObject *values[PYRT_ATTRS_CAPACITY];
 } PyRtAttrs;
 
+/* attrs is a member rather than a separate allocation, so reaching it is an
+ * address computation into a known object instead of a pointer loaded from
+ * memory. A type keeps a pointer: tp_attrs points at a static object the
+ * frontend emits per class, which the same helpers serve. */
 typedef struct __pyrt_instance
 {
   PyRt_HEAD;
-  PyRtAttrs *attrs;
+  PyRtAttrs attrs;
 } PyRtInstanceObject;
 
 #define PYRT_MAX_ARGS 6

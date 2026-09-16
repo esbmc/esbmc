@@ -38,11 +38,9 @@ PyRtArgs pyrt_prepend(PyRtObject *first, PyRtArgs args, int64_t nargs)
 
 PyRtObject *pyrt_type_call(PyRtTypeObject *t, PyRtArgs args, int64_t nargs)
 {
-  PyRtAttrs *attrs = __ESBMC_alloca(sizeof(PyRtAttrs));
-  attrs->size = 0;
   PyRtInstanceObject *o = __ESBMC_alloca(sizeof(PyRtInstanceObject));
   o->ob_type = t;
-  o->attrs = attrs;
+  o->attrs.size = 0;
   PyRtObject *self = (PyRtObject *)o;
 
   PyRtObject *init = pyrt_type_lookup(t, pyrt_str___init__);
@@ -96,7 +94,7 @@ PyRtObject *pyrt_getattr(PyRtObject *o, const char *name)
   if (o->ob_type->tp_flags & PYRT_TPFLAGS_HEAPTYPE)
   {
     PyRtObject *value =
-      pyrt_attrs_find(((PyRtInstanceObject *)o)->attrs, name);
+      pyrt_attrs_find(&((PyRtInstanceObject *)o)->attrs, name);
     if (value)
       return value;
   }
@@ -121,7 +119,7 @@ void pyrt_setattr(PyRtObject *o, const char *name, PyRtObject *value)
   }
   if (!(o->ob_type->tp_flags & PYRT_TPFLAGS_HEAPTYPE))
     PYRT_RAISE("AttributeError: object has no attribute __dict__");
-  pyrt_attrs_set(((PyRtInstanceObject *)o)->attrs, name, value);
+  pyrt_attrs_set(&((PyRtInstanceObject *)o)->attrs, name, value);
 }
 
 PyRtObject *
