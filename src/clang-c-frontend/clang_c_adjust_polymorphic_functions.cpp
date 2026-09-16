@@ -1138,8 +1138,8 @@ exprt clang_c_adjust::declare_gcc_polymorphic_builtin(
     new_symbol.name = callee.name();
     new_symbol.location = call_location;
     new_symbol.set_type(migrate_type(poly.type()));
-    new_symbol.set_value(instantiate_gcc_polymorphic_builtin(
-      identifier, to_symbol_expr(poly), context));
+    new_symbol.set_value(migrate_expr(instantiate_gcc_polymorphic_builtin(
+      identifier, to_symbol_expr(poly), context)));
 
     context.add(new_symbol);
   }

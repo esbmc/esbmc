@@ -3490,6 +3490,67 @@ made the thunk's type IREP2, `get_type()` derives it through `migrate_type_back`
 the second test can never add anything to the first. Removing it is a branch removal
 and owes a C-Dead proof; it is recorded here rather than done in passing, and it
 disappears on its own if §51.3 retires the encoding.
+
+## 57. Four phases, four walls, one question (2026-09-15)
+
+Phases 6, 7, 8 and 9 have each been driven until they stopped, by the same method:
+convert every symbol-table write of one kind, measure the whole suite, bisect the
+failures, keep what stays green, and record what the residue is made of. The four
+residues turn out to be the same thing seen four ways, which is worth stating in one
+place rather than leaving in four scope documents.
+
+### 57.1 What each phase's residue is
+
+| phase | what blocks its remaining writes | evidence |
+|---|---|---|
+| 6 (clang-c) | `restrict`, `volatile`, alignment, packing -- C type qualifiers and layout | `scope-clang-c-irep2.md` §145: all 21 type writes fail 620 of 2 293; the failing tests are the `restrict_*`, `volatile_*` and `github_7707-*` families |
+| 7 (clang-cpp) | the `constructor`/`destructor` pseudo return type, `need_vptr_init`, a code type's exception specification | §50.2, §51.3, §56.1 |
+| 8 (solidity) | eleven `#sol_*` attributes, of which `#sol_type` has 60 writes and 51 reads | `scope-solidity-irep2.md` §7.1, §13.1: all 23 type writes fail 151 of 525, and over 6 000 reads are in a class the IREP2 shape cannot separate |
+| 9 (python) | `#cpp_type`, via a predicate asking whether an 8-bit bitvector is a character | `scope-python-irep2.md` §8: seven conversion sites branch on it |
+
+Every row is the same sentence: **what the frontend needs to say about a type is wider
+than what `type2t` models**, and today the difference is parked in attributes on the
+legacy `typet` that `migrate_type` drops.
+
+### 57.2 What is not a wall, and was mistaken for one three times
+
+Three other causes were found and closed, and none of them is about the type system:
+
+- the namespace the migrating pass was not pointed at (§52, §53) -- fixed, and it
+  unblocked §49.1's blocker after all (§54);
+- a symbol that does not exist yet, which freezes a wrong type into a migrated body
+  (`scope-python-irep2.md` §6.1);
+- the cost of eagerness: migrating every symbol's value where the lazy path migrated
+  only what was asked for (`scope-clang-c-irep2.md` §146).
+
+The second and third mean two classes of write **must stay legacy** and counting them as
+debt is a mistake B-2's spelling-based count invites: a converter-time body, and a
+write that runs once per symbol.
+
+### 57.3 The question, and why it is not a measurement
+
+100% IREP2 in the frontends requires deciding what happens to the type information
+`type2t` does not model. The options, in the order they cost:
+
+1. **Accept it.** Frontend symbol types stay legacy where they carry language-level
+   meaning; B-2 is redefined to exclude them and the bar records why. Cheapest, and
+   leaves the seam permanently.
+2. **Widen `type2t`.** A qualifier set, a Solidity kind, a character flag. This is what
+   the closed type system exists to prevent, and four languages asking for four
+   extensions is the argument against it.
+3. **Move the meaning out of the type.** Each frontend keeps its language-level facts in
+   its own structures, keyed by something that survives migration -- a symbol id where
+   the reader has one (`scope-solidity-irep2.md` §10), the AST where it is still in scope
+   (§11 there), or derived from what IREP2 already holds (§8 there, §47 and §50 here).
+   Honest, and the largest refactor of the three.
+
+Options 1 and 3 are not exclusive: the derivations already landed took `#sol_contract`,
+`#member_name`, `#sol_state_var`, `#sol_name` and the vtable readers' three attributes
+off the table, and three write-only attributes were deleted outright. What is left after
+that is the genuinely irreducible part, and it is small enough to enumerate -- which is
+what §57.1 does.
+
+This is a design decision, not a measurement, and the measuring is done.
 ## 40. Probing the hop-off flags for what their corpora miss (2026-09-14)
 
 A hop-off flag's divergence count is only as good as the inputs it is measured
