@@ -1199,3 +1199,34 @@ TEST_CASE("migrate_type_back leaves a look-alike member unflagged", "[migrate]")
   REQUIRE_FALSE(comps[0].get_is_padding());
   REQUIRE_FALSE(comps[1].get_is_padding());
 }
+
+// What migrate_expr makes of a C++ symbol id, which contains characters
+// sym_name_to_symbol's renaming parser also uses. A clang USR is full of '#',
+// and '&' appears in the mangling of a reference parameter, so a name that was
+// never SSA-renamed can still look renamed (frontends-to-irep2.md §54.1).
+TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
+{
+  use_test_ns();
+  const type2tc t = pointer_type2tc(get_int_type(32));
+
+  SECTION("a '#'-bearing id keeps its whole name")
+  {
+    expr2tc e;
+    migrate_expr(symbol_exprt("c:@S@B@F@~B#this", migrate_type_back(t)), e);
+    REQUIRE(is_symbol2t(e));
+    REQUIRE(to_symbol2t(e).thename == irep_idt("c:@S@B@F@~B#this"));
+    INFO("level = " << (int)to_symbol2t(e).rlevel);
+    INFO("back  = " << migrate_expr_back(e).identifier());
+    REQUIRE(migrate_expr_back(e).identifier() == irep_idt("c:@S@B@F@~B#this"));
+  }
+
+  SECTION("an id bearing both '#' and '&' keeps its whole name")
+  {
+    expr2tc e;
+    migrate_expr(
+      symbol_exprt("c:@U@U@F@U#&1$@U@U#::ref", migrate_type_back(t)), e);
+    REQUIRE(is_symbol2t(e));
+    INFO("thename = " << to_symbol2t(e).thename);
+    REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
+  }
+}

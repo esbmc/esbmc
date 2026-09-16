@@ -25,6 +25,22 @@ clang_c_adjust::clang_c_adjust(contextt &_context)
 
 bool clang_c_adjust::adjust()
 {
+  // migrate_expr and migrate_type resolve a symbol through this thread-local
+  // namespace, and the one language_ui installed does not see the context this
+  // pass adjusts. A miss there is silent: sym_name_to_symbol parses the
+  // unresolvable name as an SSA-renamed one, and a clang USR contains `#` and
+  // `&`, so the id is truncated (docs/roadmap/frontends-to-irep2.md §52).
+  // clang_c_adjust_irep2::adjust() does the same for the same reason.
+  const namespacet *old_ns = std::exchange(migrate_namespace_lookup, &ns);
+  struct ns_restoret
+  {
+    const namespacet *old;
+    ~ns_restoret()
+    {
+      migrate_namespace_lookup = old;
+    }
+  } ns_restore{old_ns};
+
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
