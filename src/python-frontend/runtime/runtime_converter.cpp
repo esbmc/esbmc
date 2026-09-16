@@ -53,7 +53,11 @@ std::string binop_function(const std::string &op)
   static const std::map<std::string, std::string> ops = {
     {"Add", "pyrt_number_add"},
     {"Sub", "pyrt_number_subtract"},
-    {"Mult", "pyrt_number_multiply"}};
+    {"Mult", "pyrt_number_multiply"},
+    {"Div", "pyrt_number_true_divide"},
+    {"FloorDiv", "pyrt_number_floor_divide"},
+    {"Mod", "pyrt_number_remainder"},
+    {"Pow", "pyrt_number_power"}};
   auto it = ops.find(op);
   return it == ops.end() ? std::string() : it->second;
 }
@@ -320,6 +324,8 @@ exprt python_runtime_converter::expr(const json &node)
     return compare(node);
   if (type == "BoolOp")
     return boolop(node);
+  if (type == "IfExp")
+    return ifexp(node);
   if (type == "Call")
     return call_expr(node);
   if (type == "List")
@@ -551,6 +557,31 @@ void python_runtime_converter::boolop_rest(
   emit_if(is_and ? is_true : not_exprt(is_true), next, loc);
 }
 
+/// `a if c else b` evaluates only the arm it takes, so each arm's code goes in
+/// its own block.
+exprt python_runtime_converter::ifexp(const json &node)
+{
+  const locationt loc = location(node);
+  exprt result = new_temporary(object_type_, loc);
+  exprt condition = truth(node["test"]);
+
+  code_blockt then_case, else_case;
+  code_blockt *outer = block_;
+  block_ = &then_case;
+  block_->copy_to_operands(code_assignt(result, expr(node["body"])));
+  block_ = &else_case;
+  block_->copy_to_operands(code_assignt(result, expr(node["orelse"])));
+  block_ = outer;
+
+  code_ifthenelset branch;
+  branch.cond() = condition;
+  branch.then_case() = then_case;
+  branch.else_case() = else_case;
+  branch.location() = loc;
+  block_->copy_to_operands(branch);
+  return result;
+}
+
 exprt python_runtime_converter::call_expr(const json &node)
 {
   const json &func = node["func"];
@@ -646,6 +677,28 @@ exprt python_runtime_converter::call_expr(const json &node)
         arguments(node);
         return address("c:@pyrt_None");
       }
+      if (callee == "bool" && node["args"].size() == 1)
+        return call("pyrt_bool_from", {truth(node["args"][0])}, loc);
+      static const std::map<std::string, std::string> iterable_builtins = {
+        {"abs", "pyrt_builtin_abs"},
+        {"all", "pyrt_builtin_all"},
+        {"any", "pyrt_builtin_any"},
+        {"sum", "pyrt_builtin_sum"},
+        {"min", "pyrt_builtin_min_iter"},
+        {"max", "pyrt_builtin_max_iter"}};
+      auto builtin = iterable_builtins.find(callee);
+      if (builtin != iterable_builtins.end())
+      {
+        std::vector<exprt> values = arguments(node);
+        if (values.size() == 1)
+          return call(builtin->second, values, loc);
+        if ((callee == "min" || callee == "max") && values.size() == 2)
+          return call(
+            callee == "min" ? "pyrt_builtin_min2" : "pyrt_builtin_max2",
+            values,
+            loc);
+        unsupported(node);
+      }
     }
   }
 
@@ -716,6 +769,13 @@ void python_runtime_converter::statement(const json &node)
     exprt value = expr(node["value"]);
     for (const json &target : node["targets"])
       store(target, value, loc);
+  }
+  else if (type == "AnnAssign")
+  {
+    /* The annotation is not read: the runtime carries types on the objects. A
+     * bare `x: int` binds nothing, as in CPython. */
+    if (!node["value"].is_null())
+      store(node["target"], expr(node["value"]), loc);
   }
   else if (type == "AugAssign")
     aug_assign(node);
@@ -996,7 +1056,9 @@ void python_runtime_converter::collect_assigned(
         if (is_type(target, "Name"))
           assigned.insert(target["id"].get<std::string>());
     }
-    else if (is_type(node, "AugAssign") && is_type(node["target"], "Name"))
+    else if (
+      (is_type(node, "AugAssign") || is_type(node, "AnnAssign")) &&
+      is_type(node["target"], "Name"))
       assigned.insert(node["target"]["id"].get<std::string>());
     else if (is_type(node, "ClassDef"))
       assigned.insert(node["name"].get<std::string>());

@@ -1,0 +1,15 @@
+assert 7 // 2 == 3
+assert -7 // 2 == -4
+assert 7 // -2 == -4
+assert -7 % 3 == 2
+assert 7 % -3 == -2
+assert 2 ** 10 == 1024
+assert 7 / 2 == 3.5
+assert 1 / 4 == 0.25
+assert 7.0 // 2.0 == 3.0
+assert -7.0 // 2.0 == -4.0
+assert 7.5 % 2.0 == 1.5
+assert 2.0 ** 3 == 8.0
+assert 2.0 ** -2 == 0.25
+assert 1 + 2.0 == 3.0
+assert 7 // 2.0 == 3.0

@@ -119,6 +119,10 @@ typedef struct __pyrt_number_methods
   binaryfunc nb_add;
   binaryfunc nb_subtract;
   binaryfunc nb_multiply;
+  binaryfunc nb_true_divide;
+  binaryfunc nb_floor_divide;
+  binaryfunc nb_remainder;
+  binaryfunc nb_power;
   unaryfunc nb_negative;
   inquiry nb_bool;
 } PyRtNumberMethods;
@@ -168,6 +172,7 @@ struct __pyrt_type
 #define PYRT_MAX_CLASSES 16
 #define PYRT_STR_CAPACITY 64
 #define PYRT_DICT_CAPACITY 16
+#define PYRT_POW_BOUND 64
 
 extern PyRtTypeObject PyRtType_Type;
 extern PyRtTypeObject PyRtObject_Type;
@@ -232,9 +237,21 @@ bool pyrt_is_true(PyRtObject *o);
 PyRtObject *pyrt_number_add(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_number_subtract(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_number_multiply(PyRtObject *a, PyRtObject *b);
+PyRtObject *pyrt_number_true_divide(PyRtObject *a, PyRtObject *b);
+PyRtObject *pyrt_number_floor_divide(PyRtObject *a, PyRtObject *b);
+PyRtObject *pyrt_number_remainder(PyRtObject *a, PyRtObject *b);
+PyRtObject *pyrt_number_power(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_number_negative(PyRtObject *o);
 PyRtObject *pyrt_richcompare(PyRtObject *a, PyRtObject *b, int op);
 PyRtObject *pyrt_builtin_len(PyRtObject *o);
+PyRtObject *pyrt_builtin_abs(PyRtObject *o);
+PyRtObject *pyrt_builtin_all(PyRtObject *o);
+PyRtObject *pyrt_builtin_any(PyRtObject *o);
+PyRtObject *pyrt_builtin_sum(PyRtObject *o);
+PyRtObject *pyrt_builtin_min2(PyRtObject *a, PyRtObject *b);
+PyRtObject *pyrt_builtin_max2(PyRtObject *a, PyRtObject *b);
+PyRtObject *pyrt_builtin_min_iter(PyRtObject *o);
+PyRtObject *pyrt_builtin_max_iter(PyRtObject *o);
 PyRtObject *pyrt_getitem(PyRtObject *o, PyRtObject *key);
 void pyrt_setitem(PyRtObject *o, PyRtObject *key, PyRtObject *value);
 void pyrt_list_append(PyRtObject *o, PyRtObject *value);

@@ -92,6 +92,7 @@ private:
     const exprt &result,
     bool is_and,
     const locationt &loc);
+  exprt ifexp(const json &node);
   exprt call_expr(const json &node);
   exprt list(const json &node);
   exprt dict_literal(const json &node);

@@ -30,7 +30,11 @@ typedef enum
 {
   PYRT_ADD,
   PYRT_SUBTRACT,
-  PYRT_MULTIPLY
+  PYRT_MULTIPLY,
+  PYRT_TRUE_DIVIDE,
+  PYRT_FLOOR_DIVIDE,
+  PYRT_REMAINDER,
+  PYRT_POWER
 } pyrt_binop;
 
 binaryfunc pyrt_number_slot(PyRtTypeObject *t, pyrt_binop op)
@@ -38,11 +42,23 @@ binaryfunc pyrt_number_slot(PyRtTypeObject *t, pyrt_binop op)
   PyRtNumberMethods *nb = t->tp_as_number;
   if (!nb)
     return 0;
-  if (op == PYRT_ADD)
+  switch (op)
+  {
+  case PYRT_ADD:
     return nb->nb_add;
-  if (op == PYRT_SUBTRACT)
+  case PYRT_SUBTRACT:
     return nb->nb_subtract;
-  return nb->nb_multiply;
+  case PYRT_TRUE_DIVIDE:
+    return nb->nb_true_divide;
+  case PYRT_FLOOR_DIVIDE:
+    return nb->nb_floor_divide;
+  case PYRT_REMAINDER:
+    return nb->nb_remainder;
+  case PYRT_POWER:
+    return nb->nb_power;
+  default:
+    return nb->nb_multiply;
+  }
 }
 
 /* CPython's binary_op1 (Objects/abstract.c), without the subclass-first rule:
@@ -90,6 +106,38 @@ PyRtObject *pyrt_number_multiply(PyRtObject *a, PyRtObject *b)
   PyRtObject *result = pyrt_binary_op1(a, b, PYRT_MULTIPLY);
   if (result == &pyrt_NotImplemented)
     PYRT_RAISE("TypeError: unsupported operand type(s) for *");
+  return result;
+}
+
+PyRtObject *pyrt_number_true_divide(PyRtObject *a, PyRtObject *b)
+{
+  PyRtObject *result = pyrt_binary_op1(a, b, PYRT_TRUE_DIVIDE);
+  if (result == &pyrt_NotImplemented)
+    PYRT_RAISE("TypeError: unsupported operand type(s) for /");
+  return result;
+}
+
+PyRtObject *pyrt_number_floor_divide(PyRtObject *a, PyRtObject *b)
+{
+  PyRtObject *result = pyrt_binary_op1(a, b, PYRT_FLOOR_DIVIDE);
+  if (result == &pyrt_NotImplemented)
+    PYRT_RAISE("TypeError: unsupported operand type(s) for //");
+  return result;
+}
+
+PyRtObject *pyrt_number_remainder(PyRtObject *a, PyRtObject *b)
+{
+  PyRtObject *result = pyrt_binary_op1(a, b, PYRT_REMAINDER);
+  if (result == &pyrt_NotImplemented)
+    PYRT_RAISE("TypeError: unsupported operand type(s) for %");
+  return result;
+}
+
+PyRtObject *pyrt_number_power(PyRtObject *a, PyRtObject *b)
+{
+  PyRtObject *result = pyrt_binary_op1(a, b, PYRT_POWER);
+  if (result == &pyrt_NotImplemented)
+    PYRT_RAISE("TypeError: unsupported operand type(s) for **");
   return result;
 }
 
