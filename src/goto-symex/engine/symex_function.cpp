@@ -804,16 +804,21 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   // otherwise learn there is no target, condemning the path first
   // (esbmc/esbmc#604). When a target does exist nothing is skipped: we fall
   // through to the unmodified path and its claims.
-  if (options.get_bool_option("closed-world-fnptr"))
+  const bool check_fnptr_targets =
+    options.get_bool_option("check-fnptr-targets");
+  if (options.get_bool_option("closed-world-fnptr") || check_fnptr_targets)
   {
     expr2tc probe = call.function;
     dereference(probe, dereferencet::READ, true);
     if (!has_call_target(probe))
     {
       log_status(
-        "No target candidate for function call {}; assuming unreachable "
-        "(--closed-world-fnptr)",
-        from_expr(ns, "", call.function));
+        "No target candidate for function call {}; {}",
+        from_expr(ns, "", call.function),
+        check_fnptr_targets ? "reporting it (--check-fnptr-targets)"
+                            : "assuming unreachable (--closed-world-fnptr)");
+      if (check_fnptr_targets)
+        claim(gen_false_expr(), "function-pointer call has no target");
       assume(gen_false_expr());
       cur_state->source.pc++;
       return;
@@ -839,8 +844,11 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
     // Open world by default: the definition may live in a translation unit we
     // were not given, so the call is skipped and its result left havoc'd.
     // Under --closed-world-fnptr the whole program is assumed present, so no
-    // such call can happen and the path is dead (esbmc/esbmc#604).
-    if (options.get_bool_option("closed-world-fnptr"))
+    // such call can happen and the path is dead (esbmc/esbmc#604), and under
+    // --check-fnptr-targets the missing target is reported first.
+    if (check_fnptr_targets)
+      claim(gen_false_expr(), "function-pointer call has no target");
+    if (options.get_bool_option("closed-world-fnptr") || check_fnptr_targets)
       assume(gen_false_expr());
     cur_state->source.pc++;
     return;
@@ -949,7 +957,9 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
   {
     // Same rationale as the failed-symbol case above: an empty target list
     // means no compatible definition was found in what we were given.
-    if (options.get_bool_option("closed-world-fnptr"))
+    if (check_fnptr_targets)
+      claim(gen_false_expr(), "function-pointer call has no target");
+    if (options.get_bool_option("closed-world-fnptr") || check_fnptr_targets)
       assume(gen_false_expr());
     cur_state->source.pc++;
   }
