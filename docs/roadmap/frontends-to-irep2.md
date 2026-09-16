@@ -4138,3 +4138,29 @@ more carries, but **fifteen programs failing hard for three reasons**, one known
 the first time in this investigation the remaining work is a list rather than a slope.
 
 `scope-clang-c-irep2.md` §159 has the breakdown. Phase 6 stays at B-2\* 19.
+
+## 74. Seven of the fifteen are a precondition, not a defect (2026-09-16)
+
+§73 left three abort causes on clang-c's local value-write arm, two of them undiagnosed. The
+largest is now diagnosed, by instrumenting the failure rather than reasoning about it.
+
+Six of the seven `symbol' aborts are variadic programs, and the missing identifier is
+`tag-struct __va_list_tag`. That symbol **is** in the table -- `--symbol-table-only` without the
+conversion shows it with its four members -- so the name is right and the timing is wrong: it is
+not there yet when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`. `namespacet::follow`
+then asserts.
+
+That is the blocker §146 listed third and `scope-python-irep2.md` §6.1 named first: a symbol that
+does not exist yet. It is a constraint on *where* a value may be converted, not a defect to repair
+-- at converter time the clang AST is the only complete source, and a migration that resolves a
+type through the namespace is asking the symbol table a question it cannot answer.
+
+```
+7  `symbol' failed        §53's precondition -- tag not in the table yet
+4  `sz % a == 0'          no bit_field2t (§67)
+4  component lookup       undiagnosed
+```
+
+Two causes known, of two different kinds: one wants a type kind built, the other says this site
+cannot be converted at all. Neither is a rendering difference and neither yields to another
+attribute carry -- which retires the §69-§72 approach on evidence.
