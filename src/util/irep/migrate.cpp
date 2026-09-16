@@ -482,9 +482,11 @@ type2tc migrate_symbol_type(const symbolt &sym)
 void migrate_symbol_value(const symbolt &sym, expr2tc &dest)
 {
   // The IREP2 form is the source of truth on `symbolt`; get_value2() returns
-  // it directly (lazily populated if a legacy-side setter wrote last). Kept
-  // as a named chokepoint so the round-trip cross-check below runs on every
-  // real symbol value the pipeline reads.
+  // it directly (lazily populated if a legacy-side setter wrote last). Note
+  // this is NOT the chokepoint its type counterpart is: it has one caller
+  // (contracts.cpp), against 34 for migrate_symbol_type, because symbol values
+  // are read through get_value()/get_value2() directly. The cross-check below
+  // therefore covers one C contract path, not the pipeline at large.
   dest = sym.get_value2();
 #ifndef NDEBUG
   // Cross-check: assert the IREP2 value form is stable under the
