@@ -3509,6 +3509,16 @@ static exprt back_sideeffect(const expr2tc &ref)
   return theexpr;
 }
 
+/// Restores `#cformat` only when there is one: it is a comment field, but an
+/// empty one still makes c_expr2string prefer it over deriving the text, so it
+/// would print nothing at all (§63).
+static exprt with_cformat(exprt e, const irep_idt &cformat)
+{
+  if (!cformat.empty())
+    e.cformat(cformat);
+  return e;
+}
+
 static exprt migrate_expr_back_dispatch(const expr2tc &ref);
 
 exprt migrate_expr_back(const expr2tc &ref)
@@ -4412,12 +4422,7 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
     theexpr.set_value(integer2binary(ref2.value, width));
-    // Only when there is one to restore: `#cformat` is a comment field, but an
-    // empty one still makes c_expr2string prefer it over deriving the text, and
-    // would print nothing at all (§63).
-    if (!ref2.cformat.empty())
-      theexpr.cformat(ref2.cformat);
-    return theexpr;
+    return with_cformat(std::move(theexpr), ref2.cformat);
   }
   case expr2t::sizeof_id:
   {
@@ -4436,10 +4441,7 @@ static exprt migrate_expr_back_dispatch(const expr2tc &ref)
   case expr2t::constant_floatbv_id:
   {
     const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
-    exprt theexpr = ref2.value.to_expr();
-    if (!ref2.cformat.empty())
-      theexpr.cformat(ref2.cformat);
-    return theexpr;
+    return with_cformat(ref2.value.to_expr(), ref2.cformat);
   }
   case expr2t::constant_bool_id:
   {
