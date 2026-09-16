@@ -4115,3 +4115,26 @@ So the next measurement is the local arm's GOTO cost, with all four fixes, again
 same commit. §63's 2 112 does not answer it -- that was both arms converted and none of the fixes.
 If the GOTO is clean the arm converts and Phase 6 moves; if not, §71's recommendation stands and
 the choice is a `type2t` base-class qualifier field against accepting the rendering difference.
+
+## 73. 106, not 3 003 -- and fifteen of them abort (2026-09-16)
+
+§72 doubted the criterion: every figure from §68 onward was a symbol-table difference, and the
+symbol table is a debug dump rather than the program that gets verified. Measured, the doubt was
+right and the hope behind it was wrong.
+
+Converting `clang_c_convert.cpp:659` with all four seam fixes in place, both arms from the same
+commit: **106 of 8 682** goto programs differ, against 3 003 symbol tables. So 97% of what five
+sections measured was rendering. The carries were correct -- the seam invents less now -- but the
+number they chased was the wrong one, and the "nine more sections" projection rested on it.
+
+Of the 106, **91 differ benignly and 15 abort**, across three distinct assertions: seven a null
+`symbol`, four the `sz % a == 0` padding assertion that §67 traced to IREP2 having no bitfield
+type, and four a failed struct member lookup. `regression/esbmc/github_571_3` is one of the
+padding four and has `unsigned b : 12` in its source, so that cause is shared with the static arm.
+The other two are recorded and not diagnosed.
+
+So neither arm converts, but the obstacle has changed shape: not thousands of differences needing
+more carries, but **fifteen programs failing hard for three reasons**, one known and two not. For
+the first time in this investigation the remaining work is a list rather than a slope.
+
+`scope-clang-c-irep2.md` §159 has the breakdown. Phase 6 stays at B-2\* 19.
