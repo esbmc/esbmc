@@ -3793,3 +3793,29 @@ legacy by design (§57.2), and what is left after those is small.
 The refinement is syntactic and the script says so: it does not resolve types, so a write
 passing an IREP2 value under an ordinary name still counts. `B-2*` is therefore an upper
 bound -- a tighter one than the grep, and honest about which.
+
+### 58.3 Sharpened, and validated against two hand audits
+
+The first version counted a *bare name* as debt, which meant **every site this plan
+converted stayed counted**: a conversion names its result `value2`, `body`, `values2`, and
+the grep keeps matching. Three more shapes are now recognised -- a call to a method whose
+name ends in `2t`/`2tc`, a name declared `expr2tc`/`type2tc` in the same file, and a field
+of a name declared as a reference to a `*2t` node, since every field of one is IREP2 by
+construction.
+
+| frontend | B-2 | B-2* first cut | B-2* now |
+|---|---|---|---|
+| clang-c | 34 | 27 | 26 |
+| clang-cpp | 15 | 9 | **3** |
+| solidity | 98 | 91 | 91 |
+| python | 108 | 57 | 54 |
+| jimple | 10 | 8 | **3** |
+| total | 265 | 192 | **177** |
+
+The two frontends with a small enough residue to audit by hand both now agree with the
+script exactly: clang-cpp's three are §56.1's three (the ctor/dtor pseudo return type,
+`need_vptr_init`, the exception specification) and jimple's three are §48's three (the
+`width` attribute and two body writes). That agreement is the reason to trust the other
+three rows.
+
+`--list` prints the sites it counted, so a disagreement is checkable rather than arguable.

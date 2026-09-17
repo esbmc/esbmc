@@ -14,9 +14,16 @@ quotes historically -- and note that those are `git grep -c` *line* counts, not
 occurrence counts, which is a third way the quoted numbers differ from the bar's
 wording. Both columns are given. The refinement is syntactic: it strips // and /* */ comments and
 string literals, and treats a write as IREP2 when its argument is a migrate_* call, a
-*2tc constructor, or a name ending in `2tc`/`2t`. It does not resolve types, so a
-write passing an IREP2 variable under another name still counts as debt -- the refined
-figure is an upper bound, and a tighter one than the raw.
+*2tc constructor, or a name ending in `2tc`/`2t`. It recognises three shapes of IREP2
+argument: a `migrate_*` call, a `*2tc` constructor or a call to a method whose name ends
+in `2t`/`2tc`, and a bare name declared as `expr2tc`/`type2tc` somewhere in the same file.
+
+The last is what makes a converted site stop counting: a conversion usually names its
+result `value2`, `body` or similar, and the bare name keeps the grep matching. Matching
+per file rather than per scope is deliberately coarse -- a name declared IREP2 in one
+function and legacy in another would be misread -- so the refined figure is still an
+upper bound on nothing and a *lower* bound on nothing: it is the best syntactic answer,
+and `--list` prints what it counted so a disagreement can be checked by hand.
 """
 import re
 import subprocess
@@ -33,6 +40,15 @@ FRONTENDS = [
 LEGACY = re.compile(r"\b([A-Za-z_]*(?:exprt|typet|codet)|irept)\b")
 WRITE = re.compile(r"\.set_(type|value)\(|->set_(type|value)\(")
 IREP2_ARG = re.compile(r"^(migrate_type|migrate_expr)\s*\(|^[A-Za-z_]\w*2tc\s*\(|2tc$|2t$")
+# A call whose method name ends in `2t`/`2tc` returns IREP2, e.g. `to_code2t(...)`.
+IREP2_CALL = re.compile(r"^[A-Za-z_][\w.>\-\[\]]*(?:2t|2tc)\s*\(")
+# Names declared as an IREP2 container anywhere in the file. Converting a site
+# typically names its result `value2`, `body`, `values2` and so on, which keeps
+# the grep matching; this is what makes such a site stop counting as debt.
+IREP2_DECL = re.compile(r"\b(?:const\s+)?(?:expr2tc|type2tc)\s*&?\s*([A-Za-z_]\w*)\s*[;=,){]")
+# A reference to an IREP2 node: every field of one is itself IREP2, so
+# `code_type.arguments[i]` needs no migration.
+IREP2_NODE = re.compile(r"\b(?:const\s+)?[A-Za-z_]\w*2t\s*&\s*([A-Za-z_]\w*)\s*[;=]")
 
 
 def strip_noise(text):
@@ -69,7 +85,28 @@ def files(frontend):
     return [f for f in out.split() if f.endswith((".cpp", ".h"))]
 
 
-def measure(frontend):
+def count_b2(path, clean, listing=None):
+    """B-2 writes in one cleaned file: raw, and those not already IREP2."""
+    raw = refined = 0
+    irep2_names = set(IREP2_DECL.findall(clean))
+    irep2_nodes = set(IREP2_NODE.findall(clean))
+    for line in clean.split("\n"):
+        for m in WRITE.finditer(line):
+            raw += 1
+            arg = argument_of(line, m.start())
+            if IREP2_ARG.search(arg) or IREP2_CALL.match(arg):
+                continue
+            if arg in irep2_names:
+                continue
+            if arg.split(".")[0].split("-")[0] in irep2_nodes:
+                continue
+            refined += 1
+            if listing is not None:
+                listing.append(f"{path}: {arg}")
+    return raw, refined
+
+
+def measure(frontend, listing=None):
     """Count B-1 and B-2 occurrences in a frontend, raw and refined."""
     lines_b1 = raw_b1 = refined_b1 = raw_b2 = refined_b2 = 0
     for path in files(frontend):
@@ -79,12 +116,9 @@ def measure(frontend):
         lines_b1 += sum(1 for ln in text.split("\n") if LEGACY.search(ln))
         clean = strip_noise(text)
         refined_b1 += len(LEGACY.findall(clean))
-        for line in clean.split("\n"):
-            for m in WRITE.finditer(line):
-                raw_b2 += 1
-                arg = argument_of(line, m.start())
-                if not IREP2_ARG.search(arg):
-                    refined_b2 += 1
+        raw, refined = count_b2(path, clean, listing)
+        raw_b2 += raw
+        refined_b2 += refined
     return lines_b1, raw_b1, refined_b1, raw_b2, refined_b2
 
 
@@ -92,9 +126,10 @@ def main():
     """Print the per-frontend table and the totals row."""
     print(f"{'frontend':<22} {'B-1 ln':>8} {'B-1':>8} {'B-1*':>8}   {'B-2':>6} {'B-2*':>6}")
     print("-" * 68)
+    listing = [] if "--list" in sys.argv else None
     totals = [0, 0, 0, 0, 0]
     for f in FRONTENDS:
-        got = measure(f)
+        got = measure(f, listing)
         totals = [a + b for a, b in zip(totals, got)]
         print(f"{f:<22} {got[0]:>8} {got[1]:>8} {got[2]:>8}   {got[3]:>6} {got[4]:>6}")
     print("-" * 68)
@@ -105,6 +140,10 @@ def main():
     print(" B-1     occurrences, which is what the bar's wording describes.")
     print(" *       refined: comments and string literals excluded from B-1; writes")
     print("         whose argument is already IREP2 excluded from B-2.")
+    if listing is not None:
+        print("\nB-2* sites:")
+        for row in listing:
+            print("  " + row)
     return 0
 
 
