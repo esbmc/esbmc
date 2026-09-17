@@ -19,9 +19,11 @@
  *  direct expr2t::simplify() callers that never reach the free simplify()
  *  below. Coverage is still not total, and three gaps are structural:
  *  simplify() returns nil for address_of before any rewrite site (overflow
- *  now reaches one narrow verified rewrite -- the widened-operand-multiply
- *  overflow shortcut in overflow2t::do_simplify() -- but otherwise still
- *  declines the same way);
+ *  now reaches one narrow rewrite -- the widened-operand-multiply overflow
+ *  shortcut in overflow2t::do_simplify() (#7840) -- but is_unstatable_shape()
+ *  declines it explicitly: stating it as an equality would hand the
+ *  checker's solver back the exact double-width multiply the shortcut exists
+ *  to keep away from the solver);
  *  the driver cannot install a checker until it holds a namespace, so frontend
  *  parsing runs unchecked; and the rewrites the checker's own solver performs
  *  are skipped by the reentrancy guard below, counted in neither total. A
