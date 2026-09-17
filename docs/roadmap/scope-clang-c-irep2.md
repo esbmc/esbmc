@@ -9305,3 +9305,112 @@ That is the next thing to measure and it is cheap: the local arm's GOTO cost, wi
 in place, against a base from the same commit. §149.2's 2 112 was measured with **both** arms
 converted and none of the fixes, so it does not answer this. If the local arm's GOTO is clean, it
 converts; if it is not, the strata matter and §157.2's structural recommendation stands.
+
+## 159. The criterion was wrong, and the arm has three hard failures (2026-09-16)
+
+§158.3 asked whether nine sections of symbol-table accounting had been measuring the wrong
+artefact. They had. It also hoped the answer would unblock the local arm. It does not.
+
+### 159.1 The GOTO cost is 106, not 3 003
+
+Converting `clang_c_convert.cpp:659` with all four of this stack's seam fixes in place, both arms
+built from the same commit:
+
+```
+symbol tables differing   3 003 of 8 682   (§158.2)
+goto programs differing     106 of 8 682   1.2%
+```
+
+So 97% of what §154-§158 measured was a debug dump diverging, not the program under verification.
+The four carries were correct and are worth having -- the seam invents less now -- but the figure
+they were chasing was the wrong one, and §157.2's "nine more sections" projection was built on it.
+
+### 159.2 Of those 106, fifteen abort -- for three different reasons
+
+```
+91  differ benignly
+15  abort (exit 134), across three distinct assertions:
+     7  `symbol' failed
+     4  `sz % a == 0' failed                         the bitfield padding assertion, §153
+     4  `... struct_union_get_component_number(source->type, memb).has_value()' failed
+```
+
+`regression/esbmc/github_571_3`, one of the four padding aborts, has `unsigned b : 12` in its
+source -- the same bitfield cause §153 isolated for the static arm, so that one is shared.
+
+The other two are new and undiagnosed here. A null symbol in seven programs and a failed struct
+member lookup in four are not rendering differences; they are the conversion producing a value
+that a later pass cannot use. Neither is diagnosed in this section, for the reason §157.1 gave:
+five sections in this stack have explained a symptom and been refuted by the next measurement.
+
+### 159.3 Where this leaves Phase 6
+
+| arm | GOTO cost | hard failures |
+|---|---|---|
+| `:632` static | not separately measured | the bitfield assertion, corpus-wide (§153) |
+| `:659` local | 106 of 8 682 | 15, across three assertions, one shared with the static arm |
+
+Neither arm converts. What has changed is the size and shape of the obstacle: not 3 003
+differences needing nine more carries, but **15 programs failing hard for three reasons**, of
+which one is known and two are not. That is a tractable list, and it is the first time in this
+investigation that the remaining work has been a list rather than a slope.
+
+The bitfield is still the one with a name and no cheap answer -- `bit_field2t` needs a width, a
+migration in both directions, and every `type_ids` switch answered for. The other two need
+diagnosing before anyone can say what they need.
+
+## 160. The seven null-symbol aborts are §53's precondition (2026-09-16)
+
+§159.2 left three abort causes on the local arm, two undiagnosed. This diagnoses the largest.
+
+### 160.1 Which programs, and what is missing
+
+Six of the seven are variadic, which is the whole clue:
+
+```
+regression/esbmc/va_binds_by_reference
+regression/esbmc/irep2_only_va_binds_by_reference
+regression/esbmc/irep2_only_va_binds_by_reference_c23
+regression/esbmc/irep2_only_va_copy_binds_by_reference
+regression/esbmc/vasprintf_valist_consumed_no_recovery_fail
+regression/nonz3/variadic_function
+regression/esbmc-cpp/cpp/github_2254_fail
+```
+
+The assertion is `namespacet::follow`'s `assert(symbol)` (`util/symtab/namespace.cpp:60`) -- a
+`symbol_typet` naming something the namespace cannot find. Instrumented to print the identifier
+rather than guessed at:
+
+```
+[FOLLOW] missing identifier=tag-struct __va_list_tag
+```
+
+### 160.2 The identifier is right; the timing is not
+
+`tag-struct __va_list_tag` **is** in the symbol table -- `--symbol-table-only` on the same program
+without the conversion shows it, with its four members. So this is not a naming mismatch of the
+kind §44 and §46 were: the name is correct and the symbol exists by the end of conversion. It does
+not exist *yet* when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`.
+
+That is the blocker §146 listed third -- "a symbol that does not exist yet"
+(`scope-python-irep2.md` §6.1) -- and §53's precondition in its original form: at converter time
+the clang AST is the only complete source, and a migration that has to resolve a type through the
+namespace is asking the symbol table a question it cannot answer yet.
+
+So seven of the fifteen hard failures are one known class, and the class already has a stated
+answer: do not migrate eagerly at converter time. That is a constraint on *where* a value write
+can be converted, not a defect to fix.
+
+### 160.3 What the fifteen look like now
+
+| assertion | count | cause |
+|---|---|---|
+| `symbol' failed | 7 | §53's precondition -- the type's tag symbol is not in the table yet |
+| `sz % a == 0' | 4 | no `bit_field2t` in IREP2 (§153) |
+| `...get_component_number(...).has_value()` | 4 | undiagnosed |
+
+Two of the three groups now have causes, and they are different kinds of thing: one is a missing
+type kind that needs building, the other a precondition that says this particular site cannot be
+converted at all. Neither is a rendering difference, and neither is helped by another attribute
+carry -- which retires the approach §155 through §158 took, on evidence rather than on my
+impatience with it.

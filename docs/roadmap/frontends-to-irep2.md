@@ -4318,3 +4318,52 @@ So the next measurement is the local arm's GOTO cost, with all four fixes, again
 same commit. §63's 2 112 does not answer it -- that was both arms converted and none of the fixes.
 If the GOTO is clean the arm converts and Phase 6 moves; if not, §71's recommendation stands and
 the choice is a `type2t` base-class qualifier field against accepting the rendering difference.
+
+## 73. 106, not 3 003 -- and fifteen of them abort (2026-09-16)
+
+§72 doubted the criterion: every figure from §68 onward was a symbol-table difference, and the
+symbol table is a debug dump rather than the program that gets verified. Measured, the doubt was
+right and the hope behind it was wrong.
+
+Converting `clang_c_convert.cpp:659` with all four seam fixes in place, both arms from the same
+commit: **106 of 8 682** goto programs differ, against 3 003 symbol tables. So 97% of what five
+sections measured was rendering. The carries were correct -- the seam invents less now -- but the
+number they chased was the wrong one, and the "nine more sections" projection rested on it.
+
+Of the 106, **91 differ benignly and 15 abort**, across three distinct assertions: seven a null
+`symbol`, four the `sz % a == 0` padding assertion that §67 traced to IREP2 having no bitfield
+type, and four a failed struct member lookup. `regression/esbmc/github_571_3` is one of the
+padding four and has `unsigned b : 12` in its source, so that cause is shared with the static arm.
+The other two are recorded and not diagnosed.
+
+So neither arm converts, but the obstacle has changed shape: not thousands of differences needing
+more carries, but **fifteen programs failing hard for three reasons**, one known and two not. For
+the first time in this investigation the remaining work is a list rather than a slope.
+
+`scope-clang-c-irep2.md` §159 has the breakdown. Phase 6 stays at B-2\* 19.
+
+## 74. Seven of the fifteen are a precondition, not a defect (2026-09-16)
+
+§73 left three abort causes on clang-c's local value-write arm, two of them undiagnosed. The
+largest is now diagnosed, by instrumenting the failure rather than reasoning about it.
+
+Six of the seven `symbol' aborts are variadic programs, and the missing identifier is
+`tag-struct __va_list_tag`. That symbol **is** in the table -- `--symbol-table-only` without the
+conversion shows it with its four members -- so the name is right and the timing is wrong: it is
+not there yet when `migrate_expr(val)` runs at `clang_c_convert.cpp:659`. `namespacet::follow`
+then asserts.
+
+That is the blocker §146 listed third and `scope-python-irep2.md` §6.1 named first: a symbol that
+does not exist yet. It is a constraint on *where* a value may be converted, not a defect to repair
+-- at converter time the clang AST is the only complete source, and a migration that resolves a
+type through the namespace is asking the symbol table a question it cannot answer.
+
+```
+7  `symbol' failed        §53's precondition -- tag not in the table yet
+4  `sz % a == 0'          no bit_field2t (§67)
+4  component lookup       undiagnosed
+```
+
+Two causes known, of two different kinds: one wants a type kind built, the other says this site
+cannot be converted at all. Neither is a rendering difference and neither yields to another
+attribute carry -- which retires the §69-§72 approach on evidence.
