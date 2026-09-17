@@ -96,9 +96,21 @@ std::string builtin_type_symbol(const std::string &name)
     {"str", "c:@PyRtStr_Type"},
     {"float", "c:@PyRtFloat_Type"},
     {"object", "c:@PyRtObject_Type"},
-    {"type", "c:@PyRtType_Type"}};
+    {"type", "c:@PyRtType_Type"},
+    {"BaseException", "c:@PyRtBaseException_Type"},
+    {"Exception", "c:@PyRtException_Type"}};
   auto it = types.find(name);
   return it == types.end() ? std::string() : it->second;
+}
+
+/// Type object for a builtin usable as a base class. Only the exception roots
+/// qualify: subclassing int or list would need the instance layout of the
+/// builtin, which a user class here does not get.
+std::string builtin_base_symbol(const std::string &name)
+{
+  if (name == "Exception" || name == "BaseException")
+    return builtin_type_symbol(name);
+  return std::string();
 }
 
 std::string binop_function(const std::string &op)
@@ -1641,7 +1653,8 @@ void python_runtime_converter::declare_class(const json &def)
     const json &base = def["bases"][0];
     if (
       !is_type(base, "Name") ||
-      (base["id"] != "object" && !classes_.count(base["id"])))
+      (base["id"] != "object" && !classes_.count(base["id"]) &&
+       builtin_base_symbol(base["id"]).empty()))
       unsupported(def);
   }
 
@@ -1787,8 +1800,10 @@ void python_runtime_converter::convert()
       {"ob_type", address_of_exprt(symbol_expr(lookup("c:@PyRtType_Type")))},
       {"tp_name", name_pointer(cls)},
       {"tp_base",
-       base.empty() ? address_of_exprt(symbol_expr(lookup("c:@PyRtObject_Type")))
-                    : type_pointer(base)},
+       base.empty()
+         ? address_of_exprt(symbol_expr(lookup("c:@PyRtObject_Type")))
+         : (classes_.count(base) ? type_pointer(base)
+                                 : address(builtin_base_symbol(base)))},
       {"tp_attrs",
        address_of_exprt(symbol_expr(lookup(global_id("$pyrt_attrs$" + cls))))},
       {"tp_flags", from_integer(heaptype_flag, uint_type())}};

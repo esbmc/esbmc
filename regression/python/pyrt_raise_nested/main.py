@@ -1,5 +1,5 @@
 # A raise from inside a handler is caught by the enclosing try.
-class MyError:
+class MyError(Exception):
     pass
 
 

@@ -208,6 +208,8 @@ extern PyRtTypeObject PyRtTuple_Type;
 extern PyRtTypeObject PyRtStr_Type;
 extern PyRtTypeObject PyRtFloat_Type;
 extern PyRtTypeObject PyRtDict_Type;
+extern PyRtTypeObject PyRtBaseException_Type;
+extern PyRtTypeObject PyRtException_Type;
 extern PyRtTypeObject PyRtFunction_Type;
 extern PyRtTypeObject PyRtMethod_Type;
 

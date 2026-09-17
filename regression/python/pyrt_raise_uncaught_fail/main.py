@@ -1,4 +1,4 @@
-class MyError:
+class MyError(Exception):
     pass
 
 

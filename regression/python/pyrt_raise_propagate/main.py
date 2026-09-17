@@ -1,5 +1,5 @@
 # The raise leaves a frame and is caught at the call site.
-class MyError:
+class MyError(Exception):
     pass
 
 
