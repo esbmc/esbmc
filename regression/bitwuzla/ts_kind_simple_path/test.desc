@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --ts-k-induction --max-k-step 8
+^Solution found by the transition-system inductive step \(k = 3\)$
+^VERIFICATION SUCCESSFUL$

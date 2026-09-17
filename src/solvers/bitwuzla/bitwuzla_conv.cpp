@@ -59,6 +59,8 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   }
 
   bitw_options.set(bitwuzla::Option::PRODUCE_MODELS, 1);
+  if (options.get_bool_option("smt-unsat-assumptions"))
+    bitw_options.set(bitwuzla::Option::PRODUCE_UNSAT_ASSUMPTIONS, 1);
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 
@@ -92,6 +94,27 @@ smt_resultt bitwuzla_convt::dec_solve()
     return P_UNSATISFIABLE;
 
   return P_ERROR;
+}
+
+smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  std::vector<bitwuzla::Term> terms;
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<bitw_smt_ast>(a)->a);
+
+  bitwuzla::Result result = bitw->check_sat(terms);
+  if (result == bitwuzla::Result::SAT)
+    return P_SATISFIABLE;
+  if (result == bitwuzla::Result::UNSAT)
+    return P_UNSATISFIABLE;
+  return P_ERROR;
+}
+
+bool bitwuzla_convt::is_unsat_assumption(smt_astt a)
+{
+  return bitw->is_unsat_assumption(to_solver_smt_ast<bitw_smt_ast>(a)->a);
 }
 
 const std::string bitwuzla_convt::solver_text()

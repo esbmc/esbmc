@@ -32,6 +32,12 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
   smt_resultt dec_solve() override;
+  smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool is_unsat_assumption(smt_astt a) override;
+  bool supports_assumptions() const override
+  {
+    return true;
+  }
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;

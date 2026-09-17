@@ -1,11 +1,21 @@
 #include <esbmc/esbmc_parseoptions.h>
 
+#include <transition-system/ts_engines.h>
 #include <transition-system/ts_extraction.h>
+#include <transition-system/ts_pdr.h>
 #include <transition-system/ts_slice.h>
 #include <util/base/time_stopping.h>
 #include <util/message/message.h>
 
+#include <cstdlib>
+#include <limits>
 #include <sstream>
+
+bool esbmc_parseoptionst::ts_strategy_requested() const
+{
+  return cmdline.isset("ts-check") || cmdline.isset("ts-bmc") ||
+         cmdline.isset("ts-k-induction") || cmdline.isset("ts-pdr");
+}
 
 int esbmc_parseoptionst::do_ts_strategy(
   optionst &options,
@@ -18,13 +28,24 @@ int esbmc_parseoptionst::do_ts_strategy(
 
   if (!extracted)
   {
-    log_result("TS-CHECK rejected");
-    log_result("VERIFICATION UNKNOWN");
-    return 0;
+    if (cmdline.isset("ts-check"))
+      log_result("TS-CHECK rejected");
+    else
+      log_status("Not a transition system");
+    if (cmdline.isset("ts-check") || cmdline.isset("ts-no-fallback"))
+    {
+      log_result("VERIFICATION UNKNOWN");
+      return 0;
+    }
+    if (!cmdline.isset("ts-k-induction") && !cmdline.isset("ts-pdr"))
+      options.set_option("disable-inductive-step", true);
+    return do_bmc_strategy(options, goto_functions);
   }
-  slice_transition_system(ts);
+  if (!cmdline.isset("ts-no-live-filter"))
+    slice_transition_system(ts);
 
   const std::string extract_s = time2string(current_time() - start);
+  log_status("Transition system extracted in {}s", extract_s);
 
   if (cmdline.isset("ts-dump"))
   {
@@ -33,15 +54,55 @@ int esbmc_parseoptionst::do_ts_strategy(
     log_result("{}", oss.str());
   }
 
-  log_result(
-    "TS-CHECK accepted states={} inputs={} defs={} bad={} prefix_bad={} "
-    "extract_s={}",
-    ts.states.size(),
-    ts.inputs.size(),
-    ts.body_defs.size(),
-    ts.bad.size(),
-    ts.prefix_bad.size(),
-    extract_s);
-  log_result("VERIFICATION UNKNOWN");
-  return 0;
+  if (cmdline.isset("ts-check"))
+  {
+    log_result(
+      "TS-CHECK accepted states={} inputs={} defs={} bad={} prefix_bad={} "
+      "extract_s={}",
+      ts.states.size(),
+      ts.inputs.size(),
+      ts.body_defs.size(),
+      ts.bad.size(),
+      ts.prefix_bad.size(),
+      extract_s);
+    log_result("VERIFICATION UNKNOWN");
+    return 0;
+  }
+
+  const uint64_t max_k = cmdline.isset("unlimited-k-steps")
+                           ? std::numeric_limits<uint64_t>::max()
+                           : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  namespacet ns(context);
+
+  if (cmdline.isset("ts-pdr"))
+  {
+    ts_pdrt pdr(ts, ns, options);
+    unsigned depth = 0;
+    switch (pdr.run(max_k, depth))
+    {
+    case ts_pdrt::resultt::safe:
+      log_success(
+        "\nSolution found by PDR (invariant checked)\nVERIFICATION SUCCESSFUL");
+      return 0;
+    case ts_pdrt::resultt::unsafe:
+    {
+      log_status("PDR found a violation at step {}; replaying with BMC", depth);
+      ts_enginet replay(ts, ns, options, true);
+      const int rc = replay.bmc(depth, false);
+      if (rc != 1)
+        log_error("BMC did not reproduce the PDR counterexample");
+      return rc;
+    }
+    case ts_pdrt::resultt::unknown:
+      log_status("PDR: {}", pdr.reason);
+      log_fail("\nVERIFICATION UNKNOWN");
+      return 0;
+    }
+  }
+
+  ts_enginet engine(ts, ns, options, !cmdline.isset("ts-k-induction"));
+  if (cmdline.isset("ts-k-induction"))
+    return engine.k_induction(max_k, !cmdline.isset("ts-no-simple-path"));
+  return engine.bmc(max_k, cmdline.isset("ts-push-pop"));
 }
