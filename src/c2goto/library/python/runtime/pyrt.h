@@ -50,6 +50,18 @@ typedef struct __pyrt_list
   PyRtObject *items[PYRT_LIST_CAPACITY];
 } PyRtListObject;
 
+#define PYRT_SET_CAPACITY 16
+
+/* Members are unique and kept in insertion order, so iterating one is
+ * deterministic. A real set has no order; nothing here relies on it having
+ * none. */
+typedef struct __pyrt_set
+{
+  PyRt_HEAD;
+  int64_t size;
+  PyRtObject *items[PYRT_SET_CAPACITY];
+} PyRtSetObject;
+
 #define PYRT_TUPLE_CAPACITY 16
 
 /* Immutable: the entries are fixed once the literal is built, so there is no
@@ -205,6 +217,7 @@ extern PyRtTypeObject PyRtLong_Type;
 extern PyRtTypeObject PyRtBool_Type;
 extern PyRtTypeObject PyRtList_Type;
 extern PyRtTypeObject PyRtTuple_Type;
+extern PyRtTypeObject PyRtSet_Type;
 extern PyRtTypeObject PyRtStr_Type;
 extern PyRtTypeObject PyRtFloat_Type;
 extern PyRtTypeObject PyRtDict_Type;
@@ -259,6 +272,9 @@ extern const char pyrt_str___ne__[];
 extern const char pyrt_str___gt__[];
 extern const char pyrt_str___ge__[];
 extern const char pyrt_str_append[];
+extern const char pyrt_str_add[];
+extern const char pyrt_str_discard[];
+extern const char pyrt_str_remove[];
 extern const char pyrt_str___class__[];
 
 PyRtObject *pyrt_bool_from(bool b);
@@ -273,6 +289,11 @@ PyRtObject *pyrt_long_remainder(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_long_power(PyRtObject *a, PyRtObject *b);
 PyRtObject *pyrt_long_richcompare(PyRtObject *a, PyRtObject *b, int op);
 PyRtObject *pyrt_list_new(void);
+PyRtObject *pyrt_set_new(void);
+void pyrt_set_add(PyRtObject *o, PyRtObject *value);
+void pyrt_set_discard(PyRtObject *o, PyRtObject *value);
+void pyrt_set_remove(PyRtObject *o, PyRtObject *value);
+int64_t pyrt_set_find(PyRtSetObject *s, PyRtObject *value);
 PyRtObject *pyrt_tuple_new(void);
 void pyrt_tuple_append(PyRtObject *o, PyRtObject *value);
 void pyrt_unpack_check(PyRtObject *o, int64_t expected);

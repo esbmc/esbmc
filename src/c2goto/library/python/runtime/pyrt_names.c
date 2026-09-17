@@ -1,5 +1,8 @@
 #include "pyrt.h"
 
+const char pyrt_str_add[] = "add";
+const char pyrt_str_discard[] = "discard";
+const char pyrt_str_remove[] = "remove";
 const char pyrt_str___init__[] = "__init__";
 const char pyrt_str___add__[] = "__add__";
 const char pyrt_str___radd__[] = "__radd__";

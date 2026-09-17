@@ -123,6 +123,7 @@ private:
   exprt call_expr(const json &node);
   exprt list(const json &node);
   exprt tuple(const json &node);
+  exprt set_literal(const json &node);
   exprt comprehension(const json &node, bool is_dict);
   void emit_loop(
     const json &target,

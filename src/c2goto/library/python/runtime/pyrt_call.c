@@ -132,5 +132,21 @@ pyrt_call_method(PyRtObject *o, const char *name, PyRtArgs args, int64_t nargs)
     pyrt_list_append(o, args.a0);
     return &pyrt_None;
   }
+  if (o->ob_type == &PyRtSet_Type)
+  {
+    if (name == pyrt_str_add || name == pyrt_str_discard ||
+        name == pyrt_str_remove)
+    {
+      if (nargs != 1)
+        PYRT_RAISE("TypeError: this set method takes exactly one argument");
+      if (name == pyrt_str_add)
+        pyrt_set_add(o, args.a0);
+      else if (name == pyrt_str_discard)
+        pyrt_set_discard(o, args.a0);
+      else
+        pyrt_set_remove(o, args.a0);
+      return &pyrt_None;
+    }
+  }
   return pyrt_call(pyrt_getattr(o, name), args, nargs);
 }

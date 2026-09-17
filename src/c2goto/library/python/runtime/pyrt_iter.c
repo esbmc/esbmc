@@ -25,6 +25,9 @@ PyRtObject *pyrt_contains(PyRtObject *container, PyRtObject *item)
 {
   if (container->ob_type == &PyRtStr_Type)
     PYRT_RAISE("pyrt: substring test is not modelled");
+  if (container->ob_type == &PyRtSet_Type)
+    return pyrt_bool_from(
+      pyrt_set_find((PyRtSetObject *)container, item) >= 0);
   if (container->ob_type == &PyRtDict_Type)
     return pyrt_bool_from(
       pyrt_dict_find((PyRtDictObject *)container, item) >= 0);

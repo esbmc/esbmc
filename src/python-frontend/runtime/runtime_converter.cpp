@@ -110,6 +110,7 @@ std::string builtin_type_symbol(const std::string &name)
     {"bool", "c:@PyRtBool_Type"},
     {"list", "c:@PyRtList_Type"},
     {"tuple", "c:@PyRtTuple_Type"},
+    {"set", "c:@PyRtSet_Type"},
     {"dict", "c:@PyRtDict_Type"},
     {"str", "c:@PyRtStr_Type"},
     {"float", "c:@PyRtFloat_Type"},
@@ -495,6 +496,8 @@ exprt python_runtime_converter::expr(const json &node)
     return list(node);
   if (type == "Tuple")
     return tuple(node);
+  if (type == "Set")
+    return set_literal(node);
   if (type == "Dict")
     return dict_literal(node);
   if (type == "ListComp")
@@ -865,6 +868,8 @@ exprt python_runtime_converter::call_expr(const json &node)
         return call("pyrt_dict_new", {}, loc);
       if (callee == "tuple" && node["args"].empty())
         return call("pyrt_tuple_new", {}, loc);
+      if (callee == "set" && node["args"].empty())
+        return call("pyrt_set_new", {}, loc);
       static const std::map<std::string, std::string> iterable_builtins = {
         {"abs", "pyrt_builtin_abs"},
         {"all", "pyrt_builtin_all"},
@@ -960,6 +965,17 @@ exprt python_runtime_converter::comprehension(const json &node, bool is_dict)
         emit_if(condition, kept, loc);
     },
     loc);
+  return result;
+}
+
+/// `{a, b}`. Adding a member already present changes nothing, so a literal
+/// naming the same value twice holds it once, as in Python.
+exprt python_runtime_converter::set_literal(const json &node)
+{
+  const locationt loc = location(node);
+  exprt result = call("pyrt_set_new", {}, loc);
+  for (const json &element : node["elts"])
+    call("pyrt_set_add", {result, expr(element)}, loc);
   return result;
 }
 
