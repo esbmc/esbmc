@@ -211,8 +211,9 @@ smt_convt *create_solver(
   bool fp_to_bv = options.get_bool_option("fp2bv");
 
   // Pick a tuple flattener to use. If the solver has native support, and no
-  // options were given, use that by default
-  if (tuple_api != nullptr && !node_flat && !sym_flat)
+  // options were given, use that by default. A native tuple cannot hold a
+  // flattened array as a field, so flattened arrays need flattened tuples.
+  if (tuple_api != nullptr && !node_flat && !sym_flat && !array_flat)
     ctx->set_tuple_iface(tuple_api);
   // Use the node flattener if specified
   else if (node_flat)
