@@ -41,6 +41,28 @@ void collect_target_names(
       collect_target_names(element, assigned);
 }
 
+/// A comprehension binds its generator target, but it is an expression, so
+/// collect_assigned never walks past the statement to find it. Scan the whole
+/// subtree instead: a comprehension can sit anywhere an expression can.
+void collect_comprehension_targets(
+  const nlohmann::json &node,
+  std::set<std::string> &assigned)
+{
+  if (node.is_array())
+  {
+    for (const nlohmann::json &element : node)
+      collect_comprehension_targets(element, assigned);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  if (is_type(node, "ListComp") || is_type(node, "DictComp"))
+    for (const nlohmann::json &generator : node["generators"])
+      collect_target_names(generator["target"], assigned);
+  for (const auto &entry : node.items())
+    collect_comprehension_targets(entry.value(), assigned);
+}
+
 /// Py_LT..Py_GE in pyrt.h, or -1 for an operator richcompare does not take.
 int richcompare_op(const std::string &op)
 {
@@ -435,6 +457,10 @@ exprt python_runtime_converter::expr(const json &node)
     return tuple(node);
   if (type == "Dict")
     return dict_literal(node);
+  if (type == "ListComp")
+    return comprehension(node, false);
+  if (type == "DictComp")
+    return comprehension(node, true);
   if (type == "Subscript")
     return subscript(node);
   if (type == "Attribute")
@@ -824,6 +850,64 @@ exprt python_runtime_converter::call_expr(const json &node)
     loc);
 }
 
+/// `[e for x in it if c]` and its dict form build the container with the same
+/// loop machinery a for statement uses, so a tuple target and range counting
+/// come along unchanged. One generator only: a nested comprehension is
+/// refused rather than half-handled. Several `if` filters are evaluated and
+/// conjoined rather than short-circuited, which shows only with side effects.
+exprt python_runtime_converter::comprehension(const json &node, bool is_dict)
+{
+  const json &generators = node["generators"];
+  if (generators.size() != 1)
+    unsupported(node);
+  const json &generator = generators[0];
+  if (generator.contains("is_async") && generator["is_async"] != 0)
+    unsupported(node);
+
+  const locationt loc = location(node);
+  exprt result = new_temporary(object_type_, loc);
+  block_->copy_to_operands(code_assignt(
+    result, call(is_dict ? "pyrt_dict_new" : "pyrt_list_new", {}, loc)));
+
+  emit_loop(
+    generator["target"],
+    generator["iter"],
+    [&]() {
+      exprt condition = nil_exprt();
+      for (const json &test : generator["ifs"])
+      {
+        exprt value = truth(test);
+        if (condition.is_nil())
+          condition = value;
+        else
+        {
+          exprt both("and", bool_typet());
+          both.copy_to_operands(condition, value);
+          condition = both;
+        }
+      }
+
+      code_blockt kept;
+      code_blockt *outer = block_;
+      block_ = &kept;
+      if (is_dict)
+        call(
+          "pyrt_setitem",
+          {result, expr(node["key"]), expr(node["value"])},
+          loc);
+      else
+        call("pyrt_list_append", {result, expr(node["elt"])}, loc);
+      block_ = outer;
+
+      if (condition.is_nil())
+        block_->copy_to_operands(kept);
+      else
+        emit_if(condition, kept, loc);
+    },
+    loc);
+  return result;
+}
+
 exprt python_runtime_converter::tuple(const json &node)
 {
   const locationt loc = location(node);
@@ -1099,10 +1183,23 @@ void python_runtime_converter::for_statement(const json &node)
   /* The target is bound through store(), which unpacks a tuple or list target
    * and refuses anything it cannot bind, so `for a, b in pairs` needs no check
    * of its own here. */
-  const json &target = node["target"];
+  emit_loop(
+    node["target"],
+    node["iter"],
+    [&]() { statements(node["body"], *block_); },
+    location(node));
+}
 
-  const locationt loc = location(node);
-  const json &iterable = node["iter"];
+/// The loop scaffolding shared by a `for` statement and a comprehension: the
+/// body is whatever the caller emits, so a comprehension appends to its result
+/// instead of running user statements, and both get range counting, tuple
+/// targets and `continue` alike.
+void python_runtime_converter::emit_loop(
+  const json &target,
+  const json &iterable,
+  const std::function<void()> &emit_body,
+  const locationt &loc)
+{
   const bool over_range = is_type(iterable, "Call") &&
                           is_type(iterable["func"], "Name") &&
                           iterable["func"]["id"] == "range" &&
@@ -1159,8 +1256,8 @@ void python_runtime_converter::for_statement(const json &node)
     over_range ? call("pyrt_long_from", {index}, loc)
                : call("pyrt_iter_item", {container, index}, loc),
     loc);
+  emit_body();
   block_ = outer;
-  statements(node["body"], body);
 
   exprt next = plus_exprt(index, from_integer(stride, counter));
   next.type() = counter;
@@ -1261,6 +1358,7 @@ void python_runtime_converter::collect_assigned(
 {
   for (const json &node : body)
   {
+    collect_comprehension_targets(node, assigned);
     if (is_type(node, "Assign"))
     {
       for (const json &target : node["targets"])

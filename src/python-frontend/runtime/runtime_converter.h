@@ -5,6 +5,7 @@
 #include <util/irep/std_types.h>
 #include <util/symtab/context.h>
 
+#include <functional>
 #include <map>
 #include <set>
 #include <string>
@@ -118,6 +119,12 @@ private:
   exprt call_expr(const json &node);
   exprt list(const json &node);
   exprt tuple(const json &node);
+  exprt comprehension(const json &node, bool is_dict);
+  void emit_loop(
+    const json &target,
+    const json &iterable,
+    const std::function<void()> &emit_body,
+    const locationt &loc);
   exprt dict_literal(const json &node);
   exprt subscript(const json &node);
 
