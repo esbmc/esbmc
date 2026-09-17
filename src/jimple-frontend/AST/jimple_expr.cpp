@@ -13,16 +13,6 @@ void jimple_constant::from_json(const json &j)
   j.at("value").get_to(value);
 }
 
-exprt jimple_constant::to_exprt(
-  contextt &,
-  const std::string &,
-  const std::string &) const
-{
-  auto as_number = std::stoi(value);
-  return constant_exprt(
-    integer2binary(as_number, 10), integer2string(as_number), int_type());
-};
-
 // The leaf of this frontend's expression tree: a literal with no context and no
 // operands, so it converts with nothing left to migrate. Matches what
 // migrate_expr makes of the constant_exprt above -- int_type() is signedbv, so
@@ -39,22 +29,6 @@ void jimple_symbol::from_json(const json &j)
 {
   j.at("value").get_to(var_name);
 }
-
-exprt jimple_symbol::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // 1. Look over the local scope
-  auto symbol_name = get_symbol_name(class_name, function_name, var_name);
-  symbolt &s = *ctx.find_symbol(symbol_name);
-
-  // TODO:
-  // 2. Look over the class scope
-  // 3. Look over the global scope (possibly don't need)
-
-  return symbol_expr(s);
-};
 
 expr2tc jimple_symbol::to_expr2t(
   contextt &ctx,
@@ -201,6 +175,65 @@ void jimple_binop::from_json(const json &j)
 // >= and >, with from_json rewriting == to = beforehand. Anything else falls
 // through to the base default and takes exactly the path it takes today, so an
 // operator this switch does not know cannot silently build the wrong node.
+
+// gen_binary gives the node the lhs type; these kinds keep it.
+static expr2tc jimple_typed_binop(
+  const std::string &op,
+  const type2tc &t,
+  const expr2tc &l,
+  const expr2tc &r)
+{
+  if (op == "+")
+    return add2tc(t, l, r);
+  if (op == "-")
+    return sub2tc(t, l, r);
+  if (op == "*")
+    return mul2tc(t, l, r);
+  if (op == "/")
+    return div2tc(t, l, r);
+  if (op == "mod")
+    return modulus2tc(t, l, r);
+  if (op == "bitand")
+    return bitand2tc(t, l, r);
+  if (op == "bitor")
+    return bitor2tc(t, l, r);
+  if (op == "bitxor")
+    return bitxor2tc(t, l, r);
+  if (op == "shl")
+    return shl2tc(t, l, r);
+  if (op == "ashr")
+    return ashr2tc(t, l, r);
+  // Mirrors migrate_expr's arm rather than a test: jimple builds no unsigned
+  // type, so a logical and an arithmetic shift right of a signed operand print
+  // the same and agree on every verdict -- swapping the two changes nothing
+  // observable (§38.2).
+  if (op == "lshr")
+    return lshr2tc(t, l, r);
+  return expr2tc();
+}
+
+// The relational kinds force bool themselves, which is what migrate_expr
+// produces for them too.
+static expr2tc jimple_relational_binop(
+  const std::string &op,
+  const expr2tc &l,
+  const expr2tc &r)
+{
+  if (op == "=")
+    return equality2tc(l, r);
+  if (op == "notequal")
+    return notequal2tc(l, r);
+  if (op == "<")
+    return lessthan2tc(l, r);
+  if (op == "<=")
+    return lessthanequal2tc(l, r);
+  if (op == ">")
+    return greaterthan2tc(l, r);
+  if (op == ">=")
+    return greaterthanequal2tc(l, r);
+  return expr2tc();
+}
+
 expr2tc jimple_binop::to_expr2t(
   contextt &ctx,
   const std::string &class_name,
@@ -209,24 +242,31 @@ expr2tc jimple_binop::to_expr2t(
   expr2tc l = lhs->to_expr2t(ctx, class_name, function_name);
   expr2tc r = rhs->to_expr2t(ctx, class_name, function_name);
 
-  // gen_binary gives the node the lhs type; the relational kinds force bool
-  // themselves, which is what migrate_expr produces for them too.
-  const type2tc &t = l->type;
+  expr2tc e = jimple_typed_binop(binop, l->type, l, r);
+  if (is_nil_expr(e))
+    e = jimple_relational_binop(binop, l, r);
+  if (!is_nil_expr(e))
+    return e;
 
-  if (binop == "+")
-    return add2tc(t, l, r);
-  if (binop == "-")
-    return sub2tc(t, l, r);
-  if (binop == "=")
-    return equality2tc(l, r);
-  if (binop == "notequal")
-    return notequal2tc(l, r);
-  if (binop == ">")
-    return greaterthan2tc(l, r);
-  if (binop == ">=")
-    return greaterthanequal2tc(l, r);
+  // Both representations require these to be bool throughout: migrate_expr
+  // asserts the legacy node's type is bool, and goto_check asserts the node and
+  // *each operand* are (goto_check.cpp, and_id/or_id). The legacy arm handed
+  // gen_binary the lhs type, so a jimple `and` over two ints aborted an
+  // assert-enabled build in either representation -- which no NDEBUG build and
+  // no test in the corpus could show (§38.5).
+  if (binop == "and" || binop == "or")
+  {
+    namespacet ns(ctx);
+    c_implicit_typecast(l, get_bool_type(), ns);
+    c_implicit_typecast(r, get_bool_type(), ns);
+    return binop == "and" ? expr2tc(and2tc(l, r)) : expr2tc(or2tc(l, r));
+  }
 
-  return jimple_expr::to_expr2t(ctx, class_name, function_name);
+  // Every spelling the frontend converts end to end is covered above
+  // (scope-jimple-irep2.md §38.1). Rejecting the rest here rather than letting
+  // migrate_expr reject them names the operator instead of the irep id, and it
+  // is what leaves no caller for any expression to_exprt.
+  throw "Unsupported Jimple operator: " + binop;
 }
 
 void jimple_cast::from_json(const json &j)
@@ -365,70 +405,6 @@ expr2tc jimple_expr::lower_invoke2t(
   stmts.push_back(
     code_function_call2tc(lhs, symbol_expr2tc(*callee), args, none));
   return code_block2tc(stmts, none, none);
-}
-
-exprt jimple_expr_invoke::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Move intrinsics to backend
-  if (base_class == "kotlin.jvm.internal.Intrinsics")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Runtime")
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  // TODO: Move intrinsics to backend
-  if (base_class == "java.lang.Integer" && method == "valueOf_1")
-    // This would be called with valueOf(2), valueOf(42), etc...
-    return parameters[0]->to_exprt(ctx, class_name, function_name);
-
-  if (is_nondet_call())
-  {
-    jimple_nondet nondet(method);
-    return nondet.to_exprt(ctx, class_name, function_name);
-  }
-
-  code_blockt block;
-  code_function_callt call;
-
-  std::ostringstream oss;
-  oss << base_class << ":" << method;
-
-  auto symbol = ctx.find_symbol(oss.str());
-  if (!symbol)
-  {
-    log_error("Could not find symbol {}", oss.str());
-    abort();
-  }
-  call.function() = symbol_expr(*symbol);
-  if (!is_nil_expr(lhs))
-    call.lhs() = migrate_expr_back(lhs);
-
-  for (long unsigned int i = 0; i < parameters.size(); i++)
-  {
-    // Just adding the arguments should be enough to set the parameters
-    auto parameter_expr =
-      parameters[i]->to_exprt(ctx, class_name, function_name);
-    call.arguments().push_back(parameter_expr);
-    // Hack, manually adding parameters, this should be done at symex
-    std::ostringstream oss;
-    oss << "@parameter" << i;
-    auto temp = get_symbol_name(base_class, method, oss.str());
-    symbolt &added_symbol = *ctx.find_symbol(temp);
-    code_assignt assign(symbol_expr(added_symbol), parameter_expr);
-    block.operands().push_back(assign);
-  }
-  block.operands().push_back(call);
-  return block;
 }
 
 expr2tc jimple_expr_invoke::to_expr2t(
@@ -614,4 +590,3 @@ void jimple_virtual_member::from_json(const json &j)
   j.at("signature").at("type").get_to(t);
   type = std::make_shared<jimple_type>(t);
 }
-

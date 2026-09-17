@@ -101,11 +101,6 @@ public:
   {
     value = v;
   }
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -137,11 +132,6 @@ public:
   {
     return var_name;
   }
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -171,7 +161,6 @@ public:
     return "Jimple BinOP";
   }
 
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -195,7 +184,6 @@ public:
   {
     return "Jimple Cast";
   }
-
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -222,7 +210,6 @@ public:
     return "Jimple Lengthof";
   }
 
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -248,7 +235,6 @@ public:
     return "Jimple New array";
   }
 
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -272,11 +258,6 @@ public:
   {
     return "Jimple Invoke";
   }
-
-  virtual exprt to_exprt(
-    contextt &ctx,
-    const std::string &class_name,
-    const std::string &function_name) const override;
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -322,7 +303,6 @@ public:
   {
     return "Jimple Virtual Invoke";
   }
-
 
   virtual expr2tc to_expr2t(
     contextt &ctx,
@@ -406,7 +386,6 @@ public:
     return "Jimple Deref";
   }
 
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -438,7 +417,6 @@ public:
   }
 
   const std::string mode; // Int, char, long, etc... e.g. Random().nextInt()
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,
@@ -490,7 +468,6 @@ public:
     return "Jimple Virtual Member";
   }
   virtual void from_json(const json &j) override;
-
   virtual expr2tc to_expr2t(
     contextt &ctx,
     const std::string &class_name,

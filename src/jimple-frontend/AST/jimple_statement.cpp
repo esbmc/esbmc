@@ -121,46 +121,6 @@ void jimple_assignment::from_json(const json &j)
   rhs = jimple_expr::get_expression(j.at("rhs"));
 }
 
-exprt jimple_assignment::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
-{
-  // TODO: Remove this hack
-  if (is_skip)
-  {
-    code_skipt skip;
-    return skip;
-  }
-
-  auto lhs_handle = lhs->to_exprt(ctx, class_name, function_name);
-
-  auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
-  if (dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
-  {
-    expr2tc lhs2;
-    migrate_expr(lhs_handle, lhs2);
-    dyn_expr->set_lhs(lhs2);
-    return rhs->to_exprt(ctx, class_name, function_name);
-  }
-
-  auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
-  if (dyn2_expr && !dyn2_expr->is_nondet_call())
-  {
-    expr2tc lhs2;
-    migrate_expr(lhs_handle, lhs2);
-    dyn2_expr->set_lhs(lhs2);
-    return rhs->to_exprt(ctx, class_name, function_name);
-  }
-
-  auto from_expr = rhs->to_exprt(ctx, class_name, function_name);
-  c_typecastt c_typecast(ctx);
-  c_typecast.implicit_typecast(from_expr, lhs_handle.type());
-
-  code_assignt assign(lhs_handle, from_expr);
-  return assign;
-}
-
 expr2tc jimple_assignment::to_code2t(
   contextt &ctx,
   const std::string &class_name,

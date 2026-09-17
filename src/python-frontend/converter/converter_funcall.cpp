@@ -926,7 +926,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     call.type() = ret_type;
     if (element.contains("args"))
       for (const auto &arg : element["args"])
-        call.arguments().push_back(get_expr(arg));
+      {
+        exprt arg_expr = get_expr(arg);
+        // No parameter types to check against here, so refuse cleanly.
+        if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+          dynamic_type_handler_.refuse_tagged_argument();
+        call.arguments().push_back(arg_expr);
+      }
 
     return call;
   }
@@ -1001,6 +1007,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         for (const auto &arg_element : element["args"])
         {
           exprt arg_expr = get_expr(arg_element);
+          // The pointer target only carries a return type, no parameter
+          // types, so refuse cleanly instead of passing a mistyped arg.
+          if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+            dynamic_type_handler_.refuse_tagged_argument();
           // A function name used as an argument decays to a function pointer.
           if (arg_expr.type().is_code() && arg_expr.is_symbol())
             arg_expr = address_of_exprt(arg_expr);

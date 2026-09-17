@@ -1197,6 +1197,15 @@ static bool is_python_module_global(const symbolt &s)
   return s.mode == "Python" && !s.file_local;
 }
 
+// The name alone does not identify one: a symbol carries its module prefix in
+// the id, so `c:@__ESBMC_exc_thrown` passed a base-name test, and havocking it
+// raised a spurious uncaught exception (#7356).
+static bool is_esbmc_internal_symbol(const symbolt &s)
+{
+  return id2string(s.name).starts_with("__ESBMC_") ||
+         id2string(s.id).contains("__ESBMC_");
+}
+
 void code_contractst::havoc_static_globals(
   goto_programt &dest,
   const locationt &location)
@@ -1211,9 +1220,12 @@ void code_contractst::havoc_static_globals(
     if (!s.static_lifetime && !is_python_module_global(s))
       return;
 
-    // Skip internal ESBMC symbols
-    std::string sym_name = id2string(s.name);
-    if (sym_name.starts_with("__ESBMC_"))
+    if (is_esbmc_internal_symbol(s))
+      return;
+
+    // A const global holds its initialiser for every caller, so havocking one
+    // would refute a `requires` that reads it rather than widen the check.
+    if (s.get_type().cmt_constant())
       return;
 
     // Build LHS symbol expression
@@ -1234,6 +1246,15 @@ void code_contractst::havoc_static_globals(
     t->location = location;
     t->location.comment("contract havoc global");
   });
+}
+
+void code_contractst::havoc_globals_for_entry_harness(
+  goto_programt &dest,
+  const locationt &location,
+  bool is_entry_harness)
+{
+  if (is_entry_harness)
+    havoc_static_globals(dest, location);
 }
 
 std::set<std::string> code_contractst::enforce_contracts(
@@ -1561,10 +1582,20 @@ goto_programt code_contractst::generate_checking_wrapper(
   const bool declares_frame =
     declares_frame_condition(assigns_targets, original_body);
 
-  // Note: Here is the design, enforce_contracts mode does NOT havoc
-  // parameters or globals. The wrapper is called by actual callers, so we
-  // preserve the caller's argument values. Global variables are handled by
-  // unified nondet_static initialization, not per-function havoc.
+  // The wrapper doubles as the function real callers invoke, so it must not
+  // havoc their state. Entry-harness mode is the exception: nothing called
+  // this function, and the globals still hold their static initialisers even
+  // though a caller could have written anything a `requires` admits. That
+  // makes a `requires` the initial state fails unsatisfiable, discharging the
+  // check vacuously, and leaves a violating state unreachable even when the
+  // initialiser does satisfy it (#7356). Parameters are already nondet here,
+  // which is why only globals need this.
+
+  // Havoc first of all: after step 0 it would overwrite the pointer
+  // __ESBMC_is_fresh just allocated for a global, and after step 2 the
+  // __ESBMC_old snapshots would record the initialiser rather than the
+  // havoc'd value.
+  havoc_globals_for_entry_harness(wrapper, location, alloc_ptr_params);
 
   // 0. Process __ESBMC_is_fresh in requires: allocate memory FIRST.
   //    This must come before both pointer-validity assumptions and old-snapshot
