@@ -222,6 +222,12 @@ public:
     struct expr_op_convert ops);
 
   smt_astt convert_assign(const expr2tc &expr);
+  /** Bind the symbol on the left of an equality to its right-hand side
+   *  without asserting anything: later conversions of the symbol yield the
+   *  right-hand side, so only definitions something asserted depends on reach
+   *  the solver. Falls back to convert_assign for aggregates or a symbol that
+   *  was already converted. */
+  void define(const expr2tc &expr);
 
   /** Convert @p expr and dump the resulting SMT AST in SMT format. Used by
    *  --ssa-smt-trace so callers outside the solver layer can request the
@@ -256,6 +262,16 @@ public:
    *  an error occurred.
    *  @return Result code of the call to the solver. */
   virtual smt_resultt dec_solve() = 0;
+
+  /** Solve with each boolean ast in @p assumptions held true for this query
+   *  only. Backends without support abort; check supports_assumptions(). */
+  virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  /** After an UNSAT dec_solve_assuming: whether @p a was needed. */
+  virtual bool is_unsat_assumption(smt_astt a);
+  virtual bool supports_assumptions() const
+  {
+    return false;
+  }
 
   void pre_solve();
 

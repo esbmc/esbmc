@@ -353,6 +353,28 @@ smt_astt smt_solver_baset::convert_concat_int_mode(
   return result;
 }
 
+void smt_solver_baset::define(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  const type2tc &t = eq.side_1->type;
+  const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
+  bool converted;
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    converted = smt_cache.find(eq.side_1) != smt_cache.end();
+  }
+  // Aggregates need the flatteners' assign; a symbol already in use would
+  // otherwise stay free.
+  if (!scalar || converted)
+  {
+    convert_assign(expr);
+    return;
+  }
+  smt_astt value = convert_ast(eq.side_2);
+  std::lock_guard lock(smt_cache_mutex);
+  smt_cache.insert({eq.side_1, value, ctx_level});
+}
+
 smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -3285,6 +3307,18 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 
   // type_rec is now the base type.
   return type_rec;
+}
+
+smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
+{
+  log_error("{} does not support solving under assumptions", solver_text());
+  abort();
+}
+
+bool smt_solver_baset::is_unsat_assumption(smt_astt)
+{
+  log_error("{} does not support unsat assumptions", solver_text());
+  abort();
 }
 
 void smt_solver_baset::pre_solve()

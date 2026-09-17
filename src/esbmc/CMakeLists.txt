@@ -62,6 +62,10 @@ add_library(esbmc-driver
     parseoptions/k_induction.cpp
     parseoptions/process_goto_program.cpp
     parseoptions/property_monitors.cpp
+    parseoptions/ts_strategy.cpp
+    ts/transition_system.cpp
+    ts/ts_engines.cpp
+    ts/ts_pdr.cpp
     bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
 target_include_directories(esbmc-driver
     PUBLIC ${CMAKE_BINARY_DIR}/src
