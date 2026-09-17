@@ -1,6 +1,7 @@
 #ifndef CPROVER_CBMC_BMC_H
 #define CPROVER_CBMC_BMC_H
 
+#include <esbmc/kind_invariants.h>
 #include <goto-programs/dead_store_advisory.h>
 #include <goto-programs/goto_coverage.h>
 #include <goto-programs/property_verdict.h>
@@ -13,6 +14,7 @@
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
+#include <optional>
 #include <set>
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
@@ -74,6 +76,23 @@ public:
   /// that suppressed the global verdict can emit it once its own guards have
   /// run, without restating the rule or the diagnostic.
   void report_violation();
+
+  /// What the model of a satisfiable --adaptive-k-induction step says.
+  struct kind_feedbackt
+  {
+    /// Forward condition only: for each loop that hit its unwinding
+    /// assertion, the most iterations it can still run from there, or nullopt
+    /// when that can exceed \p cap.
+    BigInt cap;
+    std::map<unsigned, std::optional<BigInt>> remaining;
+    /// The stamped loop-head states the execution passes through, in order.
+    std::vector<loop_head_samplet> samples;
+    /// The comments of the claims the model violates.
+    std::set<std::string> violated;
+  };
+  /// Set by a driver that wants the feedback; see harvest_loop_head_samples
+  /// and infer_loop_bounds.
+  kind_feedbackt *kind_feedback = nullptr;
 
   virtual smt_resultt start_bmc();
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
@@ -142,6 +161,28 @@ protected:
 
   virtual void
   bidirectional_search(smt_convt &smt_conv, const symex_target_equationt &eq);
+
+  /// Fill kind_feedback from the model of a satisfiable forward condition.
+  /// Each loop's continuation guard gives ranking measures; the largest value
+  /// a measure takes at a reachable unwinding assertion, found by bisection on
+  /// the same formula, bounds the iterations left. Leaves the solver holding a
+  /// model of the unconstrained formula.
+  void infer_loop_bounds(smt_convt &smt_conv, const symex_target_equationt &eq);
+
+  /// The loop-head states of the model of a satisfiable forward condition
+  /// that the execution it describes reaches, appended to kind_feedback.
+  /// Must run before infer_loop_bounds changes the model.
+  void harvest_loop_head_samples(
+    smt_convt &smt_conv,
+    const symex_target_equationt &eq);
+
+  /// The unwinding assertion recorded for @p step, or null.
+  const goto_symext::unwinding_claimt *
+  unwinding_claim_of(const symex_target_equationt::SSA_stept &step) const;
+
+  /// The unwinding assertions and loop-head visits of the last symex run.
+  std::vector<goto_symext::unwinding_claimt> unwinding_claims;
+  std::vector<goto_symext::loop_head_visitt> loop_head_visits;
 
   smt_resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 

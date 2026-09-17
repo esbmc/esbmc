@@ -212,6 +212,8 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   forward_condition = sym.forward_condition;
   inductive_step = sym.inductive_step;
   first_loop = sym.first_loop;
+  unwinding_claims = sym.unwinding_claims;
+  loop_head_visits = sym.loop_head_visits;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;

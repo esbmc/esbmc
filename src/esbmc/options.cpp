@@ -565,6 +565,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bidirectional",
      NULL,
      "Search the inductive step counterexample for assignments"},
+    {"adaptive-k-induction",
+     NULL,
+     "Prove by k-induction, raising each loop's bound to what the forward "
+     "condition's counterexample shows it needs"},
+    {"kind-max-bound",
+     boost::program_options::value<int>()->default_value(10000)->value_name(
+       "nr"),
+     "Largest loop bound --adaptive-k-induction jumps to (default is 10000)"},
     {"unlimited-k-steps",
      NULL,
      "Remove the upper bound on the number of k-induction steps"},

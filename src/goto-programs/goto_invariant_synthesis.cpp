@@ -298,6 +298,8 @@ void collect_taken_functions(
   });
 }
 
+} // namespace
+
 /// Whether the program can create a thread. Every route -- pthread_create,
 /// std::thread, a CUDA kernel launch, threading.Thread -- lowers to the
 /// __ESBMC_spawn_thread intrinsic, so reaching it is the creation point.
@@ -312,7 +314,7 @@ void collect_taken_functions(
 /// interleaving points its body carried, and
 /// regression/esbmc/synth_loop_invariant_thread_falseproof is the shape where
 /// that reads as a proof rather than a lost bug.
-bool spawns_threads(const goto_functionst &goto_functions)
+bool program_spawns_threads(const goto_functionst &goto_functions)
 {
   const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
 
@@ -346,6 +348,8 @@ bool spawns_threads(const goto_functionst &goto_functions)
   return false;
 }
 
+namespace
+{
 /// One forward pass: hold each call until a marker is reached, then record the
 /// held calls as that marker's dependencies. A call after the last marker in
 /// the function cannot feed one, so it is dropped.
@@ -921,7 +925,7 @@ void goto_synthesise_loop_invariants(
 {
   size_t synthesised = 0;
 
-  if (spawns_threads(goto_functions))
+  if (program_spawns_threads(goto_functions))
   {
     log_warning(
       "--synthesise-loop-invariants: the program creates threads, and cutting "
@@ -1008,4 +1012,22 @@ void goto_synthesise_loop_invariants(
       "proceeds unchanged");
 
   goto_functions.update();
+}
+
+std::vector<expr2tc> affine_loop_invariants(
+  goto_functiont &goto_function,
+  const loopst &loop,
+  const overflow_checkst &overflow)
+{
+  goto_programt::targett head;
+  affine_loopt shape;
+  if (
+    loop.get_modified_loop_vars().empty() ||
+    !recognise_affine_loop(goto_function, loop, overflow, head, shape))
+    return {};
+
+  std::vector<expr2tc> conjuncts{build_bound_invariant(shape, shape.cond)};
+  for (const auto &acc : shape.accumulators)
+    conjuncts.push_back(build_accumulator_invariant(shape, acc));
+  return conjuncts;
 }

@@ -3,6 +3,9 @@
 
 #include <goto-programs/goto_functions.h>
 #include <irep2/irep2_expr.h>
+#include <vector>
+
+class loopst;
 
 /// What goto_check will instrument on the guards this pass emits. It checks
 /// every instruction guard, including the synthesised ones, so a closed form
@@ -128,5 +131,19 @@ void goto_synthesise_loop_invariants(
   goto_functionst &goto_functions,
   const overflow_checkst &overflow,
   bool k_induction_ran);
+
+/// The conjuncts goto_synthesise_loop_invariants would emit for @p loop, or
+/// none when the loop is not the recognised affine shape. Nothing is emitted
+/// and none of that pass's program-wide declines apply: the caller checks
+/// what it assumes.
+std::vector<expr2tc> affine_loop_invariants(
+  goto_functiont &goto_function,
+  const loopst &loop,
+  const overflow_checkst &overflow);
+
+/// Whether the program can reach __ESBMC_spawn_thread. Cutting a loop deletes
+/// the interleaving points its body carried, so no loop-cutting proof holds
+/// for such a program.
+bool program_spawns_threads(const goto_functionst &goto_functions);
 
 #endif /* GOTO_PROGRAMS_GOTO_INVARIANT_SYNTHESIS_H_ */

@@ -93,6 +93,35 @@ public:
 
   typedef goto_symex_statet statet;
 
+  /// An unwinding assertion together with the loop's continuation condition,
+  /// renamed to the SSA names live at the assertion. --adaptive-k-induction
+  /// reads the model through it to bound the iterations still to come.
+  struct unwinding_claimt
+  {
+    /// Position among the unwinding claims and loop-head visits of a run.
+    size_t sequence;
+    unsigned loop_number;
+    /// The assertion step's guard, which identifies the step in the equation.
+    expr2tc path_guard;
+    expr2tc continuation;
+  };
+
+  /// A loop-head state --adaptive-k-induction's forward condition passes
+  /// through: the loop's variables, renamed to the SSA names live there.
+  struct loop_head_visitt
+  {
+    size_t sequence;
+    unsigned loop;
+    expr2tc path_guard;
+    struct variablet
+    {
+      expr2tc symbol;
+      expr2tc renamed;
+      bool modified;
+    };
+    std::vector<variablet> variables;
+  };
+
   /**
    *  Class recording the outcome of symbolic execution.
    *  Contains the things that are of interest to the BMC class: The object
@@ -122,6 +151,8 @@ public:
     /// under --schedule the current frame is already dangling by the time
     /// bmct looks (issue #6423).
     unsigned int bounded_loop_truncations;
+    std::vector<unwinding_claimt> unwinding_claims;
+    std::vector<loop_head_visitt> loop_head_visits;
   };
 
   /**
@@ -452,6 +483,14 @@ protected:
    *  @param guard Current state guard.
    */
   void loop_bound_exceeded(const expr2tc &guard);
+
+  /// Record the unwinding assertion just claimed at the current back edge;
+  /// see unwinding_claimt.
+  void record_unwinding_claim();
+
+  /// Record the state at the stamped loop-head placeholder the current step
+  /// skips; see loop_head_visitt.
+  void record_loop_head_visit();
 
   /// Records that a loop was cut off at the unwinding bound with nothing to
   /// flag it. Virtual because --schedule runs each path in its own execution
@@ -1480,6 +1519,8 @@ protected:
    *  coverage percentage measured on such a run is a lower bound: goals past
    *  the bound were never reached (issue #6387). */
   unsigned bounded_loop_truncations = 0;
+  std::vector<unwinding_claimt> unwinding_claims;
+  std::vector<loop_head_visitt> loop_head_visits;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */

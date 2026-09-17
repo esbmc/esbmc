@@ -1,4 +1,5 @@
 #include <cassert>
+#include <goto-programs/goto_k_induction.h>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/equation/slice.h>
 #include <goto-symex/equation/symex_target_equation.h>
@@ -7,6 +8,7 @@
 #include <solvers/smtlib/smtlib_conv.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
@@ -742,6 +744,8 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   {
     // generate unwinding assertion
     claim(negated_cond, "unwinding assertion loop " + i2string(loop_number));
+    if (forward_condition && options.get_bool_option("adaptive-k-induction"))
+      record_unwinding_claim();
   }
   else
   {
@@ -759,6 +763,83 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 
   // add to state guard to prevent further assignments
   cur_state->guard.add(negated_cond);
+}
+
+void goto_symext::record_unwinding_claim()
+{
+  const goto_programt::instructiont &back_edge = *cur_state->source.pc;
+  expr2tc continuation = back_edge.guard;
+  if (is_true(continuation))
+  {
+    // A while loop re-tests at its head: IF !cond THEN GOTO exit, possibly
+    // behind assumptions only the inductive step makes.
+    goto_programt::const_targett head_it = back_edge.targets.front();
+    while (head_it->inductive_step_instruction)
+      ++head_it;
+    const goto_programt::instructiont &head = *head_it;
+    if (
+      !head.is_goto() || head.targets.size() != 1 ||
+      head.targets.front()->location_number <= back_edge.location_number)
+      return;
+    continuation =
+      is_not2t(head.guard) ? to_not2t(head.guard).value : not2tc(head.guard);
+  }
+
+  // Symex dereferences a guard before renaming it; a raw guard that reads
+  // through a pointer has no SSA form the solver can take.
+  if (reads_through_pointer(continuation))
+    return;
+
+  // Not simplified: operands symex already knows would fold the guard to a
+  // constant and leave no measure to read.
+  cur_state->rename(continuation);
+  unwinding_claims.push_back(
+    {unwinding_claims.size() + loop_head_visits.size(),
+     back_edge.loop_number,
+     cur_state->guard.as_expr(),
+     continuation});
+}
+
+void goto_symext::record_loop_head_visit()
+{
+  const goto_programt::const_targett placeholder = cur_state->source.pc;
+  loop_head_visitt visit{
+    unwinding_claims.size() + loop_head_visits.size(),
+    stamped_loop(*placeholder),
+    cur_state->guard.as_expr(),
+    {}};
+
+  auto add = [&](const expr2tc &symbol, bool modified) {
+    if (!is_symbol2t(symbol) || !is_bv_type(symbol))
+      return;
+    for (const auto &v : visit.variables)
+      if (v.symbol == symbol)
+        return;
+    expr2tc renamed = symbol;
+    cur_state->rename(renamed);
+    visit.variables.push_back({symbol, renamed, modified});
+  };
+
+  // goto_k_induction havocs exactly the loop's variables, just ahead of here.
+  for (auto it = placeholder; it != cur_state->source.prog->instructions.begin();)
+  {
+    --it;
+    if (!it->inductive_step_instruction)
+      break;
+    if (it->is_assign())
+      add(to_code_assign2t(it->code).target, true);
+  }
+
+  auto head = std::next(placeholder);
+  if (head->is_goto())
+  {
+    std::unordered_set<expr2tc, irep2_hash> symbols;
+    get_symbols(head->guard, symbols);
+    for (const expr2tc &symbol : symbols)
+      add(symbol, false);
+  }
+
+  loop_head_visits.push_back(std::move(visit));
 }
 
 bool goto_symext::get_unwind(

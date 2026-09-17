@@ -195,11 +195,13 @@ candidates_for_loop(const loopst &loop, const std::vector<expr2tc> &constants)
   return out;
 }
 
+} // namespace
+
 /// True when a LOOP_INVARIANT already sits where goto_loop_invariant's
 /// extractor searches. A user-written or affine-synthesised invariant is
 /// authoritative: both would be folded into the same claim set, and a rejected
 /// guess would then fail alongside the invariant that was actually wanted.
-bool has_existing_invariant(
+bool houdini_has_existing_invariant(
   const goto_programt::targett &head,
   const goto_programt::targett &begin)
 {
@@ -215,7 +217,7 @@ bool has_existing_invariant(
   return false;
 }
 
-void emit_candidate(
+void houdini_emit_candidate(
   goto_functiont &goto_function,
   const goto_programt::targett &anchor,
   const expr2tc &candidate,
@@ -230,7 +232,13 @@ void emit_candidate(
   goto_function.body.instructions.insert(anchor, inv);
 }
 
-} // namespace
+std::vector<expr2tc>
+houdini_template_candidates(const loopst &loop, const goto_programt &body)
+{
+  std::vector<expr2tc> constants;
+  collect_function_constants(body, constants);
+  return candidates_for_loop(loop, constants);
+}
 
 std::set<std::string> goto_houdini_emit_candidates(
   goto_functionst &goto_functions,
@@ -253,7 +261,7 @@ std::set<std::string> goto_houdini_emit_candidates(
       const goto_programt::targett anchor = loop.get_original_loop_head();
       const goto_programt::targett begin = it->second.body.instructions.begin();
 
-      if (has_existing_invariant(anchor, begin))
+      if (houdini_has_existing_invariant(anchor, begin))
         continue;
 
       for (const expr2tc &cand : candidates_for_loop(loop, constants))
@@ -261,7 +269,7 @@ std::set<std::string> goto_houdini_emit_candidates(
         const std::string id = std::to_string(next_id++);
         if (keep && keep->count(id) == 0)
           continue;
-        emit_candidate(it->second, anchor, cand, id);
+        houdini_emit_candidate(it->second, anchor, cand, id);
         emitted.insert(id);
       }
     }

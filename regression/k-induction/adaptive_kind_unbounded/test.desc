@@ -1,0 +1,5 @@
+CORE
+main.c
+--adaptive-k-induction
+^Loop [0-9]+ can run past --kind-max-bound; relying on the inductive step$
+^VERIFICATION SUCCESSFUL$

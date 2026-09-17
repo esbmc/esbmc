@@ -5,6 +5,7 @@
 #endif
 #include <sys/types.h>
 #include <algorithm>
+#include <limits>
 #include <cctype>
 #include <cstdlib>
 #include <thread>
@@ -26,6 +27,7 @@
 #include <ac_config.h>
 #include <esbmc/bmc.h>
 #include <esbmc/property_report.h>
+#include <esbmc/ranking_synthesis.h>
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/trace/build_goto_trace.h>
@@ -42,6 +44,8 @@
 #include <sstream>
 #include <util/base/i2string.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
+#include <util/lang/c_types.h>
 #include <util/irep/location.h>
 
 #include <util/irep/migrate.h>
@@ -1836,7 +1840,8 @@ static bool suppresses_global_verdict(const optionst &options)
          options.get_bool_option("diagnose-unknown-properties") ||
          options.get_bool_option("coverage-measurement") ||
          options.get_bool_option("houdini-probe") ||
-         options.get_bool_option("houdini-defer-verdict");
+         options.get_bool_option("houdini-defer-verdict") ||
+         options.get_bool_option("adaptive-kind-defer-verdict");
 }
 
 void bmct::report_result(smt_resultt &res)
@@ -2076,6 +2081,18 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 
       if (config.options.get_bool_option("bidirectional"))
         bidirectional_search(*runtime_solver, *eq);
+
+      if (kind_feedback)
+      {
+        for (const auto &step : eq->SSA_steps)
+          if (
+            step.is_assert() && !step.ignore &&
+            runtime_solver->l_get(step.cond_expr).is_false())
+            kind_feedback->violated.insert(step.comment.as_string());
+        harvest_loop_head_samples(*runtime_solver, *eq);
+        if (options.get_bool_option("forward-condition"))
+          infer_loop_bounds(*runtime_solver, *eq);
+      }
     }
 
     if (res)
@@ -2175,6 +2192,138 @@ smt_resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   }
 
   return interleaving_failed > 0 ? P_SATISFIABLE : res;
+}
+
+const goto_symext::unwinding_claimt *
+bmct::unwinding_claim_of(const symex_target_equationt::SSA_stept &step) const
+{
+  const std::string unwinding = "unwinding assertion loop ";
+  if (
+    !step.is_assert() || step.ignore ||
+    step.comment.as_string().rfind(unwinding, 0) != 0)
+    return nullptr;
+
+  for (const goto_symext::unwinding_claimt &c : unwinding_claims)
+    if (
+      c.path_guard == step.guard &&
+      step.comment.as_string() == unwinding + i2string(c.loop_number))
+      return &c;
+  return nullptr;
+}
+
+void bmct::harvest_loop_head_samples(
+  smt_convt &smt_conv,
+  const symex_target_equationt &eq)
+{
+  // The execution the model describes ends at the unwinding assertion it
+  // violates, and satisfies every assumption before that one only.
+  size_t end = std::numeric_limits<size_t>::max();
+  for (const auto &step : eq.SSA_steps)
+    if (const auto *claim = unwinding_claim_of(step))
+      if (smt_conv.l_get(step.cond_expr).is_false())
+        end = std::min(end, claim->sequence);
+
+  for (const goto_symext::loop_head_visitt &visit : loop_head_visits)
+  {
+    if (visit.sequence > end || !smt_conv.l_get(visit.path_guard).is_true())
+      continue;
+
+    loop_head_samplet sample{visit.loop, {}};
+    for (const auto &v : visit.variables)
+    {
+      const expr2tc value = smt_conv.get(v.renamed);
+      if (!is_nil_expr(value) && is_constant_int2t(value))
+        sample.values.push_back(
+          {v.symbol, to_constant_int2t(value).value, v.modified});
+    }
+    kind_feedback->samples.push_back(std::move(sample));
+  }
+}
+
+void bmct::infer_loop_bounds(
+  smt_convt &smt_conv,
+  const symex_target_equationt &eq)
+{
+  // One entry per unwinding assertion the model can reach: the claim being
+  // violated, and the iterations a measure allows from there.
+  struct reacht
+  {
+    expr2tc reached;
+    expr2tc remaining;
+  };
+  // loop -> measure candidate -> claims
+  std::map<unsigned, std::vector<std::vector<reacht>>> loops;
+  std::set<unsigned> unusable;
+  const type2tc wide = get_int_type(64);
+
+  for (const auto &step : eq.SSA_steps)
+  {
+    const goto_symext::unwinding_claimt *claim = unwinding_claim_of(step);
+    if (!claim)
+      continue;
+
+    std::vector<std::pair<expr2tc, expr2tc>> measures;
+    auto &candidates = loops[claim->loop_number];
+    if (
+      !measure_candidates_from_guard(claim->continuation, measures) ||
+      (!candidates.empty() && candidates.size() != measures.size()))
+    {
+      unusable.insert(claim->loop_number);
+      continue;
+    }
+
+    candidates.resize(measures.size());
+    for (size_t i = 0; i < measures.size(); ++i)
+    {
+      // The loop continues while m >= L. A measure that is not a ranking
+      // function makes the bound too small, which only costs another forward
+      // condition.
+      const auto &[m, L] = measures[i];
+      candidates[i].push_back(
+        {not2tc(step.cond_expr),
+         add2tc(wide, sub2tc(wide, m, L), gen_one(wide))});
+    }
+  }
+
+  auto can_exceed = [&](const std::vector<reacht> &claims, const BigInt &v) {
+    std::vector<expr2tc> cases;
+    for (const reacht &c : claims)
+      cases.push_back(
+        and2tc(c.reached, greaterthan2tc(c.remaining, constant_int2tc(wide, v))));
+    smt_conv.push_ctx();
+    smt_conv.assert_expr(disjunction(cases));
+    const bool sat = smt_conv.dec_solve() == P_SATISFIABLE;
+    smt_conv.pop_ctx();
+    return sat;
+  };
+
+  const BigInt &cap = kind_feedback->cap;
+  for (const auto &[loop, candidates] : loops)
+  {
+    if (unusable.count(loop))
+      continue;
+
+    std::optional<BigInt> fewest;
+    for (const auto &claims : candidates)
+    {
+      if (can_exceed(claims, cap))
+        continue;
+      BigInt lo = 0, hi = cap;
+      while (lo < hi)
+      {
+        const BigInt mid = (lo + hi) / 2;
+        if (can_exceed(claims, mid))
+          lo = mid + 1;
+        else
+          hi = mid;
+      }
+      if (!fewest || lo < *fewest)
+        fewest = lo;
+    }
+    kind_feedback->remaining[loop] = fewest;
+  }
+
+  smt_conv.dec_solve();
 }
 
 void bmct::bidirectional_search(
@@ -2332,6 +2481,8 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       std::dynamic_pointer_cast<symex_target_equationt>(solver_result.target);
 
     saw_bounded_loop_truncation |= solver_result.bounded_loop_truncations > 0;
+    unwinding_claims = std::move(solver_result.unwinding_claims);
+    loop_head_visits = std::move(solver_result.loop_head_visits);
 
     log_status(
       "Symex completed in: {}s ({} assignments)",

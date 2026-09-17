@@ -1,10 +1,15 @@
 #include <esbmc/esbmc_parseoptions.h>
 #include <esbmc/bmc.h>
 #include <goto-programs/goto_houdini_invariants.h>
+#include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loop_invariant.h>
+#include <util/arith/arith_tools.h>
 #include <goto-programs/property_verdict.h>
+#include <util/base/time_stopping.h>
 #include <util/message/message.h>
+#include <algorithm>
 #include <mutex>
+#include <tuple>
 #include <optional>
 #include <set>
 #include <string>
@@ -115,7 +120,162 @@ size_t user_claims_decided()
   return n;
 }
 
+/// The pool index a claim comment names, or nullopt when the claim is not a
+/// pool candidate's (a user claim, or the `true` that only cuts a loop).
+std::optional<size_t> pool_index_of(const std::string &claim)
+{
+  const std::string id = candidate_id_of(claim);
+  if (id.empty() || !std::all_of(id.begin(), id.end(), ::isdigit))
+    return std::nullopt;
+  return std::stoul(id);
+}
+
+using positiont = std::tuple<std::string, unsigned, unsigned>;
+
+positiont position_of(const property_locationt &loc)
+{
+  return {loc.file, loc.line, loc.column};
+}
+
+/// Where the program's own assertions are. A claim the cut program never
+/// reaches has no verdict at all, so a proof must cover each of these.
+std::set<positiont> assertion_positions(const goto_functionst &goto_functions)
+{
+  std::set<positiont> positions;
+  forall_goto_functions (f, goto_functions)
+  {
+    if (!f->second.body_available)
+      continue;
+    forall_goto_program_instructions (i, f->second.body)
+      if (i->is_assert())
+        positions.insert(position_of(property_location(i->location, "")));
+  }
+  return positions;
+}
 } // namespace
+
+kind_proof_resultt esbmc_parseoptionst::prove_kind_candidates(
+  const goto_functionst &pristine,
+  const std::vector<kind_candidatet> &pool,
+  const std::vector<size_t> &ids,
+  const optionst &probe_options,
+  const std::map<unsigned, BigInt> &bounds,
+  fine_timet deadline)
+{
+  const auto saved_verdicts = goto_functionst::property_verdicts.snapshot();
+  const auto saved_reached = goto_functionst::reached_claims;
+  const auto saved_mul_reached = goto_functionst::reached_mul_claims;
+
+  // The schema's program with @p emitted attached. Asserting nothing but the
+  // candidates keeps each refinement to the claims it is about: an assertion
+  // constrains no path, so dropping one changes no reachable state.
+  auto build = [&](const std::vector<size_t> &emitted, bool program_claims) {
+    goto_functionst probe = pristine;
+    if (!program_claims)
+      Forall_goto_functions (f, probe)
+        Forall_goto_program_instructions (i, f->second.body)
+          if (i->is_assert())
+            i->make_skip();
+    emit_kind_candidates(probe, pool, emitted);
+    goto_loop_invariant(probe, context, false);
+    probe.update();
+    return probe;
+  };
+
+  auto solve = [&](goto_functionst &probe, bmct::kind_feedbackt &feedback) {
+    std::string unwindset;
+    forall_goto_functions (f, probe)
+      forall_goto_program_instructions (i, f->second.body)
+      {
+        const auto bound = bounds.find(stamped_loop(*i));
+        if (i->is_backwards_goto() && bound != bounds.end())
+          unwindset += (unwindset.empty() ? "" : ",") +
+                       std::to_string(i->loop_number) + ":" +
+                       integer2string(bound->second);
+      }
+
+    reset_run_state();
+    optionst options = probe_options;
+    options.set_option("unwindset", unwindset);
+    bmct bmc(probe, options, context);
+    bmc.kind_feedback = &feedback;
+    std::shared_ptr<symex_target_equationt> eq;
+    return bmc.run(eq);
+  };
+
+  // Houdini refined by models: each satisfiable round names every candidate
+  // the model breaks -- one false at an entry, or not preserved by the body
+  // under the others -- and dropping one only weakens what the rest assume.
+  // An unsatisfiable round has every remaining candidate, and every unwinding
+  // assertion, holding together.
+  kind_proof_resultt result;
+  std::vector<size_t> alive = ids;
+  bool inductive = false;
+  while (!inductive && current_time() <= deadline)
+  {
+    ++result.rounds;
+    goto_functionst probe = build(alive, false);
+    bmct::kind_feedbackt feedback;
+    const smt_resultt res = solve(probe, feedback);
+    if (res == P_UNSATISFIABLE)
+    {
+      inductive = true;
+      break;
+    }
+    if (res != P_SATISFIABLE)
+      break;
+
+    std::set<size_t> broken;
+    for (const std::string &claim : feedback.violated)
+      if (const auto index = pool_index_of(claim))
+        broken.insert(*index);
+    // Only an unwinding assertion failed: a loop left to the unwinder runs
+    // past its bound, and no candidate can be separated from that.
+    if (broken.empty())
+      break;
+    alive.erase(
+      std::remove_if(
+        alive.begin(),
+        alive.end(),
+        [&broken](size_t index) { return broken.count(index) != 0; }),
+      alive.end());
+  }
+
+  if (inductive)
+  {
+    result.proven = alive;
+
+    if (current_time() <= deadline)
+    {
+      ++result.rounds;
+      goto_functionst probe = build(alive, true);
+      bmct::kind_feedbackt feedback;
+      const bool holds = solve(probe, feedback) == P_UNSATISFIABLE;
+
+      // Every assertion the run reached holds; one it never reached has no
+      // verdict, and the cut program may have made it unreachable (#7478).
+      std::set<positiont> reached;
+      for (const auto &[claim, verdict] :
+           goto_functionst::property_verdicts.snapshot())
+        reached.insert(position_of(verdict.loc));
+      const std::set<positiont> assertions = assertion_positions(pristine);
+      result.program_proved =
+        holds && std::includes(
+                   reached.begin(),
+                   reached.end(),
+                   assertions.begin(),
+                   assertions.end());
+    }
+  }
+
+  reset_run_state();
+  for (const auto &[claim, verdict] : saved_verdicts)
+    goto_functionst::property_verdicts.record(
+      claim, verdict.verdict, verdict.loc, verdict.note);
+  goto_functionst::reached_claims = saved_reached;
+  goto_functionst::reached_mul_claims = saved_mul_reached;
+  return result;
+}
 
 /// Houdini fixpoint: guess a pool of candidate invariants, then let the solver
 /// delete the ones it refutes until the surviving set is inductive. See

@@ -51,4 +51,25 @@ std::set<std::string> goto_houdini_emit_candidates(
   goto_functionst &goto_functions,
   const std::optional<std::set<std::string>> &keep);
 
+class loopst;
+
+/// The template candidates for @p loop, guessed from the literals in the
+/// enclosing function's @p body.
+std::vector<expr2tc>
+houdini_template_candidates(const loopst &loop, const goto_programt &body);
+
+/// True when a LOOP_INVARIANT already sits in the window goto_loop_invariant
+/// searches back from @p head.
+bool houdini_has_existing_invariant(
+  const goto_programt::targett &head,
+  const goto_programt::targett &begin);
+
+/// Emit @p candidate as a LOOP_INVARIANT tagged with @p id before @p anchor,
+/// the loop's original head, so the schema names the candidate in its claims.
+void houdini_emit_candidate(
+  goto_functiont &goto_function,
+  const goto_programt::targett &anchor,
+  const expr2tc &candidate,
+  const std::string &id);
+
 #endif /* GOTO_PROGRAMS_GOTO_HOUDINI_INVARIANTS_H_ */

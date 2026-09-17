@@ -50,6 +50,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c
 )
 
 add_executable(esbmc main.cpp
+    parseoptions/adaptive_kind_strategy.cpp
     parseoptions/bmc_strategy.cpp
     parseoptions/houdini_strategy.cpp
     parseoptions/command_line_options.cpp
@@ -59,7 +60,7 @@ add_executable(esbmc main.cpp
     parseoptions/k_induction.cpp
     parseoptions/process_goto_program.cpp
     parseoptions/property_monitors.cpp
-    bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
+    bmc.cpp invariant_mining.cpp kind_invariants.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp globals.cpp show_vcc.cpp options.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_include_directories(esbmc
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

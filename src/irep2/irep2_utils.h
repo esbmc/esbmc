@@ -456,6 +456,10 @@ void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols);
 
+/** Whether @p e reads through a pointer or has a side effect: something that
+ *  only means what it says once symex has dereferenced it. */
+bool reads_through_pointer(const expr2tc &e);
+
 /** Insert a zero operand at each reserved padding-member position so a struct
  *  literal's operand list matches its type's component list, exactly as
  *  clang_c_adjust::adjust_struct's insertion loop does. IREP2 carries no

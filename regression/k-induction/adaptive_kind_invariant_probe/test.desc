@@ -1,0 +1,5 @@
+CORE
+main.c
+--adaptive-k-induction
+^Loop invariants prove every property \(k = [0-9]+\)$
+^VERIFICATION SUCCESSFUL$

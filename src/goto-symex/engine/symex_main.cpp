@@ -259,12 +259,15 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return goto_symext::symex_resultt(
+  symex_resultt result(
     target,
     total_claims,
     remaining_claims,
     simplified_claims,
     bounded_loop_truncations);
+  result.unwinding_claims = unwinding_claims;
+  result.loop_head_visits = loop_head_visits;
+  return result;
 }
 
 void goto_symext::symex_step(reachability_treet &art)

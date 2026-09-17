@@ -783,3 +783,16 @@ irep_idt quantifier_direct_bound_name(const expr2tc &binder)
   const expr2tc sym = strip_typecasts(binder);
   return is_address_of2t(sym) ? quantifier_bound_name(sym) : irep_idt();
 }
+
+bool reads_through_pointer(const expr2tc &e)
+{
+  if (
+    is_dereference2t(e) || is_sideeffect2t(e) ||
+    (is_index2t(e) && is_pointer_type(to_index2t(e).source_value)))
+    return true;
+
+  bool found = false;
+  e->foreach_operand(
+    [&found](const expr2tc &op) { found = found || reads_through_pointer(op); });
+  return found;
+}

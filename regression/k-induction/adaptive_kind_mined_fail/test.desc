@@ -1,0 +1,4 @@
+CORE
+main.c
+--adaptive-k-induction --kind-max-bound 50
+^VERIFICATION FAILED$

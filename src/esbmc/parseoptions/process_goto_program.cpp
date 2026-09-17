@@ -417,7 +417,9 @@ bool esbmc_parseoptionst::process_goto_program(
       if (is_k_induction || wants_loop_invariants())
         remove_no_op(goto_functions);
 
-      if (is_k_induction)
+      // The adaptive strategy transforms the loops itself, after keeping an
+      // untransformed copy to prove loop invariants on.
+      if (is_k_induction && !cmdline.isset("adaptive-k-induction"))
         disable_is_if_unsound(goto_k_induction(goto_functions, ns));
 
       if (wants_loop_invariants())
@@ -478,7 +480,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (
       (cmdline.isset("interval-analysis") ||
        cmdline.isset("goto-contractor")) &&
-      wants_kind_pipeline)
+      wants_kind_pipeline && !cmdline.isset("adaptive-k-induction"))
     {
       instrument_loop_bounds_after_kind(goto_functions, ns, options);
     }

@@ -2,6 +2,7 @@
 #define CPROVER_ESBMC_PARSEOPTIONS_H
 
 #include <esbmc/bmc.h>
+#include <esbmc/kind_invariants.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>
 #include <util/config/cmdline.h>
@@ -9,6 +10,7 @@
 #include <util/config/parseoptions.h>
 #include <util/ssa/algorithms.h>
 #include <util/base/threeval.h>
+#include <util/base/time_stopping.h>
 #include <string_view>
 
 // Macro to determine if color output should be enabled
@@ -89,9 +91,30 @@ protected:
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
+  /// k-induction that raises each loop's bound to what the forward
+  /// condition's counterexample shows it needs; see adaptive_kind_strategy.cpp.
+  int do_adaptive_kind_strategy(
+    optionst &options,
+    goto_functionst &goto_functions);
+
   /// Houdini fixpoint over guessed loop-invariant candidates; see
   /// goto_houdini_invariants.h.
   int do_houdini_strategy(optionst &options, goto_functionst &goto_functions);
+
+  /// Houdini fixpoint over the candidates of @p pool named by @p ids, on
+  /// copies of @p pristine, which must not carry the k-induction transform.
+  /// Each round solves the loop-invariant schema under @p probe_options, a
+  /// base-case run, with each loop the schema leaves to the
+  /// unwinder bounded as @p bounds says for its stamp. No round starts after
+  /// @p deadline, as given by current_time(); a fixpoint not reached by then
+  /// proves nothing. The global verdict table is left as it was found.
+  kind_proof_resultt prove_kind_candidates(
+    const goto_functionst &pristine,
+    const std::vector<kind_candidatet> &pool,
+    const std::vector<size_t> &ids,
+    const optionst &probe_options,
+    const std::map<unsigned, BigInt> &bounds,
+    fine_timet deadline);
 
   int do_context_bound_deepening(
     optionst &options,
@@ -110,15 +133,21 @@ protected:
     goto_functionst &goto_functions,
     const uint64_t &k_step);
 
+  /// \param hints when set, filled from a satisfiable result; see
+  ///   bmct::infer_loop_bounds.
   tvt does_forward_condition_hold(
     optionst &options,
     goto_functionst &goto_functions,
-    const uint64_t &k_step);
+    const uint64_t &k_step,
+    bmct::kind_feedbackt *hints = nullptr);
 
+  /// \param feedback when set, filled from a satisfiable result with the
+  ///   loop-head states the counterexample passes through.
   tvt is_inductive_step_violated(
     optionst &options,
     goto_functionst &goto_functions,
-    const uint64_t &k_step);
+    const uint64_t &k_step,
+    bmct::kind_feedbackt *feedback = nullptr);
 
   void diagnose_unknown_properties(
     optionst &options,

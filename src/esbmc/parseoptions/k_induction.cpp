@@ -769,7 +769,8 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
-  const uint64_t &k_step)
+  const uint64_t &k_step,
+  bmct::kind_feedbackt *hints)
 {
   if (options.get_bool_option("disable-forward-condition"))
     return tvt(tvt::TV_UNKNOWN);
@@ -788,13 +789,22 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   options.set_option("no-assertions", true);
   options.set_option("unwind", integer2string(k_step));
 
+  // Bound inference reads the loop guard's operands at the unwinding
+  // assertion, where nothing else uses them, so the slicer would drop their
+  // definitions and leave them unconstrained.
+  const bool no_slice = options.get_bool_option("no-slice");
+  if (hints)
+    options.set_option("no-slice", true);
+
   bmct bmc(goto_functions, options, context);
+  bmc.kind_feedback = hints;
 
   log_progress("Checking forward condition, k = {:d}", k_step);
   auto res = do_bmc(bmc);
 
   // Restore the no assertion flag, before checking the other steps
   options.set_option("no-assertions", no_assertions);
+  options.set_option("no-slice", no_slice);
 
   switch (res)
   {
@@ -838,7 +848,8 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const uint64_t &k_step)
+  const uint64_t &k_step,
+  bmct::kind_feedbackt *feedback)
 {
   if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
@@ -854,6 +865,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   options.set_option("unwind", integer2string(k_step));
 
   bmct bmc(goto_functions, options, context);
+  bmc.kind_feedback = feedback;
 
   log_progress("Checking inductive step, k = {:d}", k_step);
   smt_resultt res = static_cast<smt_resultt>(do_bmc(bmc));

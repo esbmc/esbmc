@@ -243,6 +243,35 @@ static bool incompatible_flags(const cmdlinet &cmdline)
         return true;
       }
 
+  // --adaptive-k-induction owns the outer loop and the per-loop bounds. It reads
+  // the forward condition's model through a single whole-formula solve, which
+  // the multi-property, scheduling and incremental modes replace.
+  if (cmdline.isset("adaptive-k-induction"))
+    for (const char *incompatible :
+         {"k-induction-parallel",
+          "incremental-bmc",
+          "falsification",
+          "termination",
+          "dead-code-check",
+          "multi-property",
+          "bidirectional",
+          "unwindset",
+          "unwindsetname",
+          "loop-invariant",
+          "loop-invariant-check",
+          "synthesise-loop-invariants",
+          "houdini-loop-invariants",
+          "incremental-context-bound",
+          "smt-during-symex",
+          "schedule",
+          "goto-contractor"})
+      if (cmdline.isset(incompatible))
+      {
+        log_error(
+          "--adaptive-k-induction cannot be combined with --{}", incompatible);
+        return true;
+      }
+
   // --incremental-context-bound owns the outer verification loop, re-running
   // do_bmc per context bound; the unwinding strategies each drive an outer
   // loop of their own, so only one driver can own the run (issue #6480).
@@ -331,6 +360,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
   if (cmdline.isset("houdini-loop-invariants"))
     return do_houdini_strategy(options, goto_functions);
 
+  if (cmdline.isset("adaptive-k-induction"))
+    return do_adaptive_kind_strategy(options, goto_functions);
+
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||
     cmdline.isset("falsification") || cmdline.isset("k-induction") ||
@@ -378,6 +410,15 @@ int esbmc_parseoptionst::doit()
 
   if (incompatible_flags(cmdline))
     return 1;
+
+  // Every pass that gates on --k-induction must also run for the adaptive
+  // strategy, which differs only in how it picks the bounds.
+  if (cmdline.isset("adaptive-k-induction"))
+  {
+    cmdline.vm.emplace("k-induction", cmdline.vm["adaptive-k-induction"]);
+    cmdline.options_map["k-induction"] =
+      cmdline.options_map["adaptive-k-induction"];
+  }
 
   // Preprocess the input program.
   // (This will not have any effect if OLD_FRONTEND is not enabled.)

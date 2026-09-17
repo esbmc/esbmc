@@ -709,3 +709,36 @@ bool goto_k_induction(goto_functionst &goto_functions, const namespacet &)
   goto_functions.update();
   return disable_inductive_step;
 }
+
+goto_programt::targett skip_inductive_preamble(
+  goto_programt::targett loop_head,
+  goto_programt::targett loop_exit)
+{
+  goto_programt::targett it = loop_head;
+  while (it != loop_exit && it->inductive_step_instruction)
+    ++it;
+  return it;
+}
+
+static const irep_idt loop_stamp_field = "#adaptive_kind_loop";
+
+void stamp_loop_back_edges(goto_functionst &goto_functions)
+{
+  unsigned next = 0;
+  Forall_goto_functions (f, goto_functions)
+    Forall_goto_program_instructions (i, f->second.body)
+      if (i->is_backwards_goto())
+        stamp_loop(*i, ++next);
+}
+
+void stamp_loop(goto_programt::instructiont &instruction, unsigned loop)
+{
+  instruction.location.set(loop_stamp_field, static_cast<long>(loop));
+}
+
+unsigned stamped_loop(const goto_programt::instructiont &instruction)
+{
+  const std::string id =
+    instruction.location.get(loop_stamp_field).as_string();
+  return id.empty() ? 0 : std::stoul(id);
+}

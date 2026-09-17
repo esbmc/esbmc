@@ -2201,6 +2201,7 @@ bool measure_from_disequality(
   out.push_back({m_ba, L});
   return true;
 }
+} // namespace
 
 /// Build ranking candidates from a loop guard. A single relational atom
 /// yields one candidate. A top-level `&&` conjunction yields one
@@ -2233,6 +2234,8 @@ bool measure_candidates_from_guard(
   return !out.empty();
 }
 
+namespace
+{
 /// Conjoin a list of atoms into a single expression (true if empty).
 expr2tc conjoin(const std::vector<expr2tc> &atoms)
 {

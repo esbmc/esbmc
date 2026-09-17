@@ -40,4 +40,12 @@ tvt try_prove_termination_by_ranking(
   optionst &options,
   const namespacet &ns);
 
+/// Candidate ranking measures (m, L) read off a loop's continuation
+/// condition: the loop can only continue while m >= L. m is an int64
+/// difference of guard operands, so it cannot wrap. Returns false when the
+/// guard yields no candidate.
+bool measure_candidates_from_guard(
+  const expr2tc &guard,
+  std::vector<std::pair<expr2tc, expr2tc>> &out);
+
 #endif /* ESBMC_RANKING_SYNTHESIS_H */

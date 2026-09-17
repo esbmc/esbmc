@@ -1,3 +1,4 @@
+#include <goto-programs/goto_k_induction.h>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <goto-symex/symex_invariant.h>
@@ -257,6 +258,14 @@ void execution_statet::symex_step(reachability_treet &art)
     interleaving_unviable = false;
   else
     interleaving_unviable = true;
+
+  // The placeholders --adaptive-k-induction stamps mark where each loop's
+  // havoc'd state enters it: a state the forward condition reaches, or the one
+  // the inductive step starts from.
+  if (
+    (forward_condition || inductive_step) && instruction.is_assume() &&
+    stamped_loop(instruction))
+    record_loop_head_visit();
 
   // Don't convert if it's a inductive instruction and we are running the base
   // case or forward condition

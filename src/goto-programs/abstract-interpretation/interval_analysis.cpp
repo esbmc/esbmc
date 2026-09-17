@@ -6,6 +6,7 @@
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
 #include <util/base/prefix.h>
+#include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_loops.h>
 #include <util/base/time_stopping.h>
 
@@ -208,22 +209,6 @@ void instrument_loops(
   }
 }
 
-/// Find the first instruction at or after \p loop_head that was NOT inserted
-/// by k-induction's preamble (havoc + entry-condition assume). For loops
-/// whose loop_head pointed at an IF before k-induction ran, this returns
-/// the (now shifted) IF; for do-while loops it returns the first real body
-/// instruction. Stops at \p loop_exit defensively — every preamble
-/// instruction is inside the discovered loop, so we should never reach
-/// the back-edge while skipping.
-static goto_programt::targett skip_inductive_preamble(
-  goto_programt::targett loop_head,
-  goto_programt::targett loop_exit)
-{
-  goto_programt::targett it = loop_head;
-  while (it != loop_exit && it->inductive_step_instruction)
-    ++it;
-  return it;
-}
 
 /// RAII guard for the thread_local skip_inductive_step_instructions flag.
 /// Saves the prior value and restores it on scope exit, so an exception
