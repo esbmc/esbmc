@@ -498,3 +498,6 @@ shape -- unlike §9, no corpus is needed, because the test that discriminates is
 Python B-2* stays 43; repo total 114. The funcdef cluster is not ten writes blocked on one attribute,
 as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
 loss, and the next step is the three experiments above rather than another conversion attempt.
+So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
