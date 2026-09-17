@@ -94,6 +94,22 @@ smt_resultt bitwuzla_convt::dec_solve()
   return P_ERROR;
 }
 
+smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  std::vector<bitwuzla::Term> terms;
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<bitw_smt_ast>(a)->a);
+
+  bitwuzla::Result result = bitw->check_sat(terms);
+  if (result == bitwuzla::Result::SAT)
+    return P_SATISFIABLE;
+  if (result == bitwuzla::Result::UNSAT)
+    return P_UNSATISFIABLE;
+  return P_ERROR;
+}
+
 const std::string bitwuzla_convt::solver_text()
 {
   std::string ss = "Bitwuzla ";

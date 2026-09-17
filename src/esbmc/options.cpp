@@ -556,7 +556,21 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Extract the main loop as a transition system, print one TS-CHECK line "
      "saying whether it is one, and stop"},
-    {"ts-dump", NULL, "With --ts-check, also print the transition system"}}},
+    {"ts-dump",
+     NULL,
+     "With another --ts option, also print the extracted transition system"},
+    {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-no-fallback",
+     NULL,
+     "Report UNKNOWN instead of falling back when the program is not a "
+     "transition system"},
+    {"ts-no-live-filter",
+     NULL,
+     "Keep every havocked variable as state instead of slicing to the "
+     "properties' cone of influence"},
+    {"ts-push-pop",
+     NULL,
+     "Use push/pop instead of assumptions in --ts-bmc (cross-check)"}}},
   {"k-induction",
    {{"base-case", NULL, "Check the base case"},
     {"forward-condition", NULL, "Check the forward condition"},
