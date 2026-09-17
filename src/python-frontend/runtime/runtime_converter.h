@@ -138,6 +138,7 @@ private:
   void assert_statement(const json &node);
   void raise_statement(const json &node);
   void try_statement(const json &node);
+  void emit_guarded(const json &node, const locationt &loc);
   void class_statement(const json &node);
 
   void collect_assigned(

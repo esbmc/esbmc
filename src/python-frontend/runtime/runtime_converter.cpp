@@ -1322,10 +1322,9 @@ void python_runtime_converter::raise_statement(const json &node)
 /// and re-raises on no match, which is the next step.
 void python_runtime_converter::try_statement(const json &node)
 {
-  if (!node["finalbody"].empty() || !node["orelse"].empty())
-    unsupported(node);
   const json &handlers = node["handlers"];
-  if (handlers.empty())
+  const bool has_finally = !node["finalbody"].empty();
+  if (handlers.empty() && !has_finally)
     unsupported(node);
   for (const json &handler : handlers)
     /* `except (A, B):` tests several classes; pyrt_isinstance takes one. */
@@ -1334,8 +1333,64 @@ void python_runtime_converter::try_statement(const json &node)
 
   const locationt loc = location(node);
 
+  if (!has_finally)
+  {
+    emit_guarded(node, loc);
+    return;
+  }
+
+  /* `finally` runs however the region is left, so its body is emitted twice:
+   * once after the guarded region for the paths that leave it normally --
+   * the body completed, or a handler did -- and once in a catch-all that
+   * re-raises, for an exception no handler took and for a handler that threw
+   * one itself. */
+  code_blockt inner;
+  code_blockt *around = block_;
+  block_ = &inner;
+  emit_guarded(node, loc);
+  statements(node["finalbody"], inner);
+
+  code_blockt cleanup;
+  block_ = &cleanup;
+  statements(node["finalbody"], cleanup);
+  side_effect_exprt propagate("cpp-throw", empty_typet());
+  propagate.location() = loc;
+  codet rethrow("expression");
+  rethrow.copy_to_operands(propagate);
+  rethrow.location() = loc;
+  cleanup.copy_to_operands(rethrow);
+  block_ = around;
+
+  /* This one needs no binding -- it only runs the cleanup and re-raises -- so
+   * it catches with `...` rather than by the boxed pointer type. */
+  cleanup.type().set("ellipsis", true);
+  cleanup.set("exception_id", "ellipsis");
+
+  codet wrapped("cpp-catch");
+  wrapped.copy_to_operands(inner);
+  wrapped.copy_to_operands(cleanup);
+  wrapped.location() = loc;
+  block_->copy_to_operands(wrapped);
+}
+
+/// The body and its handlers, without the `finally` that may wrap them.
+void python_runtime_converter::emit_guarded(
+  const json &node,
+  const locationt &loc)
+{
+  const json &handlers = node["handlers"];
+
   code_blockt body;
   statements(node["body"], body);
+  /* `else` runs only when the body completed: appending it to the body is
+   * enough, since an exception leaves the body and skips whatever follows. */
+  statements(node["orelse"], body);
+
+  if (handlers.empty())
+  {
+    block_->copy_to_operands(body);
+    return;
+  }
 
   code_blockt caught;
   code_blockt *outer = block_;
