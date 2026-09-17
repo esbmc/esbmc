@@ -30,40 +30,32 @@ bool starts_with(const std::string &s, const std::string &prefix)
   return s.compare(0, prefix.size(), prefix) == 0;
 }
 
-/// `for(;;)` lowers to `IF !1 THEN GOTO exit`.
-bool never_taken(const expr2tc &guard)
-{
-  expr2tc simplified = guard->simplify();
-  return is_false(is_nil_expr(simplified) ? guard : simplified);
-}
-
 bool is_input_symbol(const expr2tc &e)
 {
   return is_symbol2t(e) &&
          starts_with(to_symbol2t(e).thename.as_string(), "nondet$symex::");
 }
 
-/// No backward jump in `f` or anything it calls; no function pointers and no
-/// recursion.
-bool calls_are_loop_free(
+/// No recursion, and no function pointers outside the library models. Loops in
+/// callees are checked during capture: one that would run more than once
+/// leaves an unwinding assertion in the step.
+bool calls_are_supported(
   const goto_functionst &fns,
   goto_programt::const_targett it,
   goto_programt::const_targett end,
+  bool library,
   std::vector<irep_idt> &stack,
   std::string &reason)
 {
   for (; it != end; ++it)
   {
-    if (it->is_backwards_goto())
-    {
-      reason = "a loop is reachable outside the main loop";
-      return false;
-    }
     if (!it->is_function_call())
       continue;
     const expr2tc &callee = to_code_function_call2t(it->code).function;
     if (!is_symbol2t(callee))
     {
+      if (library)
+        continue;
       reason = "call through a function pointer";
       return false;
     }
@@ -77,8 +69,14 @@ bool calls_are_loop_free(
     if (f == fns.function_map.end() || !f->second.body_available)
       continue;
     stack.push_back(name);
-    const auto &body = f->second.body.instructions;
-    if (!calls_are_loop_free(fns, body.begin(), body.end(), stack, reason))
+    const auto &body = f->second.body;
+    if (!calls_are_supported(
+          fns,
+          body.instructions.begin(),
+          body.instructions.end(),
+          library || body.hide,
+          stack,
+          reason))
       return false;
     stack.pop_back();
   }
@@ -121,23 +119,15 @@ bool recognise(
     return false;
   }
 
+  // Leaving the loop (a return, a goto past it, exit or assume(0)) ends the
+  // path; capture rejects the program if an assertion can follow.
   goto_programt::const_targett head = back->targets.front();
-  const unsigned lo = head->location_number, hi = back->location_number;
   for (auto it = head; it != back; ++it)
-  {
-    if (it->is_return() || it->is_throw() || it->is_end_function())
+    if (it->is_throw())
     {
-      reason = "the loop body can leave main";
+      reason = "the loop body can throw";
       return false;
     }
-    if (it->is_goto() && !never_taken(it->guard))
-      for (const auto &t : it->targets)
-        if (t->location_number < lo || t->location_number > hi)
-        {
-          reason = "the loop body has an exit";
-          return false;
-        }
-  }
 
   goto_programt::const_targett entry = head;
   while (entry != body.instructions.begin())
@@ -166,8 +156,8 @@ bool recognise(
   }
 
   std::vector<irep_idt> stack{main_id};
-  if (!calls_are_loop_free(
-        fns, body.instructions.begin(), back, stack, reason))
+  if (!calls_are_supported(
+        fns, body.instructions.begin(), back, false, stack, reason))
     return false;
 
   // The entry function runs its own set-up before calling main.
@@ -182,8 +172,8 @@ bool recognise(
       return is_symbol2t(f) && to_symbol2t(f).thename == main_id;
     });
     std::vector<irep_idt> entry_stack{fns.main_id()};
-    if (!calls_are_loop_free(
-          fns, insns.begin(), call_main, entry_stack, reason))
+    if (!calls_are_supported(
+          fns, insns.begin(), call_main, false, entry_stack, reason))
       return false;
   }
 
@@ -394,13 +384,21 @@ bool extract_transition_system(
   insert_markers(main_body, head, context, marker_pre, shape.havoc_vars);
   insert_markers(main_body, entry, context, marker_init, shape.havoc_vars);
   program.update();
+  const auto main_back = std::find_if(
+    main_body.instructions.begin(),
+    main_body.instructions.end(),
+    [](const auto &i) { return i.is_backwards_goto(); });
+  const std::string main_unwinding =
+    "unwinding assertion loop " + std::to_string(main_back->loop_number);
 
+  // Unwinding assertions stay on: any loop other than the main one that runs
+  // more than once in a single step, or before the loop, leaves one behind.
   optionst opts = options;
   opts.set_option("inductive-step", true);
   opts.set_option("base-case", false);
   opts.set_option("forward-condition", false);
-  opts.set_option("partial-loops", true);
-  opts.set_option("no-unwinding-assertions", true);
+  opts.set_option("partial-loops", false);
+  opts.set_option("no-unwinding-assertions", false);
   opts.set_option("unwind", "1");
   opts.set_option("state-hashing", false);
   opts.set_option("schedule", false);
@@ -474,6 +472,24 @@ bool extract_transition_system(
   {
     reason = "loop markers out of order";
     return false;
+  }
+  for (size_t i = 0; i < steps.size(); i++)
+  {
+    const auto &s = *steps[i];
+    if (!s.is_assert())
+      continue;
+    const std::string &comment = s.comment.as_string();
+    if (i < post_first && comment.find("unwinding assertion") != std::string::npos)
+    {
+      reason = "a loop or recursion inside a step runs more than once";
+      return false;
+    }
+    // Exits end a path, so nothing after the loop may be checked.
+    if (i > post_first && comment != main_unwinding)
+    {
+      reason = "an assertion is reachable after the loop";
+      return false;
+    }
   }
   for (unsigned k = 0; k < n; k++)
     if (!is_symbol2t(pre[k]))

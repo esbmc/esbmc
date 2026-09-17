@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-k-induction --max-k-step 10
+^Transition system extracted
+^VERIFICATION SUCCESSFUL$

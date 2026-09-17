@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-bmc --max-k-step 10
+^Transition-system counterexample at step 3
+^VERIFICATION FAILED$
