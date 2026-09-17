@@ -1,0 +1,4 @@
+CORE
+main.py
+--python-runtime
+^.*unsupported under --python-runtime: Import.*$
