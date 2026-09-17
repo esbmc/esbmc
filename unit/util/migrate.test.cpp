@@ -1297,3 +1297,26 @@ TEST_CASE("a constant keeps its source spelling across the seam", "[migrate]")
     REQUIRE(a->crc() == b->crc());
   }
 }
+
+// back_sideeffect used to write `#type` and `#size` unconditionally, so a side
+// effect that had neither came back carrying `#type: empty` and `#size: nil`.
+// Comments are invisible to irept::operator==, so nothing compared unequal --
+// but every printed symbol table and goto program showed them
+// (docs/roadmap/scope-clang-c-irep2.md §155).
+TEST_CASE("a nondet side effect gains no empty comment keys", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_size).is_nil());
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}

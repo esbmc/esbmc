@@ -9007,3 +9007,187 @@ pattern of this whole investigation: §63 blamed an empty operands list, §151 a
 comparing two representations, §152 a lost alignment attribute, and each was the most visible
 difference rather than the cause. The reproducer above is nine lines and settles it in one run,
 which is what the previous three should have been.
+
+## 154. The local arm costs 3 341, and it is not the qualifier (2026-09-16)
+
+§152.2 put the local arm's cost at 3 378 differing symbol tables and §153.3 filed it under "C
+qualifiers on a pointee". Both numbers were measured against the pre-`#cformat` base, so they
+credited this one line with differences already merged in the stack. Measured properly -- this
+branch's HEAD against HEAD plus `clang_c_convert.cpp:659` -- the cost is **3 341 of 8 682**, and
+the cause is mostly not the qualifier.
+
+### 154.1 The split
+
+```
+esbmc-cpp*   2 571        esbmc          286
+other          770        ir-ra           99
+```
+
+C++ dominates at 2 571 of 3 341, and a C++ case does not differ the way the C one does. For
+`regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy`, 50 diff lines, all of one shape:
+
+```
+>   * #size: nil                  added by the round trip
+>   * #type: empty                added
+<   * operands:                   dropped
+<   * #location:  * function: main dropped
+```
+
+That is `back_sideeffect` (`migrate.cpp:3468`), not a type qualifier. It writes `cmt_type` and
+`cmt_size` **unconditionally** -- with `size` a deliberate `nil_exprt` and `cmttype` a
+default-constructed `typet` when there is nothing to restore -- so a node that had neither
+comes back with both. It drops the empty `operands` list (§151.1). And it deliberately does not
+restore `#location`, which `:3501-3508` explains at length: writing it back moves instruction
+columns on the default path, measured at 126 of 131 goto programs, so it is held for its own PR
+and an SV-COMP run (§136.3).
+
+The C side is the qualifier: `regression/bitwuzla/buf-overflow` differs only as
+`(const signed char *)src` losing its `const`.
+
+### 154.2 What that means for the arm
+
+Three causes, not one, and one of them is a documented deliberate omission:
+
+| cause | where | share |
+|---|---|---|
+| `back_sideeffect` writing `#size`/`#type` unconditionally | `migrate.cpp:3487-3488` | the C++ bulk |
+| the empty `operands` list | `migrate.cpp:3441` (§151.1) | with the above |
+| `#location` not restored, on purpose | `migrate.cpp:3501-3508`, §136.3 | with the above |
+| C qualifiers on a pointee | no `type2t` field | the C remainder |
+
+So §153.3's table is wrong about the local arm: it is not waiting on an unreflected qualifier
+attribute, it is waiting mostly on the side-effect round trip -- two parts of which are
+tractable (stop writing empty comment keys; restore the empty operands list) and one of which is
+already scheduled elsewhere (§136.3's location, which needs an SV-COMP run because it changes
+counterexample columns).
+
+### 154.3 A method note, because this is the fifth correction on one question
+
+Every figure in §150.2, §152.2 and §153.3 came from comparing against a base that predated part
+of the stack. The rule that would have caught all of them: **the base arm must be built from the
+same commit the change is applied to**, and the sample used to characterise a residual must be
+drawn from the differing set rather than picked. This section's first attempt sampled three
+programs, found two identical, and inferred the cost had collapsed -- the full run says 3 341.
+
+## 155. Empty comment keys, fixed; and they were not what the arm was waiting on (2026-09-16)
+
+§154.1 found that a C++ value write's symbol-table difference had four shapes, two of which
+were `back_sideeffect` writing comment keys it had nothing to put in: `#type: empty` and
+`#size: nil` on a node that had neither. This section fixes that and reports that it does not
+help the arm at all.
+
+### 155.1 The fix, and a third state inside it
+
+```cpp
+  if (!is_nil_type(ref2.alloctype))
+    theexpr.cmt_type(cmttype);
+  if (!is_nil_expr(ref2.size))
+    theexpr.cmt_size(size);
+```
+
+Keyed off the source fields, not off the locals, and that distinction is the whole difficulty.
+A first attempt guarded on `cmttype.is_not_nil()`, which does not work: a default-constructed
+`typet` has an **empty id**, and `is_not_nil()` reports empty as present. That is the same third
+state the comment above `size` in this function has warned about since it was written -- an empty
+irep is neither nil nor real -- and the first guard walked into it. The unit case
+`a nondet side effect gains no empty comment keys` fails on that version and passes on this one.
+
+Safe because nothing can observe the difference except a printer: comments live in `comments`,
+which `irept::operator==` does not compare; both getters return nil whether the key is absent or
+nil-valued; and no `test.desc` in the tree mentions `#size` or `#type`
+(`grep -rl '#size\|#type' regression --include=test.desc` returns 0 files).
+
+It is not free, though. On the **default path** -- no conversion anywhere -- it changes the
+printed symbol table of **2 059 of 8 682** programs, all of them losing `* #size: nil` lines.
+That is disclosed rather than buried: it is the same shape of change as §136.3's held-back
+`#location` restoration, differing in that this one removes vacuous comment subs that no
+counterexample renders, where §136.3 moves instruction columns that counterexamples do.
+
+### 155.2 It does not reduce the local arm's cost
+
+Measured from the same commit each side, converting `clang_c_convert.cpp:659`:
+
+```
+without this fix   3 341 of 8 682
+with this fix      3 343 of 8 682
+```
+
+Unchanged. §154.1's sample showed the empty comment keys because they were *in* the diff, not
+because they were the diff -- the same program also drops an empty `operands` list and a
+`#location`, and those two alone keep it differing. So the C++ bulk of the arm's 3 341 is the
+other two shapes, and of those, `#location` is deliberately unrestored and scheduled under
+§136.3 with an SV-COMP run attached.
+
+That is worth stating plainly: **clang-c's local value-write arm is blocked behind §136.3**, not
+behind the type system. §153.3 put it under "C qualifiers, an unreflected attribute"; the
+qualifier is only the C remainder of 770 programs, and the C++ 2 571 are waiting on a location
+decision already taken and deferred.
+
+### 155.3 Where Phase 6's two value writes now stand
+
+| arm | blocked on | scheduled? |
+|---|---|---|
+| `:632` static | no bitfield type in IREP2 (§153) | no -- needs a new `type2t` kind |
+| `:659` local | `#location` not restored (§136.3) + empty `operands` (§151.1) | §136.3 is, with an SV-COMP run |
+
+Neither is a measurement question. Phase 6 stays at B-2\* 19, and this fix ships on its own
+merits -- one fewer thing the seam invents -- rather than as a step toward either.
+
+## 156. §136.3, done: a side effect carries its own location (2026-09-16)
+
+§136.3 measured what restoring a side effect's location does and then declined to do it,
+holding it for "its own PR and an SV-COMP run". §155.2 established that this is the one thing
+clang-c's local value write is waiting on. This is that PR.
+
+### 156.1 The change
+
+`back_sideeffect` restores `ref2.location` when it is not nil. Before, it did not, and
+`goto_convert` fell back to the enclosing statement's location for a side effect carrying
+none -- so a call's instruction took the column of the statement it sat in rather than its own.
+
+### 156.2 The scale, measured over the corpus rather than a sample
+
+§136.3's figure was 126 of 131 goto programs, from a stride-16 sample of one suite. Measured
+over every C and C++ program under `regression/` whose `test.desc` names a source that exists,
+both arms built from this branch:
+
+```
+8 283 of 8 682 goto programs change   (8 109 and 8 108 distinct hashes, so both
+                                       captures have content)
+```
+
+That is 95% of the corpus. Proportionally §136.3's sample was right; in absolute terms this is
+a change to almost every program ESBMC's own suite covers.
+
+### 156.3 What moves, and why it is the better column
+
+Two tests pinned a column and both moved to the more precise one:
+
+| test | source line | was | now | what is at the new column |
+|---|---|---|---|---|
+| `function_return_location` | `M_z = Foo(M_x, M_y);` | 3 | 9 | the call, not `M_z` |
+| `github_4715_irep2_native_body_while_cond_loc_01` | `while (t--)` | 3 | 10 | `t--`, not `while` |
+
+Neither pinned the column deliberately. The first exists to check that `M_z`'s value is
+attributed to `main`'s line 10 rather than to `Foo`'s line 4 -- its negative lookahead says so
+-- and that still holds; only the column within line 10 moved. Both expectations are updated.
+
+Everything else holds at this branch's baseline: `regression/esbmc` 1 of 2303, `esbmc-cpp/cpp`
+6 of 1065, unit 879 of 879.
+
+### 156.4 Why this still needs a competition run
+
+The change is user-visible on the **default** path: counterexample and witness lines now name
+the call's column. `scripts/competitions/svcomp/esbmc-wrapper.py`'s `parse_result()` classifies
+a task by matching substrings of ESBMC's output, and #7250 is what happens when output changes
+in a way nobody checked against it -- PR #7064 added a per-property table and turned ~2 600
+correct-false verdicts into `Unknown`. The wrapper matches verdict lines rather than source
+columns, so the expectation is no effect, but that is an expectation and not a measurement.
+Hence `needs-svcomp-run`, and hence this section rather than a sentence in a conversion PR.
+
+### 156.5 What it unblocks
+
+`clang_c_convert.cpp:659`, the local value-write arm -- 138 735 executions across 6 553
+programs -- differed in 3 341 symbol tables with the location withheld, of which §154.1 traced
+the C++ bulk to this and to the empty `operands` list. Whether that residue collapses is the
+next thing to measure, and it is measurable only once this lands.

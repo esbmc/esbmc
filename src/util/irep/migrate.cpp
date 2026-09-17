@@ -3484,8 +3484,17 @@ static exprt back_sideeffect(const expr2tc &ref)
     size = migrate_expr_back(ref2.size);
   back_sideeffect_operands(ref2, theexpr);
 
-  theexpr.cmt_type(cmttype);
-  theexpr.cmt_size(size);
+  // Only when there is something to say. Writing these unconditionally gives a
+  // node that never had them a `#type: empty` and a `#size: nil`, which is
+  // invisible to irept::operator== -- comments are not compared -- but shows up
+  // in every printed symbol table and goto program (§155). Keyed off the source
+  // fields rather than off the locals: a default-constructed `typet` has an
+  // empty id, and `is_not_nil()` reports that as present, which is the same
+  // third state the `size` comment above warns about.
+  if (!is_nil_type(ref2.alloctype))
+    theexpr.cmt_type(cmttype);
+  if (!is_nil_expr(ref2.size))
+    theexpr.cmt_size(size);
 
   // For cpp_new[] also restore the "size" field the frontend uses. Under
   // --irep2-bodies this back-migration feeds the legacy conversion pipeline,
@@ -3498,14 +3507,12 @@ static exprt back_sideeffect(const expr2tc &ref)
     theexpr.size(size);
   theexpr.statement(back_sideeffect_statement(ref2.kind));
 
-  // ref2.location is deliberately *not* restored onto the legacy node.
-  // goto_convert falls back to the enclosing statement's location for a side
-  // effect carrying none, so writing this one back moves the instruction's
-  // column on the default path -- measured at 126 of 131 goto programs over a
-  // stride-16 sample of regression/esbmc. That is very likely the more
-  // faithful column, but it is a user-visible change to counterexamples and
-  // witnesses, so it needs its own PR and an SV-COMP run
-  // (scope-clang-c-irep2.md §136.3).
+  // Restored. goto_convert falls back to the enclosing statement's location for
+  // a side effect carrying none, so a call's instruction took the statement's
+  // column rather than its own; carrying the location back gives it the call's
+  // (scope-clang-c-irep2.md §156).
+  if (ref2.location.is_not_nil())
+    theexpr.location() = ref2.location;
   return theexpr;
 }
 

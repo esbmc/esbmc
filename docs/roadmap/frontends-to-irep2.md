@@ -4173,3 +4173,88 @@ across §63, §151, §152 and this section is one worth naming: each blamed the 
 difference -- an empty operands list, an assertion mixing two representations, a missing
 alignment attribute -- and each was refuted by the next measurement. What settled it was
 dumping the object under test instead of diffing artefacts around it.
+
+## 68. The local arm's cost, measured against the right base (2026-09-16)
+
+§66 and §67 put clang-c's local value-write arm at 3 378 differing symbol tables and attributed
+them to C qualifiers. Both were measured against a base predating the `#cformat` carry that is
+now merged in this stack. Measured correctly -- HEAD against HEAD plus the one line -- the cost
+is **3 341 of 8 682**, and the attribution was wrong: 2 571 of them are C++ programs whose
+difference is the side-effect round trip, not a qualifier.
+
+A C++ case differs in four ways, all from `back_sideeffect` (`migrate.cpp:3468`): it writes
+`cmt_type` and `cmt_size` unconditionally, so a node that had neither gains `#type: empty` and
+`#size: nil`; it drops the empty `operands` list §65 investigated; and it does not restore
+`#location`, which the code explains is deliberate -- restoring it moves instruction columns on
+126 of 131 sampled goto programs and so needs its own PR and an SV-COMP run
+(`scope-clang-c-irep2.md` §136.3). Only the C remainder is the qualifier, as
+`(const signed char *)src` losing its `const`.
+
+So the arm is not blocked on widening `type2t` after all. Two of its three causes are ordinary
+bugs in the back-migration -- stop writing empty comment keys, restore the empty operands list
+-- and the third is already scheduled. That is a better position than §67 left it in, and it was
+only visible once the comparison used a base from the same commit.
+
+`scope-clang-c-irep2.md` §154.3 records the method rule this keeps violating: the base arm must
+be built from the commit the change is applied to, and a residual must be characterised from a
+sample drawn out of the differing set rather than picked. Five figures in this stack were wrong
+for one of those two reasons.
+
+## 69. Two fewer keys the seam invents, and the arm is waiting on §136.3 (2026-09-16)
+
+§68 identified four shapes in a converted C++ value write's symbol-table difference, two of them
+`back_sideeffect` writing `#type: empty` and `#size: nil` onto nodes that had neither. Those are
+now written only when there is something to write, keyed off `ref2.alloctype` and `ref2.size`
+rather than off the locals -- a first attempt guarded on `cmttype.is_not_nil()` and failed,
+because a default-constructed `typet` has an empty id and `is_not_nil()` calls that present. A
+unit case pins it and fails on the unguarded version.
+
+The fix changes the printed symbol table of **2 059 of 8 682** programs on the default path, all
+of them losing `* #size: nil`. Disclosed because that is a quarter of the corpus; safe because
+comments are not compared by `irept::operator==`, both getters return nil either way, and no
+`test.desc` mentions either key.
+
+It does **not** help the value write it came from. Converting `clang_c_convert.cpp:659` costs
+3 341 differing symbol tables without this fix and 3 343 with it -- unchanged. §68's sample
+showed the empty keys because they were in the diff, not because they were the diff; the same
+program also loses an empty `operands` list and a `#location`, and either alone keeps it
+differing.
+
+So the local arm is blocked behind `scope-clang-c-irep2.md` §136.3 -- the deliberate decision not
+to restore a side effect's location, held for its own PR and an SV-COMP run because it moves
+instruction columns on 126 of 131 sampled goto programs. Not behind the type system, which is
+where §67 and §68 put it. The static arm remains blocked on IREP2 having no bitfield type.
+
+```
+:632 static   no bitfield type          needs a new type2t kind
+:659 local    #location (§136.3)        scheduled, SV-COMP run attached
+```
+
+Phase 6 stays at B-2\* 19. Three ticks of measurement have moved the blocker from "the type
+system" to two specific, named, already-documented items -- which is the useful outcome even
+though the count did not move.
+
+## 70. The location decision, taken (2026-09-16)
+
+§136.3 of `scope-clang-c-irep2.md` measured what restoring a side effect's location costs and
+deferred it; §69 established it is the one thing clang-c's local value write is waiting on. It is
+done here, with the number the deferral asked for.
+
+`back_sideeffect` restores the location when it is not nil, so a call's instruction carries the
+call's column instead of the enclosing statement's. Measured over the 8 682 C and C++ programs
+under `regression/`, both arms built from this branch: **8 283 change** -- 95% of the corpus,
+where §136.3's stride-16 sample of one suite had suggested 96%.
+
+Two tests pinned a column incidentally and both moved to the more precise one: `M_z = Foo(...)`
+from column 3 to the call at 9, and `while (t--)` from the `while` at 3 to the decrement at 10.
+Expectations updated; everything else at baseline.
+
+This is the first change in this stack that alters what a user sees. Counterexamples and
+witnesses now name the call's column, so it carries `needs-svcomp-run`: `parse_result()` in
+`esbmc-wrapper.py` classifies tasks by matching ESBMC's output, and #7250 is the precedent for
+changing output without checking it there. The wrapper reads verdict lines, not columns, so the
+expectation is no effect -- an expectation, not a measurement, which is exactly why the roadmap
+held this for a competition run rather than letting it ride along.
+
+What it unblocks is measurable only once it lands: the local arm's 3 341 differing symbol tables,
+whose C++ bulk §69 traced to this location and to the empty `operands` list.
