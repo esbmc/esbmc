@@ -1,6 +1,5 @@
-// esbmc/esbmc#7855: a pointer stored into a malloc'd object ESBMC models as
-// untyped bytes is not the one read back. A stack array of the same type
-// verifies; see github_7855-cast for what the store is lowered to.
+// esbmc/esbmc#7855: flattening a pointer into a malloc'd object ESBMC models
+// as untyped bytes and reading it back must yield the pointer that went in.
 #include <stdlib.h>
 
 struct entry

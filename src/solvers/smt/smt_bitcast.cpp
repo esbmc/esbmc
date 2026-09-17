@@ -126,12 +126,83 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
   abort();
 }
 
+/* A pointer is an (object, offset) tuple, and its machine representation is its
+ * numeric address. That address does not identify it: finalize_pointer_chain()
+ * deliberately lets object 1, INVALID, overlap every other object, so
+ * convert_typecast_to_ptr() cannot tell which pointer an address came from and
+ * a pointer flattened into an untyped byte object read back as a different one
+ * (#7855).
+ *
+ * The address has to stay the representation -- a program can memset pointer
+ * storage or store a literal into it, and reading that back must still mean
+ * what the bits say (regression/esbmc/memset_pointer). So keep it, and record
+ * every pointer a bitcast flattens or rebuilds. Tying those pairwise, so two
+ * flattened pointers sharing an address are the same pointer, is what lets the
+ * round trip prove anything; it constrains only pointers that reach a bitcast,
+ * and leaves every address-space constraint alone.
+ *
+ * Only bitcast takes this path. A typecast keeps plain C integer-to-pointer
+ * semantics, where the address really is all the program has. */
+
+bool smt_solver_baset::pointer_repr_applies(
+  const type2tc &ptr_type,
+  const type2tc &bv_type)
+{
+  /* A CHERI pointer carries a third, capability field this pair would drop. */
+  if (config.ansi_c.cheri)
+    return false;
+
+  /* A narrower or wider reinterpretation truncates or extends the stored bits,
+   * so the value read back is not the representation that went in. */
+  return ptr_type->get_width() == bv_type->get_width();
+}
+
+/** Tie @p pointer to @p address, and to every pointer flattened before it. */
+void smt_solver_baset::record_flattened_pointer(
+  smt_astt address,
+  smt_astt pointer)
+{
+  for (const ptr_flatten_entry &prev : ptr_flatten_history)
+    assert_ast(mk_implies(
+      mk_eq(address, prev.address), pointer->eq(this, prev.pointer)));
+
+  ptr_flatten_history.push_back({address, pointer, ctx_level});
+}
+
+smt_astt smt_solver_baset::encode_pointer_repr(
+  const expr2tc &ptr,
+  const type2tc &to_type)
+{
+  smt_astt address = convert_ast(typecast2tc(to_type, ptr));
+  record_flattened_pointer(address, convert_ast(ptr));
+  return address;
+}
+
+smt_astt smt_solver_baset::decode_pointer_repr(
+  const expr2tc &repr,
+  const type2tc &to_type)
+{
+  smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
+  record_flattened_pointer(convert_ast(repr), pointer);
+  return pointer;
+}
+
 smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
 {
   assert(is_bitcast2t(expr));
 
   const expr2tc &from = to_bitcast2t(expr).from;
   const type2tc &to_type = to_bitcast2t(expr).type;
+
+  if (
+    is_pointer_type(from->type) && is_bv_type(to_type) &&
+    pointer_repr_applies(from->type, to_type))
+    return encode_pointer_repr(from, to_type);
+
+  if (
+    is_pointer_type(to_type) && is_bv_type(from->type) &&
+    pointer_repr_applies(to_type, from->type))
+    return decode_pointer_repr(from, to_type);
 
   // Converts to floating-point
   if (is_floatbv_type(to_type))

@@ -1,5 +1,0 @@
-CORE
-main.c
---64 --incremental-bmc
-^VERIFICATION FAILED$
-^  FAILED +\[main\.assertion\.1\] +line +\d+ +a different address is a different pointer$

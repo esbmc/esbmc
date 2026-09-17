@@ -269,6 +269,10 @@ void smt_solver_baset::pop_ctx()
     it = entries.empty() ? uf_ackermann_history.erase(it) : std::next(it);
   }
 
+  std::erase_if(ptr_flatten_history, [this](const ptr_flatten_entry &e) {
+    return e.level >= ctx_level;
+  });
+
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
