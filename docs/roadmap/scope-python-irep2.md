@@ -441,6 +441,63 @@ decided the question.
 Two of `python_expr_builder.cpp`'s six hand-restorations (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`,
 each commented "migrate_type does not round-trip `#cpp_type`") are now redundant for these kinds and
 could be removed; that is a separate change with its own measurement, not a rider.
+
+## 11. The funcdef cluster: two blockers, neither of them `#cpp_type` (2026-09-17)
+
+§3's table listed `converter_funcdef.cpp`'s writes as failing `class_var_param_augassign{,_fail}` with
+the cause "same shape, parameter and return types" -- i.e. `#cpp_type`. With §10's carry in, they still
+fail, so that attribution was wrong. Measured, and the two halves fail differently.
+
+### 11.1 Split by half, because the whole tells you nothing
+
+`get_function_definition` (`:2055-2548`) holds eight of the file's twelve writes: seven
+`added_symbol->set_type(type)` over the function's own `code_typet`, and one
+`added_symbol->set_value(function_body)`.
+
+```
+both halves converted        SIGSEGV
+the body write alone         SIGSEGV
+the seven type writes alone  VERIFICATION FAILED -- "assertion count == 5"
+base                         both tests pass
+```
+
+Converting all eight and seeing one failure would have suggested one cause. They are two.
+
+### 11.2 The body write must not be converted, and §8.2 says so
+
+The crash is in `std::construct_at<irep_idt>` under `process_goto_program`, i.e. a consumer copying
+names out of the symbol after conversion. The reason is already in this document: §6 is titled *a body
+cannot be migrated before its symbols exist*, and §8.2 is explicit --
+
+> The program-entry body writes (§6) are correct as they are: `set_value(const exprt &)` defers
+> migration until the symbol table is complete, which is exactly what a body needs. Converting them is
+> not blocked work, it is work that must not be done.
+
+`:2539` is one of those writes. The B-2 bar counts it as residue because it counts the argument's
+spelling, and that is the bar being wrong rather than the code. It should be struck from the residue
+rather than left looking like debt -- the same correction §8.2 already made for two writes and this one
+escaped.
+
+### 11.3 The type writes are a real blocker, and not this attribute
+
+The seven type writes produce a wrong verdict, not a crash: `class_var_param_augassign` asserts
+`count == 5` after an augmented assignment to a class variable through a `Class*` parameter, and with
+the function's `code_typet` stored IREP2-side that assertion fails. So a `code_typet` round trip loses
+something this path needs, and it is not `#cpp_type` -- that is carried now, and the failure is
+unchanged.
+
+What it is remains open. Candidates, in the order worth testing: an argument's `#default_value`, which
+`code_type2t` has no field for and which `python_adjust.cpp:86-90` already documents as lost; the
+parameter's `symbol_typet` subtype resolution, since the failing shape is specifically a pointer to a
+class; and `#identifier`/`#base_name` on the arguments, which §44's carry covers but only for types
+built by `migrate_type`. Each is a one-build experiment against a named oracle, which is the cheap
+shape -- unlike §9, no corpus is needed, because the test that discriminates is already in the tree.
+
+### 11.4 Standing
+
+Python B-2* stays 43; repo total 114. The funcdef cluster is not ten writes blocked on one attribute,
+as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
+loss, and the next step is the three experiments above rather than another conversion attempt.
 So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
 `val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
 pass review silently.
