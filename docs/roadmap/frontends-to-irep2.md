@@ -4478,3 +4478,35 @@ and these ten writes together. It still needs its own corpus-wide A/B, because s
 the risk.
 
 Solidity B-2* 65 -> 56; repo total 144 -> 135.
+
+## 78. The fourth name loss was a printer bug (2026-09-16)
+
+§77 deferred ten Solidity writes because `migrate_expr_back` drops the `name` `symbol_expr` sets, so
+one symbol reaches the printer in two spellings and `get_shorthands` reports a namespace collision.
+The premise was right and the conclusion was wrong: the defect is in the question `get_shorthands`
+asks, not in the seam.
+
+It compared whole `exprt`s to decide whether a shorthand was ambiguous, and that test was a tautology:
+`symbols` is a `std::set<exprt>` ordered by `compare()`, and `compare()` and `operator==` ignore the
+same field (comments, `irep.cpp:186-205`), so every pair of distinct elements is unequal and the guard
+marked every clash. Comparing identifiers is the first form that distinguishes anything, and it is
+sound because the identifier already carries the SSA renaming (`symbol2t::get_symbol_name` appends
+`?l1!thr` and `&node#l2`, `irep2_expr.cpp:198-225`), while `next_symbol` and `nondet_symbol` -- the two
+kinds that could share an identifier meaning different values -- are never collected
+(`c_expr2string.cpp:31-38`).
+
+It is a live defect independent of the migration: of 5864 clashes over the Solidity corpus, 12 are two
+spellings of one symbol, in twelve named tests. Three consumers inherit the function, and the one that
+matters most is `goto2c::expr2ct`, which emits C that must compile: a declaration took the short name
+while a use took the mangled one, naming an identifier the output never declared. Two invariants made
+this worth care rather than a one-liner -- `goto_coverage.cpp:818-828` warns that altering `from_expr`
+formatting can silently deflate k-path coverage, and `witnesses.cpp:939-959` builds SV-COMP witness
+assignments through it. `goto-transcoder` 268/268, `goto-coverage` 144/144 (67 of its descriptors pin a
+percentage), `witnesses` 163/163; the change carries `needs-svcomp-run`.
+
+The lesson generalises past this instance. Three of the four name losses so far were fixed by carrying
+the field (§44, §46, §69). This one should not be, and nor should it be fixed by deriving the name in
+`migrate_expr_back`: a consumer that treats two spellings of one symbol as two symbols is wrong
+whether or not the seam preserves spelling. Before adding a field to carry a marker across, it is
+worth asking whether the reader's use of it is defensible -- here it was not, and the fix is a line in
+the reader rather than storage in the hottest node in the tool.
