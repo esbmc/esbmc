@@ -1,0 +1,4 @@
+CORE
+main.c
+--adaptive-k-induction --max-k-step 55
+^VERIFICATION FAILED$

@@ -5,6 +5,7 @@
 #include <util/config/options.h>
 #include <util/symtab/namespace.h>
 #include <map>
+#include <set>
 #include <vector>
 
 /// A loop-invariant candidate for --adaptive-k-induction, tied to its loop by
@@ -62,10 +63,11 @@ std::vector<kind_candidatet> generate_kind_candidates(
   const namespacet &ns,
   bool with_intervals);
 
-/// Attach pool[i] for every i in @p ids as a LOOP_INVARIANT tagged with i, and
-/// `true` on every other loop the schema can cut, so none of them is left to
-/// the unwinder with its assertions unproved.
-void emit_kind_candidates(
+/// Attach pool[i] for every i in @p ids whose loop the schema can cut as a
+/// LOOP_INVARIANT tagged with i, and `true` on every other loop it can cut, so
+/// none of them is left to the unwinder with its assertions unproved. Returns
+/// the ids attached: a candidate that was not has no claim to be refuted by.
+std::set<size_t> emit_kind_candidates(
   goto_functionst &goto_functions,
   const std::vector<kind_candidatet> &pool,
   const std::vector<size_t> &ids);

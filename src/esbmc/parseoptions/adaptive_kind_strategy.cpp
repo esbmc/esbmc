@@ -253,10 +253,15 @@ int esbmc_parseoptionst::do_adaptive_kind_strategy(
           return 0;
         // No execution outruns the bounds, so a base case under exactly the
         // same ones covers every execution.
-        if (is_base_case_violated(options, goto_functions, k_step).is_true())
+        const tvt confirmed =
+          is_base_case_violated(options, goto_functions, k_step);
+        if (confirmed.is_true())
           return 1;
-        log_success("\nVERIFICATION SUCCESSFUL");
-        return 0;
+        if (confirmed.is_false())
+        {
+          log_success("\nVERIFICATION SUCCESSFUL");
+          return 0;
+        }
       }
 
       const bool jumped = apply_bound_hints(hints, k_step, bounds, unbounded);

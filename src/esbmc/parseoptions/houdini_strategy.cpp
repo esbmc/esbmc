@@ -169,16 +169,23 @@ kind_proof_resultt esbmc_parseoptionst::prove_kind_candidates(
   // The schema's program with @p emitted attached. Asserting nothing but the
   // candidates keeps each refinement to the claims it is about: an assertion
   // constrains no path, so dropping one changes no reachable state.
-  auto build = [&](const std::vector<size_t> &emitted, bool program_claims) {
+  // Drops from @p candidates any that were not emitted.
+  auto build = [&](std::vector<size_t> &candidates, bool program_claims) {
     goto_functionst probe = pristine;
     if (!program_claims)
       Forall_goto_functions (f, probe)
         Forall_goto_program_instructions (i, f->second.body)
           if (i->is_assert())
             i->make_skip();
-    emit_kind_candidates(probe, pool, emitted);
+    const std::set<size_t> emitted =
+      emit_kind_candidates(probe, pool, candidates);
+    candidates.erase(
+      std::remove_if(
+        candidates.begin(),
+        candidates.end(),
+        [&emitted](size_t id) { return emitted.count(id) == 0; }),
+      candidates.end());
     goto_loop_invariant(probe, context, false);
-    probe.update();
     return probe;
   };
 

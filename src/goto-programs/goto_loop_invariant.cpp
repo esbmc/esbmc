@@ -208,9 +208,10 @@ static std::vector<expr2tc> extract_invariants_near(
 
     // A user-written invariant keeps the historical proximity-only behaviour:
     // the frontend may legitimately place it further from the head, and #3936
-    // depends on that latitude.
+    // depends on that latitude. Houdini pools sit right before their head too.
     if (
-      it->location.property().as_string() == kSynthesisedInvariantProperty &&
+      (it->location.property().as_string() == kSynthesisedInvariantProperty ||
+       is_houdini_marker(it)) &&
       crossed_real_instruction)
     {
       // The count line has already reported this as synthesised. Say so rather

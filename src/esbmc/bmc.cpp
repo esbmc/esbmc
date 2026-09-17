@@ -2298,9 +2298,14 @@ void bmct::infer_loop_bounds(
   };
 
   const BigInt &cap = kind_feedback->cap;
+  const BigInt below_any_measure("-9223372036854775808");
   for (const auto &[loop, candidates] : loops)
   {
-    if (unusable.count(loop))
+    // A loop whose unwinding assertion no execution reaches already has a
+    // bound that holds; raising it would only cost the base case.
+    if (
+      unusable.count(loop) || candidates.empty() ||
+      !can_exceed(candidates.front(), below_any_measure))
       continue;
 
     std::optional<BigInt> fewest;

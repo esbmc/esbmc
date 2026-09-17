@@ -188,11 +188,12 @@ std::vector<kind_candidatet> generate_kind_candidates(
   return pool;
 }
 
-void emit_kind_candidates(
+std::set<size_t> emit_kind_candidates(
   goto_functionst &goto_functions,
   const std::vector<kind_candidatet> &pool,
   const std::vector<size_t> &ids)
 {
+  std::set<size_t> emitted;
   std::map<unsigned, std::vector<size_t>> by_loop;
   for (size_t id : ids)
     by_loop[pool[id].loop].push_back(id);
@@ -218,11 +219,15 @@ void emit_kind_candidates(
         continue;
       }
       for (size_t id : found->second)
+      {
         houdini_emit_candidate(
           f->second, anchor, pool[id].expr, std::to_string(id));
+        emitted.insert(id);
+      }
     }
   }
   goto_functions.update();
+  return emitted;
 }
 
 std::map<unsigned, goto_programt::targett>
