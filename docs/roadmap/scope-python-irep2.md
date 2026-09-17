@@ -441,3 +441,6 @@ decided the question.
 Two of `python_expr_builder.cpp`'s six hand-restorations (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`,
 each commented "migrate_type does not round-trip `#cpp_type`") are now redundant for these kinds and
 could be removed; that is a separate change with its own measurement, not a rider.
+So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
