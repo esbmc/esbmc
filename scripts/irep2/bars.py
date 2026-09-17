@@ -155,7 +155,7 @@ def measure(frontend, listing=None):
                     continue
                 refined_b2 += 1
                 if listing is not None:
-                    listing.append("%s:%d: %s" % (path, line_of(lines, m.start()), arg))
+                    listing.append(f"{path}:{line_of(lines, m.start())}: {arg}")
     return lines_b1, raw_b1, refined_b1, raw_b2, refined_b2
 
 
