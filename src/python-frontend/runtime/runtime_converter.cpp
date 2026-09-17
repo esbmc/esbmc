@@ -850,6 +850,21 @@ exprt python_runtime_converter::call_expr(const json &node)
       }
       if (callee == "bool" && node["args"].size() == 1)
         return call("pyrt_bool_from", {truth(node["args"][0])}, loc);
+      /* A builtin type used as a call converts its argument; without this it
+       * would reach pyrt_call and build an instance of the type instead. */
+      static const std::map<std::string, std::string> conversions = {
+        {"int", "pyrt_to_int"},
+        {"float", "pyrt_to_float"},
+        {"str", "pyrt_to_str"}};
+      auto conversion = conversions.find(callee);
+      if (conversion != conversions.end() && node["args"].size() == 1)
+        return call(conversion->second, {expr(node["args"][0])}, loc);
+      if (callee == "list" && node["args"].empty())
+        return call("pyrt_list_new", {}, loc);
+      if (callee == "dict" && node["args"].empty())
+        return call("pyrt_dict_new", {}, loc);
+      if (callee == "tuple" && node["args"].empty())
+        return call("pyrt_tuple_new", {}, loc);
       static const std::map<std::string, std::string> iterable_builtins = {
         {"abs", "pyrt_builtin_abs"},
         {"all", "pyrt_builtin_all"},

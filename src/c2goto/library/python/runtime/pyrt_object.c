@@ -237,6 +237,41 @@ PyRtObject *pyrt_getitem(PyRtObject *o, PyRtObject *key)
   return sq->sq_item(o, pyrt_sequence_index(o, key));
 }
 
+/* int(x). A float truncates toward zero, as CPython does; bool is an int
+ * already. Parsing a string is a decimal scan this does not model. */
+PyRtObject *pyrt_to_int(PyRtObject *o)
+{
+  if (pyrt_long_check(o))
+    return pyrt_long_from(((PyRtLongObject *)o)->value);
+  if (pyrt_float_check(o))
+    return pyrt_long_from((int64_t)((PyRtFloatObject *)o)->value);
+  if (o->ob_type == &PyRtStr_Type)
+    PYRT_RAISE("pyrt: int() of a string is not modelled");
+  PYRT_RAISE("TypeError: int() argument must be a number");
+  return &pyrt_None;
+}
+
+PyRtObject *pyrt_to_float(PyRtObject *o)
+{
+  if (pyrt_number_check(o))
+    return pyrt_float_from(pyrt_number_as_double(o));
+  if (o->ob_type == &PyRtStr_Type)
+    PYRT_RAISE("pyrt: float() of a string is not modelled");
+  PYRT_RAISE("TypeError: float() argument must be a number");
+  return &pyrt_None;
+}
+
+/* str(x) only where no rendering is needed. Turning a number into digits
+ * wants a buffer and a format this does not model, so it is refused rather
+ * than answered with something shorter than the truth. */
+PyRtObject *pyrt_to_str(PyRtObject *o)
+{
+  if (o->ob_type == &PyRtStr_Type)
+    return o;
+  PYRT_RAISE("pyrt: str() of this type is not modelled");
+  return &pyrt_None;
+}
+
 /* Used where the caller can turn an error into a Python exception -- inside a
  * try. A missing key is recorded rather than asserted, so the caller throws a
  * KeyError the program can catch. Everything else keeps the ordinary path,
