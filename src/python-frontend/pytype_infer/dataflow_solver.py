@@ -4,18 +4,16 @@ from dataclasses import dataclass
 from .lattice import *
 from .cfg_builder import *
 
+
 @dataclass
 class InferenceContext:
-    
-    known_classes: dict[str,Any]
+
+    known_classes: dict[str, Any]
+
 
 def parse_isinstance_condition(cond):
-    if not (isinstance(cond, ast.Call)
-    and isinstance(cond.func, ast.Name)
-    and cond.func.id == "isinstance"
-    and len(cond.args) >=2
-    and isinstance(cond.args[0], ast.Name)
-    ):
+    if not (isinstance(cond, ast.Call) and isinstance(cond.func, ast.Name) and cond.func.id
+            == "isinstance" and len(cond.args) >= 2 and isinstance(cond.args[0], ast.Name)):
         return None
     var = cond.args[0].id
     type_expr = cond.args[1]
@@ -23,12 +21,12 @@ def parse_isinstance_condition(cond):
     if isinstance(type_expr, ast.Name):
         return ("isinstance", var, type_expr.id)
 
-    if(isinstance(type_expr, ast.Subscript)
-       and isinstance(type_expr.value, ast.Name)):
+    if (isinstance(type_expr, ast.Subscript) and isinstance(type_expr.value, ast.Name)):
 
-       return ("isinstance", var, type_expr.value.id)
+        return ("isinstance", var, type_expr.value.id)
 
     return None
+
 
 def parse_none_condition(cond):
     if not isinstance(cond, ast.Compare):
@@ -39,8 +37,7 @@ def parse_none_condition(cond):
 
     comparator = cond.comparators[0]
 
-    if not (isinstance(comparator, ast.Constant)
-            and comparator.value is None):
+    if not (isinstance(comparator, ast.Constant) and comparator.value is None):
         return None
 
     if isinstance(cond.ops[0], ast.Is):
@@ -49,16 +46,20 @@ def parse_none_condition(cond):
     if isinstance(cond.ops[0], ast.IsNot):
         return ("is_none", cond.left.id, True)
 
-    return None                               
+    return None
+
 
 def parse_condition(cond):
     result = parse_isinstance_condition(cond)
     if result is not None:
         return result
 
-    return parse_none_condition(cond)    
+    return parse_none_condition(cond)
 
-def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef, context: InferenceContext, max_iters: int =50):
+
+def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+                     context: InferenceContext,
+                     max_iters: int = 50):
     cfg = build_cfg_for_function(func_node)
     in_envs, out_envs = initialize_environments(func_node, cfg)
 
@@ -69,11 +70,11 @@ def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef, context:
 
     while changed and iteration < max_iters:
         changed = False
-        iteration +=1
+        iteration += 1
 
         for i, block in enumerate(cfg.blocks):
             env, cond, stmts = prepare_block(block, in_envs, i)
-            
+
             print(f"\nBLOCK {i}")
             print("IN :", in_envs[i])
             print("OUT:", out_envs[i])
@@ -87,7 +88,7 @@ def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef, context:
                     for j, item in enumerate(stmt):
                         print(f"  [{j}] TYPE:", type(item))
                         print(f"  [{j}] VALUE:", repr(item))
-                
+
                 if isinstance(stmt, ast.AST):
                     print("AST:", ast.dump(stmt))
                 else:
@@ -99,18 +100,14 @@ def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef, context:
                         context,
                     )
                 #print(f"  BEFORE {ast.dump(stmt)}")
-                assert isinstance(env, dict), (
-                    f"BAD ENV BEFORE STATEMENT: "
-                    f"{type(env).__name__}: {env!r}"
-)
+                assert isinstance(env, dict), (f"BAD ENV BEFORE STATEMENT: "
+                                               f"{type(env).__name__}: {env!r}")
 
                 new_env = transfer_statement(stmt, env, context)
 
-                assert isinstance(new_env, dict), (
-                    f"BAD ENV AFTER STATEMENT: "
-                    f"stmt={debug_dump(stmt)} "
-                    f"result={type(new_env).__name__}: {new_env!r}"
-                )
+                assert isinstance(new_env, dict), (f"BAD ENV AFTER STATEMENT: "
+                                                   f"stmt={debug_dump(stmt)} "
+                                                   f"result={type(new_env).__name__}: {new_env!r}")
 
                 env = new_env
 
@@ -120,22 +117,30 @@ def analyze_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef, context:
                 out_envs[i] = merged
                 changed = True
 
-            propagate_block(block,merged, cond, in_envs,)
+            propagate_block(
+                block,
+                merged,
+                cond,
+                in_envs,
+            )
     if changed:
-        return None        
+        return None
 
-    return cfg, in_envs, out_envs, return_types  
+    return cfg, in_envs, out_envs, return_types
+
 
 def debug_dump(node) -> str:
     if isinstance(node, ast.AST):
         return ast.dump(node)
     return repr(node)
 
+
 def infer_return_type(stmt, env, context):
     if stmt.value is None:
         return None
 
     return infer_type_from_expr(stmt.value, env, context)
+
 
 def propagate_block(block, env, cond, in_envs):
     if cond is not None and block.succ:
@@ -150,7 +155,9 @@ def propagate_block(block, env, cond, in_envs):
             block.succ,
             env,
             in_envs,
-        )       
+        )
+
+
 def propagate_condition(block, env, cond, in_envs):
     parsed = parse_condition(cond)
 
@@ -178,6 +185,8 @@ def propagate_condition(block, env, cond, in_envs):
         false_env,
         in_envs,
     )
+
+
 def narrow_condition(parsed, env):
     true_env = env.copy()
     false_env = env.copy()
@@ -199,18 +208,16 @@ def narrow_condition(parsed, env):
 
     return true_env, false_env
 
+
 def narrow_isinstance(parsed, true_env, false_env):
     _, var, type_name = parsed
 
     if var in true_env:
-        true_env[var] = (
-            true_env[var].narrow_with_isinstance(type_name)
-        )
+        true_env[var] = (true_env[var].narrow_with_isinstance(type_name))
 
     if var in false_env:
-        false_env[var] = (
-            false_env[var].remove_isinstance(type_name)
-        )
+        false_env[var] = (false_env[var].remove_isinstance(type_name))
+
 
 def narrow_none(parsed, true_env, false_env):
     _, var, is_not = parsed
@@ -220,6 +227,7 @@ def narrow_none(parsed, true_env, false_env):
     else:
         narrow_is_none(true_env, false_env, var)
 
+
 def narrow_is_none(true_env, false_env, var):
     if var in true_env:
         true_env[var] = true_env[var].narrow_with_isinstance("None")
@@ -227,13 +235,14 @@ def narrow_is_none(true_env, false_env, var):
     if var in false_env:
         false_env[var] = false_env[var].remove_isinstance("None")
 
+
 def narrow_not_none(true_env, false_env, var):
     if var in true_env:
         true_env[var] = true_env[var].remove_isinstance("None")
 
     if var in false_env:
         false_env[var] = false_env[var].narrow_with_isinstance("None")
-           
+
 
 def initialize_environments(func_node, cfg):
     n = len(cfg.blocks)
@@ -247,13 +256,13 @@ def initialize_environments(func_node, cfg):
         if arg.annotation is not None:
             entry_env[arg.arg] = infer_annotation_type(arg.annotation)
         else:
-            entry_env[arg.arg] = Unknown()              
+            entry_env[arg.arg] = Unknown()
 
     if n > 0:
         in_envs[0] = entry_env.copy()
 
-
     return in_envs, out_envs
+
 
 # def compute_input_envirment(block, block_index, in_envs, out_envs):
 #     if not block.pred:
@@ -269,12 +278,14 @@ def initialize_environments(func_node, cfg):
 
 #     return pred_env
 
+
 def merge_into_environment(target, source):
     for name, typ in source.items():
         if name in target:
             target[name] = target[name].join(typ)
         else:
             target[name] = typ
+
 
 def prepare_block(block, in_envs, block_index):
     env = in_envs[block_index].copy()
@@ -288,10 +299,10 @@ def prepare_block(block, in_envs, block_index):
 
     return env, cond, stmts
 
+
 def is_condition_marker(stmt):
-    return (isinstance(stmt, tuple)
-             and len(stmt) >=2
-             and stmt[0] == "cond")
+    return (isinstance(stmt, tuple) and len(stmt) >= 2 and stmt[0] == "cond")
+
 
 def transfer_statement(stmt, env, context):
     if isinstance(stmt, ast.Assign):
@@ -304,7 +315,7 @@ def transfer_statement(stmt, env, context):
         return transfer_expr(stmt, env, context)
 
     #if isinstance(stmt, ast.Return):
-     #   return transfer_return(stmt, env, context)
+    #   return transfer_return(stmt, env, context)
 
     return env
 
@@ -313,9 +324,14 @@ def transfer_return(stmt, env, context):
     if stmt.value is None:
         return env
 
-    return_type = infer_type_from_expr(stmt.value, env, context,)
+    return_type = infer_type_from_expr(
+        stmt.value,
+        env,
+        context,
+    )
 
-    return env, return_type 
+    return env, return_type
+
 
 def transfer_assign(stmt, env, context):
     for target in stmt.targets:
@@ -325,7 +341,8 @@ def transfer_assign(stmt, env, context):
         elif isinstance(target, ast.Subscript):
             assign_subscript(target, stmt.value, env, context)
 
-    return env 
+    return env
+
 
 def assign_name(target, value, env, context):
     name = target.id
@@ -335,16 +352,17 @@ def assign_name(target, value, env, context):
         typ = Unknown()
 
     #if name in env:
-     #   env[name] = env[name].join(typ)
+    #   env[name] = env[name].join(typ)
     #else:
-    env[name] = typ 
+    env[name] = typ
+
 
 def assign_subscript(target, value, env, context):
     if not isinstance(target.value, ast.Name):
         return
 
     container = target.value.id
-    key_type = infer_type_from_expr(target.slice,env, context) 
+    key_type = infer_type_from_expr(target.slice, env, context)
     value_type = infer_type_from_expr(value, env, context)
 
     update_subscript_assignment(
@@ -353,6 +371,8 @@ def assign_subscript(target, value, env, context):
         value_type,
         env,
     )
+
+
 def update_subscript_assignment(container, key_type, value_type, env):
     current = env.get(container, Unknown())
 
@@ -360,7 +380,7 @@ def update_subscript_assignment(container, key_type, value_type, env):
         env[container] = DictType(
             current.key_t.join(key_type),
             current.val_t.join(value_type),
-        )    
+        )
         return
 
     if isinstance(current, ListType):
@@ -368,10 +388,14 @@ def update_subscript_assignment(container, key_type, value_type, env):
         return
 
     if isinstance(current, Unknown):
-        env[container] = infer_subscript_container(key_type, value_type,)
+        env[container] = infer_subscript_container(
+            key_type,
+            value_type,
+        )
         return
 
     env[container] = Unknown()
+
 
 def infer_subscript_container(key_type, value_type):
     if isinstance(key_type, StrType):
@@ -381,6 +405,7 @@ def infer_subscript_container(key_type, value_type):
         return ListType(value_type)
 
     return Unknown()
+
 
 def transfer_annassign(stmt, env):
     if not isinstance(stmt.target, ast.Name):
@@ -395,6 +420,7 @@ def transfer_annassign(stmt, env):
         env[name] = Unknown()
 
     return env
+
 
 """ def transfer_expr(stmt, env, context):
     expr = stmt.value
@@ -419,6 +445,7 @@ def transfer_annassign(stmt, env):
 
     return env    """
 
+
 def transfer_expr(
     stmt: ast.Expr,
     env: dict[str, Type],
@@ -431,7 +458,7 @@ def transfer_expr(
         handle_call_effect(expr, env, context)
 
     return env
-     
+
 
 def handle_call_effect(call, env, context):
     if not isinstance(call.func, ast.Attribute):
@@ -442,6 +469,7 @@ def handle_call_effect(call, env, context):
 
     elif call.func.attr == "setdefault":
         handle_setdefault(call, env, context)
+
 
 def handle_setdefault(call, env, context):
     if not isinstance(call.func, ast.Attribute):
@@ -455,15 +483,22 @@ def handle_setdefault(call, env, context):
 
     dict_name = call.func.value.id
 
-    key_type = infer_type_from_expr(call.args[0], env, context,)
+    key_type = infer_type_from_expr(
+        call.args[0],
+        env,
+        context,
+    )
 
     #default_type = infer_type_from_expr(call.args[1], env, context,)
 
-    current = env.get(dict_name, Unknown(),)
+    current = env.get(
+        dict_name,
+        Unknown(),
+    )
 
     if not isinstance(current, DictType):
         return
-    
+
     if len(call.args) >= 2:
         default_type = infer_type_from_expr(
             call.args[1],
@@ -489,6 +524,7 @@ def handle_setdefault(call, env, context):
         new_value_type,
     )
 
+
 def handle_append(call, env, context):
     if not call.args:
         return
@@ -506,9 +542,7 @@ def handle_append(call, env, context):
         current = env.get(listname, Unknown())
 
         if isinstance(current, ListType):
-            env[listname] = ListType(
-                current.elem.join(arg_type)
-            )
+            env[listname] = ListType(current.elem.join(arg_type))
         else:
             env[listname] = ListType(arg_type)
 
@@ -533,6 +567,7 @@ def handle_append(call, env, context):
             env,
             context,
         )
+
 
 def handle_nested_append(call, arg_type, env, context):
     if not isinstance(call.func, ast.Attribute):
@@ -566,8 +601,6 @@ def handle_nested_append(call, arg_type, env, context):
     if not isinstance(default_type, ListType):
         return
 
-
-
     current = env.get(dictname, Unknown())
 
     if isinstance(current, DictType):
@@ -576,9 +609,7 @@ def handle_nested_append(call, arg_type, env, context):
         value_type = current.val_t
 
         if isinstance(value_type, ListType):
-            updated_value = ListType(
-                value_type.elem.join(arg_type)
-            )
+            updated_value = ListType(value_type.elem.join(arg_type))
         # elif isinstance(default_type, ListType):
         #     updated_value = ListType(
         #         default_type.elem.join(arg_type)
@@ -595,15 +626,15 @@ def handle_nested_append(call, arg_type, env, context):
     if isinstance(default_type, ListType):
         env[dictname] = DictType(
             key_type,
-            ListType(
-                default_type.elem.join(arg_type)
-            ),
+            ListType(default_type.elem.join(arg_type)),
         )
 
+
 def merge_environment(previous, current):
-    merged= previous.copy()
+    merged = previous.copy()
     merge_into_environment(merged, current)
     return merged
+
 
 def merge_types(old_t, new_type, use_widen=False):
     if old_t is None:
@@ -611,11 +642,13 @@ def merge_types(old_t, new_type, use_widen=False):
 
     if use_widen:
         return old_t.widen(new_type)
-    
-    return old_t.join(new_type) 
+
+    return old_t.join(new_type)
+
 
 def merge_successor_environment(successor, env, in_envs):
     merge_into_environment(in_envs[successor], env)
+
 
 def propagate_to_successors(successors, env, in_envs):
     for successor in successors:
@@ -623,13 +656,15 @@ def propagate_to_successors(successors, env, in_envs):
             successor,
             env,
             in_envs,
-        )               
-                                                                             
+        )
+
+
 def infer_class_call_type(func_name, known_classes):
     if func_name in known_classes:
         return InstanceType(func_name)
 
     return None
+
 
 def infer_instance_attribute_type(
     obj_type,
@@ -646,6 +681,7 @@ def infer_instance_attribute_type(
         Unknown(),
     )
 
+
 def infer_dict_attribute_type(obj_type, attr_name):
     if attr_name == "copy":
         return CallableType([], DictType(obj_type.key_t, obj_type.val_t))
@@ -657,20 +693,29 @@ def infer_dict_attribute_type(obj_type, attr_name):
         return CallableType([], obj_type.val_t)
 
     if attr_name == "popitem":
-        return CallableType([], TupleType([obj_type.key_t, obj_type.val_t]),)
+        return CallableType(
+            [],
+            TupleType([obj_type.key_t, obj_type.val_t]),
+        )
 
     if attr_name == "keys":
-        return CallableType([], ListType(obj_type.key_t),)
+        return CallableType(
+            [],
+            ListType(obj_type.key_t),
+        )
 
     if attr_name == "values":
         return CallableType([], ListType(obj_type.val_t))
 
     if attr_name == "items":
-        return CallableType([], ListType(TupleType([obj_type.key_t, obj_type.val_t])),)
-    
+        return CallableType(
+            [],
+            ListType(TupleType([obj_type.key_t, obj_type.val_t])),
+        )
+
     if attr_name in {
-        "update",
-        "clear",
+            "update",
+            "clear",
     }:
         return CallableType(
             [],
@@ -687,7 +732,8 @@ def infer_dict_attribute_type(obj_type, attr_name):
         )
 
     return Unknown()
-    
+
+
 def infer_constant_type(expr):
     value = expr.value
 
@@ -711,6 +757,7 @@ def infer_constant_type(expr):
 
     return Unknown()
 
+
 def infer_list_literal_type(expr, env, context):
     elem_type = Unknown()
 
@@ -719,12 +766,11 @@ def infer_list_literal_type(expr, env, context):
 
     return ListType(elem_type)
 
+
 def infer_tuple_literal_type(expr, env, context):
-    elems = [
-        infer_type_from_expr(element, env, context)
-        for element in expr.elts
-    ]    
+    elems = [infer_type_from_expr(element, env, context) for element in expr.elts]
     return TupleType(elems)
+
 
 def infer_dict_literal_type(expr, env, context):
     key_type = Unknown()
@@ -734,18 +780,15 @@ def infer_dict_literal_type(expr, env, context):
         if key is None:
             continue
 
-        key_type = key_type.join(
-            infer_type_from_expr(key, env, context)
-        )
+        key_type = key_type.join(infer_type_from_expr(key, env, context))
 
-        value_type = value_type.join(
-            infer_type_from_expr(value, env, context)
-        )
+        value_type = value_type.join(infer_type_from_expr(value, env, context))
 
     return DictType(
         key_type,
         value_type,
     )
+
 
 def infer_binop_type(expr, env, context):
     left = infer_type_from_expr(expr.left, env, context)
@@ -754,9 +797,12 @@ def infer_binop_type(expr, env, context):
     print(
         "[PYTYPE BINOP]",
         ast.dump(expr),
-        "LEFT =", left,
-        "RIGHT =", right,
-        "OP =", type(expr.op).__name__,
+        "LEFT =",
+        left,
+        "RIGHT =",
+        right,
+        "OP =",
+        type(expr.op).__name__,
     )
 
     if isinstance(expr.op, ast.Add):
@@ -768,10 +814,7 @@ def infer_binop_type(expr, env, context):
     if isinstance(expr.op, (ast.Div, ast.FloorDiv)):
         numeric_types = (BoolType, IntType, FloatType)
 
-        if not (
-            isinstance(left, numeric_types)
-            and isinstance(right, numeric_types)
-        ):
+        if not (isinstance(left, numeric_types) and isinstance(right, numeric_types)):
             return Unknown()
 
         if isinstance(expr.op, ast.Div):
@@ -783,7 +826,6 @@ def infer_binop_type(expr, env, context):
 
         return IntType()
 
-
     if isinstance(left, FloatType) or isinstance(right, FloatType):
         return FloatType()
 
@@ -791,6 +833,7 @@ def infer_binop_type(expr, env, context):
         return IntType()
 
     return Unknown()
+
 
 def infer_add_type(left, right):
     if isinstance(left, ListType) and isinstance(right, ListType):
@@ -804,17 +847,27 @@ def infer_add_type(left, right):
 
     return None
 
+
 def infer_call_type(expr, env, context):
     func = expr.func
 
     if isinstance(func, ast.Name):
-        return infer_named_call_type(func.id, expr, env, context, )
+        return infer_named_call_type(
+            func.id,
+            expr,
+            env,
+            context,
+        )
 
     if isinstance(func, ast.Attribute):
         if (isinstance(func.value, ast.Name) and func.value.id == "cmath"):
             return infer_cmath_call_type(func.attr, expr, env, context)
 
-        obj_type = infer_type_from_expr(func.value, env, context, )
+        obj_type = infer_type_from_expr(
+            func.value,
+            env,
+            context,
+        )
 
         arg_types = []
         for arg in expr.args:
@@ -831,7 +884,7 @@ def infer_call_type(expr, env, context):
             result = obj_type.val_t.join(default_type)
             handle_setdefault(expr, env, context)
             return result
-        
+
         attribute_type = infer_attribute_type(
             obj_type,
             func.attr,
@@ -839,11 +892,12 @@ def infer_call_type(expr, env, context):
         )
 
         if isinstance(attribute_type, CallableType):
-                return attribute_type.ret
+            return attribute_type.ret
 
         #return resolve_method_call(obj_type, func.attr, arg_types)
 
     return Unknown()
+
 
 def infer_named_call_type(
     func_name,
@@ -851,12 +905,7 @@ def infer_named_call_type(
     env,
     context,
 ):
-    builtin_type = infer_builtin_call_type(
-        func_name,
-        expr,
-        env,
-        context
-    )
+    builtin_type = infer_builtin_call_type(func_name, expr, env, context)
 
     if builtin_type is not None:
         return builtin_type
@@ -870,6 +919,7 @@ def infer_named_call_type(
         return class_type
 
     return Unknown()
+
 
 def infer_builtin_call_type(name, expr, env, context):
     if name == "len":
@@ -904,15 +954,14 @@ def infer_builtin_call_type(name, expr, env, context):
 
     return None
 
+
 def infer_lambda_type(expr, env, context):
-    param_types: List[Type] =[
-        Unknown()
-        for _ in expr.args.args
-    ]
+    param_types: List[Type] = [Unknown() for _ in expr.args.args]
 
     ret_type = infer_type_from_expr(expr.body, env, context)
 
     return CallableType(param_types, ret_type)
+
 
 def infer_cmath_call_type(
     func_name,
@@ -921,26 +970,27 @@ def infer_cmath_call_type(
     context,
 ):
     if func_name in {
-        "acos",
-        "asin",
-        "atan",
-        "acosh",
-        "asinh",
-        "atanh",
-        "cos",
-        "sin",
-        "tan",
-        "cosh",
-        "sinh",
-        "tanh",
-        "exp",
-        "log",
-        "log10",
-        "sqrt",
+            "acos",
+            "asin",
+            "atan",
+            "acosh",
+            "asinh",
+            "atanh",
+            "cos",
+            "sin",
+            "tan",
+            "cosh",
+            "sinh",
+            "tanh",
+            "exp",
+            "log",
+            "log10",
+            "sqrt",
     }:
         return ComplexType()
 
     return Unknown()
+
 
 def infer_subscript_type(expr, env, context):
     container_type = infer_type_from_expr(expr.value, env, context)
@@ -965,6 +1015,7 @@ def infer_subscript_type(expr, env, context):
     )
     return result
 
+
 def infer_list_attribute_type(obj_type, attr_name):
     if attr_name == "copy":
         return CallableType(
@@ -979,13 +1030,13 @@ def infer_list_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "append",
-        "extend",
-        "insert",
-        "remove",
-        "clear",
-        "reverse",
-        "sort",
+            "append",
+            "extend",
+            "insert",
+            "remove",
+            "clear",
+            "reverse",
+            "sort",
     }:
         return CallableType(
             [],
@@ -993,8 +1044,8 @@ def infer_list_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "count",
-        "index",
+            "count",
+            "index",
     }:
         return CallableType(
             [],
@@ -1002,11 +1053,12 @@ def infer_list_attribute_type(obj_type, attr_name):
         )
 
     return Unknown()
+
 
 def infer_tuple_attribute_type(obj_type, attr_name):
     if attr_name in {
-        "count",
-        "index",
+            "count",
+            "index",
     }:
         return CallableType(
             [],
@@ -1015,27 +1067,28 @@ def infer_tuple_attribute_type(obj_type, attr_name):
 
     return Unknown()
 
+
 def infer_str_attribute_type(obj_type, attr_name):
     if attr_name in {
-        "upper",
-        "lower",
-        "capitalize",
-        "title",
-        "casefold",
-        "swapcase",
-        "strip",
-        "lstrip",
-        "rstrip",
-        "replace",
-        "removeprefix",
-        "removesuffix",
-        "expandtabs",
-        "center",
-        "ljust",
-        "rjust",
-        "zfill",
-        "join",
-        "translate",
+            "upper",
+            "lower",
+            "capitalize",
+            "title",
+            "casefold",
+            "swapcase",
+            "strip",
+            "lstrip",
+            "rstrip",
+            "replace",
+            "removeprefix",
+            "removesuffix",
+            "expandtabs",
+            "center",
+            "ljust",
+            "rjust",
+            "zfill",
+            "join",
+            "translate",
     }:
         return CallableType(
             [],
@@ -1043,9 +1096,9 @@ def infer_str_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "split",
-        "rsplit",
-        "splitlines",
+            "split",
+            "rsplit",
+            "splitlines",
     }:
         return CallableType(
             [],
@@ -1053,8 +1106,8 @@ def infer_str_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "partition",
-        "rpartition",
+            "partition",
+            "rpartition",
     }:
         return CallableType(
             [],
@@ -1066,11 +1119,11 @@ def infer_str_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "find",
-        "rfind",
-        "index",
-        "rindex",
-        "count",
+            "find",
+            "rfind",
+            "index",
+            "rindex",
+            "count",
     }:
         return CallableType(
             [],
@@ -1078,20 +1131,20 @@ def infer_str_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "startswith",
-        "endswith",
-        "isalnum",
-        "isalpha",
-        "isascii",
-        "isdecimal",
-        "isdigit",
-        "isidentifier",
-        "islower",
-        "isnumeric",
-        "isprintable",
-        "isspace",
-        "istitle",
-        "isupper",
+            "startswith",
+            "endswith",
+            "isalnum",
+            "isalpha",
+            "isascii",
+            "isdecimal",
+            "isdigit",
+            "isidentifier",
+            "islower",
+            "isnumeric",
+            "isprintable",
+            "isspace",
+            "istitle",
+            "isupper",
     }:
         return CallableType(
             [],
@@ -1099,6 +1152,7 @@ def infer_str_attribute_type(obj_type, attr_name):
         )
 
     return Unknown()
+
 
 def infer_set_attribute_type(obj_type, attr_name):
     if attr_name == "copy":
@@ -1114,10 +1168,10 @@ def infer_set_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "union",
-        "intersection",
-        "difference",
-        "symmetric_difference",
+            "union",
+            "intersection",
+            "difference",
+            "symmetric_difference",
     }:
         return CallableType(
             [],
@@ -1125,14 +1179,14 @@ def infer_set_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "add",
-        "clear",
-        "discard",
-        "remove",
-        "update",
-        "intersection_update",
-        "difference_update",
-        "symmetric_difference_update",
+            "add",
+            "clear",
+            "discard",
+            "remove",
+            "update",
+            "intersection_update",
+            "difference_update",
+            "symmetric_difference_update",
     }:
         return CallableType(
             [],
@@ -1140,9 +1194,9 @@ def infer_set_attribute_type(obj_type, attr_name):
         )
 
     if attr_name in {
-        "issubset",
-        "issuperset",
-        "isdisjoint",
+            "issubset",
+            "issuperset",
+            "isdisjoint",
     }:
         return CallableType(
             [],
@@ -1150,6 +1204,7 @@ def infer_set_attribute_type(obj_type, attr_name):
         )
 
     return Unknown()
+
 
 def infer_tuple_subscript_type(
     tuple_type,
@@ -1178,6 +1233,7 @@ def infer_tuple_subscript_type(
 
     return Unknown()
 
+
 def infer_unary_op_type(expr, env, context):
     operand_type = infer_type_from_expr(
         expr.operand,
@@ -1204,6 +1260,7 @@ def infer_unary_op_type(expr, env, context):
 
     return Unknown()
 
+
 def infer_container_subscript_type(container_type, index_expr, env, context):
     if isinstance(container_type, ListType):
         index_type = infer_type_from_expr(index_expr, env, context)
@@ -1218,7 +1275,7 @@ def infer_container_subscript_type(container_type, index_expr, env, context):
 
     if isinstance(container_type, DictType):
         key_type = infer_type_from_expr(index_expr, env, context)
-            
+
         if not is_type_compatible(key_type, container_type.key_t):
             return Unknown()
 
@@ -1233,13 +1290,14 @@ def infer_container_subscript_type(container_type, index_expr, env, context):
     if isinstance(container_type, StrType):
         if isinstance(index_expr, ast.Slice):
             return StrType()
-        
+
         return StrType()
 
     if isinstance(container_type, SetType):
         return Unknown()
 
     return Unknown()
+
 
 def is_type_compatible(actual, expected):
     if isinstance(actual, Unknown) or isinstance(expected, Unknown):
@@ -1255,6 +1313,7 @@ def is_type_compatible(actual, expected):
         return True
 
     return False
+
 
 def infer_attribute_type(
     obj_type,
@@ -1292,12 +1351,7 @@ def infer_attribute_type(
         )
     if isinstance(obj_type, ComplexType):
         if attr_name in {"real", "imag"}:
-            print(
-            "COMPLEX ATTRIBUTE:",
-            obj_type,
-            attr_name,
-            "-> FloatType"
-            )
+            print("COMPLEX ATTRIBUTE:", obj_type, attr_name, "-> FloatType")
             return FloatType()
 
     if isinstance(obj_type, InstanceType):
@@ -1308,6 +1362,7 @@ def infer_attribute_type(
         )
 
     return Unknown()
+
 
 def build_class_info(class_node, known_classes):
     context = InferenceContext(known_classes=known_classes)
@@ -1328,13 +1383,11 @@ def build_class_info(class_node, known_classes):
         elif isinstance(stmt, ast.Assign):
             for target in stmt.targets:
                 if isinstance(target, ast.Name):
-                    attributes[target.id] = (
-                        infer_type_from_expr(
-                            stmt.value,
-                            {},
-                            context,
-                        )
-                    )
+                    attributes[target.id] = (infer_type_from_expr(
+                        stmt.value,
+                        {},
+                        context,
+                    ))
 
         elif isinstance(stmt, ast.FunctionDef):
             collect_instance_attributes(
@@ -1349,7 +1402,8 @@ def build_class_info(class_node, known_classes):
         attributes=attributes,
     )
 
-def collect_known_classes(tree)-> dict[str, Any]:
+
+def collect_known_classes(tree) -> dict[str, Any]:
     known_classes = {}
 
     for node in ast.walk(tree):
@@ -1362,6 +1416,7 @@ def collect_known_classes(tree)-> dict[str, Any]:
 
     return known_classes
 
+
 def collect_instance_attributes(
     function_node,
     attributes,
@@ -1372,16 +1427,11 @@ def collect_instance_attributes(
         if isinstance(node, ast.AnnAssign):
             target = node.target
 
-            if not (
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id == "self"
-            ):
+            if not (isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"):
                 continue
 
-            attributes[target.attr] = infer_annotation_type(
-                node.annotation
-            )
+            attributes[target.attr] = infer_annotation_type(node.annotation)
             continue
 
         if isinstance(node, ast.Assign):
@@ -1390,11 +1440,8 @@ def collect_instance_attributes(
 
             target = node.targets[0]
 
-            if not (
-                isinstance(target, ast.Attribute)
-                and isinstance(target.value, ast.Name)
-                and target.value.id == "self"
-            ):
+            if not (isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+                    and target.value.id == "self"):
                 continue
 
             attributes[target.attr] = infer_type_from_expr(
@@ -1402,8 +1449,7 @@ def collect_instance_attributes(
                 {},
                 context,
             )
-        
-            
+
 
 def infer_annotation_type(annotation):
     if isinstance(annotation, ast.Name):
@@ -1423,17 +1469,18 @@ def infer_annotation_type(annotation):
         slice_node = annotation.slice
 
         if name == "list":
-            return ListType(
-                infer_annotation_type(slice_node)
-            )
+            return ListType(infer_annotation_type(slice_node))
 
-        if name == "set": 
+        if name == "set":
             return SetType(infer_annotation_type(slice_node))
 
         if name == "dict":
             if isinstance(slice_node, ast.Tuple):
                 if len(slice_node.elts) == 2:
-                    return DictType(infer_annotation_type(slice_node.elts[0]), infer_annotation_type(slice_node.elts[1]),)
+                    return DictType(
+                        infer_annotation_type(slice_node.elts[0]),
+                        infer_annotation_type(slice_node.elts[1]),
+                    )
 
             return DictType(Unknown(), Unknown())
 
@@ -1442,12 +1489,12 @@ def infer_annotation_type(annotation):
                 return TupleType([infer_annotation_type(element) for element in slice_node.elts])
 
             return TupleType([infer_annotation_type(slice_node)])
-    return Unknown()        
+    return Unknown()
+
+
 def infer_type_from_expr(expr, env, context):
-    assert isinstance(env, dict), (
-        f"infer_type_from_expr received non-env: "
-        f"{type(env).__name__}: {env!r}; expr={ast.dump(expr)}"
-    )
+    assert isinstance(env, dict), (f"infer_type_from_expr received non-env: "
+                                   f"{type(env).__name__}: {env!r}; expr={ast.dump(expr)}")
     if isinstance(expr, ast.Constant):
         return infer_constant_type(expr)
 
@@ -1455,14 +1502,10 @@ def infer_type_from_expr(expr, env, context):
         return env.get(expr.id, Unknown())
 
     if isinstance(expr, ast.Attribute):
-        obj_type = infer_type_from_expr(
-            expr.value,
-            env,
-            context
-        )
+        obj_type = infer_type_from_expr(expr.value, env, context)
         if isinstance(obj_type, ComplexType):
             if expr.attr in {"real", "imag"}:
-               return FloatType()
+                return FloatType()
 
         return infer_attribute_type(
             obj_type,
@@ -1489,12 +1532,17 @@ def infer_type_from_expr(expr, env, context):
         return infer_subscript_type(expr, env, context)
 
     if isinstance(expr, ast.Call):
-        return infer_call_type(expr, env, context,)
+        return infer_call_type(
+            expr,
+            env,
+            context,
+        )
 
     if isinstance(expr, ast.Lambda):
         return infer_lambda_type(expr, env, context)
 
     return Unknown()
 
+
 def repr_dict(d):
-    return {k:repr(v) for k,v in d.items()}
+    return {k: repr(v) for k, v in d.items()}
