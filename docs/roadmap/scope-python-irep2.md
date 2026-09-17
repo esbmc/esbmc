@@ -317,6 +317,127 @@ The frontend already compensates for this loss by hand at six call sites in
 does not round-trip `#cpp_type`; restore the exact target type". Seven ad-hoc restorations is the
 argument for the carry, not for an eighth.
 
-So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+So the next task is the carry itself, with a regression pair over
 `val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
 pass review silently.
+
+## 10. The carry, and the eleven writes with it (2026-09-17)
+
+§9 left the cluster blocked on `#cpp_type`. The attribute now crosses the seam, and the eleven writes
+land behind it.
+
+### 10.1 Three kinds, chosen by writer
+
+`irep_idt cpp_type` is added to `unsignedbv_type2t`, `signedbv_type2t` and `floatbv_type2t`, carried
+both ways in `migrate_type`/`migrate_type_back`, with the back-write guarded on non-empty -- `#cpp_type`
+is a comment field, and writing it empty inserts a key the printer reads, which is the §158 hazard for
+the fourth time.
+
+§9.3's mistake was censusing a corpus, so the kinds come from enumerating the **writers** --
+`type_handler.cpp:651` and `list_access.cpp:4120` both tag `char_type()`, i.e. signedbv, and
+`convert_float_literal.cpp:26/31/36` tag `float_type()`, `long_double_type()` and `double_type()`, i.e.
+floatbv. Two qualifications the first draft of this section got wrong:
+
+- **unsignedbv is not carried for a Python writer.** `char_type()` is unsignedbv when
+  `config.ansi_c.char_is_unsigned` (`c_types.cpp:190`), so the arm exists for platform symmetry, and it
+  is the arm `goto2c/expr2c.cpp:174` reads. The `unsigned_long` spellings §9.3 counted come from
+  `clang_c_convert.cpp:1549`, in the **C** frontend; nothing in `src/python-frontend/` writes that
+  spelling.
+- **The enumeration is of Python's writers, not the tree's.** `clang_c_convert.cpp:1503-1607` tags
+  every clang builtin, and around fifteen Solidity sites tag theirs, so `bool_type2t` and
+  `empty_type2t` also receive spellings and **still drop them**. That is left alone deliberately:
+  `cpp_expr2string` handles neither string, `goto2c` reads only the bitvector kinds, and
+  `id2string(bool_typet().id())` already equals `"bool"` so the exception-id fallback coincides. It is
+  not a claim that no other kind is ever spelled.
+
+The field is **unreflected**, like `argument_base_names` (§44), `member_base_names` (§46), `cformat`
+(§69) and `constant_qualified` before it: a spelling is no part of a type's identity, so two bitvectors
+of a width stay the same type however they were spelled, and the unit test asserts that on `==` and
+`crc()` both.
+
+Why each arm is carried differs, and only one of the three answers is "a Python consumer reads it":
+
+```
+signedbv    is_char_type (type_utils.h:207) -- the only Python reader of the spelling
+unsignedbv  the same reader under char_is_unsigned, plus goto2c/expr2c.cpp:174
+floatbv     no Python reader at all: is_char_type tests the bitvector kinds only,
+            get_python_type_category branches on is_floatbv() rather than the
+            spelling, and python printing goes through c_expr2string, which never
+            reads it. Carried for cpp_expr2string.cpp:166 and the exception-id
+            path, and pinned by the unit round-trip rather than end-to-end.
+```
+
+That last row matters for what a future regression would catch: dropping **only** the floatbv carry
+fails the unit test and nothing else.
+
+A third reader the first draft missed, and it is not a printer:
+`clang_cpp_exception_id.cpp:45` feeds throw/catch id matching, and
+`clang_cpp_adjust_irep2.cpp:147`/`:161` call it on `migrate_type_back` output -- so it sits directly in
+this change's blast radius. `esbmc-cpp/try_catch` is 172/172, which discharges it empirically.
+`python_adjust.cpp:1051`'s comment claimed the attribute never survives migration and that Python types
+never carry it; both halves were false after this change and are corrected there.
+
+### 10.2 The evidence, which §9's attempt did not have
+
+```
+base -- no carry, no writes                     VERIFICATION SUCCESSFUL
+the eleven writes, no carry                     VERIFICATION FAILED      (§9)
+the eleven writes, with the carry               VERIFICATION SUCCESSFUL
+with the carry mutated out of migrate_type      VERIFICATION FAILED
+```
+
+`regression/python/github_4715_cpp_type_char{,_fail}` pins it, and both halves are gates. The
+SUCCESSFUL half fails with `assertion 0` when the forward carry is removed. The `_fail` half needed
+help to be one: `^VERIFICATION FAILED$` alone holds either way, so it also pins the *claim shape* --
+
+```
+assertion (signed int)((signed char)val) == (signed int)((signed char)({ 120, 0 }[0]))
+```
+
+-- which a dropped spelling collapses to `assertion 0`. That is the difference between a test that
+records the verdict and a test that records why.
+
+The seven CORE tests §9 named now pass: `casting14`, `enumerate8`, `for-loop3`, `for-loop6`,
+`for-loop8_fail`, `python_irep2_adjust_only_string_index`, `string-concat6`.
+
+Because the change is in `irep2_type.h` it is global, so the breadth matters, and each figure names a
+command a reader can run:
+
+```sh
+ctest -LE regression                      884/884   (883 before this change adds its own case)
+ctest -L esbmc-solidity                   526/526
+ctest -L esbmc-cpp/cpp                    1065, six failures already failing on master (§2726)
+ctest -R "regression/esbmc-cpp/try_catch" 172/172   the exception-id reader above
+ctest -R "irep2"                          238/238   190 of them in the core C suite
+```
+
+`fields_cover_class` accepts the new field on all three kinds -- but only just, and that is worth
+recording rather than celebrating. Measured: `sizeof` goes 48 -> 56 on the two bitvector kinds, leaving
+`derived - covered` at exactly the `alignof - 1` budget of 7. The `irep_idt` pushes `constant_qualified`
+into a fresh eight-byte slot and leaves four bytes of genuine trailing padding, so a further unreflected
+field would fit in the hole **without** tripping the guard -- verified by an A/B on two header trees:
+adding a spare `unsigned int` fails the static assert before this change and passes after it. No
+declaration order avoids it, since `width + cpp_type + bool` cannot fit in eight bytes. Each bv kind
+therefore now pins its own layout with a `static_assert`, so the next field has to come through that
+comment first. This is the second time the repo has been bitten around `fields_cover_class`.
+
+The eight bytes cost nothing measurable in time, which is worth having checked rather than assumed for
+the most-constructed nodes in the tool. `ESBMC_REGRESS_TIMEOUT_MAX=45 ctest -L esbmc-solidity` reports
+one test over budget, `mul_cnt_ver_2`; standalone it takes **39.90 s with the carry against 39.99 s
+without**, so it is the known `-j4` contention artefact rather than a regression, and it passes
+uncapped.
+
+Python B-2* 54 -> 43; repo total 125 -> 114.
+
+### 10.3 What this does not settle
+
+§8.1 asked for something else: give IREP2 the distinction, on the ground that a Python character is not
+a spelling detail and `unsignedbv` of width 8 is the wrong model for it. This change does not do that.
+It carries the spelling, which unblocks the writes and pins the behaviour, and leaves the type-model
+question exactly where §8.1 put it. The carry is compatible with either answer -- if the distinction is
+later given its own kind, the field becomes redundant and can go -- but it should not be read as having
+decided the question.
+
+Two of `python_expr_builder.cpp`'s six hand-restorations (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`,
+each commented "migrate_type does not round-trip `#cpp_type`") are now redundant for these kinds and
+could be removed; that is a separate change with its own measurement, not a rider.
