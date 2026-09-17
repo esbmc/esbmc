@@ -19,6 +19,24 @@ expr2tc expr2t::do_simplify() const
   return expr2tc();
 }
 
+namespace
+{
+/** do_simplify() gets one shot on the still-unsimplified overflow node: it
+ *  only recognises a structural pattern (widened-operand multiply) where the
+ *  result is provably decisive, so it can't be fooled by the arithmetic
+ *  reassociation that gates overflow out of the operands-first walk in
+ *  expr2t::simplify(). Returns nil when no shortcut applies. Split out to
+ *  keep expr2t::simplify() inside the complexity gate. */
+expr2tc try_overflow_shortcut(const expr2t &node)
+{
+  expr2tc shortcut = node.do_simplify();
+  if (is_nil_expr(shortcut))
+    return expr2tc();
+  simplification_check::verify_node_rewrite(node, shortcut);
+  return shortcut;
+}
+} // namespace
+
 expr2tc expr2t::simplify() const
 {
   return simplify(/*suppress_reassoc=*/false);
@@ -46,18 +64,10 @@ expr2tc expr2t::simplify(bool suppress_reassoc) const
 
     // And overflows too. We don't wish an add to distribute itself, for
     // example, when we're trying to work out whether or not it's going to
-    // overflow. do_simplify() gets one shot first, on the still-unsimplified
-    // operand: it only recognises a structural pattern (widened-operand
-    // multiply) where the result is provably decisive, so it can't be fooled by
-    // the arithmetic reassociation this gate exists to block.
+    // overflow. try_overflow_shortcut() gives do_simplify() one shot at the
+    // still-unsimplified operand first — see its comment above.
     if (expr_id == overflow_id)
-    {
-      expr2tc shortcut = do_simplify();
-      if (is_nil_expr(shortcut))
-        return expr2tc();
-      simplification_check::verify_node_rewrite(*this, shortcut);
-      return shortcut;
-    }
+      return try_overflow_shortcut(*this);
 
     // Short-circuit pre-pass for and/or/if. do_simplify() runs only the
     // node-local peepholes — it never recurses into operands — so calling
