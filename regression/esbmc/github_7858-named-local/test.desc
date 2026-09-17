@@ -3,3 +3,4 @@ main.c
 --64 --overflow-check --witness-output-graphml -
 ^VERIFICATION FAILED$
 key="assumption">local == 7;
+(?s)\A(?!.*key="assumption">[^<]*(dynamic_|symex_|&amp;))
