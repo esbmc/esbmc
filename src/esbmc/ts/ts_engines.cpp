@@ -13,12 +13,13 @@ ts_enginet::ts_enginet(
   const transition_systemt &ts,
   const namespacet &ns,
   optionst &options,
-  bool bind_init)
+  bool bind_init,
+  bool incremental)
   : ts(ts), ns(ns)
 {
-  options.set_option("smt-unsat-assumptions", true);
+  options.set_option("smt-unsat-assumptions", incremental);
   solver.reset(create_solver("", ns, options));
-  if (!solver->supports_assumptions())
+  if (incremental && !solver->supports_assumptions())
   {
     log_error("The transition-system engines need a solver with assumptions");
     abort();
@@ -71,6 +72,35 @@ bool ts_enginet::check_prefix()
   }
   solver->assert_expr(not2tc(disjunction(violated)));
   return true;
+}
+
+smt_resultt ts_enginet::solve_prefix()
+{
+  std::vector<expr2tc> violated;
+  for (const auto &p : ts.prefix_bad)
+    violated.push_back(p.violated);
+  solver->assert_expr(disjunction(violated));
+  return solver->dec_solve();
+}
+
+smt_resultt ts_enginet::solve_bound(unsigned k)
+{
+  for (unsigned j = 0; j < k; j++)
+  {
+    add_step(j);
+    close_step(j);
+  }
+  add_step(k);
+  solver->assert_expr(bad_literal(k));
+  fine_timet start = current_time();
+  smt_resultt res = solver->dec_solve();
+  log_status(
+    "TS BMC step {} (fresh solver) solve {}s",
+    k,
+    time2string(current_time() - start));
+  if (res == smt_resultt::P_SATISFIABLE)
+    report_counterexample(k);
+  return res;
 }
 
 void ts_enginet::add_step(unsigned step)

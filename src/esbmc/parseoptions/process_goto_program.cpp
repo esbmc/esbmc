@@ -352,6 +352,7 @@ bool esbmc_parseoptionst::process_goto_program(
     bool is_k_induction =
       (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
        cmdline.isset("k-induction-parallel") || cmdline.isset("ts-dump") ||
+       cmdline.isset("ts-btor2") ||
        cmdline.isset("ts-bmc") || cmdline.isset("ts-k-induction") ||
        cmdline.isset("ts-pdr")) &&
       !options.get_bool_option("termination");

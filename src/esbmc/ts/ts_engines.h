@@ -13,15 +13,23 @@ class ts_enginet
 public:
   /// With `bind_init`, the first state is the initial state outright, which
   /// lets the solver fold constant initial values; only BMC can use it.
+  /// Without `incremental`, the solver is never asked to track assumptions;
+  /// only solve_prefix and solve_bound may be used.
   ts_enginet(
     const transition_systemt &ts,
     const namespacet &ns,
     optionst &options,
-    bool bind_init = false);
+    bool bind_init = false,
+    bool incremental = true);
 
   /// Exit codes follow do_bmc_strategy: 0 SUCCESSFUL or UNKNOWN, 1 FAILED,
   /// 6 solver error.
   int bmc(uint64_t max_k, bool push_pop);
+
+  /// One monolithic BMC query on a fresh engine: steps 0..k unrolled, the
+  /// violation at step k asserted, a single check-sat.
+  smt_resultt solve_bound(unsigned k);
+  smt_resultt solve_prefix();
   int k_induction(uint64_t max_k, bool simple_path);
 
 protected:

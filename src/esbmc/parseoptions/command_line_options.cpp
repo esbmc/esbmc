@@ -840,7 +840,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // The transition-system engines reuse the k-induction havoc and the
   // inductive-step-only marking of interval bounds.
   if (
-    cmdline.isset("ts-dump") || cmdline.isset("ts-bmc") ||
+    cmdline.isset("ts-dump") || cmdline.isset("ts-btor2") ||
+    cmdline.isset("ts-bmc") ||
     cmdline.isset("ts-k-induction") || cmdline.isset("ts-pdr"))
     options.set_option("k-induction", true);
 

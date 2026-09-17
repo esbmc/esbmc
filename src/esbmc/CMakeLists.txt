@@ -64,6 +64,7 @@ add_library(esbmc-driver
     parseoptions/property_monitors.cpp
     parseoptions/ts_strategy.cpp
     ts/transition_system.cpp
+    ts/ts_btor2.cpp
     ts/ts_engines.cpp
     ts/ts_pdr.cpp
     bmc.cpp property_report.cpp ranking_synthesis.cpp non_termination.cpp show_vcc.cpp options.cpp)
