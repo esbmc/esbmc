@@ -1324,12 +1324,13 @@ void python_runtime_converter::try_statement(const json &node)
 {
   if (!node["finalbody"].empty() || !node["orelse"].empty())
     unsupported(node);
-  if (node["handlers"].size() != 1)
+  const json &handlers = node["handlers"];
+  if (handlers.empty())
     unsupported(node);
-
-  const json &handler = node["handlers"][0];
-  if (!handler["type"].is_null() || !handler["name"].is_null())
-    unsupported(node);
+  for (const json &handler : handlers)
+    /* `except (A, B):` tests several classes; pyrt_isinstance takes one. */
+    if (!handler["type"].is_null() && !is_type(handler["type"], "Name"))
+      unsupported(node);
 
   const locationt loc = location(node);
 
@@ -1337,11 +1338,72 @@ void python_runtime_converter::try_statement(const json &node)
   statements(node["body"], body);
 
   code_blockt caught;
-  statements(handler["body"], caught);
-  /* goto_convert reads exception_id off the handler block; clang_cpp_adjust
-   * re-derives it from the block type, so both are set to agree. */
-  caught.type().set("ellipsis", true);
-  caught.set("exception_id", "ellipsis");
+  code_blockt *outer = block_;
+  block_ = &caught;
+
+  /* Catching by value of the one boxed pointer type catches every Python
+   * exception, and unlike a `...` catch it earns the binding remove_exceptions
+   * writes. Declaring the temporary is the whole job: goto_convert expands an
+   * uninitialised DECL into the DECL + `= NONDET` pair the pass looks for, and
+   * rewrites that assignment into the read of the thrown object. Adding an
+   * assignment here would land *after* that rewrite and overwrite it. */
+  exprt thrown = new_temporary(object_type_, loc);
+
+  /* Every test is evaluated before the chain: pyrt_isinstance has no side
+   * effects, and a call emitted inside a nested else would land in the wrong
+   * block. */
+  std::vector<exprt> matches;
+  for (const json &handler : handlers)
+    matches.push_back(
+      handler["type"].is_null()
+        ? nil_exprt()
+        : call("pyrt_isinstance", {thrown, expr(handler["type"])}, loc));
+
+  /* Built back to front, so an unmatched exception reaches the re-raise that
+   * sits innermost. This is CPython's order: the handlers are tried in turn
+   * and the exception continues propagating when none matches. */
+  side_effect_exprt reraise("cpp-throw", empty_typet());
+  reraise.location() = loc;
+  codet rethrow("expression");
+  rethrow.copy_to_operands(reraise);
+  rethrow.location() = loc;
+  codet chain = rethrow;
+
+  for (size_t i = handlers.size(); i-- > 0;)
+  {
+    const json &handler = handlers[i];
+    code_blockt taken;
+    if (!handler["name"].is_null())
+    {
+      const std::string bound = handler["name"];
+      taken.copy_to_operands(code_assignt(
+        symbol_expr(lookup(
+          locals_.count(bound) ? local_id(bound) : global_id(bound))),
+        thrown));
+    }
+    statements(handler["body"], taken);
+
+    if (matches[i].is_nil())
+    {
+      chain = taken; // a bare `except:` takes everything left
+      continue;
+    }
+    code_ifthenelset branch;
+    branch.cond() = matches[i];
+    branch.then_case() = taken;
+    branch.else_case() = chain;
+    branch.location() = loc;
+    chain = branch;
+  }
+  caught.copy_to_operands(chain);
+  block_ = outer;
+
+  /* The handler's id has to equal the one derived for what is thrown, or the
+   * exception escapes it. Both sides are the boxed pointer, whose id is the
+   * struct tag without its "tag-" prefix plus "_ptr". The type is set too, so
+   * clang_cpp_adjust re-derives the same value rather than a different one. */
+  caught.type() = object_type_;
+  caught.set("exception_id", std::string(object_tag).substr(4) + "_ptr");
 
   codet guarded("cpp-catch");
   guarded.copy_to_operands(body);
