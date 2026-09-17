@@ -19,6 +19,8 @@
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <jimple-frontend/AST/jimple_declaration.h>
 #include <nlohmann/json.hpp>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
 
 // ** Try to initialize an structure with a JSON string
 SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
@@ -278,5 +280,83 @@ SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
 
     REQUIRE(f.binop == "-");
     REQUIRE_FALSE(f.binop == "+");
+  }
+}
+
+// jimple_identity and jimple_assertion declare no native to_code2t, so the
+// base's migrating default reaches to_exprt; without it the statement silently
+// becomes a code_skipt (docs/roadmap/scope-jimple-irep2.md §44).
+SCENARIO(
+  "Statements that reach to_exprt through the migrating default",
+  "[jimple-frontend]")
+{
+  GIVEN("An identity statement naming a declared local")
+  {
+    contextt ctx;
+    symbolt local;
+    local.id = "MainKt:foo_1@i0";
+    local.name = "i0";
+    local.set_type(int_type());
+    ctx.move_symbol_to_context(local);
+
+    std::istringstream file(R"json({
+    "identifier": "parameter0",
+    "name": "MainKt:foo_1@i0",
+    "type": {"identifier": "int", "dimensions": 0}
+})json");
+    nlohmann::json j;
+    file >> j;
+
+    jimple_identity f;
+    j.get_to(f);
+
+    REQUIRE(f.local_name == "MainKt:foo_1@i0");
+    REQUIRE(f.at_identifier == "parameter0");
+
+    exprt lowered = f.to_exprt(ctx, "MainKt", "foo_1");
+
+    REQUIRE(lowered.is_code());
+    REQUIRE(lowered.statement() == "assign");
+    REQUIRE_FALSE(lowered.statement() == "skip");
+    REQUIRE(lowered.op0().identifier() == "MainKt:foo_1@i0");
+    REQUIRE(lowered.op1().identifier() == "@parameter0");
+    REQUIRE_FALSE(lowered.op1().identifier() == "parameter0");
+  }
+
+  GIVEN("An assertion statement over a declared local")
+  {
+    contextt ctx;
+    symbolt local;
+    local.id = "MainKt:main_0@x";
+    local.name = "x";
+    local.set_type(int_type());
+    ctx.move_symbol_to_context(local);
+
+    std::istringstream file(R"json({
+    "object": "Assert",
+    "equals": {"value": "42", "symbol": "x"}
+})json");
+    nlohmann::json j;
+    file >> j;
+
+    jimple_assertion f;
+    j.get_to(f);
+
+    exprt lowered = f.to_exprt(ctx, "MainKt", "main_0");
+
+    REQUIRE(lowered.is_function_call());
+    REQUIRE_FALSE(lowered.statement() == "skip");
+
+    const code_function_callt &call = to_code_function_call(to_code(lowered));
+    REQUIRE(call.function().identifier() == "__ESBMC_assert");
+    REQUIRE(call.arguments().size() == 1);
+
+    const exprt &condition = call.arguments()[0];
+    REQUIRE(condition.id() == "not");
+    REQUIRE(condition.op0().id() == "=");
+    REQUIRE(condition.op0().op0().identifier() == "MainKt:main_0@x");
+    REQUIRE(condition.op0().op1() == from_integer(42, int_type()));
+
+    REQUIRE(ctx.find_symbol("__ESBMC_assert") != nullptr);
   }
 }

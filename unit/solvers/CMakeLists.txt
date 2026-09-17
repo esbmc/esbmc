@@ -65,3 +65,9 @@ new_unit_test(simplification_equivalence_test
 # it. `solvers` rather than a named backend -- whichever is built in answers.
 new_unit_test(tuple_node_update_test "tuple_node_update.test.cpp"
               "solvers;util_esbmc;filesystem;bigint")
+
+# Bounds on a tuple field index, over both flatteners. The mismatch that made
+# them read and write out of bounds needs an expression whose struct type
+# disagrees with its AST's sort, which no C input produces.
+new_unit_test(tuple_field_bounds_test "tuple_field_bounds.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
