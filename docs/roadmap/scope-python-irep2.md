@@ -634,3 +634,55 @@ That makes it the sixth marker found not to survive the seam, and the second whe
 carries both `x` and `#x`, establish which one each accessor reads before concluding a carry covers it.
 `argumentt::get_identifier()` reads `#identifier` while the node also holds a plain `identifier`, so
 §44's carry looked complete and was not.
+
+## 12. `bases`: the write is the repair, so it stays (2026-09-17)
+
+§3's table listed `python_adjust.cpp:70` as failing a unit case, with the cause "the write exists to
+re-attach the legacy-only `bases` sub-irep, and storing IREP2 drops it again". That is right, and the
+conclusion it implies is worth making explicit: this write must stay legacy, and the question it raises
+is structural rather than a conversion.
+
+### 12.1 What the site does
+
+```cpp
+const irept bases = symbol->get_type().find("bases");
+symbol->set_type(t);                     // IREP2 -- drops `bases`
+if (bases.is_not_nil())
+{
+  typet patched = symbol->get_type();    // back-migrated view
+  patched.set("bases", bases);           // re-attach
+  symbol->set_type(std::move(patched));  // <- the residue B-2 counts
+}
+```
+
+The legacy write *is* the compensation for the loss two lines above it. Converting it would drop `bases`
+a second time and undo the repair, which is why the repo's own unit case
+(`python_adjust pre-pass write-back preserves bases for the throw chain`) catches it -- and why §3 notes
+that a scripted conversion walking into it is the argument for the test rather than against the script.
+
+### 12.2 All three routes, and why none is cheap
+
+§80 gives three answers when a marker does not survive the seam. For `bases` each is priced:
+
+- **Derivation** is unavailable. clang-cpp records inheritance structurally as `@base@<class_id>`
+  components, so a base list is recoverable there -- but the Python frontend stores it *only* in the
+  sub-irep (`python_class_builder.cpp:83`, `st.add("bases").get_sub()`), and emits no `@base@`
+  component. There is no second source to derive from.
+- **Fixing the readers** is not one frontend's work. `find("bases")` has four readers in four layers:
+  `util/expr/base_type.cpp:421`, `clang-cpp-frontend/clang_cpp_exception_id.cpp:27`,
+  `python-frontend/python_adjust.cpp:1088` and `goto-programs/remove_exceptions.cpp:718`. They would all
+  need another source, and by the point above there is none.
+- **Carrying it** cannot use the unreflected pattern the other five carries used. `bases` has no `#`, so
+  it lives in `named_sub` and takes part in `typet` equality (§3.1) -- a faithful IREP2 field would have
+  to be *reflected*, changing `struct_type2t`'s identity and therefore every hash and cache keyed on a
+  struct type. That is a different order of change from §10's eight bytes.
+
+### 12.3 So it is a decision, not a task
+
+`python_adjust.cpp:70` joins `:2539` and `converter_stmt.cpp:1351` as a write that stays legacy for a
+stated reason, and B-2 counts all three only because it counts the argument's spelling. What is left is a
+structural question of the same kind as §8.1 and the Phase 6 trio: **should inheritance cross the seam as
+a reflected field on `struct_type2t`, or should Python record bases structurally as clang-cpp does, so the
+list becomes derivable?** The second is the smaller change to the IR and the larger one to the frontend,
+and it would retire this residue and the exception-id divergence §11.3.1 notes together. Neither should
+be picked without the maintainers, and neither is blocked on measurement -- the routes above are priced.
