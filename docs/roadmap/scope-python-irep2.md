@@ -686,3 +686,9 @@ a reflected field on `struct_type2t`, or should Python record bases structurally
 list becomes derivable?** The second is the smaller change to the IR and the larger one to the frontend,
 and it would retire this residue and the exception-id divergence §11.3.1 notes together. Neither should
 be picked without the maintainers, and neither is blocked on measurement -- the routes above are priced.
+Python B-2* stays 43; repo total 114. The funcdef cluster is not ten writes blocked on one attribute,
+as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
+loss, and the next step is the three experiments above rather than another conversion attempt.
+So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
