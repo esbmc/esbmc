@@ -2073,6 +2073,96 @@ Twenty-seven PRs. B-1 is 154, from 160 -- the drop is the two `exprt lhs`
 members and their setters. The slice mostly adds native code rather than removing
 legacy code; the removal it unlocks is worth most of `jimple_expr.cpp`.
 
+
+## 43. The invoke cluster, and an over-deletion §42 hid (2026-09-15)
+
+§42.1 called `jimple_symbol` and `jimple_constant` "ordinary conversions". They are not:
+both already have native `to_expr2t` arms, and their legacy arms were reached only from
+inside the two remaining legacy consumers -- `jimple_assignment::to_exprt` and
+`jimple_expr_invoke::to_exprt`. Grepping every direct `to_exprt` call confirms it: the
+only ones left on expressions are at `jimple_statement.cpp:136,142,149,152` and
+`jimple_expr.cpp:330,335,358`, all inside those two.
+
+So the three live arms were one cluster rooted at the invoke lowering.
+`jimple_expr_invoke` now builds the call natively -- a `code_block2tc` of the
+`@parameter<i>` assignments followed by `code_function_call2tc`, with an `lhs2` the
+assignment sets -- and `jimple_assignment::to_code2t` routes the non-virtual invoke there
+instead of to the migrating default. Re-probing all four remaining legacy arms over the 27
+tests gives **0 observations**: the cluster is retired.
+
+### 43.1 What that probe also exposed
+
+`jimple_virtual_invoke::to_exprt` was in the nine §42 deleted as unreached, and deleting
+it was wrong. `jimple_assignment`'s virtual-invoke branch still delegates to the migrating
+default, which reaches that arm; with the arm gone the base's `code_skipt` was returned
+instead, so **a virtual-invoke assignment silently became a skip**.
+
+Nothing in the corpus builds that shape -- which is why the deletion passed 27 of 27 and
+why the probe read zero. The arm is restored here with a comment saying so. Two things
+follow:
+
+- the probe answers "is this reached by the corpus", not "is this dead". For a deletion
+  the second question is the one that matters, and only a caller audit answers it. §42's
+  other eight deletions are safe on that stricter test -- each class has a native
+  `to_expr2t` and no remaining caller -- but that was luck rather than method;
+- `regression/jimple` has no test for an assignment whose right-hand side is a virtual
+  invoke. That gap let a silent semantic change through, and it is worth closing before
+  `jimple_virtual_invoke` is converted for real.
+
+### 43.2 The gap closed
+
+`github_4715_virtual_invoke_assign_01{,_fail}` is that test. The jimple input is JSON, so
+it is hand-authored rather than compiled: `kt-func-call-true`'s structure with its callee
+made an instance method, a receiver local allocated with `new`, and the assignment's
+right-hand side changed from `static_invoke` to `virtual_invoke`. The failing half changes
+the callee's return value rather than the assertion, so both halves exercise the same
+lowering.
+
+It bites on exactly the over-deletion it exists to catch: delete
+`jimple_virtual_invoke::to_exprt` again and **both halves fail**, where the 27 tests before
+it all passed. `jimple` is 29 of 29 with it added.
+
+B-1 is 115 rather than the 110 §42 reported, the difference being the restored arm.
+
+## 44. `jimple_virtual_invoke` converted, and two more over-deletions found (2026-09-15)
+
+With §43.2's test in place, `jimple_virtual_invoke` gets the native arm
+`jimple_expr_invoke` got in §43: a `code_block2tc` of the `@this` and `@parameter<i>`
+assignments followed by `code_function_call2tc`, and `jimple_assignment::to_code2t` now
+routes both invoke forms to their own arm instead of to the migrating default. 29 of 29
+jimple and 876 of 876 unit tests.
+
+### 44.1 The caller audit §43.1 asked for, and what it found
+
+§43.1 said a deletion needs a caller audit rather than the probe. Doing that audit across
+both hierarchies -- which classes declare a native arm, and which inherit the base's
+migrating default -- found **two more classes** in the same state
+`jimple_virtual_invoke` was in:
+
+| class | native `to_code2t` | legacy `to_exprt` |
+|---|---|---|
+| `jimple_identity` | no | deleted by §40.3 |
+| `jimple_assertion` | no | deleted by §40.3 |
+
+Both fall through `jimple_method_field::to_code2t` to the base's `to_exprt`, which returns
+`code_skipt`. So since §40.3 an identity statement and an `Assertion` statement have
+silently produced a skip. Both arms are restored here with a comment saying why.
+
+No test builds either statement -- jimple tests express an assertion through the
+`If`/`AssertionError` idiom rather than the `Assertion` object, and nothing in the corpus
+emits `Identity` -- which is exactly why three deletions in a row passed 27 of 27.
+
+### 44.2 The rule, stated properly this time
+
+The probe answers *"does the corpus reach this?"*. A deletion needs *"can anything reach
+this?"*, and for a virtual with a non-abstract base the answer is yes unless the class
+overrides the replacement. So the criterion is:
+
+> an arm may be deleted only if its class declares the native replacement.
+
+That is checkable without running anything, it is what the table above applies, and it
+would have prevented all three over-deletions. B-1 is 124: the true figure once the three
+restorations are counted, against the 110 §42 claimed.
 ## 38. Every binop the frontend supports, and what a zero still hid
 
 §37.3 concluded that the expression `to_exprt` arms were callerless. They were
