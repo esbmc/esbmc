@@ -11,14 +11,22 @@
 class ts_enginet
 {
 public:
+  /// Without `incremental`, the solver is never asked to track assumptions;
+  /// only solve_prefix and solve_bound may be used.
   ts_enginet(
     const transition_systemt &ts,
     const namespacet &ns,
-    optionst &options);
+    optionst &options,
+    bool incremental = true);
 
   /// Exit codes follow do_bmc_strategy: 0 SUCCESSFUL or UNKNOWN, 1 FAILED,
   /// 6 solver error.
   int bmc(uint64_t max_k, bool push_pop);
+
+  /// One monolithic BMC query on a fresh engine: steps 0..k unrolled, the
+  /// violation at step k asserted, a single check-sat.
+  smt_resultt solve_bound(unsigned k);
+  smt_resultt solve_prefix();
 
 protected:
   const transition_systemt &ts;

@@ -71,6 +71,47 @@ int esbmc_parseoptionst::do_ts_strategy(
                            : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   namespacet ns(context);
+
+  if (cmdline.isset("ts-fresh-solver"))
+  {
+    if (!ts.prefix_bad.empty())
+    {
+      ts_enginet prefix(ts, ns, options, false);
+      if (prefix.solve_prefix() == smt_resultt::P_SATISFIABLE)
+      {
+        log_fail("\nVERIFICATION FAILED");
+        return 1;
+      }
+    }
+    if (ts.bad.empty())
+    {
+      log_success("\nVERIFICATION SUCCESSFUL");
+      return 0;
+    }
+    for (uint64_t k = 0; k <= max_k; k++)
+    {
+      fine_timet start = current_time();
+      ts_enginet fresh(ts, ns, options, false);
+      smt_resultt res = fresh.solve_bound(k);
+      log_status(
+        "TS BMC step {} (fresh solver): {} ({}s)",
+        k,
+        res == smt_resultt::P_SATISFIABLE     ? "violated"
+        : res == smt_resultt::P_UNSATISFIABLE ? "safe"
+                                              : "unknown",
+        time2string(current_time() - start));
+      if (res == smt_resultt::P_SATISFIABLE)
+      {
+        log_fail("\nVERIFICATION FAILED");
+        return 1;
+      }
+      if (res != smt_resultt::P_UNSATISFIABLE)
+        return 6;
+    }
+    log_fail("\nVERIFICATION UNKNOWN");
+    return 0;
+  }
+
   ts_enginet engine(ts, ns, options);
   return engine.bmc(max_k, cmdline.isset("ts-push-pop"));
 }

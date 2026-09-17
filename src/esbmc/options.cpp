@@ -568,6 +568,9 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Keep every havocked variable as state instead of slicing to the "
      "properties' cone of influence"},
+    {"ts-fresh-solver",
+     NULL,
+     "With --ts-bmc, solve each bound as one formula in a new solver"},
     {"ts-push-pop",
      NULL,
      "Use push/pop instead of assumptions in --ts-bmc (cross-check)"}}},
