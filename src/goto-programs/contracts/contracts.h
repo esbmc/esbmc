@@ -781,6 +781,16 @@ private:
   /// \param location Location information
   void havoc_static_globals(goto_programt &dest, const locationt &location);
 
+  /// \brief Havoc the globals, but only for the entry harness
+  /// The wrapper doubles as the body real callers invoke, and havocking there
+  /// would discard the caller's state. With no caller, the globals still hold
+  /// their static initialisers while a caller could have written anything the
+  /// `requires` admits (#7356).
+  void havoc_globals_for_entry_harness(
+    goto_programt &dest,
+    const locationt &location,
+    bool is_entry_harness);
+
   /// \brief Allocate fresh malloc backing storage for all pointer parameters.
   /// Called in --function entry harness mode so that pointer params point to
   /// real heap objects instead of nil, enabling valid dereference in the body.

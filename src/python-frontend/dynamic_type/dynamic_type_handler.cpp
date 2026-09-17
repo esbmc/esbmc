@@ -1,4 +1,5 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -16,101 +17,7 @@ using namespace python_expr;
 
 namespace
 {
-// Classifies a branch's direct, top-level literal assignments by literal
-// type.
-std::unordered_map<std::string, std::string>
-classify_branch_literal_assigns(const nlohmann::json &block)
-{
-  std::unordered_map<std::string, std::string> types;
-  if (!block.is_array())
-    return types;
-
-  for (const auto &stmt : block)
-  {
-    if (!stmt.is_object())
-      continue;
-
-    const std::string stmt_type = stmt.value("_type", "");
-    nlohmann::json target;
-    if (stmt_type == "Assign")
-    {
-      if (!stmt.contains("targets") || stmt["targets"].size() != 1)
-        continue;
-      target = stmt["targets"][0];
-    }
-    else if (stmt_type == "AnnAssign")
-    {
-      if (!stmt.contains("target"))
-        continue;
-      target = stmt["target"];
-    }
-    else
-      continue;
-
-    if (target.value("_type", "") != "Name" || !target.contains("id"))
-      continue;
-    const std::string &name = target["id"].get<std::string>();
-
-    // A later reassignment invalidates any literal kind recorded for `name`
-    // by an earlier statement in this same block.
-    if (!stmt.contains("value") || stmt["value"].is_null())
-    {
-      types.erase(name);
-      continue;
-    }
-    const auto &value = stmt["value"];
-    if (value.value("_type", "") != "Constant" || !value.contains("value"))
-    {
-      types.erase(name);
-      continue;
-    }
-
-    const auto &lit = value["value"];
-    if (lit.is_string())
-      types[name] = "str";
-    else if (lit.is_number_integer() || lit.is_boolean())
-      types[name] = "num";
-    else
-      types.erase(name);
-  }
-
-  return types;
-}
-
-// Recursively collects, per name, the literal kinds assigned to it across
-// every leaf reachable from `block` -- following a nested If (an elif in
-// orelse, or a plain nested if/else in body) into both of its arms.
-// Returns false if any such nested If is dangling (no final else).
-bool collect_branch_literal_kinds(
-  const nlohmann::json &block,
-  std::unordered_map<std::string, std::unordered_set<std::string>> &kinds,
-  std::unordered_map<std::string, int> &leaf_count,
-  int &leaf_total)
-{
-  if (
-    block.is_array() && block.size() == 1 && block[0].is_object() &&
-    block[0].value("_type", "") == "If")
-  {
-    const auto &nested = block[0];
-    if (
-      !nested.contains("body") || !nested.contains("orelse") ||
-      nested["orelse"].empty())
-      return false;
-
-    return collect_branch_literal_kinds(
-             nested["body"], kinds, leaf_count, leaf_total) &&
-           collect_branch_literal_kinds(
-             nested["orelse"], kinds, leaf_count, leaf_total);
-  }
-
-  leaf_total++;
-  for (const auto &[name, kind] : classify_branch_literal_assigns(block))
-  {
-    kinds[name].insert(kind);
-    leaf_count[name]++;
-  }
-  return true;
-}
+using dynamic_type_detail::collect_if_node_literal_kinds;
 
 // Classifies a single `return <literal>` statement: "num", "str", or "" if
 // it isn't a literal return.
@@ -171,20 +78,11 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
 {
   std::unordered_set<std::string> dynamic_type_names;
 
-  if (!if_node.contains("body"))
-    return dynamic_type_names;
-  if (!if_node.contains("orelse") || if_node["orelse"].empty())
-    return dynamic_type_names;
-
   std::unordered_map<std::string, std::unordered_set<std::string>> kinds;
   std::unordered_map<std::string, int> leaf_count;
   int leaf_total = 0;
 
-  if (!collect_branch_literal_kinds(
-        if_node["body"], kinds, leaf_count, leaf_total))
-    return dynamic_type_names;
-  if (!collect_branch_literal_kinds(
-        if_node["orelse"], kinds, leaf_count, leaf_total))
+  if (!collect_if_node_literal_kinds(if_node, kinds, leaf_count, leaf_total))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
@@ -951,13 +849,24 @@ bool dynamic_type_handler::detect_dynamic_return_type(
   return false;
 }
 
-exprt dynamic_type_handler::build_tagged_return_value(
+bool dynamic_type_handler::scope_assigns_divergent_literal_types(
+  const std::string &name,
+  const nlohmann::json &scope_body) const
+{
+  return dynamic_type_detail::scope_assigns_divergent_literal_types(
+    name, scope_body);
+}
+
+exprt dynamic_type_handler::build_tagged_value(
   const exprt &value,
   const locationt &location,
   codet &target_block)
 {
   symbolt &tag_symbol = converter_.create_tmp_symbol(
-    location, "$return_tag$", type_handler_.get_tagged_object_type(), exprt());
+    location,
+    "$tagged_value$",
+    type_handler_.get_tagged_object_type(),
+    exprt());
 
   code_declt tag_decl(build_symbol(tag_symbol));
   tag_decl.location() = location;
@@ -968,6 +877,13 @@ exprt dynamic_type_handler::build_tagged_return_value(
     target_block.copy_to_operands(instr);
 
   return build_symbol(tag_symbol);
+}
+
+void dynamic_type_handler::refuse_tagged_argument() const
+{
+  throw std::runtime_error(
+    "passing a dynamically-typed variable to a function is not yet "
+    "supported");
 }
 
 void dynamic_type_handler::assign_tagged_object(
