@@ -11,6 +11,15 @@
 
 #pragma once
 
+// Implemented in converter_stmt.cpp; declared there (via python_converter.h)
+// for python_converter/numpy_call_expr, and forward-declared here so this
+// template-only translation unit can share the same numpy-alias resolution
+// without pulling in python_converter.h (which this file predates in the
+// pipeline and must not depend on).
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name);
+
 // ---------- leaf inspectors ----------
 
 template <class Json>
@@ -2691,6 +2700,81 @@ std::string python_annotation<Json>::get_type_from_ifexp(
 }
 
 template <class Json>
+bool python_annotation<Json>::is_numpy_array_ctor_call(
+  const Json &call_value) const
+{
+  if (
+    !call_value.is_object() ||
+    call_value.value("_type", std::string()) != "Call" ||
+    !call_value.contains("func") || !call_value["func"].is_object() ||
+    call_value["func"].value("_type", std::string()) != "Attribute" ||
+    !call_value["func"].contains("value") ||
+    !call_value["func"]["value"].is_object() ||
+    call_value["func"]["value"].value("_type", std::string()) != "Name")
+    return false;
+
+  static const std::set<std::string> numpy_array_ctors = {
+    "array", "zeros", "ones", "full", "empty", "arange", "eye", "identity",
+    "linspace"};
+  const std::string method_name = call_value["func"].value("attr", "");
+  const std::string module_alias =
+    call_value["func"]["value"].value("id", "");
+  return numpy_array_ctors.count(method_name) != 0 &&
+         is_imported_numpy_module_alias(
+           static_cast<const nlohmann::json &>(ast_), module_alias);
+}
+
+template <class Json>
+bool python_annotation<Json>::current_func_returns_name_directly(
+  const std::string &name) const
+{
+  if (current_func == nullptr || !current_func->contains("body"))
+    return false;
+
+  const Json *block = &(*current_func)["body"];
+  while (block->is_array() && !block->empty())
+  {
+    const Json &last = block->back();
+    if (!last.is_object())
+      return false;
+
+    const std::string type = last.value("_type", std::string());
+    if (type == "Return")
+      return last.contains("value") && last["value"].is_object() &&
+             last["value"].value("_type", std::string()) == "Name" &&
+             last["value"].value("id", std::string()) == name;
+
+    if (
+      type != "If" || !last.contains("body") || !last["body"].is_array() ||
+      !last.contains("orelse") || !last["orelse"].is_array() ||
+      last["orelse"].empty())
+      return false;
+
+    // Only the trailing if/else's own two arms matter here -- reuse this
+    // loop for the "then" arm and recurse once for the "else" arm, mirroring
+    // the two-branch pattern get_function_definition's own check accepts.
+    bool else_returns = false;
+    {
+      const Json *else_block = &last["orelse"];
+      if (!else_block->is_array() || else_block->empty())
+        return false;
+      const Json &else_last = else_block->back();
+      else_returns = else_last.is_object() &&
+                     else_last.value("_type", std::string()) == "Return" &&
+                     else_last.contains("value") &&
+                     else_last["value"].is_object() &&
+                     else_last["value"].value("_type", std::string()) ==
+                       "Name" &&
+                     else_last["value"].value("id", std::string()) == name;
+    }
+    if (!else_returns)
+      return false;
+    block = &last["body"];
+  }
+  return false;
+}
+
+template <class Json>
 InferResult python_annotation<Json>::infer_type(
   const Json &stmt,
   const Json &body,
@@ -2901,6 +2985,30 @@ InferResult python_annotation<Json>::infer_type(
   else if (
     value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
   {
+    // np.zeros/ones/full/array/... produce a concrete, fixed-shape array in
+    // the converter, but the numpy operational model declares them as
+    // returning the generic `list[float]` (numpy.py has no notion of the
+    // converter's later concrete shape). That mismatch is harmless on its
+    // own -- get_var_assign retypes the binding from the converted RHS
+    // regardless of a stale list annotation -- except for exactly one
+    // shape: a local variable the enclosing function then returns directly
+    // (`a = np.zeros(3); return a`), where get_function_definition reads
+    // this same generic list annotation from `function_node["returns"]`
+    // *before* the body is converted and locks the function's own return
+    // type to it (the array_return_local_* gap). Scope the decline to that
+    // shape specifically -- ANY other numpy-constructor assignment (module
+    // level, a parameter-feeding local, an unrelated local) keeps its usual
+    // annotation, which other inference still depends on (e.g.
+    // array_param_shape_metadata_success's module-level array passed into a
+    // function that reads its shape).
+    if (
+      is_numpy_array_ctor_call(stmt["value"]) &&
+      stmt.contains("targets") && stmt["targets"].is_array() &&
+      stmt["targets"].size() == 1 && stmt["targets"][0].contains("id") &&
+      current_func_returns_name_directly(
+        stmt["targets"][0]["id"].template get<std::string>()))
+      return InferResult::UNKNOWN;
+
     // Try get_type_from_call first (checks builtin_functions map)
     inferred_type = get_type_from_call(stmt);
 

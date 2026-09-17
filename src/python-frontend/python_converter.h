@@ -1194,6 +1194,56 @@ private:
 
   bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
 
+  // The last direct assignment to `name` in `block[0..end)`, following into
+  // both arms of a trailing if/else (nullptr unless both arms agree it's a
+  // numpy array constructor call). Shared by block_assigns_numpy_array_to
+  // and reject_incompatible_numpy_local_return_branches so both walk the
+  // same "what did this name last bind to" search -- one only needs to know
+  // whether it resolved, the other needs the value node itself to compare
+  // shapes between branches.
+  const nlohmann::json *find_numpy_ctor_value_assigned_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `block[0..end)` ends (directly, or through both arms of a
+  // trailing if/else) in an assignment binding `name` from a numpy array
+  // constructor call. Shared by local_var_numpy_array_return's straight-line
+  // and branching cases so both walk the same "what did this name last bind
+  // to" search.
+  bool block_assigns_numpy_array_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `func_def`'s only top-level statement is `return <Name>`, and
+  // that Name was last bound (directly, or identically on both arms of an
+  // if/else) by a numpy array constructor call. get_function_definition
+  // checks this before its own return-type dispatch: the static annotator's
+  // pre-pass already resolved such a Name's own `np.zeros(...)`-shaped
+  // assignment through the numpy operational model's declared signature
+  // (`list[float]`) and wrote that bogus annotation into
+  // `function_node["returns"]` ahead of real conversion -- locking the
+  // function's return type to a generic PyListObject* before the body (which
+  // actually returns a concrete array) is ever converted. A direct
+  // `return np.zeros(...)` never hits this: static inference only chases a
+  // Name-based callee, not np.zeros's Attribute-based one, so it leaves the
+  // return type empty and the existing GOTO-scan fallback already types it
+  // correctly. Treating the local-var case the same way here (by having the
+  // caller skip the annotation-driven dispatch entirely) reaches that same
+  // already-correct fallback instead of duplicating it.
+  bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
+
+  // Throws an explicit TypeError when local_var_numpy_array_return's
+  // trailing if/else binds the returned name from a numpy array constructor
+  // call with a different literal shape argument on each arm -- e.g.
+  // np.zeros(3) on one branch, np.zeros((2, 2)) on the other. Left
+  // unchecked, converting the branch merge with two different concrete
+  // array types crashes value_sett::assign's type-compatibility assertion
+  // instead of rejecting cleanly (ADR-NP principle 3).
+  void reject_incompatible_numpy_local_return_branches(
+    const nlohmann::json &func_def) const;
+
   // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
   // itself returns a numpy array is never an is_numpy_array_constructor_expr
   // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type

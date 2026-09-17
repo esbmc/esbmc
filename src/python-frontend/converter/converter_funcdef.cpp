@@ -2184,12 +2184,205 @@ void python_converter::upgrade_param_type_from_default(
     param_sym->set_type(default_type);
 }
 
+namespace
+{
+// Structural equality of two AST JSON nodes, ignoring source-location keys
+// (lineno/col_offset/...). Two textually identical constructor calls on
+// different source lines -- e.g. `np.zeros(3)` on both arms of an if/else --
+// differ only in their location fields, so a raw `==`/`dump()` comparison
+// would wrongly report them as different shapes. Mirrors
+// ast_equal_ignoring_location in python-list/list_access.cpp; duplicated
+// rather than shared since that copy lives in an anonymous namespace with no
+// header of its own.
+bool numpy_ctor_args_equal_ignoring_location(
+  const nlohmann::json &a,
+  const nlohmann::json &b)
+{
+  static constexpr const char *loc_keys[] = {
+    "lineno", "col_offset", "end_lineno", "end_col_offset"};
+  auto is_loc_key = [&](const std::string &k) {
+    for (const char *lk : loc_keys)
+      if (k == lk)
+        return true;
+    return false;
+  };
+
+  if (a.type() != b.type())
+    return false;
+
+  if (a.is_object())
+  {
+    for (auto it = a.begin(); it != a.end(); ++it)
+    {
+      if (is_loc_key(it.key()))
+        continue;
+      if (
+        !b.contains(it.key()) ||
+        !numpy_ctor_args_equal_ignoring_location(it.value(), b[it.key()]))
+        return false;
+    }
+    for (auto it = b.begin(); it != b.end(); ++it)
+    {
+      if (is_loc_key(it.key()))
+        continue;
+      if (!a.contains(it.key()))
+        return false;
+    }
+    return true;
+  }
+
+  if (a.is_array())
+  {
+    if (a.size() != b.size())
+      return false;
+    for (size_t i = 0; i < a.size(); ++i)
+      if (!numpy_ctor_args_equal_ignoring_location(a[i], b[i]))
+        return false;
+    return true;
+  }
+
+  return a == b;
+}
+} // namespace
+
+// The last direct assignment to `name` in `block[0..end)`, following into
+// both arms of a trailing if/else so a branching function is handled the
+// same as a straight-line one. Returns the assigned value node only when it
+// is a numpy array constructor call (and, for an if/else, when *both* arms
+// agree); nullptr for anything else, including a non-constructor assignment
+// that would shadow an outer one -- the caller must not keep searching past
+// that shadow.
+const nlohmann::json *python_converter::find_numpy_ctor_value_assigned_to(
+  const nlohmann::json &block,
+  std::size_t end,
+  const std::string &name) const
+{
+  if (!block.is_array() || end > block.size())
+    return nullptr;
+
+  for (std::size_t i = end; i-- > 0;)
+  {
+    const nlohmann::json &stmt = block[i];
+    if (!stmt.is_object())
+      continue;
+    const std::string type = stmt.value("_type", "");
+
+    if (
+      type == "Assign" && stmt.contains("targets") &&
+      stmt["targets"].is_array() && stmt["targets"].size() == 1 &&
+      stmt["targets"][0].is_object() &&
+      stmt["targets"][0].value("_type", "") == "Name" &&
+      stmt["targets"][0].value("id", "") == name)
+    {
+      if (
+        !stmt.contains("value") || !stmt["value"].is_object() ||
+        !is_numpy_array_constructor_expr(stmt["value"]))
+        return nullptr;
+      return &stmt["value"];
+    }
+
+    if (
+      type == "If" && stmt.contains("body") && stmt["body"].is_array() &&
+      stmt.contains("orelse") && stmt["orelse"].is_array() &&
+      !stmt["orelse"].empty())
+    {
+      const nlohmann::json *then_value = find_numpy_ctor_value_assigned_to(
+        stmt["body"], stmt["body"].size(), name);
+      const nlohmann::json *else_value = find_numpy_ctor_value_assigned_to(
+        stmt["orelse"], stmt["orelse"].size(), name);
+      return (then_value && else_value) ? then_value : nullptr;
+    }
+  }
+  return nullptr;
+}
+
+bool python_converter::block_assigns_numpy_array_to(
+  const nlohmann::json &block,
+  std::size_t end,
+  const std::string &name) const
+{
+  return find_numpy_ctor_value_assigned_to(block, end, name) != nullptr;
+}
+
+bool python_converter::local_var_numpy_array_return(
+  const nlohmann::json &func_def) const
+{
+  const nlohmann::json &body = func_def["body"];
+  if (!body.is_array() || body.empty())
+    return false;
+
+  const nlohmann::json &last = body.back();
+  if (
+    !last.is_object() || last.value("_type", "") != "Return" ||
+    !last.contains("value") || !last["value"].is_object() ||
+    last["value"].value("_type", "") != "Name")
+    return false;
+
+  return block_assigns_numpy_array_to(
+    body, body.size() - 1, last["value"].value("id", ""));
+}
+
+void python_converter::reject_incompatible_numpy_local_return_branches(
+  const nlohmann::json &func_def) const
+{
+  const nlohmann::json &body = func_def["body"];
+  if (!body.is_array() || body.empty())
+    return;
+
+  const nlohmann::json &last = body.back();
+  if (
+    !last.is_object() || last.value("_type", "") != "Return" ||
+    !last.contains("value") || !last["value"].is_object() ||
+    last["value"].value("_type", "") != "Name")
+    return;
+
+  const std::string name = last["value"].value("id", "");
+  for (std::size_t i = body.size() - 1; i-- > 0;)
+  {
+    const nlohmann::json &stmt = body[i];
+    if (!stmt.is_object() || stmt.value("_type", "") != "If")
+      continue;
+    if (
+      !stmt.contains("body") || !stmt["body"].is_array() ||
+      !stmt.contains("orelse") || !stmt["orelse"].is_array() ||
+      stmt["orelse"].empty())
+      return;
+
+    const nlohmann::json *then_value = find_numpy_ctor_value_assigned_to(
+      stmt["body"], stmt["body"].size(), name);
+    const nlohmann::json *else_value = find_numpy_ctor_value_assigned_to(
+      stmt["orelse"], stmt["orelse"].size(), name);
+    // Conservatively compared by AST equality of the constructor's args,
+    // ignoring source location (the same call spelled on two different
+    // branch lines, e.g. `np.zeros(3)` on both arms, must not be treated as
+    // a mismatch): a solid static shape-equivalence proof (e.g. np.zeros(3)
+    // vs np.zeros((3,))) is out of scope here, and rejecting a same-shape
+    // pair spelled differently is a false positive ESBMC can live with --
+    // the alternative is joining two differently-shaped concrete array
+    // types at the branch merge, which crashes body conversion outright.
+    if (
+      then_value && else_value && then_value->contains("args") &&
+      else_value->contains("args") &&
+      !numpy_ctor_args_equal_ignoring_location(
+        (*then_value)["args"], (*else_value)["args"]))
+      throw std::runtime_error(
+        "TypeError: numpy local array return requires the same shape "
+        "across all branches");
+    return;
+  }
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
+  reject_incompatible_numpy_local_return_branches(function_node);
+
   // Function return type
   code_typet type;
-  const nlohmann::json &return_node = function_node["returns"];
+  static const nlohmann::json null_return_annotation = nullptr;
+  const nlohmann::json &return_node =
+    local_var_numpy_array_return(function_node) ? null_return_annotation
+                                                : function_node["returns"];
 
   // Tracks annotations that already encode Optional (e.g. Optional[T] or
   // T | None). When true, the later body_has_none_return pass must not
