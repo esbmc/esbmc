@@ -4,6 +4,7 @@
 #include <util/config/config.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>
+#include <cstdint>
 
 /* convert_sort and tuple_array_create_despatch hand array-of-struct types over
  * with every pointer rewritten to pointer_struct -- pointers inside a union
@@ -33,6 +34,52 @@ smt_tuple_concat_flattener::members_of(const type2tc &type) const
 {
   bool as_pointer = is_pointer_type(type) || is_code_type(type);
   return struct_union_members(as_pointer ? ctx->pointer_struct : type);
+}
+
+static std::vector<irep_idt>
+names_of(smt_solver_baset *ctx, const type2tc &type)
+{
+  bool as_pointer = is_pointer_type(type) || is_code_type(type);
+  return struct_union_member_names(as_pointer ? ctx->pointer_struct : type);
+}
+
+/** Members (i, j) of two structs naming the same field. Two versions of one
+ *  struct meet in practice -- a program's glibc `struct tm` against the C
+ *  library model's shorter one -- so when the member lists differ, pair by
+ *  name and type; a field only one side has is left unconstrained. */
+static std::vector<std::pair<size_t, size_t>> member_pairs(
+  const std::vector<type2tc> &ma,
+  const std::vector<irep_idt> &na,
+  const std::vector<type2tc> &mb,
+  const std::vector<irep_idt> &nb)
+{
+  std::vector<std::pair<size_t, size_t>> out;
+  if (na == nb)
+  {
+    for (size_t i = 0; i < na.size(); i++)
+      out.emplace_back(i, i);
+    return out;
+  }
+  for (size_t i = 0; i < na.size(); i++)
+    for (size_t j = 0; j < nb.size(); j++)
+      if (
+        na[i] == nb[j] && (ma[i] == mb[j] || (is_tuple_ast_type(ma[i]) &&
+                                              is_tuple_ast_type(mb[j]))))
+      {
+        out.emplace_back(i, j);
+        break;
+      }
+  return out;
+}
+
+/** The partner of member @p i in @p pairs, or SIZE_MAX if it has none. */
+static size_t
+partner(const std::vector<std::pair<size_t, size_t>> &pairs, size_t i)
+{
+  for (auto [a, b] : pairs)
+    if (a == i)
+      return b;
+  return SIZE_MAX;
 }
 
 std::size_t smt_tuple_concat_flattener::width(const type2tc &type)
@@ -115,18 +162,27 @@ smt_astt smt_tuple_concat_flattener::to_bv(smt_astt a, const type2tc &type)
   if (is_tuple_ast_type(type))
   {
     concat_smt_astt ca = to_concat_ast(a);
-    if (ca->packed())
+    std::vector<type2tc> ms = members_of(type);
+    std::vector<irep_idt> ns = names_of(ctx, type);
+    std::vector<irep_idt> vns = names_of(ctx, ca->thetype);
+    if (ca->packed() && vns == ns)
       return ca->inner;
+
+    auto pairs = member_pairs(ms, ns, members_of(ca->thetype), vns);
 
     /* Members run from the lowest bit up; mk_concat puts its first operand
      * in the high bits. */
-    std::vector<type2tc> ms = members_of(type);
     smt_astt acc = nullptr;
     for (size_t i = 0; i < ms.size(); i++)
     {
       if (width(ms[i]) == 0)
         continue;
-      smt_astt m = to_bv(ca->members[i], ms[i]);
+      size_t j = partner(pairs, i);
+      smt_astt m = j != SIZE_MAX
+                     ? to_bv(ca->project(ctx, j), ms[i])
+                     : ctx->mk_smt_symbol(
+                         ctx->mk_fresh_name("concat_free_field::"),
+                         ctx->mk_int_bv_sort(width(ms[i])));
       acc = acc == nullptr ? m : ctx->mk_concat(m, acc);
     }
     return acc;
@@ -348,15 +404,18 @@ smt_tuple_concat_flattener::tuple_get(const type2tc &type, smt_astt a)
 {
   concat_smt_astt ca = to_concat_ast(a);
   std::vector<type2tc> ms = members_of(type);
+  auto pairs = member_pairs(
+    ms,
+    names_of(ctx, type),
+    members_of(ca->thetype),
+    names_of(ctx, ca->thetype));
 
-  std::vector<expr2tc> fields;
-  fields.reserve(ms.size());
-  for (size_t i = 0; i < ms.size(); i++)
+  std::vector<expr2tc> fields(ms.size());
+  for (auto [i, j] : pairs)
   {
-    smt_astt m = ca->packed() ? ca->project(ctx, i) : ca->members[i];
-    fields.push_back(
-      is_tuple_ast_type(ms[i]) ? tuple_get(ms[i], m)
-                               : ctx->get_by_ast(ms[i], m));
+    smt_astt m = ca->packed() ? ca->project(ctx, j) : ca->members[j];
+    fields[i] = is_tuple_ast_type(ms[i]) ? tuple_get(ms[i], m)
+                                         : ctx->get_by_ast(ms[i], m);
   }
 
   if (is_pointer_type(type) || is_code_type(type))
@@ -383,10 +442,14 @@ expr2tc smt_tuple_concat_flattener::tuple_get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  smt_astt elem = select_elem(ctx, to_concat_ast(array)->inner, index);
+  /* The index is into the flattened array, whose element is the innermost
+   * type of @p subtype. */
+  type2tc elem = subtype;
+  while (is_array_type(elem))
+    elem = to_array_type(elem).subtype;
+  smt_astt bits = select_elem(ctx, to_concat_ast(array)->inner, index);
   return tuple_get(
-    subtype,
-    new concat_smt_ast(*this, ctx, ctx->convert_sort(subtype), subtype, elem));
+    elem, new concat_smt_ast(*this, ctx, ctx->convert_sort(elem), elem, bits));
 }
 
 smt_astt concat_smt_ast::ite(
@@ -401,6 +464,26 @@ smt_astt concat_smt_ast::ite(
   if (is_array_type(thetype))
     return new concat_smt_ast(
       flat, ctx, sort, thetype, ctx->mk_ite(cond, inner, f->inner));
+
+  std::vector<type2tc> ms = flat.members_of(thetype);
+  std::vector<irep_idt> na = names_of(ctx, thetype);
+  std::vector<irep_idt> nb = names_of(ctx, f->thetype);
+  if (na != nb)
+  {
+    auto pairs = member_pairs(ms, na, flat.members_of(f->thetype), nb);
+    std::vector<smt_astt> terms;
+    terms.reserve(ms.size());
+    for (size_t i = 0; i < ms.size(); i++)
+    {
+      size_t j = partner(pairs, i);
+      smt_astt e =
+        j != SIZE_MAX
+          ? f->project(ctx, j)
+          : flat.build(ctx->mk_fresh_name("concat_free_field::"), ms[i]);
+      terms.push_back(project(ctx, i)->ite(ctx, cond, e));
+    }
+    return new concat_smt_ast(flat, ctx, sort, thetype, std::move(terms));
+  }
 
   if (!packed() && !f->packed())
   {
@@ -426,9 +509,20 @@ smt_astt concat_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
   if (is_array_type(thetype))
     return ctx->mk_eq(inner, o->inner);
 
+  std::vector<type2tc> ms = flat.members_of(thetype);
+  std::vector<irep_idt> na = names_of(ctx, thetype);
+  std::vector<irep_idt> nb = names_of(ctx, o->thetype);
+  if (na != nb)
+  {
+    smt_solver_baset::ast_vec eqs;
+    for (auto [i, j] : member_pairs(ms, na, flat.members_of(o->thetype), nb))
+      if (flat.width(ms[i]) != 0)
+        eqs.push_back(project(ctx, i)->eq(ctx, o->project(ctx, j)));
+    return ctx->make_n_ary_and(eqs);
+  }
+
   if (!packed() && !o->packed())
   {
-    std::vector<type2tc> ms = flat.members_of(thetype);
     smt_solver_baset::ast_vec eqs;
     for (size_t i = 0; i < ms.size(); i++)
       if (flat.width(ms[i]) != 0)
