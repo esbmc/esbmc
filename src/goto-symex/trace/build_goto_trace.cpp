@@ -78,6 +78,26 @@ static bool reads_through_dereference(const expr2tc &e)
   return found;
 }
 
+/* The value of @p source in the counterexample, when it is a read this trace
+ * records nowhere else: a scalar lvalue reached through a dereference. Nil
+ * when it is anything else, or when the model does not pin it down. */
+static expr2tc nondet_read_value(
+  smt_convt &smt_conv,
+  const expr2tc &source,
+  const expr2tc &renamed)
+{
+  if (!is_member2t(source) && !is_index2t(source))
+    return expr2tc();
+
+  if (
+    !reads_through_dereference(source) || !is_scalar_type(source->type) ||
+    source->type != renamed->type)
+    return expr2tc();
+
+  expr2tc value = smt_conv.get(renamed);
+  return is_constant_expr(value) ? value : expr2tc();
+}
+
 static void collect_nondet_reads(
   smt_convt &smt_conv,
   const expr2tc &source,
@@ -94,17 +114,11 @@ static void collect_nondet_reads(
   while (is_implies2t(renamed) && !is_implies2t(source))
     renamed = to_implies2t(renamed).side_2;
 
-  if (
-    (is_member2t(source) || is_index2t(source)) &&
-    reads_through_dereference(source) && is_scalar_type(source->type) &&
-    source->type == renamed->type)
+  expr2tc value = nondet_read_value(smt_conv, source, renamed);
+  if (!is_nil_expr(value))
   {
-    expr2tc value = smt_conv.get(renamed);
-    if (!is_nil_expr(value) && is_constant_expr(value))
-    {
-      out.emplace_back(source, value);
-      return;
-    }
+    out.emplace_back(source, value);
+    return;
   }
 
   /* Descend only while the substitution is the single difference between the
@@ -124,6 +138,19 @@ static void collect_nondet_reads(
 
   for (size_t i = 0; i < source_ops.size(); i++)
     collect_nondet_reads(smt_conv, source_ops[i], renamed_ops[i], out);
+}
+
+/* Pair the claim of a violated assert with the values its dereference-rooted
+ * reads take here. A claim that held records nothing. */
+static void record_violated_reads(
+  smt_convt &smt_conv,
+  const expr2tc &ssa_cond,
+  goto_trace_stept &step)
+{
+  if (step.guard)
+    return;
+
+  collect_nondet_reads(smt_conv, step.pc->guard, ssa_cond, step.nondet_reads);
 }
 
 void build_goto_trace(
@@ -218,13 +245,7 @@ void build_goto_trace(
     if (SSA_step.is_assert())
     {
       goto_trace_step.guard = smt_conv.l_get(SSA_step.cond_expr).is_true();
-
-      if (!goto_trace_step.guard)
-        collect_nondet_reads(
-          smt_conv,
-          goto_trace_step.pc->guard,
-          SSA_step.cond,
-          goto_trace_step.nondet_reads);
+      record_violated_reads(smt_conv, SSA_step.cond, goto_trace_step);
     }
     // Keeps the opposite idiom on purpose: here guard is a direction bit, not
     // a violation flag, so unknown has no fail-safe value and flipping would
