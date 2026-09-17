@@ -6753,6 +6753,17 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         arg.identifier().as_string(), arg_id);
     }
 
+    // A `bytes`-typed parameter with a resolved length is array-by-value, so
+    // the matching call-site argument is passed by value too.
+    if (
+      type_utils::is_bytes_array(arg.type()) && param_idx < params.size() &&
+      params[param_idx].type().is_array())
+    {
+      call.arguments().push_back(arg);
+      arg_index++;
+      continue;
+    }
+
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
