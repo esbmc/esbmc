@@ -486,15 +486,45 @@ the function's `code_typet` stored IREP2-side that assertion fails. So a `code_t
 something this path needs, and it is not `#cpp_type` -- that is carried now, and the failure is
 unchanged.
 
-What it is remains open. Candidates, in the order worth testing: an argument's `#default_value`, which
-`code_type2t` has no field for and which `python_adjust.cpp:86-90` already documents as lost; the
-parameter's `symbol_typet` subtype resolution, since the failing shape is specifically a pointer to a
-class; and `#identifier`/`#base_name` on the arguments, which §44's carry covers but only for types
-built by `migrate_type`. Each is a one-build experiment against a named oracle, which is the cheap
-shape -- unlike §9, no corpus is needed, because the test that discriminates is already in the tree.
+### 11.3.1 Measured: it is the argument's *plain* `identifier`
+
+None of the three candidates this section first listed. Probing all seven sites with
+`full_eq(migrate_type_back(migrate_type(type)), type)` reports **one** difference, and it is at site 7
+on `advance` -- the function the failing test exercises:
+
+```
+ORIG argument 0                               BACK argument 0
+  * type: pointer -> symbol tag-Counter         * type: pointer -> symbol tag-Counter
+  * identifier: py:main.py@F@advance@c          (dropped)
+  * #location: {file, line, function, column}   (dropped)
+  * #base_name: c                               * #base_name: c
+  * #identifier: py:main.py@F@advance@c         * #identifier: py:main.py@F@advance@c
+```
+
+So `#identifier` and `#base_name` both survive -- §44's carry works -- and what does not is the
+**plain `identifier`**, plus the argument's `#location`. That is the same plain-versus-comment trap as
+the struct component base name: `code_typet::argumentt::get_identifier()` returns `cmt_identifier()`
+(`std_types.h:332-335`), so the seam reads and writes `#identifier` at both ends
+(`migrate.cpp:352`, `:3167`) and never touches the plain key at all.
+
+It also rules out the obvious reader. Symex takes parameter names from
+`function_type.argument_names` on the **IREP2** side (`symex_function.cpp:185`), which is populated from
+`#identifier` and therefore intact -- so this is not the `symex_function.cpp:219` unnamed-parameter skip.
+
+What makes it bite is more likely identity than content: the plain `identifier` lives in `named_sub`, so
+it takes part in `typet` equality. A function symbol whose legacy type loses it is no longer equal to
+the type any earlier legacy copy holds, and `migrate.cpp:715-737` exists precisely because the codebase
+depends on all symbols of a name sharing one type. Finding which comparison that breaks is the next
+step, and it is now a search over readers of a known key rather than a guess between three attributes.
 
 ### 11.4 Standing
 
 Python B-2* stays 43; repo total 114. The funcdef cluster is not ten writes blocked on one attribute,
-as §3 had it. It is one write that must stay legacy and seven blocked on an unidentified `code_typet`
-loss, and the next step is the three experiments above rather than another conversion attempt.
+as §3 had it. It is one write that **must** stay legacy -- §8.2's rule, and bar noise rather than debt --
+and seven blocked on a named loss: the argument's plain `identifier`.
+
+That makes it the sixth marker found not to survive the seam, and the second where the plain key and the
+`#` key were confused for one another. Worth stating as a check rather than a story: when a legacy node
+carries both `x` and `#x`, establish which one each accessor reads before concluding a carry covers it.
+`argumentt::get_identifier()` reads `#identifier` while the node also holds a plain `identifier`, so
+§44's carry looked complete and was not.
