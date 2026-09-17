@@ -1296,12 +1296,25 @@ void python_runtime_converter::emit_loop(
 /// here.
 void python_runtime_converter::raise_statement(const json &node)
 {
-  /* A bare `raise` re-raises whatever is active, which needs the pending
-   * exception this lowering does not carry yet. */
-  if (node["exc"].is_null() || !node["cause"].is_null())
+  /* `raise X from Y` records a cause, which nothing here reads. */
+  if (!node["cause"].is_null())
     unsupported(node);
 
   const locationt loc = location(node);
+
+  /* A bare `raise` re-raises whatever is in flight: a throw with no operand,
+   * the same shape a handler's no-match fallback emits. */
+  if (node["exc"].is_null())
+  {
+    side_effect_exprt again("cpp-throw", empty_typet());
+    again.location() = loc;
+    codet reraise("expression");
+    reraise.copy_to_operands(again);
+    reraise.location() = loc;
+    block_->copy_to_operands(reraise);
+    return;
+  }
+
   exprt value = expr(node["exc"]);
 
   side_effect_exprt thrown("cpp-throw", empty_typet());
@@ -1327,9 +1340,17 @@ void python_runtime_converter::try_statement(const json &node)
   if (handlers.empty() && !has_finally)
     unsupported(node);
   for (const json &handler : handlers)
-    /* `except (A, B):` tests several classes; pyrt_isinstance takes one. */
-    if (!handler["type"].is_null() && !is_type(handler["type"], "Name"))
+  {
+    const json &names = handler["type"];
+    if (names.is_null() || is_type(names, "Name"))
+      continue;
+    /* `except (A, B):` names several classes. */
+    if (!is_type(names, "Tuple"))
       unsupported(node);
+    for (const json &one : names["elts"])
+      if (!is_type(one, "Name"))
+        unsupported(node);
+  }
 
   const locationt loc = location(node);
 
@@ -1409,10 +1430,34 @@ void python_runtime_converter::emit_guarded(
    * block. */
   std::vector<exprt> matches;
   for (const json &handler : handlers)
-    matches.push_back(
-      handler["type"].is_null()
-        ? nil_exprt()
-        : call("pyrt_isinstance", {thrown, expr(handler["type"])}, loc));
+  {
+    const json &names = handler["type"];
+    if (names.is_null())
+    {
+      matches.push_back(nil_exprt());
+      continue;
+    }
+    if (!is_type(names, "Tuple"))
+    {
+      matches.push_back(call("pyrt_isinstance", {thrown, expr(names)}, loc));
+      continue;
+    }
+    /* A tuple clause matches when any of its classes does. */
+    exprt any = nil_exprt();
+    for (const json &one : names["elts"])
+    {
+      exprt matched = call("pyrt_isinstance", {thrown, expr(one)}, loc);
+      if (any.is_nil())
+      {
+        any = matched;
+        continue;
+      }
+      exprt either("or", bool_typet());
+      either.copy_to_operands(any, matched);
+      any = either;
+    }
+    matches.push_back(any);
+  }
 
   /* Built back to front, so an unmatched exception reaches the re-raise that
    * sits innermost. This is CPython's order: the handlers are tried in turn
