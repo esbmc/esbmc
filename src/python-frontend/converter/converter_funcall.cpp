@@ -1534,9 +1534,19 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           if (arg_sym->is_address_of())
             arg_sym = &arg_sym->op0();
           if (arg_sym->is_symbol())
+          {
+            // `#identifier`, not the plain key: register_function_argument sets
+            // both from one string, but only `#identifier` survives the IREP2
+            // seam, so a function type stored IREP2-side keeps this lookup
+            // working. Falls back for a frontend that sets only the plain one
+            // (clang_cpp_convert.cpp:2880).
+            const code_typet::argumentt &param = params[i];
             copy_instance_attributes(
-              params[i].identifier().as_string(),
+              param.get_identifier().empty()
+                ? param.identifier().as_string()
+                : param.get_identifier().as_string(),
               arg_sym->identifier().as_string());
+          }
         }
       }
     }
