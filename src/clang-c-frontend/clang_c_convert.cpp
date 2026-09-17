@@ -1592,6 +1592,11 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "_Float16";
     break;
 
+  case clang::BuiltinType::BFloat16:
+    new_type = bfloat16_type();
+    c_type = "__bf16";
+    break;
+
   case clang::BuiltinType::Float:
     new_type = float_type();
     c_type = "float";
@@ -1736,7 +1741,13 @@ bool clang_c_convertert::get_builtin_type(
     new_type = SVE_VEC(unsignedbv_typet(8), 64);
     c_type = "__clang_svuint8x4_t";
     break;
-#if LLVM_VERSION_MAJOR >= 19
+#if LLVM_VERSION_MAJOR >= 20
+  /* Storage-only in clang: no arithmetic and no conversions are accepted on
+   * it, so the width is all a model needs. */
+  case clang::BuiltinType::MFloat8:
+    new_type = unsignedbv_typet(8);
+    c_type = "__mfp8";
+    break;
   case clang::BuiltinType::SveMFloat8:
     new_type = SVE_VEC(unsignedbv_typet(8), 16);
     c_type = "__SVMfloat8_t";
@@ -1894,16 +1905,6 @@ bool clang_c_convertert::get_builtin_type(
 #endif
 
 #undef SVE_VEC
-
-  // Unsupported extensions (optional don't care)
-  case clang::BuiltinType::BFloat16:
-    if (config.options.get_bool_option("dont-care-about-missing-extensions"))
-    {
-      new_type = half_float_type();
-      c_type = "_Float16";
-      break;
-    }
-    [[fallthrough]];
 
   default:
   {
