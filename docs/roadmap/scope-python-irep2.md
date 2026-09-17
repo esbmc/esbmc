@@ -232,3 +232,91 @@ mistake B-2's spelling-based count invites. The program-entry body writes (§6) 
 correct as they are: `set_value(const exprt &)` defers migration until the symbol table
 is complete, which is exactly what a body needs. Converting them is not blocked work, it
 is work that must not be done.
+
+## 9. §3's prediction, confirmed — and the cost of not reading §3 (2026-09-17)
+
+`handle_assignment_type_adjustments` (`converter_stmt.cpp:1200-1455`) holds twelve B-2 writes, the
+densest single-function cluster left in the migration. Eleven were converted, measured, reviewed, and
+**reverted**: they break seven CORE tests. §3 of this document already said they would.
+
+### 9.1 The finding, and the two-line reproducer
+
+```python
+val = "hello"[0]
+assert val == "h"
+```
+
+```
+base arm                VERIFICATION SUCCESSFUL
+eleven writes converted VERIFICATION FAILED     (GOTO shows ASSERT 0)
+```
+
+Attributed by stashing the change and rebuilding, not inferred. Seven CORE tests fail the same way and
+pass on base: `casting14`, `enumerate8`, `for-loop3`, `for-loop6`, `for-loop8_fail`,
+`python_irep2_adjust_only_string_index`, `string-concat6`. `assert "hello"[0] == "h"` is unaffected --
+the defect needs the char to pass *through a symbol*, which is exactly what these writes change.
+
+The chain, each link at a line:
+
+```
+list_access.cpp:4119      tags a string-subscript result #cpp_type == "char"
+converter_stmt.cpp:1402   set_type(migrate_type(rhs.type())) on that tagged type
+migrate.cpp:3238          rebuilds signedbv_typet(width); #cpp_type is not carried
+converter_expr.cpp:1763   a Name read is typed from symbol->get_type()
+converter_binop.cpp:619   get_python_type_category returns "numeric", not "string"
+                          -> the comparison folds cross-type to false
+```
+
+`list_access.cpp:4119`'s own comment names the consumer it is feeding, which is the one that breaks.
+
+### 9.2 §3 predicted exactly this, in this file
+
+§3's table, above:
+
+| site | symptom | cause |
+|---|---|---|
+| `converter/converter_stmt.cpp` (11 writes) | `casting14` fails | most write `rhs.type()`, which carries `#cpp_type` |
+
+Eleven writes, this file, `casting14`, `#cpp_type`. An earlier pass had already measured it. The work
+above re-measured it from scratch, reached the opposite conclusion, and appended a section to the same
+document without reading the section three headings up. That is the whole finding worth keeping: the
+answer was in the file being edited.
+
+### 9.3 Why three instruments all missed it
+
+None of them was aimed at the attribute.
+
+- **The A/B is structurally blind to `#cpp_type`.** `python_languaget::from_type` routes to
+  `c_type2string` (`python_language.cpp:362-370`), and `c_expr2string.cpp` never reads `#cpp_type` --
+  only `cpp_expr2string.cpp:138` and `goto2c/expr2c.cpp:174` do. The failing case prints
+  `Type........: signed char` either way, because the width-8 fallback produces that string without the
+  tag. So "0 of 76 differ" was evidence about branch flips in 76 programs, not about the attribute, and
+  reading it as corroboration was wrong.
+- **The census sampled the shape out.** It counted `#cpp_type` on writes in the 78-test stratified
+  corpus: 51 `double`, 14 `unsigned_long`, no `char`. But site `:1402` runs in 338 tests and the corpus
+  held 78, chosen for *site execution* rather than for the attribute -- so the `char`-spelled writes
+  were simply not in it. §9.1 of the reverted text criticised precisely this error about an earlier
+  filter and then repeated it one section later.
+- **The census also read the wrong node.** `is_char_type` is asked of an array *subtype*
+  (`string_handler.cpp:2397`, `:2431`), and a probe on `rhs.type().cpp_type()` cannot see a tag on
+  `rhs.type().subtype()`.
+
+A census aimed at an attribute must enumerate its **writers** (`type_handler.cpp:651`,
+`list_access.cpp:4120`, `convert_float_literal.cpp:26/31/36`) and route each through each site. Counting
+what a convenience corpus happens to contain measures the corpus.
+
+### 9.4 What this changes in the plan
+
+These eleven writes are blocked on the `#cpp_type` carry §8.1 scopes -- not blocked on more measurement.
+So is the next cluster: §3's table also lists `converter_funcdef.cpp`'s ten writes failing
+`class_var_param_augassign{,_fail}` for the same reason, and `python_adjust.cpp:70` for the analogous
+loss of the legacy-only `bases` sub-irep.
+
+The frontend already compensates for this loss by hand at six call sites in
+`python_expr_builder.cpp` (`:40`, `:71`, `:90`, `:112`, `:176`, `:312`), each commented "migrate_type
+does not round-trip `#cpp_type`; restore the exact target type". Seven ad-hoc restorations is the
+argument for the carry, not for an eighth.
+
+So Python's B-2 residue stays 54, and the next task is the carry itself, with a regression pair over
+`val = "hello"[0]; assert val == "h"` added in the same change so a later attempt at these eleven cannot
+pass review silently.
