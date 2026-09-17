@@ -38,6 +38,20 @@ smt_solver_baset *create_new_z3_solver(
     options.get_bool_option("--smt-formula-too"))
     z3::config().set("smtlib2_compliant", "true");
 
+  if (const auto it = options.option_values.find("z3-param");
+      it != options.option_values.end())
+    for (const std::string &param : it->second)
+    {
+      const size_t eq = param.find('=');
+      if (eq == std::string::npos)
+      {
+        log_error("--z3-param expects name=value, got '{}'", param);
+        abort();
+      }
+      z3::set_param(
+        param.substr(0, eq).c_str(), param.substr(eq + 1).c_str());
+    }
+
   z3_convt *conv = new z3_convt(ns, options);
   *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);

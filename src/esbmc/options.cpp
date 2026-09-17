@@ -645,6 +645,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"boolector", NULL, "Use Boolector"},
     {"z3", NULL, "Use Z3"},
     {"z3-debug", NULL, "Extracts Z3 dump and SMT2 formula"},
+    {"z3-param",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "name=value"),
+     "Set a Z3 global parameter, e.g. rewriter.blast_select_store=true; "
+     "may be given multiple times"},
     {"z3-debug-dump-file",
      boost::program_options::value<std::string>()->value_name("z3.log"),
      "Name for Z3 dump file"},
