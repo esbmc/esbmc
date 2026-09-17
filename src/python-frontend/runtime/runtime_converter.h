@@ -78,7 +78,12 @@ private:
     const std::string &function,
     const std::vector<exprt> &arguments,
     const locationt &loc);
-  std::vector<exprt> arguments(const json &call_node);
+  std::vector<exprt> arguments(const json &call_node, bool allow_keywords = false);
+  std::vector<exprt> arguments_for(
+    const json &call_node,
+    const json &signature,
+    const std::string &callee,
+    const locationt &loc);
   exprt arguments_struct(
     const std::vector<exprt> &arguments,
     const json &call_node) const;

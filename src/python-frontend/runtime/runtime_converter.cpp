@@ -284,9 +284,10 @@ exprt python_runtime_converter::call(
   return result;
 }
 
-std::vector<exprt> python_runtime_converter::arguments(const json &call_node)
+std::vector<exprt>
+python_runtime_converter::arguments(const json &call_node, bool allow_keywords)
 {
-  if (!call_node["keywords"].empty())
+  if (!allow_keywords && !call_node["keywords"].empty())
     unsupported(call_node);
   std::vector<exprt> values;
   for (const json &arg : call_node["args"])
@@ -295,6 +296,73 @@ std::vector<exprt> python_runtime_converter::arguments(const json &call_node)
       unsupported(arg);
     values.push_back(expr(arg));
   }
+  return values;
+}
+
+/// Positional arguments for a call to a function whose signature is known,
+/// with keywords placed by name and missing trailing arguments taken from the
+/// defaults. Python evaluates a default once, when the `def` runs; evaluating
+/// it here instead differs only for a mutable default, which this does not
+/// model. `defaults` covers the *last* parameters, hence the offset.
+std::vector<exprt> python_runtime_converter::arguments_for(
+  const json &call_node,
+  const json &signature,
+  const std::string &callee,
+  const locationt &loc)
+{
+  std::vector<exprt> values = arguments(call_node, true);
+
+  const json &parameters = signature["args"];
+  std::vector<bool> filled(parameters.size(), false);
+  for (size_t i = 0; i < values.size() && i < parameters.size(); ++i)
+    filled[i] = true;
+
+  for (const json &keyword : call_node["keywords"])
+  {
+    if (keyword["arg"].is_null())
+      unsupported(call_node); // **kwargs at the call site
+    const std::string name = keyword["arg"];
+    size_t position = parameters.size();
+    for (size_t i = 0; i < parameters.size(); ++i)
+      if (parameters[i]["arg"] == name)
+        position = i;
+    if (position == parameters.size())
+    {
+      raise(
+        "TypeError: " + callee + "() got an unexpected keyword argument '" +
+          name + "'",
+        loc);
+      return values;
+    }
+    if (filled[position])
+    {
+      raise(
+        "TypeError: " + callee + "() got multiple values for argument '" +
+          name + "'",
+        loc);
+      return values;
+    }
+    values.resize(std::max(values.size(), position + 1), nil_exprt());
+    values[position] = expr(keyword["value"]);
+    filled[position] = true;
+  }
+
+  const json &defaults = signature["defaults"];
+  const size_t first_default = parameters.size() - defaults.size();
+  for (size_t i = 0; i < parameters.size(); ++i)
+  {
+    if (filled[i] || i < first_default)
+      continue;
+    values.resize(std::max(values.size(), i + 1), nil_exprt());
+    values[i] = expr(defaults[i - first_default]);
+    filled[i] = true;
+  }
+
+  /* A hole left by a keyword that skipped a parameter with no default is a
+   * missing argument, which the arity check below reports. */
+  for (size_t i = 0; i < values.size(); ++i)
+    if (values[i].is_nil())
+      return {};
   return values;
 }
 
@@ -646,8 +714,10 @@ exprt python_runtime_converter::call_expr(const json &node)
       auto function = functions_.find(callee);
       if (function != functions_.end())
       {
-        std::vector<exprt> values = arguments(node);
-        const size_t arity = (*function->second)["args"]["args"].size();
+        const json &signature = (*function->second)["args"];
+        std::vector<exprt> values =
+          arguments_for(node, signature, callee, loc);
+        const size_t arity = signature["args"].size();
         if (values.size() != arity)
         {
           raise(
@@ -1242,11 +1312,12 @@ void python_runtime_converter::declare_variable(
 void python_runtime_converter::check_signature(const json &def) const
 {
   const json &args = def["args"];
+  /* Defaults are allowed: the call site fills a missing argument. *args and
+   * **kwargs are not, since PyRtArgs is a fixed six positional slots. */
   if (
     !def["decorator_list"].empty() || !args["posonlyargs"].empty() ||
-    !args["kwonlyargs"].empty() || !args["defaults"].empty() ||
-    !args["vararg"].is_null() || !args["kwarg"].is_null() ||
-    args["args"].size() > max_args)
+    !args["kwonlyargs"].empty() || !args["vararg"].is_null() ||
+    !args["kwarg"].is_null() || args["args"].size() > max_args)
     unsupported(def);
 }
 
