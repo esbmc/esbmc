@@ -123,6 +123,7 @@ def line_of(lines, offset):
 
 
 def files(frontend):
+    """The frontend's tracked C++ sources and headers."""
     out = subprocess.run(["git", "ls-files", "src/" + frontend],
                          capture_output=True,
                          text=True,
@@ -137,7 +138,24 @@ def is_irep2(arg, irep2_names):
     return BASE_NAME.split(arg)[0] in irep2_names
 
 
+def count_b2(path, clean, listing=None):
+    """B-2 writes in one cleaned file: raw, and those not already IREP2."""
+    raw = refined = 0
+    irep2_names = set(IREP2_DECL.findall(clean)) | set(IREP2_NODE.findall(clean))
+    for lines, line in statements(clean):
+        for m in WRITE.finditer(line):
+            raw += 1
+            arg = argument_of(line, m.start())
+            if is_irep2(arg, irep2_names):
+                continue
+            refined += 1
+            if listing is not None:
+                listing.append(f"{path}:{line_of(lines, m.start())}: {arg}")
+    return raw, refined
+
+
 def measure(frontend, listing=None):
+    """Count B-1 and B-2 occurrences in a frontend, raw and refined."""
     lines_b1 = raw_b1 = refined_b1 = raw_b2 = refined_b2 = 0
     for path in files(frontend):
         with open(path, encoding="utf-8", errors="replace") as fh:
@@ -146,30 +164,25 @@ def measure(frontend, listing=None):
         lines_b1 += sum(1 for ln in text.split("\n") if LEGACY.search(ln))
         clean = strip_noise(text)
         refined_b1 += len(LEGACY.findall(clean))
-        irep2_names = set(IREP2_DECL.findall(clean)) | set(IREP2_NODE.findall(clean))
-        for lines, line in statements(clean):
-            for m in WRITE.finditer(line):
-                raw_b2 += 1
-                arg = argument_of(line, m.start())
-                if is_irep2(arg, irep2_names):
-                    continue
-                refined_b2 += 1
-                if listing is not None:
-                    listing.append(f"{path}:{line_of(lines, m.start())}: {arg}")
+        raw, refined = count_b2(path, clean, listing)
+        raw_b2 += raw
+        refined_b2 += refined
     return lines_b1, raw_b1, refined_b1, raw_b2, refined_b2
 
 
 def main():
-    print("%-22s %8s %8s %8s   %6s %6s" % ("frontend", "B-1 ln", "B-1", "B-1*", "B-2", "B-2*"))
+    """Print the per-frontend table and the totals row."""
+    print(f"{'frontend':<22} {'B-1 ln':>8} {'B-1':>8} {'B-1*':>8}   {'B-2':>6} {'B-2*':>6}")
     print("-" * 68)
     listing = [] if "--list" in sys.argv else None
     totals = [0, 0, 0, 0, 0]
     for f in FRONTENDS:
         got = measure(f, listing)
         totals = [a + b for a, b in zip(totals, got)]
-        print("%-22s %8d %8d %8d   %6d %6d" % (f, *got))
+        print(f"{f:<22} {got[0]:>8} {got[1]:>8} {got[2]:>8}   {got[3]:>6} {got[4]:>6}")
     print("-" * 68)
-    print("%-22s %8d %8d %8d   %6d %6d" % ("total", *totals))
+    print(f"{'total':<22} {totals[0]:>8} {totals[1]:>8} {totals[2]:>8}   "
+          f"{totals[3]:>6} {totals[4]:>6}")
     print("\n B-1 ln  matching lines, which is what `git grep -c` reports and what the")
     print("         roadmap's historical figures are.")
     print(" B-1     occurrences, which is what the bar's wording describes.")
