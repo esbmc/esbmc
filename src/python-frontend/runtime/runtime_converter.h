@@ -136,6 +136,8 @@ private:
   void while_statement(const json &node);
   void for_statement(const json &node);
   void assert_statement(const json &node);
+  void raise_statement(const json &node);
+  void try_statement(const json &node);
   void class_statement(const json &node);
 
   void collect_assigned(

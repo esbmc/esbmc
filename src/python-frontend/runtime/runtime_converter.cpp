@@ -1056,6 +1056,10 @@ void python_runtime_converter::statement(const json &node)
     class_statement(node);
   else if (type == "FunctionDef" && module_level)
     return;
+  else if (type == "Raise")
+    raise_statement(node);
+  else if (type == "Try")
+    try_statement(node);
   else if (type != "Pass" && type != "Global")
     unsupported(node);
 }
@@ -1272,6 +1276,68 @@ void python_runtime_converter::emit_loop(
   block_->copy_to_operands(loop);
 }
 
+/// `raise X` throws the boxed exception object itself. The runtime's own
+/// errors -- a KeyError from pyrt_dict, say -- still abort instead of
+/// throwing: they are raised inside the C models, where there is no throw, so
+/// making them catchable needs a pending-exception flag the caller tests after
+/// every call. That is a separate step; only a Python-level raise participates
+/// here.
+void python_runtime_converter::raise_statement(const json &node)
+{
+  /* A bare `raise` re-raises whatever is active, which needs the pending
+   * exception this lowering does not carry yet. */
+  if (node["exc"].is_null() || !node["cause"].is_null())
+    unsupported(node);
+
+  const locationt loc = location(node);
+  exprt value = expr(node["exc"]);
+
+  side_effect_exprt thrown("cpp-throw", empty_typet());
+  thrown.copy_to_operands(value);
+  thrown.location() = loc;
+
+  codet statement("expression");
+  statement.copy_to_operands(thrown);
+  statement.location() = loc;
+  block_->copy_to_operands(statement);
+}
+
+/// The handler catches everything and leaves the type test to run time, which
+/// is what CPython does: an exception's class lives in its ob_type, a value,
+/// where remove_exceptions dispatches on the *static* type of the thrown
+/// expression -- and every box here is the same PyRtObject pointer. A typed
+/// `except E:` therefore becomes a catch-all whose body tests pyrt_isinstance
+/// and re-raises on no match, which is the next step.
+void python_runtime_converter::try_statement(const json &node)
+{
+  if (!node["finalbody"].empty() || !node["orelse"].empty())
+    unsupported(node);
+  if (node["handlers"].size() != 1)
+    unsupported(node);
+
+  const json &handler = node["handlers"][0];
+  if (!handler["type"].is_null() || !handler["name"].is_null())
+    unsupported(node);
+
+  const locationt loc = location(node);
+
+  code_blockt body;
+  statements(node["body"], body);
+
+  code_blockt caught;
+  statements(handler["body"], caught);
+  /* goto_convert reads exception_id off the handler block; clang_cpp_adjust
+   * re-derives it from the block type, so both are set to agree. */
+  caught.type().set("ellipsis", true);
+  caught.set("exception_id", "ellipsis");
+
+  codet guarded("cpp-catch");
+  guarded.copy_to_operands(body);
+  guarded.copy_to_operands(caught);
+  guarded.location() = loc;
+  block_->copy_to_operands(guarded);
+}
+
 void python_runtime_converter::assert_statement(const json &node)
 {
   code_assertt assertion;
@@ -1348,6 +1414,14 @@ void python_runtime_converter::collect_annotations(const json &body)
       collect_annotations(node["body"]);
       collect_annotations(node["orelse"]);
     }
+    else if (is_type(node, "Try"))
+    {
+      collect_annotations(node["body"]);
+      collect_annotations(node["orelse"]);
+      collect_annotations(node["finalbody"]);
+      for (const json &handler : node["handlers"])
+        collect_annotations(handler["body"]);
+    }
   }
 }
 
@@ -1383,6 +1457,19 @@ void python_runtime_converter::collect_assigned(
       collect_target_names(node["target"], assigned);
       collect_assigned(node["body"], assigned, declared_global);
       collect_assigned(node["orelse"], assigned, declared_global);
+    }
+    else if (is_type(node, "Try"))
+    {
+      collect_assigned(node["body"], assigned, declared_global);
+      collect_assigned(node["orelse"], assigned, declared_global);
+      collect_assigned(node["finalbody"], assigned, declared_global);
+      for (const json &handler : node["handlers"])
+      {
+        /* `except E as e` binds e over the handler body. */
+        if (!handler["name"].is_null())
+          assigned.insert(handler["name"].get<std::string>());
+        collect_assigned(handler["body"], assigned, declared_global);
+      }
     }
   }
 }
