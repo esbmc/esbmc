@@ -24,6 +24,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 
 using namespace json_utils;
@@ -719,6 +720,124 @@ bool body_returns_list_value(const nlohmann::json &body)
   };
 
   return check(body);
+}
+
+// The call's first argument, if it is an integer Constant.
+std::optional<size_t> get_constant_int_arg0(const nlohmann::json &call)
+{
+  if (!call.contains("args") || call["args"].empty())
+    return std::nullopt;
+
+  const auto &arg0 = call["args"][0];
+  if (!arg0.is_object() || arg0.value("_type", std::string()) != "Constant")
+    return std::nullopt;
+
+  if (!arg0.contains("value") || !arg0["value"].is_number_integer())
+    return std::nullopt;
+
+  return static_cast<size_t>(arg0["value"].get<long long>());
+}
+
+// The call's first argument's element count, if it is a List literal.
+std::optional<size_t> get_list_arg0_size(const nlohmann::json &call)
+{
+  if (!call.contains("args") || call["args"].empty())
+    return std::nullopt;
+
+  const auto &arg0 = call["args"][0];
+  if (!arg0.is_object() || arg0.value("_type", std::string()) != "List")
+    return std::nullopt;
+
+  if (!arg0.contains("elts"))
+    return std::nullopt;
+
+  return arg0["elts"].size();
+}
+
+// A statically-known byte length for a single return expression:
+// nondet_bytes(N) or bytes(N) with a constant N, or a bytes([...]) literal
+// (sized by element count). Anything else (a variable, a slice, string
+// decoding, ...) returns nullopt -- the fixed-size array representation for
+// bytes needs a concrete size, and there is no general way to derive one from
+// an arbitrary expression.
+std::optional<size_t> try_get_constant_bytes_length(const nlohmann::json &val)
+{
+  if (!val.is_object() || val.value("_type", std::string()) != "Call")
+    return std::nullopt;
+
+  if (
+    !val.contains("func") || !val["func"].is_object() ||
+    !val["func"].contains("id"))
+    return std::nullopt;
+
+  const std::string &callee = val["func"]["id"].get<std::string>();
+  if (callee != "nondet_bytes" && callee != "bytes")
+    return std::nullopt;
+
+  if (auto len = get_constant_int_arg0(val))
+    return len;
+
+  if (callee == "bytes")
+    return get_list_arg0_size(val);
+
+  return std::nullopt;
+}
+
+// The concrete bytes length for a `-> bytes` function, inferred from every
+// return statement in 'body'. nullopt when no return yields a statically known
+// length, or when two returns disagree on it -- a fixed-size array cannot
+// encode a length that varies at runtime, so the caller keeps the pre-existing
+// size-0 default in that case.
+std::optional<size_t> infer_bytes_return_size(const nlohmann::json &body)
+{
+  std::optional<size_t> result;
+  bool ambiguous = false;
+
+  std::function<void(const nlohmann::json &)> scan =
+    [&](const nlohmann::json &b) {
+      if (!b.is_array() || ambiguous)
+        return;
+      for (const auto &stmt : b)
+      {
+        if (!stmt.is_object() || ambiguous)
+          continue;
+        if (
+          stmt.value("_type", std::string()) == "Return" &&
+          stmt.contains("value") && !stmt["value"].is_null())
+        {
+          if (auto len = try_get_constant_bytes_length(stmt["value"]))
+          {
+            if (result && *result != *len)
+              ambiguous = true;
+            else
+              result = len;
+          }
+        }
+        for (const char *key : {"body", "orelse"})
+          if (stmt.contains(key))
+            scan(stmt[key]);
+      }
+    };
+
+  scan(body);
+  return ambiguous ? std::nullopt : result;
+}
+
+// Resolve a `-> <return_type>` annotation not already special-cased by the
+// caller's if/else chain (list/dict/str/Tuple/Callable/Optional/...). bytes
+// needs the function's own body to infer a concrete array size (see
+// infer_bytes_return_size); every other name defers entirely to
+// type_handler::get_typet, exactly as before this function existed.
+typet resolve_generic_return_type(
+  const std::string &return_type,
+  const nlohmann::json &function_node,
+  const type_handler &type_handler_)
+{
+  if (return_type == "bytes")
+    return type_handler_.get_typet(
+      "bytes", infer_bytes_return_size(function_node["body"]).value_or(0));
+
+  return type_handler_.get_typet(return_type);
 }
 } // namespace
 
@@ -2797,8 +2916,8 @@ void python_converter::get_function_definition(
     }
     else
     {
-      type.return_type() =
-        type_handler_.get_typet(return_type.get<std::string>());
+      type.return_type() = resolve_generic_return_type(
+        return_type.get<std::string>(), function_node, type_handler_);
     }
   }
   else if (return_node["_type"] == "BinOp")
