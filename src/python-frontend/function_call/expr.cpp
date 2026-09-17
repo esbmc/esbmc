@@ -420,7 +420,7 @@ void function_call_expr::get_function_type()
 bool function_call_expr::is_nondet_call() const
 {
   static std::regex pattern(
-    R"(nondet_(int|char|bool|float|str|complex)|__VERIFIER_nondet_(int|char|bool|float|str|complex))");
+    R"(nondet_(int|char|bool|float|str|complex|bytes)|__VERIFIER_nondet_(int|char|bool|float|str|complex|bytes))");
 
   return std::regex_match(function_id_.get_function(), pattern);
 }
